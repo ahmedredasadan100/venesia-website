@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-arabic);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+html,
+body {
+  /* Prevent any element from creating a horizontal scrollbar.
+     The actual leaking element (CTA ambient glow with -inset-8) is
+     contained at its own section level; this is a safety net only. */
+  overflow-x: hidden;
+}
+
+body {
+  font-family: var(--font-arabic), sans-serif;
+  font-weight: 400;
+  background: #05070B;
+  color: #ffffff;
+}
+
+.font-en {
+  font-family: var(--font-inter);
+}
+
+@keyframes hero-ken-burns {
+  0% {
+    transform: translate(-50%, -50%) scale(1.00);
+  }
+  100% {
+    transform: translate(calc(-50% - 0.45%), calc(-50% + 0.28%)) scale(1.046);
+  }
+}
+
+@keyframes hero-ken-burns-alt {
+  0% {
+    transform: translate(calc(-50% + 0.32%), calc(-50% + 0.16%)) scale(1.00);
+  }
+  100% {
+    transform: translate(calc(-50% - 0.38%), calc(-50% - 0.20%)) scale(1.050);
+  }
+}
+
+.hero-slide-ken-burns {
+  /* 44 s — unhurried cinematic drift, starts at natural scale */
+  animation: hero-ken-burns 44s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.hero-slide-ken-burns-alt {
+  /* 48 s — slightly longer to avoid feeling synchronised with even slides */
+  animation: hero-ken-burns-alt 48s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* ─── hero melt ────────────────────────────────────────────────────────────────
+   Minimal colour seal only — ensures the hero's bottom edge is #05070B so
+   the join with <main> is invisible. No atmosphere is added here; all
+   atmospheric blending happens at the TOP of the Projects section instead.       */
+.venesia-hero-melt {
+  background:
+    linear-gradient(
+      to bottom,
+      transparent              0%,
+      transparent             58%,
+      rgba(5,  7,  11, 0.08)  70%,
+      rgba(5,  7,  11, 0.45)  83%,
+      rgba(5,  7,  11, 0.86)  93%,
+      #05070B                 100%
+    );
+}
+
+/* ─── projects section atmospheric cap ─────────────────────────────────────────
+   Sits at the very top of <main> (z-index: -1, below content, above background).
+   Anchors warm gold and deep navy atmosphere at the join line and dissolves to
+   nothing before reaching the section header, so it feels like the section is
+   breathing upward into the hero — not like a separate overlay layer.            */
+.venesia-projects-cap {
+  background:
+    /* warm gold bloom — wide ambient field, not a concentrated spot */
+    radial-gradient(ellipse 148% 88% at 16% 4%, rgba(192, 143, 62, 0.17) 0%, transparent 64%),
+    /* deep navy depth — anchored top-right, mirrors hero's navy tones */
+    radial-gradient(ellipse  92% 68% at 84% 2%, rgba(14,  30,  70, 0.40) 0%, transparent 58%),
+    /* wide cool-dark field that melts away by mid-cap */
+    radial-gradient(ellipse 168% 56% at 50% 0%, rgba(6,   10,  20, 0.26) 0%, transparent 52%),
+    /* master vertical dissolve — strongest at the join, fully gone by 55 % */
+    linear-gradient(
+      to bottom,
+      rgba(5,  7, 11, 0.22)  0%,
+      rgba(5,  7, 11, 0.10)  20%,
+      rgba(5,  7, 11, 0.02)  40%,
+      transparent             55%,
+      transparent            100%
+    );
+}
+
+/* ─── film grain ────────────────────────────────────────────────────────────────
+   Inline SVG feTurbulence tile repeated across the full viewport. Provides the
+   micro-texture that unifies hero, projects, and footer into one visual canvas —
+   just as film grain unifies a cinematic frame. Opacity and overlay blend ensure
+   it is felt but never consciously noticed.                                       */
+.venesia-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch' result='noise'/%3E%3CfeColorMatrix type='saturate' values='0' in='noise'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 250px 250px;
+  opacity: 0.028;
+  mix-blend-mode: overlay;
+}
+
+/* ─── gold sweep — cinematic hover light on cards / images ──────────────────────
+   A skewed luminance band that travels across the card once on mouse-enter.
+   Add a <div aria-hidden className="venesia-gold-sweep" /> inside any
+   overflow-hidden container whose ancestor has class "group".                     */
+@keyframes venesia-gold-sweep {
+  0%   { transform: translateX(-130%) skewX(-12deg); }
+  100% { transform: translateX(230%)  skewX(-12deg); }
+}
+
+.venesia-gold-sweep {
+  position: absolute;
+  inset: 0;
+  width: 55%;
+  background: linear-gradient(
+    90deg,
+    transparent                  0%,
+    rgba(216, 184, 122, 0.05)   35%,
+    rgba(216, 184, 122, 0.13)   50%,
+    rgba(216, 184, 122, 0.05)   65%,
+    transparent                100%
+  );
+  transform: translateX(-130%) skewX(-12deg);
+  pointer-events: none;
+  z-index: 8;
+}
+
+.group:hover .venesia-gold-sweep {
+  animation: venesia-gold-sweep 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* ─── scroll reveal ────────────────────────────────────────────────────────────
+   Cinematic "section gently wakes up" pattern.
+   Elements start invisible and 24px below their resting position, then ease
+   upward into place with a long, decelerated curve — unhurried and premium.
+   Delay is injected via JS setTimeout (data-delay attr, milliseconds).        */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity   0.95s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.95s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+[data-reveal].is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── main section ambient canvas ───────────────────────────────────────────────
+   Top-weighted atmosphere that picks up the hero's palette immediately after the
+   join, so the eye perceives continuous environmental lighting rather than a new
+   section starting from scratch.                                                  */
+.venesia-main-canvas {
+  background:
+    radial-gradient(ellipse 135% 40% at 20%  0%,  rgba(192, 143, 62, 0.14) 0%, transparent 100%),
+    radial-gradient(ellipse 105% 35% at 78%  0%,  rgba(18,  36,  78, 0.28) 0%, transparent 100%),
+    radial-gradient(ellipse  90% 24% at 42%  50%, rgba(9,   18,  40, 0.13) 0%, transparent 100%),
+    radial-gradient(ellipse  80% 20% at 60%  100%,rgba(14,  26,  52, 0.18) 0%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, rgba(5, 7, 11, 0.60) 100%);
+}
