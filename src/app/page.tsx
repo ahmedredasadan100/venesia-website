@@ -393,7 +393,7 @@ export default function HomePage() {
 
         <div className="relative z-10 flex h-full min-h-0 flex-col">
           <div className="mx-auto flex w-full max-w-7xl flex-1 min-h-0 items-center px-6 lg:px-6">
-            <div className="grid w-full items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
+            <div className="grid w-full translate-y-3 items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
               <div>
               <div className="mb-5 inline-flex translate-y-2 rounded-full border border-white/10 bg-[#0B1220]/30 px-4 py-2 text-sm tracking-wide text-[#D8B87A] backdrop-blur-md sm:translate-y-3 md:mb-6">
   من المخطط إلى التنفيذ… الحكاية بتتشاف على الأرض
@@ -489,7 +489,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="relative z-20 flex shrink-0 justify-center gap-1.5 pb-10 pt-4">
+          <div className="relative z-20 flex shrink-0 translate-y-2.5 justify-center gap-1.5 pb-10 pt-4">
             {heroSlides.map((_, index) => (
               <button
                 key={index}
