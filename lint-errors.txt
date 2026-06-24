@@ -1,0 +1,333 @@
+﻿
+E:\web\venisia\src\app\admin\pages-blocks\pages\[id]\PageBlocksClient.tsx
+  119:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\app\admin\pages-blocks\pages\[id]\PageBlocksClient.tsx:119:7
+  117 |
+  118 |     if (!assignState.ok && !assignHeroState.ok) {
+> 119 |       setActionMessage(assignState.message ?? assignHeroState.message);
+      |       ^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  120 |       return;
+  121 |     }
+  122 |                      react-hooks/set-state-in-effect
+  133:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\app\admin\pages-blocks\pages\[id]\PageBlocksClient.tsx:133:7
+  131 |   useEffect(() => {
+  132 |     if (placementAssignment) {
+> 133 |       setEditVisible(normalizeBoolean(placementAssignment.is_visible, true));
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  134 |     }
+  135 |   }, [placementAssignment]);
+  136 |  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\app\admin\topics\TopicDateLabelField.tsx
+  34:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\app\admin\topics\TopicDateLabelField.tsx:34:7
+  32 |   useEffect(() => {
+  33 |     if (!dateValue && !manualLabel) {
+> 34 |       setDateValue(getTodayInputValue());
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  35 |     }
+  36 |   }, [dateValue, manualLabel]);
+  37 |  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\SiteNavbar.tsx
+  81:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\SiteNavbar.tsx:81:5
+  79 |
+  80 |   useEffect(() => {
+> 81 |     setMobileOpen(false);
+     |     ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  82 |     setOpenSubmenu(null);
+  83 |   }, [pathname]);
+  84 |  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\admin\AdminRichTextEditor.tsx
+  118:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\AdminRichTextEditor.tsx:118:7
+  116 |     if (normalized !== editor.getHTML()) {
+  117 |       editor.commands.setContent(normalized, { emitUpdate: false });
+> 118 |       setHtml(normalized);
+      |       ^^^^^^^ Avoid calling setState() directly within an effect
+  119 |     }
+  120 |   }, [defaultValue, editor]);
+  121 |  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\admin\AdminShell.tsx
+  89:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\AdminShell.tsx:89:5
+  87 |       menuItems.filter((item) => item.children?.length && isItemActive(pathname, item)).map((item) => [item.href, true]),
+  88 |     );
+> 89 |     setOpenGroups(activeGroups);
+     |     ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  90 |   }, [pathname]);
+  91 |
+  92 |   const sidebar = (  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\admin\AdminTagsField.tsx
+  53:3  error  Error: Cannot access refs during render
+
+React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).
+
+E:\web\venisia\src\components\admin\AdminTagsField.tsx:53:3
+  51 |   const tagsRef = useRef(tags);
+  52 |
+> 53 |   tagsRef.current = tags;
+     |   ^^^^^^^^^^^^^^^ Cannot update ref during render
+  54 |
+  55 |   function getComposeValue() {
+  56 |     return inputRef.current?.value ?? "";  react-hooks/refs
+
+E:\web\venisia\src\components\admin\AdminTopicSearch.tsx
+  28:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\AdminTopicSearch.tsx:28:5
+  26 |
+  27 |   useEffect(() => {
+> 28 |     setValue(defaultValue);
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  29 |   }, [defaultValue]);
+  30 |
+  31 |   useEffect(() => {              react-hooks/set-state-in-effect
+  35:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\AdminTopicSearch.tsx:35:7
+  33 |
+  34 |     if (q.length < 2) {
+> 35 |       setSuggestions([]);
+     |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  36 |       setIsOpen(false);
+  37 |       return;
+  38 |     }  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\admin\media\AdminMediaBrowseModal.tsx
+  27:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\media\AdminMediaBrowseModal.tsx:27:5
+  25 |
+  26 |     let cancelled = false;
+> 27 |     setLoading(true);
+     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  28 |     setError(null);
+  29 |
+  30 |     fetch(`/api/admin/media-browse?folder=${encodeURIComponent(folder)}`)  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\admin\media\AdminMediaFileField.tsx
+  26:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\media\AdminMediaFileField.tsx:26:5
+  24 |
+  25 |   useEffect(() => {
+> 26 |     setValue(defaultValue ?? "");
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  27 |   }, [defaultValue]);
+  28 |
+  29 |   function updateValue(next: string) {  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\admin\media\AdminMediaGalleryField.tsx
+  47:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\media\AdminMediaGalleryField.tsx:47:5
+  45 |
+  46 |   useEffect(() => {
+> 47 |     setPaths(defaultPaths?.length ? defaultPaths : parsePaths(defaultValue));
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  48 |   }, [defaultValue]);
+  49 |
+  50 |   function openAdd() {  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\admin\media\AdminMediaImageField.tsx
+  42:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\media\AdminMediaImageField.tsx:42:5
+  40 |
+  41 |   useEffect(() => {
+> 42 |     setValue(defaultValue);
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  43 |   }, [defaultValue]);
+  44 |
+  45 |   function updateValue(next: string) {  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\admin\media\AdminMediaPickerModal.tsx
+  54:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\admin\media\AdminMediaPickerModal.tsx:54:5
+  52 |   useEffect(() => {
+  53 |     if (!open) return;
+> 54 |     setFolder(resolvedInitialFolder);
+     |     ^^^^^^^^^ Avoid calling setState() directly within an effect
+  55 |     void loadFolder(resolvedInitialFolder);
+  56 |   }, [open, resolvedInitialFolder, loadFolder]);
+  57 |  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\projects\ProjectsHubHero.tsx
+  52:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\projects\ProjectsHubHero.tsx:52:7
+  50 |   useEffect(() => {
+  51 |     if (activeSlide > heroSlides.length - 1) {
+> 52 |       setActiveSlide(0);
+     |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  53 |     }
+  54 |   }, [activeSlide, heroSlides.length]);
+  55 |  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\projects\ProjectsListSection.tsx
+  57:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\projects\ProjectsListSection.tsx:57:5
+  55 |
+  56 |   useEffect(() => {
+> 57 |     setCurrentPage(1);
+     |     ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  58 |   }, [activeFilter, viewMode]);
+  59 |
+  60 |   return (  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\projects\details\ProjectDeliverySpecsSection.tsx
+  26:41  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+E:\web\venisia\src\components\projects\details\ProjectPlansAndAreasSection.tsx
+  27:24  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+E:\web\venisia\src\components\projects\details\ResidentialExecutionJourney.tsx
+  27:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+E:\web\venisia\src\components\projects\details\ResidentialExecutionJourney.tsx:27:5
+  25 |
+  26 |   useEffect(() => {
+> 27 |     setActiveUpdateId(safeUpdates[0]?.id ?? "");
+     |     ^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  28 |   }, [activeStageId, safeUpdates]);
+  29 |
+  30 |   if (!safeStages.length || !activeStage) return null;  react-hooks/set-state-in-effect
+
+E:\web\venisia\src\components\sections\SectionRenderer.tsx
+  15:11  error  Error: Cannot create components during render
+
+Components created during render will reset their state each time they are created. Declare components outside of render.
+
+E:\web\venisia\src\components\sections\SectionRenderer.tsx:15:11
+  13 |   if (!Renderer) return null;
+  14 |
+> 15 |   return <Renderer block={block} />;
+     |           ^^^^^^^^ This component is created during render
+  16 | }
+  17 |
+
+E:\web\venisia\src\components\sections\SectionRenderer.tsx:11:20
+   9 |   if (block.blockType === "breadcrumb") return null;
+  10 |
+> 11 |   const Renderer = getBlockRenderer(block.blockType);
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ The component is created during render here
+  12 |
+  13 |   if (!Renderer) return null;
+  14 |  react-hooks/static-components
+
+E:\web\venisia\src\components\seo\JsonLd.tsx
+  2:24  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  2:46  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+Γ£û 22 problems (22 errors, 0 warnings)
+

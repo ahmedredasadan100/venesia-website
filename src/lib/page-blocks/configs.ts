@@ -1,0 +1,476 @@
+export type ContentBlockConfig = {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  body?: string;
+  alignment?: "start" | "center";
+};
+
+export type AboutIntroBeatConfig = {
+  num?: string;
+  title?: string;
+  text?: string;
+};
+
+export type AboutIntroImagesConfig = {
+  main?: string;
+  secondary?: string;
+  accent?: string;
+  mainAlt?: string;
+  secondaryAlt?: string;
+  accentAlt?: string;
+};
+
+/** Structured config for the full About Intro visual section (text + images + beats). */
+export type AboutIntroModuleConfig = ContentBlockConfig & {
+  images?: AboutIntroImagesConfig;
+  beats?: AboutIntroBeatConfig[];
+  /** Optional CTA — used by home-story; ignored by About Who We Are renderer. */
+  button?: AboutCtaButtonConfig;
+};
+
+export type VisionGoalsItemConfig = {
+  title?: string;
+  text?: string;
+};
+
+export type VisionGoalsColumnConfig = {
+  title?: string;
+  items?: VisionGoalsItemConfig[];
+};
+
+/** Structured config for the Vision & Goals visual section (text + image + two columns). */
+export type VisionGoalsModuleConfig = {
+  eyebrow?: string;
+  title?: string;
+  intro?: string[];
+  image?: string;
+  imageAlt?: string;
+  vision?: VisionGoalsColumnConfig;
+  goals?: VisionGoalsColumnConfig;
+};
+
+export type AboutCtaContactConfig = {
+  label?: string;
+  value?: string;
+  href?: string;
+};
+
+export type AboutCtaButtonConfig = {
+  label?: string;
+  href?: string;
+};
+
+/** Structured config for the About CTA band (contacts + copy + image). */
+export type AboutCtaModuleConfig = {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  button?: AboutCtaButtonConfig;
+  note?: string;
+  image?: string;
+  imageAlt?: string;
+  contacts?: AboutCtaContactConfig[];
+};
+
+export const ABOUT_PRINCIPLES_ICON_KEYS = ["land", "engineering", "timeline"] as const;
+export type AboutPrinciplesIconKey = (typeof ABOUT_PRINCIPLES_ICON_KEYS)[number];
+
+export type AboutPrinciplesItemConfig = {
+  icon?: AboutPrinciplesIconKey | string;
+  title?: string;
+  description?: string;
+};
+
+/** Structured config for the About Principles section. */
+export type AboutPrinciplesModuleConfig = {
+  eyebrow?: string;
+  title?: string;
+  /** Optional intro copy — used by home-trust; ignored by About Principles renderer. */
+  description?: string;
+  items?: AboutPrinciplesItemConfig[];
+};
+
+/** Structured config for the About Approach section. */
+export type AboutApproachModuleConfig = {
+  eyebrow?: string;
+  title?: string;
+};
+
+export type CtaLinkConfig = {
+  label?: string;
+  href?: string;
+  target?: "_self" | "_blank";
+};
+
+export type CtaBlockConfig = {
+  eyebrow?: string;
+  title?: string;
+  highlight?: string;
+  description?: string;
+  primaryCta?: CtaLinkConfig;
+  secondaryCta?: CtaLinkConfig;
+  backgroundImage?: string;
+  backgroundStyle?: "dark" | "gold" | "gradient";
+};
+
+export type CardsBlockItem = {
+  title?: string;
+  body?: string;
+  icon?: string;
+  href?: string;
+};
+
+export type CardsBlockConfig = {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  columns?: 2 | 3 | 4;
+  items?: CardsBlockItem[];
+};
+
+export type BreadcrumbBlockItem = {
+  label?: string;
+  href?: string;
+};
+
+export type BreadcrumbBlockConfig = {
+  source?: "navigation" | "manual";
+  showHome?: boolean;
+  currentLabelOverride?: string;
+  manualItems?: BreadcrumbBlockItem[];
+};
+
+export function asContentConfig(raw: unknown): ContentBlockConfig {
+  return (raw ?? {}) as ContentBlockConfig;
+}
+
+export function isAboutIntroTemplate(slug: string, variant?: string | null) {
+  return slug === "about-intro" || variant === "about-intro";
+}
+
+export function isHomeStoryTemplate(slug: string, variant?: string | null) {
+  return slug === "home-story" || variant === "home-story";
+}
+
+/** Shared config shape (about-intro schema) — not the same admin module identity as about-intro. */
+export function usesAboutIntroConfigSchema(slug: string, variant?: string | null) {
+  return isAboutIntroTemplate(slug, variant) || isHomeStoryTemplate(slug, variant);
+}
+
+export function isVisionGoalsTemplate(slug: string, variant?: string | null) {
+  return slug === "vision-goals" || variant === "vision-goals";
+}
+
+export function isAboutCtaTemplate(slug: string, variant?: string | null) {
+  return slug === "about-cta" || variant === "about-cta";
+}
+
+export function isHomeContactTemplate(slug: string, variant?: string | null) {
+  return slug === "home-contact" || variant === "home-contact";
+}
+
+/** Shared config shape (about-cta schema) — not the same admin module identity as about-cta. */
+export function usesAboutCtaConfigSchema(slug: string, variant?: string | null) {
+  return isAboutCtaTemplate(slug, variant) || isHomeContactTemplate(slug, variant);
+}
+
+export function isAboutPrinciplesTemplate(slug: string, variant?: string | null) {
+  return slug === "about-principles" || variant === "about-principles";
+}
+
+export function isHomeTrustTemplate(slug: string, variant?: string | null) {
+  return slug === "home-trust" || variant === "home-trust";
+}
+
+export function isHomeProjectsTemplate(slug: string, variant?: string | null) {
+  return slug === "home-projects" || variant === "home-projects";
+}
+
+/** Shared config shape (about-principles schema) — not the same admin module identity as about-principles. */
+export function usesAboutPrinciplesConfigSchema(slug: string, variant?: string | null) {
+  return isAboutPrinciplesTemplate(slug, variant) || isHomeTrustTemplate(slug, variant);
+}
+
+export function isAboutApproachTemplate(slug: string, variant?: string | null) {
+  return slug === "about-approach" || variant === "about-approach";
+}
+
+export function resolveContentBlockConfig(template: {
+  slug: string;
+  variant?: string | null;
+  config: unknown;
+}):
+  | ContentBlockConfig
+  | AboutIntroModuleConfig
+  | VisionGoalsModuleConfig
+  | AboutCtaModuleConfig
+  | AboutPrinciplesModuleConfig
+  | AboutApproachModuleConfig {
+  if (usesAboutIntroConfigSchema(template.slug, template.variant)) {
+    return asAboutIntroConfig(template.config);
+  }
+  if (isVisionGoalsTemplate(template.slug, template.variant)) {
+    return asVisionGoalsConfig(template.config);
+  }
+  if (usesAboutCtaConfigSchema(template.slug, template.variant)) {
+    return asAboutCtaConfig(template.config);
+  }
+  if (usesAboutPrinciplesConfigSchema(template.slug, template.variant)) {
+    return asAboutPrinciplesConfig(template.config);
+  }
+  if (isAboutApproachTemplate(template.slug, template.variant)) {
+    return asAboutApproachConfig(template.config);
+  }
+  return asContentConfig(template.config);
+}
+
+export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
+  const config = (raw ?? {}) as Record<string, unknown>;
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+  const imagesRaw = config.images as Record<string, unknown> | undefined;
+  const readImage = (nestedKey: string, flatKey: string) =>
+    readText(imagesRaw?.[nestedKey]) || readText(config[flatKey]) || undefined;
+
+  const images = imagesRaw || config.image_main || config.image_secondary || config.image_accent
+    ? {
+        main: readImage("main", "image_main"),
+        secondary: readImage("secondary", "image_secondary"),
+        accent: readImage("accent", "image_accent"),
+        mainAlt: readText(imagesRaw?.mainAlt ?? imagesRaw?.main_alt ?? config.image_main_alt) || undefined,
+        secondaryAlt:
+          readText(imagesRaw?.secondaryAlt ?? imagesRaw?.secondary_alt ?? config.image_secondary_alt) || undefined,
+        accentAlt: readText(imagesRaw?.accentAlt ?? imagesRaw?.accent_alt ?? config.image_accent_alt) || undefined,
+      }
+    : undefined;
+
+  const beatsRaw = config.beats;
+  const beats = Array.isArray(beatsRaw)
+    ? beatsRaw
+        .slice(0, 3)
+        .map((beat, index) => {
+          const row = beat as Record<string, unknown>;
+          return {
+            num: readText(row.num) || String(index + 1).padStart(2, "0"),
+            title: readText(row.title) || undefined,
+            text: readText(row.text) || undefined,
+          };
+        })
+    : undefined;
+
+  const buttonRaw = config.button as Record<string, unknown> | undefined;
+  const buttonLabel = readText(buttonRaw?.label ?? config.button_label);
+  const buttonHref = readText(buttonRaw?.href ?? config.button_href);
+  const button =
+    buttonLabel || buttonHref
+      ? {
+          label: buttonLabel || undefined,
+          href: buttonHref || undefined,
+        }
+      : undefined;
+
+  return {
+    eyebrow: readText(config.eyebrow) || undefined,
+    title: readText(config.title) || undefined,
+    subtitle: readText(config.subtitle) || undefined,
+    body: readText(config.body) || undefined,
+    alignment: config.alignment === "center" ? "center" : "start",
+    images,
+    beats,
+    button,
+  };
+}
+
+function readVisionGoalsColumn(raw: unknown): VisionGoalsColumnConfig | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const column = raw as Record<string, unknown>;
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const itemsRaw = column.items;
+
+  const items = Array.isArray(itemsRaw)
+    ? itemsRaw
+        .map((item) => {
+          const row = item as Record<string, unknown>;
+          const title = readText(row.title);
+          const text = readText(row.text);
+          if (!title && !text) return null;
+          return { title: title || undefined, text: text || undefined };
+        })
+        .filter(Boolean) as VisionGoalsItemConfig[]
+    : undefined;
+
+  const title = readText(column.title) || undefined;
+
+  return title || items?.length ? { title, items } : undefined;
+}
+
+export function asVisionGoalsConfig(raw: unknown): VisionGoalsModuleConfig {
+  const config = (raw ?? {}) as Record<string, unknown>;
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+  const image =
+    readText(config.image) ||
+    readText(config.image_path) ||
+    readText(config.imagePath) ||
+    undefined;
+
+  const introRaw = config.intro;
+  let intro: string[] | undefined;
+  if (Array.isArray(introRaw)) {
+    intro = introRaw.map(readText).filter(Boolean);
+  } else if (typeof introRaw === "string" && introRaw.trim()) {
+    intro = introRaw
+      .split(/\n{2,}/)
+      .map(readText)
+      .filter(Boolean);
+  } else if (typeof config.body === "string" && config.body.trim()) {
+    intro = config.body
+      .split(/\n{2,}/)
+      .map(readText)
+      .filter(Boolean);
+  }
+
+  return {
+    eyebrow: readText(config.eyebrow) || undefined,
+    title: readText(config.title) || undefined,
+    intro,
+    image,
+    imageAlt: readText(config.imageAlt ?? config.image_alt) || undefined,
+    vision: readVisionGoalsColumn(config.vision),
+    goals: readVisionGoalsColumn(config.goals),
+  };
+}
+
+export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
+  const config = (raw ?? {}) as Record<string, unknown>;
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+  const buttonRaw = config.button as Record<string, unknown> | undefined;
+  const buttonLabel = readText(buttonRaw?.label) || readText(config.button_label) || undefined;
+  const buttonHref = readText(buttonRaw?.href) || readText(config.button_href) || undefined;
+  const button = buttonLabel || buttonHref ? { label: buttonLabel, href: buttonHref } : undefined;
+
+  const image =
+    readText(config.image) ||
+    readText(config.image_path) ||
+    readText(config.imagePath) ||
+    undefined;
+
+  const contactsRaw = config.contacts;
+  const contacts = Array.isArray(contactsRaw)
+    ? contactsRaw
+        .slice(0, 4)
+        .map((item) => {
+          const row = item as Record<string, unknown>;
+          const label = readText(row.label);
+          const value = readText(row.value);
+          const href = readText(row.href) || undefined;
+          if (!label && !value) return null;
+          return { label: label || undefined, value: value || undefined, href };
+        })
+        .filter(Boolean) as AboutCtaContactConfig[]
+    : undefined;
+
+  return {
+    eyebrow: readText(config.eyebrow) || undefined,
+    title: readText(config.title) || undefined,
+    description: readText(config.description) || readText(config.body) || undefined,
+    button,
+    note: readText(config.note) || undefined,
+    image,
+    imageAlt: readText(config.imageAlt ?? config.image_alt) || undefined,
+    contacts,
+  };
+}
+
+function normalizePrinciplesIcon(value: unknown): AboutPrinciplesIconKey {
+  const key = typeof value === "string" ? value.trim() : "";
+  if (ABOUT_PRINCIPLES_ICON_KEYS.includes(key as AboutPrinciplesIconKey)) {
+    return key as AboutPrinciplesIconKey;
+  }
+  return "land";
+}
+
+export function asAboutPrinciplesConfig(raw: unknown): AboutPrinciplesModuleConfig {
+  const config = (raw ?? {}) as Record<string, unknown>;
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+  const itemsRaw = config.items;
+  const items = Array.isArray(itemsRaw)
+    ? itemsRaw
+        .slice(0, 6)
+        .map((item) => {
+          const row = item as Record<string, unknown>;
+          const title = readText(row.title);
+          const description = readText(row.description ?? row.text ?? row.body);
+          const icon = normalizePrinciplesIcon(row.icon);
+          if (!title && !description) return null;
+          return { icon, title: title || undefined, description: description || undefined };
+        })
+        .filter(Boolean) as AboutPrinciplesItemConfig[]
+    : undefined;
+
+  return {
+    eyebrow: readText(config.eyebrow) || undefined,
+    title: readText(config.title) || undefined,
+    description: readText(config.description) || undefined,
+    items,
+  };
+}
+
+export function asAboutApproachConfig(raw: unknown): AboutApproachModuleConfig {
+  const config = (raw ?? {}) as Record<string, unknown>;
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+  return {
+    eyebrow: readText(config.eyebrow) || undefined,
+    title: readText(config.title) || undefined,
+  };
+}
+
+export function asCtaConfig(raw: unknown): CtaBlockConfig {
+  return (raw ?? {}) as CtaBlockConfig;
+}
+
+export function asCardsConfig(raw: unknown): CardsBlockConfig {
+  return (raw ?? {}) as CardsBlockConfig;
+}
+
+export function asBreadcrumbConfig(raw: unknown): BreadcrumbBlockConfig {
+  const config = (raw ?? {}) as Record<string, unknown>;
+
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const source = config.source === "manual" ? "manual" : "navigation";
+
+  let showHome = true;
+  if (typeof config.showHome === "boolean") {
+    showHome = config.showHome;
+  } else if (config.show_home === false || config.show_home === "false") {
+    showHome = false;
+  }
+
+  const manualRaw = config.manualItems ?? config.manual_items;
+  const manualItems = Array.isArray(manualRaw)
+    ? manualRaw
+        .map((item) => {
+          const row = item as Record<string, unknown>;
+          const label = readText(row.label);
+          const href = readText(row.href);
+          if (!label) return null;
+          return { label, href: href || undefined };
+        })
+        .filter(Boolean) as BreadcrumbBlockItem[]
+    : undefined;
+
+  const currentLabelOverride =
+    readText(config.currentLabelOverride) || readText(config.current_label_override) || undefined;
+
+  return {
+    source,
+    showHome,
+    currentLabelOverride,
+    manualItems,
+  };
+}

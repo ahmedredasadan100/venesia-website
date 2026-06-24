@@ -1,6 +1,21 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans_Arabic, Inter } from "next/font/google";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+import JsonLd from "../components/seo/JsonLd";
+import AppChrome from "../components/AppChrome";
+import { FooterSettingsProvider } from "../components/FooterSettingsProvider";
+import { PublicNavigationProvider } from "../components/PublicNavigationProvider";
+import { loadFooterSettings } from "../lib/footer/load-footer-settings";
+import { getPublicNavigationItems } from "../lib/navigation/get-public-navigation";
+import { logError } from "../lib/logging";
+import { buildMetadata } from "../lib/seo/build-metadata";
+import {
+  buildOrganizationSchema,
+  buildWebsiteSchema,
+} from "../lib/seo/build-jsonld";
+import { buildAiVisibilityJson } from "../lib/seo/build-ai-visibility";
+import { buildFaqSchema } from "../lib/seo/build-faq-schema";
+import { VENESIA_FAQS } from "../config/seo/faq-schema";
+import { SEO_SITE } from "../config/seo/seo-site";
 import "./globals.css";
 
 const ibmArabic = IBM_Plex_Sans_Arabic({
@@ -14,23 +29,60 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-export const metadata: Metadata = {
-  title: "Venesia Developments",
-  description: "Real Estate Developer",
+export const metadata: Metadata = buildMetadata({
+  path: "/",
+});
+
+export const viewport: Viewport = {
+  themeColor: SEO_SITE.themeColor,
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
-export default function RootLayout({
+const organizationSchema = buildOrganizationSchema();
+const websiteSchema = buildWebsiteSchema();
+const aiVisibilitySchema = buildAiVisibilityJson();
+const faqSchema = buildFaqSchema(VENESIA_FAQS);
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let navigationItems: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
+  let footerNavItems: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
+  let footerSettings = await loadFooterSettings().catch(() => null);
+
+  try {
+    [navigationItems, footerNavItems] = await Promise.all([
+      getPublicNavigationItems("main"),
+      getPublicNavigationItems("footer"),
+    ]);
+  } catch (error) {
+    logError("Failed to preload public navigation in root layout", error, { location: "main/footer" });
+  }
+
+  if (!footerSettings) {
+    const { DEFAULT_FOOTER_SETTINGS } = await import("../lib/footer/defaults");
+    footerSettings = DEFAULT_FOOTER_SETTINGS;
+  }
+
   return (
-    <html lang="ar">
+    <html lang={SEO_SITE.language} dir={SEO_SITE.direction}>
       <body
-        className={`${ibmArabic.variable} ${inter.variable} antialiased`}
+        className={`${ibmArabic.variable} ${inter.variable} overflow-x-hidden antialiased`}
       >
-        {children}
-        <SpeedInsights />
+        <JsonLd data={organizationSchema} />
+        <JsonLd data={websiteSchema} />
+        <JsonLd data={aiVisibilitySchema} />
+        <JsonLd data={faqSchema} />
+
+        <PublicNavigationProvider items={navigationItems}>
+          <FooterSettingsProvider settings={footerSettings} footerNavItems={footerNavItems}>
+            <AppChrome>{children}</AppChrome>
+          </FooterSettingsProvider>
+        </PublicNavigationProvider>
       </body>
     </html>
   );

@@ -20,18 +20,50 @@
 
 html,
 body {
-  /* Prevent any element from creating a horizontal scrollbar.
-     The actual leaking element (CTA ambient glow with -inset-8) is
-     contained at its own section level; this is a safety net only. */
+  width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
 }
 
 body {
+  position: relative;
   font-family: var(--font-arabic), sans-serif;
   font-weight: 400;
   background: #05070B;
   color: #ffffff;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+
+/* ─────────────────────────────────────────────────────────
+   Venesia Typography Polish
+───────────────────────────────────────────────────────── */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-arabic), sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.18;
+}
+
+p {
+  font-weight: 400;
+  line-height: 1.9;
+}
+
+::selection {
+  background: rgba(216, 184, 122, 0.28);
+  color: #ffffff;
+}
+
+
 
 .font-en {
   font-family: var(--font-inter);
@@ -64,6 +96,41 @@ body {
 .hero-slide-ken-burns-alt {
   /* 48 s — slightly longer to avoid feeling synchronised with even slides */
   animation: hero-ken-burns-alt 48s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes hero-card-ken-burns {
+  0% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1.08) translate3d(-0.6%, 0.4%, 0);
+  }
+}
+
+@keyframes hero-card-ken-burns-alt {
+  0% {
+    transform: scale(1.03) translate3d(0.25%, 0.15%, 0);
+  }
+  100% {
+    transform: scale(1.075) translate3d(0.65%, -0.35%, 0);
+  }
+}
+
+.hero-card-ken-burns {
+  animation: hero-card-ken-burns 20s ease-in-out infinite alternate;
+  will-change: transform;
+  transform-origin: center center;
+}
+
+.hero-card-ken-burns-alt {
+  animation: hero-card-ken-burns-alt 22s ease-in-out infinite alternate;
+  will-change: transform;
+  transform-origin: center center;
+}
+
+.hero-bg-parallax-layer {
+  transform: translate3d(0, 0, 0) scale(1.025);
   will-change: transform;
 }
 
@@ -106,6 +173,13 @@ body {
       transparent             55%,
       transparent            100%
     );
+}
+
+.venesia-hero-projects-bridge {
+  background:
+    radial-gradient(ellipse 125% 75% at 18% 0%, rgba(192, 143, 62, 0.055) 0%, transparent 68%),
+    radial-gradient(ellipse 100% 60% at 82% 0%, rgba(14, 30, 70, 0.10) 0%, transparent 62%),
+    linear-gradient(to bottom, rgba(5, 7, 11, 0.05) 0%, transparent 100%);
 }
 
 /* ─── film grain ────────────────────────────────────────────────────────────────
@@ -182,3 +256,402 @@ body {
     radial-gradient(ellipse  80% 20% at 60%  100%,rgba(14,  26,  52, 0.18) 0%, transparent 100%),
     linear-gradient(to bottom, transparent 0%, rgba(5, 7, 11, 0.60) 100%);
 }
+
+/* ─── about internal hero — restrained cinematic motion ─────────────────────── */
+@keyframes about-hero-ken-burns {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    transform: translate(calc(-50% - 0.16%), calc(-50% + 0.1%)) scale(1.014);
+  }
+}
+
+.about-hero-ken-burns {
+  animation: about-hero-ken-burns 66s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes about-hero-media-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.about-hero-media-enter {
+  animation: about-hero-media-enter 1.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes about-hero-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.about-hero-content-enter {
+  animation: about-hero-content-enter 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.12s forwards;
+  opacity: 0;
+}
+
+@keyframes about-hero-atmosphere-drift {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    opacity: 0.94;
+    transform: translate3d(0, -0.2%, 0);
+  }
+}
+
+.about-hero-atmosphere-drift {
+  animation: about-hero-atmosphere-drift 34s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes about-hero-glow-breathe {
+  0%,
+  100% {
+    opacity: 0.88;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.about-hero-glow-breathe {
+  animation: about-hero-glow-breathe 22s ease-in-out infinite;
+}
+
+.about-hero-parallax-layer {
+  transform: translate3d(0, 0, 0) scale(1.035);
+  will-change: transform;
+  transition: transform 0.18s linear;
+}
+
+/* ─── About Hero Cinematic Diagonal Cut ───────────────────────── */
+
+.about-hero-diagonal-cut {
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 100px;
+  z-index: 6;
+  pointer-events: none;
+
+  background:
+    linear-gradient(
+      to bottom right,
+      transparent 0%,
+      transparent 43%,
+      rgba(5,7,11,0.72) 44%,
+      #05070B 72%,
+      #05070B 100%
+    );
+    box-shadow:
+  inset 0 1px 0 rgba(216,184,122,0.05);
+}
+
+/* subtle atmospheric continuation */
+.about-hero-diagonal-cut::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background:
+    radial-gradient(
+      ellipse at 20% 0%,
+      rgba(216,184,122,0.10) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(5,7,11,0.00) 0%,
+      rgba(5,7,11,0.28) 100%
+    );
+
+  mix-blend-mode: screen;
+  opacity: 0.65;
+}
+@keyframes shimmer {
+  0% {
+    transform: translateX(130%);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-230%);
+    opacity: 0;
+  }
+}
+@keyframes featuredFade {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+ @keyframes heroProjectCard {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+
+ 
+/* ─── Venesia Admin Premium Skin ─────────────────────────────── */
+.admin-premium-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(216, 184, 122, 0.13);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(216, 184, 122, 0.075), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+    rgba(8, 13, 22, 0.82);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.052);
+  backdrop-filter: blur(18px);
+}
+
+.admin-premium-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(216, 184, 122, 0.10), transparent 24%, transparent 72%, rgba(47, 107, 255, 0.045));
+  opacity: 0.72;
+}
+
+.admin-premium-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.admin-premium-card:hover {
+  border-color: rgba(216, 184, 122, 0.28);
+  box-shadow:
+    0 34px 110px rgba(0, 0, 0, 0.46),
+    0 0 40px rgba(216, 184, 122, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.admin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(216, 184, 122, 0.42) rgba(255, 255, 255, 0.035);
+}
+
+.admin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.admin-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 999px;
+}
+
+.admin-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(216, 184, 122, 0.68), rgba(137, 100, 44, 0.52));
+  border-radius: 999px;
+}
+
+.admin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(240, 212, 147, 0.9), rgba(216, 184, 122, 0.7));
+}
+
+/* ─── Venesia Admin Sidebar: real layout integration ─────────────
+   The sidebar is not a framed panel anymore.
+   No own height, no own scroll, no own background, no divider.
+   It participates in the page canvas exactly like Joomla-style admin layout. */
+.admin-sidebar-shell {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: visible !important;
+  scrollbar-width: none;
+}
+
+.admin-sidebar-shell,
+.admin-sidebar-shell * {
+  scroll-behavior: auto;
+}
+
+.admin-sidebar-shell::-webkit-scrollbar,
+.admin-sidebar-shell *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.admin-sidebar-shell::before,
+.admin-sidebar-shell::after {
+  content: none !important;
+  display: none !important;
+}
+
+@keyframes admin-edge-trace {
+  to { --admin-edge-angle: 360deg; }
+}
+
+@property --admin-edge-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.admin-premium-card::after,
+.admin-mini-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(
+    from var(--admin-edge-angle),
+    transparent 0deg,
+    transparent 38deg,
+    rgba(216, 184, 122, 0.72) 54deg,
+    rgba(240, 212, 147, 0.95) 68deg,
+    rgba(216, 184, 122, 0.20) 84deg,
+    transparent 106deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transition: opacity 280ms ease;
+}
+
+.admin-premium-card:hover::after,
+.admin-mini-card:hover::after {
+  opacity: 1;
+  animation: admin-edge-trace 1.15s linear infinite;
+}
+
+.admin-mini-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.admin-mini-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+.admin-premium-card > * {
+  z-index: 2;
+}
+
+@media (max-height: 760px) {
+  .admin-sidebar-shell nav {
+    padding-top: 0.55rem !important;
+    padding-bottom: 0.55rem !important;
+  }
+
+  .admin-sidebar-shell nav > div {
+    row-gap: 0.15rem !important;
+  }
+
+  .admin-sidebar-shell a,
+  .admin-sidebar-shell button {
+    padding-top: 0.52rem !important;
+    padding-bottom: 0.52rem !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
+   Admin Select / Dropdown Readability
+───────────────────────────────────────────────────────── */
+.admin-select,
+.admin-select option,
+select.admin-select,
+select.admin-select option {
+  background-color: #0B0F16;
+  color: #FFFFFF;
+}
+
+.admin-select option:checked,
+.admin-select option:hover {
+  background-color: #1B2330;
+  color: #D8B87A;
+}
+
+/* ─────────────────────────────────────────────────────────
+   Admin Bulk Actions Visibility
+───────────────────────────────────────────────────────── */
+.bulk-menu-scope:has(input[name="menu_ids"]:checked) .bulk-menu-bar {
+  display: flex;
+}
+
+/* ─────────────────────────────────────────────────────────
+   Public Rich Text (TipTap / CMS HTML)
+───────────────────────────────────────────────────────── */
+.rich-text-content {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.rich-text-content p {
+  margin: 0 0 1rem;
+}
+
+.rich-text-content p:last-child {
+  margin-bottom: 0;
+}
+
+.rich-text-content ul,
+.rich-text-content ol {
+  margin: 0 0 1.125rem;
+  padding-right: 1.5rem;
+}
+
+.rich-text-content li {
+  margin-bottom: 0.375rem;
+}
+
+.rich-text-content a {
+  color: #d8b87a;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rich-text-content strong,
+.rich-text-content b {
+  color: #f2d99b;
+  font-weight: 700;
+}
+
