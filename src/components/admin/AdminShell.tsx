@@ -252,6 +252,16 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               </div>
 
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await fetch("/api/admin/auth/logout", { method: "POST" });
+                    window.location.href = "/admin/login";
+                  }}
+                  className="rounded-2xl border border-white/10 px-3 py-2 text-xs font-semibold text-white/55 transition hover:border-[#D8B87A]/30 hover:text-[#D8B87A]"
+                >
+                  خروج
+                </button>
                 <button className="grid size-11 place-items-center rounded-2xl border border-[#D8B87A]/14 bg-white/[0.045] text-white/62 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]">
                   🔔
                 </button>

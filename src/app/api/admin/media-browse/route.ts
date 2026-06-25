@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 
+import { requireAdminApi } from "../../../../lib/admin/auth/require-admin-api";
 import { listPublicImagePaths } from "../../../../lib/admin/media-library";
 
 export async function GET(request: Request) {
+  const authError = await requireAdminApi();
+  if (authError) return authError;
+
   const { searchParams } = new URL(request.url);
   const folder = searchParams.get("folder") || "images";
 

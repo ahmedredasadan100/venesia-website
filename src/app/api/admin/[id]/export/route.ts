@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireAdminApi } from "../../../../../lib/admin/auth/require-admin-api";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { logError } from "../../../../../lib/logging";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const authError = await requireAdminApi();
+  if (authError) return authError;
+
   const { id } = await params;
   const menuId = Number(id);
 

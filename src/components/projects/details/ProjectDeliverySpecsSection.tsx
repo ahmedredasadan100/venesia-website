@@ -23,11 +23,12 @@ type ProjectDeliverySpecsSectionProps = {
 export default function ProjectDeliverySpecsSection({
   deliverySpecs,
 }: ProjectDeliverySpecsSectionProps) {
+  const images = deliverySpecs?.images ?? [];
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
   if (!deliverySpecs) return null;
 
-  const [activeImage, setActiveImage] = useState<DeliverySpecImage | undefined>(
-    deliverySpecs.images[0],
-  );
+  const activeImage = images[activeImageIndex] ?? images[0];
 
   return (
     <section
@@ -81,7 +82,7 @@ export default function ProjectDeliverySpecsSection({
                   <button
                     key={`${image.image}-${index}`}
                     type="button"
-                    onClick={() => setActiveImage(image)}
+                    onClick={() => setActiveImageIndex(index)}
                     className={`overflow-hidden rounded-2xl border transition-all ${
                       activeImage?.image === image.image
                         ? "border-[#D8B87A] ring-1 ring-[#D8B87A]"

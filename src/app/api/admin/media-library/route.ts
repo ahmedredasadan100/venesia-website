@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAdminApi } from "../../../../lib/admin/auth/require-admin-api";
 import {
   listPublicMediaFolder,
   normalizeMediaFolder,
@@ -8,6 +9,9 @@ import {
 } from "../../../../lib/admin/media-library";
 
 export async function GET(request: Request) {
+  const authError = await requireAdminApi();
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(request.url);
     const folder = normalizeMediaFolder(searchParams.get("folder") || "images");
@@ -22,6 +26,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const authError = await requireAdminApi();
+  if (authError) return authError;
+
   try {
     const formData = await request.formData();
     const file = formData.get("file");

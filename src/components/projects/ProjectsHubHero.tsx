@@ -34,25 +34,18 @@ export default function ProjectsHubHero({
   }, [projects, featuredProject]);
 
   const [activeSlide, setActiveSlide] = useState(0);
-  const activeProject = heroSlides[activeSlide];
+  const boundedSlide = heroSlides.length ? activeSlide % heroSlides.length : 0;
+  const activeProject = heroSlides[boundedSlide];
 
   useEffect(() => {
     if (heroSlides.length <= 1) return;
 
     const timer = window.setInterval(() => {
-      setActiveSlide((prev) =>
-        prev === heroSlides.length - 1 ? 0 : prev + 1
-      );
+      setActiveSlide((prev) => (prev + 1) % heroSlides.length);
     }, 6000);
 
     return () => window.clearInterval(timer);
   }, [heroSlides.length]);
-
-  useEffect(() => {
-    if (activeSlide >= heroSlides.length) {
-      setActiveSlide(0);
-    }
-  }, [activeSlide, heroSlides.length]);
 
   if (!activeProject) return null;
 
@@ -144,7 +137,7 @@ export default function ProjectsHubHero({
             >
               <span
                 className={`block h-1.5 rounded-full transition-all duration-500 ${
-                  index === activeSlide ? "w-8 bg-[#D8B87A]" : "w-3 bg-white/25 group-hover:bg-white/45"
+                  index === boundedSlide ? "w-8 bg-[#D8B87A]" : "w-3 bg-white/25 group-hover:bg-white/45"
                 }`}
               />
             </button>

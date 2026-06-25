@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { type ResidentialExecutionJourneyStage } from "../../../lib/projects/public-types";
 
@@ -23,14 +23,14 @@ export default function ResidentialExecutionJourney({
 
   const safeUpdates = activeStage?.updates ?? [];
 
-  useEffect(() => {
-    setActiveUpdateId(safeUpdates[0]?.id ?? "");
-  }, [activeStageId, safeUpdates]);
+  const resolvedUpdateId = safeUpdates.some((update) => update.id === activeUpdateId)
+    ? activeUpdateId
+    : (safeUpdates[0]?.id ?? "");
 
   if (!safeStages.length || !activeStage) return null;
 
   const activeUpdate =
-    safeUpdates.find((update) => update.id === activeUpdateId) ?? safeUpdates[0];
+    safeUpdates.find((update) => update.id === resolvedUpdateId) ?? safeUpdates[0];
 
   const galleryImages = (activeUpdate?.gallery?.length
     ? activeUpdate.gallery

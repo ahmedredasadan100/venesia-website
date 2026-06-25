@@ -20,8 +20,6 @@ export default function ProjectPlansAndAreasSection({
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  if (!areas.length) return null;
-
   const isSlider = areas.length > 3;
 
   const visibleAreas = useMemo(() => {
@@ -33,6 +31,8 @@ export default function ProjectPlansAndAreasSection({
       areas[(activeIndex + 2) % areas.length],
     ];
   }, [areas, activeIndex, isSlider]);
+
+  if (!areas.length) return null;
 
   const goNext = () => {
     setActiveIndex((current) => (current + 1) % areas.length);

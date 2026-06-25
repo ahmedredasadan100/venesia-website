@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import {
@@ -36,11 +36,17 @@ export default function ProjectsListSection({
   const projectsStartRef = useRef<HTMLDivElement | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(projects.length / PROJECTS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
 
   const paginatedProjects = useMemo(() => {
-    const start = (currentPage - 1) * PROJECTS_PER_PAGE;
+    const start = (safeCurrentPage - 1) * PROJECTS_PER_PAGE;
     return projects.slice(start, start + PROJECTS_PER_PAGE);
-  }, [projects, currentPage]);
+  }, [projects, safeCurrentPage]);
+
+  const handleFilterChange = (filter: ProjectHubFilterId) => {
+    setCurrentPage(1);
+    onFilterChange(filter);
+  };
 
   const goToPage = (page: number) => {
     setCurrentPage(page);
@@ -52,10 +58,6 @@ export default function ProjectsListSection({
       });
     });
   };
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeFilter, viewMode]);
 
   return (
     <section className="px-6 pt-14">
@@ -77,7 +79,10 @@ export default function ProjectsListSection({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setViewMode("list")}
+              onClick={() => {
+                setCurrentPage(1);
+                setViewMode("list");
+              }}
               className={`rounded-lg border px-3 py-2 text-sm transition ${
                 viewMode === "list"
                   ? "border-[#D8B87A]/35 text-[#D8B87A]"
@@ -89,7 +94,10 @@ export default function ProjectsListSection({
 
             <button
               type="button"
-              onClick={() => setViewMode("cards")}
+              onClick={() => {
+                setCurrentPage(1);
+                setViewMode("cards");
+              }}
               className={`rounded-lg border px-3 py-2 text-sm transition ${
                 viewMode === "cards"
                   ? "border-[#D8B87A]/35 text-[#D8B87A]"
@@ -104,7 +112,7 @@ export default function ProjectsListSection({
         <div className="mb-7">
           <ProjectsHubFilters
             activeFilter={activeFilter}
-            onFilterChange={onFilterChange}
+            onFilterChange={handleFilterChange}
             stats={stats}
           />
         </div>

@@ -3,6 +3,11 @@ import "server-only";
 import fs from "fs";
 import path from "path";
 
+/**
+ * Media uploads write directly to /public (images, files).
+ * Migration plan: docs/security-media-upload-migration.md
+ */
+
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg"]);
 const PDF_EXTENSIONS = new Set([".pdf"]);
 const MEDIA_ROOT_FOLDERS = new Set(["images", "files"]);

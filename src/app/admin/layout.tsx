@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import AdminShell from "../../components/admin/AdminShell";
+import AdminAccessLayout from "../../components/admin/AdminAccessLayout";
 import { NO_INDEX_ROBOTS } from "../../config/seo/seo-rules";
 import { buildMetadata } from "../../lib/seo/build-metadata";
 
@@ -16,5 +16,5 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <AdminShell>{children}</AdminShell>;
+  return <AdminAccessLayout>{children}</AdminAccessLayout>;
 }
