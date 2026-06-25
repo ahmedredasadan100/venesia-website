@@ -8,16 +8,16 @@ import BackToTopButton from "./BackToTopButton";
 
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isAdmin = pathname.startsWith("/admin");
+  const isStandalone = pathname.startsWith("/admin") || pathname === "/maintenance";
 
   return (
     <>
-      {!isAdmin ? <SiteNavbar /> : null}
+      {!isStandalone ? <SiteNavbar /> : null}
 
       {children}
 
-      {!isAdmin ? <SiteFooter immediateReveal /> : null}
-      {!isAdmin ? <BackToTopButton /> : null}
+      {!isStandalone ? <SiteFooter immediateReveal /> : null}
+      {!isStandalone ? <BackToTopButton /> : null}
 
       <SpeedInsights />
     </>

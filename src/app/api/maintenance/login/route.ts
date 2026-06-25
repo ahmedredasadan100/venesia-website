@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { handleAdminLoginRequest } from "../../../../../lib/admin/auth/handle-admin-login";
+import { handleAdminLoginRequest } from "../../../../lib/admin/auth/handle-admin-login";
 
 export async function POST(request: Request) {
   try {

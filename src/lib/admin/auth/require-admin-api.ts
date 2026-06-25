@@ -8,6 +8,7 @@ import {
   ADMIN_SESSION_TTL_SEC,
   createAdminSessionToken,
   getAdminAuthConfig,
+  getAdminSessionCookieDomain,
   shouldUseSecureAdminSessionCookie,
   verifyAdminSessionToken,
 } from "./session";
@@ -29,32 +30,38 @@ export async function requireAdminApi() {
   return null;
 }
 
-export function createAdminSessionCookie(username: string) {
+export function createAdminSessionCookie(username: string, request?: Request) {
   const config = getAdminAuthConfig();
   if (!config.configured) {
     throw new Error("Admin auth is not configured.");
   }
 
   const value = createAdminSessionToken(username, config.secret);
+  const domain = getAdminSessionCookieDomain(request);
+
   return {
     name: ADMIN_SESSION_COOKIE,
     value,
     httpOnly: true,
-    secure: shouldUseSecureAdminSessionCookie(),
+    secure: shouldUseSecureAdminSessionCookie(request),
     sameSite: "lax" as const,
     path: "/",
     maxAge: ADMIN_SESSION_TTL_SEC,
+    ...(domain ? { domain } : {}),
   };
 }
 
-export function clearAdminSessionCookie() {
+export function clearAdminSessionCookie(request?: Request) {
+  const domain = getAdminSessionCookieDomain(request);
+
   return {
     name: ADMIN_SESSION_COOKIE,
     value: "",
     httpOnly: true,
-    secure: shouldUseSecureAdminSessionCookie(),
+    secure: shouldUseSecureAdminSessionCookie(request),
     sameSite: "lax" as const,
     path: "/",
     maxAge: 0,
+    ...(domain ? { domain } : {}),
   };
 }

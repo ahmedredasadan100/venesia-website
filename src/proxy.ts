@@ -9,6 +9,8 @@ import {
   isAdminAuthPublicPath,
   isAdminPath,
 } from "./lib/admin/auth/session";
+import { isMaintenancePublicPath } from "./lib/maintenance/paths";
+import { isMaintenanceModeEnabled } from "./lib/maintenance/read-maintenance-mode";
 
 function redirectToLogin(request: NextRequest) {
   const loginUrl = new URL("/admin/login", request.url);
@@ -21,16 +23,35 @@ function redirectToLogin(request: NextRequest) {
   return NextResponse.redirect(loginUrl);
 }
 
+function redirectToMaintenance(request: NextRequest) {
+  const maintenanceUrl = new URL("/maintenance", request.url);
+  const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+
+  if (nextPath && nextPath !== "/maintenance") {
+    maintenanceUrl.searchParams.set("next", nextPath);
+  }
+
+  return NextResponse.redirect(maintenanceUrl);
+}
+
 function unauthorizedApi() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
-export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+function maintenanceApi() {
+  return NextResponse.json({ error: "Site is under maintenance." }, { status: 503 });
+}
 
-  if (!isAdminPath(pathname) && !isAdminApiPath(pathname)) {
-    return NextResponse.next();
-  }
+function hasBypassSession(request: NextRequest) {
+  const config = getAdminAuthConfig();
+  if (!config.configured) return false;
+
+  const sessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+  return hasValidAdminSession(sessionCookie, config.secret);
+}
+
+function handleAdminAuth(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
   if (isAdminAuthPublicPath(pathname)) {
     return NextResponse.next();
@@ -44,16 +65,47 @@ export function proxy(request: NextRequest) {
     return redirectToLogin(request);
   }
 
-  const sessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  const authenticated = hasValidAdminSession(sessionCookie, config.secret);
-
-  if (!authenticated) {
+  if (!hasBypassSession(request)) {
     return isAdminApiPath(pathname) ? unauthorizedApi() : redirectToLogin(request);
   }
 
   return NextResponse.next();
 }
 
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isAdminPath(pathname) || isAdminApiPath(pathname)) {
+    return handleAdminAuth(request);
+  }
+
+  if (isMaintenancePublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  const maintenanceOn = await isMaintenanceModeEnabled();
+  if (!maintenanceOn) {
+    return NextResponse.next();
+  }
+
+  if (hasBypassSession(request)) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/api/")) {
+    return maintenanceApi();
+  }
+
+  return redirectToMaintenance(request);
+}
+
 export const config = {
-  matcher: ["/admin", "/admin/:path*", "/api/admin/:path*"],
+  matcher: [
+    "/admin",
+    "/admin/:path*",
+    "/api/admin/:path*",
+    "/maintenance",
+    "/api/maintenance/:path*",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+  ],
 };

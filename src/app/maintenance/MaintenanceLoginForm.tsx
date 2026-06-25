@@ -1,0 +1,88 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { FormEvent, useState } from "react";
+
+export default function MaintenanceLoginForm() {
+  const searchParams = useSearchParams();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const trimmedUsername = username.trim();
+      const response = await fetch("/api/maintenance/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ username: trimmedUsername, password }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError("بيانات الدخول غير صحيحة.");
+          return;
+        }
+        setError(payload.error ?? "تعذر تسجيل الدخول.");
+        return;
+      }
+
+      const nextPath = searchParams.get("next") || "/";
+      const destination = nextPath.startsWith("/") ? nextPath : "/";
+      window.location.assign(destination);
+    } catch {
+      setError("تعذر الاتصال بالخادم.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="mx-auto w-full max-w-md space-y-4" dir="rtl">
+      <label className="block space-y-2 text-sm text-white/55">
+        <span>اسم المستخدم</span>
+        <input
+          name="username"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+          autoComplete="username"
+          required
+          className="w-full rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-white outline-none focus:border-[#D8B87A]/45"
+        />
+      </label>
+
+      <label className="block space-y-2 text-sm text-white/55">
+        <span>كلمة المرور</span>
+        <input
+          name="password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          autoComplete="current-password"
+          required
+          className="w-full rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-white outline-none focus:border-[#D8B87A]/45"
+        />
+      </label>
+
+      {error ? (
+        <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</p>
+      ) : null}
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-4 py-3 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d] disabled:opacity-60"
+      >
+        {loading ? "جاري الدخول…" : "دخول الموقع"}
+      </button>
+    </form>
+  );
+}

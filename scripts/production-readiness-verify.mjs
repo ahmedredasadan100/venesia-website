@@ -111,6 +111,19 @@ for (const key of ["footer.brand", "footer.contact_items", "footer.social_links"
   record(`site_settings:${key}`, !error && Boolean(data), error?.message);
 }
 
+{
+  const { data, error } = await supabase
+    .from("site_settings")
+    .select("key,value")
+    .eq("key", "maintenance_mode")
+    .maybeSingle();
+  record(
+    "site_settings:maintenance_mode",
+    !error && Boolean(data),
+    error?.message ?? (data ? `enabled=${data.value?.enabled === true}` : "missing — run node scripts/apply-maintenance-mode-seed.mjs"),
+  );
+}
+
 const { data: footerMenu } = await supabase
   .from("menus")
   .select("id")
