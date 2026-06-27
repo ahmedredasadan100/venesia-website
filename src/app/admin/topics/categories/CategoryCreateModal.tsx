@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
-import VenesiaModal, {
+import {
   ADMIN_FORM,
+  AdminActionButton,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
+  VenesiaModal,
   adminFormFieldClassName,
-  adminFormLabelClassName,
-} from "../../../../components/admin/VenesiaModal";
+} from "../../../../components/admin/ui";
 import CategoryParentSelect from "./CategoryParentSelect";
 import CategorySlugFields from "./CategorySlugFields";
 import { createCategory } from "./actions";
@@ -24,14 +25,10 @@ export default function CategoryCreateModal({ parentOptions }: CategoryCreateMod
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex h-12 cursor-pointer items-center gap-3 rounded-[10px] border border-[#F3C46B]/25 bg-[linear-gradient(135deg,#F1C55F_0%,#D6A13D_52%,#A86F1E_100%)] px-5 text-sm font-bold text-white shadow-[0_18px_46px_rgba(216,184,122,0.18),inset_0_1px_0_rgba(255,255,255,0.28)] transition hover:brightness-110"
-      >
+      <AdminActionButton variant="primary" onClick={() => setOpen(true)}>
         <PlusIcon />
         إضافة تصنيف
-      </button>
+      </AdminActionButton>
 
       <VenesiaModal
         open={open}

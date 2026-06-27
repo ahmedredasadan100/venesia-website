@@ -4,6 +4,8 @@ import Link from "next/link";
 
 import AdminModuleTabs from "./AdminModuleTabs";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
+import { AdminLinkField } from "../ui";
+import { linkDefaultFromContainer } from "../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { CtaBlockConfig } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
@@ -80,13 +82,23 @@ export default function CtaModuleEditClient({
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Primary CTA Label</span>
                       <input name="primary_cta_label" defaultValue={config.primaryCta?.label ?? ""} className={fieldClassName()} />
-                      <input name="primary_cta_href" defaultValue={config.primaryCta?.href ?? ""} dir="ltr" className={fieldClassName()} />
                     </label>
+                    <AdminLinkField
+                      prefix="primary_cta"
+                      label="Primary CTA — Link"
+                      defaultValue={linkDefaultFromContainer(config.primaryCta as Record<string, unknown>)}
+                      showAnchor
+                    />
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Secondary CTA Label</span>
                       <input name="secondary_cta_label" defaultValue={config.secondaryCta?.label ?? ""} className={fieldClassName()} />
-                      <input name="secondary_cta_href" defaultValue={config.secondaryCta?.href ?? ""} dir="ltr" className={fieldClassName()} />
                     </label>
+                    <AdminLinkField
+                      prefix="secondary_cta"
+                      label="Secondary CTA — Link"
+                      defaultValue={linkDefaultFromContainer(config.secondaryCta as Record<string, unknown>)}
+                      showAnchor
+                    />
                   </div>
                 </section>
               ),

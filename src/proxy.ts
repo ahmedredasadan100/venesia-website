@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { validateAdminSessionPayload } from "./lib/admin/auth/admin-users";
 import {
   ADMIN_SESSION_COOKIE,
   getAdminAuthConfig,
-  hasValidAdminSession,
   isAdminApiPath,
   isAdminAuthPublicPath,
   isAdminPath,
+  verifyAdminSessionToken,
 } from "./lib/admin/auth/session";
 import { isMaintenancePublicPath } from "./lib/maintenance/paths";
 import { isMaintenanceModeEnabled } from "./lib/maintenance/read-maintenance-mode";
@@ -42,15 +43,18 @@ function maintenanceApi() {
   return NextResponse.json({ error: "Site is under maintenance." }, { status: 503 });
 }
 
-function hasBypassSession(request: NextRequest) {
+async function hasBypassSession(request: NextRequest) {
   const config = getAdminAuthConfig();
   if (!config.configured) return false;
 
   const sessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  return hasValidAdminSession(sessionCookie, config.secret);
+  const payload = verifyAdminSessionToken(sessionCookie, config.secret);
+  if (!payload) return false;
+
+  return validateAdminSessionPayload(payload);
 }
 
-function handleAdminAuth(request: NextRequest) {
+async function handleAdminAuth(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isAdminAuthPublicPath(pathname)) {
@@ -65,7 +69,7 @@ function handleAdminAuth(request: NextRequest) {
     return redirectToLogin(request);
   }
 
-  if (!hasBypassSession(request)) {
+  if (!(await hasBypassSession(request))) {
     return isAdminApiPath(pathname) ? unauthorizedApi() : redirectToLogin(request);
   }
 
@@ -88,7 +92,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (hasBypassSession(request)) {
+  if (await hasBypassSession(request)) {
     return NextResponse.next();
   }
 

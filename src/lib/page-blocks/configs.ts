@@ -54,11 +54,15 @@ export type AboutCtaContactConfig = {
   label?: string;
   value?: string;
   href?: string;
+  link?: Record<string, unknown>;
+  target?: "_self" | "_blank";
 };
 
 export type AboutCtaButtonConfig = {
   label?: string;
   href?: string;
+  link?: Record<string, unknown>;
+  target?: "_self" | "_blank";
 };
 
 /** Structured config for the About CTA band (contacts + copy + image). */
@@ -101,6 +105,7 @@ export type CtaLinkConfig = {
   label?: string;
   href?: string;
   target?: "_self" | "_blank";
+  link?: Record<string, unknown>;
 };
 
 export type CtaBlockConfig = {
@@ -119,6 +124,8 @@ export type CardsBlockItem = {
   body?: string;
   icon?: string;
   href?: string;
+  link?: Record<string, unknown>;
+  target?: "_self" | "_blank";
 };
 
 export type CardsBlockConfig = {
@@ -132,6 +139,7 @@ export type CardsBlockConfig = {
 export type BreadcrumbBlockItem = {
   label?: string;
   href?: string;
+  link?: Record<string, unknown>;
 };
 
 export type BreadcrumbBlockConfig = {

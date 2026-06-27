@@ -1,14 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import BlockModuleManagerClient from "../../../../../components/admin/page-blocks/BlockModuleManagerClient";
-import {
-  bulkContentBlocks,
-  createContentBlock,
-  deleteContentBlock,
-  duplicateContentBlock,
-  toggleContentBlockStatus,
-} from "./actions";
+import ContentBlocksTableClient from "./ContentBlocksTableClient";
+import type { ContentBlockRow } from "./actions";
 
 export default async function ContentBlocksPage() {
   const { data, error } = await getSupabaseAdmin()
@@ -25,19 +19,10 @@ export default async function ContentBlocksPage() {
     );
   }
 
-  return (
-    <BlockModuleManagerClient
-      moduleKey="content"
-      moduleTitle="إدارة بلوكات المحتوى"
-      moduleDescription="قوالب المحتوى النصي القابلة لإعادة الاستخدام. اربطها بالصفحات من Pages Manager."
-      rows={(data ?? []).map((row) => ({ ...row, description: row.description ?? null }))}
-      createAction={createContentBlock}
-      deleteAction={deleteContentBlock}
-      duplicateAction={duplicateContentBlock}
-      toggleAction={toggleContentBlockStatus}
-      bulkAction={bulkContentBlocks}
-      defaultVariant="default"
-      variantOptions={[["default", "Default"], ["split-image-right", "Split Image Right"], ["quote-emphasis", "Quote Emphasis"]]}
-    />
-  );
+  const rows: ContentBlockRow[] = (data ?? []).map((row) => ({
+    ...row,
+    description: row.description ?? null,
+  }));
+
+  return <ContentBlocksTableClient rows={rows} />;
 }

@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
@@ -15,22 +17,26 @@ import {
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import type { CtaBlockConfig } from "../../../../../lib/page-blocks/configs";
 
+import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
+
+function buildCtaLink(formData: FormData, prefix: string, labelField: string) {
+  const label = cleanText(formData.get(labelField));
+  const linkData = linkFieldFromFormData(formData, prefix);
+  if (!label && !hasSavedLinkField(linkData)) return undefined;
+  return {
+    label,
+    ...(linkData ? { link: linkData.link, target: linkData.target } : {}),
+  };
+}
+
 function buildCtaConfig(formData: FormData): CtaBlockConfig {
   return {
     eyebrow: cleanText(formData.get("eyebrow")),
     title: cleanText(formData.get("title")),
     highlight: cleanText(formData.get("highlight")),
     description: cleanText(formData.get("description")),
-    primaryCta: {
-      label: cleanText(formData.get("primary_cta_label")),
-      href: cleanText(formData.get("primary_cta_href")),
-      target: cleanText(formData.get("primary_cta_target")) === "_blank" ? "_blank" : "_self",
-    },
-    secondaryCta: {
-      label: cleanText(formData.get("secondary_cta_label")),
-      href: cleanText(formData.get("secondary_cta_href")),
-      target: cleanText(formData.get("secondary_cta_target")) === "_blank" ? "_blank" : "_self",
-    },
+    primaryCta: buildCtaLink(formData, "primary_cta", "primary_cta_label"),
+    secondaryCta: buildCtaLink(formData, "secondary_cta", "secondary_cta_label"),
     backgroundImage: cleanText(formData.get("background_image")),
     backgroundStyle: (cleanText(formData.get("background_style")) || "dark") as CtaBlockConfig["backgroundStyle"],
   };
@@ -44,6 +50,7 @@ async function ensureUniqueSlug(slug: string, id?: number) {
 }
 
 export async function createCtaBlock(formData: FormData) {
+  await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
@@ -71,6 +78,7 @@ export async function createCtaBlock(formData: FormData) {
 }
 
 export async function updateCtaBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
@@ -100,6 +108,7 @@ export async function updateCtaBlock(formData: FormData) {
 }
 
 export async function toggleCtaBlockStatus(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "draft");
   if (!id) throw new Error("معرّف البلوك مفقود.");
@@ -114,6 +123,7 @@ export async function toggleCtaBlockStatus(formData: FormData) {
 }
 
 export async function deleteCtaBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -124,6 +134,7 @@ export async function deleteCtaBlock(formData: FormData) {
 }
 
 export async function duplicateCtaBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -146,6 +157,7 @@ export async function duplicateCtaBlock(formData: FormData) {
 }
 
 export async function bulkCtaBlocks(formData: FormData) {
+  await requireAdminSession();
   const action = cleanText(formData.get("bulk_action"));
   const ids = formData
     .getAll("ids")
@@ -182,6 +194,7 @@ export type CtaBlockRow = {
 };
 
 export async function getCtaBlockRows(): Promise<CtaBlockRow[]> {
+  await requireAdminSession();
   const { data, error } = await getSupabaseAdmin()
     .from("cta_block_templates")
     .select("id,name,slug,description,variant,status,updated_at")

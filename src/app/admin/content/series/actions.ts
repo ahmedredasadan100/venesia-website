@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -127,6 +129,7 @@ async function validatePayloadWithCategory(payload: ReturnType<typeof getPayload
 }
 
 export async function createSeries(formData: FormData) {
+  await requireAdminSession();
   const payload = getPayload(formData);
   const validationError = await validatePayloadWithCategory(payload);
   if (validationError) redirectWithError(validationError);
@@ -153,6 +156,7 @@ export async function createSeries(formData: FormData) {
 }
 
 export async function updateSeries(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectWithError("السلسلة غير صالحة.");
 
@@ -189,6 +193,7 @@ export async function updateSeries(formData: FormData) {
 }
 
 export async function toggleSeriesStatus(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   const currentStatus = getString(formData, "status");
   if (!id || !validateId(id)) redirectWithError("السلسلة غير صالحة.");
@@ -208,6 +213,7 @@ export async function toggleSeriesStatus(formData: FormData) {
 }
 
 export async function duplicateSeries(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectWithError("السلسلة غير صالحة.");
 
@@ -247,6 +253,7 @@ export async function duplicateSeries(formData: FormData) {
 }
 
 export async function deleteSeries(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectWithError("السلسلة غير صالحة.");
 
@@ -266,6 +273,7 @@ export async function deleteSeries(formData: FormData) {
 }
 
 export async function bulkSeriesAction(formData: FormData) {
+  await requireAdminSession();
   const action = getString(formData, "bulk_action");
   const ids = getAllStrings(formData, "ids");
   if (!ids.length) redirectWithError("حدد سلسلة واحدة على الأقل.");
@@ -317,6 +325,7 @@ export type SeriesTableResult = {
 };
 
 export async function getSeriesTableRows(): Promise<SeriesTableRow[]> {
+  await requireAdminSession();
   const [{ data: seriesRows, error: seriesError }, { data: topicRows, error: topicError }] = await Promise.all([
     getSupabaseAdmin()
       .from("topic_series")
@@ -357,6 +366,7 @@ function failure(message: string): SeriesTableResult {
 }
 
 export async function toggleSeriesStatusAjax(id: number, currentStatus: string | null): Promise<SeriesTableResult> {
+  await requireAdminSession();
   if (!validateId(String(id))) return failure("السلسلة غير صالحة.");
 
   const nextStatus: SeriesStatus = currentStatus === "published" ? "unpublished" : "published";
@@ -372,6 +382,7 @@ export async function toggleSeriesStatusAjax(id: number, currentStatus: string |
 }
 
 export async function duplicateSeriesAjax(id: number): Promise<SeriesTableResult> {
+  await requireAdminSession();
   if (!validateId(String(id))) return failure("السلسلة غير صالحة.");
 
   const { data, error } = await getSupabaseAdmin()
@@ -408,6 +419,7 @@ export async function duplicateSeriesAjax(id: number): Promise<SeriesTableResult
 }
 
 export async function deleteSeriesAjax(id: number): Promise<SeriesTableResult> {
+  await requireAdminSession();
   if (!validateId(String(id))) return failure("السلسلة غير صالحة.");
 
   const { count, error: countError } = await getSupabaseAdmin()
@@ -425,6 +437,7 @@ export async function deleteSeriesAjax(id: number): Promise<SeriesTableResult> {
 }
 
 export async function bulkSeriesActionAjax(action: string, ids: number[]): Promise<SeriesTableResult> {
+  await requireAdminSession();
   const validIds = ids.filter((id) => validateId(String(id))).map(String);
   if (!validIds.length) return failure("حدد سلسلة واحدة على الأقل.");
 

@@ -10,7 +10,7 @@ import {
 } from "./types";
 
 const LIST_COLUMNS =
-  "id, code, arabic_name, location_label, map_area, featured, publication_status, updated_at";
+  "id, code, slug, arabic_name, location_label, map_area, featured, publication_status, updated_at";
 
 export async function listProjectsByType(type: ProjectCategory): Promise<ProjectListRow[]> {
   const { data, error } = await getSupabaseAdmin()

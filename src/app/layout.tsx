@@ -5,6 +5,7 @@ import AppChrome from "../components/AppChrome";
 import { FooterSettingsProvider } from "../components/FooterSettingsProvider";
 import { PublicNavigationProvider } from "../components/PublicNavigationProvider";
 import { loadFooterSettings } from "../lib/footer/load-footer-settings";
+import { resolveFooterComposition } from "../lib/footer/resolve-footer-composition";
 import { getPublicNavigationItems } from "../lib/navigation/get-public-navigation";
 import { logError } from "../lib/logging";
 import { buildMetadata } from "../lib/seo/build-metadata";
@@ -68,6 +69,11 @@ export default async function RootLayout({
     footerSettings = DEFAULT_FOOTER_SETTINGS;
   }
 
+  const footerComposition = await resolveFooterComposition(footerSettings, {
+    mainNavItems: navigationItems,
+    footerNavItems,
+  });
+
   return (
     <html lang={SEO_SITE.language} dir={SEO_SITE.direction}>
       <body
@@ -79,7 +85,11 @@ export default async function RootLayout({
         <JsonLd data={faqSchema} />
 
         <PublicNavigationProvider items={navigationItems}>
-          <FooterSettingsProvider settings={footerSettings} footerNavItems={footerNavItems}>
+          <FooterSettingsProvider
+            settings={footerSettings}
+            footerNavItems={footerNavItems}
+            footerComposition={footerComposition}
+          >
             <AppChrome>{children}</AppChrome>
           </FooterSettingsProvider>
         </PublicNavigationProvider>

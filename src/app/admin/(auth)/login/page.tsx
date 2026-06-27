@@ -9,8 +9,7 @@ export default function AdminLoginPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D8B87A]/70">Venesia CMS</p>
         <h1 className="mt-3 text-2xl font-semibold text-white">تسجيل دخول الإدارة</h1>
         <p className="mt-2 text-sm leading-7 text-white/50">
-          هذه الصفحة محمية. أدخل بيانات الدخول المعرّفة في متغيرات البيئة للوصول إلى لوحة التحكم. بعد
-          تعديل <code className="text-white/70">.env.local</code> يجب إعادة تشغيل السيرفر.
+          هذه الصفحة محمية. أدخل بيانات الدخول المسجّلة في نظام المستخدمين للوصول إلى لوحة التحكم.
         </p>
 
         <div className="mt-8">

@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { isAdminAuthPagePath } from "../../lib/admin/auth/session";
 import AdminShell from "./AdminShell";
 
 type AdminAccessLayoutProps = {
@@ -12,7 +13,7 @@ type AdminAccessLayoutProps = {
 export default function AdminAccessLayout({ children }: AdminAccessLayoutProps) {
   const pathname = usePathname();
 
-  if (pathname === "/admin/login") {
+  if (isAdminAuthPagePath(pathname)) {
     return <>{children}</>;
   }
 

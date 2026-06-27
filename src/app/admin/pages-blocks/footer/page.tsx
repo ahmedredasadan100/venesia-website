@@ -1,6 +1,8 @@
-import FooterSettingsClient from "./FooterSettingsClient";
+import FooterBuilderClient from "./FooterBuilderClient";
 import { loadFooterSettingsForAdmin } from "../../../../lib/footer/load-footer-settings";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+
+import type { FooterMenuOption } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +12,7 @@ type PageProps = {
 
 export default async function FooterSettingsPage({ searchParams }: PageProps) {
   const resolvedSearch = searchParams ? await searchParams : {};
-  const [settings, footerMenuResult] = await Promise.all([
+  const [settings, footerMenuResult, menusResult] = await Promise.all([
     loadFooterSettingsForAdmin(),
     getSupabaseAdmin()
       .from("menus")
@@ -20,6 +22,11 @@ export default async function FooterSettingsPage({ searchParams }: PageProps) {
       .order("id", { ascending: true })
       .limit(1)
       .maybeSingle(),
+    getSupabaseAdmin()
+      .from("menus")
+      .select("id, name, location")
+      .eq("is_active", true)
+      .order("id", { ascending: true }),
   ]);
 
   const footerMenuId = footerMenuResult.data?.id ?? null;
@@ -49,11 +56,18 @@ export default async function FooterSettingsPage({ searchParams }: PageProps) {
     }));
   }
 
+  const menuOptions: FooterMenuOption[] = (menusResult.data ?? []).map((menu) => ({
+    id: menu.id,
+    name: menu.name ?? `قائمة #${menu.id}`,
+    location: menu.location ?? "custom",
+  }));
+
   return (
-    <FooterSettingsClient
+    <FooterBuilderClient
       settings={settings}
       footerMenuId={footerMenuId}
       quickLinkItems={quickLinkItems}
+      menuOptions={menuOptions}
       saved={Boolean(resolvedSearch.saved)}
     />
   );

@@ -6,6 +6,7 @@ import type {
   FooterSocialLink,
   FooterSocialPlatform,
 } from "./types";
+import { buildSlotsFromLegacy } from "./build-slots-from-legacy";
 
 const SOCIAL_PLATFORMS: FooterSocialPlatform[] = [
   "facebook",
@@ -88,11 +89,15 @@ export const DEFAULT_FOOTER_LEGAL: FooterLegal = {
   tagline: "Trust Built On Ground",
 };
 
+export const DEFAULT_FOOTER_SLOTS = buildSlotsFromLegacy(DEFAULT_FOOTER_BRAND);
+
 export const DEFAULT_FOOTER_SETTINGS: FooterSettings = {
   brand: DEFAULT_FOOTER_BRAND,
   contactItems: DEFAULT_FOOTER_CONTACT_ITEMS,
   socialLinks: DEFAULT_FOOTER_SOCIAL_LINKS,
   legal: DEFAULT_FOOTER_LEGAL,
+  slots: DEFAULT_FOOTER_SLOTS,
+  slotsSource: "default",
   usesFallback: true,
 };
 

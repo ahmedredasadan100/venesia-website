@@ -6,6 +6,7 @@ type AdminPageHeaderProps = {
   actions?: ReactNode;
   eyebrow?: ReactNode;
   meta?: ReactNode;
+  breadcrumb?: ReactNode;
   className?: string;
 };
 
@@ -15,6 +16,7 @@ export default function AdminPageHeader({
   actions,
   eyebrow = "Admin Panel",
   meta,
+  breadcrumb,
   className = "",
 }: AdminPageHeaderProps) {
   return (
@@ -33,6 +35,12 @@ export default function AdminPageHeader({
           <h1 className="mt-3 text-2xl font-semibold text-white md:text-3xl">
             {title}
           </h1>
+
+          {breadcrumb ? (
+            <div className="mt-5 flex items-center justify-end gap-3 text-sm text-white/45">
+              {breadcrumb}
+            </div>
+          ) : null}
 
           {description ? (
             <p className="mt-3 max-w-3xl text-sm leading-7 text-white/56">

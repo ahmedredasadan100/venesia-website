@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -77,6 +79,7 @@ async function getUsageCountBySlug(slug: string) {
 }
 
 export async function createMediaCategory(formData: FormData) {
+  await requireAdminSession();
   const name = getString(formData, "name");
   const rawSlug = getString(formData, "slug");
   const slug = rawSlug ? normalizeArabicForSlug(rawSlug) : normalizeArabicForSlug(name);
@@ -108,6 +111,7 @@ export async function createMediaCategory(formData: FormData) {
 }
 
 export async function updateMediaCategory(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   const name = getString(formData, "name");
   const rawSlug = getString(formData, "slug");
@@ -144,6 +148,7 @@ export async function updateMediaCategory(formData: FormData) {
 }
 
 export async function toggleMediaCategoryStatus(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
 
@@ -161,6 +166,7 @@ export async function toggleMediaCategoryStatus(formData: FormData) {
 }
 
 export async function deleteMediaCategory(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
 

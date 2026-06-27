@@ -10,7 +10,7 @@ export const SEO_SITE = {
   city: "New Cairo",
   defaultUrl:
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://www.venesiadevelopments.com",
+    "https://www.venesia-developments.net",
   defaultImage: "/images/venesia-5.png",
   logo: "/logo.png",
   themeColor: "#0B0B0B",

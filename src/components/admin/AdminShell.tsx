@@ -57,6 +57,7 @@ const menuItems: MenuItem[] = [
     icon: "⚙",
     children: [
       { href: "/admin/settings/general", label: "إعدادات عامة" },
+      { href: "/admin/settings/security", label: "الأمان" },
       { href: "/admin/settings/theme", label: "الثيم" },
       { href: "/admin/settings/appearance", label: "المظهر" },
       { href: "/admin/settings/integrations", label: "التكاملات" },

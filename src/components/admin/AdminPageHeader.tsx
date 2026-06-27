@@ -7,6 +7,7 @@ type AdminPageHeaderProps = {
   description?: ReactNode;
   actions?: ReactNode;
   meta?: ReactNode;
+  breadcrumb?: ReactNode;
   className?: string;
 };
 
@@ -22,6 +23,7 @@ export default function AdminPageHeader({
   description,
   actions,
   meta,
+  breadcrumb,
   className,
 }: AdminPageHeaderProps) {
   return (
@@ -31,6 +33,7 @@ export default function AdminPageHeader({
       description={description}
       actions={actions}
       meta={meta}
+      breadcrumb={breadcrumb}
       className={className}
     />
   );

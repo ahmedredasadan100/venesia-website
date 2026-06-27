@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -127,6 +129,74 @@ async function getChildrenCount(id: string) {
   return count ?? 0;
 }
 
+async function loadCategoryRelations() {
+  const { data, error } = await getSupabaseAdmin().from("topic_categories").select("id, parent_id, name");
+  if (error) redirectError(error.message);
+  return data ?? [];
+}
+
+function buildChildrenByParent(categories: Array<{ id: number | string; parent_id: number | null }>) {
+  const childrenByParent = new Map<number, number[]>();
+
+  categories.forEach((category) => {
+    const id = Number(category.id);
+    const parentId = category.parent_id ? Number(category.parent_id) : null;
+    if (!parentId) return;
+
+    const children = childrenByParent.get(parentId) ?? [];
+    children.push(id);
+    childrenByParent.set(parentId, children);
+  });
+
+  return childrenByParent;
+}
+
+function collectDescendantIds(rootId: number, childrenByParent: Map<number, number[]>) {
+  const blockedIds = new Set<number>([rootId]);
+  const stack = [...(childrenByParent.get(rootId) ?? [])];
+
+  while (stack.length > 0) {
+    const id = stack.pop();
+    if (!id || blockedIds.has(id)) continue;
+    blockedIds.add(id);
+    stack.push(...(childrenByParent.get(id) ?? []));
+  }
+
+  return blockedIds;
+}
+
+function flattenValidTransferTargets(
+  categories: Array<{ id: number | string; name: string; parent_id: number | null }>,
+  blockedIds: Set<number>,
+) {
+  const byId = new Map(
+    categories.map((category) => [Number(category.id), category]),
+  );
+
+  function getLevel(id: number) {
+    let level = 0;
+    let current = byId.get(id);
+
+    while (current?.parent_id) {
+      const parentId = Number(current.parent_id);
+      if (blockedIds.has(parentId)) break;
+      level += 1;
+      current = byId.get(parentId);
+    }
+
+    return level;
+  }
+
+  return categories
+    .filter((category) => !blockedIds.has(Number(category.id)))
+    .map((category) => ({
+      id: Number(category.id),
+      name: category.name,
+      level: getLevel(Number(category.id)),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+}
+
 async function ensureParentIsValid(parentId: number | null, currentId?: string) {
   if (!parentId) return;
   if (currentId && parentId === Number(currentId)) {
@@ -144,32 +214,9 @@ async function ensureParentIsValid(parentId: number | null, currentId?: string) 
 
   if (!currentId) return;
 
-  const { data: categories, error } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .select("id, parent_id");
-
-  if (error) redirectError(error.message);
-
-  const childrenByParent = new Map<number, number[]>();
-  (categories ?? []).forEach((category) => {
-    const id = Number(category.id);
-    const directParentId = category.parent_id ? Number(category.parent_id) : null;
-    if (!directParentId) return;
-
-    const children = childrenByParent.get(directParentId) ?? [];
-    children.push(id);
-    childrenByParent.set(directParentId, children);
-  });
-
-  const blockedIds = new Set<number>([Number(currentId)]);
-  const stack = [...(childrenByParent.get(Number(currentId)) ?? [])];
-
-  while (stack.length > 0) {
-    const id = stack.pop();
-    if (!id || blockedIds.has(id)) continue;
-    blockedIds.add(id);
-    stack.push(...(childrenByParent.get(id) ?? []));
-  }
+  const categories = await loadCategoryRelations();
+  const childrenByParent = buildChildrenByParent(categories);
+  const blockedIds = collectDescendantIds(Number(currentId), childrenByParent);
 
   if (blockedIds.has(parentId)) {
     redirectError("لا يمكن نقل التصنيف داخل نفسه أو داخل أحد التصنيفات الفرعية التابعة له.");
@@ -177,6 +224,7 @@ async function ensureParentIsValid(parentId: number | null, currentId?: string) 
 }
 
 export async function createCategory(formData: FormData) {
+  await requireAdminSession();
   const name = getString(formData, "name");
   const rawSlug = getString(formData, "slug");
   const slug = rawSlug ? normalizeArabicForSlug(rawSlug) : normalizeArabicForSlug(name);
@@ -214,6 +262,7 @@ export async function createCategory(formData: FormData) {
 }
 
 export async function updateCategory(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   const name = getString(formData, "name");
   const rawSlug = getString(formData, "slug");
@@ -266,6 +315,7 @@ export async function updateCategory(formData: FormData) {
 }
 
 export async function toggleCategoryStatus(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
 
@@ -285,6 +335,7 @@ export async function toggleCategoryStatus(formData: FormData) {
 }
 
 export async function duplicateCategory(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
 
@@ -333,7 +384,142 @@ export async function duplicateCategory(formData: FormData) {
   redirect("/admin/topics/categories?notice=created");
 }
 
+export async function getCategoryDeletePreviewAjax(id: number) {
+  await requireAdminSession();
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return { ok: false as const, message: "معرّف التصنيف غير صالح." };
+  }
+
+  const { data: category, error: categoryError } = await getSupabaseAdmin()
+    .from("topic_categories")
+    .select("id, name")
+    .eq("id", id)
+    .maybeSingle<{ id: number; name: string }>();
+
+  if (categoryError) return { ok: false as const, message: categoryError.message };
+  if (!category) return { ok: false as const, message: "التصنيف غير موجود." };
+
+  const { count: topicCountRaw, error: topicError } = await getSupabaseAdmin()
+    .from("topics")
+    .select("id", { count: "exact", head: true })
+    .eq("category_id", id);
+  if (topicError) return { ok: false as const, message: topicError.message };
+
+  const { count: childrenCountRaw, error: childrenError } = await getSupabaseAdmin()
+    .from("topic_categories")
+    .select("id", { count: "exact", head: true })
+    .eq("parent_id", id);
+  if (childrenError) return { ok: false as const, message: childrenError.message };
+
+  const topicCount = topicCountRaw ?? 0;
+  const childrenCount = childrenCountRaw ?? 0;
+
+  const { data: categories, error: categoriesError } = await getSupabaseAdmin()
+    .from("topic_categories")
+    .select("id, parent_id, name");
+  if (categoriesError) return { ok: false as const, message: categoriesError.message };
+
+  const childrenByParent = buildChildrenByParent(categories ?? []);
+  const blockedIds = collectDescendantIds(id, childrenByParent);
+  const validTransferTargets = flattenValidTransferTargets(categories ?? [], blockedIds);
+
+  return {
+    ok: true as const,
+    categoryName: category.name,
+    topicCount,
+    childrenCount,
+    validTransferTargets,
+  };
+}
+
+export async function deleteCategorySafelyAjax(id: number, transferToId?: number | null) {
+  await requireAdminSession();
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return { ok: false as const, message: "معرّف التصنيف غير صالح." };
+  }
+
+  const supabase = getSupabaseAdmin();
+
+  const { count: topicCountRaw, error: topicError } = await supabase
+    .from("topics")
+    .select("id", { count: "exact", head: true })
+    .eq("category_id", id);
+  if (topicError) return { ok: false as const, message: topicError.message };
+
+  const { count: childrenCountRaw, error: childrenError } = await supabase
+    .from("topic_categories")
+    .select("id", { count: "exact", head: true })
+    .eq("parent_id", id);
+  if (childrenError) return { ok: false as const, message: childrenError.message };
+
+  const topicCount = topicCountRaw ?? 0;
+  const childrenCount = childrenCountRaw ?? 0;
+
+  if (childrenCount > 0) {
+    return {
+      ok: false as const,
+      message: "لا يمكن حذف تصنيف يحتوي على تصنيفات فرعية. انقل التصنيفات الفرعية أولًا.",
+    };
+  }
+
+  if (topicCount > 0) {
+    if (!transferToId || !Number.isFinite(transferToId)) {
+      return { ok: false as const, message: "اختر تصنيفًا لنقل الموضوعات إليه." };
+    }
+
+    if (transferToId === id) {
+      return { ok: false as const, message: "لا يمكن النقل إلى نفس التصنيف." };
+    }
+
+    const { data: categories, error: categoriesError } = await getSupabaseAdmin()
+      .from("topic_categories")
+      .select("id, parent_id, name");
+    if (categoriesError) return { ok: false as const, message: categoriesError.message };
+
+    const childrenByParent = buildChildrenByParent(categories ?? []);
+    const blockedIds = collectDescendantIds(id, childrenByParent);
+
+    if (blockedIds.has(transferToId)) {
+      return {
+        ok: false as const,
+        message: "لا يمكن النقل إلى هذا التصنيف لأنه نفس التصنيف أو أحد أبنائه.",
+      };
+    }
+
+    const { data: target, error: targetError } = await supabase
+      .from("topic_categories")
+      .select("id, name, slug")
+      .eq("id", transferToId)
+      .maybeSingle<{ id: number; name: string; slug: string }>();
+
+    if (targetError) return { ok: false as const, message: targetError.message };
+    if (!target) return { ok: false as const, message: "التصنيف الهدف غير موجود." };
+
+    const now = new Date().toISOString();
+    const { error: moveError } = await supabase
+      .from("topics")
+      .update({
+        category_id: target.id,
+        category: target.name,
+        category_slug: target.slug,
+        updated_at: now,
+      })
+      .eq("category_id", id);
+
+    if (moveError) return { ok: false as const, message: moveError.message };
+  }
+
+  const { error: deleteError } = await supabase.from("topic_categories").delete().eq("id", id);
+  if (deleteError) return { ok: false as const, message: deleteError.message };
+
+  revalidateCategories();
+  return { ok: true as const, message: "تم حذف التصنيف بنجاح." };
+}
+
 export async function deleteCategory(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
 

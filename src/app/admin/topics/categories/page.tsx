@@ -1,16 +1,20 @@
 import Link from "next/link";
 import AdminNotice from "../../../../components/admin/AdminNotice";
+import {
+  ADMIN_DATA_GRID_ACTION_COLUMNS,
+  AdminPageHeader,
+  AdminStatusPill,
+} from "../../../../components/admin/ui";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import CategoryTreeControls from "./CategoryTreeControls";
 import CategoryCreateModal from "./CategoryCreateModal";
-import CategoryEditModal from "./CategoryEditModal";
+import CategoryRowActions from "./CategoryRowActions";
 import { flattenCategoryTree } from "../../../../lib/admin/category-tree";
-import {
-  deleteCategory,
-  toggleCategoryStatus,
-} from "./actions";
 
 export const dynamic = "force-dynamic";
+
+/** RTL tree grid: التصنيف (1fr) → … → الإجراءات (ثابت، شمال). */
+const TREE_GRID_COLUMNS = `minmax(260px, 1fr) minmax(160px, 1fr) 96px 96px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 type CategoryRow = {
   id: number;
@@ -133,73 +137,6 @@ function SearchIcon() {
   );
 }
 
-function TrashIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M5 7h14M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7m-8 0 1 12h8l1-12"
-      />
-      <path strokeLinecap="round" d="M10 11v5M14 11v5" />
-    </svg>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="2.7" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.6 10.6a2.7 2.7 0 0 0 3.8 3.8" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.2 7.6C4.1 9.2 2.5 12 2.5 12s3.5 6 9.5 6c1.55 0 2.94-.4 4.16-1.02" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6c6 0 9.5 6 9.5 6a14.7 14.7 0 0 1-2.1 2.65" />
-    </svg>
-  );
-}
-
-function MoreIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="currentColor"
-    >
-      <path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
-    </svg>
-  );
-}
-
 function ChevronDownIcon() {
   return (
     <svg
@@ -234,36 +171,6 @@ function FilterIcon() {
   );
 }
 
-function ListIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-    >
-      <path strokeLinecap="round" d="M8 6h12M8 12h12M8 18h12" />
-      <path strokeLinecap="round" d="M4 6h.01M4 12h.01M4 18h.01" />
-    </svg>
-  );
-}
-
-function StatusBadge({ isActive }: { isActive: boolean }) {
-  return (
-    <span
-      className={`inline-flex min-w-[56px] justify-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-        isActive
-          ? "border-emerald-400/18 bg-emerald-500/18 text-emerald-100"
-          : "border-red-400/20 bg-red-500/12 text-red-100"
-      }`}
-    >
-      {isActive ? "منشور" : "مخفي"}
-    </span>
-  );
-}
-
 function CountLabel({ category }: { category: CategoryNode }) {
   const count = category.totalCount;
   if (category.children.length > 0 && count === 0)
@@ -271,50 +178,6 @@ function CountLabel({ category }: { category: CategoryNode }) {
   if (count === 1) return <>عنصر</>;
   if (count <= 10 && category.slug !== "topics") return <>{count} عناصر</>;
   return <>{count} مقال</>;
-}
-
-function ActionButtons({
-  category,
-  parentOptions,
-}: {
-  category: CategoryNode;
-  parentOptions: Array<{ id: number; name: string; level: number }>;
-}) {
-  const isActive = Boolean(category.is_active);
-  const isUsed = category.totalCount > 0 || category.children.length > 0;
-
-  return (
-    <div className="flex items-center justify-center gap-1.5" dir="rtl">
-      <CategoryEditModal category={category} parentOptions={parentOptions} />
-      <form action={toggleCategoryStatus}>
-        <input type="hidden" name="id" value={category.id} />
-        <button
-          className={`flex h-11 w-11 items-center justify-center rounded-[8px] border transition ${
-            isActive
-              ? "border-emerald-400/22 bg-emerald-500/12 text-emerald-100 hover:border-emerald-300/40 hover:bg-emerald-500/18"
-              : "border-orange-400/22 bg-orange-500/12 text-orange-100 hover:border-orange-300/40 hover:bg-orange-500/18"
-          }`}
-          title={isActive ? "إخفاء التصنيف" : "إظهار التصنيف"}
-        >
-          {isActive ? <EyeIcon /> : <EyeOffIcon />}
-        </button>
-      </form>
-      <form action={deleteCategory}>
-        <input type="hidden" name="id" value={category.id} />
-        <button
-          disabled={isUsed}
-          className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-red-400/20 bg-[#C9333E] text-white shadow-[0_13px_30px_rgba(201,51,62,0.18)] transition hover:bg-[#E23B46] disabled:cursor-not-allowed disabled:border-white/8 disabled:bg-white/[0.04] disabled:text-white/22 disabled:shadow-none"
-          title={
-            isUsed
-              ? "لا يمكن حذف تصنيف مستخدم أو يحتوي تصنيفات فرعية"
-              : "حذف التصنيف"
-          }
-        >
-          <TrashIcon />
-        </button>
-      </form>
-    </div>
-  );
 }
 
 function TreeLines({
@@ -414,9 +277,10 @@ function CategoryRowView({
       data-sort-order={category.sort_order ?? 0}
     >
       <div
-        className={`grid min-w-[1080px] grid-cols-[1.55fr_1.35fr_150px_120px_150px] items-center gap-4 border-b border-white/[0.075] px-6 py-3.5 transition hover:bg-white/[0.025] ${
+        className={`grid min-w-[980px] items-center gap-4 border-b border-white/[0.075] px-6 py-3.5 transition hover:bg-white/[0.025] ${
           level === 0 ? "bg-white/[0.025]" : "bg-transparent"
         }`}
+        style={{ gridTemplateColumns: TREE_GRID_COLUMNS }}
       >
         <div className="relative">
           <TreeLines category={category} level={level} />
@@ -425,13 +289,15 @@ function CategoryRowView({
         <p className="text-sm leading-7 text-white/62">
           {category.description || "—"}
         </p>
-        <p className="text-sm text-white/82">
+        <p className="text-center text-sm text-white/82">
           <CountLabel category={category} />
         </p>
         <div className="flex justify-center">
-          <StatusBadge isActive={Boolean(category.is_active)} />
+          <AdminStatusPill tone={Boolean(category.is_active) ? "green" : "gold"}>
+            {Boolean(category.is_active) ? "منشور" : "مخفي"}
+          </AdminStatusPill>
         </div>
-        <ActionButtons category={category} parentOptions={parentOptions} />
+        <CategoryRowActions category={category} parentOptions={parentOptions} />
       </div>
     </div>
   );
@@ -502,30 +368,27 @@ export default async function TopicCategoriesPage({
   const totalCount = safeCategories.length;
 
   return (
-    <main className="relative space-y-6" dir="rtl">
-      <div className="flex items-start justify-between gap-6" dir="ltr">
-        <CategoryCreateModal parentOptions={parentOptions} />
-
-        <div className="text-right" dir="rtl">
-          <h1 className="text-3xl font-black tracking-tight text-white md:text-4xl">
-            إدارة التصنيفات
-          </h1>
-          <div className="mt-5 flex items-center justify-end gap-3 text-sm text-white/45">
+    <main className="space-y-7" dir="rtl">
+      <AdminPageHeader
+        eyebrow="Admin Panel"
+        title="إدارة التصنيفات"
+        description="نظّم تصنيفات الموضوعات في شجرة هرمية. عدّل أي تصنيف أو تحكّم في ظهوره وحذفه من الجدول أدناه."
+        meta={`${totalCount} تصنيف`}
+        breadcrumb={
+          <>
             <Link href="/admin" className="transition hover:text-[#D8B87A]">
               الرئيسية
             </Link>
             <span className="text-white/20">‹</span>
-            <Link
-              href="/admin/topics"
-              className="transition hover:text-[#D8B87A]"
-            >
+            <Link href="/admin/topics" className="transition hover:text-[#D8B87A]">
               إدارة المواضيع
             </Link>
             <span className="text-white/20">‹</span>
             <span className="text-[#D8B87A]">التصنيفات</span>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+        actions={<CategoryCreateModal parentOptions={parentOptions} />}
+      />
 
       {notice ? <AdminNotice variant="success" message={notice} /> : null}
       {errorMessage ? (
@@ -580,11 +443,14 @@ export default async function TopicCategoriesPage({
 
         <div className="overflow-hidden rounded-[10px] border border-white/8 bg-[#080C10]/72">
           <div className="overflow-x-auto">
-            <div className="grid min-w-[1080px] grid-cols-[1.55fr_1.35fr_150px_120px_150px] items-center gap-4 border-b border-[#D8B87A]/12 bg-white/[0.045] px-6 py-4 text-sm font-bold text-white">
-              <button type="button" data-category-sort="name" className="text-right transition hover:text-[#D8B87A]">التصنيف الرئيسي</button>
+            <div
+              className="grid min-w-[980px] items-center gap-4 border-b border-[#D8B87A]/12 bg-white/[0.045] px-6 py-4 text-sm font-bold text-white"
+              style={{ gridTemplateColumns: TREE_GRID_COLUMNS }}
+            >
+              <button type="button" data-category-sort="name" className="text-right transition hover:text-[#D8B87A]">التصنيف</button>
               <span>الوصف</span>
-              <button type="button" data-category-sort="count" className="text-right transition hover:text-[#D8B87A]">عدد عناصر الرئيسي</button>
-              <button type="button" data-category-sort="status" className="text-center transition hover:text-[#D8B87A]">حالة الرئيسي</button>
+              <button type="button" data-category-sort="count" className="text-center transition hover:text-[#D8B87A]">العدد</button>
+              <button type="button" data-category-sort="status" className="text-center transition hover:text-[#D8B87A]">الحالة</button>
               <span className="text-center">الإجراءات</span>
             </div>
 

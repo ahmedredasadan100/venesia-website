@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -84,6 +86,7 @@ async function copyPageHeroAssignments(
 }
 
 export async function togglePageStatus(formData: FormData) {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("id"));
   if (!pageId) redirect(pagesListPath({ error: "الصفحة غير موجودة." }));
 
@@ -115,6 +118,7 @@ export async function togglePageStatus(formData: FormData) {
 }
 
 export async function deletePage(formData: FormData) {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("id"));
   if (!pageId) redirect(pagesListPath({ error: "الصفحة غير موجودة." }));
 
@@ -139,7 +143,90 @@ export async function deletePage(formData: FormData) {
   redirect(pagesListPath({ notice: `تم حذف الصفحة «${page.title}».` }));
 }
 
+export type PagesTableRow = {
+  id: number;
+  title: string;
+  slug: string;
+  path: string;
+  page_type: string;
+  status: string;
+  block_count: number;
+};
+
+export type PagesTableResult = {
+  ok: boolean;
+  message?: string;
+  rows?: PagesTableRow[];
+};
+
+async function loadPagesTableRows(): Promise<PagesTableRow[]> {
+  const { data: pages, error: loadError } = await getSupabaseAdmin()
+    .from("pages")
+    .select("id,title,slug,path,page_type,status")
+    .order("id", { ascending: true });
+
+  if (loadError) throw new Error(loadError.message);
+
+  const pageRows = pages ?? [];
+  const pageIds = pageRows.map((page) => page.id);
+  const blockCounts = await getPageModuleCounts(pageIds);
+
+  return pageRows.map((page) => ({
+    ...page,
+    block_count: blockCounts.get(page.id) ?? 0,
+  }));
+}
+
+export async function getPagesTableRows(): Promise<PagesTableRow[]> {
+  await requireAdminSession();
+  return loadPagesTableRows();
+}
+
+export async function bulkDeletePagesAjax(ids: number[]): Promise<PagesTableResult> {
+  await requireAdminSession();
+  const validIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!validIds.length) return { ok: false, message: "حدد صفحة واحدة على الأقل." };
+
+  const { data: pages, error: loadError } = await getSupabaseAdmin()
+    .from("pages")
+    .select("id, slug")
+    .in("id", validIds);
+
+  if (loadError) return { ok: false, message: loadError.message };
+
+  const deletableIds: number[] = [];
+  let blockedCount = 0;
+
+  for (const page of pages ?? []) {
+    const blockReason = getPageDeleteBlockReason(page.slug);
+    if (blockReason) {
+      blockedCount += 1;
+    } else {
+      deletableIds.push(page.id);
+    }
+  }
+
+  if (!deletableIds.length) {
+    return { ok: false, message: "لا يمكن حذف الصفحات المحددة — صفحات نظامية محمية." };
+  }
+
+  const { error: deleteError } = await getSupabaseAdmin().from("pages").delete().in("id", deletableIds);
+  if (deleteError) return { ok: false, message: deleteError.message };
+
+  revalidatePath("/admin/pages-blocks/pages", "layout");
+  await revalidatePublicPagesWithBlockAssignments();
+
+  const rows = await loadPagesTableRows();
+  let message = `تم حذف ${deletableIds.length} صفحة بنجاح.`;
+  if (blockedCount > 0) {
+    message += ` لم يُحذف ${blockedCount} صفحة محمية.`;
+  }
+
+  return { ok: true, message, rows };
+}
+
 export async function duplicatePage(formData: FormData) {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("id"));
   if (!pageId) redirect(pagesListPath({ error: "الصفحة غير موجودة." }));
 
@@ -246,6 +333,7 @@ export async function assignPageBlock(
   _prev: PageBlockActionResult,
   formData: FormData,
 ): Promise<PageBlockActionResult> {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const blockType = cleanText(formData.get("block_type")) as PageBlockType;
   const templateId = parseNumber(formData.get("template_id"));
@@ -301,6 +389,7 @@ export async function assignMediaSidebarModule(
   _prev: PageBlockActionResult,
   formData: FormData,
 ): Promise<PageBlockActionResult> {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const templateId = parseNumber(formData.get("template_id"));
   const sortOrder = parseNumber(formData.get("sort_order"), await nextMediaSidebarSortOrder(pageId));
@@ -352,6 +441,7 @@ export async function assignMediaHubModule(
   _prev: PageBlockActionResult,
   formData: FormData,
 ): Promise<PageBlockActionResult> {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const templateId = parseNumber(formData.get("template_id"));
   const sortOrder = parseNumber(formData.get("sort_order"), await nextMediaHubSortOrder(pageId));
@@ -403,6 +493,7 @@ export async function assignHeroModule(
   _prev: PageBlockActionResult,
   formData: FormData,
 ): Promise<PageBlockActionResult> {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const heroId = parseNumber(formData.get("template_id"));
   const sortOrder = parseNumber(formData.get("sort_order"), 0);
@@ -450,6 +541,7 @@ export async function updatePageBlockAssignment(
   _prev: PageBlockActionResult,
   formData: FormData,
 ): Promise<PageBlockActionResult> {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const assignmentId = parseNumber(formData.get("assignment_id"));
   const blockType = cleanText(formData.get("block_type")) as PageBlockType | "media-sidebar" | "media-hub";
@@ -526,6 +618,7 @@ export async function updateHeroPageAssignment(
   _prev: PageBlockActionResult,
   formData: FormData,
 ): Promise<PageBlockActionResult> {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const assignmentId = parseNumber(formData.get("assignment_id"));
   const sortOrder = parseNumber(formData.get("sort_order"), 0);
@@ -547,6 +640,7 @@ export async function updateHeroPageAssignment(
 }
 
 export async function togglePageBlockAssignment(formData: FormData): Promise<PageBlockActionResult> {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const assignmentId = parseNumber(formData.get("assignment_id"));
   const blockType = cleanText(formData.get("block_type")) as PageBlockType | "hero" | "media-sidebar" | "media-hub";
@@ -606,6 +700,7 @@ export async function togglePageBlockAssignment(formData: FormData): Promise<Pag
 }
 
 export async function deletePageBlockAssignment(formData: FormData): Promise<PageBlockActionResult> {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const assignmentId = parseNumber(formData.get("assignment_id"));
   const blockType = cleanText(formData.get("block_type")) as PageBlockType | "hero" | "media-sidebar" | "media-hub";
@@ -691,6 +786,7 @@ function parseAssignmentKeys(formData: FormData): ParsedAssignmentKey[] {
 }
 
 export async function bulkPageBlockAssignments(formData: FormData) {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const action = cleanText(formData.get("bulk_action"));
   const entries = parseAssignmentKeys(formData);
@@ -783,6 +879,7 @@ export async function bulkPageBlockAssignments(formData: FormData) {
 }
 
 export async function getPageModuleCounts(pageIds: number[]) {
+  await requireAdminSession();
   if (!pageIds.length) return new Map<number, number>();
 
   const counts = new Map<number, number>();
@@ -815,20 +912,24 @@ export async function getPageModuleCounts(pageIds: number[]) {
 
 /** @deprecated Use getPageModuleCounts */
 export async function getPageBlockCounts(pageIds: number[]) {
+  await requireAdminSession();
   return getPageModuleCounts(pageIds);
 }
 
 /** @deprecated Legacy page_sections CRUD — kept for backward compatibility only. */
 export async function createPageSection() {
+  await requireAdminSession();
   throw new Error("Legacy page_sections creation is disabled. Assign a block template instead.");
 }
 
 export async function togglePageSection(formData: FormData) {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
 }
 
 export async function deletePageSection(formData: FormData) {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   const sectionId = parseNumber(formData.get("section_id"));
   if (!pageId || !sectionId) throw new Error("Page section id is missing.");
@@ -838,6 +939,7 @@ export async function deletePageSection(formData: FormData) {
 }
 
 export async function updatePageSectionPlacement(formData: FormData) {
+  await requireAdminSession();
   const pageId = parseNumber(formData.get("page_id"));
   revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
 }

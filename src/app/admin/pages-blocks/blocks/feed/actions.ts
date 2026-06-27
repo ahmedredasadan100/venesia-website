@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
@@ -52,6 +54,7 @@ async function ensureUniqueSlug(slug: string, id?: number) {
 }
 
 export async function createFeedModule(formData: FormData) {
+  await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
@@ -78,6 +81,7 @@ export async function createFeedModule(formData: FormData) {
 }
 
 export async function updateFeedModule(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
@@ -107,6 +111,7 @@ export async function updateFeedModule(formData: FormData) {
 }
 
 export async function toggleFeedModuleStatus(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "draft");
   if (!id) throw new Error("معرّف الموديول مفقود.");
@@ -121,6 +126,7 @@ export async function toggleFeedModuleStatus(formData: FormData) {
 }
 
 export async function deleteFeedModule(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف الموديول مفقود.");
 
@@ -131,6 +137,7 @@ export async function deleteFeedModule(formData: FormData) {
 }
 
 export async function duplicateFeedModule(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف الموديول مفقود.");
 
@@ -157,6 +164,7 @@ export async function duplicateFeedModule(formData: FormData) {
 }
 
 export async function bulkFeedModules(formData: FormData) {
+  await requireAdminSession();
   const action = cleanText(formData.get("bulk_action"));
   const ids = formData
     .getAll("ids")

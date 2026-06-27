@@ -4,22 +4,31 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const ADMIN_SESSION_COOKIE = "venesia_admin_session";
 export const ADMIN_SESSION_TTL_SEC = 60 * 60 * 12;
+export const ADMIN_SESSION_REMEMBER_TTL_SEC = 60 * 60 * 24 * 30;
+
+export function resolveAdminSessionTtlSec(rememberMe?: boolean) {
+  return rememberMe ? ADMIN_SESSION_REMEMBER_TTL_SEC : ADMIN_SESSION_TTL_SEC;
+}
 
 export type AdminSessionPayload = {
+  id: number;
   u: string;
+  sv: number;
   exp: number;
 };
 
+export type AdminSessionSubject = {
+  id: number;
+  username: string;
+  sessionVersion: number;
+};
+
 export function getAdminAuthConfig() {
-  const username = process.env["ADMIN_USERNAME"]?.trim() ?? "";
-  const password = process.env["ADMIN_PASSWORD"] ?? "";
   const secret = process.env["ADMIN_SESSION_SECRET"] ?? "";
 
   return {
-    username,
-    password,
     secret,
-    configured: Boolean(username && password && secret.length >= 16),
+    configured: secret.length >= 16,
   };
 }
 
@@ -27,11 +36,10 @@ export function getAdminEnvDiagnostics() {
   const secret = process.env["ADMIN_SESSION_SECRET"] ?? "";
 
   return {
-    hasAdminUsername: Boolean(process.env["ADMIN_USERNAME"]),
-    hasAdminPassword: Boolean(process.env["ADMIN_PASSWORD"]),
     hasAdminSecret: Boolean(secret),
     secretLengthOk: secret.length >= 16,
     authConfigured: getAdminAuthConfig().configured,
+    usesDatabaseAdminUsers: true,
   };
 }
 
@@ -101,9 +109,15 @@ function signPayload(encodedPayload: string, secret: string) {
   return createHmac("sha256", secret).update(encodedPayload).digest("base64url");
 }
 
-export function createAdminSessionToken(username: string, secret: string, ttlSec = ADMIN_SESSION_TTL_SEC) {
+export function createAdminSessionToken(
+  subject: AdminSessionSubject,
+  secret: string,
+  ttlSec = ADMIN_SESSION_TTL_SEC,
+) {
   const payload: AdminSessionPayload = {
-    u: username,
+    id: subject.id,
+    u: subject.username,
+    sv: subject.sessionVersion,
     exp: Math.floor(Date.now() / 1000) + ttlSec,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -126,28 +140,19 @@ export function verifyAdminSessionToken(token: string | undefined | null, secret
 
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as AdminSessionPayload;
-    if (!payload?.u || typeof payload.exp !== "number") return null;
+    if (
+      typeof payload?.id !== "number" ||
+      !payload?.u ||
+      typeof payload.sv !== "number" ||
+      typeof payload.exp !== "number"
+    ) {
+      return null;
+    }
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;
   } catch {
     return null;
   }
-}
-
-export function verifyAdminCredentials(username: string, password: string) {
-  const config = getAdminAuthConfig();
-  if (!config.configured) return false;
-
-  const userBuf = Buffer.from(username, "utf8");
-  const expectedUserBuf = Buffer.from(config.username, "utf8");
-  const passBuf = Buffer.from(password, "utf8");
-  const expectedPassBuf = Buffer.from(config.password, "utf8");
-
-  if (userBuf.length !== expectedUserBuf.length || passBuf.length !== expectedPassBuf.length) {
-    return false;
-  }
-
-  return timingSafeEqual(userBuf, expectedUserBuf) && timingSafeEqual(passBuf, expectedPassBuf);
 }
 
 export function isAdminPath(pathname: string) {
@@ -158,9 +163,13 @@ export function isAdminApiPath(pathname: string) {
   return pathname === "/api/admin" || pathname.startsWith("/api/admin/");
 }
 
+export function isAdminAuthPagePath(pathname: string) {
+  return pathname === "/admin/login" || pathname === "/admin/forgot-password";
+}
+
 export function isAdminAuthPublicPath(pathname: string) {
   return (
-    pathname === "/admin/login" ||
+    isAdminAuthPagePath(pathname) ||
     pathname === "/api/admin/auth/login" ||
     pathname === "/api/admin/auth/logout"
   );

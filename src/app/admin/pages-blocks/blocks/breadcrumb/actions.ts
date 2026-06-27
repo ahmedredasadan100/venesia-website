@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
@@ -15,7 +17,22 @@ import {
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import { revalidatePath } from "next/cache";
-import type { BreadcrumbBlockConfig } from "../../../../../lib/page-blocks/configs";
+import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
+import type { BreadcrumbBlockConfig, BreadcrumbBlockItem } from "../../../../../lib/page-blocks/configs";
+
+function buildManualItems(formData: FormData): BreadcrumbBlockItem[] {
+  const items: BreadcrumbBlockItem[] = [];
+  for (let index = 0; index < 8; index += 1) {
+    const label = cleanText(formData.get(`manual_item_${index}_label`));
+    const linkData = linkFieldFromFormData(formData, `manual_item_${index}`);
+    if (!label && !hasSavedLinkField(linkData)) continue;
+    items.push({
+      label: label || undefined,
+      ...(linkData ? { link: linkData.link } : {}),
+    });
+  }
+  return items;
+}
 
 function buildBreadcrumbConfig(formData: FormData): BreadcrumbBlockConfig {
   const source = cleanText(formData.get("source"));
@@ -24,14 +41,7 @@ function buildBreadcrumbConfig(formData: FormData): BreadcrumbBlockConfig {
     source: source === "manual" ? "manual" : "navigation",
     showHome: parseFormBoolean(formData, "show_home", false),
     currentLabelOverride: cleanText(formData.get("current_label_override")) || undefined,
-    manualItems: cleanText(formData.get("manual_items"))
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [label, href] = line.split("|").map((part) => part.trim());
-        return { label: label || line, href: href || undefined };
-      }),
+    manualItems: buildManualItems(formData),
   };
 }
 
@@ -43,6 +53,7 @@ async function ensureUniqueSlug(slug: string, id?: number) {
 }
 
 export async function createBreadcrumbBlock(formData: FormData) {
+  await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
@@ -70,6 +81,7 @@ export async function createBreadcrumbBlock(formData: FormData) {
 }
 
 export async function updateBreadcrumbBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
@@ -100,6 +112,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
 }
 
 export async function toggleBreadcrumbBlockStatus(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "draft");
   if (!id) throw new Error("معرّف البلوك مفقود.");
@@ -114,6 +127,7 @@ export async function toggleBreadcrumbBlockStatus(formData: FormData) {
 }
 
 export async function deleteBreadcrumbBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -124,6 +138,7 @@ export async function deleteBreadcrumbBlock(formData: FormData) {
 }
 
 export async function duplicateBreadcrumbBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -151,6 +166,7 @@ export async function duplicateBreadcrumbBlock(formData: FormData) {
 }
 
 export async function bulkBreadcrumbBlocks(formData: FormData) {
+  await requireAdminSession();
   const action = cleanText(formData.get("bulk_action"));
   const ids = formData
     .getAll("ids")

@@ -35,6 +35,7 @@ type ActionButtonProps = {
   className?: string;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
+  size?: "default" | "compact";
 };
 
 type CheckboxProps = {
@@ -62,10 +63,49 @@ const actionDefaults: Record<DataGridAction, { tone: NonNullable<ActionButtonPro
 export const ADMIN_DATA_GRID_RULES = {
   actionOrder: ["edit", "visibility", "duplicate", "delete"],
   actionButton: "h-11 w-11 rounded-[8px] cursor-pointer shrink-0",
+  actionButtonCompact: "h-10 w-10 rounded-[8px] cursor-pointer shrink-0",
   actionIcon: "h-4 w-4 shrink-0",
   checkbox: "h-4 w-4 accent-[#D8B87A] cursor-pointer",
   rowPadding: "px-5 py-4",
   bulkBarTrigger: "selectedIds.length > 0",
+  /** Default gap between action buttons (Tailwind gap-1.5 = 6px). */
+  actionGapPx: 6,
+  actionGapCompactPx: 4,
+  actionButtonPx: 44,
+  actionButtonCompactPx: 40,
+} as const;
+
+/** Width in px for a fixed actions column — use in gridTemplateColumns. */
+export function getAdminDataGridActionsColumnWidth(
+  buttonCount: number,
+  size: "default" | "compact" = buttonCount > 4 ? "compact" : "default",
+) {
+  const buttonPx =
+    size === "compact" ? ADMIN_DATA_GRID_RULES.actionButtonCompactPx : ADMIN_DATA_GRID_RULES.actionButtonPx;
+  const gapPx = size === "compact" ? ADMIN_DATA_GRID_RULES.actionGapCompactPx : ADMIN_DATA_GRID_RULES.actionGapPx;
+  const contentWidth = buttonPx * buttonCount + gapPx * Math.max(0, buttonCount - 1);
+
+  // Small buffer so borders never clip at the cell edge.
+  return contentWidth + 4;
+}
+
+export function adminDataGridActionsColumn(
+  buttonCount: number,
+  size?: "default" | "compact",
+): string {
+  return `${getAdminDataGridActionsColumnWidth(buttonCount, size)}px`;
+}
+
+/** Presets aligned with Topics golden reference and common action counts. */
+export const ADMIN_DATA_GRID_ACTION_COLUMNS = {
+  /** 4 standard actions — Topics reference (edit, visibility, duplicate, delete). */
+  four: adminDataGridActionsColumn(4, "default"),
+  /** 3 standard actions. */
+  three: adminDataGridActionsColumn(3, "default"),
+  /** 5 compact actions — reorder + CRUD rows. */
+  fiveCompact: adminDataGridActionsColumn(5, "compact"),
+  /** 1 standard action. */
+  one: adminDataGridActionsColumn(1, "default"),
 } as const;
 
 function GridIcon({ action, hidden = false }: { action: DataGridAction; hidden?: boolean }) {
@@ -118,7 +158,7 @@ export function AdminDataGrid({ children, summary, className = "" }: GridProps) 
     <section
       className={`rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl ${className}`}
     >
-      <div className="overflow-hidden rounded-[14px] border border-white/8 bg-black/14">
+      <div className="overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/8 bg-black/14">
         {children}
       </div>
       {summary ? (
@@ -180,8 +220,29 @@ export function AdminDataGridCheckbox({ checked, onChange, label, inputRef }: Ch
   );
 }
 
-export function AdminDataGridActions({ children, className = "" }: BaseProps) {
-  return <div dir="rtl" className={`flex min-w-max flex-nowrap items-center justify-center gap-2 ${className}`}>{children}</div>;
+type AdminDataGridActionsProps = BaseProps & {
+  /** Use compact buttons (40px) when a row has 5+ actions. */
+  compact?: boolean;
+};
+
+export function AdminDataGridActions({ children, className = "", compact = false }: AdminDataGridActionsProps) {
+  return (
+    <div
+      dir="rtl"
+      className={`flex w-full min-w-0 max-w-full flex-nowrap items-center justify-center overflow-hidden ${compact ? "gap-1 [&_a]:!h-10 [&_a]:!w-10 [&_button]:!h-10 [&_button]:!w-10 [&_summary]:!h-10 [&_summary]:!w-10" : "gap-1.5"} ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Grid cell wrapper — keeps action buttons inside the table/card bounds. */
+export function AdminDataGridActionsCell({ children, className = "", compact = false }: AdminDataGridActionsProps) {
+  return (
+    <div className={`min-w-0 w-full overflow-hidden ${className}`}>
+      <AdminDataGridActions compact={compact}>{children}</AdminDataGridActions>
+    </div>
+  );
 }
 
 export function AdminDataGridActionButton({
@@ -197,11 +258,13 @@ export function AdminDataGridActionButton({
   className = "",
   onClick,
   disabled = false,
+  size = "default",
 }: ActionButtonProps) {
   const resolvedTone = tone ?? (action ? actionDefaults[action].tone : "dark");
   const resolvedTitle = title ?? (action ? actionDefaults[action].title : "إجراء");
   const content = action ? <GridIcon action={action} hidden={hidden} /> : children;
-  const classes = `flex ${ADMIN_DATA_GRID_RULES.actionButton} items-center justify-center border transition ${actionTones[resolvedTone]} ${className}`;
+  const sizeClass = size === "compact" ? ADMIN_DATA_GRID_RULES.actionButtonCompact : ADMIN_DATA_GRID_RULES.actionButton;
+  const classes = `flex ${sizeClass} items-center justify-center border transition ${actionTones[resolvedTone]} ${className}`;
 
   if (href) {
     return (

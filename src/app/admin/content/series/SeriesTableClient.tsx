@@ -5,7 +5,7 @@ import {
   AdminBulkActionBar,
   AdminDataGrid,
   AdminDataGridActionButton,
-  AdminDataGridActions,
+  AdminDataGridActionsCell,
   AdminDataGridCheckbox,
   AdminDataGridEmpty,
   AdminDataGridHeader,
@@ -147,7 +147,7 @@ export default function SeriesTableClient({ series }: { series: SeriesListRow[] 
               <div className="text-center font-en text-sm font-semibold text-white/72">{item.topics_count}</div>
               <div className="flex justify-center"><AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill></div>
 
-              <AdminDataGridActions>
+              <AdminDataGridActionsCell>
                 <AdminDataGridActionButton action="edit" href={`/admin/content/series/${item.id}`} />
                 <AdminDataGridActionButton
                   action="visibility"
@@ -166,7 +166,7 @@ export default function SeriesTableClient({ series }: { series: SeriesListRow[] 
                   disabled={table.isPending}
                   onClick={() => table.runAction(() => deleteSeriesAjax(item.id))}
                 />
-              </AdminDataGridActions>
+              </AdminDataGridActionsCell>
             </AdminDataGridRow>
           );
         }) : (

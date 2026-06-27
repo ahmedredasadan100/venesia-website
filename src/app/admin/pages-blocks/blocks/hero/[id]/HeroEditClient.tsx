@@ -5,6 +5,8 @@ import Link from "next/link";
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
 import AdminModuleTabs from "../../../../../../components/admin/page-blocks/AdminModuleTabs";
 import ModulePageAssignmentsField from "../../../../../../components/admin/page-blocks/ModulePageAssignmentsField";
+import { AdminLinkField } from "../../../../../../components/admin/ui";
+import { legacyHrefFromConfig } from "../../../../../../lib/admin/links/serialize";
 import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
 import { updateHeroTemplateDetails } from "../actions";
 
@@ -46,6 +48,9 @@ export default function HeroEditClient({
   variantOptions,
   saved,
 }: HeroEditClientProps) {
+  const primaryCtaLink = legacyHrefFromConfig(config, "primaryCtaLink", "primaryCtaHref");
+  const secondaryCtaLink = legacyHrefFromConfig(config, "secondaryCtaLink", "secondaryCtaHref");
+
   return (
     <div className="space-y-6 pb-10" dir="rtl">
       <section className="rounded-[34px] border border-white/10 bg-[#080B10]/78 p-6 shadow-[0_30px_110px_rgba(0,0,0,0.26)] backdrop-blur-xl">
@@ -181,16 +186,13 @@ export default function HeroEditClient({
                         className={fieldClassName()}
                       />
                     </label>
-                    <label className="space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Primary CTA — Link</span>
-                      <input
-                        name="primary_cta_href"
-                        defaultValue={String(config.primaryCtaHref ?? "")}
-                        placeholder="/link"
-                        dir="ltr"
-                        className={fieldClassName()}
-                      />
-                    </label>
+                    <AdminLinkField
+                      prefix="primary_cta"
+                      label="Primary CTA — Link"
+                      defaultValue={primaryCtaLink}
+                      helperText="اختر رابطًا داخليًا من النظام أو أدخل رابطًا خارجيًا."
+                      showAnchor
+                    />
                     <label className="space-y-2">
                       <span className="text-xs font-semibold text-white/55">Secondary CTA — Label</span>
                       <input
@@ -199,16 +201,13 @@ export default function HeroEditClient({
                         className={fieldClassName()}
                       />
                     </label>
-                    <label className="space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Secondary CTA — Link</span>
-                      <input
-                        name="secondary_cta_href"
-                        defaultValue={String(config.secondaryCtaHref ?? "")}
-                        placeholder="/link"
-                        dir="ltr"
-                        className={fieldClassName()}
-                      />
-                    </label>
+                    <AdminLinkField
+                      prefix="secondary_cta"
+                      label="Secondary CTA — Link"
+                      defaultValue={secondaryCtaLink}
+                      helperText="اختر رابطًا داخليًا من النظام أو أدخل رابطًا خارجيًا."
+                      showAnchor
+                    />
                   </div>
                 </section>
               ),

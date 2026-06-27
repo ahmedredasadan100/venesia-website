@@ -10,7 +10,7 @@
 - `AdminDataGridHeader`
 - `AdminDataGridRow`
 - `AdminDataGridCheckbox`
-- `AdminDataGridActions`
+- `AdminDataGridActionsCell`
 - `AdminDataGridActionButton`
 - `AdminBulkActionBar`
 - `useAdminGridSelection`
@@ -85,3 +85,21 @@ Mandatory visual order remains:
 `edit → visibility → duplicate → delete`
 
 If a module cannot support one of these actions, the missing action must be documented in the page code with a clear reason. Otherwise, the action is considered missing.
+
+## 8) Actions Column Containment
+
+Every actions column must stay inside the table/card bounds. Overflow outside the grid is a bug.
+
+Use the shared helpers from `AdminDataGrid`:
+
+- `AdminDataGridActionsCell` — required wrapper for the actions grid cell.
+- `AdminDataGridActions` — inner flex row only (used inside `AdminDataGridActionsCell`); never use `min-w-max`.
+- `adminDataGridActionsColumn(count)` or `ADMIN_DATA_GRID_ACTION_COLUMNS` — fixed column width from button count.
+- `compact` on `AdminDataGridActionsCell` when a row has 5+ buttons (40px buttons, tighter gap).
+
+Rules:
+
+- Forms wrapping submit buttons must use `className="contents"` so they do not expand the flex row.
+- Action buttons always use `shrink-0`.
+- Never rely on a wider column than `adminDataGridActionsColumn()` returns.
+- Extra reorder/move buttons count toward the total button count.

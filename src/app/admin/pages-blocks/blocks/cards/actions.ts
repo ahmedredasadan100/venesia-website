@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
@@ -14,6 +16,7 @@ import {
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import type { CardsBlockConfig, CardsBlockItem } from "../../../../../lib/page-blocks/configs";
+import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
 
 function buildCardsItems(formData: FormData): CardsBlockItem[] {
   const rawItems = cleanText(formData.get("items_json"));
@@ -31,13 +34,13 @@ function buildCardsItems(formData: FormData): CardsBlockItem[] {
     const title = cleanText(formData.get(`item_${index}_title`));
     const body = cleanText(formData.get(`item_${index}_body`));
     const icon = cleanText(formData.get(`item_${index}_icon`));
-    const href = cleanText(formData.get(`item_${index}_href`));
-    if (!title && !body && !icon && !href) continue;
+    const linkData = linkFieldFromFormData(formData, `item_${index}`);
+    if (!title && !body && !icon && !hasSavedLinkField(linkData)) continue;
     items.push({
       title: title || undefined,
       body: body || undefined,
       icon: icon || undefined,
-      href: href || undefined,
+      ...(linkData ? { link: linkData.link, target: linkData.target } : {}),
     });
   }
   return items;
@@ -66,6 +69,7 @@ async function ensureUniqueSlug(slug: string, id?: number) {
 }
 
 export async function createCardsBlock(formData: FormData) {
+  await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
@@ -93,6 +97,7 @@ export async function createCardsBlock(formData: FormData) {
 }
 
 export async function updateCardsBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
@@ -122,6 +127,7 @@ export async function updateCardsBlock(formData: FormData) {
 }
 
 export async function toggleCardsBlockStatus(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "draft");
   if (!id) throw new Error("معرّف البلوك مفقود.");
@@ -136,6 +142,7 @@ export async function toggleCardsBlockStatus(formData: FormData) {
 }
 
 export async function deleteCardsBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -146,6 +153,7 @@ export async function deleteCardsBlock(formData: FormData) {
 }
 
 export async function duplicateCardsBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -168,6 +176,7 @@ export async function duplicateCardsBlock(formData: FormData) {
 }
 
 export async function bulkCardsBlocks(formData: FormData) {
+  await requireAdminSession();
   const action = cleanText(formData.get("bulk_action"));
   const ids = formData
     .getAll("ids")
@@ -204,6 +213,7 @@ export type CardsBlockRow = {
 };
 
 export async function getCardsBlockRows(): Promise<CardsBlockRow[]> {
+  await requireAdminSession();
   const { data, error } = await getSupabaseAdmin()
     .from("cards_block_templates")
     .select("id,name,slug,description,variant,status,updated_at")

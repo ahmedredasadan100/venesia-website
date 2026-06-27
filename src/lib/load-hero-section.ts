@@ -1,7 +1,9 @@
 import "server-only";
 
+import { resolveHeroConfigLinks } from "./admin/links/hero-config";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { logError } from "./logging";
+import { MEDIA_TYPE_PATHS, type MediaContentType } from "./media-center";
 import { supabase } from "./supabase";
 import type {
   HeroSectionData,
@@ -65,6 +67,12 @@ function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): 
       slug: template.slug,
     },
   };
+}
+
+async function templateToHeroSectionResolved(template: HeroTemplateRecord, page: PageRecord): Promise<HeroSectionData> {
+  const hero = templateToHeroSection(template, page);
+  hero.config = await resolveHeroConfigLinks(template.config);
+  return hero;
 }
 
 async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRecord | null> {
@@ -190,7 +198,7 @@ async function resolveHeroItems(hero: PageSectionRecord): Promise<HeroSectionDat
       title: item.title,
       excerpt: item.excerpt,
       image: item.image,
-      href: `/media-center/${item.type}/${item.slug}`,
+      href: `/media-center/${MEDIA_TYPE_PATHS[item.type as MediaContentType] ?? "news"}/${item.slug}`,
       category: item.category,
     }));
   }
@@ -238,7 +246,7 @@ export async function getHeroSectionState(pageSlug: string): Promise<HeroSection
 
   const assignedTemplate = await getAssignedHeroTemplate(page);
   if (assignedTemplate) {
-    const hero = templateToHeroSection(assignedTemplate, page);
+    const hero = await templateToHeroSectionResolved(assignedTemplate, page);
     hero.resolvedItems = await resolveHeroItems(hero);
     return { hero, visibility: "visible" };
   }

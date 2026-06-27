@@ -30,6 +30,45 @@ async function fetchSlugMap(table: "topics" | "topic_categories" | "projects", i
   return slugMap;
 }
 
+async function getPublicNavigationItemsForMenuId(menuId: number): Promise<PublicNavigationItem[]> {
+  const { data: rows, error: itemsError } = await getSupabaseAdmin()
+    .from("menu_items")
+    .select(MENU_ITEM_SELECT)
+    .eq("menu_id", menuId)
+    .eq("is_visible", true)
+    .order("sort_order", { ascending: true });
+
+  if (itemsError) {
+    logError("Failed to load navigation menu items", itemsError, { menuId });
+    return [];
+  }
+
+  const cleanRows = (rows ?? []) as MenuItemRow[];
+  const maps = await getSlugMaps(cleanRows, fetchSlugMap);
+
+  return buildPublicMenuTree(cleanRows, maps);
+}
+
+export async function getPublicNavigationItemsByMenuId(menuId: number): Promise<PublicNavigationItem[]> {
+  if (!Number.isFinite(menuId) || menuId < 1) return [];
+
+  const { data: menu, error: menuError } = await getSupabaseAdmin()
+    .from("menus")
+    .select("id, is_active")
+    .eq("id", menuId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (menuError) {
+    logError("Failed to load navigation menu by id", menuError, { menuId });
+    return [];
+  }
+
+  if (!menu) return [];
+
+  return getPublicNavigationItemsForMenuId(menuId);
+}
+
 export async function getPublicNavigationItems(location = "main"): Promise<PublicNavigationItem[]> {
   const { data: menu, error: menuError } = await getSupabaseAdmin()
     .from("menus")
@@ -47,20 +86,5 @@ export async function getPublicNavigationItems(location = "main"): Promise<Publi
 
   if (!menu) return [];
 
-  const { data: rows, error: itemsError } = await getSupabaseAdmin()
-    .from("menu_items")
-    .select(MENU_ITEM_SELECT)
-    .eq("menu_id", menu.id)
-    .eq("is_visible", true)
-    .order("sort_order", { ascending: true });
-
-  if (itemsError) {
-    logError("Failed to load navigation menu items", itemsError, { location, menuId: menu.id });
-    return [];
-  }
-
-  const cleanRows = (rows ?? []) as MenuItemRow[];
-  const maps = await getSlugMaps(cleanRows, fetchSlugMap);
-
-  return buildPublicMenuTree(cleanRows, maps);
+  return getPublicNavigationItemsForMenuId(menu.id);
 }

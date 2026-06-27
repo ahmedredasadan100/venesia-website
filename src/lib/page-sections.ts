@@ -72,8 +72,10 @@ export type HeroConfig = {
   images?: string[];
   primaryCtaLabel?: string;
   primaryCtaHref?: string;
+  primaryCtaLink?: Record<string, unknown>;
   secondaryCtaLabel?: string;
   secondaryCtaHref?: string;
+  secondaryCtaLink?: Record<string, unknown>;
   showCta?: boolean;
   imagePositionClassName?: string;
   heroLayout?: HeroLayoutPreset;

@@ -93,6 +93,7 @@ const CORE_TABLES = [
   "menus",
   "menu_items",
   "site_settings",
+  "admin_users",
   "media_hub_module_templates",
   "page_media_hub_module_assignments",
   "media_sidebar_module_templates",
@@ -103,6 +104,14 @@ console.log("=== Schema tables ===");
 for (const table of CORE_TABLES) {
   const exists = await tableExists(table);
   record(`table:${table}`, exists, exists ? "exists" : "not in schema cache");
+}
+
+{
+  const { count, error } = await supabase
+    .from("admin_users")
+    .select("id", { count: "exact", head: true })
+    .eq("is_active", true);
+  record("admin_users:active", !error && (count ?? 0) > 0, error?.message ?? `count=${count ?? 0}`);
 }
 
 console.log("\n=== Footer site_settings ===");

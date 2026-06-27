@@ -37,7 +37,8 @@ export const ADMIN_FORM = {
 /** Shared list/table layout — reuse for all Admin listing pages (Pages, Menus, Topics, Projects). */
 export const ADMIN_LIST_PAGE = {
   wrapper: "space-y-6 pb-10",
-  actionsColumnWidth: "220px",
+  /** 4 standard CRUD actions — matches Topics golden reference. */
+  actionsColumnWidth: "198px",
   bulkBar:
     "flex flex-col gap-4 rounded-[18px] border border-[#D8B87A]/14 bg-[#080B10]/92 px-4 py-4 shadow-[0_18px_70px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.035)] md:flex-row md:items-center md:justify-between",
 } as const;

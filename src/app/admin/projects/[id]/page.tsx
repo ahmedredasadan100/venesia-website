@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 function getNoticeText(notice?: string) {
   if (notice === "updated") return "تم حفظ التعديلات بنجاح.";
+  if (notice === "created") return "تم إنشاء المشروع. أكمل تفاصيله من النموذج أدناه.";
   return null;
 }
 

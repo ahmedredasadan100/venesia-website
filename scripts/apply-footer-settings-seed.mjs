@@ -1,11 +1,19 @@
 /**
- * Applies site_settings footer keys + footer menu quick links.
+ * Applies site_settings footer keys (legacy + footer.slots) and footer menu items.
+ * Menus/menu_items are seeded here for Menus Admin — Footer Builder never writes them.
+ *
  * Usage: node scripts/apply-footer-settings-seed.mjs
  */
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import {
+  buildFooterSlotsFromBrand,
+  DEFAULT_FOOTER_BRAND,
+  FOOTER_SLOTS_SETTING_KEY,
+} from "./lib/footer-default-slots.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const envPath = resolve(ROOT, ".env.local");
@@ -34,10 +42,7 @@ if (!url || !key) {
 const supabase = createClient(url, key, { auth: { persistSession: false } });
 
 const FOOTER_SETTINGS = {
-  "footer.brand": {
-    title: "Venesia Developments",
-    tagline: "Building trust before concrete.",
-  },
+  "footer.brand": { ...DEFAULT_FOOTER_BRAND },
   "footer.contact_items": [
     {
       icon: "⌖",
@@ -103,6 +108,24 @@ async function upsertSetting(settingKey, value) {
 
   if (error) throw new Error(`${settingKey}: ${error.message}`);
   console.log(`OK site_settings ${settingKey}`);
+}
+
+async function ensureFooterSlots(brand) {
+  const { data: existing, error } = await supabase
+    .from("site_settings")
+    .select("key")
+    .eq("key", FOOTER_SLOTS_SETTING_KEY)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  if (existing) {
+    console.log(`SKIP ${FOOTER_SLOTS_SETTING_KEY} (already exists — not overwritten)`);
+    return;
+  }
+
+  const slots = buildFooterSlotsFromBrand(brand);
+  await upsertSetting(FOOTER_SLOTS_SETTING_KEY, slots);
 }
 
 async function ensureFooterMenu() {
@@ -192,6 +215,7 @@ try {
     await upsertSetting(settingKey, value);
   }
 
+  await ensureFooterSlots(FOOTER_SETTINGS["footer.brand"]);
   await ensureFooterMenu();
   console.log("Footer settings seed complete.");
 } catch (error) {

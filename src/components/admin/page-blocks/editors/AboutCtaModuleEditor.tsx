@@ -1,6 +1,8 @@
 "use client";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
+import { AdminLinkField } from "../../ui";
+import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { AboutCtaContactConfig, AboutCtaModuleConfig } from "../../../../lib/page-blocks/configs";
 
@@ -64,15 +66,12 @@ export default function AboutCtaModuleEditor({
             <span className="text-xs font-semibold text-white/55">Button label</span>
             <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
           </label>
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">Button href</span>
-            <input
-              name="button_href"
-              defaultValue={config.button?.href ?? ""}
-              dir="ltr"
-              className={fieldClassName()}
-            />
-          </label>
+          <AdminLinkField
+            prefix="button"
+            label="Button Link"
+            defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
+            showAnchor
+          />
         </div>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">Note تحت الزر</span>
@@ -120,15 +119,11 @@ export default function AboutCtaModuleEditor({
                   className={fieldClassName()}
                 />
               </label>
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">Href (اختياري)</span>
-                <input
-                  name={`contact_${index}_href`}
-                  defaultValue={contact.href ?? ""}
-                  dir="ltr"
-                  className={fieldClassName()}
-                />
-              </label>
+              <AdminLinkField
+                prefix={`contact_${index}`}
+                label="Href (اختياري)"
+                defaultValue={linkDefaultFromContainer(contact as Record<string, unknown>)}
+              />
             </div>
           ))}
         </div>

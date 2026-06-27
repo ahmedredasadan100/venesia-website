@@ -11,6 +11,7 @@ import { getMediaItemBySlug, getMediaItems } from "../../../../lib/media-center"
 import { loadMediaCenterSidebarProps } from "../../../../lib/media-sidebar-modules/load-media-sidebar-modules";
 import { buildMetadata } from "../../../../lib/seo/build-metadata";
 import { buildPageJsonLd } from "../../../../lib/seo/build-jsonld";
+import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ export async function generateMetadata({
       title: "معرض غير موجود | فينيسيا للتطوير العقاري",
       description:
         "المعرض المطلوب غير متاح حاليًا داخل المركز الإعلامي لفينيسيا للتطوير العقاري.",
+      robots: NO_INDEX_ROBOTS,
     });
   }
 

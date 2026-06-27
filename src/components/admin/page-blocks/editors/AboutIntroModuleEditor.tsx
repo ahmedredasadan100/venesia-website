@@ -1,6 +1,8 @@
 "use client";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
+import { AdminLinkField } from "../../ui";
+import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { AboutIntroBeatConfig, AboutIntroModuleConfig } from "../../../../lib/page-blocks/configs";
 
@@ -116,10 +118,12 @@ export default function AboutIntroModuleEditor({
               <span className="text-xs font-semibold text-white/55">Label</span>
               <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
             </label>
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">Href</span>
-              <input name="button_href" defaultValue={config.button?.href ?? ""} className={fieldClassName()} />
-            </label>
+            <AdminLinkField
+              prefix="button"
+              label="رابط الزر"
+              defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
+              showAnchor
+            />
           </div>
         </section>
       ) : null}

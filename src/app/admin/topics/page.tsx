@@ -2,12 +2,16 @@ import Link from "next/link";
 import AdminNotice from "../../../components/admin/AdminNotice";
 import AdminPageHeader from "../../../components/admin/AdminPageHeader";
 import AdminTopicsFilters from "../../../components/admin/AdminTopicsFilters";
+import { ADMIN_DATA_GRID_ACTION_COLUMNS } from "../../../components/admin/ui";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
 import { formatAdminListDate } from "../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
-import { bulkUpdateTopics, duplicateTopic, publishTopic, softDeleteTopic, unpublishTopic } from "./actions";
+import { bulkUpdateTopics } from "./actions";
 import TopicListControls from "./TopicListControls";
+import TopicRowActions from "./TopicRowActions";
 import CopySlugButton from "./CopySlugButton";
+
+const TOPICS_TABLE_COLUMNS = `46px minmax(320px,1fr) 150px 125px 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 export const dynamic = "force-dynamic";
 
@@ -167,70 +171,6 @@ function TopicFileIcon() {
   );
 }
 
-function PencilIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
-      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 19.5 4.8-1.05L19 8.75 15.25 5 5.55 14.7 4.5 19.5Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m13.8 6.45 3.75 3.75" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 7h14M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7m-8 0 1 12h8l1-12" />
-      <path strokeLinecap="round" d="M10 11v5M14 11v5" />
-    </svg>
-  );
-}
-
-
-function DuplicateIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 8.5V6a2 2 0 0 1 2-2h7.5a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H15" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5h8.5a2 2 0 0 1 2 2V21H6.5a2 2 0 0 1-2-2v-8.5Z" />
-    </svg>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="2.7" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.6 10.6a2.7 2.7 0 0 0 3.8 3.8" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.2 7.6C4.1 9.2 2.5 12 2.5 12s3.5 6 9.5 6c1.55 0 2.94-.4 4.16-1.02" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6c6 0 9.5 6 9.5 6a14.7 14.7 0 0 1-2.1 2.65" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6 6 18" />
-    </svg>
-  );
-}
-
-function MoreIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-      <path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM12 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
-    </svg>
-  );
-}
-
 function StatusPill({ status }: { status?: string | null }) {
   const normalized = status || "draft";
   const label = normalized === "published" ? "منشور" : normalized === "unpublished" ? "مخفي" : normalized === "archived" ? "أرشيف" : "مسودة";
@@ -244,179 +184,6 @@ function StatusPill({ status }: { status?: string | null }) {
       : "border-white/12 bg-white/[0.08] text-white/64";
 
   return <span className={`inline-flex min-w-[56px] justify-center rounded-full border px-2.5 py-1.5 text-xs font-semibold ${className}`}>{label}</span>;
-}
-
-function TopicActionMenu({ topic, currentListPath }: { topic: TopicRow; currentListPath: string }) {
-  return (
-    <details className="group/actions relative">
-      <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-[8px] border border-white/8 bg-white/[0.075] text-white transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A] [&::-webkit-details-marker]:hidden">
-        <MoreIcon />
-      </summary>
-      <div className="absolute left-0 z-30 mt-3 w-44 rounded-2xl border border-[#D8B87A]/18 bg-[#080B10] p-2 text-sm shadow-[0_24px_70px_rgba(0,0,0,0.62)]">
-        <Link
-          href={`/admin/topics/${topic.id}/preview`}
-          target="_blank"
-          className="block rounded-xl px-3 py-2 text-white/70 transition hover:bg-white/[0.06] hover:text-white"
-        >
-          معاينة
-        </Link>
-        {topic.status === "published" ? (
-          <form action={unpublishTopic}>
-            <input type="hidden" name="id" value={topic.id} />
-            <input type="hidden" name="redirect_to" value={currentListPath} />
-            <button className="w-full rounded-xl px-3 py-2 text-right text-[#D8B87A] transition hover:bg-[#D8B87A]/10">
-              إخفاء الموضوع
-            </button>
-          </form>
-        ) : (
-          <form action={publishTopic}>
-            <input type="hidden" name="id" value={topic.id} />
-            <input type="hidden" name="redirect_to" value={currentListPath} />
-            <button className="w-full rounded-xl px-3 py-2 text-right text-emerald-200 transition hover:bg-emerald-400/10">
-              نشر الموضوع
-            </button>
-          </form>
-        )}
-      </div>
-    </details>
-  );
-}
-
-
-function ToggleTopicStatusButton({ topic, currentListPath }: { topic: TopicRow; currentListPath: string }) {
-  const isPublished = topic.status === "published";
-  const action = isPublished ? unpublishTopic : publishTopic;
-
-  return (
-    <form action={action}>
-      <input type="hidden" name="id" value={topic.id} />
-      <input type="hidden" name="redirect_to" value={currentListPath} />
-      <button
-        title={isPublished ? "إخفاء الموضوع" : "نشر الموضوع"}
-        className={`flex h-11 w-11 items-center justify-center rounded-[8px] border transition ${
-          isPublished
-            ? "border-emerald-400/22 bg-emerald-500/12 text-emerald-100 hover:border-emerald-300/40 hover:bg-emerald-500/18"
-            : "border-orange-400/22 bg-orange-500/12 text-orange-100 hover:border-orange-300/40 hover:bg-orange-500/18"
-        }`}
-      >
-        {isPublished ? <EyeIcon /> : <EyeOffIcon />}
-      </button>
-    </form>
-  );
-}
-
-function DuplicateTopicModal({
-  topic,
-  categories,
-  currentListPath,
-}: {
-  topic: TopicRow;
-  categories: CategoryRow[];
-  currentListPath: string;
-}) {
-  const defaultTitle = `${topic.title || "موضوع بدون عنوان"} (نسخة)`;
-  const defaultSlug = `${topic.slug || `topic-${topic.id}`}-copy`;
-
-  return (
-    <details className="group/duplicate relative">
-      <summary
-        title="نسخ الموضوع"
-        className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-[8px] border border-sky-300/18 bg-sky-500/10 text-sky-100 transition hover:border-sky-300/38 hover:bg-sky-500/16 [&::-webkit-details-marker]:hidden"
-      >
-        <DuplicateIcon />
-      </summary>
-
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/58 px-4 py-8 backdrop-blur-[2px]">
-        <div
-          dir="rtl"
-          className="w-full max-w-[760px] rounded-[24px] border border-[#D8B87A]/18 bg-[#080B10] p-5 text-right shadow-[0_30px_95px_rgba(0,0,0,0.62)]"
-        >
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <p className="text-sm font-semibold text-white">نسخ الموضوع</p>
-            <button
-              type="button"
-              data-details-close
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/60 transition hover:border-red-400/30 hover:text-red-100"
-              aria-label="إغلاق"
-              title="إغلاق"
-            >
-              <CloseIcon />
-            </button>
-          </div>
-
-          <form action={duplicateTopic} className="grid gap-4 md:grid-cols-2">
-            <input type="hidden" name="id" value={topic.id} />
-            <input type="hidden" name="redirect_to" value={currentListPath} />
-
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-xs font-medium text-white/45">اسم النسخة الجديدة</label>
-              <input
-                name="title"
-                defaultValue={defaultTitle}
-                dir="rtl"
-                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-right text-sm text-white outline-none focus:border-[#D8B87A]/45"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-white/45">Slug النسخة</label>
-              <input
-                name="slug"
-                defaultValue={defaultSlug}
-                dir="ltr"
-                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-left font-en text-sm text-white outline-none focus:border-[#D8B87A]/45"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-white/45">التصنيف</label>
-              <select
-                name="category_slug"
-                defaultValue={topic.category_slug || "__same"}
-                dir="rtl"
-                className="w-full rounded-2xl border border-white/10 bg-[#070A0F] px-4 py-3 text-right text-sm text-white/75 outline-none focus:border-[#D8B87A]/45"
-              >
-                <option value="__same">نفس التصنيف الحالي</option>
-                <option value="__none">بدون تصنيف</option>
-                {categories.map((category) => (
-                  <option key={category.slug} value={category.slug}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-xs font-medium text-white/45">حالة النسخة</label>
-              <select
-                name="status"
-                defaultValue="unpublished"
-                dir="rtl"
-                className="w-full rounded-2xl border border-white/10 bg-[#070A0F] px-4 py-3 text-right text-sm text-white/75 outline-none focus:border-[#D8B87A]/45"
-              >
-                <option value="unpublished">مخفي</option>
-                <option value="draft">مسودة</option>
-                <option value="published">منشور</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-2 flex justify-start gap-3">
-              <button className="rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]">
-                إنشاء النسخة
-              </button>
-              <button
-                type="button"
-                data-details-close
-                className="rounded-full border border-white/10 px-6 py-3 text-sm font-semibold text-white/68 transition hover:border-white/20 hover:text-white"
-              >
-                إلغاء
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </details>
-  );
 }
 
 function BulkActionsBar({ categories, currentListPath }: { categories: CategoryRow[]; currentListPath: string }) {
@@ -672,7 +439,7 @@ export default async function AdminTopicsPage({
       <section id="topics-table" className="scroll-mt-6 rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl">
         <BulkActionsBar categories={safeCategories} currentListPath={currentListPath} />
         <div className="overflow-hidden rounded-[14px] border border-white/8 bg-black/14">
-          <div className="grid grid-cols-[46px_minmax(320px,1fr)_150px_125px_88px_196px] items-center gap-4 border-b border-[#D8B87A]/12 bg-white/[0.045] px-5 py-4 text-sm font-bold text-white max-xl:hidden">
+          <div className={`grid items-center gap-4 border-b border-[#D8B87A]/12 bg-white/[0.045] px-5 py-4 text-sm font-bold text-white max-xl:hidden`} style={{ gridTemplateColumns: TOPICS_TABLE_COLUMNS }}>
             <label className="flex items-center justify-center">
               <input type="checkbox" data-topic-select-all className="h-4 w-4 accent-[#D8B87A]" />
             </label>
@@ -699,7 +466,8 @@ export default async function AdminTopicsPage({
                 return (
                   <article
                     key={topic.id}
-                    className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.035] xl:grid-cols-[46px_minmax(320px,1fr)_150px_125px_88px_196px] xl:items-center"
+                    className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.035] xl:items-center"
+                    style={{ gridTemplateColumns: TOPICS_TABLE_COLUMNS }}
                   >
                     <label className="flex items-center justify-center">
                       <input
@@ -752,29 +520,7 @@ export default async function AdminTopicsPage({
                       <StatusPill status={topic.status} />
                     </div>
 
-                    <div className="flex items-center justify-center gap-1.5">
-                      <Link
-                        href={`/admin/topics/${topic.id}`}
-                        title="تعديل"
-                        className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#D8B87A]/20 bg-[#D8B87A]/10 text-[#F1C668] transition hover:border-[#D8B87A]/45 hover:bg-[#D8B87A]/16"
-                      >
-                        <PencilIcon />
-                      </Link>
-
-                      <DuplicateTopicModal topic={topic} categories={safeCategories} currentListPath={currentListPath} />
-                      <ToggleTopicStatusButton topic={topic} currentListPath={currentListPath} />
-
-                      <form action={softDeleteTopic}>
-                        <input type="hidden" name="id" value={topic.id} />
-                        <input type="hidden" name="redirect_to" value={currentListPath} />
-                        <button
-                          title="حذف"
-                          className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-red-300/15 bg-red-500/85 text-white shadow-[0_12px_30px_rgba(220,38,38,0.22)] transition hover:bg-red-500"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </form>
-                    </div>
+                    <TopicRowActions topic={topic} categories={safeCategories} currentListPath={currentListPath} />
                   </article>
                 );
               })}

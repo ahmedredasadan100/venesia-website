@@ -6,8 +6,9 @@ import {
   ADMIN_DATA_GRID_RULES,
   AdminActionButton,
   AdminDataGrid,
+  ADMIN_DATA_GRID_ACTION_COLUMNS,
   AdminDataGridActionButton,
-  AdminDataGridActions,
+  AdminDataGridActionsCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
@@ -250,8 +251,8 @@ export default async function MediaItemsAdminPage({
   const totalCount = count ?? 0;
   const totalPages = perPage ? Math.max(1, Math.ceil(totalCount / perPage)) : 1;
   const gridColumns = activeType
-    ? "46px minmax(320px,1fr) 150px 125px 88px 196px"
-    : "46px minmax(320px,1fr) 130px 150px 125px 88px 196px";
+    ? `46px minmax(320px,1fr) 150px 125px 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`
+    : `46px minmax(320px,1fr) 130px 150px 125px 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
   return (
     <main className="space-y-7">
@@ -371,27 +372,27 @@ export default async function MediaItemsAdminPage({
                       <AdminStatusPill tone={statusTone(item.status)}>{statusLabel(item.status)}</AdminStatusPill>
                     </div>
 
-                    <AdminDataGridActions>
-                      <AdminDataGridActionButton action="edit" href={`/admin/media-center/items/${item.id}`} />
+                    <AdminDataGridActionsCell compact>
+                      <AdminDataGridActionButton action="edit" href={`/admin/media-center/items/${item.id}`} size="compact" />
                       {/* duplicate action not supported for media_items */}
-                      <form action={isPublished ? unpublishMediaItem : publishMediaItem} className="inline-flex shrink-0">
+                      <form action={isPublished ? unpublishMediaItem : publishMediaItem} className="contents">
                         <input type="hidden" name="id" value={item.id} />
-                        <AdminDataGridActionButton action="visibility" type="submit" hidden={!isPublished} />
+                        <AdminDataGridActionButton action="visibility" type="submit" size="compact" hidden={!isPublished} />
                       </form>
-                      <form action={softDeleteMediaItem} className="inline-flex shrink-0">
+                      <form action={softDeleteMediaItem} className="contents">
                         <input type="hidden" name="id" value={item.id} />
-                        <AdminDataGridActionButton action="delete" type="submit" title="أرشفة" />
+                        <AdminDataGridActionButton action="delete" type="submit" title="أرشفة" size="compact" />
                       </form>
                       <Link
                         href={`/admin/media-center/items/${item.id}/preview`}
                         target="_blank"
                         title="معاينة"
                         aria-label="معاينة"
-                        className={actionClassName("muted")}
+                        className={`${actionClassName("muted")} !h-10 !w-10 shrink-0`}
                       >
                         <EyeIcon />
                       </Link>
-                    </AdminDataGridActions>
+                    </AdminDataGridActionsCell>
                   </AdminDataGridRow>
                 );
               })}

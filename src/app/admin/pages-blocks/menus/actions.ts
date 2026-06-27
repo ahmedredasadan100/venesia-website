@@ -1,10 +1,20 @@
 "use server";
 
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { revalidateMediaCenterPublicPaths } from "../../../../lib/media-center/revalidate-public-paths";
 import { revalidateFooterPublicPaths } from "../../../../lib/footer/revalidate-footer";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { normalizeSlugInput, slugifyFromTitle, validateSlugFormat } from "../../../../lib/admin/slug";
+import { parseAdminLinkFromFormData } from "../../../../lib/admin/links/form-fields";
+import {
+  adminLinkToMenuItemColumns,
+  parentOnlyMenuItemColumns,
+} from "../../../../lib/admin/links/menu-bridge";
+import { resolveAdminLink } from "../../../../lib/admin/links";
+import { validateAdminLink } from "../../../../lib/admin/links/validate";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -23,12 +33,14 @@ function getBoolean(formData: FormData, key: string) {
 }
 
 function createSlug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
+  const normalized = normalizeSlugInput(value);
+  if (normalized) return normalized;
+  return slugifyFromTitle(value);
+}
+
+function assertValidMenuSlug(slug: string) {
+  const formatError = validateSlugFormat(slug);
+  if (formatError) backToMenus(formatError);
 }
 
 function menusPath(message?: string) {
@@ -88,55 +100,23 @@ async function getMenuIdFromItem(itemId: number) {
   return data?.menu_id ? Number(data.menu_id) : null;
 }
 
-async function getLinkedHref(formData: FormData) {
-  const itemType = getString(formData, "item_type") || "custom";
-  const rawHref = getString(formData, "href");
-  const pageHref = getString(formData, "page_href");
-  const anchor = getString(formData, "anchor").replace(/^#/, "");
+async function resolveMenuItemLink(formData: FormData) {
+  const menuId = getNumber(formData, "menu_id");
 
-  if (itemType === "page") {
-    return { itemType, href: pageHref || rawHref || "/", linkedType: null, linkedId: null, anchor: anchor || null };
+  if (getBoolean(formData, "menu_item_is_parent")) {
+    return parentOnlyMenuItemColumns();
   }
 
-  if (itemType === "topic") {
-    const topicId = getNumber(formData, "topic_id") ?? getNumber(formData, "linked_id");
-    if (!topicId) backToMenu(getNumber(formData, "menu_id"), "اختار الموضوع المرتبط بالعنصر.");
-
-    const { data, error } = await getSupabaseAdmin().from("topics").select("id, slug").eq("id", topicId).maybeSingle();
-    if (error || !data?.slug) backToMenu(getNumber(formData, "menu_id"), "الموضوع المختار غير موجود أو لا يحتوي على slug.");
-
-    return { itemType, href: `/topics/${data.slug}`, linkedType: "topics", linkedId: topicId, anchor: anchor || null };
+  const link = parseAdminLinkFromFormData(formData, "menu_link");
+  if (link.link_kind === "none") {
+    backToMenu(menuId, "اختر رابطًا للعنصر أو فعّل Parent بدون رابط.");
   }
 
-  if (itemType === "topic_category") {
-    const categoryId = getNumber(formData, "category_id") ?? getNumber(formData, "linked_id");
-    if (!categoryId) backToMenu(getNumber(formData, "menu_id"), "اختار التصنيف المرتبط بالعنصر.");
+  const validation = validateAdminLink(link);
+  if (!validation.ok) backToMenu(menuId, validation.message);
 
-    const { data, error } = await getSupabaseAdmin().from("topic_categories").select("id, slug").eq("id", categoryId).maybeSingle();
-    if (error || !data?.slug) backToMenu(getNumber(formData, "menu_id"), "التصنيف المختار غير موجود أو لا يحتوي على slug.");
-
-    return { itemType, href: `/topics?category=${data.slug}`, linkedType: "topic_categories", linkedId: categoryId, anchor: anchor || null };
-  }
-
-  if (itemType === "project") {
-    const projectId = getNumber(formData, "project_id") ?? getNumber(formData, "linked_id");
-    if (!projectId) backToMenu(getNumber(formData, "menu_id"), "اختار المشروع المرتبط بالعنصر.");
-
-    const { data, error } = await getSupabaseAdmin().from("projects").select("id, slug").eq("id", projectId).maybeSingle();
-    if (error || !data?.slug) backToMenu(getNumber(formData, "menu_id"), "المشروع المختار غير موجود أو لا يحتوي على slug.");
-
-    return { itemType, href: `/projects/${data.slug}`, linkedType: "projects", linkedId: projectId, anchor: anchor || null };
-  }
-
-  if (itemType === "anchor") {
-    return { itemType, href: rawHref || "#", linkedType: null, linkedId: null, anchor: anchor || null };
-  }
-
-  if (itemType === "parent") {
-    return { itemType, href: "#", linkedType: null, linkedId: null, anchor: null };
-  }
-
-  return { itemType, href: rawHref || "#", linkedType: null, linkedId: null, anchor: anchor || null };
+  const resolvedHref = await resolveAdminLink({ ...link, anchor: null });
+  return adminLinkToMenuItemColumns(link, resolvedHref);
 }
 
 function revalidateNavigation() {
@@ -150,12 +130,30 @@ function revalidateNavigation() {
   revalidatePath("/admin/pages-blocks/menus");
 }
 
+export async function checkMenuSlugAvailable(slug: string) {
+  await requireAdminSession();
+  const normalized = createSlug(slug);
+  const formatError = validateSlugFormat(normalized);
+  if (formatError) {
+    return { available: false as const, message: formatError };
+  }
+
+  const { data: existingMenu } = await getSupabaseAdmin().from("menus").select("id").eq("slug", normalized).maybeSingle();
+  if (existingMenu?.id) {
+    return { available: false as const, message: "الـ slug مستخدم بالفعل. اختار slug مختلف لأنه لا يمكن تكراره." };
+  }
+
+  return { available: true as const };
+}
+
 export async function createMenu(formData: FormData) {
+  await requireAdminSession();
   const name = getString(formData, "name");
   const slug = createSlug(getString(formData, "slug") || name);
   const location = getString(formData, "location") || "main";
 
-  if (!name || !slug) backToMenus("اكتب اسم القائمة والـ slug.");
+  if (!name) backToMenus("اكتب اسم القائمة.");
+  assertValidMenuSlug(slug);
 
   const { data: existingMenu } = await getSupabaseAdmin().from("menus").select("id").eq("slug", slug).maybeSingle();
   if (existingMenu?.id) backToMenus("الـ slug مستخدم بالفعل. اختار slug مختلف لأنه لا يمكن تكراره.");
@@ -172,12 +170,14 @@ export async function createMenu(formData: FormData) {
 }
 
 export async function updateMenu(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   const name = getString(formData, "name");
   const slug = createSlug(getString(formData, "slug") || name);
   const location = getString(formData, "location") || "main";
 
-  if (!id || !name || !slug) backToMenus("بيانات القائمة غير مكتملة.");
+  if (!id || !name) backToMenus("بيانات القائمة غير مكتملة.");
+  assertValidMenuSlug(slug);
 
   const { data: existingMenu } = await getSupabaseAdmin().from("menus").select("id").eq("slug", slug).neq("id", id).maybeSingle();
   if (existingMenu?.id) backToMenus("الـ slug مستخدم بالفعل في قائمة أخرى. اختار slug مختلف.");
@@ -193,6 +193,7 @@ export async function updateMenu(formData: FormData) {
 }
 
 export async function toggleMenuVisibility(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   const isActive = getBoolean(formData, "is_active");
   if (!id) backToMenus("القائمة غير موجودة.");
@@ -205,6 +206,7 @@ export async function toggleMenuVisibility(formData: FormData) {
 }
 
 export async function deleteMenu(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   if (!id) backToMenus("القائمة غير موجودة.");
 
@@ -217,6 +219,7 @@ export async function deleteMenu(formData: FormData) {
 }
 
 export async function duplicateMenu(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   if (!id) backToMenus("القائمة غير موجودة.");
 
@@ -270,10 +273,11 @@ export async function duplicateMenu(formData: FormData) {
 }
 
 export async function createMenuItem(formData: FormData) {
+  await requireAdminSession();
   const menuId = getNumber(formData, "menu_id");
   const parentId = getNumber(formData, "parent_id");
   const label = getString(formData, "label");
-  const { itemType, href, linkedType, linkedId, anchor } = await getLinkedHref(formData);
+  const { itemType, href, linkedType, linkedId, anchor, target } = await resolveMenuItemLink(formData);
 
   if (!menuId || !label) backToMenu(menuId, "اختار القائمة واكتب اسم العنصر.");
 
@@ -286,7 +290,7 @@ export async function createMenuItem(formData: FormData) {
     linked_type: linkedType,
     linked_id: linkedId,
     anchor,
-    target: getString(formData, "target") === "_blank" ? "_blank" : "_self",
+    target,
     css_class: getString(formData, "css_class") || null,
     style_preset: getString(formData, "style_preset") || "default",
     is_visible: getBoolean(formData, "is_visible"),
@@ -299,11 +303,12 @@ export async function createMenuItem(formData: FormData) {
 }
 
 export async function updateMenuItem(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   const menuId = getNumber(formData, "menu_id");
   const parentId = getNumber(formData, "parent_id");
   const label = getString(formData, "label");
-  const { itemType, href, linkedType, linkedId, anchor } = await getLinkedHref(formData);
+  const { itemType, href, linkedType, linkedId, anchor, target } = await resolveMenuItemLink(formData);
 
   if (!id || !menuId || !label) backToMenu(menuId, "بيانات العنصر غير مكتملة.");
 
@@ -317,7 +322,7 @@ export async function updateMenuItem(formData: FormData) {
       linked_type: linkedType,
       linked_id: linkedId,
       anchor,
-      target: getString(formData, "target") === "_blank" ? "_blank" : "_self",
+      target,
       css_class: getString(formData, "css_class") || null,
       style_preset: getString(formData, "style_preset") || "default",
       is_visible: getBoolean(formData, "is_visible"),
@@ -332,6 +337,7 @@ export async function updateMenuItem(formData: FormData) {
 }
 
 export async function deleteMenuItem(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   const menuId = getNumber(formData, "menu_id") ?? (id ? await getMenuIdFromItem(id) : null);
   if (!id) backToMenu(menuId, "العنصر غير موجود.");
@@ -344,6 +350,7 @@ export async function deleteMenuItem(formData: FormData) {
 }
 
 export async function toggleMenuItemVisibility(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   const menuId = getNumber(formData, "menu_id") ?? (id ? await getMenuIdFromItem(id) : null);
   const isVisible = getBoolean(formData, "is_visible");
@@ -356,7 +363,49 @@ export async function toggleMenuItemVisibility(formData: FormData) {
   backToMenu(menuId, "تم تغيير حالة العنصر.");
 }
 
+export async function moveMenuItemSortOrder(formData: FormData) {
+  await requireAdminSession();
+  const menuId = getNumber(formData, "menu_id");
+  const currentId = getNumber(formData, "current_id");
+  const targetId = getNumber(formData, "target_id");
+  if (!menuId || !currentId || !targetId) backToMenu(menuId, "تعذر إعادة الترتيب.");
+
+  const { data: rows, error: loadError } = await getSupabaseAdmin()
+    .from("menu_items")
+    .select("id, sort_order")
+    .eq("menu_id", menuId)
+    .in("id", [currentId, targetId]);
+
+  if (loadError || !rows || rows.length !== 2) backToMenu(menuId, loadError?.message ?? "تعذر إعادة الترتيب.");
+
+  const current = rows.find((row) => Number(row.id) === currentId);
+  const target = rows.find((row) => Number(row.id) === targetId);
+  if (!current || !target) backToMenu(menuId, "تعذر إعادة الترتيب.");
+
+  const currentOrder = Number(current.sort_order ?? 0);
+  const targetOrder = Number(target.sort_order ?? 0);
+  const now = new Date().toISOString();
+
+  const { error: updateCurrentError } = await getSupabaseAdmin()
+    .from("menu_items")
+    .update({ sort_order: targetOrder, updated_at: now })
+    .eq("id", currentId);
+
+  if (updateCurrentError) backToMenu(menuId, updateCurrentError.message);
+
+  const { error: updateTargetError } = await getSupabaseAdmin()
+    .from("menu_items")
+    .update({ sort_order: currentOrder, updated_at: now })
+    .eq("id", targetId);
+
+  if (updateTargetError) backToMenu(menuId, updateTargetError.message);
+
+  revalidateNavigation();
+  backToMenu(menuId, "تم تحديث ترتيب العنصر.");
+}
+
 export async function duplicateMenuItem(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   const menuId = getNumber(formData, "menu_id") ?? (id ? await getMenuIdFromItem(id) : null);
   if (!id || !menuId) backToMenu(menuId, "العنصر غير موجود.");
@@ -386,6 +435,7 @@ export async function duplicateMenuItem(formData: FormData) {
 }
 
 export async function clearMenuItems(formData: FormData) {
+  await requireAdminSession();
   const id = getNumber(formData, "id");
   if (!id) backToMenus("القائمة غير موجودة.");
 
@@ -397,6 +447,7 @@ export async function clearMenuItems(formData: FormData) {
 }
 
 export async function bulkMenuAction(formData: FormData) {
+  await requireAdminSession();
   const action = getString(formData, "bulk_action");
   const ids = formData
     .getAll("menu_ids")
@@ -429,6 +480,7 @@ export async function bulkMenuAction(formData: FormData) {
 }
 
 export async function importMenuJson(formData: FormData) {
+  await requireAdminSession();
   const menuId = getNumber(formData, "id");
   const file = formData.get("json_file");
 

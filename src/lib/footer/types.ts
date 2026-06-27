@@ -1,3 +1,5 @@
+import type { FooterSlotsConfig, FooterSlotsSource } from "./footer-slot-types";
+
 export type FooterBrand = {
   title: string;
   tagline: string;
@@ -33,11 +35,15 @@ export type FooterLegal = {
   tagline: string;
 };
 
+export type { FooterSlotsConfig, FooterSlotsSource };
+
 export type FooterSettings = {
   brand: FooterBrand;
   contactItems: FooterContactItem[];
   socialLinks: FooterSocialLink[];
   legal: FooterLegal;
+  slots: FooterSlotsConfig;
+  slotsSource: FooterSlotsSource;
   usesFallback: boolean;
 };
 
@@ -47,5 +53,9 @@ export const FOOTER_SETTING_KEYS = [
   "footer.social_links",
   "footer.legal",
 ] as const;
+
+export const FOOTER_SLOTS_SETTING_KEY = "footer.slots" as const;
+
+export const FOOTER_LOADER_SETTING_KEYS = [...FOOTER_SETTING_KEYS, FOOTER_SLOTS_SETTING_KEY] as const;
 
 export type FooterSettingKey = (typeof FOOTER_SETTING_KEYS)[number];

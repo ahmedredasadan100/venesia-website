@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -16,6 +18,7 @@ import {
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 
 export async function updateMediaHubModule(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
 

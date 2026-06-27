@@ -3,13 +3,15 @@ import "server-only";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { validateAdminSessionPayload } from "./admin-users";
 import {
   ADMIN_SESSION_COOKIE,
-  ADMIN_SESSION_TTL_SEC,
   createAdminSessionToken,
   getAdminAuthConfig,
   getAdminSessionCookieDomain,
+  resolveAdminSessionTtlSec,
   shouldUseSecureAdminSessionCookie,
+  type AdminSessionSubject,
   verifyAdminSessionToken,
 } from "./session";
 
@@ -23,20 +25,25 @@ export async function requireAdminApi() {
   const token = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
   const session = verifyAdminSessionToken(token, config.secret);
 
-  if (!session) {
+  if (!session || !(await validateAdminSessionPayload(session))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   return null;
 }
 
-export function createAdminSessionCookie(username: string, request?: Request) {
+export function createAdminSessionCookie(
+  subject: AdminSessionSubject,
+  request?: Request,
+  options?: { rememberMe?: boolean },
+) {
   const config = getAdminAuthConfig();
   if (!config.configured) {
     throw new Error("Admin auth is not configured.");
   }
 
-  const value = createAdminSessionToken(username, config.secret);
+  const maxAge = resolveAdminSessionTtlSec(options?.rememberMe === true);
+  const value = createAdminSessionToken(subject, config.secret, maxAge);
   const domain = getAdminSessionCookieDomain(request);
 
   return {
@@ -46,7 +53,7 @@ export function createAdminSessionCookie(username: string, request?: Request) {
     secure: shouldUseSecureAdminSessionCookie(request),
     sameSite: "lax" as const,
     path: "/",
-    maxAge: ADMIN_SESSION_TTL_SEC,
+    maxAge,
     ...(domain ? { domain } : {}),
   };
 }

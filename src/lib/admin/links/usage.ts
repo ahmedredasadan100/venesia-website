@@ -1,0 +1,474 @@
+import "server-only";
+
+import { getSupabaseAdmin } from "../../supabase-admin";
+import { deserializeAdminLink } from "./serialize";
+import type { AdminLinkValue, LinkedResourceType } from "./types";
+
+export type LinkUsageSourceType =
+  | "menu_item"
+  | "hero_template"
+  | "page_section"
+  | "cta_block"
+  | "content_block"
+  | "cards_block"
+  | "breadcrumb_block"
+  | "footer_slot"
+  | "footer_contact";
+
+export type LinkUsageReference = {
+  sourceType: LinkUsageSourceType;
+  sourceId: number | string;
+  sourceLabel: string;
+  fieldPath: string;
+  adminPath?: string;
+};
+
+export type LinkUsageQuery = {
+  linkedType: LinkedResourceType;
+  linkedId: number;
+};
+
+function linkMatchesResource(link: AdminLinkValue, query: LinkUsageQuery) {
+  if (link.link_kind !== "internal") return false;
+  return link.linked_type === query.linkedType && Number(link.linked_id) === query.linkedId;
+}
+
+function hrefMatchesResourcePath(href: string | null | undefined, publicPath: string | null) {
+  if (!href?.trim() || !publicPath?.trim()) return false;
+  const normalizedHref = href.trim().split("#")[0] ?? href.trim();
+  const normalizedPath = publicPath.trim().split("#")[0] ?? publicPath.trim();
+  return normalizedHref === normalizedPath;
+}
+
+function scanAdminLinkValue(
+  raw: unknown,
+  query: LinkUsageQuery,
+  publicPath: string | null,
+  meta: Omit<LinkUsageReference, "sourceType" | "sourceId" | "sourceLabel"> & {
+    sourceType: LinkUsageSourceType;
+    sourceId: number | string;
+    sourceLabel: string;
+  },
+  matches: LinkUsageReference[],
+) {
+  const link = deserializeAdminLink(raw);
+  if (linkMatchesResource(link, query) || hrefMatchesResourcePath(link.href, publicPath)) {
+    matches.push({
+      sourceType: meta.sourceType,
+      sourceId: meta.sourceId,
+      sourceLabel: meta.sourceLabel,
+      fieldPath: meta.fieldPath,
+      adminPath: meta.adminPath,
+    });
+  }
+}
+
+function scanLinkContainer(
+  container: Record<string, unknown> | null | undefined,
+  linkKey: string,
+  hrefKey: string,
+  query: LinkUsageQuery,
+  publicPath: string | null,
+  meta: Omit<LinkUsageReference, "sourceType" | "sourceId" | "sourceLabel"> & {
+    sourceType: LinkUsageSourceType;
+    sourceId: number | string;
+    sourceLabel: string;
+  },
+  matches: LinkUsageReference[],
+) {
+  if (!container) return;
+  scanAdminLinkValue(container[linkKey], query, publicPath, meta, matches);
+  scanHrefValue(container[hrefKey], query, publicPath, meta, matches);
+}
+
+function scanHrefValue(
+  href: unknown,
+  query: LinkUsageQuery,
+  publicPath: string | null,
+  meta: Omit<LinkUsageReference, "sourceType" | "sourceId" | "sourceLabel"> & {
+    sourceType: LinkUsageSourceType;
+    sourceId: number | string;
+    sourceLabel: string;
+  },
+  matches: LinkUsageReference[],
+) {
+  if (typeof href !== "string" || !href.trim()) return;
+  const link = deserializeAdminLink(href);
+  if (linkMatchesResource(link, query) || hrefMatchesResourcePath(href, publicPath)) {
+    matches.push({
+      sourceType: meta.sourceType,
+      sourceId: meta.sourceId,
+      sourceLabel: meta.sourceLabel,
+      fieldPath: meta.fieldPath,
+      adminPath: meta.adminPath,
+    });
+  }
+}
+
+async function resolveResourcePublicPath(query: LinkUsageQuery) {
+  const supabase = getSupabaseAdmin();
+
+  switch (query.linkedType) {
+    case "pages": {
+      const { data } = await supabase.from("pages").select("path,slug").eq("id", query.linkedId).maybeSingle();
+      if (!data) return null;
+      const cleanPath = data.path?.trim();
+      if (cleanPath) return cleanPath;
+      return data.slug === "home" ? "/" : `/${data.slug}`;
+    }
+    case "projects": {
+      const { data } = await supabase.from("projects").select("slug").eq("id", query.linkedId).maybeSingle();
+      return data?.slug ? `/projects/${data.slug}` : null;
+    }
+    case "topics": {
+      const { data } = await supabase.from("topics").select("slug").eq("id", query.linkedId).maybeSingle();
+      return data?.slug ? `/topics/${data.slug}` : null;
+    }
+    case "topic_categories": {
+      const { data } = await supabase.from("topic_categories").select("slug").eq("id", query.linkedId).maybeSingle();
+      return data?.slug ? `/topics?category=${data.slug}` : null;
+    }
+    case "topic_series": {
+      const { data } = await supabase.from("topic_series").select("slug").eq("id", query.linkedId).maybeSingle();
+      return data?.slug ? `/topics?series=${data.slug}` : null;
+    }
+    case "media_items": {
+      const { data } = await supabase
+        .from("media_items")
+        .select("slug,type")
+        .eq("id", query.linkedId)
+        .maybeSingle();
+      if (!data?.slug) return null;
+      const segment =
+        data.type === "news"
+          ? "news"
+          : data.type === "video"
+            ? "videos"
+            : data.type === "gallery"
+              ? "gallery"
+              : data.type === "press"
+                ? "press"
+                : data.type === "site-update"
+                  ? "site-updates"
+                  : "news";
+      return `/media-center/${segment}/${data.slug}`;
+    }
+    default:
+      return null;
+  }
+}
+
+async function scanMenuItems(query: LinkUsageQuery, publicPath: string | null) {
+  const matches: LinkUsageReference[] = [];
+  const supabase = getSupabaseAdmin();
+
+  const [{ data: typedItems }, hrefResult] = await Promise.all([
+    supabase
+      .from("menu_items")
+      .select("id,label,menu_id,href,linked_type,linked_id,menus(name)")
+      .eq("linked_type", query.linkedType)
+      .eq("linked_id", query.linkedId),
+    publicPath
+      ? supabase
+          .from("menu_items")
+          .select("id,label,menu_id,href,linked_type,linked_id,menus(name)")
+          .eq("href", publicPath)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const combined = [...(typedItems ?? []), ...(hrefResult.data ?? [])];
+  const seenIds = new Set<number>();
+
+  combined.forEach((item) => {
+    if (seenIds.has(item.id)) return;
+    seenIds.add(item.id);
+
+    const menuName =
+      item.menus && typeof item.menus === "object" && "name" in item.menus
+        ? String((item.menus as { name: string }).name)
+        : "قائمة";
+
+    matches.push({
+      sourceType: "menu_item",
+      sourceId: item.id,
+      sourceLabel: `${menuName} — ${item.label}`,
+      fieldPath: "menu_items.href",
+      adminPath: `/admin/pages-blocks/menus/${item.menu_id}`,
+    });
+  });
+
+  return matches;
+}
+
+async function scanHeroTemplates(query: LinkUsageQuery, publicPath: string | null) {
+  const matches: LinkUsageReference[] = [];
+  const { data: heroes } = await getSupabaseAdmin().from("hero_templates").select("id,name,config");
+
+  (heroes ?? []).forEach((hero) => {
+    const config = (hero.config ?? {}) as Record<string, unknown>;
+    const base = {
+      sourceType: "hero_template" as const,
+      sourceId: hero.id,
+      sourceLabel: hero.name,
+      adminPath: `/admin/pages-blocks/blocks/hero/${hero.id}`,
+    };
+
+    scanAdminLinkValue(config.primaryCtaLink, query, publicPath, { ...base, fieldPath: "config.primaryCtaLink" }, matches);
+    scanAdminLinkValue(config.secondaryCtaLink, query, publicPath, { ...base, fieldPath: "config.secondaryCtaLink" }, matches);
+    scanHrefValue(config.primaryCtaHref, query, publicPath, { ...base, fieldPath: "config.primaryCtaHref" }, matches);
+    scanHrefValue(config.secondaryCtaHref, query, publicPath, { ...base, fieldPath: "config.secondaryCtaHref" }, matches);
+  });
+
+  return matches;
+}
+
+async function scanLegacyPageSections(query: LinkUsageQuery, publicPath: string | null) {
+  const matches: LinkUsageReference[] = [];
+  const { data: sections } = await getSupabaseAdmin()
+    .from("page_sections")
+    .select("id,section_key,config")
+    .eq("section_type", "hero");
+
+  (sections ?? []).forEach((section) => {
+    const config = (section.config ?? {}) as Record<string, unknown>;
+    const base = {
+      sourceType: "page_section" as const,
+      sourceId: section.id,
+      sourceLabel: `Page Section #${section.id} (${section.section_key})`,
+      adminPath: "/admin/pages-blocks/blocks/hero",
+    };
+    scanAdminLinkValue(config.primaryCtaLink, query, publicPath, { ...base, fieldPath: "config.primaryCtaLink" }, matches);
+    scanAdminLinkValue(config.secondaryCtaLink, query, publicPath, { ...base, fieldPath: "config.secondaryCtaLink" }, matches);
+    scanHrefValue(config.primaryCtaHref, query, publicPath, { ...base, fieldPath: "config.primaryCtaHref" }, matches);
+    scanHrefValue(config.secondaryCtaHref, query, publicPath, { ...base, fieldPath: "config.secondaryCtaHref" }, matches);
+  });
+
+  return matches;
+}
+
+async function scanBlockTemplates(
+  table: "cta_block_templates" | "content_block_templates" | "cards_block_templates" | "breadcrumb_block_templates",
+  sourceType: LinkUsageSourceType,
+  adminBase: string,
+  query: LinkUsageQuery,
+  publicPath: string | null,
+) {
+  const matches: LinkUsageReference[] = [];
+  const { data: rows } = await getSupabaseAdmin().from(table).select("id,name,config");
+
+  (rows ?? []).forEach((row) => {
+    const config = (row.config ?? {}) as Record<string, unknown>;
+    const base = {
+      sourceType,
+      sourceId: row.id,
+      sourceLabel: row.name,
+      adminPath: `${adminBase}/${row.id}`,
+    };
+
+    if (table === "cta_block_templates") {
+      const primary = config.primaryCta as Record<string, unknown> | undefined;
+      const secondary = config.secondaryCta as Record<string, unknown> | undefined;
+      scanLinkContainer(primary, "link", "href", query, publicPath, { ...base, fieldPath: "config.primaryCta" }, matches);
+      scanLinkContainer(
+        secondary,
+        "link",
+        "href",
+        query,
+        publicPath,
+        { ...base, fieldPath: "config.secondaryCta" },
+        matches,
+      );
+    }
+
+    if (table === "content_block_templates") {
+      const button = config.button as Record<string, unknown> | undefined;
+      scanLinkContainer(button, "link", "href", query, publicPath, { ...base, fieldPath: "config.button" }, matches);
+      if (!button && config.button_href) {
+        scanHrefValue(config.button_href, query, publicPath, { ...base, fieldPath: "config.button_href" }, matches);
+      }
+      const contacts = Array.isArray(config.contacts) ? config.contacts : [];
+      contacts.forEach((contact, index) => {
+        if (contact && typeof contact === "object") {
+          scanLinkContainer(
+            contact as Record<string, unknown>,
+            "link",
+            "href",
+            query,
+            publicPath,
+            { ...base, fieldPath: `config.contacts[${index}]` },
+            matches,
+          );
+        }
+      });
+    }
+
+    if (table === "cards_block_templates") {
+      const items = Array.isArray(config.items) ? config.items : [];
+      items.forEach((item, index) => {
+        if (item && typeof item === "object") {
+          scanLinkContainer(
+            item as Record<string, unknown>,
+            "link",
+            "href",
+            query,
+            publicPath,
+            { ...base, fieldPath: `config.items[${index}]` },
+            matches,
+          );
+        }
+      });
+    }
+
+    if (table === "breadcrumb_block_templates") {
+      const manualItems = Array.isArray(config.manualItems)
+        ? config.manualItems
+        : Array.isArray(config.manual_items)
+          ? config.manual_items
+          : [];
+      manualItems.forEach((item, index) => {
+        if (item && typeof item === "object") {
+          scanLinkContainer(
+            item as Record<string, unknown>,
+            "link",
+            "href",
+            query,
+            publicPath,
+            { ...base, fieldPath: `config.manualItems[${index}]` },
+            matches,
+          );
+        }
+      });
+    }
+  });
+
+  return matches;
+}
+
+async function scanFooterSettings(query: LinkUsageQuery, publicPath: string | null) {
+  const matches: LinkUsageReference[] = [];
+  const { data } = await getSupabaseAdmin()
+    .from("site_settings")
+    .select("value")
+    .eq("key", "footer.slots")
+    .maybeSingle();
+
+  if (!data?.value || typeof data.value !== "object") return matches;
+
+  const footer = data.value as Record<string, unknown>;
+  const slots = Array.isArray(footer.slots) ? footer.slots : [];
+
+  slots.forEach((slot, index) => {
+    if (!slot || typeof slot !== "object") return;
+    const record = slot as Record<string, unknown>;
+    const config = (record.config ?? {}) as Record<string, unknown>;
+    const base = {
+      sourceType: "footer_slot" as const,
+      sourceId: `slot-${index + 1}`,
+      sourceLabel: `Footer Slot ${index + 1}`,
+      adminPath: "/admin/pages-blocks/footer",
+    };
+
+    const cta = config.cta as Record<string, unknown> | undefined;
+    scanLinkContainer(cta, "link", "href", query, publicPath, { ...base, fieldPath: `slots[${index}].config.cta` }, matches);
+
+    const manualLinks = Array.isArray(config.manualLinks) ? config.manualLinks : [];
+    manualLinks.forEach((link, linkIndex) => {
+      if (link && typeof link === "object") {
+        scanLinkContainer(
+          link as Record<string, unknown>,
+          "link",
+          "href",
+          query,
+          publicPath,
+          { ...base, fieldPath: `slots[${index}].config.manualLinks[${linkIndex}]` },
+          matches,
+        );
+      }
+    });
+
+    const links = Array.isArray(config.links) ? config.links : [];
+    links.forEach((link, linkIndex) => {
+      if (link && typeof link === "object") {
+        scanLinkContainer(
+          link as Record<string, unknown>,
+          "link",
+          "href",
+          query,
+          publicPath,
+          { ...base, fieldPath: `slots[${index}].config.links[${linkIndex}]` },
+          matches,
+        );
+      }
+    });
+
+    scanLinkContainer(
+      config,
+      "parentLink",
+      "parentHref",
+      query,
+      publicPath,
+      { ...base, fieldPath: `slots[${index}].config.parentLink` },
+      matches,
+    );
+  });
+
+  const { data: contactSetting } = await getSupabaseAdmin()
+    .from("site_settings")
+    .select("value")
+    .eq("key", "footer.contact_items")
+    .maybeSingle();
+
+  const contacts = Array.isArray(contactSetting?.value) ? contactSetting.value : [];
+  contacts.forEach((item, index) => {
+    if (item && typeof item === "object") {
+      scanHrefValue((item as Record<string, unknown>).href, query, publicPath, {
+        sourceType: "footer_contact",
+        sourceId: `contact-${index}`,
+        sourceLabel: "Footer Contact Items",
+        fieldPath: `footer.contact_items[${index}].href`,
+        adminPath: "/admin/pages-blocks/footer",
+      }, matches);
+    }
+  });
+
+  return matches;
+}
+
+export async function findLinkUsages(query: LinkUsageQuery): Promise<LinkUsageReference[]> {
+  const publicPath = await resolveResourcePublicPath(query);
+
+  const batches = await Promise.all([
+    scanMenuItems(query, publicPath),
+    scanHeroTemplates(query, publicPath),
+    scanLegacyPageSections(query, publicPath),
+    scanBlockTemplates("cta_block_templates", "cta_block", "/admin/pages-blocks/blocks/cta", query, publicPath),
+    scanBlockTemplates("content_block_templates", "content_block", "/admin/pages-blocks/blocks/content", query, publicPath),
+    scanBlockTemplates("cards_block_templates", "cards_block", "/admin/pages-blocks/blocks/cards", query, publicPath),
+    scanBlockTemplates(
+      "breadcrumb_block_templates",
+      "breadcrumb_block",
+      "/admin/pages-blocks/blocks/breadcrumb",
+      query,
+      publicPath,
+    ),
+    scanFooterSettings(query, publicPath),
+  ]);
+
+  const seen = new Set<string>();
+  return batches.flat().filter((item) => {
+    const key = `${item.sourceType}:${item.sourceId}:${item.fieldPath}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export async function isResourceLinked(query: LinkUsageQuery): Promise<boolean> {
+  const usages = await findLinkUsages(query);
+  return usages.length > 0;
+}
+
+export async function getResourceLinkUsageCount(query: LinkUsageQuery): Promise<number> {
+  const usages = await findLinkUsages(query);
+  return usages.length;
+}

@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
@@ -13,6 +15,7 @@ import {
   parsePageIdsFromForm,
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
+import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
 import type {
   AboutApproachModuleConfig,
   AboutCtaModuleConfig,
@@ -67,9 +70,10 @@ function buildAboutIntroConfig(formData: FormData): AboutIntroModuleConfig {
   };
 
   if (cleanText(formData.get("include_story_cta")) === "1") {
+    const linkData = linkFieldFromFormData(formData, "button");
     config.button = {
       label: cleanText(formData.get("button_label")) || undefined,
-      href: cleanText(formData.get("button_href")) || undefined,
+      ...(linkData ? { link: linkData.link, target: linkData.target } : {}),
     };
   }
 
@@ -107,21 +111,28 @@ function buildVisionGoalsConfig(formData: FormData): VisionGoalsModuleConfig {
 }
 
 function readContacts(formData: FormData) {
-  return Array.from({ length: 4 }, (_, index) => ({
-    label: cleanText(formData.get(`contact_${index}_label`)),
-    value: cleanText(formData.get(`contact_${index}_value`)),
-    href: cleanText(formData.get(`contact_${index}_href`)) || undefined,
-  }));
+  return Array.from({ length: 4 }, (_, index) => {
+    const label = cleanText(formData.get(`contact_${index}_label`));
+    const value = cleanText(formData.get(`contact_${index}_value`));
+    const linkData = linkFieldFromFormData(formData, `contact_${index}`);
+    if (!label && !value && !hasSavedLinkField(linkData)) return null;
+    return {
+      label: label || undefined,
+      value: value || undefined,
+      ...(linkData ? { link: linkData.link, target: linkData.target } : {}),
+    };
+  }).filter(Boolean) as AboutCtaModuleConfig["contacts"];
 }
 
 function buildAboutCtaConfig(formData: FormData): AboutCtaModuleConfig {
+  const buttonLink = linkFieldFromFormData(formData, "button");
   return {
     eyebrow: cleanText(formData.get("eyebrow")) || undefined,
     title: cleanText(formData.get("title")) || undefined,
     description: cleanText(formData.get("description")) || undefined,
     button: {
       label: cleanText(formData.get("button_label")) || undefined,
-      href: cleanText(formData.get("button_href")) || undefined,
+      ...(buttonLink ? { link: buttonLink.link, target: buttonLink.target } : {}),
     },
     note: cleanText(formData.get("note")) || undefined,
     image: optionalImagePath(formData, "image"),
@@ -222,6 +233,7 @@ async function ensureUniqueSlug(slug: string, id?: number) {
 }
 
 export async function createContentBlock(formData: FormData) {
+  await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
@@ -252,6 +264,7 @@ export async function createContentBlock(formData: FormData) {
 }
 
 export async function updateContentBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
@@ -284,6 +297,7 @@ export async function updateContentBlock(formData: FormData) {
 }
 
 export async function toggleContentBlockStatus(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "draft");
   if (!id) throw new Error("معرّف البلوك مفقود.");
@@ -298,6 +312,7 @@ export async function toggleContentBlockStatus(formData: FormData) {
 }
 
 export async function deleteContentBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -308,6 +323,7 @@ export async function deleteContentBlock(formData: FormData) {
 }
 
 export async function duplicateContentBlock(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -332,6 +348,7 @@ export async function duplicateContentBlock(formData: FormData) {
 }
 
 export async function bulkContentBlocks(formData: FormData) {
+  await requireAdminSession();
   const action = cleanText(formData.get("bulk_action"));
   const ids = formData
     .getAll("ids")
@@ -368,6 +385,7 @@ export type ContentBlockRow = {
 };
 
 export async function getContentBlockRows(): Promise<ContentBlockRow[]> {
+  await requireAdminSession();
   const { data, error } = await getSupabaseAdmin()
     .from("content_block_templates")
     .select("id,name,slug,description,variant,status,updated_at")

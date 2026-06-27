@@ -6,7 +6,7 @@ import {
   AdminBulkActionBar,
   AdminDataGrid,
   AdminDataGridActionButton,
-  AdminDataGridActions,
+  AdminDataGridActionsCell,
   AdminDataGridCheckbox,
   AdminDataGridEmpty,
   AdminDataGridHeader,
@@ -149,7 +149,7 @@ export default function BlockModuleManagerClient({
                 ) : null}
               </div>
 
-              <AdminDataGridActions>
+              <AdminDataGridActionsCell>
                 <AdminDataGridActionButton action="edit" href={`/admin/pages-blocks/blocks/${moduleKey}/${row.id}`} />
 
                 <form action={toggleAction} className="inline-flex shrink-0">
@@ -167,7 +167,7 @@ export default function BlockModuleManagerClient({
                   <input type="hidden" name="id" value={row.id} />
                   <AdminDataGridActionButton type="submit" action="delete" title="حذف" />
                 </form>
-              </AdminDataGridActions>
+              </AdminDataGridActionsCell>
             </AdminDataGridRow>
           );
         })}

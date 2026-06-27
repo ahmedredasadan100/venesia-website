@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
+
 import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
@@ -238,6 +240,7 @@ async function buildDbPayload(formData: FormData, status: MediaStatus) {
 }
 
 export async function createMediaItem(formData: FormData) {
+  await requireAdminSession();
   let type: MediaAdminType | null = getMediaType(formData);
 
   try {
@@ -311,28 +314,34 @@ async function updateMediaItemWithStatus(
 }
 
 export async function saveMediaItem(formData: FormData) {
+  await requireAdminSession();
   const status = getNormalizedStatus(getString(formData, "status"), "draft");
   return updateMediaItemWithStatus(formData, status, "saved");
 }
 
 export async function saveMediaItemAndClose(formData: FormData) {
+  await requireAdminSession();
   const status = getNormalizedStatus(getString(formData, "status"), "draft");
   return updateMediaItemWithStatus(formData, status, "saved", { redirectToList: true });
 }
 
 export async function saveDraftMediaItem(formData: FormData) {
+  await requireAdminSession();
   return updateMediaItemWithStatus(formData, "draft", "draft");
 }
 
 export async function publishMediaItem(formData: FormData) {
+  await requireAdminSession();
   return updateMediaItemWithStatus(formData, "published", "published");
 }
 
 export async function unpublishMediaItem(formData: FormData) {
+  await requireAdminSession();
   return updateMediaItemWithStatus(formData, "unpublished", "unpublished");
 }
 
 export async function softDeleteMediaItem(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!validateId(id)) redirectFormError("/admin/media-center", "رقم العنصر غير صحيح.");
 
@@ -361,6 +370,7 @@ function appendNotice(path: string, notice: string) {
 }
 
 export async function bulkUpdateMediaItems(formData: FormData) {
+  await requireAdminSession();
   const ids = formData
     .getAll("media_item_ids")
     .map(String)

@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import {
+  ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_RULES,
   AdminBulkActionBar,
   AdminCard,
   AdminDataGrid,
   AdminDataGridActionButton,
-  AdminDataGridActions,
+  AdminDataGridActionsCell,
   AdminDataGridCheckbox,
   AdminDataGridEmpty,
   AdminDataGridHeader,
@@ -20,6 +22,7 @@ import type { ProjectCategory } from "../../../config/projects-data";
 import {
   bulkProjectsActionAjax,
   deleteProjectAjax,
+  duplicateProjectAjax,
   getProjectsTableRows,
   toggleProjectPublicationAjax,
 } from "./actions";
@@ -27,6 +30,7 @@ import {
 export type ProjectGridRow = {
   id: number;
   code: string;
+  slug?: string | null;
   arabic_name: string;
   location_label: string;
   map_area: string;
@@ -35,9 +39,20 @@ export type ProjectGridRow = {
   updated_at: string;
 };
 
-type ProjectSortKey = "code" | "location" | "updated_at";
+type LegacyProjectSortKey = "code" | "location" | "updated_at";
+type ReferenceProjectSortKey = "name" | "code" | "featured" | "status" | "updated_at";
 
-const columns = "44px minmax(96px,110px) minmax(200px,1.2fr) 90px 110px 150px 220px";
+function buildColumns(withDuplicateAction: boolean, referenceLayout: boolean) {
+  if (referenceLayout) {
+    return `44px minmax(260px, 1fr) 96px 72px 96px 120px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+  }
+
+  const actionsColumn = withDuplicateAction
+    ? ADMIN_DATA_GRID_ACTION_COLUMNS.four
+    : ADMIN_DATA_GRID_ACTION_COLUMNS.three;
+
+  return `44px minmax(96px,110px) minmax(200px,1.2fr) 90px 110px 150px ${actionsColumn}`;
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -63,10 +78,44 @@ function locationLabel(item: ProjectGridRow) {
   return item.location_label || item.map_area || "—";
 }
 
+function featuredLabel(item: ProjectGridRow) {
+  return item.featured ? "نعم" : "لا";
+}
+
+function PublicPreviewIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={ADMIN_DATA_GRID_RULES.actionIcon}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M14 3h7v7" />
+      <path d="M10 14 21 3" />
+      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
+    </svg>
+  );
+}
+
 function ProjectIcon({ type }: { type: ProjectCategory }) {
   return (
-    <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#D8B87A]/16 bg-[#D8B87A]/8 text-lg">
-      {type === "residential" ? "🏠" : "🏢"}
+    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/16 bg-[#D8B87A]/8 text-[#D8B87A]">
+      {type === "commercial" ? (
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+          <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+          <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+          <path d="M10 6h4M10 10h4M10 14h4M10 18h4" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          <path d="M8 7h8M8 11h8M8 15h5" strokeLinecap="round" />
+        </svg>
+      )}
     </span>
   );
 }
@@ -74,10 +123,304 @@ function ProjectIcon({ type }: { type: ProjectCategory }) {
 type ProjectsTableClientProps = {
   type: ProjectCategory;
   projects: ProjectGridRow[];
+  withDuplicateAction?: boolean;
+  referenceLayout?: boolean;
 };
 
-export default function ProjectsTableClient({ type, projects }: ProjectsTableClientProps) {
-  const sortAccessors = useMemo(
+function LegacyProjectsTable({
+  type,
+  table,
+  columns,
+  withDuplicateAction,
+}: {
+  type: ProjectCategory;
+  table: ReturnType<typeof useAdminTable<ProjectGridRow, LegacyProjectSortKey>>;
+  columns: string;
+  withDuplicateAction: boolean;
+}) {
+  function sortProps(key: LegacyProjectSortKey) {
+    return {
+      active: table.sort.key === key,
+      direction: table.sort.direction,
+      onClick: () => table.toggleSort(key),
+    } as const;
+  }
+
+  return (
+    <AdminDataGrid>
+      <AdminDataGridHeader columns={columns}>
+        <div className="flex justify-center">
+          <AdminDataGridCheckbox
+            inputRef={table.selection.selectAllRef}
+            checked={table.selection.allSelected}
+            onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
+            label="تحديد الكل"
+          />
+        </div>
+        <AdminDataGridSortLabel {...sortProps("code")}>Code</AdminDataGridSortLabel>
+        <AdminDataGridSortLabel {...sortProps("location")}>Location / Area</AdminDataGridSortLabel>
+        <span className="text-center">Featured</span>
+        <span className="text-center">Published</span>
+        <AdminDataGridSortLabel {...sortProps("updated_at")} className="mx-auto">
+          Last Updated
+        </AdminDataGridSortLabel>
+        <span className="text-center">Actions</span>
+      </AdminDataGridHeader>
+
+      {table.rows.length ? (
+        table.rows.map((item) => {
+          const published = publicationMeta(item.publication_status);
+          const isHidden = item.publication_status !== "published";
+
+          return (
+            <AdminDataGridRow
+              key={item.id}
+              columns={columns}
+              className="border-b border-white/[0.045] last:border-b-0"
+            >
+              <div className="flex justify-center">
+                <AdminDataGridCheckbox
+                  checked={table.selection.selectedSet.has(item.id)}
+                  onChange={(event) => table.selection.toggleOne(item.id, event.currentTarget.checked)}
+                  label={`تحديد ${item.code}`}
+                />
+              </div>
+
+              <div className="flex min-w-0 items-center gap-2.5">
+                <ProjectIcon type={type} />
+                <span className="truncate font-en text-sm font-semibold text-[#D8B87A]">{item.code}</span>
+              </div>
+
+              <div className="truncate text-sm text-white/60">{locationLabel(item)}</div>
+
+              <div className="flex justify-center">
+                <AdminStatusPill tone={item.featured ? "green" : "muted"}>{featuredLabel(item)}</AdminStatusPill>
+              </div>
+              <div className="flex justify-center">
+                <AdminStatusPill tone={published.tone}>{published.label}</AdminStatusPill>
+              </div>
+              <div className="text-center text-xs text-white/50">{formatDate(item.updated_at)}</div>
+
+              <AdminDataGridActionsCell>
+                <AdminDataGridActionButton action="edit" href={`/admin/projects/${item.id}`} />
+                <AdminDataGridActionButton
+                  action="visibility"
+                  title={isHidden ? "نشر" : "إخفاء"}
+                  hidden={isHidden}
+                  disabled={table.isPending}
+                  onClick={() =>
+                    table.runAction(() => toggleProjectPublicationAjax(item.id, item.publication_status))
+                  }
+                />
+                {withDuplicateAction ? (
+                  <AdminDataGridActionButton
+                    action="duplicate"
+                    title="نسخ المشروع"
+                    disabled={table.isPending}
+                    onClick={() => table.runAction(() => duplicateProjectAjax(item.id))}
+                  />
+                ) : null}
+                <AdminDataGridActionButton
+                  action="delete"
+                  disabled={table.isPending}
+                  onClick={() => table.runAction(() => deleteProjectAjax(item.id))}
+                />
+              </AdminDataGridActionsCell>
+            </AdminDataGridRow>
+          );
+        })
+      ) : (
+        <AdminDataGridEmpty>
+          <p className="text-base font-semibold text-white">لا توجد مشاريع في هذه القائمة</p>
+          <p className="mt-2 text-sm text-white/45">
+            نفّذ ملف SQL ثم استورد البيانات من projects-data.ts عبر زر الاستيراد في الصفحة الرئيسية للمشاريع.
+          </p>
+        </AdminDataGridEmpty>
+      )}
+    </AdminDataGrid>
+  );
+}
+
+function ReferenceProjectsTable({
+  type,
+  table,
+  columns,
+}: {
+  type: ProjectCategory;
+  table: ReturnType<typeof useAdminTable<ProjectGridRow, ReferenceProjectSortKey>>;
+  columns: string;
+}) {
+  function sortProps(key: ReferenceProjectSortKey) {
+    return {
+      active: table.sort.key === key,
+      direction: table.sort.direction,
+      onClick: () => table.toggleSort(key),
+    } as const;
+  }
+
+  return (
+    <AdminDataGrid summary={`${table.rows.length} مشروع`}>
+      <AdminDataGridHeader columns={columns}>
+        <div className="flex justify-center">
+          <AdminDataGridCheckbox
+            inputRef={table.selection.selectAllRef}
+            checked={table.selection.allSelected}
+            onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
+            label="تحديد الكل"
+          />
+        </div>
+        <div className="min-w-0 text-right">
+          <AdminDataGridSortLabel {...sortProps("name")} className="justify-end">
+            المشروع
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">
+          <AdminDataGridSortLabel {...sortProps("code")} className="justify-center">
+            Code
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">
+          <AdminDataGridSortLabel {...sortProps("featured")} className="justify-center">
+            Featured
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">
+          <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
+            Published
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">
+          <AdminDataGridSortLabel {...sortProps("updated_at")} className="justify-center">
+            التحديث
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">الإجراءات</div>
+      </AdminDataGridHeader>
+
+      {table.rows.length ? (
+        table.rows.map((item) => {
+          const published = publicationMeta(item.publication_status);
+          const isPublished = item.publication_status === "published";
+          const previewPath = item.slug ? `/projects/${item.slug}` : null;
+
+          return (
+            <AdminDataGridRow key={item.id} columns={columns}>
+              <div className="flex justify-center">
+                <AdminDataGridCheckbox
+                  checked={table.selection.selectedSet.has(item.id)}
+                  onChange={(event) => table.selection.toggleOne(item.id, event.currentTarget.checked)}
+                  label={`تحديد ${item.arabic_name}`}
+                />
+              </div>
+
+              <div className="flex min-w-0 items-center gap-3">
+                <ProjectIcon type={type} />
+                <div className="min-w-0 text-right">
+                  <Link
+                    href={`/admin/projects/${item.id}`}
+                    className="block truncate font-semibold text-white transition hover:text-[#D8B87A]"
+                  >
+                    {item.arabic_name}
+                  </Link>
+                  <p className="mt-1 truncate font-en text-xs text-white/38">{item.code}</p>
+                </div>
+              </div>
+
+              <div className="min-w-0 text-center">
+                <span className="font-en block truncate text-xs text-[#D8B87A]/78">{item.code}</span>
+              </div>
+
+              <div className="flex justify-center">
+                <AdminStatusPill tone={item.featured ? "green" : "muted"}>{featuredLabel(item)}</AdminStatusPill>
+              </div>
+
+              <div className="flex justify-center">
+                <AdminStatusPill tone={published.tone}>{published.label}</AdminStatusPill>
+              </div>
+
+              <div className="text-center font-en text-xs tabular-nums text-white/55">
+                {formatDate(item.updated_at)}
+              </div>
+
+              <AdminDataGridActionsCell compact>
+                <AdminDataGridActionButton
+                  action="edit"
+                  href={`/admin/projects/${item.id}`}
+                  size="compact"
+                  title="تعديل المشروع"
+                />
+
+                {previewPath ? (
+                  <AdminDataGridActionButton
+                    href={previewPath}
+                    target="_blank"
+                    tone="dark"
+                    title="معاينة الصفحة العامة"
+                    size="compact"
+                  >
+                    <PublicPreviewIcon />
+                  </AdminDataGridActionButton>
+                ) : (
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    disabled
+                    title="لا يوجد slug للمعاينة"
+                    size="compact"
+                  >
+                    <PublicPreviewIcon />
+                  </AdminDataGridActionButton>
+                )}
+
+                <AdminDataGridActionButton
+                  action="visibility"
+                  size="compact"
+                  hidden={isPublished}
+                  title={isPublished ? "إخفاء" : "نشر"}
+                  disabled={table.isPending}
+                  onClick={() =>
+                    table.runAction(() => toggleProjectPublicationAjax(item.id, item.publication_status))
+                  }
+                />
+
+                <AdminDataGridActionButton
+                  action="duplicate"
+                  size="compact"
+                  title="نسخ المشروع"
+                  disabled={table.isPending}
+                  onClick={() => table.runAction(() => duplicateProjectAjax(item.id))}
+                />
+
+                <AdminDataGridActionButton
+                  action="delete"
+                  size="compact"
+                  disabled={table.isPending}
+                  onClick={() => table.runAction(() => deleteProjectAjax(item.id))}
+                />
+              </AdminDataGridActionsCell>
+            </AdminDataGridRow>
+          );
+        })
+      ) : (
+        <AdminDataGridEmpty>
+          <p className="text-base font-semibold text-white">لا توجد مشاريع في هذه القائمة</p>
+          <p className="mt-2 text-sm text-white/45">
+            نفّذ ملف SQL ثم استورد البيانات من projects-data.ts عبر زر الاستيراد في الصفحة الرئيسية للمشاريع.
+          </p>
+        </AdminDataGridEmpty>
+      )}
+    </AdminDataGrid>
+  );
+}
+
+export default function ProjectsTableClient({
+  type,
+  projects,
+  withDuplicateAction = false,
+  referenceLayout = false,
+}: ProjectsTableClientProps) {
+  const columns = buildColumns(withDuplicateAction, referenceLayout);
+
+  const legacySortAccessors = useMemo(
     () => ({
       code: (item: ProjectGridRow) => item.code,
       location: (item: ProjectGridRow) => locationLabel(item),
@@ -86,20 +429,32 @@ export default function ProjectsTableClient({ type, projects }: ProjectsTableCli
     [],
   );
 
-  const table = useAdminTable<ProjectGridRow, ProjectSortKey>({
+  const referenceSortAccessors = useMemo(
+    () => ({
+      name: (item: ProjectGridRow) => item.arabic_name,
+      code: (item: ProjectGridRow) => item.code,
+      featured: (item: ProjectGridRow) => featuredLabel(item),
+      status: (item: ProjectGridRow) => publicationMeta(item.publication_status).label,
+      updated_at: (item: ProjectGridRow) => item.updated_at,
+    }),
+    [],
+  );
+
+  const legacyTable = useAdminTable<ProjectGridRow, LegacyProjectSortKey>({
     initialRows: projects,
     getRowId: (item) => item.id,
-    sortAccessors,
+    sortAccessors: legacySortAccessors,
     refresh: () => getProjectsTableRows(type),
   });
 
-  function sortProps(key: ProjectSortKey) {
-    return {
-      active: table.sort.key === key,
-      direction: table.sort.direction,
-      onClick: () => table.toggleSort(key),
-    } as const;
-  }
+  const referenceTable = useAdminTable<ProjectGridRow, ReferenceProjectSortKey>({
+    initialRows: projects,
+    getRowId: (item) => item.id,
+    sortAccessors: referenceSortAccessors,
+    refresh: () => getProjectsTableRows(type),
+  });
+
+  const table = referenceLayout ? referenceTable : legacyTable;
 
   return (
     <div className="space-y-4">
@@ -130,91 +485,16 @@ export default function ProjectsTableClient({ type, projects }: ProjectsTableCli
         isBusy={table.isPending}
       />
 
-      <AdminDataGrid>
-        <AdminDataGridHeader columns={columns}>
-          <div className="flex justify-center">
-            <AdminDataGridCheckbox
-              inputRef={table.selection.selectAllRef}
-              checked={table.selection.allSelected}
-              onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
-              label="تحديد الكل"
-            />
-          </div>
-          <AdminDataGridSortLabel {...sortProps("code")}>Code</AdminDataGridSortLabel>
-          <AdminDataGridSortLabel {...sortProps("location")}>Location / Area</AdminDataGridSortLabel>
-          <span className="text-center">Featured</span>
-          <span className="text-center">Published</span>
-          <AdminDataGridSortLabel {...sortProps("updated_at")} className="mx-auto">
-            Last Updated
-          </AdminDataGridSortLabel>
-          <span className="text-center">Actions</span>
-        </AdminDataGridHeader>
-
-        {table.rows.length ? (
-          table.rows.map((item) => {
-            const published = publicationMeta(item.publication_status);
-            const isHidden = item.publication_status !== "published";
-
-            return (
-              <AdminDataGridRow
-                key={item.id}
-                columns={columns}
-                className="border-b border-white/[0.045] last:border-b-0"
-              >
-                <div className="flex justify-center">
-                  <AdminDataGridCheckbox
-                    checked={table.selection.selectedSet.has(item.id)}
-                    onChange={(event) => table.selection.toggleOne(item.id, event.currentTarget.checked)}
-                    label={`تحديد ${item.code}`}
-                  />
-                </div>
-
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <ProjectIcon type={type} />
-                  <span className="truncate font-en text-sm font-semibold text-[#D8B87A]">{item.code}</span>
-                </div>
-
-                <div className="truncate text-sm text-white/60">{locationLabel(item)}</div>
-
-                <div className="flex justify-center">
-                  <AdminStatusPill tone={item.featured ? "green" : "muted"}>
-                    {item.featured ? "نعم" : "لا"}
-                  </AdminStatusPill>
-                </div>
-                <div className="flex justify-center">
-                  <AdminStatusPill tone={published.tone}>{published.label}</AdminStatusPill>
-                </div>
-                <div className="text-center text-xs text-white/50">{formatDate(item.updated_at)}</div>
-
-                <AdminDataGridActions>
-                  <AdminDataGridActionButton action="edit" href={`/admin/projects/${item.id}`} />
-                  <AdminDataGridActionButton
-                    action="visibility"
-                    title={isHidden ? "نشر" : "إخفاء"}
-                    hidden={isHidden}
-                    disabled={table.isPending}
-                    onClick={() =>
-                      table.runAction(() => toggleProjectPublicationAjax(item.id, item.publication_status))
-                    }
-                  />
-                  <AdminDataGridActionButton
-                    action="delete"
-                    disabled={table.isPending}
-                    onClick={() => table.runAction(() => deleteProjectAjax(item.id))}
-                  />
-                </AdminDataGridActions>
-              </AdminDataGridRow>
-            );
-          })
-        ) : (
-          <AdminDataGridEmpty>
-            <p className="text-base font-semibold text-white">لا توجد مشاريع في هذه القائمة</p>
-            <p className="mt-2 text-sm text-white/45">
-              نفّذ ملف SQL ثم استورد البيانات من projects-data.ts عبر زر الاستيراد في الصفحة الرئيسية للمشاريع.
-            </p>
-          </AdminDataGridEmpty>
-        )}
-      </AdminDataGrid>
+      {referenceLayout ? (
+        <ReferenceProjectsTable type={type} table={referenceTable} columns={columns} />
+      ) : (
+        <LegacyProjectsTable
+          type={type}
+          table={legacyTable}
+          columns={columns}
+          withDuplicateAction={withDuplicateAction}
+        />
+      )}
     </div>
   );
 }

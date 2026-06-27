@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 
 import {
@@ -35,9 +37,24 @@ export default function VenesiaModal({
   footer,
   onClose,
 }: VenesiaModalProps) {
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
 
-  return (
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <div
       className={`fixed inset-0 ${ADMIN_MODAL.zIndex} flex items-center justify-center px-4 py-6`}
       dir="rtl"
@@ -53,6 +70,7 @@ export default function VenesiaModal({
         aria-modal="true"
         aria-labelledby="venesia-modal-title"
         className={`${ADMIN_MODAL.panel} ${ADMIN_MODAL_SIZES[size]}`}
+        onMouseDown={(event) => event.stopPropagation()}
       >
         <header className={ADMIN_MODAL.header}>
           <div className="text-right">
@@ -71,7 +89,8 @@ export default function VenesiaModal({
 
         {footer ? <footer className={ADMIN_MODAL.footer}>{footer}</footer> : null}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

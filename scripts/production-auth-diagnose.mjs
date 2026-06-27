@@ -1,6 +1,6 @@
 /**
  * Safe production auth probe — never prints secrets.
- * Usage: node scripts/production-auth-diagnose.mjs https://your-domain.com
+ * Usage: node scripts/production-auth-diagnose.mjs https://your-domain.com [username] [password]
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -22,8 +22,8 @@ function loadEnv(file) {
 loadEnv(".env.local");
 
 const base = (process.argv[2] ?? "http://localhost:3000").replace(/\/$/, "");
-const username = process.env.ADMIN_USERNAME?.trim() ?? "";
-const password = process.env.ADMIN_PASSWORD ?? "";
+const username = process.argv[3] ?? "admin";
+const password = process.argv[4] ?? "";
 
 function parseSetCookie(headers) {
   return headers.getSetCookie?.() ?? [];
@@ -39,8 +39,11 @@ function cookieMeta(line = "") {
   };
 }
 
-async function postLogin() {
-  return fetch(`${base}/api/admin/auth/login`, {
+async function postLogin(endpoint) {
+  if (!password) {
+    return { skipped: true, reason: "pass password as 4th CLI arg (never commit credentials)" };
+  }
+  return fetch(`${base}${endpoint}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -57,18 +60,14 @@ async function getWithCookies(cookieHeader, target) {
 console.log("=== Production auth diagnose ===");
 console.log("baseUrl:", base);
 console.log("envLoadedFromFile:", {
-  hasAdminUsername: Boolean(username),
-  hasAdminPassword: Boolean(password),
   hasAdminSecret: Boolean(process.env.ADMIN_SESSION_SECRET),
+  usesDatabaseAdminUsers: true,
 });
 
-const maintenanceLogin = await fetch(`${base}/api/maintenance/login`, {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({ username, password }),
-}).catch((error) => ({ error: error.message }));
-
-if (maintenanceLogin instanceof Response) {
+const maintenanceLogin = await postLogin("/api/maintenance/login");
+if (maintenanceLogin.skipped) {
+  console.log("\n3) POST /api/maintenance/login: skipped —", maintenanceLogin.reason);
+} else {
   const maintenanceCookies = parseSetCookie(maintenanceLogin.headers);
   const maintenanceMeta = cookieMeta(maintenanceCookies[0] ?? "");
   console.log("\n3) POST /api/maintenance/login");
@@ -78,15 +77,18 @@ if (maintenanceLogin instanceof Response) {
     cookieName: maintenanceMeta.name,
     sameCookieAsAdmin: maintenanceMeta.name === "venesia_admin_session",
   });
-} else {
-  console.log("\n3) POST /api/maintenance/login: unreachable", maintenanceLogin.error);
 }
 
 const maintenancePage = await fetch(`${base}/maintenance`, { redirect: "manual" });
 console.log("\n/maintenance page");
 console.log({ status: maintenancePage.status, is404: maintenancePage.status === 404 });
 
-const loginRes = await postLogin();
+const loginRes = await postLogin("/api/admin/auth/login");
+if (loginRes.skipped) {
+  console.log("\n2) POST /api/admin/auth/login: skipped —", loginRes.reason);
+  process.exit(0);
+}
+
 const setCookies = parseSetCookie(loginRes.headers);
 const cookieLine = setCookies[0] ?? "";
 const meta = cookieMeta(cookieLine);
@@ -104,11 +106,11 @@ console.log({
 });
 
 if (loginRes.status === 401) {
-  console.log("→ credentials mismatch or env not loaded on server (Redeploy required after env change).");
+  console.log("→ invalid credentials or admin_users migration not applied.");
 }
 
 if (loginRes.status === 503) {
-  console.log("→ ADMIN_* env missing or ADMIN_SESSION_SECRET shorter than 16 chars on server.");
+  console.log("→ ADMIN_SESSION_SECRET missing or no admin_users row in database.");
 }
 
 const adminRes = await getWithCookies(cookieHeader, "/admin");
@@ -140,16 +142,10 @@ console.log({
   redirectedToMaintenance: (publicWithCookie.headers.get("location") ?? "").includes("/maintenance"),
 });
 
-if (loginRes.status === 200 && adminRes.status !== 200 && !adminLocation.includes("/admin") === false) {
-  if (adminLocation.includes("/admin/login")) {
-    console.log("\n→ login 200 but /admin redirects: cookie not stored or proxy cannot read it.");
-  }
-}
-
 console.log("\n4) proxy.ts notes");
 console.log({
   adminCookieName: "venesia_admin_session",
   adminPublicPaths: ["/admin/login", "/api/admin/auth/login"],
   maintenancePublicPaths: ["/maintenance", "/api/maintenance/login"],
-  maintenanceModeStoredIn: "site_settings.maintenance_mode",
+  adminUsersTable: "admin_users",
 });

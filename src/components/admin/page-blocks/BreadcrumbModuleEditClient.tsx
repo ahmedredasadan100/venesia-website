@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import AdminModuleTabs from "./AdminModuleTabs";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
+import BreadcrumbManualItemsField from "./editors/BreadcrumbManualItemsField";
 import { fieldClassName, statusMeta } from "../../../lib/page-blocks/admin-utils";
 import type { BreadcrumbBlockConfig } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
@@ -19,7 +20,6 @@ type BreadcrumbModuleEditClientProps = {
     status: string;
   };
   config: BreadcrumbBlockConfig;
-  manualItemsText: string;
   assignmentContext: ModuleAssignmentContext;
   saved?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
@@ -28,7 +28,6 @@ type BreadcrumbModuleEditClientProps = {
 export default function BreadcrumbModuleEditClient({
   block,
   config,
-  manualItemsText,
   assignmentContext,
   saved,
   updateAction,
@@ -97,15 +96,7 @@ export default function BreadcrumbModuleEditClient({
                       className={fieldClassName()}
                     />
                   </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">عناصر يدوية — سطر لكل عنصر: Label | /href</span>
-                    <textarea
-                      name="manual_items"
-                      defaultValue={manualItemsText}
-                      rows={6}
-                      className={fieldClassName("resize-y font-mono leading-7")}
-                    />
-                  </label>
+                  <BreadcrumbManualItemsField items={config.manualItems ?? []} />
                   <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
                     <span>إظهار الرئيسية</span>
                     <input

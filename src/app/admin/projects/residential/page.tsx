@@ -2,6 +2,7 @@ import AdminNotice from "../../../../components/admin/AdminNotice";
 import { AdminActionButton, AdminInfoBar, AdminPageHeader } from "../../../../components/admin/ui";
 import { listProjectsByType } from "../../../../lib/projects/queries";
 import { getProjectsTableReady } from "../../../../lib/projects/seed-from-static-data";
+import AddProjectPanelClient from "../AddProjectPanelClient";
 import ProjectsTableClient from "../ProjectsTableClient";
 
 export const dynamic = "force-dynamic";
@@ -47,9 +48,12 @@ export default async function ResidentialProjectsPage({
         title="المشاريع السكنية"
         description="جميع المشاريع السكنية في شبكة إدارية واحدة — بدون تعديل الواجهة العامة."
         actions={
-          <AdminActionButton href="/admin/projects" variant="dark">
-            رجوع للمشاريع
-          </AdminActionButton>
+          <div className="flex flex-wrap items-center gap-3">
+            <AddProjectPanelClient type="residential" />
+            <AdminActionButton href="/admin/projects" variant="dark">
+              رجوع للمشاريع
+            </AdminActionButton>
+          </div>
         }
       />
 
@@ -62,7 +66,7 @@ export default async function ResidentialProjectsPage({
       {notice ? <AdminNotice variant="success" message={notice} /> : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={errorMessage} /> : null}
 
-      <ProjectsTableClient type="residential" projects={projects} />
+      <ProjectsTableClient type="residential" projects={projects} withDuplicateAction referenceLayout />
     </main>
   );
 }

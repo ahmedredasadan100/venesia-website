@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 
-import { PencilIcon } from "../../../../components/admin/AdminRowActions";
-import VenesiaModal, {
+import {
   ADMIN_FORM,
+  AdminDataGridActionButton,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
+  VenesiaModal,
   adminFormFieldClassName,
-} from "../../../../components/admin/VenesiaModal";
+} from "../../../../components/admin/ui";
 import CategoryParentSelect from "./CategoryParentSelect";
 import CategorySlugFields from "./CategorySlugFields";
 import { updateCategory } from "./actions";
@@ -32,15 +33,12 @@ export default function CategoryEditModal({ category, parentOptions }: CategoryE
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-[8px] border border-[#D8B87A]/20 bg-[#D8B87A]/10 text-[#F1C668] transition hover:border-[#D8B87A]/45 hover:bg-[#D8B87A]/16"
+      <AdminDataGridActionButton
+        action="edit"
+        size="compact"
         title="تعديل التصنيف"
-        aria-label="تعديل التصنيف"
-      >
-        <PencilIcon />
-      </button>
+        onClick={() => setOpen(true)}
+      />
 
       <VenesiaModal
         open={open}

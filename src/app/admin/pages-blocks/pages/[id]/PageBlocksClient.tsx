@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import {
+  ADMIN_DATA_GRID_ACTION_COLUMNS,
   AdminActionButton,
   AdminBulkActionBar,
   AdminDataGrid,
   AdminDataGridActionButton,
-  AdminDataGridActions,
+  AdminDataGridActionsCell,
   AdminDataGridCheckbox,
   AdminDataGridEmpty,
   AdminDataGridHeader,
@@ -75,7 +76,7 @@ type AssignableModuleKind = PageBlockType | "hero" | "media-sidebar" | "media-hu
 
 type SortKey = "module_kind" | "template_name" | "slot" | "sort_order" | "visibility";
 
-const gridColumns = "56px 110px minmax(220px,1.4fr) minmax(120px,0.7fr) 80px 100px 220px";
+const gridColumns = `56px 110px minmax(220px,1.4fr) minmax(120px,0.7fr) 80px 100px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 function assignmentRowId(row: PageBlockAssignmentRow) {
   return `${row.module_kind}:${row.id}`;
@@ -449,16 +450,18 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
                 </AdminStatusPill>
               </div>
 
-              <AdminDataGridActions>
+              <AdminDataGridActionsCell compact>
                 <AdminDataGridActionButton
                   action="edit"
                   title="تعديل الموديول"
                   href={moduleEditHref(row.module_kind, row.template_id)}
+                  size="compact"
                 />
                 {manageable ? (
                   <>
                     <AdminDataGridActionButton
                       title="ترتيب وموضع"
+                      size="compact"
                       onClick={() => {
                         setEditVisible(normalizeBoolean(row.is_visible, true));
                         setPlacementAssignment(row);
@@ -469,13 +472,14 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
                     <AdminDataGridActionButton
                       action="visibility"
                       title={isVisible ? "إخفاء" : "إظهار"}
+                      size="compact"
                       disabled={isPending}
                       onClick={() => handleToggleVisibility(row)}
                     />
-                    <AdminDataGridActionButton action="delete" title="حذف الربط" onClick={() => setDeletingAssignment(row)} />
+                    <AdminDataGridActionButton action="delete" title="حذف الربط" size="compact" onClick={() => setDeletingAssignment(row)} />
                   </>
                 ) : null}
-              </AdminDataGridActions>
+              </AdminDataGridActionsCell>
             </AdminDataGridRow>
           );
         })}

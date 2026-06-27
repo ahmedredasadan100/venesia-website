@@ -1,5 +1,10 @@
 "use server";
 
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { parseAdminLinkFromFormData } from "../../../../../lib/admin/links/form-fields";
+import { serializeAdminLink } from "../../../../../lib/admin/links/serialize";
+import { isAdminLinkEmpty } from "../../../../../lib/admin/links/validate";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
@@ -31,11 +36,12 @@ function parseNumber(value: FormDataEntryValue | null, fallback = 1) {
 
 function buildHeroConfig(formData: FormData) {
   const primaryCtaLabel = cleanText(formData.get("primary_cta_label"));
-  const primaryCtaHref = cleanText(formData.get("primary_cta_href"));
   const secondaryCtaLabel = cleanText(formData.get("secondary_cta_label"));
-  const secondaryCtaHref = cleanText(formData.get("secondary_cta_href"));
+  const primaryCtaLink = serializeAdminLink(parseAdminLinkFromFormData(formData, "primary_cta"));
+  const secondaryCtaLink = serializeAdminLink(parseAdminLinkFromFormData(formData, "secondary_cta"));
   const hasCtaContent =
-    Boolean(primaryCtaLabel && primaryCtaHref) || Boolean(secondaryCtaLabel && secondaryCtaHref);
+    Boolean(primaryCtaLabel && primaryCtaLink && !isAdminLinkEmpty(primaryCtaLink)) ||
+    Boolean(secondaryCtaLabel && secondaryCtaLink && !isAdminLinkEmpty(secondaryCtaLink));
 
   return {
     eyebrow: cleanText(formData.get("eyebrow")),
@@ -45,9 +51,9 @@ function buildHeroConfig(formData: FormData) {
     description: cleanText(formData.get("description")),
     images: splitImages(formData.get("images")),
     primaryCtaLabel,
-    primaryCtaHref,
+    primaryCtaLink,
     secondaryCtaLabel,
-    secondaryCtaHref,
+    secondaryCtaLink,
     showCta: formData.get("show_cta") === "on" || hasCtaContent,
     imagePositionClassName: cleanText(formData.get("image_position_class")),
   };
@@ -64,6 +70,7 @@ async function revalidateHeroAdmin() {
 }
 
 export async function createHeroTemplate(formData: FormData) {
+  await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const rawSlug = cleanText(formData.get("slug"));
   const slug = slugify(rawSlug || name);
@@ -105,6 +112,7 @@ export async function createHeroTemplate(formData: FormData) {
 }
 
 export async function toggleHeroTemplate(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
   const nextVisible = formData.get("next_visible") === "true";
 
@@ -120,6 +128,7 @@ export async function toggleHeroTemplate(formData: FormData) {
 }
 
 export async function deleteHeroTemplate(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
   if (!id) throw new Error("Hero id is missing.");
 
@@ -130,6 +139,7 @@ export async function deleteHeroTemplate(formData: FormData) {
 }
 
 export async function duplicateHeroTemplate(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
   if (!id) throw new Error("Hero id is missing.");
 
@@ -165,6 +175,7 @@ export async function duplicateHeroTemplate(formData: FormData) {
 }
 
 export async function bulkHeroTemplates(formData: FormData) {
+  await requireAdminSession();
   const action = cleanText(formData.get("bulk_action"));
   const rawIds = formData.getAll("ids");
   const ids = (rawIds.length > 1 ? rawIds : String(formData.get("ids") ?? "").split(","))
@@ -191,6 +202,7 @@ export async function bulkHeroTemplates(formData: FormData) {
 }
 
 export async function updateHeroTemplateDetails(formData: FormData) {
+  await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
   const name = cleanText(formData.get("name"));
   const rawSlug = cleanText(formData.get("slug"));

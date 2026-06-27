@@ -2,6 +2,7 @@ import AdminNotice from "../../../../components/admin/AdminNotice";
 import { AdminActionButton, AdminInfoBar, AdminPageHeader } from "../../../../components/admin/ui";
 import { listProjectsByType } from "../../../../lib/projects/queries";
 import { getProjectsTableReady } from "../../../../lib/projects/seed-from-static-data";
+import AddProjectPanelClient from "../AddProjectPanelClient";
 import ProjectsTableClient from "../ProjectsTableClient";
 
 export const dynamic = "force-dynamic";
@@ -47,9 +48,12 @@ export default async function CommercialProjectsPage({
         title="المشاريع التجارية"
         description="قائمة منفصلة للمشاريع التجارية بنفس أنماط الإدارة."
         actions={
-          <AdminActionButton href="/admin/projects" variant="dark">
-            رجوع للمشاريع
-          </AdminActionButton>
+          <div className="flex flex-wrap items-center gap-3">
+            <AddProjectPanelClient type="commercial" />
+            <AdminActionButton href="/admin/projects" variant="dark">
+              رجوع للمشاريع
+            </AdminActionButton>
+          </div>
         }
       />
 

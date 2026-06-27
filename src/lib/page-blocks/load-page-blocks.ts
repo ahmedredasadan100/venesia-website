@@ -4,6 +4,12 @@ import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import { resolveHomeModuleSlugFromTemplate, type HomeModuleSlug } from "./home-module-slugs";
 import { asBreadcrumbConfig, asCardsConfig, asCtaConfig, resolveContentBlockConfig } from "./configs";
+import {
+  resolveBreadcrumbBlockConfigLinks,
+  resolveCardsBlockConfigLinks,
+  resolveCtaBlockConfigLinks,
+  resolveContentBlockConfigLinks,
+} from "../admin/links/block-config-links";
 import { normalizeBoolean } from "./admin-utils";
 import { sortPageBlocks } from "./page-block-layout";
 import { normalizeLayoutSlot } from "./layout-slots";
@@ -88,7 +94,11 @@ export async function loadPageBlockStateBySlug(pageSlug: string): Promise<PageBl
 
     if (!template || !isPublishedTemplate(template.status)) continue;
 
-    const resolvedConfig = resolveContentBlockConfig(template);
+    const resolvedConfig = await resolveContentBlockConfigLinks(
+      resolveContentBlockConfig(template) as Record<string, unknown>,
+      template.slug,
+      template.variant,
+    );
 
     blocks.push({
       assignmentId: row.id,
@@ -120,7 +130,7 @@ export async function loadPageBlockStateBySlug(pageSlug: string): Promise<PageBl
       isVisible: true,
       template: {
         ...template,
-        config: asCtaConfig(template.config),
+        config: await resolveCtaBlockConfigLinks(asCtaConfig(template.config)),
       },
     });
   }
@@ -140,7 +150,7 @@ export async function loadPageBlockStateBySlug(pageSlug: string): Promise<PageBl
       isVisible: true,
       template: {
         ...template,
-        config: asCardsConfig(template.config),
+        config: await resolveCardsBlockConfigLinks(asCardsConfig(template.config)),
       },
     });
   }
@@ -160,7 +170,7 @@ export async function loadPageBlockStateBySlug(pageSlug: string): Promise<PageBl
       isVisible: true,
       template: {
         ...template,
-        config: asBreadcrumbConfig(template.config),
+        config: await resolveBreadcrumbBlockConfigLinks(asBreadcrumbConfig(template.config)),
       },
     });
   }

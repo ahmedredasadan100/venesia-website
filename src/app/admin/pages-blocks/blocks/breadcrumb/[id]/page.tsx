@@ -12,12 +12,6 @@ type PageProps = {
   searchParams?: Promise<{ saved?: string }> | { saved?: string };
 };
 
-function manualItemsToTextarea(config: ReturnType<typeof asBreadcrumbConfig>) {
-  return (config.manualItems ?? [])
-    .map((item) => (item.href ? `${item.label} | ${item.href}` : item.label ?? ""))
-    .join("\n");
-}
-
 export default async function BreadcrumbBlockEditPage({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
   const resolvedSearch = searchParams ? await searchParams : {};
@@ -37,7 +31,6 @@ export default async function BreadcrumbBlockEditPage({ params, searchParams }: 
     <BreadcrumbModuleEditClient
       block={block}
       config={config}
-      manualItemsText={manualItemsToTextarea(config)}
       assignmentContext={assignmentContext}
       saved={Boolean(resolvedSearch.saved)}
       updateAction={updateBreadcrumbBlock}

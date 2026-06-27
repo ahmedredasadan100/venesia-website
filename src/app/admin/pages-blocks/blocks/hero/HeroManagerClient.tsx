@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
+  ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_RULES,
   AdminBulkActionBar,
   AdminDataGrid,
   AdminDataGridActionButton,
-  AdminDataGridActions,
+  AdminDataGridActionsCell,
   AdminDataGridCheckbox,
   AdminDataGridEmpty,
   AdminDataGridHeader,
@@ -15,7 +17,7 @@ import {
   AdminStatusPill,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
-import { MoreVerticalIcon, PlusIcon } from "../../../../../components/admin/AdminRowActions";
+import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
 import {
   bulkHeroTemplates,
   createHeroTemplate,
@@ -65,25 +67,37 @@ const sourceLabels: Record<string, string> = {
   media_category: "تصنيف إعلامي",
 };
 
-function AdvancedHeroMenu({ hero, onOpen }: { hero: HeroRow; onOpen: () => void }) {
+/**
+ * RTL table: اسم الهيرو (1fr, يمين) → … → الإجراءات (ثابت، شمال).
+ */
+const gridColumns = `44px minmax(260px, 1fr) 120px 96px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+
+function PublicPreviewIcon() {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-white/8 bg-white/[0.075] text-white transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
-      title="إجراءات إضافية"
-      aria-label={`إجراءات إضافية لـ ${hero.name}`}
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={ADMIN_DATA_GRID_RULES.actionIcon}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
     >
-      <MoreVerticalIcon />
-    </button>
+      <path d="M14 3h7v7" />
+      <path d="M10 14 21 3" />
+      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
+    </svg>
   );
 }
 
-const gridColumns = "56px minmax(280px,1.8fr) minmax(180px,1fr) 120px 110px 220px";
+function resolveHeroPreviewPath(hero: HeroRow) {
+  const activeAssignment = hero.hero_assignments.find((assignment) => assignment.is_active && assignment.path);
+  if (activeAssignment?.path) return activeAssignment.path;
+  const anyAssignment = hero.hero_assignments.find((assignment) => assignment.path);
+  return anyAssignment?.path ?? null;
+}
 
 export default function HeroManagerClient({ heroes }: HeroManagerClientProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [advancedHero, setAdvancedHero] = useState<HeroRow | null>(null);
   const visibleIds = useMemo(() => heroes.map((hero) => hero.id), [heroes]);
   const selection = useAdminGridSelection<number>(visibleIds);
 
@@ -106,84 +120,122 @@ export default function HeroManagerClient({ heroes }: HeroManagerClientProps) {
         )}
       />
 
-      <AdminBulkActionBar
-        selectedIds={selection.selectedIds}
-        entityLabel="هيرو"
-        action={bulkHeroTemplates}
-        options={[
-          { value: "show", label: "إظهار" },
-          { value: "hide", label: "إخفاء" },
-          { value: "delete", label: "حذف" },
-        ]}
-        onClearSelection={selection.clearSelection}
-      />
+      <div className="space-y-4">
+        <AdminBulkActionBar
+          selectedIds={selection.selectedIds}
+          entityLabel="هيرو"
+          action={bulkHeroTemplates}
+          options={[
+            { value: "show", label: "إظهار" },
+            { value: "hide", label: "إخفاء" },
+            { value: "delete", label: "حذف" },
+          ]}
+          onClearSelection={selection.clearSelection}
+        />
 
-      <AdminDataGrid summary={heroes.length ? `${heroes.length} هيرو إجمال` : undefined}>
-        <AdminDataGridHeader columns={gridColumns}>
-          <div className="flex justify-center">
-            <AdminDataGridCheckbox
-              checked={selection.allSelected}
-              onChange={(event) => selection.toggleAll(event.target.checked)}
-              inputRef={selection.selectAllRef}
-              label="تحديد كل الهيروهات"
-            />
-          </div>
-          <div>اسم الهيرو</div>
-          <div>Slug</div>
-          <div>Variant</div>
-          <div>الحالة</div>
-          <div className="text-center">الإجراءات</div>
-        </AdminDataGridHeader>
-
-        {heroes.map((hero) => (
-          <AdminDataGridRow key={hero.id} columns={gridColumns} className="border-b border-white/8 last:border-b-0">
-            <div className="flex justify-center xl:block">
+        <AdminDataGrid summary={heroes.length ? `${heroes.length} هيرو إجمال` : undefined}>
+          <AdminDataGridHeader columns={gridColumns}>
+            <div className="flex justify-center">
               <AdminDataGridCheckbox
-                checked={selection.selectedSet.has(hero.id)}
-                onChange={(event) => selection.toggleOne(hero.id, event.target.checked)}
-                label={`تحديد ${hero.name}`}
+                inputRef={selection.selectAllRef}
+                checked={selection.allSelected}
+                onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
+                label="تحديد كل الهيروهات"
               />
             </div>
+            <div className="min-w-0 text-right">اسم الهيرو</div>
+            <div className="text-center">Slug</div>
+            <div className="text-center">الحالة</div>
+            <div className="text-center">الإجراءات</div>
+          </AdminDataGridHeader>
 
-            <div className="min-w-0">
-              <Link href={`/admin/pages-blocks/blocks/hero/${hero.id}`} className="font-semibold text-white transition hover:text-[#D8B87A]">
-                {hero.name}
-              </Link>
-              {hero.description ? <p className="mt-1 line-clamp-1 text-xs text-white/36">{hero.description}</p> : null}
-            </div>
+          {heroes.map((hero) => {
+            const previewPath = resolveHeroPreviewPath(hero);
 
-            <Link href={`/admin/pages-blocks/blocks/hero/${hero.id}`} className="font-en text-xs text-[#D8B87A]/78 transition hover:text-[#D8B87A]">
-              {hero.slug}
-            </Link>
-            <div className="text-white/58">{hero.variant}</div>
-            <div><AdminStatusPill tone={hero.is_visible ? "green" : "muted"}>{hero.is_visible ? "ظاهر" : "مخفي"}</AdminStatusPill></div>
+            return (
+              <AdminDataGridRow key={hero.id} columns={gridColumns} className="border-b border-white/8 last:border-b-0">
+                <div className="flex justify-center">
+                  <AdminDataGridCheckbox
+                    checked={selection.selectedSet.has(hero.id)}
+                    onChange={(event) => selection.toggleOne(hero.id, event.currentTarget.checked)}
+                    label={`تحديد ${hero.name}`}
+                  />
+                </div>
 
-            <AdminDataGridActions>
-              <AdminDataGridActionButton action="edit" href={`/admin/pages-blocks/blocks/hero/${hero.id}`} />
+                <div className="min-w-0 text-right">
+                  <Link href={`/admin/pages-blocks/blocks/hero/${hero.id}`} className="block truncate font-semibold text-white transition hover:text-[#D8B87A]">
+                    {hero.name}
+                  </Link>
+                  {hero.description ? <p className="mt-1 line-clamp-1 text-xs text-white/36">{hero.description}</p> : null}
+                </div>
 
-              <form action={toggleHeroTemplate} className="inline-flex shrink-0">
-                <input type="hidden" name="id" value={hero.id} />
-                <input type="hidden" name="next_visible" value={String(!hero.is_visible)} />
-                <AdminDataGridActionButton type="submit" action="visibility" hidden={!hero.is_visible} title={hero.is_visible ? "إخفاء" : "إظهار"} />
-              </form>
+                <div className="min-w-0 text-center">
+                  <Link href={`/admin/pages-blocks/blocks/hero/${hero.id}`} className="font-en block truncate text-xs text-[#D8B87A]/78 transition hover:text-[#D8B87A]">
+                    {hero.slug}
+                  </Link>
+                </div>
 
-              <form action={duplicateHeroTemplate} className="inline-flex shrink-0">
-                <input type="hidden" name="id" value={hero.id} />
-                <AdminDataGridActionButton type="submit" action="duplicate" title="نسخ" />
-              </form>
+                <div className="flex justify-center">
+                  <AdminStatusPill tone={hero.is_visible ? "green" : "muted"}>{hero.is_visible ? "ظاهر" : "مخفي"}</AdminStatusPill>
+                </div>
 
-              <form action={deleteHeroTemplate} className="inline-flex shrink-0">
-                <input type="hidden" name="id" value={hero.id} />
-                <AdminDataGridActionButton type="submit" action="delete" title="حذف" />
-              </form>
+                <AdminDataGridActionsCell compact>
+                  <AdminDataGridActionButton
+                    action="edit"
+                    href={`/admin/pages-blocks/blocks/hero/${hero.id}`}
+                    size="compact"
+                  />
 
-              <AdvancedHeroMenu hero={hero} onOpen={() => setAdvancedHero(hero)} />
-            </AdminDataGridActions>
-          </AdminDataGridRow>
-        ))}
+                  {previewPath ? (
+                    <AdminDataGridActionButton
+                      href={previewPath}
+                      target="_blank"
+                      tone="dark"
+                      title="معاينة الصفحة العامة"
+                      size="compact"
+                    >
+                      <PublicPreviewIcon />
+                    </AdminDataGridActionButton>
+                  ) : (
+                    <AdminDataGridActionButton
+                      tone="dark"
+                      disabled
+                      title="لا توجد صفحة مربوطة للمعاينة"
+                      size="compact"
+                    >
+                      <PublicPreviewIcon />
+                    </AdminDataGridActionButton>
+                  )}
 
-        {!heroes.length ? <AdminDataGridEmpty>لا توجد هيروهات بعد.</AdminDataGridEmpty> : null}
-      </AdminDataGrid>
+                  <form action={toggleHeroTemplate} className="contents">
+                    <input type="hidden" name="id" value={hero.id} />
+                    <input type="hidden" name="next_visible" value={String(!hero.is_visible)} />
+                    <AdminDataGridActionButton
+                      type="submit"
+                      action="visibility"
+                      size="compact"
+                      hidden={!hero.is_visible}
+                      title={hero.is_visible ? "إخفاء" : "إظهار"}
+                    />
+                  </form>
+
+                  <form action={duplicateHeroTemplate} className="contents">
+                    <input type="hidden" name="id" value={hero.id} />
+                    <AdminDataGridActionButton type="submit" action="duplicate" title="نسخ" size="compact" />
+                  </form>
+
+                  <form action={deleteHeroTemplate} className="contents">
+                    <input type="hidden" name="id" value={hero.id} />
+                    <AdminDataGridActionButton type="submit" action="delete" title="حذف" size="compact" />
+                  </form>
+                </AdminDataGridActionsCell>
+              </AdminDataGridRow>
+            );
+          })}
+
+          {!heroes.length ? <AdminDataGridEmpty>لا توجد هيروهات بعد.</AdminDataGridEmpty> : null}
+        </AdminDataGrid>
+      </div>
 
       {showCreateModal ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setShowCreateModal(false)}>
@@ -243,53 +295,6 @@ export default function HeroManagerClient({ heroes }: HeroManagerClientProps) {
         </div>
       ) : null}
 
-      {advancedHero ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setAdvancedHero(null)}>
-          <div className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[#080B10] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.5)]" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#D8B87A]/70">Venesia Action Modal</p>
-                <h3 className="mt-2 text-xl font-semibold text-white">عمليات متقدمة للهيرو</h3>
-                <p className="mt-1 text-sm text-white/45">{advancedHero.name}</p>
-              </div>
-              <button type="button" onClick={() => setAdvancedHero(null)} className="cursor-pointer rounded-xl border border-white/10 p-2 text-white/50 hover:text-white">
-                <CloseIcon />
-              </button>
-            </div>
-
-            <div className="mt-5 grid gap-3">
-              <Link href={`/admin/pages-blocks/blocks/hero/${advancedHero.id}`} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/75 hover:bg-white/[0.08]">
-                فتح تفاصيل الهيرو
-              </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  const payload = JSON.stringify(advancedHero, null, 2);
-                  navigator.clipboard?.writeText(payload);
-                }}
-                className="cursor-pointer rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-right text-sm text-white/75 hover:bg-white/[0.08]"
-              >
-                نسخ JSON إلى الحافظة
-              </button>
-              <form action={duplicateHeroTemplate}>
-                <input type="hidden" name="id" value={advancedHero.id} />
-                <button className="w-full cursor-pointer rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-right text-sm text-blue-100 hover:bg-blue-500/15">
-                  تكرار الهيرو بالكامل
-                </button>
-              </form>
-              <form action={deleteHeroTemplate}>
-                <input type="hidden" name="id" value={advancedHero.id} />
-                <button className="w-full cursor-pointer rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-right text-sm text-red-200 hover:bg-red-500/15">
-                  حذف نهائي
-                </button>
-              </form>
-              <button type="button" onClick={() => setAdvancedHero(null)} className="cursor-pointer rounded-2xl border border-white/10 px-4 py-3 text-sm text-white/55 hover:bg-white/5 hover:text-white">
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

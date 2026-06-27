@@ -2,6 +2,8 @@
 
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { CardsBlockItem } from "../../../../lib/page-blocks/configs";
+import { AdminLinkField } from "../../ui";
+import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 
 type AdminCardsItemsFieldProps = {
   items: CardsBlockItem[];
@@ -58,10 +60,14 @@ export default function AdminCardsItemsField({
                 />
               </label>
               {showHref ? (
-                <label className="block space-y-2 md:col-span-2">
-                  <span className="text-xs font-semibold text-white/55">الرابط (اختياري)</span>
-                  <input name={`item_${index}_href`} defaultValue={item.href ?? ""} dir="ltr" className={fieldClassName()} />
-                </label>
+                <div className="md:col-span-2">
+                  <AdminLinkField
+                    prefix={`item_${index}`}
+                    label="الرابط (اختياري)"
+                    defaultValue={linkDefaultFromContainer(item as Record<string, unknown>)}
+                    showAnchor
+                  />
+                </div>
               ) : null}
             </div>
           </div>

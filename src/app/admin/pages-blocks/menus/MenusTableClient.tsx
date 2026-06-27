@@ -6,33 +6,25 @@ import { useMemo } from "react";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import { ADMIN_LIST_PAGE } from "../../../../lib/admin/admin-ui-styles";
 import {
-  CopyIcon,
-  DownloadIcon,
-  LayersIcon,
-  MoreVerticalIcon,
-  TrashIcon,
-  UploadIcon,
-  actionClassName,
-} from "../../../../components/admin/AdminRowActions";
-import {
+  ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_RULES,
   AdminDataGrid,
   AdminDataGridActionButton,
-  AdminDataGridActions,
+  AdminDataGridActionsCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
+  AdminDataGridSortLabel,
   AdminPageHeader,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
+import { useAdminTable } from "../../../../components/admin/table-engine";
 import AddMenuPanelClient from "./AddMenuPanelClient";
 import BulkMenuController from "./BulkMenuController";
 import {
   bulkMenuAction,
-  clearMenuItems,
   deleteMenu,
   duplicateMenu,
-  importMenuJson,
   toggleMenuVisibility,
 } from "./actions";
 
@@ -50,7 +42,29 @@ type MenusTableClientProps = {
   message?: string | null;
 };
 
-const columns = `34px 42px minmax(220px,1fr) 150px 72px 96px ${ADMIN_LIST_PAGE.actionsColumnWidth}`;
+type MenuSortKey = "name" | "slug" | "item_count" | "status";
+
+/**
+ * RTL table: القائمة (1fr, يمين) → … → الإجراءات (ثابت، شمال).
+ */
+const columns = `44px minmax(260px, 1fr) 120px 72px 96px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+
+function PublicPreviewIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={ADMIN_DATA_GRID_RULES.actionIcon}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M14 3h7v7" />
+      <path d="M10 14 21 3" />
+      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
+    </svg>
+  );
+}
 
 function locationLabel(location: string) {
   const labels: Record<string, string> = {
@@ -63,88 +77,34 @@ function locationLabel(location: string) {
   return labels[location] ?? location;
 }
 
-function MoreMenu({ menu }: { menu: MenuListRow }) {
-  return (
-    <details className="group relative inline-flex shrink-0">
-      <summary
-        title="إجراءات إضافية"
-        aria-label="إجراءات إضافية"
-        className={`${actionClassName("muted")} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}
-      >
-        <MoreVerticalIcon />
-      </summary>
-
-      <div className="absolute end-0 top-12 z-[80] max-h-[70vh] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-[22px] border border-white/10 bg-[#080B10] p-2 text-right shadow-[0_24px_70px_rgba(0,0,0,0.55)]">
-        <Link
-          href={`/admin/pages-blocks/menus/${menu.id}`}
-          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm text-white/70 transition hover:bg-white/[0.045] hover:text-white"
-        >
-          <LayersIcon className="size-4 text-[#D8B87A]" />
-          فتح Builder الشجرة
-        </Link>
-
-        <a
-          href={`/api/admin/menus/${menu.id}/export`}
-          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm text-white/70 transition hover:bg-white/[0.045] hover:text-white"
-        >
-          <DownloadIcon className="size-4 text-sky-300" />
-          تصدير JSON
-        </a>
-
-        <form action={duplicateMenu}>
-          <input type="hidden" name="id" value={menu.id} />
-          <button className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-right text-sm text-white/70 transition hover:bg-white/[0.045] hover:text-white">
-            <CopyIcon className="size-4 text-sky-300" />
-            تكرار القائمة بالكامل
-          </button>
-        </form>
-
-        <form action={clearMenuItems}>
-          <input type="hidden" name="id" value={menu.id} />
-          <button className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-right text-sm text-white/70 transition hover:bg-white/[0.045] hover:text-white">
-            <TrashIcon className="size-4 text-red-300" />
-            تفريغ العناصر فقط
-          </button>
-        </form>
-
-        <details className="rounded-2xl px-3 py-3 text-sm text-white/70 open:bg-white/[0.025]">
-          <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
-            <UploadIcon className="size-4 text-emerald-300" />
-            استيراد JSON
-          </summary>
-          <form action={importMenuJson} className="mt-3 grid gap-3">
-            <input type="hidden" name="id" value={menu.id} />
-            <input
-              type="file"
-              name="json_file"
-              accept="application/json,.json"
-              className="block w-full text-xs text-white/55 file:ml-3 file:rounded-xl file:border-0 file:bg-[#D8B87A] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#05070B]"
-            />
-            <button className="min-h-9 rounded-xl border border-emerald-400/18 text-xs text-emerald-300 transition hover:bg-emerald-400/10">
-              استيراد كمسودة مخفية
-            </button>
-          </form>
-        </details>
-
-        <div className="my-2 h-px bg-white/10" />
-
-        <form action={deleteMenu}>
-          <input type="hidden" name="id" value={menu.id} />
-          <button className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-right text-sm text-red-300 transition hover:bg-red-400/10">
-            <TrashIcon className="size-4" />
-            حذف نهائي
-          </button>
-        </form>
-      </div>
-    </details>
-  );
+function menuStatusLabel(isActive: boolean) {
+  return isActive ? "ظاهرة" : "مخفية";
 }
 
 export default function MenusTableClient({ menus, message }: MenusTableClientProps) {
-  const sortedMenus = useMemo(
-    () => [...menus].sort((a, b) => a.id - b.id),
-    [menus],
+  const sortAccessors = useMemo(
+    () => ({
+      name: (item: MenuListRow) => item.name,
+      slug: (item: MenuListRow) => item.slug,
+      item_count: (item: MenuListRow) => item.item_count,
+      status: (item: MenuListRow) => menuStatusLabel(item.is_active),
+    }),
+    [],
   );
+
+  const table = useAdminTable<MenuListRow, MenuSortKey>({
+    initialRows: menus,
+    getRowId: (item) => item.id,
+    sortAccessors,
+  });
+
+  function sortProps(key: MenuSortKey) {
+    return {
+      active: table.sort.key === key,
+      direction: table.sort.direction,
+      onClick: () => table.toggleSort(key),
+    } as const;
+  }
 
   return (
     <div className={ADMIN_LIST_PAGE.wrapper} dir="rtl">
@@ -200,30 +160,43 @@ export default function MenusTableClient({ menus, message }: MenusTableClientPro
           </div>
         </div>
 
-        <AdminDataGrid summary={`${sortedMenus.length} قائمة`}>
+        <AdminDataGrid summary={`${table.rows.length} قائمة`}>
           <AdminDataGridHeader columns={columns}>
-            <span className="text-center font-en text-white/45">#</span>
-            <span className="flex justify-center">
+            <div className="flex justify-center">
               <input
                 type="checkbox"
                 data-bulk-select-all="menus"
                 className={ADMIN_DATA_GRID_RULES.checkbox}
                 aria-label="تحديد كل القوائم"
               />
-            </span>
-            <span className="text-right">القائمة</span>
-            <span className="text-right">Slug</span>
-            <span className="text-center">العناصر</span>
-            <span className="text-center">الحالة</span>
-            <span className="text-center">الإجراءات</span>
+            </div>
+            <div className="min-w-0 text-right">
+              <AdminDataGridSortLabel {...sortProps("name")} className="justify-end">
+                القائمة
+              </AdminDataGridSortLabel>
+            </div>
+            <div className="text-center">
+              <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
+                Slug
+              </AdminDataGridSortLabel>
+            </div>
+            <div className="text-center">
+              <AdminDataGridSortLabel {...sortProps("item_count")} className="justify-center">
+                العناصر
+              </AdminDataGridSortLabel>
+            </div>
+            <div className="text-center">
+              <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
+                الحالة
+              </AdminDataGridSortLabel>
+            </div>
+            <div className="text-center">الإجراءات</div>
           </AdminDataGridHeader>
 
-          {sortedMenus.length ? (
-            sortedMenus.map((menu, index) => (
+          {table.rows.length ? (
+            table.rows.map((menu) => (
               <AdminDataGridRow key={menu.id} columns={columns} className="xl:items-center">
-                <span className="text-center font-en text-white/40">{index + 1}</span>
-
-                <span className="flex justify-center">
+                <div className="flex justify-center">
                   <input
                     form="bulk-menu-form"
                     type="checkbox"
@@ -233,54 +206,75 @@ export default function MenusTableClient({ menus, message }: MenusTableClientPro
                     className={ADMIN_DATA_GRID_RULES.checkbox}
                     aria-label={`تحديد ${menu.name}`}
                   />
-                </span>
+                </div>
 
                 <div className="min-w-0 text-right">
                   <Link
                     href={`/admin/pages-blocks/menus/${menu.id}`}
-                    className="font-semibold text-white transition hover:text-[#D8B87A]"
+                    className="block truncate font-semibold text-white transition hover:text-[#D8B87A]"
                   >
                     {menu.name}
                   </Link>
-                  <p className="mt-1 text-xs text-white/38">{locationLabel(menu.location)}</p>
+                  <p className="mt-1 truncate text-xs text-white/38">{locationLabel(menu.location)}</p>
                 </div>
 
-                <div className="min-w-0 font-mono text-xs text-white/42">{menu.slug}</div>
+                <div className="min-w-0 text-center">
+                  <span className="font-en block truncate text-xs text-white/42">{menu.slug}</span>
+                </div>
 
-                <div className="text-center text-white/60">{menu.item_count}</div>
+                <div className="text-center font-en text-sm tabular-nums text-white/60">{menu.item_count}</div>
 
                 <div className="flex justify-center">
                   <AdminStatusPill tone={menu.is_active ? "green" : "gold"}>
-                    {menu.is_active ? "ظاهرة" : "مخفية"}
+                    {menuStatusLabel(menu.is_active)}
                   </AdminStatusPill>
                 </div>
 
-                <AdminDataGridActions>
-                  <AdminDataGridActionButton action="edit" href={`/admin/pages-blocks/menus/${menu.id}`} />
+                <AdminDataGridActionsCell compact>
+                  <AdminDataGridActionButton
+                    action="edit"
+                    href={`/admin/pages-blocks/menus/${menu.id}`}
+                    size="compact"
+                    title="فتح Builder الشجرة"
+                  />
 
-                  <form action={toggleMenuVisibility} className="inline-flex shrink-0">
+                  <AdminDataGridActionButton
+                    href="/"
+                    target="_blank"
+                    tone="dark"
+                    title="معاينة الموقع العام"
+                    size="compact"
+                  >
+                    <PublicPreviewIcon />
+                  </AdminDataGridActionButton>
+
+                  <form action={toggleMenuVisibility} className="contents">
                     <input type="hidden" name="id" value={menu.id} />
                     <input type="hidden" name="is_active" value={menu.is_active ? "false" : "true"} />
                     <AdminDataGridActionButton
                       type="submit"
                       action="visibility"
+                      size="compact"
                       hidden={menu.is_active}
                       title={menu.is_active ? "إخفاء" : "إظهار"}
                     />
                   </form>
 
-                  <form action={duplicateMenu} className="inline-flex shrink-0">
+                  <form action={duplicateMenu} className="contents">
                     <input type="hidden" name="id" value={menu.id} />
-                    <AdminDataGridActionButton type="submit" action="duplicate" />
+                    <AdminDataGridActionButton
+                      type="submit"
+                      action="duplicate"
+                      size="compact"
+                      title="تكرار القائمة بالكامل"
+                    />
                   </form>
 
-                  <form action={deleteMenu} className="inline-flex shrink-0">
+                  <form action={deleteMenu} className="contents">
                     <input type="hidden" name="id" value={menu.id} />
-                    <AdminDataGridActionButton type="submit" action="delete" />
+                    <AdminDataGridActionButton type="submit" action="delete" size="compact" title="حذف نهائي" />
                   </form>
-
-                  <MoreMenu menu={menu} />
-                </AdminDataGridActions>
+                </AdminDataGridActionsCell>
               </AdminDataGridRow>
             ))
           ) : (

@@ -98,6 +98,7 @@ export type ProjectMediaRow = {
 export type ProjectListRow = {
   id: number;
   code: string;
+  slug: string;
   arabic_name: string;
   location_label: string;
   map_area: string;

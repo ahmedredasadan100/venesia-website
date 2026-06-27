@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
@@ -13,6 +15,7 @@ import type { ProjectPublicationStatus, ProjectRow, ProjectStatus } from "../../
 import { parseJsonArray } from "../../../lib/projects/types";
 import { parseFloorPlanSpecsFromForm } from "../../../lib/projects/floor-plan-specs";
 import { parseFormBoolean } from "../../../lib/page-blocks/admin-utils";
+import { normalizeSlugInput, slugifyFromTitle, validateSlugFormat } from "../../../lib/admin/slug";
 
 const VALID_PUBLICATION_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
 
@@ -104,6 +107,12 @@ function resolveSlug(formData: FormData, code: string, currentSlug: string) {
   if (slug) return slug;
   if (currentSlug) return currentSlug;
   return code.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function createProjectSlug(value: string) {
+  const normalized = normalizeSlugInput(value);
+  if (normalized) return normalized;
+  return slugifyFromTitle(value);
 }
 
 function parseQuickFacts(formData: FormData, current: unknown) {
@@ -253,6 +262,7 @@ async function replaceChildren(projectId: number, formData: FormData) {
 }
 
 export async function seedProjectsAction() {
+  await requireAdminSession();
   if (!isProjectsStaticReimportAllowed()) {
     redirect(`/admin/projects?error=${encodeURIComponent(projectsStaticReimportBlockedMessage())}`);
   }
@@ -278,10 +288,126 @@ export async function seedProjectsAction() {
   );
 }
 
+export async function checkProjectFieldsAvailable(code: string, slug: string) {
+  await requireAdminSession();
+  const normalizedCode = code.trim();
+  const normalizedSlug = createProjectSlug(slug || code);
+
+  if (!normalizedCode) {
+    return { available: false as const, message: "كود المشروع مطلوب." };
+  }
+
+  const formatError = validateSlugFormat(normalizedSlug);
+  if (formatError) {
+    return { available: false as const, message: formatError };
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: codeConflict } = await supabase.from("projects").select("id").eq("code", normalizedCode).maybeSingle();
+  if (codeConflict) {
+    return { available: false as const, message: "كود المشروع مستخدم بالفعل." };
+  }
+
+  const { data: slugConflict } = await supabase.from("projects").select("id").eq("slug", normalizedSlug).maybeSingle();
+  if (slugConflict) {
+    return { available: false as const, message: "الـ slug مستخدم بالفعل." };
+  }
+
+  return { available: true as const };
+}
+
+export async function createProject(formData: FormData) {
+  await requireAdminSession();
+  const typeRaw = getString(formData, "type");
+  const type = typeRaw as ProjectCategory;
+  if (type !== "residential" && type !== "commercial") {
+    redirectWithError("residential", "نوع المشروع غير صالح.");
+  }
+
+  const arabicName = getString(formData, "arabic_name");
+  const code = getString(formData, "code");
+  const slug = createProjectSlug(getString(formData, "slug") || code || arabicName);
+  const locationLabel = getString(formData, "location_label");
+
+  if (!arabicName) redirectWithError(type, "اسم المشروع بالعربية مطلوب.");
+  if (!code) redirectWithError(type, "كود المشروع مطلوب.");
+
+  const formatError = validateSlugFormat(slug);
+  if (formatError) redirectWithError(type, formatError);
+
+  const supabase = getSupabaseAdmin();
+  const { data: codeConflict } = await supabase.from("projects").select("id").eq("code", code).maybeSingle();
+  if (codeConflict) redirectWithError(type, "كود المشروع مستخدم بالفعل.");
+
+  const { data: slugConflict } = await supabase.from("projects").select("id").eq("slug", slug).maybeSingle();
+  if (slugConflict) redirectWithError(type, "الـ slug مستخدم بالفعل.");
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("projects")
+    .insert({
+      type,
+      code,
+      slug,
+      arabic_name: arabicName,
+      english_name: getString(formData, "english_name"),
+      category_label: type === "residential" ? "سكني" : "تجاري",
+      status: "under-construction",
+      status_label: "تحت الإنشاء",
+      image: "",
+      hero_image: "",
+      location_label: locationLabel,
+      map_area: "",
+      short_description: "",
+      description: [],
+      core_specs: null,
+      delivery_label: "",
+      area_label: "",
+      progress: 0,
+      units_label: "",
+      featured: false,
+      show_on_homepage: false,
+      homepage_order: 0,
+      floors_label: null,
+      brochure_url: null,
+      publication_status: "draft",
+      overview_title: null,
+      overview_body: null,
+      overview_bullets: [],
+      overview_video_image: null,
+      district_title: null,
+      district_subtitle: null,
+      district_body: null,
+      district_bullets: [],
+      district_image: null,
+      delivery_specs_title: null,
+      delivery_specs_subtitle: null,
+      contact_cta: null,
+      quick_facts: [],
+      location_data: null,
+      cta: null,
+      detail_tabs: [],
+      seo_title: arabicName,
+      seo_description: null,
+      seo_keywords: [code, arabicName].filter(Boolean),
+      focus_keyword: code,
+      og_image: null,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single();
+
+  if (error) redirectWithError(type, error.message);
+  revalidateProjectPaths(type, data.id, slug);
+  redirectEditWithNotice(data.id, "created");
+}
+
 export async function getProjectsTableRows(type: ProjectCategory) {
+  await requireAdminSession();
   const { data, error } = await getSupabaseAdmin()
     .from("projects")
-    .select("id, code, arabic_name, location_label, map_area, featured, publication_status, updated_at")
+    .select("id, code, slug, arabic_name, location_label, map_area, featured, publication_status, updated_at")
     .eq("type", type)
     .order("homepage_order", { ascending: true })
     .order("id", { ascending: true });
@@ -291,6 +417,7 @@ export async function getProjectsTableRows(type: ProjectCategory) {
 }
 
 export async function toggleProjectPublicationAjax(id: number, currentStatus: string | null) {
+  await requireAdminSession();
   const nextStatus: PublicationStatus = currentStatus === "published" ? "unpublished" : "published";
   const { data, error } = await getSupabaseAdmin()
     .from("projects")
@@ -310,6 +437,7 @@ export async function bulkProjectsActionAjax(
   ids: number[],
   type: ProjectCategory,
 ) {
+  await requireAdminSession();
   if (!ids.length) return { ok: false as const, message: "لم يتم تحديد أي مشروع." };
 
   const now = new Date().toISOString();
@@ -339,6 +467,7 @@ export async function bulkProjectsActionAjax(
 }
 
 export async function updateProject(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!validateId(id)) redirectEditWithError(Number(id) || 0, "معرف المشروع غير صالح.");
 
@@ -434,6 +563,7 @@ export async function updateProject(formData: FormData) {
 }
 
 export async function deleteProjectAjax(id: number) {
+  await requireAdminSession();
   const { data: existing, error: lookupError } = await getSupabaseAdmin()
     .from("projects")
     .select("type, slug")
@@ -449,4 +579,108 @@ export async function deleteProjectAjax(id: number) {
 
   revalidateProjectPaths(existing.type, undefined, existing.slug);
   return { ok: true as const, message: "تم حذف المشروع." };
+}
+
+async function ensureUniqueProjectField(field: "code" | "slug", base: string) {
+  const supabase = getSupabaseAdmin();
+  let candidate = `${base}-copy`;
+  let counter = 2;
+
+  while (true) {
+    const { data } = await supabase.from("projects").select("id").eq(field, candidate).maybeSingle();
+    if (!data) return candidate;
+    candidate = `${base}-copy-${counter}`;
+    counter += 1;
+  }
+}
+
+export async function duplicateProjectAjax(id: number) {
+  await requireAdminSession();
+  if (!Number.isFinite(id) || id <= 0) {
+    return { ok: false as const, message: "معرف المشروع غير صالح." };
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: source, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle<Record<string, unknown>>();
+
+  if (error) return { ok: false as const, message: error.message };
+  if (!source) return { ok: false as const, message: "المشروع غير موجود." };
+
+  const type = source.type as ProjectCategory;
+  if (type !== "residential") {
+    return { ok: false as const, message: "النسخ متاح للمشاريع السكنية فقط." };
+  }
+
+  const sourceCode = String(source.code ?? "").trim();
+  const sourceSlug = String(source.slug ?? "").trim();
+  if (!sourceCode || !sourceSlug) {
+    return { ok: false as const, message: "لا يمكن نسخ مشروع بدون code أو slug." };
+  }
+
+  const now = new Date().toISOString();
+  const nextCode = await ensureUniqueProjectField("code", sourceCode);
+  const nextSlug = await ensureUniqueProjectField("slug", sourceSlug);
+
+  const {
+    id: _sourceId,
+    created_at: _createdAt,
+    updated_at: _updatedAt,
+    ...projectFields
+  } = source;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("projects")
+    .insert({
+      ...projectFields,
+      code: nextCode,
+      slug: nextSlug,
+      arabic_name: `${String(source.arabic_name ?? sourceCode)} - نسخة`,
+      publication_status: "draft",
+      featured: false,
+      show_on_homepage: false,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .maybeSingle<{ id: number }>();
+
+  if (insertError || !inserted) {
+    return { ok: false as const, message: insertError?.message ?? "تعذر نسخ المشروع." };
+  }
+
+  const newProjectId = inserted.id;
+
+  const [{ data: floorPlans }, { data: deliveryItems }, { data: media }] = await Promise.all([
+    supabase.from("project_floor_plans").select("area, label, plan_image, specs, featured, sort_order").eq("project_id", id),
+    supabase.from("project_delivery_spec_items").select("body, sort_order").eq("project_id", id),
+    supabase.from("project_media").select("collection, image, label, sort_order").eq("project_id", id),
+  ]);
+
+  if (floorPlans?.length) {
+    const { error: floorPlansError } = await supabase.from("project_floor_plans").insert(
+      floorPlans.map((row) => ({ ...row, project_id: newProjectId })),
+    );
+    if (floorPlansError) return { ok: false as const, message: floorPlansError.message };
+  }
+
+  if (deliveryItems?.length) {
+    const { error: deliveryError } = await supabase.from("project_delivery_spec_items").insert(
+      deliveryItems.map((row) => ({ ...row, project_id: newProjectId })),
+    );
+    if (deliveryError) return { ok: false as const, message: deliveryError.message };
+  }
+
+  if (media?.length) {
+    const { error: mediaError } = await supabase.from("project_media").insert(
+      media.map((row) => ({ ...row, project_id: newProjectId })),
+    );
+    if (mediaError) return { ok: false as const, message: mediaError.message };
+  }
+
+  revalidateProjectPaths(type, newProjectId, nextSlug);
+  return { ok: true as const, message: "تم نسخ المشروع كمسودة." };
 }

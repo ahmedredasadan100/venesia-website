@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
+
 import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
@@ -451,6 +453,7 @@ function buildTopicWritePayload(
 }
 
 export async function createTopic(formData: FormData) {
+  await requireAdminSession();
   const intent = getString(formData, "intent");
   const status: TopicStatus = intent === "publish" ? "published" : "draft";
   const payload = getPayload(formData);
@@ -582,16 +585,19 @@ async function updateTopicWithStatus(
 }
 
 export async function saveTopic(formData: FormData) {
+  await requireAdminSession();
   const status = getNormalizedStatus(getString(formData, "status"), "draft");
   await updateTopicWithStatus(formData, status, "saved", { validationMode: "save" });
 }
 
 export async function saveTopicAndClose(formData: FormData) {
+  await requireAdminSession();
   const status = getNormalizedStatus(getString(formData, "status"), "draft");
   await updateTopicWithStatus(formData, status, "saved", { redirectToList: true, validationMode: "save" });
 }
 
 export async function saveDraftTopic(formData: FormData) {
+  await requireAdminSession();
   await updateTopicWithStatus(formData, "draft", "draft", { validationMode: "draft" });
 }
 
@@ -620,6 +626,7 @@ async function setTopicStatusFromList(formData: FormData, nextStatus: TopicStatu
 }
 
 export async function publishTopic(formData: FormData) {
+  await requireAdminSession();
   if (getString(formData, "title")) {
     await updateTopicWithStatus(formData, "published", "published", { validationMode: "publish" });
   }
@@ -628,6 +635,7 @@ export async function publishTopic(formData: FormData) {
 }
 
 export async function unpublishTopic(formData: FormData) {
+  await requireAdminSession();
   if (getString(formData, "title")) {
     await updateTopicWithStatus(formData, "unpublished", "unpublished", { validationMode: "save" });
   }
@@ -636,6 +644,7 @@ export async function unpublishTopic(formData: FormData) {
 }
 
 export async function softDeleteTopic(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirect("/admin/topics?notice=error");
 
@@ -673,6 +682,7 @@ async function getTopicForDuplicate(id: string) {
 }
 
 export async function duplicateTopic(formData: FormData) {
+  await requireAdminSession();
   const id = getString(formData, "id");
   const redirectTo = getRedirectTo(formData);
   if (!id || !validateId(id)) redirect(appendNotice(redirectTo, "error"));
@@ -744,6 +754,7 @@ export async function duplicateTopic(formData: FormData) {
 }
 
 export async function bulkUpdateTopics(formData: FormData) {
+  await requireAdminSession();
   const ids = formData
     .getAll("topic_ids")
     .map(String)
