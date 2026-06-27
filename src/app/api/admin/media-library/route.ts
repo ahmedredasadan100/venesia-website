@@ -39,8 +39,11 @@ export async function POST(request: Request) {
     }
 
     const kind = String(formData.get("kind") || "image");
+    const replacePath = String(formData.get("replacePath") || "").trim() || null;
     const saved =
-      kind === "pdf" ? await savePublicDocumentUpload(folder, file) : await savePublicMediaUpload(folder, file);
+      kind === "pdf"
+        ? await savePublicDocumentUpload(folder, file, { replacePath })
+        : await savePublicMediaUpload(folder, file, { replacePath });
     return NextResponse.json(saved);
   } catch (error) {
     return NextResponse.json(

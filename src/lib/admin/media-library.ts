@@ -3,22 +3,29 @@ import "server-only";
 import fs from "fs";
 import path from "path";
 
+import {
+  getMediaParentFolder,
+  normalizeMediaFolder,
+  resolvePublicFolder,
+  type PublicMediaFolderListing,
+} from "./media-library-paths";
+import {
+  listCmsFolderFromStorage,
+  uploadCmsDocumentToStorage,
+  uploadCmsImageToStorage,
+  useSupabaseCmsStorage,
+} from "../storage/upload-cms-asset";
+
 /**
- * Media uploads write directly to /public (images, files).
+ * Media uploads: filesystem in local dev, Supabase Storage in production.
  * Migration plan: docs/security-media-upload-migration.md
  */
 
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg"]);
 const PDF_EXTENSIONS = new Set([".pdf"]);
-const MEDIA_ROOT_FOLDERS = new Set(["images", "files"]);
 
-export type PublicMediaFolderListing = {
-  folder: string;
-  parentFolder: string | null;
-  subfolders: string[];
-  images: string[];
-  documents: string[];
-};
+export type { PublicMediaFolderListing } from "./media-library-paths";
+export { normalizeMediaFolder } from "./media-library-paths";
 
 function isImageFile(filename: string) {
   return IMAGE_EXTENSIONS.has(path.extname(filename).toLowerCase());
@@ -28,31 +35,11 @@ function isPdfFile(filename: string) {
   return PDF_EXTENSIONS.has(path.extname(filename).toLowerCase());
 }
 
-function getMediaParentFolder(normalized: string) {
-  return MEDIA_ROOT_FOLDERS.has(normalized) ? null : path.posix.dirname(normalized);
-}
-
-export function normalizeMediaFolder(folder: string) {
-  const cleaned = folder.replace(/^\/+/, "").replace(/\\/g, "/").trim();
-  if (!cleaned || cleaned.includes("..")) {
-    throw new Error("Invalid folder path.");
-  }
-  return cleaned;
-}
-
-function resolvePublicFolder(folder: string) {
-  const normalized = normalizeMediaFolder(folder);
-  const publicRoot = path.join(process.cwd(), "public");
-  const target = path.join(publicRoot, normalized);
-
-  if (!target.startsWith(publicRoot)) {
-    throw new Error("Invalid folder path.");
-  }
-
-  return { normalized, publicRoot, target };
-}
-
 export async function listPublicMediaFolder(folder = "images"): Promise<PublicMediaFolderListing> {
+  if (useSupabaseCmsStorage()) {
+    return listCmsFolderFromStorage(folder);
+  }
+
   const { normalized, target } = resolvePublicFolder(folder);
 
   if (!fs.existsSync(target)) {
@@ -146,7 +133,15 @@ function sanitizeUploadFilename(filename: string, allowedExtensions: Set<string>
   return `${stem || fallbackStem}-${Date.now()}${ext}`;
 }
 
-export async function savePublicMediaUpload(folder: string, file: File) {
+export async function savePublicMediaUpload(
+  folder: string,
+  file: File,
+  options?: { replacePath?: string | null },
+) {
+  if (useSupabaseCmsStorage()) {
+    return uploadCmsImageToStorage(folder, file, options);
+  }
+
   const { normalized, target } = resolvePublicFolder(folder);
 
   if (!fs.existsSync(target)) {
@@ -165,7 +160,15 @@ export async function savePublicMediaUpload(folder: string, file: File) {
   };
 }
 
-export async function savePublicDocumentUpload(folder: string, file: File) {
+export async function savePublicDocumentUpload(
+  folder: string,
+  file: File,
+  options?: { replacePath?: string | null },
+) {
+  if (useSupabaseCmsStorage()) {
+    return uploadCmsDocumentToStorage(folder, file, options);
+  }
+
   const { normalized, target } = resolvePublicFolder(folder);
 
   if (!fs.existsSync(target)) {

@@ -11,6 +11,7 @@ type AdminMediaPickerModalProps = {
   onSelect: (path: string) => void;
   initialFolder?: string;
   mode?: "image" | "pdf";
+  replacePath?: string | null;
 };
 
 export default function AdminMediaPickerModal({
@@ -19,6 +20,7 @@ export default function AdminMediaPickerModal({
   onSelect,
   initialFolder,
   mode = "image",
+  replacePath = null,
 }: AdminMediaPickerModalProps) {
   const isPdfMode = mode === "pdf";
   const rootFolder = isPdfMode ? "files" : "images";
@@ -98,6 +100,9 @@ export default function AdminMediaPickerModal({
       formData.set("folder", folder);
       if (isPdfMode) {
         formData.set("kind", "pdf");
+      }
+      if (replacePath) {
+        formData.set("replacePath", replacePath);
       }
 
       const response = await fetch("/api/admin/media-library", {
