@@ -25,8 +25,7 @@ export default function InstallPrompt() {
               <p className="mt-1 text-xs leading-6 text-white/60">
                 {isIOS
                   ? "للوصول السريع: اضغط زر المشاركة ثم اختر «إضافة إلى الشاشة الرئيسية»."
-                  : "ثبّت الموقع كتطبيق للوصول السريع إلى Venesia Developments."}
-              </p>
+: "ثبّت الموقع   للوصول السريع إلى Venesia Developments."}              </p>
 
               {isIOS ? (
                 <p className="mt-2 text-[11px] leading-6 text-[#D8B87A]/75">

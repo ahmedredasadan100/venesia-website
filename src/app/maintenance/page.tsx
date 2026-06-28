@@ -3,7 +3,10 @@ import { Suspense } from "react";
 import { NO_INDEX_ROBOTS } from "../../config/seo/seo-rules";
 import { buildMetadata } from "../../lib/seo/build-metadata";
 
+import MaintenanceCountdown from "./MaintenanceCountdown";
+import MaintenanceInstallTeaser from "./MaintenanceInstallTeaser";
 import MaintenanceLoginForm from "./MaintenanceLoginForm";
+import { parseMaintenanceCountdownEnd } from "./parse-countdown-end";
 
 export const metadata = buildMetadata({
   path: "/maintenance",
@@ -13,6 +16,8 @@ export const metadata = buildMetadata({
 });
 
 export default function MaintenancePage() {
+  const countdownEndIso = parseMaintenanceCountdownEnd();
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#05070B] px-6 py-16 text-white" dir="rtl">
       <div className="w-full max-w-lg rounded-[34px] border border-white/10 bg-[#080B10]/90 p-8 shadow-[0_30px_110px_rgba(0,0,0,0.35)]">
@@ -23,10 +28,20 @@ export default function MaintenancePage() {
           الموقع أثناء فترة الصيانة.
         </p>
 
+        {countdownEndIso ? (
+          <div className="mt-8">
+            <MaintenanceCountdown endIso={countdownEndIso} />
+          </div>
+        ) : null}
+
         <div className="mt-8">
           <Suspense fallback={<p className="text-sm text-white/45">جاري التحميل…</p>}>
             <MaintenanceLoginForm />
           </Suspense>
+        </div>
+
+        <div className="mt-8">
+          <MaintenanceInstallTeaser />
         </div>
       </div>
     </div>
