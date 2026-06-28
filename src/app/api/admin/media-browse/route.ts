@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireAdminApi } from "../../../../lib/admin/auth/require-admin-api";
-import { listPublicImagePaths } from "../../../../lib/admin/media-library";
+import { listPublicImagePaths } from "../../../../lib/admin/list-public-image-paths";
 
 export async function GET(request: Request) {
   const authError = await requireAdminApi();

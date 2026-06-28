@@ -40,3 +40,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local QA / Playwright artifacts (never deploy)
+qa-mobile-audit/
+**/issue-shots/
+**/output-report/
+**/output-final/
+**/output-focused/
+**/*-audit/
+lint-errors.txt
+lint-report.txt
+dead-code-scan*.json

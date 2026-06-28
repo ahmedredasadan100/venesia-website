@@ -11,6 +11,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  outputFileTracingExcludes: {
+    "/api/admin/media-browse": ["./qa-mobile-audit/**/*", "./public/**/*"],
+    "/api/admin/media-library": ["./qa-mobile-audit/**/*", "./public/**/*"],
+  },
   images: {
     remotePatterns: [
       {

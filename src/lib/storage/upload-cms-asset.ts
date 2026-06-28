@@ -59,6 +59,46 @@ function publicUrlForObject(bucket: string, objectPath: string) {
   return data.publicUrl;
 }
 
+export async function listPublicImagePathsFromStorage(folder = "images", limit = 240) {
+  const normalized = normalizeMediaFolder(folder);
+  const bucket = bucketForFolder(normalized);
+  const supabase = getSupabaseAdmin();
+  const results: string[] = [];
+
+  async function walk(prefix: string) {
+    if (results.length >= limit) return;
+
+    const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+      limit: 1000,
+      sortBy: { column: "name", order: "asc" },
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    for (const entry of data ?? []) {
+      if (results.length >= limit) break;
+      if (!entry.name) continue;
+
+      const entryPath = `${prefix}/${entry.name}`;
+      const isFolder = entry.id == null && !entry.metadata;
+
+      if (isFolder) {
+        await walk(entryPath);
+        continue;
+      }
+
+      if (isImageFile(entry.name)) {
+        results.push(publicUrlForObject(bucket, entryPath));
+      }
+    }
+  }
+
+  await walk(normalized);
+  return results.slice(0, limit).sort((a, b) => a.localeCompare(b));
+}
+
 export function storageObjectPathFromPublicValue(value: string, bucket: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
