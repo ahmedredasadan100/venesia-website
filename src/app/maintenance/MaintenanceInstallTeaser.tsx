@@ -1,3 +1,20 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { canRegisterServiceWorker } from "../../lib/pwa/device";
+import { registerServiceWorker } from "../../lib/pwa/register-service-worker";
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
+type InstallHint = "android-fallback" | "iphone" | null;
+
+const ANDROID_FALLBACK_MESSAGE = "من قائمة Chrome اختر Install app أو Add to Home screen.";
+const IPHONE_INSTRUCTIONS = "اضغط Share ثم اختر Add to Home Screen.";
+
 function AndroidIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 text-[#D8B87A]">
@@ -21,26 +38,84 @@ function IPhoneIcon() {
 }
 
 export default function MaintenanceInstallTeaser() {
+  const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
+  const [hint, setHint] = useState<InstallHint>(null);
+
+  useEffect(() => {
+    if (canRegisterServiceWorker()) {
+      void registerServiceWorker();
+    }
+
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      deferredPromptRef.current = event as BeforeInstallPromptEvent;
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleAndroidClick = useCallback(async () => {
+    const deferredPrompt = deferredPromptRef.current;
+
+    if (deferredPrompt) {
+      await deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPromptRef.current = null;
+      setHint(null);
+      return;
+    }
+
+    setHint("android-fallback");
+  }, []);
+
+  const handleIPhoneClick = useCallback(() => {
+    setHint("iphone");
+  }, []);
+
   return (
     <div className="rounded-[28px] border border-white/8 bg-[#05070B]/55 px-5 py-5 backdrop-blur-sm">
       <p className="text-sm font-medium leading-7 text-white/80">تجربة فينيسيا الجديدة ستكون أقرب إليك.</p>
       <p className="mt-1 text-xs leading-6 text-white/45">ثبّت Venesia على شاشة موبايلك عند الإطلاق.</p>
 
       <div className="mt-5 flex items-center justify-center gap-8">
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#D8B87A]/20 bg-[#D8B87A]/8">
+        <button
+          type="button"
+          onClick={() => void handleAndroidClick()}
+          className="flex flex-col items-center gap-2 rounded-2xl transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/50"
+          aria-label="تثبيت Venesia على Android"
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#D8B87A]/20 bg-[#D8B87A]/8">
             <AndroidIcon />
-          </div>
+          </span>
           <span className="text-[11px] text-white/45">Android</span>
-        </div>
+        </button>
 
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#D8B87A]/20 bg-[#D8B87A]/8">
+        <button
+          type="button"
+          onClick={handleIPhoneClick}
+          className="flex flex-col items-center gap-2 rounded-2xl transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/50"
+          aria-label="تثبيت Venesia على iPhone"
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#D8B87A]/20 bg-[#D8B87A]/8">
             <IPhoneIcon />
-          </div>
+          </span>
           <span className="text-[11px] text-white/45">iPhone</span>
-        </div>
+        </button>
       </div>
+
+      {hint ? (
+        <p
+          className="mt-4 rounded-2xl border border-[#D8B87A]/15 bg-[#D8B87A]/5 px-4 py-3 text-center text-xs leading-6 text-[#D8B87A]/85"
+          role="status"
+          aria-live="polite"
+        >
+          {hint === "iphone" ? IPHONE_INSTRUCTIONS : ANDROID_FALLBACK_MESSAGE}
+        </p>
+      ) : null}
     </div>
   );
 }

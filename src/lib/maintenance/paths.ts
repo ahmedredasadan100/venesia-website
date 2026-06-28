@@ -10,6 +10,7 @@ export function isPwaAssetPath(pathname: string) {
   return (
     pathname === "/sw.js" ||
     pathname === "/manifest.webmanifest" ||
+    pathname === "/apple-touch-icon.png" ||
     pathname.startsWith("/icons/")
   );
 }
