@@ -1,0 +1,6828 @@
+{
+  "totalUrls": 120,
+  "totalChecks": 840,
+  "byType": {
+    "menu-offscreen": 230,
+    "console": 113,
+    "network": 113,
+    "maintenance": 604
+  },
+  "issues": [
+    {
+      "vp": 320,
+      "path": "/",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/about",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/contact",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/site-updates",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/videos",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/gallery",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/press",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/track-your-project",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/i87",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/i76",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/i76",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/projects/i76",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/projects/I76/floorplan-01.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/projects/b84",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/c35",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/j118",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/j191",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/f92",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/f222",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/d174",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/b137",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/b138",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/venesia-new-cairo-mall",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/projects/riyad-mall",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/site-updates/d174-plastering-update",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/gallery/d174-plastering-gallery",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/videos/d174-site-tour-video",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/d174-plastering-progress",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/site-updates/d174-electric-update",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/press/new-cairo-mall-press",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/d174-electrical-preparation",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/videos/new-cairo-mall-countdown",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/d174-external-wall",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/gallery/new-cairo-mall-final-touches",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/new-cairo-mall-opening",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/site-updates/f92-basement-roof",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/mall-glass-facade",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/gallery/f92-concrete-progress",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/videos/hekayet-beit-intro",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/mall-side-facade",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/press/venesia-media-series",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/ask-before-you-fall",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/site-updates/c35-foundation-insulation",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/videos/ask-before-you-fall-video",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/your-right-to-understand",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/gallery/c315-site-preparation",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/gallery/c35-site-preparation",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/news/hekayet-beit",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/press/construction-documentation-system",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/press/new-residential-expansion1",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/press/new-residential-expansion2",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/media-center/press/new-residential-expansion",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-club-street.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/how-did-new-cairo-start.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/future-of-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/north-house-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/north-house-new-cairo",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/north-house-new-cairo",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/north-house-new-cairo.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/new-cairo-map-guide",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/first-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/future-of-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-areas-in-new-cairo.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-first-district.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-new-narges.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-al-rehab.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-first-settlement.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-fifth-settlement.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/new-cairo-advantages",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/what-is-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/where-is-new-cairo-located",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/why-new-cairo-is-top-residential-destination",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/new-cairo-disadvantages.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/new-cairo-living-or-investment.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-new-cairo-areas-for-living.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-new-cairo-areas-for-investment.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/most-in-demand-areas-new-cairo.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/beit-el-watan-new-cairo-guide.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/what-is-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/where-is-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-map",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-map",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-map",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/beit-el-watan-map.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/why-beit-el-watan-strong-investment.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/beit-el-watan-advantages.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/beit-el-watan-disadvantages.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/is-beit-el-watan-good-for-living.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/is-beit-el-watan-good-for-investment.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/view-zone-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/second-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/fourth-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/clubs-street-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/third-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/fifth-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-north-house.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-view-zone.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-second-district.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-fourth-district.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-fifth-district.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-third-district.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-new-administrative-capital.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-location-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/how-to-compare-between-bait-al-watan-projects.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-district-in-bait-al-watan-for-living.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/north-house-vs-bait-al-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/how-to-choose-the-right-district-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-location-to-buy-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/will-bait-al-watan-prices-rise.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-time-to-buy-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/how-to-compare-projects-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-new-cairo.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-andalus.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-investors-south.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-lotus.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-south-academy.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-al-narges.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-madinaty.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-shorouk-city.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-taj-city.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-el-rehab.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-narges.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-mostakbal-city.jpg"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -84
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 320,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/about",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/contact",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/site-updates",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/videos",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/gallery",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/press",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/track-your-project",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/i87",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/i76",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/i76",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/projects/i76",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/projects/I76/floorplan-01.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/projects/b84",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/c35",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/j118",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/j191",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/f92",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/f222",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/d174",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/b137",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/b138",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/venesia-new-cairo-mall",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/projects/riyad-mall",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/site-updates/d174-plastering-update",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/gallery/d174-plastering-gallery",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/videos/d174-site-tour-video",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/d174-plastering-progress",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/site-updates/d174-electric-update",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/press/new-cairo-mall-press",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/d174-electrical-preparation",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/videos/new-cairo-mall-countdown",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/d174-external-wall",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/gallery/new-cairo-mall-final-touches",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/new-cairo-mall-opening",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/site-updates/f92-basement-roof",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/mall-glass-facade",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/gallery/f92-concrete-progress",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/videos/hekayet-beit-intro",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/mall-side-facade",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/press/venesia-media-series",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/ask-before-you-fall",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/site-updates/c35-foundation-insulation",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/videos/ask-before-you-fall-video",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/your-right-to-understand",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/gallery/c315-site-preparation",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/gallery/c35-site-preparation",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/news/hekayet-beit",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/press/construction-documentation-system",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/press/new-residential-expansion1",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/press/new-residential-expansion2",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/media-center/press/new-residential-expansion",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-club-street.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/how-did-new-cairo-start.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/future-of-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/north-house-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/north-house-new-cairo",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/north-house-new-cairo",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/north-house-new-cairo.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/new-cairo-map-guide",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/first-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/future-of-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-areas-in-new-cairo.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-first-district.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-new-narges.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-al-rehab.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-first-settlement.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-fifth-settlement.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/new-cairo-advantages",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/what-is-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/where-is-new-cairo-located",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/why-new-cairo-is-top-residential-destination",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/new-cairo-disadvantages.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/new-cairo-living-or-investment.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-new-cairo-areas-for-living.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-new-cairo-areas-for-investment.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/most-in-demand-areas-new-cairo.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/beit-el-watan-new-cairo-guide.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/what-is-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/where-is-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-map",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-map",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-map",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/beit-el-watan-map.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/why-beit-el-watan-strong-investment.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/beit-el-watan-advantages.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/beit-el-watan-disadvantages.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/is-beit-el-watan-good-for-living.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/is-beit-el-watan-good-for-investment.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/view-zone-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/second-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/fourth-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/clubs-street-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/third-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/fifth-district-beit-el-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-north-house.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-view-zone.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-second-district.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-fourth-district.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-fifth-district.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-third-district.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-new-administrative-capital.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-location-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/how-to-compare-between-bait-al-watan-projects.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-district-in-bait-al-watan-for-living.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/north-house-vs-bait-al-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/how-to-choose-the-right-district-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-location-to-buy-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/will-bait-al-watan-prices-rise.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/best-time-to-buy-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/how-to-compare-projects-in-bait-al-watan.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-new-cairo.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-andalus.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "menu-offscreen",
+      "sev": "critical",
+      "menuLeft": -44
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "console",
+      "sev": "high",
+      "msg": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "network",
+      "sev": "high",
+      "msg": "404 http://localhost:3000/images/topics/bait-al-watan-vs-investors-south.jpg"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 360,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/about",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/contact",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/site-updates",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/videos",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/track-your-project",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/i87",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/i76",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/b84",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/c35",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/j118",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/j191",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/f92",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/f222",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/d174",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/b137",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/b138",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/venesia-new-cairo-mall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/projects/riyad-mall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/site-updates/d174-plastering-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/gallery/d174-plastering-gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/videos/d174-site-tour-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/d174-plastering-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/site-updates/d174-electric-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/press/new-cairo-mall-press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/d174-electrical-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/videos/new-cairo-mall-countdown",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/d174-external-wall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/gallery/new-cairo-mall-final-touches",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/new-cairo-mall-opening",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/site-updates/f92-basement-roof",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/mall-glass-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/gallery/f92-concrete-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/videos/hekayet-beit-intro",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/mall-side-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/press/venesia-media-series",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/ask-before-you-fall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/site-updates/c35-foundation-insulation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/videos/ask-before-you-fall-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/your-right-to-understand",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/gallery/c315-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/gallery/c35-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/news/hekayet-beit",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/press/construction-documentation-system",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/press/new-residential-expansion1",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/press/new-residential-expansion2",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/media-center/press/new-residential-expansion",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/north-house-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/new-cairo-map-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/future-of-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/new-cairo-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/what-is-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/where-is-new-cairo-located",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/why-new-cairo-is-top-residential-destination",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/beit-el-watan-map",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 375,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/about",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/contact",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/site-updates",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/videos",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/track-your-project",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/i87",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/i76",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/b84",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/c35",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/j118",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/j191",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/f92",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/f222",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/d174",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/b137",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/b138",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/venesia-new-cairo-mall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/projects/riyad-mall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/site-updates/d174-plastering-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/gallery/d174-plastering-gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/videos/d174-site-tour-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/d174-plastering-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/site-updates/d174-electric-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/press/new-cairo-mall-press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/d174-electrical-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/videos/new-cairo-mall-countdown",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/d174-external-wall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/gallery/new-cairo-mall-final-touches",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/new-cairo-mall-opening",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/site-updates/f92-basement-roof",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/mall-glass-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/gallery/f92-concrete-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/videos/hekayet-beit-intro",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/mall-side-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/press/venesia-media-series",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/ask-before-you-fall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/site-updates/c35-foundation-insulation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/videos/ask-before-you-fall-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/your-right-to-understand",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/gallery/c315-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/gallery/c35-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/news/hekayet-beit",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/press/construction-documentation-system",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/press/new-residential-expansion1",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/press/new-residential-expansion2",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/media-center/press/new-residential-expansion",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/north-house-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/new-cairo-map-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/future-of-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/new-cairo-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/what-is-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/where-is-new-cairo-located",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/why-new-cairo-is-top-residential-destination",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/beit-el-watan-map",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 390,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/about",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/contact",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/site-updates",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/videos",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/track-your-project",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/projects/i87",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/projects/i76",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/projects/b84",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/projects/c35",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/projects/j118",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/projects/j191",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/projects/f92",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/site-updates/d174-plastering-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/gallery/d174-plastering-gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/videos/d174-site-tour-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/d174-plastering-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/site-updates/d174-electric-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/press/new-cairo-mall-press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/d174-electrical-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/videos/new-cairo-mall-countdown",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/d174-external-wall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/gallery/new-cairo-mall-final-touches",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/new-cairo-mall-opening",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/site-updates/f92-basement-roof",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/mall-glass-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/gallery/f92-concrete-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/videos/hekayet-beit-intro",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/mall-side-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/press/venesia-media-series",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/ask-before-you-fall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/site-updates/c35-foundation-insulation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/videos/ask-before-you-fall-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/your-right-to-understand",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/gallery/c315-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/gallery/c35-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/news/hekayet-beit",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/press/construction-documentation-system",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/press/new-residential-expansion1",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/press/new-residential-expansion2",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/media-center/press/new-residential-expansion",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/north-house-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/new-cairo-map-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/future-of-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/new-cairo-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/what-is-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/where-is-new-cairo-located",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/why-new-cairo-is-top-residential-destination",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/beit-el-watan-map",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 412,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/about",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/contact",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/site-updates",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/videos",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/track-your-project",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/i87",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/i76",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/b84",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/c35",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/j118",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/j191",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/f92",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/f222",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/d174",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/b137",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/b138",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/venesia-new-cairo-mall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/projects/riyad-mall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/site-updates/d174-plastering-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/gallery/d174-plastering-gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/videos/d174-site-tour-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/d174-plastering-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/site-updates/d174-electric-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/press/new-cairo-mall-press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/d174-electrical-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/videos/new-cairo-mall-countdown",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/d174-external-wall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/gallery/new-cairo-mall-final-touches",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/new-cairo-mall-opening",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/site-updates/f92-basement-roof",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/mall-glass-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/gallery/f92-concrete-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/videos/hekayet-beit-intro",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/mall-side-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/press/venesia-media-series",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/ask-before-you-fall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/site-updates/c35-foundation-insulation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/videos/ask-before-you-fall-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/your-right-to-understand",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/gallery/c315-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/gallery/c35-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/news/hekayet-beit",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/press/construction-documentation-system",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/press/new-residential-expansion1",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/press/new-residential-expansion2",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/media-center/press/new-residential-expansion",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/north-house-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/new-cairo-map-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/future-of-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/new-cairo-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/what-is-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/where-is-new-cairo-located",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/why-new-cairo-is-top-residential-destination",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/beit-el-watan-map",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 430,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/about",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/contact",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/site-updates",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/videos",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/track-your-project",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/i87",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/i76",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/b84",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/c35",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/j118",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/j191",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/f92",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/f222",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/d174",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/b137",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/b138",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/venesia-new-cairo-mall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/projects/riyad-mall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/site-updates/d174-plastering-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/gallery/d174-plastering-gallery",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/videos/d174-site-tour-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/d174-plastering-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/site-updates/d174-electric-update",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/press/new-cairo-mall-press",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/d174-electrical-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/videos/new-cairo-mall-countdown",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/d174-external-wall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/gallery/new-cairo-mall-final-touches",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/new-cairo-mall-opening",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/site-updates/f92-basement-roof",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/mall-glass-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/gallery/f92-concrete-progress",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/videos/hekayet-beit-intro",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/mall-side-facade",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/press/venesia-media-series",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/ask-before-you-fall",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/site-updates/c35-foundation-insulation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/videos/ask-before-you-fall-video",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/your-right-to-understand",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/gallery/c315-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/gallery/c35-site-preparation",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/news/hekayet-beit",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/press/construction-documentation-system",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/press/new-residential-expansion1",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/press/new-residential-expansion2",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/media-center/press/new-residential-expansion",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-club-street",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/how-did-new-cairo-start",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/future-of-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/north-house-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/new-cairo-map-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/first-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/future-of-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/best-areas-in-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-first-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-new-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-al-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-first-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/new-cairo-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/what-is-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/where-is-new-cairo-located",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/why-new-cairo-is-top-residential-destination",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/new-cairo-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/new-cairo-living-or-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/best-new-cairo-areas-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/best-new-cairo-areas-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/most-in-demand-areas-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/beit-el-watan-new-cairo-guide",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/what-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/where-is-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/beit-el-watan-map",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/why-beit-el-watan-strong-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/beit-el-watan-advantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/beit-el-watan-disadvantages",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/is-beit-el-watan-good-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/is-beit-el-watan-good-for-investment",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/view-zone-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/second-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/fourth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/clubs-street-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/third-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/fifth-district-beit-el-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-north-house",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-view-zone",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-second-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-fourth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-fifth-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-third-district",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-new-administrative-capital",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/best-location-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/how-to-compare-between-bait-al-watan-projects",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/best-district-in-bait-al-watan-for-living",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/al-hay-al-thani-vs-al-hay-al-rabea-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/north-house-vs-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/how-to-choose-the-right-district-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/best-location-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/will-bait-al-watan-prices-rise",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/best-time-to-buy-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/how-to-compare-projects-in-bait-al-watan",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-new-cairo",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-andalus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-investors-south",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-lotus",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-south-academy",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-al-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-madinaty",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-shorouk-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-taj-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-el-rehab",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-narges",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/bait-al-watan-vs-mostakbal-city",
+      "type": "maintenance",
+      "sev": "critical"
+    },
+    {
+      "vp": 768,
+      "path": "/topics/is-buying-in-bait-al-watan-better-than-fifth-settlement",
+      "type": "maintenance",
+      "sev": "critical"
+    }
+  ]
+}

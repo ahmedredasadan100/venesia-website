@@ -136,7 +136,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
             {/* panel ambient — warm gold bloom biased toward the building side */}
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_72%_50%,rgba(192,143,62,0.06),transparent_68%)]"
+              className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_72%_50%,rgba(192,143,62,0.06),transparent_68%)] max-md:hidden"
             />
 
             {/*
@@ -148,37 +148,53 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
             <div className="grid lg:grid-cols-[1fr_288px]">
 
               {/* ══ MAIN AREA (DOM first → physical RIGHT in RTL) ══ */}
-              <div className="relative overflow-hidden border-b border-white/[0.05] lg:border-b-0 lg:border-l lg:border-l-white/[0.06]">
+              <div className="relative overflow-hidden border-b border-white/[0.05] max-md:flex max-md:flex-col lg:border-b-0 lg:border-l lg:border-l-white/[0.06]">
+
+                {/* mobile — image band on top, building anchored to the right */}
+                <div
+                  aria-hidden
+                  className="relative h-40 w-full shrink-0 overflow-hidden max-md:block md:hidden"
+                >
+                  <img
+                    src={resolved.image}
+                    alt=""
+                    className="h-full w-full object-cover object-[right_center] opacity-[1]"
+                    style={{ filter: "brightness(1.08) contrast(1.12)" }}
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(7,9,14,0.10)_0%,rgba(7,9,14,0.55)_58%,#07090E_100%)]" />
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_left,#07090E_0%,transparent_42%,transparent_100%)]" />
+                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_55%_85%_at_88%_45%,rgba(216,184,122,0.14),transparent_62%)]" />
+                </div>
 
                 {/* building image — anchored far right, strong & clearly visible */}
                 <img
                   src={resolved.image}
                   alt=""
                   aria-hidden="true"
-                  className="absolute inset-y-0 right-0 h-full w-[55%] object-cover object-[right_center] opacity-[1]"
+                  className="absolute inset-y-0 right-0 h-full w-[55%] object-cover object-[right_center] opacity-[1] max-md:hidden"
                   style={{ filter: "brightness(1.08) contrast(1.12)" }}
                 />
                 {/* cinematic dissolve — text area protected left; fade begins near center, clears right */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#07090E_0%,rgba(7,9,14,0.82)_22%,rgba(7,9,14,0.35)_42%,rgba(7,9,14,0.08)_65%,rgba(7,9,14,0.02)_100%)]"
+                  className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#07090E_0%,rgba(7,9,14,0.82)_22%,rgba(7,9,14,0.35)_42%,rgba(7,9,14,0.08)_65%,rgba(7,9,14,0.02)_100%)] max-md:hidden"
                 />
                 {/* warm gold atmosphere — facade highlights and window glow */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_52%_70%_at_84%_50%,rgba(216,184,122,0.14),transparent_62%)]"
+                  className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_52%_70%_at_84%_50%,rgba(216,184,122,0.14),transparent_62%)] max-md:hidden"
                 />
                 {/* top + bottom edge softening */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(7,9,14,0.30)_0%,transparent_20%,transparent_80%,rgba(7,9,14,0.40)_100%)]"
+                  className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(7,9,14,0.30)_0%,transparent_20%,transparent_80%,rgba(7,9,14,0.40)_100%)] max-md:hidden"
                 />
 
                 {/* content — headline, description, CTA */}
                 <div
                   data-reveal
                   data-delay="60"
-                  className="relative z-10 flex flex-col justify-center px-10 py-10 pr-[50%] lg:px-12 lg:py-12 lg:pr-[52%]"
+                  className="relative z-10 flex flex-col justify-center px-10 py-10 pr-[50%] max-md:px-6 max-md:py-6 max-md:pr-6 lg:px-12 lg:py-12 lg:pr-[52%]"
                 >
                   {/* micro label + gold rule */}
                   <div className="mb-4 flex items-center gap-3">
@@ -201,12 +217,12 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
                     {resolved.description}
                   </p>
 
-                  <div className="mt-6 flex flex-col items-center gap-2.5">
+                  <div className="mt-6 flex flex-col items-center gap-2.5 max-md:items-stretch">
                     <a
                       href={resolved.button.href}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-[#D8B87A] px-5 py-3 text-sm font-medium text-[#06101C] shadow-[0_8px_24px_rgba(216,184,122,0.20)] transition-[transform,box-shadow,background-color] duration-300 will-change-transform hover:-translate-y-0.5 hover:bg-[#c9a760] hover:shadow-[0_10px_30px_rgba(216,184,122,0.30)] active:scale-[0.97]"
+                      className="flex cursor-pointer items-center justify-center gap-2.5 rounded-xl bg-[#D8B87A] px-5 py-3 text-sm font-medium text-[#06101C] shadow-[0_8px_24px_rgba(216,184,122,0.20)] transition-[transform,box-shadow,background-color] duration-300 will-change-transform hover:-translate-y-0.5 hover:bg-[#c9a760] hover:shadow-[0_10px_30px_rgba(216,184,122,0.30)] active:scale-[0.97] max-md:w-full max-md:px-4"
                     >
                       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M3 18v-6a9 9 0 0 1 18 0v6" />

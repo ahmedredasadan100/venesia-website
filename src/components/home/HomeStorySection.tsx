@@ -59,13 +59,13 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
   const resolved = resolveHomeStoryContent(content);
 
   return (
-    <section className="relative overflow-hidden bg-[#05070B] py-24 text-white">
+    <section className="relative overflow-hidden bg-[#05070B] py-24 text-white max-md:py-10 md:max-lg:py-16">
       <div className="mx-auto max-w-7xl px-6">
-        <div className="grid items-center gap-14 lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="grid items-center gap-14 max-md:gap-10 lg:grid-cols-[0.95fr_1.05fr]">
           {/* Images */}
-          <div className="relative min-h-[500px]">
+          <div className="relative min-h-[500px] max-md:min-h-[280px] md:max-lg:mx-auto md:max-lg:min-h-[360px] md:max-lg:w-full md:max-lg:max-w-md">
             {/* Main Image */}
-            <div className="group absolute right-0 top-0 h-[380px] w-[78%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40">
+            <div className="group absolute right-0 top-0 h-[380px] w-[78%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40 max-md:h-[220px] max-md:w-[70%] md:max-lg:h-[265px] md:max-lg:w-[74%]">
               <img
                 src={resolved.images.main}
                 alt={resolved.images.mainAlt}
@@ -84,7 +84,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
             </div>
 
             {/* Floating Image */}
-            <div className="group absolute bottom-0 left-0 h-[320px] w-[65%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50">
+            <div className="group absolute bottom-0 left-0 h-[320px] w-[65%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50 max-md:h-[185px] max-md:w-[58%] md:max-lg:h-[220px] md:max-lg:w-[60%]">
               <img
                 src={resolved.images.secondary}
                 alt={resolved.images.secondaryAlt}

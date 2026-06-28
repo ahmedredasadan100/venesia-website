@@ -207,15 +207,6 @@ export default function SiteNavbar() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <a
-              href="https://wa.me/201033766876"
-              target="_blank"
-              rel="noreferrer"
-              className="shrink-0 rounded-full bg-[#D8B87A] px-5 py-2 text-sm font-medium text-[#06101C] transition-[background-color] duration-300 ease-out hover:bg-[#cca85a] active:bg-[#c09540] sm:px-6 sm:py-2.5"
-            >
-              واتساب ↗
-            </a>
-
             <button
               onClick={() => setMobileOpen((v) => !v)}
               aria-label={mobileOpen ? "إغلاق القائمة" : "فتح القائمة"}
@@ -356,17 +347,6 @@ export default function SiteNavbar() {
             })}
           </ul>
         </nav>
-
-        <div className="border-t border-[#D8B87A]/10 px-4 py-5">
-          <a
-            href="https://wa.me/201033766876"
-            target="_blank"
-            rel="noreferrer"
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-[#D8B87A] py-3 text-sm font-medium text-[#06101C] transition-colors hover:bg-[#cca85a]"
-          >
-            تواصل عبر واتساب ↗
-          </a>
-        </div>
       </aside>
     </>
   );

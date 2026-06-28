@@ -3,6 +3,7 @@ import { getSeoRoute } from "../../config/seo/seo-data";
 import { SEO_DEFAULTS, DEFAULT_ROBOTS } from "../../config/seo/seo-rules";
 import { SEO_SITE } from "../../config/seo/seo-site";
 import type { BuildMetadataInput } from "../../config/seo/seo-types";
+import { PWA_ICON_PATHS } from "../../config/pwa";
 import { buildCanonical } from "./build-canonical";
 import { cleanText, trimToSeoLength } from "./seo-utils";
 import { buildOpenGraph } from "./build-open-graph";
@@ -61,8 +62,8 @@ export function buildMetadata(input: BuildMetadataInput): Metadata {
       creator: SEO_SITE.twitterHandle || undefined,
     },
     icons: {
-      icon: "/favicon.ico",
-      apple: "/apple-touch-icon.png",
+      icon: PWA_ICON_PATHS.favicon,
+      apple: PWA_ICON_PATHS.appleTouch,
     },
   };
 }

@@ -96,7 +96,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
         <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-6 pt-28 pb-20 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="min-w-0 text-right">
             {config.eyebrow ? (
-              <div className="mb-5 inline-flex rounded-full border border-white/10 bg-[#0B1220]/32 px-4 py-3 text-sm tracking-wide text-[#D8B87A] backdrop-blur-md">
+              <div className="mb-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
                 {config.eyebrow}
               </div>
             ) : null}

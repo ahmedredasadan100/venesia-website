@@ -17,6 +17,7 @@ import { buildAiVisibilityJson } from "../lib/seo/build-ai-visibility";
 import { buildFaqSchema } from "../lib/seo/build-faq-schema";
 import { VENESIA_FAQS } from "../config/seo/faq-schema";
 import { SEO_SITE } from "../config/seo/seo-site";
+import { PWA_CONFIG } from "../config/pwa";
 import "./globals.css";
 
 const ibmArabic = IBM_Plex_Sans_Arabic({
@@ -30,9 +31,14 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-export const metadata: Metadata = buildMetadata({
-  path: "/",
-});
+export const metadata: Metadata = {
+  ...buildMetadata({ path: "/" }),
+  appleWebApp: {
+    capable: true,
+    title: PWA_CONFIG.shortName,
+    statusBarStyle: "black-translucent",
+  },
+};
 
 export const viewport: Viewport = {
   themeColor: SEO_SITE.themeColor,

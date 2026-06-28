@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import SiteNavbar from "./SiteNavbar";
 import SiteFooter from "./SiteFooter";
 import BackToTopButton from "./BackToTopButton";
+import PwaShell from "./pwa/PwaShell";
 
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,6 +19,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
       {!isStandalone ? <SiteFooter immediateReveal /> : null}
       {!isStandalone ? <BackToTopButton /> : null}
+      {!isStandalone ? <PwaShell /> : null}
 
       <SpeedInsights />
     </>
