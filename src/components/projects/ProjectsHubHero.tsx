@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { PublicProject } from "../../lib/projects/public-types";
 import PlainTextContent from "../content/PlainTextContent";
+
+const SWIPE_THRESHOLD_PX = 48;
 
 type ProjectsHubHeroProps = {
   projects: PublicProject[];
@@ -36,6 +38,72 @@ export default function ProjectsHubHero({
   const [activeSlide, setActiveSlide] = useState(0);
   const boundedSlide = heroSlides.length ? activeSlide % heroSlides.length : 0;
   const activeProject = heroSlides[boundedSlide];
+  const sectionRef = useRef<HTMLElement>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const goToNext = useCallback(() => {
+    if (heroSlides.length <= 1) return;
+    setActiveSlide((prev) => (prev + 1) % heroSlides.length);
+  }, [heroSlides.length]);
+
+  const goToPrev = useCallback(() => {
+    if (heroSlides.length <= 1) return;
+    setActiveSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length);
+  }, [heroSlides.length]);
+
+  const handleTouchStart = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      if (heroSlides.length <= 1) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    },
+    [heroSlides.length],
+  );
+
+  const handleTouchEnd = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      const start = touchStartRef.current;
+      touchStartRef.current = null;
+      if (!start || heroSlides.length <= 1) return;
+
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+
+      if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return;
+      if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+
+      if (deltaX < 0) goToNext();
+      else goToPrev();
+    },
+    [goToNext, goToPrev, heroSlides.length],
+  );
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || heroSlides.length <= 1) return;
+
+    const onTouchMove = (event: TouchEvent) => {
+      const start = touchStartRef.current;
+      if (!start) return;
+
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 12) {
+        event.preventDefault();
+      }
+    };
+
+    section.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => section.removeEventListener("touchmove", onTouchMove);
+  }, [heroSlides.length]);
 
   useEffect(() => {
     if (heroSlides.length <= 1) return;
@@ -50,21 +118,27 @@ export default function ProjectsHubHero({
   if (!activeProject) return null;
 
   return (
-    <section className="relative isolate min-h-[620px] overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]">
+    <section
+      ref={sectionRef}
+      className="relative isolate min-h-[620px] touch-pan-y overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <img
         src={activeProject.heroImage || activeProject.image}
         alt=""
-        className="absolute inset-0 h-full w-full object-cover opacity-55 transition-opacity duration-[1200ms]"
+        aria-hidden
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-55 transition-opacity duration-[1200ms]"
       />
 
       <div
         aria-hidden
-        className="absolute inset-0 bg-[linear-gradient(to_left,rgba(5,7,11,0.96)_0%,rgba(5,7,11,0.80)_35%,rgba(5,7,11,0.40)_62%,rgba(5,7,11,0.86)_100%)]"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_left,rgba(5,7,11,0.96)_0%,rgba(5,7,11,0.80)_35%,rgba(5,7,11,0.40)_62%,rgba(5,7,11,0.86)_100%)]"
       />
 
       <div
         aria-hidden
-        className="absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_70%_24%,rgba(216,184,122,0.18),transparent_62%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_70%_24%,rgba(216,184,122,0.18),transparent_62%)]"
       />
 
       <div className="relative z-10 mx-auto flex min-h-[620px] max-w-7xl items-end px-6 pb-16 pt-32">
@@ -100,7 +174,7 @@ export default function ProjectsHubHero({
                   className="h-[280px] w-full object-cover"
                 />
 
-                <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/90 via-transparent to-transparent" />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/90 via-transparent to-transparent" />
 
                 <div className="absolute bottom-5 right-5">
                   <p className="font-en text-4xl font-semibold text-[#D8B87A]">
