@@ -5,7 +5,10 @@ export const PWA_ICON_PATHS = {
   icon192: "/icons/icon-192.png",
   icon512: "/icons/icon-512.png",
   appleTouch: "/apple-touch-icon.png",
-  favicon: "/icons/icon-32.png",
+  faviconIco: "/favicon.ico",
+  faviconSvg: "/favicon.svg",
+  favicon96: "/favicon-96x96.png",
+  manifest: "/manifest.webmanifest",
 } as const;
 
 export const PWA_CONFIG = {

@@ -62,8 +62,17 @@ export function buildMetadata(input: BuildMetadataInput): Metadata {
       creator: SEO_SITE.twitterHandle || undefined,
     },
     icons: {
-      icon: PWA_ICON_PATHS.favicon,
-      apple: PWA_ICON_PATHS.appleTouch,
+      icon: [
+        { url: PWA_ICON_PATHS.favicon96, sizes: "96x96", type: "image/png" },
+        { url: PWA_ICON_PATHS.faviconSvg, type: "image/svg+xml" },
+      ],
+      shortcut: PWA_ICON_PATHS.faviconIco,
+      apple: {
+        url: PWA_ICON_PATHS.appleTouch,
+        sizes: "180x180",
+        type: "image/png",
+      },
     },
+    manifest: PWA_ICON_PATHS.manifest,
   };
 }

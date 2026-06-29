@@ -6,10 +6,10 @@ import { fileURLToPath } from "url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const TARGETS = [
-  { file: "public/icons/icon-32.png", size: 32 },
   { file: "public/icons/icon-192.png", size: 192 },
   { file: "public/icons/icon-512.png", size: 512 },
   { file: "public/apple-touch-icon.png", size: 180 },
+  { file: "public/favicon-96x96.png", size: 96 },
 ];
 
 function iconHtml(size) {
