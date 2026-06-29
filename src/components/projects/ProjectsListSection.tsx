@@ -25,6 +25,10 @@ type ProjectsListSectionProps = {
 
 const PROJECTS_PER_PAGE = 6;
 
+function getCategoryLabel(category: PublicProject["category"]) {
+  return category === "residential" ? "سكني" : "تجاري";
+}
+
 export default function ProjectsListSection({
   projects,
   activeFilter,
@@ -60,15 +64,15 @@ export default function ProjectsListSection({
   };
 
   return (
-    <section className="px-6 pt-14">
+    <section className="overflow-x-hidden px-4 pt-14 sm:px-6">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
-          <div>
+        <div className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <p className="mb-2 font-en text-[11px] uppercase tracking-[0.24em] text-[#D8B87A]/55">
               Projects Index
             </p>
 
-            <h2 className="text-2xl font-semibold text-[#D8B87A]">
+            <h2 className="text-xl font-semibold text-[#D8B87A] sm:text-2xl">
               جميع المشروعات
               <span className="mr-2 text-sm font-normal text-white/45">
                 ({projects.length} مشروع)
@@ -76,7 +80,7 @@ export default function ProjectsListSection({
             </h2>
           </div>
 
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
             <button
               type="button"
               onClick={() => {
@@ -120,7 +124,7 @@ export default function ProjectsListSection({
         <div ref={projectsStartRef} className="scroll-mt-32" />
 
         {viewMode === "list" ? (
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2 lg:gap-5">
             {paginatedProjects.map((project) => (
               <ProjectRow key={project.id} project={project} />
             ))}
@@ -181,40 +185,42 @@ export default function ProjectsListSection({
 function ProjectRow({ project }: { project: PublicProject }) {
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">
-      <div className="grid min-h-[250px] grid-cols-[250px_1fr]">
-        <div className="relative min-h-[150px] overflow-hidden">
+      <div className="flex flex-col md:grid md:min-h-[250px] md:grid-cols-[250px_1fr]">
+        <div className="relative h-52 w-full shrink-0 overflow-hidden sm:h-56 md:h-auto md:min-h-[150px]">
           <img
             src={project.image}
             alt={project.code}
-            className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+            className="h-full w-full object-cover transition duration-700 group-hover:scale-105 md:absolute md:inset-0"
           />
 
-          <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#05070B]/20 to-[#05070B]/78" />
-          <div className="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-[#05070B] to-transparent" />
+          <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-l from-transparent via-[#05070B]/20 to-[#05070B]/78 md:block" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-16 bg-gradient-to-r from-[#05070B] to-transparent md:block" />
         </div>
 
-        <div className="flex flex-col justify-between p-5">
-          <div>
-            <div>
-  <p className="font-en text-3xl font-semibold leading-none text-[#D8B87A]">
-    {project.code}
-  </p>
+        <div className="flex min-w-0 flex-col justify-between p-5 sm:p-6">
+          <div className="min-w-0">
+            <p className="font-en text-2xl font-semibold leading-none text-[#D8B87A] sm:text-3xl">
+              {project.code}
+            </p>
 
-  <span className="mt-3 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
-    {project.locationLabel}
-  </span>
-</div>
+            <span className="mt-3 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
+              {project.locationLabel}
+            </span>
+
+            <span className="mt-2 inline-flex rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A]">
+              {getCategoryLabel(project.category)}
+            </span>
 
             <PlainTextContent
               value={project.shortDescription}
               as="p"
-              className="mt-4 line-clamp-2 text-sm leading-7 text-white/52"
+              className="mt-4 line-clamp-3 text-sm leading-7 text-white/62 sm:line-clamp-2 sm:text-white/52"
             />
           </div>
 
           <Link
             href={getProjectHref(project)}
-            className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-[#D8B87A]/35 px-5 py-3 text-sm text-[#D8B87A] transition duration-300 hover:bg-[#D8B87A] hover:text-[#111]"
+            className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#D8B87A]/35 px-5 py-3 text-sm text-[#D8B87A] transition duration-300 hover:bg-[#D8B87A] hover:text-[#111]"
           >
             استكشف التفاصيل
           </Link>
@@ -227,7 +233,7 @@ function ProjectRow({ project }: { project: PublicProject }) {
 function ProjectCard({ project }: { project: PublicProject }) {
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">
-      <div className="relative h-60 overflow-hidden">
+      <div className="relative h-52 overflow-hidden sm:h-60">
         <img
           src={project.image}
           alt={project.code}
@@ -235,27 +241,30 @@ function ProjectCard({ project }: { project: PublicProject }) {
         />
 
         <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent" />
-
-      
       </div>
 
-      <div className="px-5 pb-5 pt-0">
-        <p className="font-en text-3xl font-semibold text-[#D8B87A]">
-  {project.code}
-</p>
+      <div className="min-w-0 px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+        <p className="font-en text-2xl font-semibold text-[#D8B87A] sm:text-3xl">
+          {project.code}
+        </p>
 
-<span className="mt-1 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
-  {project.locationLabel}
-</span>
+        <span className="mt-2 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
+          {project.locationLabel}
+        </span>
+
+        <span className="mt-2 inline-flex rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A]">
+          {getCategoryLabel(project.category)}
+        </span>
+
         <PlainTextContent
           value={project.shortDescription}
           as="p"
-          className="mt-2 line-clamp-2 text-sm leading-7 text-white/58"
+          className="mt-3 line-clamp-3 text-sm leading-7 text-white/62 sm:line-clamp-2 sm:text-white/58"
         />
 
         <Link
           href={getProjectHref(project)}
-          className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-[#D8B87A]/35 px-5 py-3 text-sm text-[#D8B87A] transition duration-300 hover:bg-[#D8B87A] hover:text-[#111]"
+          className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#D8B87A]/35 px-5 py-3 text-sm text-[#D8B87A] transition duration-300 hover:bg-[#D8B87A] hover:text-[#111]"
         >
           استكشف التفاصيل
         </Link>

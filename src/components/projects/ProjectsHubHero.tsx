@@ -82,7 +82,7 @@ export default function ProjectsHubHero({
   return (
     <section
       ref={containerRef}
-      className="relative isolate min-h-[620px] touch-pan-y overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]"
+      className="relative isolate min-h-[520px] touch-pan-y overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B] md:min-h-[620px]"
       {...swipeHandlers}
     >
       <div className="pointer-events-none absolute inset-0" aria-hidden>
@@ -108,7 +108,7 @@ export default function ProjectsHubHero({
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_70%_24%,rgba(216,184,122,0.18),transparent_62%)]"
       />
 
-      <div className="relative z-10 mx-auto flex min-h-[620px] max-w-7xl items-end px-6 pb-16 pt-32">
+      <div className="relative z-10 mx-auto flex min-h-[520px] max-w-7xl items-end px-4 pb-14 pt-[calc(env(safe-area-inset-top,0px)+5.5rem)] sm:px-6 sm:pb-16 md:min-h-[620px] md:pt-32">
         <div className="grid w-full items-end gap-12 lg:grid-cols-[0.95fr_1.05fr]">
           <div>
             <p className="mb-5 text-center font-en text-[11px] uppercase tracking-[0.28em] text-[#D8B87A]/70 lg:text-right">
@@ -116,11 +116,11 @@ export default function ProjectsHubHero({
             </p>
 
             <div className="text-center lg:text-right">
-              <h1 className="font-en text-6xl font-semibold leading-none text-[#D8B87A] md:text-8xl">
+              <h1 className="font-en text-5xl font-semibold leading-none text-[#D8B87A] sm:text-6xl md:text-8xl">
                 {activeProject.code}
               </h1>
 
-              <h2 className="mt-3 text-3xl font-semibold leading-tight text-white md:text-4xl">
+              <h2 className="mt-3 text-2xl font-semibold leading-tight text-white sm:text-3xl md:text-4xl">
                 {activeProject.arabicName}
               </h2>
             </div>

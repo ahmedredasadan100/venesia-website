@@ -60,21 +60,21 @@ const visibleSideProjects = [1, 2]
   return (
     <section
       ref={containerRef}
-      className="touch-pan-y px-6 pt-12"
+      className="touch-pan-y overflow-x-hidden px-4 pt-10 sm:px-6 sm:pt-12"
       {...swipeHandlers}
     >
       <div className="mx-auto max-w-7xl">
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-semibold text-[#D8B87A]">
             مشروع مميز
           </h2>
 
-          <span className="text-xs text-white/40">
+          <span className="text-xs leading-6 text-white/40">
             اختيار يعكس مسار التنفيذ على الأرض
           </span>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[1.75fr_0.62fr_0.62fr]">
+        <div className="grid gap-5 lg:grid-cols-[1.75fr_0.62fr_0.62fr] lg:gap-4">
           <MainFeaturedCard project={mainProject} />
 
           {visibleSideProjects.map((project) => (
@@ -102,54 +102,54 @@ const visibleSideProjects = [1, 2]
   );
 }
 
+function getCategoryLabel(category: PublicProject["category"]) {
+  return category === "residential" ? "سكني" : "تجاري";
+}
+
 function MainFeaturedCard({ project }: { project: PublicProject }) {
   return (
     <article
-  key={project.id}
-  className="group animate-[featuredFade_600ms_ease-out] overflow-hidden rounded-[24px] border border-[#D8B87A]/40 bg-[#080B10]/92 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-      <div className="grid min-h-[320px] lg:grid-cols-[1.08fr_0.92fr]">
-        <div className="relative min-h-[320px] overflow-hidden">
+      key={project.id}
+      className="group animate-[featuredFade_600ms_ease-out] overflow-hidden rounded-[24px] border border-[#D8B87A]/40 bg-[#080B10]/92 shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
+    >
+      <div className="flex flex-col lg:grid lg:min-h-[320px] lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="relative h-56 w-full shrink-0 overflow-hidden sm:h-64 lg:h-auto lg:min-h-[320px]">
           <img
             src={project.image}
             alt={project.code}
-            className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+            className="h-full w-full object-cover transition duration-700 group-hover:scale-105 lg:absolute lg:inset-0"
           />
 
-          <div className="absolute inset-0 bg-[linear-gradient(to_left,rgba(5,7,11,0.80)_0%,rgba(5,7,11,0.38)_42%,rgba(5,7,11,0.04)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(to_left,rgba(5,7,11,0.80)_0%,rgba(5,7,11,0.38)_42%,rgba(5,7,11,0.04)_100%)] lg:block" />
 
           <div
             aria-hidden
-            className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#080B10] via-[#080B10]/72 to-transparent"
+            className="pointer-events-none absolute inset-y-0 left-0 hidden w-32 bg-gradient-to-r from-[#080B10] via-[#080B10]/72 to-transparent lg:block"
           />
         </div>
 
-        <div className="relative z-10 flex flex-col justify-center p-6">
-          <p className="font-en text-2xl font-semibold leading-none text-[#D8B87A]">
+        <div className="relative z-10 flex min-w-0 flex-col justify-center p-5 sm:p-6">
+          <p className="font-en text-2xl font-semibold leading-none text-[#D8B87A] sm:text-3xl">
             {project.code}
           </p>
 
-         
-           
- 
- 
+          <span className="mt-3 inline-flex w-fit rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
+            {project.locationLabel}
+          </span>
 
-<div className="mt-1">
-  <span className="rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]"> 
-    {project.locationLabel}
-  </span>
-</div>
-         
+          <span className="mt-2 inline-flex w-fit rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A]">
+            {getCategoryLabel(project.category)}
+          </span>
 
- 
           <PlainTextContent
             value={project.shortDescription}
             as="p"
-            className="mt-5 max-w-xl text-sm leading-7 text-white/60"
+            className="mt-4 line-clamp-3 text-sm leading-7 text-white/62 sm:mt-5 sm:line-clamp-none sm:max-w-xl sm:text-white/60"
           />
 
           <Link
             href={getProjectHref(project)}
-            className="mt-7 inline-flex w-full items-center justify-center rounded-xl border border-[#D8B87A]/45 px-6 py-3 text-sm text-[#D8B87A] transition duration-300 hover:bg-[#D8B87A] hover:text-[#111]"
+            className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#D8B87A]/45 px-6 py-3 text-sm text-[#D8B87A] transition duration-300 hover:bg-[#D8B87A] hover:text-[#111] sm:mt-7"
           >
             استكشف التفاصيل
           </Link>

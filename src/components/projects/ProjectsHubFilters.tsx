@@ -38,10 +38,10 @@ export default function ProjectsHubFilters({
   stats,
 }: ProjectsHubFiltersProps) {
   return (
-    <section className="relative z-20 mt-0">
-      <div className="mx-auto max-w-7xl rounded-2xl border border-[#D8B87A]/15 bg-[#080B10]/90 p-3 shadow-[0_22px_70px_rgba(0,0,0,0.38)] backdrop-blur-xl">
+    <section className="relative mt-0">
+      <div className="mx-auto max-w-7xl rounded-2xl border border-[#D8B87A]/15 bg-[#080B10]/90 p-3 shadow-[0_22px_70px_rgba(0,0,0,0.38)] backdrop-blur-xl sm:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {visibleFilters.map((filter) => {
               const isActive = activeFilter === filter.id;
               const count = filter.getCount(stats);
@@ -51,13 +51,13 @@ export default function ProjectsHubFilters({
                   key={filter.id}
                   type="button"
                   onClick={() => onFilterChange(filter.id)}
-                  className={`min-w-[120px] rounded-xl border px-5 py-3 text-sm transition duration-300 ${
+                  className={`min-w-0 rounded-xl border px-3 py-3 text-sm transition duration-300 sm:min-w-[120px] sm:px-5 ${
                     isActive
                       ? "border-[#D8B87A] bg-[#D8B87A] text-[#111]"
                       : "border-white/10 bg-white/[0.03] text-white/70 hover:border-[#D8B87A]/45 hover:text-white"
                   }`}
                 >
-                  <span>{filter.label}</span>
+                  <span className="block truncate">{filter.label}</span>
 
                   <span className="mr-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-black/20 px-1.5 text-[11px]">
                     {count}
@@ -70,7 +70,7 @@ export default function ProjectsHubFilters({
           <button
             type="button"
             onClick={() => onFilterChange("all")}
-            className="rounded-xl border border-[#D8B87A]/20 px-5 py-3 text-sm text-[#D8B87A] transition duration-300 hover:border-[#D8B87A]/55 hover:bg-[#D8B87A]/10"
+            className="w-full rounded-xl border border-[#D8B87A]/20 px-5 py-3 text-sm text-[#D8B87A] transition duration-300 hover:border-[#D8B87A]/55 hover:bg-[#D8B87A]/10 sm:w-auto"
           >
             إعادة تعيين الفلاتر
           </button>
