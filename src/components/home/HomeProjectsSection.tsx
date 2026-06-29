@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { HomepageProjectCard } from "../../lib/projects/types";
 import PlainTextContent from "../content/PlainTextContent";
+import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 
 export type HomeProjectsSectionProps = {
   projects: HomepageProjectCard[];
@@ -41,6 +42,12 @@ export default function HomeProjectsSection({ projects }: HomeProjectsSectionPro
     );
   }
 
+  const { containerRef, swipeHandlers } = useSwipeSlider<HTMLDivElement>({
+    enabled: hasMultiplePages,
+    onSwipeLeft: goToNextPage,
+    onSwipeRight: goToPrevPage,
+  });
+
   if (projects.length === 0) return null;
 
   return (
@@ -72,7 +79,7 @@ export default function HomeProjectsSection({ projects }: HomeProjectsSectionPro
           </div>
         </div>
 
-        <div className="relative">
+        <div ref={containerRef} className="relative touch-pan-y" {...swipeHandlers}>
           {hasMultiplePages && (
             <>
               <button

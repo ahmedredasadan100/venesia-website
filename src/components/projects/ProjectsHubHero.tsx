@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { PublicProject } from "../../lib/projects/public-types";
 import PlainTextContent from "../content/PlainTextContent";
-
-const SWIPE_THRESHOLD_PX = 48;
+import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 
 type ProjectsHubHeroProps = {
   projects: PublicProject[];
@@ -38,98 +37,66 @@ export default function ProjectsHubHero({
   const [activeSlide, setActiveSlide] = useState(0);
   const boundedSlide = heroSlides.length ? activeSlide % heroSlides.length : 0;
   const activeProject = heroSlides[boundedSlide];
-  const sectionRef = useRef<HTMLElement>(null);
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const canSwipe = heroSlides.length > 1;
 
   const goToNext = useCallback(() => {
-    if (heroSlides.length <= 1) return;
+    if (!canSwipe) return;
     setActiveSlide((prev) => (prev + 1) % heroSlides.length);
-  }, [heroSlides.length]);
+  }, [canSwipe, heroSlides.length]);
 
   const goToPrev = useCallback(() => {
-    if (heroSlides.length <= 1) return;
+    if (!canSwipe) return;
     setActiveSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length);
-  }, [heroSlides.length]);
+  }, [canSwipe, heroSlides.length]);
 
-  const handleTouchStart = useCallback(
-    (event: React.TouchEvent<HTMLElement>) => {
-      if (heroSlides.length <= 1) return;
-      const touch = event.touches[0];
-      if (!touch) return;
-      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    },
-    [heroSlides.length],
-  );
+  const startAutoplay = useCallback(() => {
+    if (!canSwipe) return undefined;
 
-  const handleTouchEnd = useCallback(
-    (event: React.TouchEvent<HTMLElement>) => {
-      const start = touchStartRef.current;
-      touchStartRef.current = null;
-      if (!start || heroSlides.length <= 1) return;
-
-      const touch = event.changedTouches[0];
-      if (!touch) return;
-
-      const deltaX = touch.clientX - start.x;
-      const deltaY = touch.clientY - start.y;
-
-      if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return;
-      if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
-
-      if (deltaX < 0) goToNext();
-      else goToPrev();
-    },
-    [goToNext, goToPrev, heroSlides.length],
-  );
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section || heroSlides.length <= 1) return;
-
-    const onTouchMove = (event: TouchEvent) => {
-      const start = touchStartRef.current;
-      if (!start) return;
-
-      const touch = event.touches[0];
-      if (!touch) return;
-
-      const deltaX = touch.clientX - start.x;
-      const deltaY = touch.clientY - start.y;
-
-      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 12) {
-        event.preventDefault();
-      }
-    };
-
-    section.addEventListener("touchmove", onTouchMove, { passive: false });
-    return () => section.removeEventListener("touchmove", onTouchMove);
-  }, [heroSlides.length]);
-
-  useEffect(() => {
-    if (heroSlides.length <= 1) return;
-
-    const timer = window.setInterval(() => {
+    return window.setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % heroSlides.length);
     }, 6000);
+  }, [canSwipe, heroSlides.length]);
 
-    return () => window.clearInterval(timer);
-  }, [heroSlides.length]);
+  useEffect(() => {
+    const timer = startAutoplay();
+    return () => {
+      if (timer) window.clearInterval(timer);
+    };
+  }, [startAutoplay]);
+
+  const handleGoTo = useCallback(
+    (index: number) => {
+      setActiveSlide(index);
+    },
+    [],
+  );
+
+  const { containerRef, swipeHandlers } = useSwipeSlider<HTMLElement>({
+    enabled: canSwipe,
+    onSwipeLeft: goToNext,
+    onSwipeRight: goToPrev,
+  });
 
   if (!activeProject) return null;
 
   return (
     <section
-      ref={sectionRef}
+      ref={containerRef}
       className="relative isolate min-h-[620px] touch-pan-y overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
+      {...swipeHandlers}
     >
-      <img
-        src={activeProject.heroImage || activeProject.image}
-        alt=""
-        aria-hidden
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-55 transition-opacity duration-[1200ms]"
-      />
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        {heroSlides.map((project, index) => (
+          <img
+            key={project.code}
+            src={project.heroImage || project.image}
+            alt=""
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1200ms] ease-in-out ${
+              index === boundedSlide ? "opacity-55" : "opacity-0"
+            }`}
+          />
+        ))}
+      </div>
 
       <div
         aria-hidden
@@ -199,14 +166,14 @@ export default function ProjectsHubHero({
         </div>
       </div>
 
-      {heroSlides.length > 1 ? (
+      {canSwipe ? (
         <div className="absolute inset-x-0 bottom-8 z-20 flex justify-center gap-1.5">
           {heroSlides.map((_, index) => (
             <button
               key={index}
               type="button"
               aria-label={`الشريحة ${index + 1}`}
-              onClick={() => setActiveSlide(index)}
+              onClick={() => handleGoTo(index)}
               className="group inline-flex h-10 min-w-10 items-center justify-center"
             >
               <span

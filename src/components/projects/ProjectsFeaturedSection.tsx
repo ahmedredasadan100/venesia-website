@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { getProjectHref } from "../../lib/projects/public-helpers";
 import type { PublicProject } from "../../lib/projects/public-types";
 import PlainTextContent from "../content/PlainTextContent";
+import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 
 type ProjectsFeaturedSectionProps = {
   projects: PublicProject[];
@@ -15,18 +16,38 @@ export default function ProjectsFeaturedSection({
   projects,
 }: ProjectsFeaturedSectionProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const canSwipe = projects.length > 1;
+
+  const startAutoplay = useCallback(() => {
+    if (!canSwipe) return undefined;
+
+    return window.setInterval(() => {
+      setActiveIndex((prev) => (prev === projects.length - 1 ? 0 : prev + 1));
+    }, 6000);
+  }, [canSwipe, projects.length]);
+
   useEffect(() => {
-  if (projects.length <= 1) return;
+    const timer = startAutoplay();
+    return () => {
+      if (timer) window.clearInterval(timer);
+    };
+  }, [startAutoplay]);
 
-  const timer = setInterval(() => {
-    setActiveIndex((prev) =>
-      prev === projects.length - 1 ? 0 : prev + 1
-    );
-  }, 6000);
+  const goToNext = useCallback(() => {
+    if (!canSwipe) return;
+    setActiveIndex((prev) => (prev === projects.length - 1 ? 0 : prev + 1));
+  }, [canSwipe, projects.length]);
 
-  return () => clearInterval(timer);
-}, [projects.length]);
+  const goToPrev = useCallback(() => {
+    if (!canSwipe) return;
+    setActiveIndex((prev) => (prev === 0 ? projects.length - 1 : prev - 1));
+  }, [canSwipe, projects.length]);
 
+  const { containerRef, swipeHandlers } = useSwipeSlider<HTMLElement>({
+    enabled: canSwipe,
+    onSwipeLeft: goToNext,
+    onSwipeRight: goToPrev,
+  });
 
   if (projects.length === 0) return null;
 
@@ -37,7 +58,11 @@ const visibleSideProjects = [1, 2]
   .filter(Boolean);
 
   return (
-    <section className="px-6 pt-12">
+    <section
+      ref={containerRef}
+      className="touch-pan-y px-6 pt-12"
+      {...swipeHandlers}
+    >
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-[#D8B87A]">

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { HeroSectionData } from "../../lib/page-sections";
 import { getHeroConfig } from "../../lib/page-sections";
+import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 
 type DynamicHeroSectionProps = {
   hero: HeroSectionData;
@@ -45,18 +46,49 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   const images = config.images ?? [];
   const [activeIndex, setActiveIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const canSwipe = images.length > 1;
 
-  useEffect(() => {
-    if (images.length <= 1) return;
+  const startAutoplay = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (!canSwipe) return;
 
     timerRef.current = setInterval(() => {
       setActiveIndex((current) => (current + 1) % images.length);
     }, 7500);
+  }, [canSwipe, images.length]);
 
+  useEffect(() => {
+    startAutoplay();
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [images.length]);
+  }, [startAutoplay]);
+
+  const goToNext = useCallback(() => {
+    if (!canSwipe) return;
+    setActiveIndex((current) => (current + 1) % images.length);
+    startAutoplay();
+  }, [canSwipe, images.length, startAutoplay]);
+
+  const goToPrev = useCallback(() => {
+    if (!canSwipe) return;
+    setActiveIndex((current) => (current - 1 + images.length) % images.length);
+    startAutoplay();
+  }, [canSwipe, images.length, startAutoplay]);
+
+  const handleGoTo = useCallback(
+    (index: number) => {
+      setActiveIndex(index);
+      startAutoplay();
+    },
+    [startAutoplay],
+  );
+
+  const { containerRef, swipeHandlers } = useSwipeSlider<HTMLElement>({
+    enabled: canSwipe,
+    onSwipeLeft: goToNext,
+    onSwipeRight: goToPrev,
+  });
 
   const title = config.title ?? "";
   const highlight = config.highlight ?? "";
@@ -66,7 +98,12 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   if (!hasHeroContent) return null;
 
   return (
-    <section className="relative isolate min-h-screen overflow-hidden bg-[#05070B]" dir="rtl">
+    <section
+      ref={containerRef}
+      className="relative isolate min-h-screen touch-pan-y overflow-hidden bg-[#05070B]"
+      dir="rtl"
+      {...swipeHandlers}
+    >
       <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden>
         {images.map((src, index) => (
           <div
@@ -176,7 +213,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               key={index}
               type="button"
               aria-label={`الشريحة ${index + 1}`}
-              onClick={() => setActiveIndex(index)}
+              onClick={() => handleGoTo(index)}
               className="group inline-flex h-10 min-w-10 items-center justify-center"
             >
               <span

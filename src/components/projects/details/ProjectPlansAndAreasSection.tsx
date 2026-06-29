@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+
+import { useSwipeSlider } from "../../../hooks/use-swipe-slider";
 
 type ResidentialAreaOption = {
   area: string;
@@ -32,17 +34,21 @@ export default function ProjectPlansAndAreasSection({
     ];
   }, [areas, activeIndex, isSlider]);
 
-  if (!areas.length) return null;
-
-  const goNext = () => {
+  const goNext = useCallback(() => {
     setActiveIndex((current) => (current + 1) % areas.length);
-  };
+  }, [areas.length]);
 
-  const goPrev = () => {
-    setActiveIndex((current) =>
-      current === 0 ? areas.length - 1 : current - 1,
-    );
-  };
+  const goPrev = useCallback(() => {
+    setActiveIndex((current) => (current === 0 ? areas.length - 1 : current - 1));
+  }, [areas.length]);
+
+  const { containerRef, swipeHandlers } = useSwipeSlider<HTMLDivElement>({
+    enabled: isSlider,
+    onSwipeLeft: goNext,
+    onSwipeRight: goPrev,
+  });
+
+  if (!areas.length) return null;
 
   return (
     <section
@@ -90,8 +96,10 @@ export default function ProjectPlansAndAreasSection({
         </div>
 
         <div
+          ref={containerRef}
           key={activeIndex}
-          className="grid gap-5 transition-all duration-500 md:grid-cols-2 xl:grid-cols-3"
+          className="grid touch-pan-y gap-5 transition-all duration-500 ease-out md:grid-cols-2 xl:grid-cols-3"
+          {...swipeHandlers}
         >
           {visibleAreas.map((area, index) => (
             <AreaCard
