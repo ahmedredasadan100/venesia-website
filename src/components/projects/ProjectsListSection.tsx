@@ -9,6 +9,10 @@ import {
 import type { ProjectHubFilterId, PublicProject } from "../../lib/projects/public-types";
 import ProjectsHubFilters from "./ProjectsHubFilters";
 import PlainTextContent from "../content/PlainTextContent";
+import {
+  ProjectCodeBadge,
+  ProjectImageBottomBadges,
+} from "./ProjectCardMobileOverlays";
 
 type ViewMode = "list" | "cards";
 
@@ -186,35 +190,42 @@ function ProjectRow({ project }: { project: PublicProject }) {
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">
       <div className="flex flex-col md:grid md:min-h-[250px] md:grid-cols-[250px_1fr]">
-        <div className="relative h-52 w-full shrink-0 overflow-hidden sm:h-56 md:h-auto md:min-h-[150px]">
-          <img
-            src={project.image}
-            alt={project.code}
-            className="h-full w-full object-cover transition duration-700 group-hover:scale-105 md:absolute md:inset-0"
-          />
+        <div className="relative w-full shrink-0 pb-3.5 md:min-h-[150px] md:pb-0">
+          <div className="relative h-52 w-full overflow-hidden sm:h-56 md:absolute md:inset-0 md:h-auto">
+            <img
+              src={project.image}
+              alt={project.code}
+              className="h-full w-full object-cover transition duration-700 group-hover:scale-105 md:absolute md:inset-0"
+            />
 
-          <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-l from-transparent via-[#05070B]/20 to-[#05070B]/78 md:block" />
-          <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-16 bg-gradient-to-r from-[#05070B] to-transparent md:block" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/10 to-transparent md:hidden" />
+            <ProjectCodeBadge code={project.code} />
+
+            <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-l from-transparent via-[#05070B]/20 to-[#05070B]/78 md:block" />
+            <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-16 bg-gradient-to-r from-[#05070B] to-transparent md:block" />
+          </div>
+
+          <ProjectImageBottomBadges project={project} />
         </div>
 
-        <div className="flex min-w-0 flex-col justify-between p-5 sm:p-6">
+        <div className="flex min-w-0 flex-col justify-between p-5 pt-4 sm:p-6 sm:pt-5 md:pt-6">
           <div className="min-w-0">
-            <p className="font-en text-2xl font-semibold leading-none text-[#D8B87A] sm:text-3xl">
+            <p className="hidden font-en text-2xl font-semibold leading-none text-[#D8B87A] md:block md:text-3xl">
               {project.code}
             </p>
 
-            <span className="mt-3 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
+            <span className="mt-3 hidden rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111] md:inline-flex">
               {project.locationLabel}
             </span>
 
-            <span className="mt-2 inline-flex rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A]">
+            <span className="mt-2 hidden rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A] md:inline-flex">
               {getCategoryLabel(project.category)}
             </span>
 
             <PlainTextContent
               value={project.shortDescription}
               as="p"
-              className="mt-4 line-clamp-3 text-sm leading-7 text-white/62 sm:line-clamp-2 sm:text-white/52"
+              className="mt-0 line-clamp-3 text-sm leading-7 text-white/62 md:mt-4 md:line-clamp-2 md:text-white/52"
             />
           </div>
 
@@ -233,33 +244,38 @@ function ProjectRow({ project }: { project: PublicProject }) {
 function ProjectCard({ project }: { project: PublicProject }) {
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">
-      <div className="relative h-52 overflow-hidden sm:h-60">
-        <img
-          src={project.image}
-          alt={project.code}
-          className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
-        />
+      <div className="relative shrink-0 pb-3.5 md:pb-0">
+        <div className="relative h-52 overflow-hidden sm:h-60">
+          <img
+            src={project.image}
+            alt={project.code}
+            className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+          />
 
-        <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent md:hidden" />
+          <ProjectCodeBadge code={project.code} />
+        </div>
+
+        <ProjectImageBottomBadges project={project} />
       </div>
 
-      <div className="min-w-0 px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
-        <p className="font-en text-2xl font-semibold text-[#D8B87A] sm:text-3xl">
+      <div className="min-w-0 px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5 md:pt-4">
+        <p className="hidden font-en text-2xl font-semibold text-[#D8B87A] md:block md:text-3xl">
           {project.code}
         </p>
 
-        <span className="mt-2 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
+        <span className="mt-2 hidden rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111] md:inline-flex">
           {project.locationLabel}
         </span>
 
-        <span className="mt-2 inline-flex rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A]">
+        <span className="mt-2 hidden rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A] md:inline-flex">
           {getCategoryLabel(project.category)}
         </span>
 
         <PlainTextContent
           value={project.shortDescription}
           as="p"
-          className="mt-3 line-clamp-3 text-sm leading-7 text-white/62 sm:line-clamp-2 sm:text-white/58"
+          className="mt-0 line-clamp-3 text-sm leading-7 text-white/62 md:mt-3 md:line-clamp-2 md:text-white/58"
         />
 
         <Link
