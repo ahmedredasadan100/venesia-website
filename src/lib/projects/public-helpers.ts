@@ -4,6 +4,10 @@ export function getProjectHref(project: Pick<PublicProject, "slug">) {
   return `/projects/${project.slug}`;
 }
 
+export function getProjectTrackHref(project: Pick<PublicProject, "slug">) {
+  return `/track-your-project/${project.slug}`;
+}
+
 export function sortProjectsByHomepageOrder(projects: PublicProject[]) {
   return [...projects].sort(
     (a, b) => a.homepageOrder - b.homepageOrder || a.code.localeCompare(b.code),
