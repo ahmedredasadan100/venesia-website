@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import type { AboutCtaContact, AboutCtaModuleContent } from "./about-cta-mappers";
+import { isContactIconKey, renderContactIcon } from "../page-blocks/contact-icons";
 
 export type AboutCtaModuleSectionProps = {
   cmsContent: AboutCtaModuleContent | null;
@@ -85,7 +86,7 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
                       </div>
 
                       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/[0.06] text-[#D8B87A]/80">
-                        {CONTACT_ICONS[index] ?? "◌"}
+                        {isContactIconKey(contact.icon) ? renderContactIcon(contact.icon) : CONTACT_ICONS[index] ?? "◌"}
                       </span>
                     </div>
                   ))}

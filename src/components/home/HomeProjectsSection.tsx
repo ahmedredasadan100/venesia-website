@@ -1,14 +1,51 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { HomepageProjectCard } from "../../lib/projects/types";
+import type { HomeProjectsContent } from "./home-projects-mappers";
 import PlainTextContent from "../content/PlainTextContent";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 
 export type HomeProjectsSectionProps = {
   projects: HomepageProjectCard[];
+  content?: HomeProjectsContent | null;
 };
+
+const STATIC_DEFAULTS = {
+  eyebrow: "مشاريع قيد المتابعة",
+  title: "مشاريع فينيسيا",
+  intro:
+    "كل مشروع مش مجرد اسم... ده نقطة بناء جديدة في خريطة الشركة، ومتابعة حقيقية للتنفيذ على الأرض.",
+  footerCta: {
+    label: "استعرض كل المشاريع",
+    href: "/projects",
+  },
+  showEyebrow: true,
+  showTitle: true,
+  showIntro: true,
+  showFooterCta: true,
+  projectsLimit: undefined as number | undefined,
+} satisfies HomeProjectsContent;
+
+function resolveHomeProjectsContent(content?: HomeProjectsContent | null) {
+  if (!content) return STATIC_DEFAULTS;
+
+  return {
+    eyebrow: content.eyebrow.trim() || STATIC_DEFAULTS.eyebrow,
+    title: content.title.trim() || STATIC_DEFAULTS.title,
+    intro: content.intro.trim() || STATIC_DEFAULTS.intro,
+    footerCta: {
+      label: content.footerCta.label.trim() || STATIC_DEFAULTS.footerCta.label,
+      href: content.footerCta.href.trim() || STATIC_DEFAULTS.footerCta.href,
+    },
+    showEyebrow: content.showEyebrow,
+    showTitle: content.showTitle,
+    showIntro: content.showIntro,
+    showFooterCta: content.showFooterCta,
+    projectsLimit: content.projectsLimit,
+  };
+}
 
 function getProjectHref(project: HomepageProjectCard) {
   return `/projects/${project.slug}`;
@@ -24,22 +61,118 @@ function chunkProjects(projects: HomepageProjectCard[], size: number) {
   return chunks;
 }
 
-export default function HomeProjectsSection({ projects }: HomeProjectsSectionProps) {
-  const [activePage, setActivePage] = useState(0);
+function resolveProjectsLimit(limit?: number | string | null) {
+  if (limit == null || limit === "") return undefined;
 
-  const projectPages = useMemo(() => chunkProjects(projects, 3), [projects]);
-  const hasMultiplePages = projectPages.length > 1;
+  const parsed =
+    typeof limit === "number"
+      ? limit
+      : typeof limit === "string"
+        ? Number(limit.trim())
+        : NaN;
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return Math.floor(parsed);
+}
+
+const CARDS_PER_PAGE = 3;
+
+function buildProjectPages(projects: HomepageProjectCard[]) {
+  return chunkProjects(projects, CARDS_PER_PAGE);
+}
+
+function getHeaderLayoutClass(hasIntroColumn: boolean, hasHeadingColumn: boolean) {
+  if (hasIntroColumn && hasHeadingColumn) {
+    return "mb-10 flex flex-col gap-8 lg:flex-row-reverse lg:items-end lg:justify-between";
+  }
+  if (hasHeadingColumn) {
+    return "mb-10 flex flex-col gap-8 lg:items-end";
+  }
+  if (hasIntroColumn) {
+    return "mb-10 flex flex-col gap-8";
+  }
+  return "";
+}
+
+function getProjectPageLayoutClass(cardCount: number) {
+  if (cardCount >= 3) {
+    return "grid h-full shrink-0 grid-cols-1 gap-5 md:grid-cols-3";
+  }
+
+  return "flex h-full shrink-0 flex-col gap-5 md:flex-row md:flex-wrap md:justify-center";
+}
+
+function getProjectCardSlideClass(cardCount: number) {
+  if (cardCount >= 3) {
+    return "";
+  }
+
+  return "w-full md:w-[calc((100%-2.5rem)/3)] md:max-w-none md:shrink-0";
+}
+
+export default function HomeProjectsSection({ projects, content }: HomeProjectsSectionProps) {
+  const [activePage, setActivePage] = useState(0);
+  const sectionCopy = resolveHomeProjectsContent(content);
+
+  const projectsLimit = resolveProjectsLimit(sectionCopy.projectsLimit);
+
+  const limitedProjects = useMemo(() => {
+    if (!projectsLimit) return projects;
+    return projects.slice(0, projectsLimit);
+  }, [projects, projectsLimit]);
+
+  const projectPages = useMemo(() => buildProjectPages(limitedProjects), [limitedProjects]);
+  const totalPages = projectPages.length;
+  const hasMultiplePages = totalPages > 1;
+  const safeActivePage = Math.min(activePage, Math.max(totalPages - 1, 0));
+
+  const showIntro = sectionCopy.showIntro && Boolean(sectionCopy.intro.trim());
+  const showEyebrow = sectionCopy.showEyebrow && Boolean(sectionCopy.eyebrow.trim());
+  const showTitle = sectionCopy.showTitle && Boolean(sectionCopy.title.trim());
+
+  const introColumn = showIntro ? (
+    <div className="max-w-md">
+      <p className="text-lg leading-9 text-white/65">{sectionCopy.intro}</p>
+    </div>
+  ) : null;
+
+  const headingColumn =
+    showEyebrow || showTitle ? (
+      <div className="text-right">
+        {showEyebrow ? (
+          <p className="mb-3 text-sm font-medium tracking-[0.26em] text-[#D8B87A]">{sectionCopy.eyebrow}</p>
+        ) : null}
+        {showTitle ? (
+          <h2 className="text-3xl font-bold leading-tight tracking-[-0.04em] md:text-5xl">{sectionCopy.title}</h2>
+        ) : null}
+      </div>
+    ) : null;
+
+  const hasIntroColumn = Boolean(introColumn);
+  const hasHeadingColumn = Boolean(headingColumn);
+  const showHeader = hasIntroColumn || hasHeadingColumn;
+  const headerLayoutClass = getHeaderLayoutClass(hasIntroColumn, hasHeadingColumn);
+
+  const showFooterCta =
+    sectionCopy.showFooterCta &&
+    Boolean(sectionCopy.footerCta.label.trim()) &&
+    Boolean(sectionCopy.footerCta.href.trim());
 
   function goToNextPage() {
-    setActivePage((current) =>
-      current === projectPages.length - 1 ? 0 : current + 1
-    );
+    setActivePage((current) => {
+      if (totalPages <= 1) return 0;
+      return current >= totalPages - 1 ? 0 : current + 1;
+    });
   }
 
   function goToPrevPage() {
-    setActivePage((current) =>
-      current === 0 ? projectPages.length - 1 : current - 1
-    );
+    setActivePage((current) => {
+      if (totalPages <= 1) return 0;
+      return current <= 0 ? totalPages - 1 : current - 1;
+    });
   }
 
   const { containerRef, swipeHandlers } = useSwipeSlider<HTMLDivElement>({
@@ -48,7 +181,14 @@ export default function HomeProjectsSection({ projects }: HomeProjectsSectionPro
     onSwipeRight: goToPrevPage,
   });
 
-  if (projects.length === 0) return null;
+  useEffect(() => {
+    setActivePage((current) => {
+      if (totalPages <= 0) return 0;
+      return current >= totalPages ? 0 : current;
+    });
+  }, [totalPages, projectsLimit]);
+
+  if (limitedProjects.length === 0) return null;
 
   return (
     <section className="relative overflow-hidden bg-[#05070B] px-6 py-20 text-white">
@@ -58,26 +198,12 @@ export default function HomeProjectsSection({ projects }: HomeProjectsSectionPro
       />
 
       <div className="relative mx-auto max-w-7xl">
-        <div className="mb-10 flex flex-col gap-8 lg:flex-row-reverse lg:items-end lg:justify-between">
-          <div className="max-w-md">
-            <p className="text-lg leading-9 text-white/65">
-              كل مشروع مش مجرد اسم... ده نقطة بناء جديدة في خريطة الشركة،
-              ومتابعة حقيقية للتنفيذ على الأرض.
-            </p>
+        {showHeader ? (
+          <div className={headerLayoutClass}>
+            {introColumn}
+            {headingColumn}
           </div>
-
-          <div className="flex flex-col gap-5 lg:items-end">
-            <div className="text-right">
-              <p className="mb-3 text-sm font-medium tracking-[0.26em] text-[#D8B87A]">
-                مشاريع قيد المتابعة
-              </p>
-
-              <h2 className="text-3xl font-bold leading-tight tracking-[-0.04em] md:text-5xl">
-                مشاريع فينيسيا
-              </h2>
-            </div>
-          </div>
-        </div>
+        ) : null}
 
         <div ref={containerRef} className="relative touch-pan-y" {...swipeHandlers}>
           {hasMultiplePages && (
@@ -102,21 +228,30 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
             </>
           )}
 
-          <div className="overflow-x-hidden overflow-y-visible py-3">
+          <div dir="ltr" className="overflow-x-hidden overflow-y-visible py-3">
             <div
               className="flex transition-transform duration-[850ms] ease-out"
-              style={{ transform: `translateX(${activePage * 100}%)` }}
+              style={
+                totalPages > 1
+                  ? {
+                      width: `${totalPages * 100}%`,
+                      transform: `translateX(-${(safeActivePage * 100) / totalPages}%)`,
+                    }
+                  : undefined
+              }
             >
               {projectPages.map((page, pageIndex) => (
                 <div
-                  key={pageIndex}
-                  className="grid min-w-full grid-cols-1 gap-5 md:grid-cols-3"
+                  key={`page-${pageIndex}-${page.map((project) => project.id).join("-")}`}
+                  dir="rtl"
+                  className={getProjectPageLayoutClass(page.length)}
+                  style={totalPages > 1 ? { width: `${100 / totalPages}%` } : { width: "100%" }}
                 >
                   {page.map((project) => (
 <Link
   key={project.id}
   href={getProjectHref(project)}
-  className="group relative block cursor-pointer overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] text-white shadow-2xl backdrop-blur transition-all duration-500 hover:-translate-y-2 hover:border-[#D8B87A]/20 hover:bg-white/[0.07] hover:shadow-[0_20px_56px_rgba(0,0,0,0.42),0_0_0_1px_rgba(216,184,122,0.06)]"
+  className={`group relative block cursor-pointer overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] text-white shadow-2xl backdrop-blur transition-all duration-500 hover:-translate-y-2 hover:border-[#D8B87A]/20 hover:bg-white/[0.07] hover:shadow-[0_20px_56px_rgba(0,0,0,0.42),0_0_0_1px_rgba(216,184,122,0.06)] ${getProjectCardSlideClass(page.length)}`}
 >
   {/* Venesia Gold Edge Traces */}
   <div
@@ -180,7 +315,7 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
           </div>
         </div>
 
-        {hasMultiplePages && (
+        {hasMultiplePages ? (
           <div className="mt-8 flex justify-center gap-2">
             {projectPages.map((_, index) => (
               <button
@@ -189,23 +324,25 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
                 onClick={() => setActivePage(index)}
                 aria-label={`انتقال إلى مجموعة المشاريع ${index + 1}`}
                 className={`h-2 rounded-full transition-all duration-300 ${
-                  activePage === index
+                  safeActivePage === index
                     ? "w-8 bg-[#D8B87A]"
                     : "w-2 bg-white/25 hover:bg-white/45"
                 }`}
               />
             ))}
           </div>
-        )}
+        ) : null}
 
-        <div className="mt-10 flex justify-center">
-          <Link
-            href="/projects"
-            className="rounded-full border border-white/10 bg-white/[0.045] px-7 py-3 text-sm font-medium text-white/80 transition duration-300 hover:border-[#D8B87A]/40 hover:bg-white/[0.08] hover:text-[#D8B87A]"
-          >
-            استعرض كل المشاريع
-          </Link>
-        </div>
+        {showFooterCta ? (
+          <div className="mt-10 flex justify-center">
+            <Link
+              href={sectionCopy.footerCta.href}
+              className="rounded-full border border-white/10 bg-white/[0.045] px-7 py-3 text-sm font-medium text-white/80 transition duration-300 hover:border-[#D8B87A]/40 hover:bg-white/[0.08] hover:text-[#D8B87A]"
+            >
+              {sectionCopy.footerCta.label}
+            </Link>
+          </div>
+        ) : null}
       </div>
     </section>
   );

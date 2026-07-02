@@ -20,6 +20,7 @@ import {
   mapAboutPrinciplesBlock,
 } from "../about/about-cms-mappers";
 import { mapHomeContactBlock } from "../home/home-contact-mappers";
+import { mapHomeProjectsBlock } from "../home/home-projects-mappers";
 import { mapHomeStoryBlock } from "../home/home-cms-mappers";
 import { mapHomeTrustBlock } from "../home/home-trust-mappers";
 import ContactCTASection from "../contact/ContactCTASection";
@@ -186,7 +187,10 @@ export function buildSlotModuleNodes(
       push(
         `home-projects-${block.assignmentId}`,
         block.sortOrder,
-        <HomeProjectsSection projects={context.homepageProjects ?? []} />,
+        <HomeProjectsSection
+          projects={context.homepageProjects ?? []}
+          content={mapHomeProjectsBlock(block)}
+        />,
       );
       continue;
     }

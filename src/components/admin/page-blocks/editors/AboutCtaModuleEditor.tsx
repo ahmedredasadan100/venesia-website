@@ -1,20 +1,46 @@
 "use client";
 
+import { useState } from "react";
+
 import AdminMediaImageField from "../../media/AdminMediaImageField";
+import AdminModuleTabs from "../AdminModuleTabs";
 import { AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
+import type { AdminLinkValue } from "../../../../lib/admin/links/types";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { AboutCtaContactConfig, AboutCtaModuleConfig } from "../../../../lib/page-blocks/configs";
+import {
+  CONTACT_ICON_OPTIONS,
+  renderContactIcon,
+  resolveContactIconKey,
+} from "../../../page-blocks/contact-icons";
 
 type AboutCtaModuleEditorProps = {
   config: AboutCtaModuleConfig;
   editorMode?: "about-cta" | "home-contact";
 };
 
-function padContacts(contacts: AboutCtaContactConfig[] | undefined, size = 4) {
-  const rows = [...(contacts ?? [])].slice(0, size);
-  while (rows.length < size) rows.push({});
-  return rows;
+const CONTACT_SLOTS = 4;
+
+type ContactRow = {
+  uid: string;
+  label: string;
+  value: string;
+  icon: string;
+  linkDefault: AdminLinkValue;
+};
+
+function buildInitialRows(contacts: AboutCtaContactConfig[] | undefined): ContactRow[] {
+  return Array.from({ length: CONTACT_SLOTS }, (_, index) => {
+    const contact = contacts?.[index];
+    return {
+      uid: `contact-slot-${index}`,
+      label: contact?.label ?? "",
+      value: contact?.value ?? "",
+      icon: resolveContactIconKey(contact?.icon, index),
+      linkDefault: linkDefaultFromContainer((contact ?? {}) as Record<string, unknown>),
+    };
+  });
 }
 
 export default function AboutCtaModuleEditor({
@@ -22,12 +48,24 @@ export default function AboutCtaModuleEditor({
   editorMode = "about-cta",
 }: AboutCtaModuleEditorProps) {
   const isHomeContact = editorMode === "home-contact";
-  const contacts = padContacts(config.contacts);
+  const [contactRows, setContactRows] = useState<ContactRow[]>(() => buildInitialRows(config.contacts));
 
-  return (
+  function updateRow(uid: string, patch: Partial<Pick<ContactRow, "label" | "value" | "icon">>) {
+    setContactRows((rows) => rows.map((row) => (row.uid === uid ? { ...row, ...patch } : row)));
+  }
+
+  function moveRow(index: number, direction: -1 | 1) {
+    setContactRows((rows) => {
+      const target = index + direction;
+      if (target < 0 || target >= rows.length) return rows;
+      const next = [...rows];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  const contentTab = (
     <div className="space-y-6">
-      <input type="hidden" name="config_schema" value="about-cta" />
-
       <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <h2 className="text-sm font-semibold text-white">النص الرئيسي</h2>
         <label className="block space-y-2">
@@ -78,56 +116,123 @@ export default function AboutCtaModuleEditor({
           <input name="note" defaultValue={config.note ?? ""} className={fieldClassName()} />
         </label>
       </section>
+    </div>
+  );
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-        <h2 className="text-sm font-semibold text-white">الصورة</h2>
-        <AdminMediaImageField
-          name="image"
-          label="صورة القسم"
-          defaultValue={config.image ?? ""}
-          dimensionHint="content"
-          browseFolder={isHomeContact ? "images/home" : "images/about"}
-        />
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Alt</span>
-          <input name="image_alt" defaultValue={config.imageAlt ?? ""} className={fieldClassName()} />
-        </label>
-      </section>
+  const imageTab = (
+    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <h2 className="text-sm font-semibold text-white">الصورة</h2>
+      <AdminMediaImageField
+        name="image"
+        label="صورة القسم"
+        defaultValue={config.image ?? ""}
+        dimensionHint="content"
+        browseFolder={isHomeContact ? "images/home" : "images/about"}
+      />
+      <label className="block space-y-2">
+        <span className="text-xs font-semibold text-white/55">Alt</span>
+        <input name="image_alt" defaultValue={config.imageAlt ?? ""} className={fieldClassName()} />
+      </label>
+    </section>
+  );
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-        <h2 className="text-sm font-semibold text-white">بيانات التواصل (4 كحد أقصى)</h2>
-        <p className="text-xs leading-6 text-white/45">
-          اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر.
-        </p>
-        <div className="grid gap-4 lg:grid-cols-2">
-          {contacts.map((contact, index) => (
-            <div key={index} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+  const contactsTab = (
+    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <h2 className="text-sm font-semibold text-white">بيانات التواصل (4 كحد أقصى)</h2>
+      <p className="text-xs leading-6 text-white/45">
+        اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر. استخدم أسهم الترتيب لتغيير
+        ترتيب الصفوف كما يظهر في الصفحة العامة، واختر أيقونة كل صف.
+      </p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {contactRows.map((row, index) => (
+          <div key={row.uid} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+            <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-[#D8B87A]/70">وسيلة {index + 1}</p>
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">Label</span>
-                <input
-                  name={`contact_${index}_label`}
-                  defaultValue={contact.label ?? ""}
-                  className={fieldClassName()}
-                />
-              </label>
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">Value</span>
-                <input
-                  name={`contact_${index}_value`}
-                  defaultValue={contact.value ?? ""}
-                  className={fieldClassName()}
-                />
-              </label>
-              <AdminLinkField
-                prefix={`contact_${index}`}
-                label="Href (اختياري)"
-                defaultValue={linkDefaultFromContainer(contact as Record<string, unknown>)}
-              />
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => moveRow(index, -1)}
+                  disabled={index === 0}
+                  aria-label="تحريك الصف لأعلى"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveRow(index, 1)}
+                  disabled={index === contactRows.length - 1}
+                  aria-label="تحريك الصف لأسفل"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  ↓
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
-      </section>
+
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold text-white/55">Label</span>
+              <input
+                name={`contact_${index}_label`}
+                value={row.label}
+                onChange={(event) => updateRow(row.uid, { label: event.target.value })}
+                className={fieldClassName()}
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold text-white/55">Value</span>
+              <input
+                name={`contact_${index}_value`}
+                value={row.value}
+                onChange={(event) => updateRow(row.uid, { value: event.target.value })}
+                className={fieldClassName()}
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold text-white/55">الأيقونة</span>
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8B87A]/22 bg-[#D8B87A]/[0.07] text-[#D8B87A]/75">
+                  {renderContactIcon(row.icon)}
+                </span>
+                <select
+                  name={`contact_${index}_icon`}
+                  value={row.icon}
+                  onChange={(event) => updateRow(row.uid, { icon: event.target.value })}
+                  className={fieldClassName()}
+                >
+                  {CONTACT_ICON_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <AdminLinkField
+              prefix={`contact_${index}`}
+              label="Href (اختياري)"
+              defaultValue={row.linkDefault}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  return (
+    <div className="space-y-6">
+      <input type="hidden" name="config_schema" value="about-cta" />
+
+      <AdminModuleTabs
+        tabs={[
+          { id: "content", label: "المحتوى الأساسي", content: contentTab },
+          { id: "image", label: "الصورة", content: imageTab },
+          { id: "contacts", label: "بيانات التواصل", content: contactsTab },
+        ]}
+      />
     </div>
   );
 }

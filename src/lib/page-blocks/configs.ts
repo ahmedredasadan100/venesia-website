@@ -54,6 +54,7 @@ export type AboutCtaContactConfig = {
   label?: string;
   value?: string;
   href?: string;
+  icon?: string;
   link?: Record<string, unknown>;
   target?: "_self" | "_blank";
 };
@@ -99,6 +100,24 @@ export type AboutPrinciplesModuleConfig = {
 export type AboutApproachModuleConfig = {
   eyebrow?: string;
   title?: string;
+};
+
+/** Section copy for Home Projects — project cards remain in the projects table. */
+export type HomeProjectsModuleConfig = {
+  eyebrow?: string;
+  title?: string;
+  intro?: string;
+  showEyebrow?: boolean;
+  showTitle?: boolean;
+  showIntro?: boolean;
+  showFooterCta?: boolean;
+  projectsLimit?: number;
+  footerCta?: {
+    label?: string;
+    href?: string;
+    link?: Record<string, unknown>;
+    target?: "_self" | "_blank";
+  };
 };
 
 export type CtaLinkConfig = {
@@ -375,8 +394,9 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
           const label = readText(row.label);
           const value = readText(row.value);
           const href = readText(row.href) || undefined;
+          const icon = readText(row.icon) || undefined;
           if (!label && !value) return null;
-          return { label: label || undefined, value: value || undefined, href };
+          return { label: label || undefined, value: value || undefined, href, icon };
         })
         .filter(Boolean) as AboutCtaContactConfig[]
     : undefined;
@@ -435,6 +455,55 @@ export function asAboutApproachConfig(raw: unknown): AboutApproachModuleConfig {
   return {
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
+  };
+}
+
+export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
+  const config = (raw ?? {}) as Record<string, unknown>;
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readShowFlag = (camelKey: string, snakeKey: string) => {
+    const value = config[camelKey] ?? config[snakeKey];
+    if (typeof value === "boolean") return value;
+    if (value === "false" || value === "0") return false;
+    if (value === "true" || value === "1") return true;
+    return true;
+  };
+  const footerRaw = config.footerCta ?? config.footer_cta;
+  const footer =
+    footerRaw && typeof footerRaw === "object"
+      ? (footerRaw as Record<string, unknown>)
+      : undefined;
+  const limitRaw = config.projectsLimit ?? config.projects_limit;
+  const parsedLimit =
+    typeof limitRaw === "number" && Number.isFinite(limitRaw) && limitRaw > 0
+      ? Math.floor(limitRaw)
+      : typeof limitRaw === "string" && limitRaw.trim()
+        ? (() => {
+            const parsed = Number(limitRaw);
+            return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+          })()
+        : undefined;
+
+  return {
+    eyebrow: readText(config.eyebrow) || undefined,
+    title: readText(config.title) || undefined,
+    intro: readText(config.intro) || undefined,
+    showEyebrow: readShowFlag("showEyebrow", "show_eyebrow"),
+    showTitle: readShowFlag("showTitle", "show_title"),
+    showIntro: readShowFlag("showIntro", "show_intro"),
+    showFooterCta: readShowFlag("showFooterCta", "show_footer_cta"),
+    projectsLimit: parsedLimit,
+    footerCta: footer
+      ? {
+          label: readText(footer.label) || undefined,
+          href: readText(footer.href) || undefined,
+          link:
+            footer.link && typeof footer.link === "object"
+              ? (footer.link as Record<string, unknown>)
+              : undefined,
+          target: footer.target === "_blank" ? "_blank" : footer.target === "_self" ? "_self" : undefined,
+        }
+      : undefined,
   };
 }
 

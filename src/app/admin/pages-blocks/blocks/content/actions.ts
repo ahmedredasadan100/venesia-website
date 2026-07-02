@@ -7,6 +7,7 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  parseFormBoolean,
   parseNumber,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -22,6 +23,7 @@ import type {
   AboutIntroModuleConfig,
   AboutPrinciplesModuleConfig,
   ContentBlockConfig,
+  HomeProjectsModuleConfig,
   VisionGoalsModuleConfig,
 } from "../../../../../lib/page-blocks/configs";
 import {
@@ -114,11 +116,13 @@ function readContacts(formData: FormData) {
   return Array.from({ length: 4 }, (_, index) => {
     const label = cleanText(formData.get(`contact_${index}_label`));
     const value = cleanText(formData.get(`contact_${index}_value`));
+    const icon = cleanText(formData.get(`contact_${index}_icon`));
     const linkData = linkFieldFromFormData(formData, `contact_${index}`);
     if (!label && !value && !hasSavedLinkField(linkData)) return null;
     return {
       label: label || undefined,
       value: value || undefined,
+      icon: icon || undefined,
       ...(linkData ? { link: linkData.link, target: linkData.target } : {}),
     };
   }).filter(Boolean) as AboutCtaModuleConfig["contacts"];
@@ -179,6 +183,35 @@ function buildAboutApproachConfig(formData: FormData): AboutApproachModuleConfig
   };
 }
 
+function buildHomeProjectsConfig(formData: FormData): HomeProjectsModuleConfig {
+  const footerLink = linkFieldFromFormData(formData, "footer_cta");
+  const label = cleanText(formData.get("footer_cta_label"));
+  const limitText = cleanText(formData.get("projects_limit"));
+  const parsedLimit = limitText ? parseNumber(limitText, 0) : 0;
+  const projectsLimit =
+    limitText && Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.floor(parsedLimit) : undefined;
+
+  const footerCta =
+    label || hasSavedLinkField(footerLink)
+      ? {
+          label: label || undefined,
+          ...(footerLink ? { link: footerLink.link, target: footerLink.target } : {}),
+        }
+      : undefined;
+
+  return {
+    eyebrow: cleanText(formData.get("eyebrow")) || undefined,
+    title: cleanText(formData.get("title")) || undefined,
+    intro: cleanText(formData.get("intro")) || undefined,
+    showEyebrow: parseFormBoolean(formData, "show_eyebrow", false),
+    showTitle: parseFormBoolean(formData, "show_title", false),
+    showIntro: parseFormBoolean(formData, "show_intro", false),
+    showFooterCta: parseFormBoolean(formData, "show_footer_cta", false),
+    projectsLimit,
+    footerCta,
+  };
+}
+
 function resolveStructuredVariant(slug: string, variantInput: string | null) {
   if (usesAboutIntroConfigSchema(slug, variantInput)) return "about-intro";
   if (isVisionGoalsTemplate(slug, variantInput)) return "vision-goals";
@@ -198,7 +231,8 @@ function buildContentConfig(
   | VisionGoalsModuleConfig
   | AboutCtaModuleConfig
   | AboutPrinciplesModuleConfig
-  | AboutApproachModuleConfig {
+  | AboutApproachModuleConfig
+  | HomeProjectsModuleConfig {
   const variantInput = cleanText(formData.get("variant")) || null;
 
   if (cleanText(formData.get("config_schema")) === "about-intro" || usesAboutIntroConfigSchema(slug ?? "", variantInput)) {
@@ -220,7 +254,7 @@ function buildContentConfig(
     return buildAboutApproachConfig(formData);
   }
   if (cleanText(formData.get("config_schema")) === "home-projects" || isHomeProjectsTemplate(slug ?? "", variantInput)) {
-    return {};
+    return buildHomeProjectsConfig(formData);
   }
   return buildGenericContentConfig(formData);
 }

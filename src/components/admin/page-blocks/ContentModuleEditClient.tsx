@@ -18,6 +18,7 @@ import {
   asAboutIntroConfig,
   asAboutPrinciplesConfig,
   asContentConfig,
+  asHomeProjectsConfig,
   asVisionGoalsConfig,
 } from "../../../lib/page-blocks/configs";
 import { getContentModuleEditorKey } from "../../../lib/page-blocks/module-edit-registry";
@@ -59,6 +60,8 @@ export default function ContentModuleEditClient({
           ? asAboutPrinciplesConfig(block.config)
           : editorKey === "about-approach"
             ? asAboutApproachConfig(block.config)
+            : editorKey === "home-projects"
+              ? asHomeProjectsConfig(block.config)
             : asContentConfig(block.config);
   const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
 
@@ -94,7 +97,7 @@ export default function ContentModuleEditClient({
           {editorKey === "home-contact"
             ? "CTA الرئيسية: نص + زر + صورة + 4 وسائل تواصل — للصفحة الرئيسية فقط."
             : editorKey === "home-projects"
-            ? "سكشن مشاريع فينيسيا — placement فقط. بيانات الكروت من جدول projects (show_on_homepage + homepage_order)."
+            ? "سكشن مشاريع فينيسيا — نصوص السكشن من هنا؛ بيانات الكروت من جدول projects (show_on_homepage + homepage_order)."
             : editorKey === "home-trust"
             ? "لماذا يثق السوق العقاري في فينيسيا؟ — نص يسار + 4 بطاقات ثقة — للصفحة الرئيسية فقط."
             : editorKey === "home-story"
@@ -179,7 +182,7 @@ export default function ContentModuleEditClient({
                     editorMode="home-trust"
                   />
                 ) : editorKey === "home-projects" ? (
-                  <HomeProjectsPlacementEditor />
+                  <HomeProjectsPlacementEditor config={config as ReturnType<typeof asHomeProjectsConfig>} />
                 ) : editorKey === "about-principles" ? (
                   <AboutPrinciplesModuleEditor
                     config={config as ReturnType<typeof asAboutPrinciplesConfig>}

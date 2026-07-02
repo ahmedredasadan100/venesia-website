@@ -6,6 +6,7 @@ export type AboutCtaContact = {
   label: string;
   value: string;
   href?: string;
+  icon?: string;
 };
 
 export type AboutCtaModuleContent = {
@@ -37,6 +38,7 @@ function mapContacts(contacts?: AboutCtaModuleConfig["contacts"]): AboutCtaConta
       label: item.label ?? "",
       value: item.value ?? "",
       href: item.href?.trim() || undefined,
+      icon: item.icon?.trim() || undefined,
     }))
     .filter((item) => item.label.trim() || item.value.trim());
 }

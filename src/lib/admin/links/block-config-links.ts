@@ -7,6 +7,7 @@ import type {
   BreadcrumbBlockConfig,
   CardsBlockConfig,
   CtaBlockConfig,
+  HomeProjectsModuleConfig,
 } from "../../page-blocks/configs";
 
 async function resolveNestedLink(
@@ -98,20 +99,37 @@ export async function resolveBreadcrumbBlockConfigLinks(config: BreadcrumbBlockC
   return { ...config, manualItems };
 }
 
+export async function resolveHomeProjectsConfigLinks(
+  config: HomeProjectsModuleConfig,
+): Promise<HomeProjectsModuleConfig> {
+  if (!config.footerCta) return config;
+
+  const footerCta = (await resolveNestedLink(
+    config.footerCta as Record<string, unknown>,
+    "link",
+    "href",
+  )) as HomeProjectsModuleConfig["footerCta"];
+
+  return { ...config, footerCta };
+}
+
 export async function resolveContentBlockConfigLinks(
   config: Record<string, unknown>,
   slug: string,
   variant?: string | null,
 ): Promise<Record<string, unknown>> {
-  const { usesAboutIntroConfigSchema, usesAboutCtaConfigSchema, isVisionGoalsTemplate } = await import(
-    "../../page-blocks/configs"
-  );
+  const { usesAboutIntroConfigSchema, usesAboutCtaConfigSchema, isVisionGoalsTemplate, isHomeProjectsTemplate } =
+    await import("../../page-blocks/configs");
 
   if (usesAboutIntroConfigSchema(slug, variant)) {
     return resolveAboutIntroConfigLinks(config);
   }
   if (usesAboutCtaConfigSchema(slug, variant)) {
     const resolved = await resolveAboutCtaConfigLinks(config as AboutCtaModuleConfig);
+    return resolved as unknown as Record<string, unknown>;
+  }
+  if (isHomeProjectsTemplate(slug, variant)) {
+    const resolved = await resolveHomeProjectsConfigLinks(config as HomeProjectsModuleConfig);
     return resolved as unknown as Record<string, unknown>;
   }
   if (isVisionGoalsTemplate(slug, variant)) {
