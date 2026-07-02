@@ -39,7 +39,12 @@ export default function FooterBlockHeader({
 }: FooterBlockHeaderProps) {
   const eyebrowText = eyebrow?.trim() || null;
   const titleText = title?.trim() || null;
-  const iconNode = renderIcon(icon, variant);
+  const hasHeaderContent = Boolean(eyebrowText || titleText);
+  const resolvedIcon: FooterBlockIcon =
+    variant === "public" && hasHeaderContent && (icon === "none" || icon == null)
+      ? "brand"
+      : icon;
+  const iconNode = renderIcon(resolvedIcon, variant);
 
   if (!eyebrowText && !titleText && !iconNode) return null;
 

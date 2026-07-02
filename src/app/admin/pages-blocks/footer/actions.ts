@@ -15,8 +15,11 @@ import type {
   FooterTextSlotConfig,
 } from "../../../../lib/footer/footer-slot-types";
 import { revalidateFooterPublicPaths } from "../../../../lib/footer/revalidate-footer";
-import type { FooterBrand, FooterContactItem, FooterLegal, FooterSocialLink } from "../../../../lib/footer/types";
-import { FOOTER_SLOTS_SETTING_KEY } from "../../../../lib/footer/types";
+import {
+  isFooterContactItemPublic,
+  normalizeFooterContactItem,
+} from "../../../../lib/footer/parse-footer-settings";
+import { FOOTER_SLOTS_SETTING_KEY, type FooterBrand, type FooterContactItem, type FooterLegal, type FooterSocialLink } from "../../../../lib/footer/types";
 import { assertValidFooterSlots } from "../../../../lib/footer/validate-footer-slots";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
@@ -64,7 +67,7 @@ function syncBrandFromSlots(slots: FooterSlotsConfig): FooterBrand {
     textSlot?.type === "text" ? (textSlot.config as FooterTextSlotConfig) : null;
 
   return {
-    title: textConfig?.title.trim() || DEFAULT_FOOTER_BRAND.title,
+    title: textConfig ? textConfig.title.trim() : DEFAULT_FOOTER_BRAND.title,
     tagline: textConfig?.body.trim() || DEFAULT_FOOTER_BRAND.tagline,
     contactHeading: contactSlot?.heading?.trim() || DEFAULT_FOOTER_BRAND.contactHeading,
     mediaHeading: mediaSlot?.heading?.trim() || DEFAULT_FOOTER_BRAND.mediaHeading,
@@ -101,18 +104,8 @@ function sanitizeContactItems(items: FooterContactItem[]): FooterContactItem[] {
   const parsed: FooterContactItem[] = [];
 
   for (const item of items) {
-    const label = item.label.trim();
-    const value = item.value.trim();
-    if (!label || !value) continue;
-    const href = item.href?.trim();
-    const icon = item.icon?.trim();
-    parsed.push({
-      label,
-      value,
-      href: href || undefined,
-      icon: icon || undefined,
-      visible: item.visible === false ? false : undefined,
-    });
+    const normalized = normalizeFooterContactItem(item);
+    if (normalized) parsed.push(normalized);
   }
 
   return parsed;
@@ -125,8 +118,8 @@ export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
   const contactItems = sanitizeContactItems(input.contactItems);
   const socialLinks = sanitizeSocialLinks(input.socialLinks);
 
-  if (usesGlobalContactPool(validatedSlots) && !contactItems.length) {
-    throw new Error("أضف عنصر تواصل واحدًا على الأقل للمجموعة العامة.");
+  if (usesGlobalContactPool(validatedSlots) && !contactItems.some(isFooterContactItemPublic)) {
+    throw new Error("أضف عنصر تواصل ظاهرًا واحدًا على الأقل للمجموعة العامة.");
   }
 
   if (!socialLinks.length) {

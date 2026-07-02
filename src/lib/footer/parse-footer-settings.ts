@@ -11,12 +11,67 @@ function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+export function parseFooterContactItemVisible(value: unknown): boolean | undefined {
+  if (value === false || value === "false" || value === 0 || value === "0") return false;
+  return undefined;
+}
+
+export function isFooterContactItemVisible(item: FooterContactItem) {
+  return item.visible !== false;
+}
+
+export function hasFooterContactItemContent(item: Pick<FooterContactItem, "label" | "value" | "icon">) {
+  return Boolean(item.label?.trim() || item.value?.trim() || item.icon?.trim());
+}
+
+export function isFooterContactItemPublic(item: FooterContactItem) {
+  return isFooterContactItemVisible(item) && hasFooterContactItemContent(item);
+}
+
+export function normalizeFooterContactItem(item: FooterContactItem): FooterContactItem | null {
+  const label = item.label?.trim() ?? "";
+  const value = item.value?.trim() ?? "";
+  const href = item.href?.trim();
+  const icon = item.icon?.trim();
+
+  if (!hasFooterContactItemContent({ label, value, icon })) {
+    return null;
+  }
+
+  return {
+    label,
+    value,
+    href: href || undefined,
+    icon: icon || undefined,
+    visible: item.visible === false ? false : undefined,
+  };
+}
+
+export function parseFooterContactItem(record: Record<string, unknown>): FooterContactItem | null {
+  const label = cleanText(record.label);
+  const value = cleanText(record.value);
+  const href = cleanText(record.href);
+  const icon = cleanText(record.icon);
+
+  if (!hasFooterContactItemContent({ label, value, icon })) {
+    return null;
+  }
+
+  return {
+    icon: icon || undefined,
+    label,
+    value,
+    href: href || undefined,
+    visible: parseFooterContactItemVisible(record.visible),
+  };
+}
+
 export function parseFooterBrand(value: unknown, fallback: FooterBrand): FooterBrand {
   if (!value || typeof value !== "object") return fallback;
 
   const record = value as Record<string, unknown>;
   return {
-    title: cleanText(record.title) || fallback.title,
+    title: typeof record.title === "string" ? cleanText(record.title) : fallback.title,
     tagline: cleanText(record.tagline) || fallback.tagline,
     contactHeading: cleanText(record.contactHeading) || fallback.contactHeading,
     mediaHeading: cleanText(record.mediaHeading) || fallback.mediaHeading,
@@ -29,21 +84,7 @@ export function parseFooterContactItems(value: unknown, fallback: FooterContactI
   const parsed = value
     .map((item) => {
       if (!item || typeof item !== "object") return null;
-      const record = item as Record<string, unknown>;
-      const label = cleanText(record.label);
-      const contactValue = cleanText(record.value);
-      if (!label || !contactValue) return null;
-
-      const href = cleanText(record.href);
-      const icon = cleanText(record.icon);
-
-      return {
-        icon: icon || undefined,
-        label,
-        value: contactValue,
-        href: href || undefined,
-        visible: record.visible === false ? false : undefined,
-      } satisfies FooterContactItem;
+      return parseFooterContactItem(item as Record<string, unknown>);
     })
     .filter(Boolean) as FooterContactItem[];
 

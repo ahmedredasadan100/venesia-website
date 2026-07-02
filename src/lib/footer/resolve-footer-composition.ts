@@ -22,6 +22,7 @@ import type {
   ResolvedFooterSlot,
   ResolvedFooterTextSlot,
 } from "./resolved-footer-types";
+import { isFooterContactItemPublic } from "./parse-footer-settings";
 import type { FooterContactItem, FooterSettings } from "./types";
 
 export type FooterNavigationContext = {
@@ -58,7 +59,7 @@ function resolveContactItems(
   globalItems: FooterContactItem[],
 ): FooterContactItem[] {
   const items = config.source === "custom" ? config.items : globalItems;
-  return items.filter((item) => item.visible !== false);
+  return items.filter((item) => isFooterContactItemPublic(item));
 }
 
 function resolveTextSlot(slot: FooterSlot<"text">): ResolvedFooterTextSlot {
@@ -69,8 +70,8 @@ function resolveTextSlot(slot: FooterSlot<"text">): ResolvedFooterTextSlot {
     type: "text",
     heading: slot.heading,
     revealDelay: revealDelayForIndex(slot.index),
-    title: config.title,
-    body: config.body,
+    title: config.title.trim(),
+    body: config.body.trim(),
     showBrandIcon: config.showBrandIcon,
     cta: {
       enabled: config.cta.enabled,

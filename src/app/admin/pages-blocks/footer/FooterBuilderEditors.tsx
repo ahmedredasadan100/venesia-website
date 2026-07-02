@@ -37,16 +37,29 @@ type ContactItemsFieldProps = {
 export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldProps) {
   const rows = items.length ? items : [emptyContactRow()];
 
+  function updateRow(index: number, patch: Partial<FooterContactItem>) {
+    onChange(
+      rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
+    );
+  }
+
   return (
     <div className="space-y-3">
       {hint ? <p className={adminFormHintClassName()}>{hint}</p> : null}
       {rows.map((item, index) => (
         <div
-          key={`contact-${index}`}
-          className="space-y-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4"
+          key={`contact-row-${index}`}
+          className={`space-y-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4 ${
+            item.visible === false ? "opacity-55" : ""
+          }`}
         >
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-white/75">عنصر #{index + 1}</p>
+            <p className="text-sm font-medium text-white/75">
+              عنصر #{index + 1}
+              {item.visible === false ? (
+                <span className="ms-2 text-xs font-normal text-white/40">(مخفي في الفوتر)</span>
+              ) : null}
+            </p>
             <AdminActionButton
               variant="ghost"
               className="!min-h-8 !px-3 !py-1.5 text-xs text-red-300"
@@ -55,14 +68,36 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
               حذف
             </AdminActionButton>
           </div>
+
+          <div className="rounded-2xl border border-white/8 bg-[#05070B]/70 px-4 py-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">معاينة</p>
+            <div className="text-[13px] text-white/50">
+              {item.icon?.trim() || item.label?.trim() ? (
+                <div className="flex items-center gap-2">
+                  {item.icon?.trim() ? (
+                    <span className="shrink-0 text-[#D8B87A]/50">{item.icon.trim()}</span>
+                  ) : null}
+                  {item.label?.trim() ? (
+                    <span className="text-[11px] font-medium text-white/45">{item.label.trim()}</span>
+                  ) : null}
+                </div>
+              ) : null}
+              {item.value?.trim() ? (
+                <p className={`break-all text-white/55 ${item.icon?.trim() || item.label?.trim() ? "mt-1" : ""}`}>
+                  {item.value.trim()}
+                </p>
+              ) : !item.icon?.trim() && !item.label?.trim() ? (
+                <p className="text-white/30">بدون محتوى</p>
+              ) : null}
+            </div>
+          </div>
+
           <div className={ADMIN_FORM.gridTwoCol}>
             <label className={adminFormLabelClassName()}>
               <span>التسمية</span>
               <input
                 value={item.label}
-                onChange={(event) =>
-                  onChange(rows.map((row, rowIndex) => (rowIndex === index ? { ...row, label: event.target.value } : row)))
-                }
+                onChange={(event) => updateRow(index, { label: event.target.value })}
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
@@ -71,9 +106,7 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
               <span>القيمة</span>
               <input
                 value={item.value}
-                onChange={(event) =>
-                  onChange(rows.map((row, rowIndex) => (rowIndex === index ? { ...row, value: event.target.value } : row)))
-                }
+                onChange={(event) => updateRow(index, { value: event.target.value })}
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
@@ -82,9 +115,7 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
               <span>الرابط (اختياري)</span>
               <input
                 value={item.href ?? ""}
-                onChange={(event) =>
-                  onChange(rows.map((row, rowIndex) => (rowIndex === index ? { ...row, href: event.target.value } : row)))
-                }
+                onChange={(event) => updateRow(index, { href: event.target.value })}
                 className={adminFormFieldClassName()}
                 dir="ltr"
               />
@@ -93,9 +124,7 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
               <span>أيقونة (اختياري)</span>
               <input
                 value={item.icon ?? ""}
-                onChange={(event) =>
-                  onChange(rows.map((row, rowIndex) => (rowIndex === index ? { ...row, icon: event.target.value } : row)))
-                }
+                onChange={(event) => updateRow(index, { icon: event.target.value })}
                 className={adminFormFieldClassName()}
               />
             </label>
@@ -105,11 +134,7 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
                 type="checkbox"
                 checked={item.visible !== false}
                 onChange={(event) =>
-                  onChange(
-                    rows.map((row, rowIndex) =>
-                      rowIndex === index ? { ...row, visible: event.target.checked } : row,
-                    ),
-                  )
+                  updateRow(index, { visible: event.target.checked ? undefined : false })
                 }
                 className="h-4 w-4 accent-[#D8B87A]"
               />

@@ -11,6 +11,7 @@ import {
   type FooterTextSlotConfig,
 } from "./footer-slot-types";
 import { isRegisteredFooterBlockType } from "./footer-block-registry";
+import { hasFooterContactItemContent } from "./parse-footer-settings";
 
 const UNSAFE_HREF_PATTERN = /^\s*javascript:/i;
 
@@ -33,9 +34,6 @@ function footerLinkIsSet(href: string, link?: Record<string, unknown> | null) {
 }
 
 function validateTextConfig(config: FooterTextSlotConfig, path: string, errors: string[]) {
-  if (!config.title.trim()) {
-    errors.push(`${path}: عنوان النص مطلوب.`);
-  }
   if (config.cta.enabled) {
     if (!config.cta.label.trim()) errors.push(`${path}: تسمية CTA مطلوبة عند التفعيل.`);
     if (!footerLinkIsSet(config.cta.href, config.cta.link)) {
@@ -56,9 +54,13 @@ function validateContactConfig(config: FooterContactSlotConfig, path: string, er
     errors.push(`${path}: أضف عنصر تواصل واحدًا على الأقل للوضع المخصص.`);
   }
 
+  if (config.source !== "custom") {
+    return;
+  }
+
   config.items.forEach((item, index) => {
-    if (!item.label.trim() || !item.value.trim()) {
-      errors.push(`${path}.items[${index}]: التسمية والقيمة مطلوبتان.`);
+    if (!hasFooterContactItemContent(item)) {
+      errors.push(`${path}.items[${index}]: أضف تسمية أو قيمة أو أيقونة.`);
     }
     if (item.href) pushHrefError(errors, `${path}.items[${index}].href`, item.href);
   });

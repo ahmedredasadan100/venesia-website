@@ -15,6 +15,7 @@ import {
   type FooterSlotsConfig,
   type FooterTextSlotConfig,
 } from "./footer-slot-types";
+import { parseFooterContactItem } from "./parse-footer-settings";
 import type { FooterContactItem } from "./types";
 
 function cleanText(value: unknown) {
@@ -54,21 +55,7 @@ function parseContactItems(value: unknown): FooterContactItem[] {
   return value
     .map((item) => {
       if (!item || typeof item !== "object") return null;
-      const record = item as Record<string, unknown>;
-      const label = cleanText(record.label);
-      const contactValue = cleanText(record.value);
-      if (!label || !contactValue) return null;
-
-      const href = cleanText(record.href);
-      const icon = cleanText(record.icon);
-
-      return {
-        icon: icon || undefined,
-        label,
-        value: contactValue,
-        href: href || undefined,
-        visible: record.visible === false ? false : undefined,
-      } satisfies FooterContactItem;
+      return parseFooterContactItem(item as Record<string, unknown>);
     })
     .filter(Boolean) as FooterContactItem[];
 }
@@ -109,7 +96,7 @@ export function parseTextSlotConfig(raw: unknown, fallback: FooterTextSlotConfig
   const targetRaw = cleanText(ctaRaw.target);
 
   return {
-    title: cleanText(record.title) || fallback.title,
+    title: typeof record.title === "string" ? cleanText(record.title) : fallback.title,
     body: cleanText(record.body) || fallback.body,
     showBrandIcon: parseBoolean(record.showBrandIcon, fallback.showBrandIcon),
     cta: {

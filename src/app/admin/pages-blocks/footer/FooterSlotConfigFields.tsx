@@ -128,12 +128,13 @@ function TextSlotFields({
   return (
     <div className="space-y-4">
       <label className={adminFormLabelClassName()}>
-        <span>العنوان الرئيسي (Title)</span>
+        <span>العنوان الرئيسي (Title) — اختياري</span>
         <input
           value={config.title}
           onChange={(event) => onChange({ ...config, title: event.target.value })}
           className={adminFormFieldClassName()}
           dir="rtl"
+          placeholder="يُترك فارغًا لإخفاء العنوان الرئيسي"
         />
       </label>
       <label className={adminFormLabelClassName()}>
