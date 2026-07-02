@@ -50,6 +50,7 @@ function buildHeroConfig(formData: FormData) {
     subtitle: cleanText(formData.get("subtitle")),
     description: cleanText(formData.get("description")),
     images: splitImages(formData.get("images")),
+    mobileImages: splitImages(formData.get("mobile_images")),
     primaryCtaLabel,
     primaryCtaLink,
     secondaryCtaLabel,

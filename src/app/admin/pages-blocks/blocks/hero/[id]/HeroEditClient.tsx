@@ -31,6 +31,7 @@ type HeroEditClientProps = {
   };
   config: Record<string, unknown>;
   imagesText: string;
+  mobileImagesText: string;
   assignedPageIds: number[];
   pages: PageOption[];
   sourceOptions: [string, string][];
@@ -42,6 +43,7 @@ export default function HeroEditClient({
   hero,
   config,
   imagesText,
+  mobileImagesText,
   assignedPageIds,
   pages,
   sourceOptions,
@@ -137,13 +139,13 @@ export default function HeroEditClient({
               ),
             },
             {
-              id: "media",
-              label: "الوسائط",
+              id: "media-desktop",
+              label: "صور الديسكتوب",
               content: (
                 <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                   <AdminImagePathListField
                     name="images"
-                    label="صور الهيرو"
+                    label="صور الهيرو (ديسكتوب)"
                     defaultValue={imagesText}
                     helperText="اختر أو ارفع الصور من المكتبة. استخدم الأسهم لترتيب الشرائح في العرض."
                   />
@@ -156,6 +158,20 @@ export default function HeroEditClient({
                       className={fieldClassName()}
                     />
                   </label>
+                </section>
+              ),
+            },
+            {
+              id: "media-mobile",
+              label: "صور الموبايل",
+              content: (
+                <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                  <AdminImagePathListField
+                    name="mobile_images"
+                    label="صور الهيرو (موبايل)"
+                    defaultValue={mobileImagesText}
+                    helperText="اختياري. لو تُركت فارغة تُستخدم صور الديسكتوب تلقائيًا على الموبايل. رتّب صور الموبايل بنفس ترتيب الديسكتوب."
+                  />
                 </section>
               ),
             },

@@ -70,6 +70,7 @@ export type HeroConfig = {
   subtitle?: string;
   description?: string;
   images?: string[];
+  mobileImages?: string[];
   primaryCtaLabel?: string;
   primaryCtaHref?: string;
   primaryCtaLink?: Record<string, unknown>;
@@ -96,6 +97,13 @@ export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
     ? raw.images.map((item) => String(item).trim()).filter(Boolean)
     : [];
 
+  const mobileImagesRaw = Array.isArray(raw.mobileImages)
+    ? raw.mobileImages
+    : Array.isArray(raw.mobile_images)
+      ? raw.mobile_images
+      : [];
+  const mobileImages = mobileImagesRaw.map((item) => String(item).trim()).filter(Boolean);
+
   const showCta = readBool(raw.showCta) ?? readBool(raw.show_cta);
   const heroLayoutRaw = readText(raw.heroLayout) || readText(raw.hero_layout);
   const heroLayout: HeroLayoutPreset | undefined =
@@ -108,6 +116,7 @@ export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
     subtitle: readText(raw.subtitle) || undefined,
     description: readText(raw.description) || undefined,
     images: images.length ? images : undefined,
+    mobileImages: mobileImages.length ? mobileImages : undefined,
     primaryCtaLabel: readText(raw.primaryCtaLabel) || readText(raw.primary_cta_label) || undefined,
     primaryCtaHref: readText(raw.primaryCtaHref) || readText(raw.primary_cta_href) || undefined,
     secondaryCtaLabel: readText(raw.secondaryCtaLabel) || readText(raw.secondary_cta_label) || undefined,

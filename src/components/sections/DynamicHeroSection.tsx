@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { HeroSectionData } from "../../lib/page-sections";
 import { getHeroConfig } from "../../lib/page-sections";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
@@ -41,21 +41,48 @@ export default function DynamicHeroSection({
   );
 }
 
+const HERO_MOBILE_QUERY = "(max-width: 767px)";
+
+function subscribeHeroMobile(callback: () => void) {
+  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  const mq = window.matchMedia(HERO_MOBILE_QUERY);
+  mq.addEventListener("change", callback);
+  return () => mq.removeEventListener("change", callback);
+}
+
+function getHeroMobileSnapshot() {
+  return typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(HERO_MOBILE_QUERY).matches;
+}
+
+function getHeroMobileServerSnapshot() {
+  return false;
+}
+
+function useIsMobileViewport() {
+  return useSyncExternalStore(subscribeHeroMobile, getHeroMobileSnapshot, getHeroMobileServerSnapshot);
+}
+
 function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   const config = getHeroConfig(hero);
   const images = config.images ?? [];
+  const mobileImages = config.mobileImages ?? [];
+  const isMobile = useIsMobileViewport();
+  // Mobile can have an independent slide count: use mobileImages only when it has items,
+  // otherwise fall back to the full desktop images set.
+  const slides = isMobile && mobileImages.length > 0 ? mobileImages : images;
   const [activeIndex, setActiveIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const canSwipe = images.length > 1;
+  const canSwipe = slides.length > 1;
+  const safeIndex = Math.min(activeIndex, Math.max(slides.length - 1, 0));
 
   const startAutoplay = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (!canSwipe) return;
 
     timerRef.current = setInterval(() => {
-      setActiveIndex((current) => (current + 1) % images.length);
+      setActiveIndex((current) => (current + 1) % slides.length);
     }, 7500);
-  }, [canSwipe, images.length]);
+  }, [canSwipe, slides.length]);
 
   useEffect(() => {
     startAutoplay();
@@ -66,15 +93,15 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
 
   const goToNext = useCallback(() => {
     if (!canSwipe) return;
-    setActiveIndex((current) => (current + 1) % images.length);
+    setActiveIndex((current) => (current + 1) % slides.length);
     startAutoplay();
-  }, [canSwipe, images.length, startAutoplay]);
+  }, [canSwipe, slides.length, startAutoplay]);
 
   const goToPrev = useCallback(() => {
     if (!canSwipe) return;
-    setActiveIndex((current) => (current - 1 + images.length) % images.length);
+    setActiveIndex((current) => (current - 1 + slides.length) % slides.length);
     startAutoplay();
-  }, [canSwipe, images.length, startAutoplay]);
+  }, [canSwipe, slides.length, startAutoplay]);
 
   const handleGoTo = useCallback(
     (index: number) => {
@@ -105,11 +132,11 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
       {...swipeHandlers}
     >
       <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden>
-        {images.map((src, index) => (
+        {slides.map((src, index) => (
           <div
             key={`${src}-${index}`}
             className={`absolute inset-0 transition-opacity duration-[2400ms] ease-in-out ${
-              index === activeIndex ? "opacity-100" : "opacity-0"
+              index === safeIndex ? "opacity-100" : "opacity-0"
             }`}
           >
             <img
@@ -206,9 +233,9 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[8] h-[115px] bg-[linear-gradient(to_top,#05070B_0%,rgba(5,7,11,0.72)_55%,transparent_100%)] [clip-path:polygon(0_68%,100%_38%,100%_100%,0_100%)]" />
 
-      {images.length > 1 ? (
+      {slides.length > 1 ? (
         <div className="absolute inset-x-0 bottom-8 z-20 flex justify-center gap-1.5">
-          {images.map((_, index) => (
+          {slides.map((_, index) => (
             <button
               key={index}
               type="button"
@@ -218,7 +245,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
             >
               <span
                 className={`block h-1.5 rounded-full transition-all duration-500 ${
-                  index === activeIndex ? "w-8 bg-[#D8B87A]" : "w-3 bg-white/25 group-hover:bg-white/45"
+                  index === safeIndex ? "w-8 bg-[#D8B87A]" : "w-3 bg-white/25 group-hover:bg-white/45"
                 }`}
               />
             </button>
@@ -280,6 +307,9 @@ function InternalDynamicHero({
 
   const images = config.images?.length ? config.images : fallbackImage ? [fallbackImage] : [];
   const image = images[0];
+  // Mobile image support for internal heroes, excluding the Contact page hero.
+  const supportsMobileImages = hero.page?.slug !== "contact";
+  const mobileImage = supportsMobileImages ? config.mobileImages?.[0] : undefined;
   const title = config.title || fallbackTitle || hero.page?.title || "";
   const eyebrow = config.eyebrow || fallbackEyebrow || "Internal Page";
   const subtitle = config.subtitle || fallbackSubtitle || "";
@@ -297,12 +327,24 @@ function InternalDynamicHero({
     >
       {image ? (
         <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden>
-          <img
-            src={image}
-            alt=""
-            className={`hero-slide-ken-burns pointer-events-none absolute left-1/2 top-1/2 min-h-full min-w-full object-cover ${imagePosition}`}
-            style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
-          />
+          {mobileImage ? (
+            <picture>
+              <source media="(max-width: 767px)" srcSet={mobileImage} />
+              <img
+                src={image}
+                alt=""
+                className={`hero-slide-ken-burns pointer-events-none absolute left-1/2 top-1/2 min-h-full min-w-full object-cover ${imagePosition}`}
+                style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
+              />
+            </picture>
+          ) : (
+            <img
+              src={image}
+              alt=""
+              className={`hero-slide-ken-burns pointer-events-none absolute left-1/2 top-1/2 min-h-full min-w-full object-cover ${imagePosition}`}
+              style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
+            />
+          )}
           <div className="pointer-events-none absolute inset-0 bg-[#05070B]/20" />
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_left,rgba(5,7,11,0.52)_0%,rgba(5,7,11,0.20)_26%,rgba(5,7,11,0.06)_44%,transparent_64%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(5,7,11,0.24)_0%,transparent_34%,rgba(5,7,11,0.68)_100%)]" />

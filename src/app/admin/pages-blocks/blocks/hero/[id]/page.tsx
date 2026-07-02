@@ -27,6 +27,11 @@ function imagesToTextarea(config: Record<string, unknown> | null) {
   return Array.isArray(images) ? images.join("\n") : "";
 }
 
+function mobileImagesToTextarea(config: Record<string, unknown> | null) {
+  const images = config?.mobileImages ?? config?.mobile_images;
+  return Array.isArray(images) ? images.join("\n") : "";
+}
+
 export default async function HeroDetailsPage({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
   const resolvedSearch = searchParams ? await searchParams : {};
@@ -69,6 +74,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
       }}
       config={config}
       imagesText={imagesToTextarea(config)}
+      mobileImagesText={mobileImagesToTextarea(config)}
       assignedPageIds={assignedPageIds}
       pages={(pages ?? []).map((page) => ({
         id: page.id,
