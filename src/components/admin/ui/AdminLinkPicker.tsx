@@ -595,7 +595,7 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
         </div>
       }
     >
-      <div className="flex h-[min(520px,62vh)] min-h-[420px] flex-col gap-4 overflow-hidden">
+      <div className="flex h-[min(520px,calc(100dvh-16rem))] min-h-[240px] flex-col gap-4 overflow-hidden">
         {error ? (
           <p className="shrink-0 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {error}

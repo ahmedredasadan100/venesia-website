@@ -69,10 +69,10 @@ export default function VenesiaModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="venesia-modal-title"
-        className={`${ADMIN_MODAL.panel} ${ADMIN_MODAL_SIZES[size]}`}
+        className={`${ADMIN_MODAL.panel} ${ADMIN_MODAL_SIZES[size]} flex max-h-[calc(100dvh-3rem)] flex-col`}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className={ADMIN_MODAL.header}>
+        <header className={`${ADMIN_MODAL.header} shrink-0`}>
           <div className="text-right">
             <p className={ADMIN_MODAL.eyebrow}>{eyebrow}</p>
             <h2 id="venesia-modal-title" className={ADMIN_MODAL.title}>
@@ -85,9 +85,9 @@ export default function VenesiaModal({
           </button>
         </header>
 
-        <div className={ADMIN_MODAL.body}>{children}</div>
+        <div className={`${ADMIN_MODAL.body} min-h-0 flex-1 overflow-y-auto`}>{children}</div>
 
-        {footer ? <footer className={ADMIN_MODAL.footer}>{footer}</footer> : null}
+        {footer ? <footer className={`${ADMIN_MODAL.footer} shrink-0`}>{footer}</footer> : null}
       </section>
     </div>,
     document.body,
