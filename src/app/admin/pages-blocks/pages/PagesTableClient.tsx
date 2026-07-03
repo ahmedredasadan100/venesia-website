@@ -4,16 +4,21 @@ import Link from "next/link";
 import { useMemo } from "react";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_COLUMNS,
   ADMIN_DATA_GRID_RULES,
   AdminBulkActionBar,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  AdminDataGridCenterCell,
   AdminDataGridCheckbox,
+  AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridSortLabel,
+  AdminDataGridStatusCell,
   AdminPageHeader,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
@@ -45,7 +50,8 @@ type PageSortKey = "title" | "block_count" | "status";
  * RTL table: الصفحة (1fr, يمين) → … → الإجراءات (ثابت، شمال).
  * الـ 1fr يملأ المساحة المتبقية فلا يبقى فراغ بعد عمود الإجراءات.
  */
-const columns = `44px minmax(260px, 1fr) 72px 96px 96px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+// 96px (4th) = secondary page-type column (no dedicated preset).
+const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.count} 96px ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 function statusMeta(status: string) {
   if (status === "published") return { label: "منشورة", tone: "green" as const };
@@ -142,30 +148,30 @@ export default function PagesTableClient({ pages, notice, error }: PagesTableCli
 
         <AdminDataGrid summary={`${table.rows.length} صفحة`}>
         <AdminDataGridHeader columns={columns}>
-          <div className="flex justify-center">
+          <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
               inputRef={table.selection.selectAllRef}
               checked={table.selection.allSelected}
               onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
               label="تحديد الكل"
             />
-          </div>
-          <div className="min-w-0 text-right">
+          </AdminDataGridCheckboxCell>
+          <AdminDataGridPrimaryCell>
             <AdminDataGridSortLabel {...sortProps("title")} className="justify-end">
               الصفحة
             </AdminDataGridSortLabel>
-          </div>
-          <div className="text-center">
+          </AdminDataGridPrimaryCell>
+          <AdminDataGridCenterCell>
             <AdminDataGridSortLabel {...sortProps("block_count")} className="justify-center">
               الموديولات
             </AdminDataGridSortLabel>
-          </div>
-          <div className="text-center">النوع</div>
-          <div className="text-center">
+          </AdminDataGridCenterCell>
+          <AdminDataGridCenterCell>النوع</AdminDataGridCenterCell>
+          <AdminDataGridCenterCell>
             <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
               الحالة
             </AdminDataGridSortLabel>
-          </div>
+          </AdminDataGridCenterCell>
           <div className="text-center">الإجراءات</div>
         </AdminDataGridHeader>
 
@@ -177,26 +183,26 @@ export default function PagesTableClient({ pages, notice, error }: PagesTableCli
 
           return (
             <AdminDataGridRow key={page.id} columns={columns}>
-              <div className="flex justify-center">
+              <AdminDataGridCheckboxCell>
                 <AdminDataGridCheckbox
                   checked={table.selection.selectedSet.has(page.id)}
                   onChange={(event) => table.selection.toggleOne(page.id, event.currentTarget.checked)}
                   label={`تحديد ${page.title}`}
                 />
-              </div>
-              <div className="min-w-0 text-right">
+              </AdminDataGridCheckboxCell>
+              <AdminDataGridPrimaryCell>
                 <Link
                   href={`/admin/pages-blocks/pages/${page.id}`}
                   className="block truncate font-semibold text-white hover:text-[#D8B87A]"
                 >
                   {page.title}
                 </Link>
-              </div>
-              <div className="text-center font-en text-sm tabular-nums text-white/60">{page.block_count}</div>
-              <div className="truncate text-center text-sm text-white/55">{page.page_type}</div>
-              <div className="flex justify-center">
+              </AdminDataGridPrimaryCell>
+              <AdminDataGridCenterCell className="font-en text-sm tabular-nums text-white/60">{page.block_count}</AdminDataGridCenterCell>
+              <AdminDataGridCenterCell className="truncate text-sm text-white/55">{page.page_type}</AdminDataGridCenterCell>
+              <AdminDataGridStatusCell>
                 <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-              </div>
+              </AdminDataGridStatusCell>
               <AdminDataGridActionsCell compact>
                 <AdminDataGridActionButton
                   action="edit"

@@ -17,6 +17,72 @@
 
 ممنوع بناء جدول جديد بكلاسات محلية إذا كان يؤدي نفس وظيفة الـ Data Grid.
 
+### 1.a) Cell Contract (إلزامي)
+
+كل خلية داخل أي Data Grid يجب أن تستخدم الغلاف الرسمي المخصص لنوعها. أي wrapper محلي يكسر هذه القواعد يعتبر Bug وليس اختلاف تصميم.
+
+- ممنوع أي wrapper محلي للـ checkbox (مثل `flex justify-center` أو `xl:block`). أي checkbox — في الهيدر أو الصف — يجب أن يكون داخل `AdminDataGridCheckboxCell` (الذي يستخدم دائمًا `flex items-center justify-center`). يُسمح داخله بـ `AdminDataGridCheckbox` أو `<input>` خام (لحالة الـ bulk بـ data-attrs).
+- أي **primary column** (العمود الرئيسي: الصفحة / الموضوع / القالب / القائمة / السلسلة) يجب أن يستخدم `AdminDataGridPrimaryCell`.
+- أي **secondary / centered column** (النوع / التصنيف / العدد / Slug / تاريخ النشر) يجب أن يستخدم `AdminDataGridCenterCell`.
+- أي **status pill** (حالة النشر أو الظهور) يجب أن يكون داخل `AdminDataGridStatusCell`.
+
+### 1.b) Column Presets (إلزامي)
+
+أي عرض عمود يجب أن يأتي من `ADMIN_DATA_GRID_COLUMNS` أو `ADMIN_DATA_GRID_ACTION_COLUMNS`. ممنوع رقم columns محلي جديد **إلا** مع تعليق واضح يشرح لماذا لا يكفي أي preset.
+
+Presets المتاحة في `ADMIN_DATA_GRID_COLUMNS`:
+
+- `checkbox` = `46px`
+- `primaryStandard` = `minmax(320px,1fr)` — للجداول التي عمودها الرئيسي نص طويل/مركز الجدول.
+- `primaryCompact` = `minmax(260px,1fr)` — للجداول متعددة الأعمدة (Pages / Menus).
+- `statusCompact` = `88px` — لحالات قصيرة (ظاهر / منشور).
+- `statusStandard` = `96px` — لحالات أطول أو جداول عامة (default الأأمن مع العربية).
+- `count` = `72px`
+- `slug` = `150px`
+- `slugCompact` = `120px` — عمود slug/كود مختصر للجداول الكثيفة (Menus).
+
+### 1.c) Row Separators
+
+فواصل الصفوف جزء من الـ Contract وتُفعّل عبر `AdminDataGridRow divided` (يطبّق `divide-y`-equivalent مطابقًا لـ Topics). تطبيقها على الجداول القديمة يكون تدريجيًا/باعتماد بصري منفصل، وليس بكلاسات محلية.
+
+### 1.d) Admin Data Grid Contract V1 — Usage Pattern
+
+الاستخدام القياسي لأي Data Grid يتبع النمط التالي (توثيق مرجعي سريع):
+
+- **عرّف الأعمدة** من `ADMIN_DATA_GRID_COLUMNS` للأعمدة، ومن `ADMIN_DATA_GRID_ACTION_COLUMNS` لعمود الإجراءات.
+- **الـ checkbox** (هيدر وصفوف) داخل `AdminDataGridCheckboxCell`.
+- **العمود الأساسي** داخل `AdminDataGridPrimaryCell`.
+- **الأعمدة الثانوية** داخل `AdminDataGridCenterCell`.
+- **الحالة (status pill)** داخل `AdminDataGridStatusCell`.
+- **الإجراءات** بعرض من `ADMIN_DATA_GRID_ACTION_COLUMNS`، وداخل `AdminDataGridActionsCell`.
+- **ممنوع** أي wrapper محلي (مثل `flex justify-center` أو `xl:block`) أو أي column width عشوائي بدون preset رسمي أو استثناء موثّق بتعليق.
+
+مثال مرجعي:
+
+```tsx
+const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+
+<AdminDataGrid summary={...}>
+  <AdminDataGridHeader columns={columns}>
+    <AdminDataGridCheckboxCell>{/* AdminDataGridCheckbox */}</AdminDataGridCheckboxCell>
+    <AdminDataGridPrimaryCell>{/* العمود الأساسي */}</AdminDataGridPrimaryCell>
+    <AdminDataGridStatusCell>{/* عنوان الحالة */}</AdminDataGridStatusCell>
+    <div className="text-center">الإجراءات</div>
+  </AdminDataGridHeader>
+
+  {rows.map((row) => (
+    <AdminDataGridRow key={row.id} columns={columns}>
+      <AdminDataGridCheckboxCell>{/* AdminDataGridCheckbox */}</AdminDataGridCheckboxCell>
+      <AdminDataGridPrimaryCell>{/* المحتوى */}</AdminDataGridPrimaryCell>
+      <AdminDataGridStatusCell>{/* AdminStatusPill */}</AdminDataGridStatusCell>
+      <AdminDataGridActionsCell compact>{/* AdminDataGridActionButton */}</AdminDataGridActionsCell>
+    </AdminDataGridRow>
+  ))}
+</AdminDataGrid>
+```
+
+النطاق المعتمد لـ V1: `Pages` · `Menus` · `PageBlocks` فقط. أي توسيع لاحق يتم عبر جلسة `Admin Data Grid Contract Rollout — Batch 1`.
+
 ## 2) Selection + Bulk Actions
 
 أي جدول فيه Checkboxes يجب أن يطبق القاعدة التالية:

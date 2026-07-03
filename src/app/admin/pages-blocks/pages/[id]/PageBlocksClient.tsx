@@ -2,19 +2,24 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_COLUMNS,
   AdminActionButton,
   AdminBulkActionBar,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  AdminDataGridCenterCell,
   AdminDataGridCheckbox,
+  AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridSortLabel,
+  AdminDataGridStatusCell,
   AdminPageHeader,
   AdminStatusPill,
   AdminInfoBar,
@@ -29,10 +34,8 @@ import {
   moduleKindLabel,
   moduleListHref,
   normalizeBoolean,
-  statusMeta,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { PAGE_MODULE_HINTS } from "../../../../../lib/page-blocks/page-module-hints";
-import { PAGE_LAYOUT_SLOTS, type PageBlockAssignmentRow, type PageBlockType, type PageModuleKind } from "../../../../../lib/page-blocks/types";
+import { PAGE_LAYOUT_SLOTS, type PageBlockAssignmentRow, type PageBlockType } from "../../../../../lib/page-blocks/types";
 import { LAYOUT_SLOT_LABELS_AR, type PageLayoutSlot } from "../../../../../lib/page-blocks/layout-slots";
 import {
   assignHeroModule,
@@ -41,9 +44,8 @@ import {
   assignPageBlock,
   bulkPageBlockAssignments,
   deletePageBlockAssignment,
+  movePageBlockAssignment,
   togglePageBlockAssignment,
-  updateHeroPageAssignment,
-  updatePageBlockAssignment,
 } from "../actions";
 
 type PageRow = {
@@ -74,9 +76,10 @@ type PageBlocksClientProps = {
 
 type AssignableModuleKind = PageBlockType | "hero" | "media-sidebar" | "media-hub";
 
-type SortKey = "module_kind" | "template_name" | "slot" | "sort_order" | "visibility";
+type SortKey = "module_kind" | "template_name" | "visibility";
 
-const gridColumns = `56px 110px minmax(220px,1.4fr) minmax(120px,0.7fr) 80px 100px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+// 150px = secondary module-type column (no dedicated preset).
+const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.statusCompact} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 function assignmentRowId(row: PageBlockAssignmentRow) {
   return `${row.module_kind}:${row.id}`;
@@ -84,6 +87,22 @@ function assignmentRowId(row: PageBlockAssignmentRow) {
 
 function isManageableAssignment(row: PageBlockAssignmentRow) {
   return row.manages_assignment_on_page;
+}
+
+/** Canonical row order — mirrors getPageModuleAssignmentsForAdmin so optimistic order == server order. */
+function compareAssignments(a: PageBlockAssignmentRow, b: PageBlockAssignmentRow) {
+  const kindOrder = (kind: string) => (kind === "hero" ? -2 : kind === "breadcrumb" ? -1 : 0);
+  const byKind = kindOrder(a.module_kind) - kindOrder(b.module_kind);
+  if (byKind !== 0) return byKind;
+  return a.sort_order - b.sort_order || a.id - b.id;
+}
+
+/** Valid layout slots for a module kind — kinds with >1 option are inline-editable. */
+function getSlotOptions(kind: string): PageLayoutSlot[] {
+  if (kind === "hero" || kind === "breadcrumb") return ["hero"];
+  if (kind === "feed" || kind === "media-sidebar") return ["sidebar"];
+  if (kind === "media-hub") return ["main"];
+  return [...PAGE_LAYOUT_SLOTS];
 }
 
 const slotLabels = LAYOUT_SLOT_LABELS_AR;
@@ -99,11 +118,9 @@ function CloseButton({ onClick }: { onClick: () => void }) {
 export default function PageBlocksClient({ page, assignments, templates }: PageBlocksClientProps) {
   const router = useRouter();
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [placementAssignment, setPlacementAssignment] = useState<PageBlockAssignmentRow | null>(null);
   const [deletingAssignment, setDeletingAssignment] = useState<PageBlockAssignmentRow | null>(null);
   const [assignModuleKind, setAssignModuleKind] = useState<AssignableModuleKind>("content");
   const [assignVisible, setAssignVisible] = useState(true);
-  const [editVisible, setEditVisible] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -151,8 +168,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     () => ({
       module_kind: (row: PageBlockAssignmentRow) => moduleKindLabel(row.module_kind),
       template_name: (row: PageBlockAssignmentRow) => row.template_name,
-      slot: (row: PageBlockAssignmentRow) => row.slot,
-      sort_order: (row: PageBlockAssignmentRow) => row.sort_order,
       visibility: (row: PageBlockAssignmentRow) => (normalizeBoolean(row.is_visible, true) ? 0 : 1),
     }),
     [],
@@ -193,34 +208,42 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     return ids;
   }, [assignments, assignModuleKind]);
 
-  const pageHints = PAGE_MODULE_HINTS[page.slug] ?? null;
+  const usedModuleKinds = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const assignment of assignments) {
+      if (seen.has(assignment.module_kind)) continue;
+      seen.add(assignment.module_kind);
+      list.push(assignment.module_kind);
+    }
+    return list;
+  }, [assignments]);
 
-  const slotOptions = useMemo((): PageLayoutSlot[] => {
-    if (assignModuleKind === "hero" || assignModuleKind === "breadcrumb") {
-      return ["hero"];
+  /** Up/down neighbour per row, scoped to same module kind + slot, ordered by sort_order. */
+  const reorderInfo = useMemo(() => {
+    const groups = new Map<string, PageBlockAssignmentRow[]>();
+    for (const row of table.rawRows) {
+      if (!isManageableAssignment(row)) continue;
+      const key = `${row.module_kind}::${row.slot}`;
+      const list = groups.get(key);
+      if (list) list.push(row);
+      else groups.set(key, [row]);
     }
-    if (assignModuleKind === "feed" || assignModuleKind === "media-sidebar") {
-      return ["sidebar"];
-    }
-    if (assignModuleKind === "media-hub") {
-      return ["main"];
-    }
-    return [...PAGE_LAYOUT_SLOTS];
-  }, [assignModuleKind]);
 
-  const placementSlotOptions = useMemo((): PageLayoutSlot[] => {
-    if (!placementAssignment) return [...PAGE_LAYOUT_SLOTS];
-    if (placementAssignment.module_kind === "hero" || placementAssignment.module_kind === "breadcrumb") {
-      return ["hero"];
+    const info = new Map<string, { up: PageBlockAssignmentRow | null; down: PageBlockAssignmentRow | null }>();
+    for (const group of groups.values()) {
+      const sorted = [...group].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+      sorted.forEach((row, index) => {
+        info.set(assignmentRowId(row), {
+          up: index > 0 ? sorted[index - 1] : null,
+          down: index < sorted.length - 1 ? sorted[index + 1] : null,
+        });
+      });
     }
-    if (placementAssignment.module_kind === "feed" || placementAssignment.module_kind === "media-sidebar") {
-      return ["sidebar"];
-    }
-    if (placementAssignment.module_kind === "media-hub") {
-      return ["main"];
-    }
-    return [...PAGE_LAYOUT_SLOTS];
-  }, [placementAssignment]);
+    return info;
+  }, [table.rawRows]);
+
+  const slotOptions = useMemo((): PageLayoutSlot[] => getSlotOptions(assignModuleKind), [assignModuleKind]);
 
   const assignableTemplates = useMemo(
     () => templateOptions.filter((template) => !assignedTemplateIds.has(template.id)),
@@ -259,26 +282,40 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     });
   }
 
-  function handleUpdatePlacement(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!placementAssignment) return;
+  /** Optimistic in-table reorder — swaps sort_order with the adjacent sibling, rolls back on failure. */
+  function handleReorder(row: PageBlockAssignmentRow, direction: "up" | "down") {
+    const neighbour = reorderInfo.get(assignmentRowId(row));
+    const target = direction === "up" ? neighbour?.up : neighbour?.down;
+    if (!target) return;
 
-    const formData = new FormData(event.currentTarget);
-    formData.set("is_visible", editVisible ? "true" : "false");
+    const previousRows = table.rawRows;
+    const nextRows = previousRows
+      .map((current) => {
+        if (current.module_kind === row.module_kind && current.id === row.id) {
+          return { ...current, sort_order: target.sort_order };
+        }
+        if (current.module_kind === target.module_kind && current.id === target.id) {
+          return { ...current, sort_order: row.sort_order };
+        }
+        return current;
+      })
+      .sort(compareAssignments);
+
+    table.setRows(nextRows);
+    setActionMessage(null);
+
+    const formData = new FormData();
+    formData.set("page_id", String(page.id));
+    formData.set("block_type", row.module_kind);
+    formData.set("current_id", String(row.id));
+    formData.set("target_id", String(target.id));
 
     startTransition(async () => {
-      const result =
-        placementAssignment.module_kind === "hero"
-          ? await updateHeroPageAssignment(PAGE_BLOCK_ACTION_INITIAL, formData)
-          : await updatePageBlockAssignment(PAGE_BLOCK_ACTION_INITIAL, formData);
-
+      const result = await movePageBlockAssignment(formData);
       if (!result.ok) {
+        table.setRows(previousRows);
         setActionMessage(result.message);
-        return;
       }
-      setPlacementAssignment(null);
-      setActionMessage(null);
-      router.refresh();
     });
   }
 
@@ -321,17 +358,23 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
   return (
     <div className="space-y-6 pb-10" dir="rtl">
       <AdminPageHeader
-        eyebrow="Page Modules Manager"
+        eyebrow="مدير موديولات الصفحة"
         title={page.title}
-        description="عرض الموديولات المعيّنة حسب Layout Slots (hero · main · sidebar · bottom · footer). عدّل المحتوى من مدير الموديول — هنا تتحكم بالربط والترتيب داخل كل slot."
-        meta={`${page.path} · ${page.slug} · ${assignments.length} موديول`}
+        description="من هنا تراجع الموديولات المرتبطة بهذه الصفحة، وتتحكم في موضع ظهورها وترتيبها داخل الصفحة، بينما يظل تعديل المحتوى من مدير كل موديول."
+        meta={(
+          <div className="space-y-1 text-right leading-6">
+            <div>المسار: <span dir="ltr" className="font-en">{page.path || "/"}</span></div>
+            <div>الكود: <span dir="ltr" className="font-en">{page.slug}</span></div>
+            <div>عدد الموديولات بالصفحة: {assignments.length}</div>
+          </div>
+        )}
         actions={(
           <div className="flex flex-wrap items-center gap-3">
             <AdminActionButton href="/admin/pages-blocks/pages" variant="ghost">
               رجوع للصفحات
             </AdminActionButton>
             <AdminActionButton href="/admin/pages-blocks/blocks" variant="ghost">
-              Blocks Hub
+              إدارة الموديولات
             </AdminActionButton>
             <AdminActionButton href={page.path || "#"} variant="ghost">
               معاينة
@@ -350,15 +393,22 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
         )}
       />
 
-      {pageHints ? (
+      {usedModuleKinds.length ? (
         <AdminInfoBar
-          label={`مرجع موديولات ${page.slug}`}
-          description={pageHints
-            .map((hint) => {
-              const slugText = hint.slugs.length ? hint.slugs.join(", ") : hint.note ?? "—";
-              return `${hint.module}: ${slugText}`;
-            })
-            .join(" · ")}
+          label={`مرجع موديولات الصفحة ${page.title || page.slug}`}
+          description={(
+            <span className="flex flex-wrap items-center gap-2">
+              {usedModuleKinds.map((kind) => (
+                <Link
+                  key={kind}
+                  href={moduleListHref(kind)}
+                  className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
+                >
+                  {moduleKindLabel(kind)}
+                </Link>
+              ))}
+            </span>
+          )}
         />
       ) : null}
 
@@ -383,29 +433,36 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
 
       <AdminDataGrid summary={`${table.rows.length} موديول`}>
         <AdminDataGridHeader columns={gridColumns}>
-          <div className="flex justify-center">
+          <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
               checked={selection.allSelected}
               onChange={(event) => selection.toggleAll(event.target.checked)}
               inputRef={selection.selectAllRef}
               label="تحديد الكل"
             />
-          </div>
-          <AdminDataGridSortLabel {...sortProps("module_kind")}>النوع</AdminDataGridSortLabel>
-          <AdminDataGridSortLabel {...sortProps("template_name")}>القالب</AdminDataGridSortLabel>
-          <AdminDataGridSortLabel {...sortProps("slot")}>Slot</AdminDataGridSortLabel>
-          <AdminDataGridSortLabel {...sortProps("sort_order")} className="mx-auto">Order</AdminDataGridSortLabel>
-          <AdminDataGridSortLabel {...sortProps("visibility")} className="mx-auto">الحالة</AdminDataGridSortLabel>
+          </AdminDataGridCheckboxCell>
+          <AdminDataGridPrimaryCell>
+            <AdminDataGridSortLabel {...sortProps("template_name")} className="justify-end">القالب</AdminDataGridSortLabel>
+          </AdminDataGridPrimaryCell>
+          <AdminDataGridCenterCell>
+            <AdminDataGridSortLabel {...sortProps("module_kind")} className="justify-center">النوع</AdminDataGridSortLabel>
+          </AdminDataGridCenterCell>
+          <AdminDataGridCenterCell>
+            <AdminDataGridSortLabel {...sortProps("visibility")} className="justify-center">الحالة</AdminDataGridSortLabel>
+          </AdminDataGridCenterCell>
           <div className="text-center">الإجراءات</div>
         </AdminDataGridHeader>
 
-        {table.rows.map((row) => {
-          const templateStatus = statusMeta(row.template_status);
+        {table.rows.map((row, index) => {
           const isVisible = normalizeBoolean(row.is_visible, true);
           const manageable = isManageableAssignment(row);
           return (
-            <AdminDataGridRow key={assignmentRowId(row)} columns={gridColumns}>
-              <div className="flex justify-center xl:block">
+            <AdminDataGridRow
+              key={assignmentRowId(row)}
+              columns={gridColumns}
+              divided={index > 0}
+            >
+              <AdminDataGridCheckboxCell>
                 {manageable ? (
                   <AdminDataGridCheckbox
                     checked={selection.selectedSet.has(assignmentRowId(row))}
@@ -415,42 +472,56 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
                 ) : (
                   <span className="text-xs text-white/25">—</span>
                 )}
-              </div>
-              <div>
-                <Link href={moduleListHref(row.module_kind)} className="font-semibold text-[#D8B87A] hover:text-[#e5c98d]">
-                  {moduleKindLabel(row.module_kind)}
-                </Link>
-                <p className="mt-1 font-mono text-xs text-white/35">{row.template_variant}</p>
-              </div>
+              </AdminDataGridCheckboxCell>
 
-              <div className="min-w-0">
-                <Link href={moduleEditHref(row.module_kind, row.template_id)} className="font-semibold text-white hover:text-[#D8B87A]">
+              <AdminDataGridPrimaryCell className="flex items-center gap-2">
+                <Link
+                  href={moduleEditHref(row.module_kind, row.template_id)}
+                  className="min-w-0 truncate text-sm font-semibold text-white hover:text-[#D8B87A]"
+                  title={row.template_slug}
+                >
                   {row.template_name}
                 </Link>
-                <p className="mt-1 font-mono text-xs text-white/35" dir="ltr">{row.template_slug}</p>
-                <AdminStatusPill tone={templateStatus.tone}>
-                  {row.module_kind === "hero" ? `هيرو: ${templateStatus.label}` : `قالب: ${templateStatus.label}`}
-                </AdminStatusPill>
                 {row.module_kind !== "hero" && row.template_status !== "published" ? (
-                  <p className="mt-1 text-[10px] leading-5 text-amber-200/75">
-                    لن يظهر على الموقع حتى يُنشر القالب من Block Module.
-                  </p>
+                  <span className="shrink-0 rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-200/85">
+                    غير منشور
+                  </span>
                 ) : null}
-                {row.assignment_note ? (
-                  <p className="mt-1 text-[10px] leading-5 text-white/40">{row.assignment_note}</p>
-                ) : null}
-              </div>
+              </AdminDataGridPrimaryCell>
 
-              <div className="text-white/58">{slotLabels[row.slot as keyof typeof slotLabels] ?? row.slot}</div>
-              <div className="text-center font-mono text-xs text-white/42">{row.sort_order}</div>
+              <AdminDataGridCenterCell className="truncate text-sm font-semibold text-white/75">
+                {moduleKindLabel(row.module_kind)}
+              </AdminDataGridCenterCell>
 
-              <div className="flex justify-center">
+              <AdminDataGridStatusCell>
                 <AdminStatusPill tone={isVisible ? "green" : "muted"}>
                   {isVisible ? "ظاهر" : "مخفي"}
                 </AdminStatusPill>
-              </div>
+              </AdminDataGridStatusCell>
 
               <AdminDataGridActionsCell compact>
+                {manageable ? (
+                  <>
+                    <AdminDataGridActionButton
+                      tone="dark"
+                      title="تحريك لأعلى"
+                      size="compact"
+                      disabled={isPending || !reorderInfo.get(assignmentRowId(row))?.up}
+                      onClick={() => handleReorder(row, "up")}
+                    >
+                      <span className="text-sm">↑</span>
+                    </AdminDataGridActionButton>
+                    <AdminDataGridActionButton
+                      tone="dark"
+                      title="تحريك لأسفل"
+                      size="compact"
+                      disabled={isPending || !reorderInfo.get(assignmentRowId(row))?.down}
+                      onClick={() => handleReorder(row, "down")}
+                    >
+                      <span className="text-sm">↓</span>
+                    </AdminDataGridActionButton>
+                  </>
+                ) : null}
                 <AdminDataGridActionButton
                   action="edit"
                   title="تعديل الموديول"
@@ -459,16 +530,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
                 />
                 {manageable ? (
                   <>
-                    <AdminDataGridActionButton
-                      title="ترتيب وموضع"
-                      size="compact"
-                      onClick={() => {
-                        setEditVisible(normalizeBoolean(row.is_visible, true));
-                        setPlacementAssignment(row);
-                      }}
-                    >
-                      ↕
-                    </AdminDataGridActionButton>
                     <AdminDataGridActionButton
                       action="visibility"
                       title={isVisible ? "إخفاء" : "إظهار"}
@@ -636,80 +697,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
                 </button>
                 <button disabled={!assignableTemplates.length || assignPending} className="cursor-pointer rounded-2xl bg-[#D8B87A] px-5 py-3 text-sm font-bold text-[#06101C] hover:bg-[#e5c98d] disabled:cursor-not-allowed disabled:opacity-40">
                   ربط البلوك
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {placementAssignment ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setPlacementAssignment(null)}>
-          <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[#080B10] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.5)]" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-              <div>
-                <h3 className="text-xl font-semibold text-white">ترتيب وموضع الربط</h3>
-                <p className="mt-1 text-sm text-white/45">
-                  {moduleKindLabel(placementAssignment.module_kind)} · {placementAssignment.template_name}
-                </p>
-              </div>
-              <CloseButton onClick={() => setPlacementAssignment(null)} />
-            </div>
-
-            <form key={placementAssignment.id} onSubmit={handleUpdatePlacement} className="mt-5 grid gap-4 md:grid-cols-2">
-              <input type="hidden" name="page_id" value={page.id} />
-              <input type="hidden" name="assignment_id" value={placementAssignment.id} />
-              <input type="hidden" name="block_type" value={placementAssignment.block_type ?? placementAssignment.module_kind} />
-
-              <div className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-white/55">الموديول</span>
-                <div className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3">
-                  <p className="font-semibold text-white">{placementAssignment.template_name}</p>
-                  <p className="mt-1 font-mono text-xs text-white/45" dir="ltr">{placementAssignment.template_slug}</p>
-                </div>
-                <p className="text-xs leading-6 text-white/42">
-                  لتعديل المحتوى، افتح الموديول من{" "}
-                  <Link href={moduleEditHref(placementAssignment.module_kind, placementAssignment.template_id)} className="text-[#D8B87A] underline">
-                    {moduleKindLabel(placementAssignment.module_kind)} Manager
-                  </Link>
-                  . لتغيير القالب، احذف هذا الربط وأنشئ ربطًا جديدًا.
-                </p>
-              </div>
-
-              {placementAssignment.module_kind !== "hero" ? (
-                <label className="space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Slot</span>
-                  <select name="slot" defaultValue={placementAssignment.slot} className={fieldClassName()}>
-                    {placementSlotOptions.map((slot) => (
-                      <option key={slot} value={slot}>{slotLabels[slot] ?? slot}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <input type="hidden" name="slot" value="hero" />
-              )}
-
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">Order</span>
-                <input name="sort_order" type="number" defaultValue={placementAssignment.sort_order} className={fieldClassName()} />
-              </label>
-
-              <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70 md:col-span-2">
-                <span>ظاهر على الموقع</span>
-                <input
-                  type="checkbox"
-                  checked={editVisible}
-                  onChange={(event) => setEditVisible(event.target.checked)}
-                  className="accent-[#D8B87A]"
-                />
-              </label>
-
-              <div className="flex justify-end gap-3 md:col-span-2">
-                <button type="button" onClick={() => setPlacementAssignment(null)} className="cursor-pointer rounded-2xl border border-white/10 px-5 py-3 text-sm text-white/60 hover:bg-white/5 hover:text-white">
-                  إلغاء
-                </button>
-                <button disabled={isPending} className="cursor-pointer rounded-2xl bg-[#D8B87A] px-5 py-3 text-sm font-bold text-[#06101C] hover:bg-[#e5c98d] disabled:cursor-not-allowed disabled:opacity-40">
-                  حفظ الربط
                 </button>
               </div>
             </form>

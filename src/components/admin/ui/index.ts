@@ -9,6 +9,7 @@ export { default as AdminBulkActionBar } from "./AdminBulkActionBar";
 export {
   ADMIN_DATA_GRID_RULES,
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_COLUMNS,
   adminDataGridActionsColumn,
   getAdminDataGridActionsColumnWidth,
   AdminDataGrid,
@@ -16,6 +17,10 @@ export {
   AdminDataGridRow,
   AdminDataGridSortLabel,
   AdminDataGridCheckbox,
+  AdminDataGridCheckboxCell,
+  AdminDataGridPrimaryCell,
+  AdminDataGridCenterCell,
+  AdminDataGridStatusCell,
   AdminDataGridActions,
   AdminDataGridActionsCell,
   AdminDataGridActionButton,

@@ -73,6 +73,8 @@ export const ADMIN_DATA_GRID_RULES = {
   actionGapCompactPx: 4,
   actionButtonPx: 44,
   actionButtonCompactPx: 40,
+  /** Official row separator — opt-in via `AdminDataGridRow divided` (matches Topics divide-y). */
+  rowDivider: "border-t border-white/8",
 } as const;
 
 /** Width in px for a fixed actions column — use in gridTemplateColumns. */
@@ -106,6 +108,30 @@ export const ADMIN_DATA_GRID_ACTION_COLUMNS = {
   fiveCompact: adminDataGridActionsColumn(5, "compact"),
   /** 1 standard action. */
   one: adminDataGridActionsColumn(1, "default"),
+} as const;
+
+/**
+ * Official column-width presets for admin Data Grids (Admin Data Grid Contract).
+ * Pages must build `gridTemplateColumns` from these presets + `ADMIN_DATA_GRID_ACTION_COLUMNS`.
+ * A raw literal width is only allowed with an inline comment explaining why no preset fits.
+ */
+export const ADMIN_DATA_GRID_COLUMNS = {
+  /** Checkbox column — fixed, matches Topics golden reference. */
+  checkbox: "46px",
+  /** Primary column for content-heavy tables (Topic / Template / Series). */
+  primaryStandard: "minmax(320px,1fr)",
+  /** Primary column for multi-column tables that need room for the rest (Pages / Menus). */
+  primaryCompact: "minmax(260px,1fr)",
+  /** Short status labels (ظاهر / منشور). */
+  statusCompact: "88px",
+  /** Longer status labels or general tables (منشورة / غير منشورة) — safer default for Arabic. */
+  statusStandard: "96px",
+  /** Numeric count column (tabular-nums). */
+  count: "72px",
+  /** Slug / short code column. */
+  slug: "150px",
+  /** Compact slug / short-code column for dense multi-column tables (Menus). */
+  slugCompact: "120px",
 } as const;
 
 function GridIcon({ action, hidden = false }: { action: DataGridAction; hidden?: boolean }) {
@@ -181,15 +207,41 @@ export function AdminDataGridHeader({ children, columns, className = "" }: GridL
   );
 }
 
-export function AdminDataGridRow({ children, columns, className = "" }: GridLineProps) {
+export function AdminDataGridRow({ children, columns, className = "", divided = false }: GridLineProps & { divided?: boolean }) {
   return (
     <article
-      className={`grid gap-4 px-5 py-4 transition hover:bg-white/[0.035] xl:items-center ${className}`}
+      className={`grid gap-4 px-5 py-4 transition hover:bg-white/[0.035] xl:items-center ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
       style={{ gridTemplateColumns: columns }}
     >
       {children}
     </article>
   );
+}
+
+/**
+ * Official cell wrappers (Admin Data Grid Contract).
+ * These are the ONLY allowed wrappers for their cell type inside a Data Grid.
+ * Local wrappers (e.g. `flex justify-center`, `xl:block`) are a bug, not a design choice.
+ */
+
+/** Checkbox cell — the only allowed wrapper for header/row checkboxes. */
+export function AdminDataGridCheckboxCell({ children, className = "" }: BaseProps) {
+  return <div className={`flex items-center justify-center ${className}`}>{children}</div>;
+}
+
+/** Primary column cell — content-heavy, right-aligned (RTL), truncate-safe. */
+export function AdminDataGridPrimaryCell({ children, className = "" }: BaseProps) {
+  return <div className={`min-w-0 text-right ${className}`}>{children}</div>;
+}
+
+/** Secondary column cell — centered, truncate-safe (type / category / count / slug). */
+export function AdminDataGridCenterCell({ children, className = "" }: BaseProps) {
+  return <div className={`min-w-0 text-center ${className}`}>{children}</div>;
+}
+
+/** Status cell — centers an `AdminStatusPill`. */
+export function AdminDataGridStatusCell({ children, className = "" }: BaseProps) {
+  return <div className={`flex items-center justify-center ${className}`}>{children}</div>;
 }
 
 export function AdminDataGridSortLabel({ children, onClick, active = false, direction = "asc", className = "" }: SortLabelProps) {

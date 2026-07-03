@@ -7,14 +7,19 @@ import AdminNotice from "../../../../components/admin/AdminNotice";
 import { ADMIN_LIST_PAGE } from "../../../../lib/admin/admin-ui-styles";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_COLUMNS,
   ADMIN_DATA_GRID_RULES,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  AdminDataGridCenterCell,
+  AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridSortLabel,
+  AdminDataGridStatusCell,
   AdminPageHeader,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
@@ -47,7 +52,7 @@ type MenuSortKey = "name" | "slug" | "item_count" | "status";
 /**
  * RTL table: القائمة (1fr, يمين) → … → الإجراءات (ثابت، شمال).
  */
-const columns = `44px minmax(260px, 1fr) 120px 72px 96px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.count} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 function PublicPreviewIcon() {
   return (
@@ -162,41 +167,41 @@ export default function MenusTableClient({ menus, message }: MenusTableClientPro
 
         <AdminDataGrid summary={`${table.rows.length} قائمة`}>
           <AdminDataGridHeader columns={columns}>
-            <div className="flex justify-center">
+            <AdminDataGridCheckboxCell>
               <input
                 type="checkbox"
                 data-bulk-select-all="menus"
                 className={ADMIN_DATA_GRID_RULES.checkbox}
                 aria-label="تحديد كل القوائم"
               />
-            </div>
-            <div className="min-w-0 text-right">
+            </AdminDataGridCheckboxCell>
+            <AdminDataGridPrimaryCell>
               <AdminDataGridSortLabel {...sortProps("name")} className="justify-end">
                 القائمة
               </AdminDataGridSortLabel>
-            </div>
-            <div className="text-center">
+            </AdminDataGridPrimaryCell>
+            <AdminDataGridCenterCell>
               <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
                 Slug
               </AdminDataGridSortLabel>
-            </div>
-            <div className="text-center">
+            </AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
               <AdminDataGridSortLabel {...sortProps("item_count")} className="justify-center">
                 العناصر
               </AdminDataGridSortLabel>
-            </div>
-            <div className="text-center">
+            </AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
               <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
                 الحالة
               </AdminDataGridSortLabel>
-            </div>
+            </AdminDataGridCenterCell>
             <div className="text-center">الإجراءات</div>
           </AdminDataGridHeader>
 
           {table.rows.length ? (
             table.rows.map((menu) => (
-              <AdminDataGridRow key={menu.id} columns={columns} className="xl:items-center">
-                <div className="flex justify-center">
+              <AdminDataGridRow key={menu.id} columns={columns}>
+                <AdminDataGridCheckboxCell>
                   <input
                     form="bulk-menu-form"
                     type="checkbox"
@@ -206,9 +211,9 @@ export default function MenusTableClient({ menus, message }: MenusTableClientPro
                     className={ADMIN_DATA_GRID_RULES.checkbox}
                     aria-label={`تحديد ${menu.name}`}
                   />
-                </div>
+                </AdminDataGridCheckboxCell>
 
-                <div className="min-w-0 text-right">
+                <AdminDataGridPrimaryCell>
                   <Link
                     href={`/admin/pages-blocks/menus/${menu.id}`}
                     className="block truncate font-semibold text-white transition hover:text-[#D8B87A]"
@@ -216,19 +221,19 @@ export default function MenusTableClient({ menus, message }: MenusTableClientPro
                     {menu.name}
                   </Link>
                   <p className="mt-1 truncate text-xs text-white/38">{locationLabel(menu.location)}</p>
-                </div>
+                </AdminDataGridPrimaryCell>
 
-                <div className="min-w-0 text-center">
+                <AdminDataGridCenterCell>
                   <span className="font-en block truncate text-xs text-white/42">{menu.slug}</span>
-                </div>
+                </AdminDataGridCenterCell>
 
-                <div className="text-center font-en text-sm tabular-nums text-white/60">{menu.item_count}</div>
+                <AdminDataGridCenterCell className="font-en text-sm tabular-nums text-white/60">{menu.item_count}</AdminDataGridCenterCell>
 
-                <div className="flex justify-center">
+                <AdminDataGridStatusCell>
                   <AdminStatusPill tone={menu.is_active ? "green" : "gold"}>
                     {menuStatusLabel(menu.is_active)}
                   </AdminStatusPill>
-                </div>
+                </AdminDataGridStatusCell>
 
                 <AdminDataGridActionsCell compact>
                   <AdminDataGridActionButton
