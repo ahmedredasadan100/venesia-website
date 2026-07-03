@@ -1,6 +1,6 @@
-import Link from "next/link";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import AdminPageHeader from "../../../../components/admin/AdminPageHeader";
+import { AdminActionButton } from "../../../../components/admin/ui";
 import SeoPanel from "../../../../components/admin/SeoPanel";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import FaqEditor from "../FaqEditor";
@@ -49,13 +49,17 @@ export default async function NewTopicPage({
   return (
     <main className="space-y-7">
       <AdminPageHeader
+        variant="context"
         eyebrow="CREATE TOPIC"
         title="إنشاء موضوع جديد"
+        contextLine="أنت الآن تضيف: موضوع جديد"
         description="أنشئ الموضوع كاملًا من البداية: المحتوى، السيو، الصورة، الأسئلة الشائعة، ثم احفظه كمسودة أو انشره بعد اكتمال الجاهزية."
         actions={
-          <Link href="/admin/topics" className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/65 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]">
-            رجوع للقائمة
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
+            <AdminActionButton href="/admin/topics/categories" variant="dark">عرض التصنيفات</AdminActionButton>
+            <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
+          </div>
         }
       />
 

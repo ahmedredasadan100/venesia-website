@@ -65,9 +65,9 @@ export default async function NewTopicCategoryPage({
         description="أنشئ تصنيفًا جديدًا وحدّد التصنيف الأب والترتيب قبل الحفظ."
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            <AdminActionButton href="/admin/topics/categories" variant="dark">
-              رجوع للتصنيفات
-            </AdminActionButton>
+            <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
+            <AdminActionButton href="/admin/topics/categories" variant="dark">عرض التصنيفات</AdminActionButton>
+            <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
           </div>
         }
       />
