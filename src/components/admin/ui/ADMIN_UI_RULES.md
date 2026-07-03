@@ -83,6 +83,14 @@ const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.p
 
 النطاق المعتمد لـ V1: `Pages` · `Menus` · `PageBlocks` فقط. أي توسيع لاحق يتم عبر جلسة `Admin Data Grid Contract Rollout — Batch 1`.
 
+### 1.e) Admin Data Grid Bulk Actions Rule
+
+- لا يتم استخدام checkbox كديكور فقط داخل أي Data Grid.
+- أي جدول يحتوي checkbox يجب أن يملك selection behavior واضحًا (عبر `useAdminGridSelection` أو `useAdminTable`).
+- إذا كان الجدول يدعم إجراءات جماعية، يظهر **Bulk Actions Bar** (`AdminBulkActionBar`) عند تحديد صف أو أكثر فقط.
+- Bulk Actions يجب أن تتبع النمط الموجود في الأدمن (`AdminBulkActionBar`) **بدون UI جديد** أو تعديل المكوّن المشترك.
+- حماية الحذف أو أي قيود على البيانات تظل **server-side** ولا يتم تجاوزها في bulk actions (التلميح client-side مسموح لكنه لا يغني عن حماية السيرفر).
+
 ## 2) Selection + Bulk Actions
 
 أي جدول فيه Checkboxes يجب أن يطبق القاعدة التالية:
@@ -114,6 +122,25 @@ const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.p
 ```
 
 كل حجم ولون وأيقونة وHover وCursor يتم التحكم فيه من `AdminDataGridActionButton` فقط.
+
+### 3.a) Sortable Resource Action Order
+
+المورد القابل للترتيب اليدوي (فيه أسهم `moveUp`/`moveDown`) يستخدم ترتيب إجراءات ثابت:
+
+`moveUp / moveDown → edit → visibilityToggle → duplicate → preview if available → delete`
+
+- الأسهم تعتمد على `sort_order` الحقيقي (ترتيب فعلي مُخزَّن)، وليست فرزًا بصريًا مؤقتًا.
+- أول عنصر عالميًا: `moveUp` معطّل. آخر عنصر عالميًا: `moveDown` معطّل.
+- `preview` يظهر فقط عند وجود public route حقيقي للمورد؛ وإلا يُحذف من الصف (لا رابط وهمي).
+- هذا Pattern رسمي للموارد القابلة للترتيب وليس استثناءً. الموارد غير القابلة للترتيب تبقى على `edit → visibility → duplicate → delete`.
+
+### 3.b) View Sorting vs Manual Reorder
+
+يجب التمييز بوضوح بين نوعين مختلفين ولا يُخلط بينهما:
+
+- **Table Sorting (View Sorting):** فرز عرض فقط عبر الضغط على عنوان العمود. يعيد ترتيب **الصفوف كاملةً كوحدة واحدة** (وليس خلية/عمودًا منفردًا). **لا يغيّر أي بيانات ولا يغيّر `sort_order`.** في الجداول المقسّمة لصفحات (paginated) يكون الفرز **server-side على كامل البيانات قبل الـ pagination** عبر query params (`?sort=...&dir=asc|desc`)، وليس فرز عميل للصفحة الظاهرة فقط. النقر: أول ضغطة `asc`، ثانية `desc`، ثالثة رجوع للـ default.
+- **Manual Reorder:** فقط عبر أسهم `moveUp`/`moveDown`، وهو الوحيد الذي **يغيّر `sort_order` الحقيقي** في قاعدة البيانات.
+- **العزل بينهما إلزامي:** الـ default view يكون حسب `sort_order ASC`، وهو الوضع الوحيد الذي تعمل فيه أسهم reorder. عند تفعيل أي فرز عرض غير الـ default، تُعطَّل أسهم `moveUp`/`moveDown` (منعًا للخلط بين الرؤية المؤقتة والترتيب المحفوظ)، بينما تبقى باقي الإجراءات (`edit`/`visibility`/`duplicate`/`delete`) فعّالة.
 
 ## 4) Cursor
 
@@ -169,3 +196,20 @@ Rules:
 - Action buttons always use `shrink-0`.
 - Never rely on a wider column than `adminDataGridActionsColumn()` returns.
 - Extra reorder/move buttons count toward the total button count.
+
+## 9) Page Context Header (`AdminPageHeader` variants)
+
+مكوّن `AdminPageHeader` له نمطان (variant):
+
+- `variant="default"` — الشكل القديم/الحالي لكل الصفحات، ولم ولن يتغيّر. أي صفحة لا تمرّر `variant` تبقى على هذا النمط تلقائيًا.
+- `variant="context"` — نمط Page Context Header الجديد للصفحات التي تحتاج فصلًا بصريًا واضحًا بين:
+  - **هوية الصفحة** (Eyebrow + Title + `contextLine`) على اليمين،
+  - **وصف الصفحة** على اليسار، يفصلهما divider رأسي هادئ (warm-gold) على الديسكتوب وفاصل أفقي على الموبايل،
+  - **إجراءات الصفحة** في Page Actions Bar سفلي مدمج داخل نفس البلوك (centered).
+
+قواعد الاستخدام:
+
+- الاستخدام **opt-in فقط** — يُفعَّل بتمرير `variant="context"` صراحةً.
+- **ممنوع تعميمه** على كل الصفحات إلا بقرار Rollout منفصل.
+- النمط جاهز للحالات: بدون actions (لا يظهر الشريط السفلي)، زر واحد أو عدة أزرار (تتوسّط وتلتف بدون overflow)، بدون `contextLine` (لا فراغ تحت العنوان)، وعنوان/وصف طويل (يلتفّان دون كسر التوازن).
+- على الموبايل: الهوية والوصف يصبحان stacked، والـ divider يتحوّل لفاصل أفقي، والأزرار تلتف بدون overflow أفقي.

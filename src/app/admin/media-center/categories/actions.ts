@@ -3,6 +3,7 @@
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { revalidateMediaCenterPublicPaths } from "../../../../lib/media-center/revalidate-public-paths";
@@ -179,4 +180,184 @@ export async function deleteMediaCategory(formData: FormData) {
 
   revalidateCategories();
   redirect("/admin/media-center/categories?notice=deleted");
+}
+
+// Preserves the current pagination page (from the referer) after a bulk redirect.
+async function categoriesRedirectBase() {
+  const referer = (await headers()).get("referer");
+  if (referer) {
+    try {
+      const page = new URL(referer).searchParams.get("page");
+      if (page && /^\d+$/.test(page)) return `/admin/media-center/categories?page=${page}&`;
+    } catch {
+      // ignore malformed referer
+    }
+  }
+  return "/admin/media-center/categories?";
+}
+
+export async function bulkMediaCategoryAction(formData: FormData) {
+  await requireAdminSession();
+
+  const action = getString(formData, "bulk_action");
+  const ids = formData
+    .getAll("ids")
+    .map((value) => String(value))
+    .filter((value) => validateId(value));
+
+  const base = await categoriesRedirectBase();
+
+  if (!ids.length) redirect(`${base}error=${encodeURIComponent("حدد تصنيفًا واحدًا على الأقل.")}`);
+
+  const now = new Date().toISOString();
+
+  if (action === "publish" || action === "hide") {
+    const isActive = action === "publish";
+    const { error } = await getSupabaseAdmin()
+      .from("media_categories")
+      .update({ is_active: isActive, updated_at: now })
+      .in("id", ids);
+
+    if (error) redirect(`${base}error=${encodeURIComponent(error.message)}`);
+    revalidateCategories();
+    redirect(`${base}notice=${isActive ? "shown" : "hidden"}`);
+  }
+
+  if (action === "delete") {
+    const { data: selected, error: selectedError } = await getSupabaseAdmin()
+      .from("media_categories")
+      .select("slug")
+      .in("id", ids);
+
+    if (selectedError) redirect(`${base}error=${encodeURIComponent(selectedError.message)}`);
+
+    const slugs = ((selected ?? []) as { slug: string }[]).map((row) => row.slug);
+    if (slugs.length) {
+      // all-or-nothing: if ANY selected category is in use, block the whole delete.
+      const { count, error: usageError } = await getSupabaseAdmin()
+        .from("media_items")
+        .select("id", { count: "exact", head: true })
+        .in("category_slug", slugs)
+        .is("deleted_at", null);
+
+      if (usageError) redirect(`${base}error=${encodeURIComponent(usageError.message)}`);
+      if ((count ?? 0) > 0) {
+        redirect(`${base}error=${encodeURIComponent("لا يمكن حذف تصنيفات مستخدمة داخل عناصر المركز الإعلامي. أخفِها بدلًا من حذفها.")}`);
+      }
+    }
+
+    const { error } = await getSupabaseAdmin().from("media_categories").delete().in("id", ids);
+    if (error) redirect(`${base}error=${encodeURIComponent(error.message)}`);
+
+    revalidateCategories();
+    redirect(`${base}notice=deleted`);
+  }
+
+  redirect(`${base}error=${encodeURIComponent("إجراء جماعي غير معروف.")}`);
+}
+
+export async function moveMediaCategory(formData: FormData) {
+  await requireAdminSession();
+
+  const id = getString(formData, "id");
+  const direction = getString(formData, "direction");
+  const base = await categoriesRedirectBase();
+
+  if (!validateId(id)) redirect(`${base}error=${encodeURIComponent("معرّف التصنيف غير صالح.")}`);
+  if (direction !== "up" && direction !== "down") {
+    redirect(`${base}error=${encodeURIComponent("اتجاه الترتيب غير صالح.")}`);
+  }
+
+  // Global order across ALL categories (matches the list default order).
+  const { data: rows, error } = await getSupabaseAdmin()
+    .from("media_categories")
+    .select("id")
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) redirect(`${base}error=${encodeURIComponent(error.message)}`);
+
+  const orderedIds = ((rows ?? []) as { id: number }[]).map((row) => row.id);
+  const currentIndex = orderedIds.findIndex((rowId) => String(rowId) === id);
+  if (currentIndex === -1) redirect(`${base}error=${encodeURIComponent("التصنيف غير موجود.")}`);
+
+  const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+  // First/last globally: nothing to do (arrows are disabled in the UI anyway).
+  if (targetIndex < 0 || targetIndex >= orderedIds.length) {
+    redirect("/admin/media-center/categories");
+  }
+
+  // Swap positions, then re-index the whole list sequentially so the new order
+  // persists even when several rows currently share sort_order (e.g. default 0).
+  [orderedIds[currentIndex], orderedIds[targetIndex]] = [orderedIds[targetIndex], orderedIds[currentIndex]];
+
+  const now = new Date().toISOString();
+  for (let index = 0; index < orderedIds.length; index += 1) {
+    const { error: updateError } = await getSupabaseAdmin()
+      .from("media_categories")
+      .update({ sort_order: (index + 1) * 10, updated_at: now })
+      .eq("id", orderedIds[index]);
+
+    if (updateError) redirect(`${base}error=${encodeURIComponent(updateError.message)}`);
+  }
+
+  revalidateCategories();
+  redirect(`${base}notice=reordered`);
+}
+
+export async function duplicateMediaCategory(formData: FormData) {
+  await requireAdminSession();
+
+  const id = getString(formData, "id");
+  if (!validateId(id)) redirectError("معرّف التصنيف غير صالح.");
+
+  const { data: source, error } = await getSupabaseAdmin()
+    .from("media_categories")
+    .select("name, slug, description, sort_order")
+    .eq("id", id)
+    .maybeSingle<{ name: string; slug: string; description: string | null; sort_order: number | null }>();
+
+  if (error) redirectError(error.message);
+  if (!source) redirectError("التصنيف غير موجود.");
+
+  // Safe, unique slug — never reuse the source slug.
+  const baseSlug = `${source.slug}-copy`;
+  let candidate = baseSlug;
+  let attempt = 1;
+  // eslint-disable-next-line no-await-in-loop
+  while (!(await ensureUniqueSlug(candidate))) {
+    attempt += 1;
+    candidate = `${baseSlug}-${attempt}`;
+  }
+
+  // Place the copy at the end of the order.
+  const { data: lastRow } = await getSupabaseAdmin()
+    .from("media_categories")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ sort_order: number | null }>();
+
+  const nextSortOrder = (Number(lastRow?.sort_order ?? 0) || 0) + 10;
+
+  const now = new Date().toISOString();
+  const { data: inserted, error: insertError } = await getSupabaseAdmin()
+    .from("media_categories")
+    .insert({
+      name: `${source.name} (نسخة)`,
+      slug: candidate,
+      description: source.description ?? null,
+      sort_order: nextSortOrder,
+      is_active: false,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single<{ id: number }>();
+
+  if (insertError) redirectError(insertError.message);
+  if (!inserted) redirectError("تعذر إنشاء نسخة التصنيف.");
+
+  revalidateCategories();
+  redirect(`/admin/media-center/categories/${inserted.id}`);
 }

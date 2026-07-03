@@ -9,6 +9,8 @@ type AdminPageHeaderProps = {
   meta?: ReactNode;
   breadcrumb?: ReactNode;
   className?: string;
+  variant?: "default" | "context";
+  contextLine?: ReactNode;
 };
 
 /**
@@ -25,6 +27,8 @@ export default function AdminPageHeader({
   meta,
   breadcrumb,
   className,
+  variant,
+  contextLine,
 }: AdminPageHeaderProps) {
   return (
     <UnifiedAdminPageHeader
@@ -35,6 +39,8 @@ export default function AdminPageHeader({
       meta={meta}
       breadcrumb={breadcrumb}
       className={className}
+      variant={variant}
+      contextLine={contextLine}
     />
   );
 }
