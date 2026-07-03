@@ -63,8 +63,7 @@ export default function AdminPageHeader({
           {description ? (
             <>
               {/* Premium subtle divider — vertical on desktop with a small diamond accent. */}
-              <div className="relative hidden self-stretch lg:flex lg:w-px lg:shrink-0 lg:items-center lg:justify-center">
-                <span className="absolute inset-y-1 w-px bg-gradient-to-b from-transparent via-[#D8B87A]/55 to-transparent" />
+              <div className="relative hidden self-stretch bg-gradient-to-b from-transparent via-[#D8B87A]/55 to-transparent lg:flex lg:w-px lg:shrink-0 lg:items-center lg:justify-center">
                 <span className="relative h-1.5 w-1.5 rotate-45 rounded-[1px] bg-[#D8B87A]/85 shadow-[0_0_11px_rgba(216,184,122,0.55)]" />
               </div>
               {/* Mobile fallback: quiet horizontal divider. */}

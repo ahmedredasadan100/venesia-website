@@ -41,8 +41,10 @@ export default async function EditMediaCategoryPage({
   return (
     <main className="space-y-7">
       <AdminPageHeader
+        variant="context"
         eyebrow="EDIT CATEGORY"
         title={`تعديل التصنيف: ${data.name}`}
+        contextLine={`أنت الآن تعدّل: ${data.name}`}
         description="عدّل بيانات التصنيف من هنا: الاسم، الـ Slug، الوصف، الترتيب، والحالة."
         actions={
           <Link
