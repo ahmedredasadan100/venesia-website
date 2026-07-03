@@ -1,5 +1,6 @@
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import { AdminActionButton, AdminInfoBar, AdminPageHeader } from "../../../../components/admin/ui";
+import { PlusIcon } from "../../../../components/admin/AdminRowActions";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import SeriesTableClient, { type SeriesListRow } from "./SeriesTableClient";
 
@@ -67,9 +68,20 @@ export default async function Page({ searchParams }: { searchParams?: Promise<{ 
   return (
     <main className="space-y-7">
       <AdminPageHeader
+        variant="context"
         title="إدارة السلاسل"
+        contextLine="أنت الآن تدير: سلاسل المحتوى"
         description="كل سلسلة تابعة لتصنيف من Topics Categories، ويتم اختيارها من داخل الموضوعات."
-        actions={<AdminActionButton href="/admin/content/series/new" variant="gold">إضافة سلسلة</AdminActionButton>}
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <AdminActionButton href="/admin/content/series/new" variant="primary">
+              <PlusIcon />
+              إضافة سلسلة
+            </AdminActionButton>
+            <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
+            <AdminActionButton href="/admin/topics/categories" variant="dark">عرض التصنيفات</AdminActionButton>
+          </div>
+        }
       />
 
       <AdminInfoBar

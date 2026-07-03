@@ -1,13 +1,13 @@
-import Link from "next/link";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  AdminActionButton,
   AdminPageHeader,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
+import { PlusIcon } from "../../../../components/admin/AdminRowActions";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import CategoryTreeControls from "./CategoryTreeControls";
-import CategoryCreateModal from "./CategoryCreateModal";
 import CategoryRowActions from "./CategoryRowActions";
 import { flattenCategoryTree } from "../../../../lib/admin/category-tree";
 
@@ -370,24 +370,21 @@ export default async function TopicCategoriesPage({
   return (
     <main className="space-y-7" dir="rtl">
       <AdminPageHeader
+        variant="context"
         eyebrow="Admin Panel"
         title="إدارة التصنيفات"
+        contextLine="أنت الآن تدير: تصنيفات الموضوعات"
         description="نظّم تصنيفات الموضوعات في شجرة هرمية. عدّل أي تصنيف أو تحكّم في ظهوره وحذفه من الجدول أدناه."
-        meta={`${totalCount} تصنيف`}
-        breadcrumb={
-          <>
-            <Link href="/admin" className="transition hover:text-[#D8B87A]">
-              الرئيسية
-            </Link>
-            <span className="text-white/20">‹</span>
-            <Link href="/admin/topics" className="transition hover:text-[#D8B87A]">
-              إدارة المواضيع
-            </Link>
-            <span className="text-white/20">‹</span>
-            <span className="text-[#D8B87A]">التصنيفات</span>
-          </>
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <AdminActionButton href="/admin/topics/categories/new" variant="primary">
+              <PlusIcon />
+              إضافة تصنيف
+            </AdminActionButton>
+            <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
+            <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
+          </div>
         }
-        actions={<CategoryCreateModal parentOptions={parentOptions} />}
       />
 
       {notice ? <AdminNotice variant="success" message={notice} /> : null}

@@ -2,7 +2,8 @@ import Link from "next/link";
 import AdminNotice from "../../../components/admin/AdminNotice";
 import AdminPageHeader from "../../../components/admin/AdminPageHeader";
 import AdminTopicsFilters from "../../../components/admin/AdminTopicsFilters";
-import { ADMIN_DATA_GRID_ACTION_COLUMNS } from "../../../components/admin/ui";
+import { ADMIN_DATA_GRID_ACTION_COLUMNS, AdminActionButton } from "../../../components/admin/ui";
+import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
 import { formatAdminListDate } from "../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
@@ -385,25 +386,20 @@ export default async function AdminTopicsPage({
     <main className="space-y-7">
       <TopicListControls />
       <AdminPageHeader
+        variant="context"
         eyebrow="TOPICS CONTROL"
         title="إدارة موضوعات تهمك"
+        contextLine="أنت الآن تدير: موضوعات تهمك"
         description="إدارة المقالات، الفلاتر، النشر، الإخفاء، الحذف الآمن، وقياس جودة السيو لكل صفحة من مكان واحد."
         actions={
-          <>
-            <Link
-              href="/admin/topics/categories"
-              className="rounded-full border border-[#D8B87A]/35 px-5 py-3 text-sm font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10"
-            >
-              إدارة التصنيفات
-            </Link>
-
-            <Link
-              href="/admin/topics/new"
-              className="rounded-full bg-[#D8B87A] px-5 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
-            >
-              + موضوع جديد
-            </Link>
-          </>
+          <div className="flex flex-wrap items-center gap-3">
+            <AdminActionButton href="/admin/topics/new" variant="primary">
+              <PlusIcon />
+              إضافة موضوع جديد
+            </AdminActionButton>
+            <AdminActionButton href="/admin/topics/categories" variant="dark">إدارة التصنيفات</AdminActionButton>
+            <AdminActionButton href="/admin/content/series" variant="dark">إدارة السلاسل</AdminActionButton>
+          </div>
         }
       />
 
