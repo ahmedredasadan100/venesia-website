@@ -14,6 +14,7 @@ import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { bulkUpdateTopics } from "./actions";
 import TopicListControls from "./TopicListControls";
 import TopicRowActions from "./TopicRowActions";
+import TopicsTablePagination from "./TopicsTablePagination";
 import CopySlugButton from "./CopySlugButton";
 
 const TOPICS_TABLE_COLUMNS = `46px minmax(320px,1fr) 150px 125px 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
@@ -70,8 +71,56 @@ type SeriesRow = {
   category_id: number | null;
 };
 
-const LIMIT_OPTIONS = ["10", "25", "50", "100", "all"];
+const LIMIT_OPTIONS = ["10", "20", "30"];
 const DEFAULT_LIMIT = "10";
+
+type TopicListFilterState = {
+  q: string;
+  status: string;
+  category: string;
+  series: string;
+  featured: string;
+  popular: string;
+  dateFrom: string | null;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyTopicListFilters(query: any, filters: TopicListFilterState) {
+  let next = query;
+
+  if (filters.q) {
+    next = next.or(
+      `title.ilike.%${filters.q}%,slug.ilike.%${filters.q}%,category.ilike.%${filters.q}%,excerpt.ilike.%${filters.q}%`,
+    );
+  }
+
+  if (filters.status !== "all") next = next.eq("status", filters.status);
+  if (filters.category !== "all") next = next.eq("category_slug", filters.category);
+  if (filters.series !== "all") next = next.eq("series_slug", filters.series);
+  if (filters.featured === "yes") next = next.eq("is_featured", true);
+  if (filters.featured === "no") next = next.eq("is_featured", false);
+  if (filters.popular === "yes") next = next.eq("is_popular", true);
+  if (filters.popular === "no") next = next.eq("is_popular", false);
+  if (filters.dateFrom) next = next.gte("created_at", filters.dateFrom);
+
+  return next;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyTopicListSort(query: any, sort: string) {
+  if (sort === "created_asc") return query.order("created_at", { ascending: true });
+  if (sort === "updated_desc") return query.order("updated_at", { ascending: false });
+  if (sort === "updated_asc") return query.order("updated_at", { ascending: true });
+  if (sort === "id_desc") return query.order("id", { ascending: false });
+  if (sort === "id_asc") return query.order("id", { ascending: true });
+  if (sort === "title_asc") return query.order("title", { ascending: true });
+  if (sort === "title_desc") return query.order("title", { ascending: false });
+  if (sort === "category_asc") return query.order("category", { ascending: true });
+  if (sort === "category_desc") return query.order("category", { ascending: false });
+  if (sort === "status_asc") return query.order("status", { ascending: true });
+  if (sort === "status_desc") return query.order("status", { ascending: false });
+  return query.order("created_at", { ascending: false });
+}
 
 function cleanSearch(value: string) {
   return value.replace(/[,%]/g, " ").replace(/\s+/g, " ").trim();
@@ -259,15 +308,6 @@ function BulkActionsBar({
   );
 }
 
-function AdminTopicsTotalBar({ count }: { count: number }) {
-  return (
-    <div className="mt-4 flex h-16 items-center justify-center gap-3 rounded-[10px] border border-white/8 bg-black/18 text-sm text-white/72">
-      <TopicFileIcon />
-      <span>إجمالي الموضوعات : {count}</span>
-    </div>
-  );
-}
-
 export default async function AdminTopicsPage({
   searchParams,
 }: {
@@ -287,6 +327,22 @@ export default async function AdminTopicsPage({
   const limitValue = LIMIT_OPTIONS.includes(rawLimit) ? rawLimit : DEFAULT_LIMIT;
   const currentPage = getPositiveNumber(params?.page, 1);
   const notice = getNoticeText(params?.notice);
+  const dateFrom = getDateFromPeriod(period);
+  const listFilters: TopicListFilterState = { q, status, category, series, featured, popular, dateFrom };
+  const perPage = Number(limitValue);
+
+  const { count: rawTotalCount } = await applyTopicListFilters(
+    getSupabaseAdmin().from("topics").select("id", { count: "exact", head: true }).is("deleted_at", null),
+    listFilters,
+  );
+
+  const totalCount = rawTotalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const from = (safePage - 1) * perPage;
+  const to = from + perPage - 1;
+  const rangeStart = totalCount === 0 ? 0 : from + 1;
+  const rangeEnd = totalCount === 0 ? 0 : Math.min(safePage * perPage, totalCount);
 
   const queryParams = new URLSearchParams();
   if (q) queryParams.set("q", q);
@@ -298,56 +354,30 @@ export default async function AdminTopicsPage({
   if (featured !== "all") queryParams.set("featured", featured);
   if (popular !== "all") queryParams.set("popular", popular);
   if (limitValue !== DEFAULT_LIMIT) queryParams.set("limit", limitValue);
-  if (currentPage > 1) queryParams.set("page", String(currentPage));
+  if (safePage > 1) queryParams.set("page", String(safePage));
 
   const currentListPath = queryParams.toString()
     ? `/admin/topics?${queryParams.toString()}`
     : "/admin/topics";
 
-  const dateFrom = getDateFromPeriod(period);
+  let query = applyTopicListSort(
+    applyTopicListFilters(
+      getSupabaseAdmin()
+        .from("topics")
+        .select(
+          "id, title, slug, excerpt, content, image, image_alt, category, category_slug, status, is_featured, is_popular, published_at, created_at, updated_at, deleted_at, seo_title, seo_description, seo_keywords, focus_keyword, faq",
+          { count: "exact" },
+        )
+        .is("deleted_at", null),
+      listFilters,
+    ),
+    sort,
+  );
 
-  let query = getSupabaseAdmin()
-    .from("topics")
-    .select(
-      "id, title, slug, excerpt, content, image, image_alt, category, category_slug, status, is_featured, is_popular, published_at, created_at, updated_at, deleted_at, seo_title, seo_description, seo_keywords, focus_keyword, faq",
-      { count: "exact" }
-    )
-    .is("deleted_at", null);
-
-  if (q) {
-    query = query.or(`title.ilike.%${q}%,slug.ilike.%${q}%,category.ilike.%${q}%,excerpt.ilike.%${q}%`);
-  }
-
-  if (status !== "all") query = query.eq("status", status);
-  if (category !== "all") query = query.eq("category_slug", category);
-  if (series !== "all") query = query.eq("series_slug", series);
-  if (featured === "yes") query = query.eq("is_featured", true);
-  if (featured === "no") query = query.eq("is_featured", false);
-  if (popular === "yes") query = query.eq("is_popular", true);
-  if (popular === "no") query = query.eq("is_popular", false);
-  if (dateFrom) query = query.gte("created_at", dateFrom);
-
-  if (sort === "created_asc") query = query.order("created_at", { ascending: true });
-  else if (sort === "updated_desc") query = query.order("updated_at", { ascending: false });
-  else if (sort === "updated_asc") query = query.order("updated_at", { ascending: true });
-  else if (sort === "id_desc") query = query.order("id", { ascending: false });
-  else if (sort === "id_asc") query = query.order("id", { ascending: true });
-  else if (sort === "title_asc") query = query.order("title", { ascending: true });
-  else if (sort === "title_desc") query = query.order("title", { ascending: false });
-  else if (sort === "category_asc") query = query.order("category", { ascending: true });
-  else if (sort === "category_desc") query = query.order("category", { ascending: false });
-  else if (sort === "status_asc") query = query.order("status", { ascending: true });
-  else if (sort === "status_desc") query = query.order("status", { ascending: false });
-  else query = query.order("created_at", { ascending: false });
-
-  const perPage = limitValue === "all" ? null : Number(limitValue);
-  const from = perPage ? (currentPage - 1) * perPage : 0;
-  const to = perPage ? from + perPage - 1 : undefined;
-
-  if (perPage) query = query.range(from, to as number);
+  query = query.range(from, to);
 
   const [
-    { data: topics, error, count },
+    { data: topics, error },
     { data: categories },
     { data: seriesRows },
     totalStats,
@@ -394,8 +424,6 @@ export default async function AdminTopicsPage({
   const categoryGroups = buildTopicCategoryFilterGroups(safeCategories);
   const bulkCategories = categoryGroups.flatMap((group) => group.options);
 
-  const totalCount = count ?? 0;
-  const totalPages = perPage ? Math.max(1, Math.ceil(totalCount / perPage)) : 1;
   const allTopicsCount = totalStats.count ?? 0;
   const publishedCount = publishedStats.count ?? 0;
   const draftCount = draftStats.count ?? 0;
@@ -560,44 +588,15 @@ export default async function AdminTopicsPage({
           )}
         </div>
 
-        <AdminTopicsTotalBar count={totalCount} />
+        <TopicsTablePagination
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          totalCount={totalCount}
+          limit={limitValue}
+          currentPage={safePage}
+          totalPages={totalPages}
+        />
       </section>
-
-      {perPage && totalPages > 1 ? (
-        <nav className="flex flex-wrap items-center justify-center gap-2">
-          <Link
-            href={buildHref(queryParams, { page: String(Math.max(1, currentPage - 1)) })}
-            className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
-          >
-            السابق
-          </Link>
-
-          {Array.from({ length: totalPages }).map((_, index) => {
-            const page = index + 1;
-
-            return (
-              <Link
-                key={page}
-                href={buildHref(queryParams, { page: String(page) })}
-                className={
-                  page === currentPage
-                    ? "rounded-full bg-[#D8B87A] px-4 py-2 text-sm font-semibold text-[#06101C]"
-                    : "rounded-full border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
-                }
-              >
-                {page}
-              </Link>
-            );
-          })}
-
-          <Link
-            href={buildHref(queryParams, { page: String(Math.min(totalPages, currentPage + 1)) })}
-            className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
-          >
-            التالي
-          </Link>
-        </nav>
-      ) : null}
     </main>
   );
 }
