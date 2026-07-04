@@ -2,7 +2,7 @@ import AdminNotice from "../../../../../components/admin/AdminNotice";
 import {
   ADMIN_FORM,
   AdminActionButton,
-  AdminPageHeader,
+  AdminPageContextHeader,
 } from "../../../../../components/admin/ui";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { flattenCategoryTree, type CategoryTreeNode } from "../../../../../lib/admin/category-tree";
@@ -57,18 +57,16 @@ export default async function NewTopicCategoryPage({
 
   return (
     <main className="space-y-7" dir="rtl">
-      <AdminPageHeader
-        variant="context"
-        eyebrow="Admin Panel"
+      <AdminPageContextHeader
+        eyebrow="CATEGORIES CONTROL"
         title="إضافة تصنيف جديد"
-        contextLine="أنت الآن تضيف: تصنيف جديد للموضوعات"
         description="أنشئ تصنيفًا جديدًا وحدّد التصنيف الأب والترتيب قبل الحفظ."
         actions={
-          <div className="flex flex-wrap items-center gap-3">
+          <>
             <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
             <AdminActionButton href="/admin/topics/categories" variant="dark">عرض التصنيفات</AdminActionButton>
             <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
-          </div>
+          </>
         }
       />
 

@@ -3,7 +3,7 @@ import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_HEADER_CLASSES,
   AdminActionButton,
-  AdminPageHeader,
+  AdminPageContextHeader,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
@@ -370,21 +370,19 @@ export default async function TopicCategoriesPage({
 
   return (
     <main className="space-y-7" dir="rtl">
-      <AdminPageHeader
-        variant="context"
-        eyebrow="Admin Panel"
+      <AdminPageContextHeader
+        eyebrow="CATEGORIES CONTROL"
         title="إدارة التصنيفات"
-        contextLine="أنت الآن تدير: تصنيفات الموضوعات"
-        description="نظّم تصنيفات الموضوعات في شجرة هرمية. عدّل أي تصنيف أو تحكّم في ظهوره وحذفه من الجدول أدناه."
+        description="من هنا تُدار تصنيفات موضوعات تهمك، مع تنظيم الظهور والربط بالمقالات والسلاسل وتحسين بنية المحتوى من مكان واحد."
         actions={
-          <div className="flex flex-wrap items-center gap-3">
+          <>
             <AdminActionButton href="/admin/topics/categories/new" variant="primary">
               <PlusIcon />
-              إضافة تصنيف
+              إضافة تصنيف جديد
             </AdminActionButton>
             <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
             <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
-          </div>
+          </>
         }
       />
 

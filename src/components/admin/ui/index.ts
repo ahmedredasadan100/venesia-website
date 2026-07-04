@@ -1,4 +1,6 @@
 export { default as AdminPageHeader } from "./AdminPageHeader";
+export { default as AdminPageContextHeader } from "./AdminPageContextHeader";
+export type { AdminPageContextHeaderProps } from "./AdminPageContextHeader";
 export { default as AdminCard } from "./AdminCard";
 export { default as AdminToolbar } from "./AdminToolbar";
 export { default as AdminActionButton } from "./AdminActionButton";

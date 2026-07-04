@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AdminInfoBar, AdminPageHeader } from "../../../../../components/admin/ui";
+import { AdminActionButton, AdminInfoBar, AdminPageContextHeader } from "../../../../../components/admin/ui";
 import { loadActiveTopicCategoriesForAdmin } from "../../../../../lib/admin/load-topic-categories";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import SeriesForm from "../SeriesForm";
@@ -14,6 +14,12 @@ type SeriesRow = {
   sort_order: number | null;
   category_id: number | null;
 };
+
+function truncateWords(value: string, limit = 4) {
+  const words = value.trim().split(/\s+/);
+  if (words.length <= limit) return value;
+  return `${words.slice(0, limit).join(" ")}...`;
+}
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -46,7 +52,19 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <main className="space-y-7">
-      <AdminPageHeader title="تعديل سلسلة" description="عدّل بيانات السلسلة وتصنيفها بدون خلطها مع جدول العرض." />
+      <AdminPageContextHeader
+        eyebrow="SERIES CONTROL"
+        contextLine="تعديل سلسلة:"
+        title={truncateWords(data.name || "بدون اسم")}
+        actions={
+          <>
+            <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
+            <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
+            <AdminActionButton href="/admin/topics/categories" variant="dark">عرض التصنيفات</AdminActionButton>
+          </>
+        }
+      />
+
       <AdminInfoBar label="Series Edit" description="أي تعديل على اسم السلسلة أو الـ Slug يتم مزامنته مع الموضوعات المرتبطة بها." />
       <SeriesForm mode="edit" series={data} categories={categories} />
     </main>

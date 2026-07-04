@@ -1,4 +1,4 @@
-import { AdminActionButton, AdminInfoBar, AdminPageHeader } from "../../../../../components/admin/ui";
+import { AdminActionButton, AdminInfoBar, AdminPageContextHeader } from "../../../../../components/admin/ui";
 import { loadActiveTopicCategoriesForAdmin } from "../../../../../lib/admin/load-topic-categories";
 import SeriesForm from "../SeriesForm";
 
@@ -9,17 +9,16 @@ export default async function Page() {
 
   return (
     <main className="space-y-7">
-      <AdminPageHeader
-        variant="context"
-        title="إضافة سلسلة"
-        contextLine="أنت الآن تضيف: سلسلة جديدة"
+      <AdminPageContextHeader
+        eyebrow="SERIES CONTROL"
+        title="إضافة سلسلة جديدة"
         description="أضف سلسلة جديدة تحت تصنيف محدد ليتم اختيارها لاحقًا من داخل الموضوعات."
         actions={
-          <div className="flex flex-wrap items-center gap-3">
+          <>
             <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
             <AdminActionButton href="/admin/topics/categories" variant="dark">عرض التصنيفات</AdminActionButton>
             <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
-          </div>
+          </>
         }
       />
       <AdminInfoBar label="Series Create" description="كل سلسلة يجب أن تنتمي إلى تصنيف من Topics Categories." />

@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import AdminNotice from "../../../../components/admin/AdminNotice";
-import AdminPageHeader from "../../../../components/admin/AdminPageHeader";
-import AdminStatusBadge from "../../../../components/admin/AdminStatusBadge";
+import { AdminActionButton, AdminPageContextHeader } from "../../../../components/admin/ui";
 import SaveBar from "../../../../components/admin/SaveBar";
 import SeoPanel from "../../../../components/admin/SeoPanel";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -29,9 +28,10 @@ function getNoticeText(notice?: string) {
   return null;
 }
 
-function getAdminStatus(status?: string | null) {
-  if (status === "unpublished") return "hidden";
-  return status || "draft";
+function truncateWords(value: string, limit = 4) {
+  const words = value.trim().split(/\s+/);
+  if (words.length <= limit) return value;
+  return `${words.slice(0, limit).join(" ")}...`;
 }
 
 function getSeoKeywords(value: unknown) {
@@ -70,16 +70,16 @@ export default async function EditTopicPage({
 
   return (
     <main className="space-y-7">
-      <AdminPageHeader
+      <AdminPageContextHeader
         eyebrow="EDIT TOPIC"
-        title={topic.title || "تحرير موضوع"}
-        description="تحرير المقال، إعدادات النشر، السيو، الصورة، الأسئلة الشائعة، وحالة الظهور من صفحة واحدة منظمة."
+        contextLine="تعديل موضوع:"
+        title={truncateWords(topic.title || "بدون عنوان")}
         actions={
           <>
-            <AdminStatusBadge status={getAdminStatus(status)} />
-            <Link href="/admin/topics" className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/65 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]">رجوع للقائمة</Link>
-            <Link href={`/admin/topics/${topic.id}/preview`} target="_blank" className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/70 transition hover:border-white/30 hover:text-white">معاينة داخلية</Link>
-            {topic.slug ? <Link href={`/topics/${topic.slug}`} target="_blank" className="rounded-full border border-[#D8B87A]/35 px-5 py-3 text-sm font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10">النسخة العامة</Link> : null}
+            <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
+            <AdminActionButton href="/admin/topics/categories" variant="dark">عرض التصنيفات</AdminActionButton>
+            <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
+            <Link href={`/admin/topics/${topic.id}/preview`} target="_blank" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18 hover:bg-white/[0.05]">معاينة داخلية</Link>
           </>
         }
       />
