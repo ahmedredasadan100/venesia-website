@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import AdminStatusBadge from "../../../../components/admin/AdminStatusBadge";
-import { AdminInfoBar, AdminPageHeader } from "../../../../components/admin/ui";
+import { AdminActionButton, AdminInfoBar, AdminPageHeader } from "../../../../components/admin/ui";
 import { getProjectEditBundle } from "../../../../lib/projects/queries";
 import ProjectEditForm from "../ProjectEditForm";
 
@@ -33,20 +33,30 @@ export default async function ProjectEditPage({
   const notice = getNoticeText(query?.notice);
   const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
   const listPath = project.type === "residential" ? "/admin/projects/residential" : "/admin/projects/commercial";
+  const contextLine =
+    project.type === "residential"
+      ? "أنت الآن تدير: المشروعات السكنية"
+      : "أنت الآن تدير: المشروعات التجارية";
 
   return (
     <main className="space-y-7">
       <AdminPageHeader
+        variant="context"
         eyebrow={project.type === "residential" ? "RESIDENTIAL PROJECT" : "COMMERCIAL PROJECT"}
         title={project.arabic_name}
         description={`${project.code} — ${project.slug}`}
+        contextLine={contextLine}
         actions={
           <>
             <AdminStatusBadge status={project.publication_status} />
-            <Link href={listPath} className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/65 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]">
+            <AdminActionButton href={listPath} variant="dark">
               رجوع للقائمة
-            </Link>
-            <Link href={`/projects/${project.slug}`} target="_blank" className="rounded-full border border-[#D8B87A]/35 px-5 py-3 text-sm font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10">
+            </AdminActionButton>
+            <Link
+              href={`/projects/${project.slug}`}
+              target="_blank"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#D8B87A]/35 px-4 py-2.5 text-sm font-semibold text-[#D8B87A] transition hover:bg-[#D8B87A]/10"
+            >
               النسخة العامة
             </Link>
           </>

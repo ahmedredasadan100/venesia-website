@@ -57,7 +57,9 @@ export default async function ProjectsHubPage({
   return (
     <main className="space-y-7">
       <AdminPageHeader
+        variant="context"
         title="المشاريع"
+        contextLine="أنت الآن تدير: مركز المشروعات"
         description={
           reimportAllowed
             ? "اختر نوع المشاريع لإدارتها. الواجهة العامة تقرأ من Supabase. projects-data.ts للاستيراد/البذرة في التطوير فقط."

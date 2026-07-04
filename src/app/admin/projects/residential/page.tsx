@@ -45,13 +45,21 @@ export default async function ResidentialProjectsPage({
   return (
     <main className="space-y-7">
       <AdminPageHeader
+        variant="context"
         title="المشاريع السكنية"
         description="جميع المشاريع السكنية في شبكة إدارية واحدة — بدون تعديل الواجهة العامة."
+        contextLine="أنت الآن تدير: المشروعات السكنية"
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <AddProjectPanelClient type="residential" />
+            <AdminActionButton href="/admin/projects/commercial" variant="dark">
+              المشاريع التجارية
+            </AdminActionButton>
+            <AdminActionButton href="/admin/projects/construction-updates" variant="dark">
+              عرض التحديثات
+            </AdminActionButton>
             <AdminActionButton href="/admin/projects" variant="dark">
-              رجوع للمشاريع
+              مركز المشروعات
             </AdminActionButton>
           </div>
         }
