@@ -1,7 +1,7 @@
 /** Shared Admin UI tokens — modals, forms, tables. Import from here for new screens.
  *
  * Admin Design System rule: every new Admin page MUST reuse the shared components
- * (AdminPageHeader, AdminPageContextHeader, AdminDataGrid, AdminActionButton, AdminStatusPill, AdminBulkActionBar,
+ * (AdminPageHeader, AdminPageContextHeader, AdminTablePagination, AdminDataGrid, AdminActionButton, AdminStatusPill, AdminBulkActionBar,
  * VenesiaModal) and tokens from this file. Do not create page-specific layout/CSS when a
  * unified component already exists — the goal is one consistent Admin experience.
  */

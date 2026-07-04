@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 
-const LIMIT_OPTIONS = ["10", "20", "30"] as const;
-const DEFAULT_LIMIT = "10";
-const PAGINATION_MENU_ATTR = "data-topics-pagination-menu";
+export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE = "10";
+export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS = ["10", "20", "30"] as const;
+
+const PAGINATION_MENU_ATTR = "data-admin-table-pagination-menu";
 
 const FOOTER_SURFACE_CLASSES =
   "border border-[#D8B87A]/14 bg-[linear-gradient(135deg,rgba(216,184,122,0.10),rgba(56,189,248,0.06),rgba(255,255,255,0.025))] text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl";
@@ -23,13 +24,21 @@ type MenuPosition = {
 
 const MENU_GAP = 6;
 
-type TopicsTablePaginationProps = {
-  rangeStart: number;
-  rangeEnd: number;
-  totalCount: number;
-  limit: string;
+export type AdminTablePaginationProps = {
+  basePath: string;
   currentPage: number;
   totalPages: number;
+  totalCount: number;
+  rangeStart: number;
+  rangeEnd: number;
+  pageSize: string;
+  pageSizeOptions?: readonly string[];
+  defaultPageSize?: string;
+  showPageSizeSelector?: boolean;
+  emptySummaryText?: string;
+  pageParamName?: string;
+  limitParamName?: string;
+  className?: string;
 };
 
 function ChevronDownIcon() {
@@ -75,7 +84,7 @@ function useFixedDropupPosition(isOpen: boolean, anchorRef: React.RefObject<HTML
   return position;
 }
 
-function buildPaginationItems(currentPage: number, totalPages: number): Array<number | "ellipsis"> {
+export function buildAdminPaginationItems(currentPage: number, totalPages: number): Array<number | "ellipsis"> {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
   }
@@ -102,7 +111,11 @@ function buildPaginationItems(currentPage: number, totalPages: number): Array<nu
   return pages;
 }
 
-function buildTopicsHref(params: URLSearchParams, patch: Record<string, string | null>) {
+export function buildAdminPaginationHref(
+  basePath: string,
+  params: URLSearchParams,
+  patch: Record<string, string | null>,
+) {
   const next = new URLSearchParams(params.toString());
 
   Object.entries(patch).forEach(([key, value]) => {
@@ -111,24 +124,33 @@ function buildTopicsHref(params: URLSearchParams, patch: Record<string, string |
   });
 
   const query = next.toString();
-  return query ? `/admin/topics?${query}` : "/admin/topics";
+  return query ? `${basePath}?${query}` : basePath;
 }
 
-export default function TopicsTablePagination({
-  rangeStart,
-  rangeEnd,
-  totalCount,
-  limit,
+export default function AdminTablePagination({
+  basePath,
   currentPage,
   totalPages,
-}: TopicsTablePaginationProps) {
+  totalCount,
+  rangeStart,
+  rangeEnd,
+  pageSize,
+  pageSizeOptions = ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
+  defaultPageSize = ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  showPageSizeSelector = true,
+  emptySummaryText = "لا توجد نتائج مطابقة",
+  pageParamName = "page",
+  limitParamName = "limit",
+  className = "",
+}: AdminTablePaginationProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const limitTriggerId = useId();
   const [isLimitOpen, setIsLimitOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const menuPosition = useFixedDropupPosition(isLimitOpen, triggerRef);
-  const paginationItems = buildPaginationItems(currentPage, totalPages);
+  const paginationItems = buildAdminPaginationItems(currentPage, totalPages);
 
   useEffect(() => {
     setIsMounted(true);
@@ -151,22 +173,23 @@ export default function TopicsTablePagination({
   function applyLimit(nextLimit: string) {
     const params = new URLSearchParams(searchParams.toString());
 
-    if (nextLimit === DEFAULT_LIMIT) params.delete("limit");
-    else params.set("limit", nextLimit);
+    if (nextLimit === defaultPageSize) params.delete(limitParamName);
+    else params.set(limitParamName, nextLimit);
 
-    params.delete("page");
+    params.delete(pageParamName);
 
     const query = params.toString();
-    router.push(query ? `/admin/topics?${query}` : "/admin/topics", { scroll: false });
+    router.push(query ? `${basePath}?${query}` : basePath, { scroll: false });
     setIsLimitOpen(false);
   }
 
   const summaryText =
     totalCount === 0
-      ? "لا توجد موضوعات مطابقة"
+      ? emptySummaryText
       : `عرض ${rangeStart} إلى ${rangeEnd} من إجمالي ${totalCount}`;
 
   const limitMenu =
+    showPageSizeSelector &&
     isMounted &&
     isLimitOpen &&
     menuPosition &&
@@ -174,7 +197,7 @@ export default function TopicsTablePagination({
       <div
         {...{ [PAGINATION_MENU_ATTR]: "" }}
         role="listbox"
-        aria-labelledby="topics-limit-trigger"
+        aria-labelledby={limitTriggerId}
         dir="rtl"
         style={{
           position: "fixed",
@@ -185,8 +208,8 @@ export default function TopicsTablePagination({
         }}
         className={`${MENU_SCROLLBAR_CLASSES} rounded-[12px] border border-[#D8B87A]/22 bg-[#080B10]/96 p-1 shadow-[0_-14px_45px_rgba(0,0,0,0.38),0_18px_55px_rgba(0,0,0,0.42)] backdrop-blur-xl`}
       >
-        {LIMIT_OPTIONS.map((option) => {
-          const selected = limit === option;
+        {pageSizeOptions.map((option) => {
+          const selected = pageSize === option;
 
           return (
             <button
@@ -212,45 +235,51 @@ export default function TopicsTablePagination({
 
   const prevHref =
     currentPage > 1
-      ? buildTopicsHref(new URLSearchParams(searchParams.toString()), {
-          page: currentPage - 1 <= 1 ? null : String(currentPage - 1),
+      ? buildAdminPaginationHref(basePath, new URLSearchParams(searchParams.toString()), {
+          [pageParamName]: currentPage - 1 <= 1 ? null : String(currentPage - 1),
         })
       : null;
   const nextHref =
     currentPage < totalPages
-      ? buildTopicsHref(new URLSearchParams(searchParams.toString()), { page: String(currentPage + 1) })
+      ? buildAdminPaginationHref(basePath, new URLSearchParams(searchParams.toString()), {
+          [pageParamName]: String(currentPage + 1),
+        })
       : null;
 
   return (
-    <div className={`mt-4 rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES}`}>
+    <div className={`mt-4 rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES} ${className}`.trim()}>
       <div
         dir="ltr"
         className="grid grid-cols-1 items-center gap-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-3"
       >
-        <div dir="rtl" className="flex items-center justify-center gap-2 md:justify-self-start">
-          <span className="text-xs font-medium text-[#F4E7C5]/55">عدد العناصر:</span>
-          <div className="relative">
-            <button
-              ref={triggerRef}
-              type="button"
-              id="topics-limit-trigger"
-              aria-haspopup="listbox"
-              aria-expanded={isLimitOpen}
-              onClick={() => setIsLimitOpen((open) => !open)}
-              className={`flex h-9 min-w-[72px] items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition ${
-                isLimitOpen
-                  ? "border-[#D8B87A]/35 bg-black/30 text-[#F4E7C5]"
-                  : "border-[#D8B87A]/16 bg-black/22 text-[#F4E7C5]/90 hover:border-[#D8B87A]/28 hover:bg-black/28"
-              }`}
-            >
-              <span>{limit}</span>
-              <span className={`text-[#F4E7C5]/45 transition ${isLimitOpen ? "" : "rotate-180"}`}>
-                <ChevronDownIcon />
-              </span>
-            </button>
-            {limitMenu}
+        {showPageSizeSelector ? (
+          <div dir="rtl" className="flex items-center justify-center gap-2 md:justify-self-start">
+            <span className="text-xs font-medium text-[#F4E7C5]/55">عدد العناصر:</span>
+            <div className="relative">
+              <button
+                ref={triggerRef}
+                type="button"
+                id={limitTriggerId}
+                aria-haspopup="listbox"
+                aria-expanded={isLimitOpen}
+                onClick={() => setIsLimitOpen((open) => !open)}
+                className={`flex h-9 min-w-[72px] items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition ${
+                  isLimitOpen
+                    ? "border-[#D8B87A]/35 bg-black/30 text-[#F4E7C5]"
+                    : "border-[#D8B87A]/16 bg-black/22 text-[#F4E7C5]/90 hover:border-[#D8B87A]/28 hover:bg-black/28"
+                }`}
+              >
+                <span>{pageSize}</span>
+                <span className={`text-[#F4E7C5]/45 transition ${isLimitOpen ? "" : "rotate-180"}`}>
+                  <ChevronDownIcon />
+                </span>
+              </button>
+              {limitMenu}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="hidden md:block" aria-hidden="true" />
+        )}
 
         {totalPages > 1 ? (
           <nav
@@ -285,8 +314,8 @@ export default function TopicsTablePagination({
               }
 
               const isActive = item === currentPage;
-              const href = buildTopicsHref(new URLSearchParams(searchParams.toString()), {
-                page: item <= 1 ? null : String(item),
+              const href = buildAdminPaginationHref(basePath, new URLSearchParams(searchParams.toString()), {
+                [pageParamName]: item <= 1 ? null : String(item),
               });
 
               return (

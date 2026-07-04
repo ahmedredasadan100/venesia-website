@@ -5,7 +5,7 @@ import {
   buildTopicCategoryFilterGroups,
   type TopicCategoryRecord,
 } from "./topics-category-groups";
-import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminPageContextHeader } from "../../../components/admin/ui";
+import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminPageContextHeader, AdminTablePagination } from "../../../components/admin/ui";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
 import { formatAdminListDate } from "../../../lib/content-dates";
@@ -13,7 +13,6 @@ import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { bulkUpdateTopics } from "./actions";
 import TopicListControls from "./TopicListControls";
 import TopicRowActions from "./TopicRowActions";
-import TopicsTablePagination from "./TopicsTablePagination";
 import CopySlugButton from "./CopySlugButton";
 
 const TOPICS_TABLE_COLUMNS = `46px minmax(320px,1fr) 150px 125px 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
@@ -585,13 +584,15 @@ export default async function AdminTopicsPage({
           )}
         </div>
 
-        <TopicsTablePagination
+        <AdminTablePagination
+          basePath="/admin/topics"
           rangeStart={rangeStart}
           rangeEnd={rangeEnd}
           totalCount={totalCount}
-          limit={limitValue}
+          pageSize={limitValue}
           currentPage={safePage}
           totalPages={totalPages}
+          emptySummaryText="لا توجد موضوعات مطابقة"
         />
       </section>
     </main>

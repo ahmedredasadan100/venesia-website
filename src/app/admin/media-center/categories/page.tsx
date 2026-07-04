@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import AdminPageHeader from "../../../../components/admin/AdminPageHeader";
+import { AdminTablePagination } from "../../../../components/admin/ui";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import MediaCategoriesTableClient, { type MediaCategoryRow } from "./MediaCategoriesTableClient";
 import MediaCategoryCreateModal from "./MediaCategoryCreateModal";
@@ -44,16 +45,6 @@ function getPage(value?: string) {
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 }
 
-function pageHref(page: number, sortKey: SortKey | null, dir: SortDir) {
-  const params = new URLSearchParams();
-  params.set("page", String(page));
-  if (sortKey) {
-    params.set("sort", sortKey);
-    params.set("dir", dir);
-  }
-  return `/admin/media-center/categories?${params.toString()}`;
-}
-
 async function getUsageCounts(slugs: string[]) {
   const entries = await Promise.all(
     slugs.map(async (slug) => {
@@ -68,24 +59,6 @@ async function getUsageCounts(slugs: string[]) {
   );
 
   return new Map(entries);
-}
-
-function Pagination({ currentPage, totalPages, sortKey, dir }: { currentPage: number; totalPages: number; sortKey: SortKey | null; dir: SortDir }) {
-  if (totalPages <= 1) return null;
-
-  const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
-
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-2 border-t border-white/10 px-6 py-5">
-      {currentPage > 1 ? <Link href={pageHref(currentPage - 1, sortKey, dir)} className="rounded-full border border-white/10 px-4 py-2 text-xs text-white/60 transition hover:border-[#D8B87A]/45 hover:text-[#D8B87A]">السابق</Link> : null}
-      {pages.map((page) => (
-        <Link key={page} href={pageHref(page, sortKey, dir)} className={`rounded-full px-4 py-2 text-xs font-semibold transition ${page === currentPage ? "bg-[#D8B87A] text-[#06101C]" : "border border-white/10 text-white/55 hover:border-[#D8B87A]/45 hover:text-[#D8B87A]"}`}>
-          {page}
-        </Link>
-      ))}
-      {currentPage < totalPages ? <Link href={pageHref(currentPage + 1, sortKey, dir)} className="rounded-full border border-white/10 px-4 py-2 text-xs text-white/60 transition hover:border-[#D8B87A]/45 hover:text-[#D8B87A]">التالي</Link> : null}
-    </div>
-  );
 }
 
 export default async function MediaCategoriesPage({ searchParams }: { searchParams?: Promise<CategoriesSearchParams> }) {
@@ -135,6 +108,9 @@ export default async function MediaCategoriesPage({ searchParams }: { searchPara
       });
 
   const from = (currentPage - 1) * PAGE_SIZE;
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const rangeStart = totalCount === 0 ? 0 : from + 1;
+  const rangeEnd = totalCount === 0 ? 0 : Math.min(safePage * PAGE_SIZE, totalCount);
   const pageSlice = ordered.slice(from, from + PAGE_SIZE);
 
   const tableRows: MediaCategoryRow[] = pageSlice.map((category) => {
@@ -177,7 +153,17 @@ export default async function MediaCategoriesPage({ searchParams }: { searchPara
         isDefaultSort={isDefaultSort}
       />
 
-      <Pagination currentPage={currentPage} totalPages={totalPages} sortKey={sortKey} dir={dir} />
+      <AdminTablePagination
+        basePath="/admin/media-center/categories"
+        currentPage={safePage}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        pageSize={String(PAGE_SIZE)}
+        showPageSizeSelector={false}
+        emptySummaryText="لا توجد تصنيفات مطابقة"
+      />
     </main>
   );
 }

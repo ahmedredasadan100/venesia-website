@@ -1,6 +1,15 @@
 export { default as AdminPageHeader } from "./AdminPageHeader";
 export { default as AdminPageContextHeader } from "./AdminPageContextHeader";
 export type { AdminPageContextHeaderProps } from "./AdminPageContextHeader";
+export {
+  default as AdminTablePagination,
+  AdminPagination,
+  buildAdminPaginationHref,
+  buildAdminPaginationItems,
+  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
+} from "./AdminPagination";
+export type { AdminTablePaginationProps } from "./AdminTablePagination";
 export { default as AdminCard } from "./AdminCard";
 export { default as AdminToolbar } from "./AdminToolbar";
 export { default as AdminActionButton } from "./AdminActionButton";
