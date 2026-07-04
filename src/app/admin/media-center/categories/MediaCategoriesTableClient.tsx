@@ -47,13 +47,11 @@ const BASE_PATH = "/admin/media-center/categories";
 
 export default function MediaCategoriesTableClient({
   categories,
-  totalCount,
   sortKey,
   dir,
   isDefaultSort,
 }: {
   categories: MediaCategoryRow[];
-  totalCount: number;
   sortKey: MediaCategorySortKey | null;
   dir: MediaCategorySortDir;
   isDefaultSort: boolean;
@@ -112,7 +110,7 @@ export default function MediaCategoriesTableClient({
         onClearSelection={selection.clearSelection}
       />
 
-      <AdminDataGrid summary={`${totalCount} تصنيف إجمالًا`}>
+      <AdminDataGrid>
         <AdminDataGridHeader columns={columns}>
           <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox

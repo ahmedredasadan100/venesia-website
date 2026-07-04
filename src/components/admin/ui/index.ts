@@ -8,8 +8,7 @@ export {
   buildAdminPaginationItems,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
-} from "./AdminPagination";
-export type { AdminTablePaginationProps } from "./AdminTablePagination";
+} from "./AdminPagination";export type { AdminTablePaginationProps, PageSizeSelectorMode } from "./AdminTablePagination";
 export { default as AdminCard } from "./AdminCard";
 export { default as AdminToolbar } from "./AdminToolbar";
 export { default as AdminActionButton } from "./AdminActionButton";

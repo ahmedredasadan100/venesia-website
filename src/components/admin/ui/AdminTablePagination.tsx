@@ -24,6 +24,8 @@ type MenuPosition = {
 
 const MENU_GAP = 6;
 
+export type PageSizeSelectorMode = "auto" | "always" | "never";
+
 export type AdminTablePaginationProps = {
   basePath: string;
   currentPage: number;
@@ -34,12 +36,18 @@ export type AdminTablePaginationProps = {
   pageSize: string;
   pageSizeOptions?: readonly string[];
   defaultPageSize?: string;
-  showPageSizeSelector?: boolean;
+  pageSizeSelectorMode?: PageSizeSelectorMode;
+  forceShowSummary?: boolean;
   emptySummaryText?: string;
   pageParamName?: string;
   limitParamName?: string;
   className?: string;
 };
+
+function getMinPageSize(pageSizeOptions: readonly string[]) {
+  const values = pageSizeOptions.map((option) => Number(option)).filter((value) => Number.isFinite(value) && value > 0);
+  return values.length > 0 ? Math.min(...values) : Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
+}
 
 function ChevronDownIcon() {
   return (
@@ -137,7 +145,8 @@ export default function AdminTablePagination({
   pageSize,
   pageSizeOptions = ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
   defaultPageSize = ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
-  showPageSizeSelector = true,
+  pageSizeSelectorMode = "auto",
+  forceShowSummary = false,
   emptySummaryText = "لا توجد نتائج مطابقة",
   pageParamName = "page",
   limitParamName = "limit",
@@ -151,6 +160,14 @@ export default function AdminTablePagination({
   const [isMounted, setIsMounted] = useState(false);
   const menuPosition = useFixedDropupPosition(isLimitOpen, triggerRef);
   const paginationItems = buildAdminPaginationItems(currentPage, totalPages);
+  const minPageSize = getMinPageSize(pageSizeOptions);
+  const shouldShowPageSizeSelector =
+    pageSizeSelectorMode === "always"
+      ? true
+      : pageSizeSelectorMode === "never"
+        ? false
+        : totalCount > minPageSize;
+  const shouldShowFooter = forceShowSummary || totalCount > minPageSize || totalPages > 1;
 
   useEffect(() => {
     setIsMounted(true);
@@ -189,7 +206,7 @@ export default function AdminTablePagination({
       : `عرض ${rangeStart} إلى ${rangeEnd} من إجمالي ${totalCount}`;
 
   const limitMenu =
-    showPageSizeSelector &&
+    shouldShowPageSizeSelector &&
     isMounted &&
     isLimitOpen &&
     menuPosition &&
@@ -246,13 +263,15 @@ export default function AdminTablePagination({
         })
       : null;
 
+  if (!shouldShowFooter) return null;
+
   return (
     <div className={`mt-4 rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES} ${className}`.trim()}>
       <div
         dir="ltr"
         className="grid grid-cols-1 items-center gap-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-3"
       >
-        {showPageSizeSelector ? (
+        {shouldShowPageSizeSelector ? (
           <div dir="rtl" className="flex items-center justify-center gap-2 md:justify-self-start">
             <span className="text-xs font-medium text-[#F4E7C5]/55">عدد العناصر:</span>
             <div className="relative">

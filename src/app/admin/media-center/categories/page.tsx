@@ -8,7 +8,8 @@ import MediaCategoryCreateModal from "./MediaCategoryCreateModal";
 
 export const dynamic = "force-dynamic";
 
-const PAGE_SIZE = 10;
+const LIMIT_OPTIONS = ["10", "20", "30"] as const;
+const DEFAULT_LIMIT = "10";
 
 type CategoryRow = {
   id: number;
@@ -21,6 +22,7 @@ type CategoryRow = {
 
 type CategoriesSearchParams = {
   page?: string;
+  limit?: string;
   notice?: string;
   error?: string;
   sort?: string;
@@ -64,6 +66,9 @@ async function getUsageCounts(slugs: string[]) {
 export default async function MediaCategoriesPage({ searchParams }: { searchParams?: Promise<CategoriesSearchParams> }) {
   const query = await searchParams;
   const currentPage = getPage(query?.page);
+  const rawLimit = query?.limit ?? DEFAULT_LIMIT;
+  const limitValue = LIMIT_OPTIONS.includes(rawLimit as (typeof LIMIT_OPTIONS)[number]) ? rawLimit : DEFAULT_LIMIT;
+  const perPage = Number(limitValue);
   const notice = getNoticeText(query?.notice);
   const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
 
@@ -84,7 +89,8 @@ export default async function MediaCategoriesPage({ searchParams }: { searchPara
   const baseOrdered = (categories ?? []) as CategoryRow[];
   const usageCounts = await getUsageCounts(baseOrdered.map((category) => category.slug));
   const totalCount = baseOrdered.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
 
   // Default-order global index → drives manual reorder arrow enabling (default view only).
   const defaultIndexById = new Map<number, number>();
@@ -107,11 +113,10 @@ export default async function MediaCategoriesPage({ searchParams }: { searchPara
         return cmp * factor;
       });
 
-  const from = (currentPage - 1) * PAGE_SIZE;
-  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const from = (safePage - 1) * perPage;
   const rangeStart = totalCount === 0 ? 0 : from + 1;
-  const rangeEnd = totalCount === 0 ? 0 : Math.min(safePage * PAGE_SIZE, totalCount);
-  const pageSlice = ordered.slice(from, from + PAGE_SIZE);
+  const rangeEnd = totalCount === 0 ? 0 : Math.min(safePage * perPage, totalCount);
+  const pageSlice = ordered.slice(from, from + perPage);
 
   const tableRows: MediaCategoryRow[] = pageSlice.map((category) => {
     const defaultIndex = defaultIndexById.get(category.id) ?? 0;
@@ -147,7 +152,6 @@ export default async function MediaCategoriesPage({ searchParams }: { searchPara
 
       <MediaCategoriesTableClient
         categories={tableRows}
-        totalCount={totalCount}
         sortKey={sortKey}
         dir={dir}
         isDefaultSort={isDefaultSort}
@@ -160,8 +164,7 @@ export default async function MediaCategoriesPage({ searchParams }: { searchPara
         totalCount={totalCount}
         rangeStart={rangeStart}
         rangeEnd={rangeEnd}
-        pageSize={String(PAGE_SIZE)}
-        showPageSizeSelector={false}
+        pageSize={limitValue}
         emptySummaryText="لا توجد تصنيفات مطابقة"
       />
     </main>
