@@ -1,6 +1,7 @@
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_HEADER_CLASSES,
   AdminActionButton,
   AdminPageHeader,
   AdminStatusPill,
@@ -441,7 +442,7 @@ export default async function TopicCategoriesPage({
         <div className="overflow-hidden rounded-[10px] border border-white/8 bg-[#080C10]/72">
           <div className="overflow-x-auto">
             <div
-              className="grid min-w-[980px] items-center gap-4 border-b border-[#D8B87A]/12 bg-white/[0.045] px-6 py-4 text-sm font-bold text-white"
+              className={`grid min-w-[980px] items-center gap-4 px-6 py-4 ${ADMIN_DATA_GRID_HEADER_CLASSES}`}
               style={{ gridTemplateColumns: TREE_GRID_COLUMNS }}
             >
               <button type="button" data-category-sort="name" className="text-right transition hover:text-[#D8B87A]">التصنيف</button>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import AdminNotice from "../../../components/admin/AdminNotice";
 import AdminPageHeader from "../../../components/admin/AdminPageHeader";
 import AdminTopicsFilters from "../../../components/admin/AdminTopicsFilters";
-import { ADMIN_DATA_GRID_ACTION_COLUMNS, AdminActionButton } from "../../../components/admin/ui";
+import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton } from "../../../components/admin/ui";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
 import { formatAdminListDate } from "../../../lib/content-dates";
@@ -435,7 +435,7 @@ export default async function AdminTopicsPage({
       <section id="topics-table" className="scroll-mt-6 rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl">
         <BulkActionsBar categories={safeCategories} currentListPath={currentListPath} />
         <div className="overflow-hidden rounded-[14px] border border-white/8 bg-black/14">
-          <div className={`grid items-center gap-4 border-b border-[#D8B87A]/12 bg-white/[0.045] px-5 py-4 text-sm font-bold text-white max-xl:hidden`} style={{ gridTemplateColumns: TOPICS_TABLE_COLUMNS }}>
+          <div className={`grid items-center gap-4 px-5 py-4 max-xl:hidden ${ADMIN_DATA_GRID_HEADER_CLASSES}`} style={{ gridTemplateColumns: TOPICS_TABLE_COLUMNS }}>
             <label className="flex items-center justify-center">
               <input type="checkbox" data-topic-select-all className="h-4 w-4 accent-[#D8B87A]" />
             </label>

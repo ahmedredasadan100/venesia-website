@@ -77,6 +77,10 @@ export const ADMIN_DATA_GRID_RULES = {
   rowDivider: "border-t border-white/8",
 } as const;
 
+/** Shared table header surface — Admin Data Grid + manual grid headers (Topics list, Categories tree). */
+export const ADMIN_DATA_GRID_HEADER_CLASSES =
+  "border-b border-[#D8B87A]/18 bg-[linear-gradient(135deg,rgba(216,184,122,0.14),rgba(56,189,248,0.08),rgba(255,255,255,0.03))] text-sm font-bold text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl";
+
 /** Width in px for a fixed actions column — use in gridTemplateColumns. */
 export function getAdminDataGridActionsColumnWidth(
   buttonCount: number,
@@ -199,7 +203,7 @@ export function AdminDataGrid({ children, summary, className = "" }: GridProps) 
 export function AdminDataGridHeader({ children, columns, className = "" }: GridLineProps) {
   return (
     <div
-      className={`grid items-center gap-4 border-b border-[#D8B87A]/12 bg-white/[0.045] px-5 py-4 text-sm font-bold text-white max-xl:hidden ${className}`}
+      className={`grid items-center gap-4 px-5 py-4 max-xl:hidden ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
       style={{ gridTemplateColumns: columns }}
     >
       {children}

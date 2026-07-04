@@ -10,6 +10,7 @@ export {
   ADMIN_DATA_GRID_RULES,
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
+  ADMIN_DATA_GRID_HEADER_CLASSES,
   adminDataGridActionsColumn,
   getAdminDataGridActionsColumnWidth,
   AdminDataGrid,
