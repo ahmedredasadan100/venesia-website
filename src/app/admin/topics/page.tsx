@@ -5,7 +5,7 @@ import {
   buildTopicCategoryFilterGroups,
   type TopicCategoryRecord,
 } from "./topics-category-groups";
-import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminPageContextHeader, AdminTablePagination } from "../../../components/admin/ui";
+import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminMetricCard, AdminPageContextHeader, AdminTablePagination } from "../../../components/admin/ui";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
 import { formatAdminListDate } from "../../../lib/content-dates";
@@ -461,12 +461,12 @@ export default async function AdminTopicsPage({
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-6">
-        <AdminMetricCard label="إجمالي الموضوعات" value={allTopicsCount} />
-        <AdminMetricCard label="منشور" value={publishedCount} />
-        <AdminMetricCard label="مسودات" value={draftCount} />
-        <AdminMetricCard label="مخفي" value={hiddenCount} />
-        <AdminMetricCard label="أرشيف" value={archivedCount} />
-        <AdminMetricCard label="متوسط SEO" value={averageSeo} suffix="/100" />
+        <AdminMetricCard compact label="إجمالي الموضوعات" value={allTopicsCount} tone="gold" />
+        <AdminMetricCard compact label="منشور" value={publishedCount} tone="green" />
+        <AdminMetricCard compact label="مسودات" value={draftCount} tone="amber" />
+        <AdminMetricCard compact label="مخفي" value={hiddenCount} tone="violet" />
+        <AdminMetricCard compact label="أرشيف" value={archivedCount} tone="cyan" />
+        <AdminMetricCard compact label="متوسط SEO" value={averageSeo} suffix="/100" tone="blue" />
       </section>
 
       <TopicsListFilters
@@ -596,25 +596,5 @@ export default async function AdminTopicsPage({
         />
       </section>
     </main>
-  );
-}
-
-function AdminMetricCard({
-  label,
-  value,
-  suffix = "",
-}: {
-  label: string;
-  value: number;
-  suffix?: string;
-}) {
-  return (
-    <div className="rounded-[24px] border border-white/10 bg-[#080B10]/90 p-5 shadow-[0_20px_70px_rgba(0,0,0,0.25)]">
-      <p className="font-en text-3xl font-semibold text-[#D8B87A]">
-        {value}
-        {suffix}
-      </p>
-      <p className="mt-2 text-sm text-white/50">{label}</p>
-    </div>
   );
 }

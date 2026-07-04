@@ -6,6 +6,7 @@ import {
   ADMIN_DATA_GRID_RULES,
   AdminActionButton,
   AdminDataGrid,
+  AdminMetricCard,
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -277,11 +278,11 @@ export default async function MediaItemsAdminPage({
       {error ? <AdminNotice variant="danger" title="تعذر تحميل المركز الإعلامي" message={error.message} /> : null}
 
       <section className="grid gap-4 md:grid-cols-5">
-        <AdminMetricCard label="إجمالي العناصر" value={totalStats.count ?? 0} />
-        <AdminMetricCard label="منشور" value={publishedStats.count ?? 0} />
-        <AdminMetricCard label="مسودات" value={draftStats.count ?? 0} />
-        <AdminMetricCard label="مخفي" value={hiddenStats.count ?? 0} />
-        <AdminMetricCard label="أرشيف" value={archivedStats.count ?? 0} />
+        <AdminMetricCard compact label="إجمالي العناصر" value={totalStats.count ?? 0} tone="gold" />
+        <AdminMetricCard compact label="منشور" value={publishedStats.count ?? 0} tone="green" />
+        <AdminMetricCard compact label="مسودات" value={draftStats.count ?? 0} tone="amber" />
+        <AdminMetricCard compact label="مخفي" value={hiddenStats.count ?? 0} tone="violet" />
+        <AdminMetricCard compact label="أرشيف" value={archivedStats.count ?? 0} tone="cyan" />
       </section>
 
       <MediaAdminFilters
@@ -449,14 +450,5 @@ export default async function MediaItemsAdminPage({
         </nav>
       ) : null}
     </main>
-  );
-}
-
-function AdminMetricCard({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-[24px] border border-white/10 bg-[#080B10]/90 p-5 shadow-[0_20px_70px_rgba(0,0,0,0.25)]">
-      <p className="font-en text-3xl font-semibold text-[#D8B87A]">{value}</p>
-      <p className="mt-2 text-sm text-white/50">{label}</p>
-    </div>
   );
 }

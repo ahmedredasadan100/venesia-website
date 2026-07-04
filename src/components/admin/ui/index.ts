@@ -9,6 +9,8 @@ export {
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
 } from "./AdminPagination";export type { AdminTablePaginationProps, PageSizeSelectorMode } from "./AdminTablePagination";
+export { default as AdminMetricCard } from "./AdminMetricCard";
+export type { AdminMetricCardProps, AdminMetricCardTone } from "./AdminMetricCard";
 export { default as AdminCard } from "./AdminCard";
 export { default as AdminToolbar } from "./AdminToolbar";
 export { default as AdminActionButton } from "./AdminActionButton";
