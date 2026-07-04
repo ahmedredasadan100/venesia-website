@@ -1,7 +1,11 @@
 import Link from "next/link";
 import AdminNotice from "../../../components/admin/AdminNotice";
 import AdminPageHeader from "../../../components/admin/AdminPageHeader";
-import AdminTopicsFilters from "../../../components/admin/AdminTopicsFilters";
+import TopicsListFilters from "./TopicsListFilters";
+import {
+  buildTopicCategoryFilterGroups,
+  type TopicCategoryRecord,
+} from "./topics-category-groups";
 import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton } from "../../../components/admin/ui";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
@@ -20,6 +24,7 @@ type SearchParams = {
   q?: string;
   status?: string;
   category?: string;
+  series?: string;
   period?: string;
   sort?: string;
   featured?: string;
@@ -58,9 +63,11 @@ type TopicRow = {
   faq: TopicFaq[] | null;
 };
 
-type CategoryRow = {
+type SeriesRow = {
+  id: number;
   name: string;
   slug: string;
+  category_id: number | null;
 };
 
 const LIMIT_OPTIONS = ["10", "25", "50", "100", "all"];
@@ -187,7 +194,13 @@ function StatusPill({ status }: { status?: string | null }) {
   return <span className={`inline-flex min-w-[56px] justify-center rounded-full border px-2.5 py-1.5 text-xs font-semibold ${className}`}>{label}</span>;
 }
 
-function BulkActionsBar({ categories, currentListPath }: { categories: CategoryRow[]; currentListPath: string }) {
+function BulkActionsBar({
+  categories,
+  currentListPath,
+}: {
+  categories: Array<{ name: string; slug: string }>;
+  currentListPath: string;
+}) {
   return (
     <form
       id="topics-bulk-form"
@@ -265,6 +278,7 @@ export default async function AdminTopicsPage({
   const q = cleanSearch(params?.q ?? "");
   const status = params?.status ?? "all";
   const category = params?.category ?? "all";
+  const series = params?.series ?? "all";
   const period = params?.period ?? "all";
   const sort = params?.sort ?? "created_desc";
   const featured = params?.featured ?? "all";
@@ -278,6 +292,7 @@ export default async function AdminTopicsPage({
   if (q) queryParams.set("q", q);
   if (status !== "all") queryParams.set("status", status);
   if (category !== "all") queryParams.set("category", category);
+  if (series !== "all") queryParams.set("series", series);
   if (period !== "all") queryParams.set("period", period);
   if (sort !== "created_desc") queryParams.set("sort", sort);
   if (featured !== "all") queryParams.set("featured", featured);
@@ -305,6 +320,7 @@ export default async function AdminTopicsPage({
 
   if (status !== "all") query = query.eq("status", status);
   if (category !== "all") query = query.eq("category_slug", category);
+  if (series !== "all") query = query.eq("series_slug", series);
   if (featured === "yes") query = query.eq("is_featured", true);
   if (featured === "no") query = query.eq("is_featured", false);
   if (popular === "yes") query = query.eq("is_popular", true);
@@ -333,6 +349,7 @@ export default async function AdminTopicsPage({
   const [
     { data: topics, error, count },
     { data: categories },
+    { data: seriesRows },
     totalStats,
     publishedStats,
     draftStats,
@@ -342,9 +359,16 @@ export default async function AdminTopicsPage({
     query,
     getSupabaseAdmin()
       .from("topic_categories")
-      .select("name, slug")
-      .eq("is_active", true)
-      .order("sort_order", { ascending: true }),
+      .select("id, name, slug, parent_id, sort_order, is_active")
+      .order("parent_id", { ascending: true, nullsFirst: true })
+      .order("sort_order", { ascending: true })
+      .order("id", { ascending: true }),
+    getSupabaseAdmin()
+      .from("topic_series")
+      .select("id, name, slug, category_id")
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true }),
     getSupabaseAdmin().from("topics").select("id", { count: "exact", head: true }).is("deleted_at", null),
     getSupabaseAdmin()
       .from("topics")
@@ -365,7 +389,10 @@ export default async function AdminTopicsPage({
   ]);
 
   const safeTopics = (topics ?? []) as TopicRow[];
-  const safeCategories = (categories ?? []) as CategoryRow[];
+  const safeCategories = (categories ?? []) as TopicCategoryRecord[];
+  const safeSeries = (seriesRows ?? []) as SeriesRow[];
+  const categoryGroups = buildTopicCategoryFilterGroups(safeCategories);
+  const bulkCategories = categoryGroups.flatMap((group) => group.options);
 
   const totalCount = count ?? 0;
   const totalPages = perPage ? Math.max(1, Math.ceil(totalCount / perPage)) : 1;
@@ -418,22 +445,18 @@ export default async function AdminTopicsPage({
         <AdminMetricCard label="متوسط SEO" value={averageSeo} suffix="/100" />
       </section>
 
-      <AdminTopicsFilters
+      <TopicsListFilters
         q={q}
         status={status}
         category={category}
-        period={period}
-        sort={sort}
+        series={series}
         featured={featured}
-        popular={popular}
-        limit={limitValue}
-        categories={safeCategories}
-        currentPage={currentPage}
-        totalPages={totalPages}
+        categoryGroups={categoryGroups}
+        seriesOptions={safeSeries}
       />
 
       <section id="topics-table" className="scroll-mt-6 rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl">
-        <BulkActionsBar categories={safeCategories} currentListPath={currentListPath} />
+        <BulkActionsBar categories={bulkCategories} currentListPath={currentListPath} />
         <div className="overflow-hidden rounded-[14px] border border-white/8 bg-black/14">
           <div className={`grid items-center gap-4 px-5 py-4 max-xl:hidden ${ADMIN_DATA_GRID_HEADER_CLASSES}`} style={{ gridTemplateColumns: TOPICS_TABLE_COLUMNS }}>
             <label className="flex items-center justify-center">
@@ -516,7 +539,7 @@ export default async function AdminTopicsPage({
                       <StatusPill status={topic.status} />
                     </div>
 
-                    <TopicRowActions topic={topic} categories={safeCategories} currentListPath={currentListPath} />
+                    <TopicRowActions topic={topic} categories={bulkCategories} currentListPath={currentListPath} />
                   </article>
                 );
               })}
