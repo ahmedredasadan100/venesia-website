@@ -1,194 +1,94 @@
-import { getSupabaseAdmin } from "./supabase-admin";
-import { logError } from "./logging";
+import {
+  legacyGetMediaItemBySlug,
+  legacyGetMediaItems,
+  legacyGetMediaStaticParams,
+} from "./media-center/legacy-provider";
+import { getPublicMediaContentSource, isLegacyFallbackEnabled } from "./media-center/source";
+import type { MediaContentItem, MediaContentType, MediaSidebarItem } from "./media-center/types";
+import {
+  getMediaHref,
+  MEDIA_CONTENT_TYPES,
+  MEDIA_TYPE_PATHS,
+  type MediaNewsItem,
+} from "./media-center/types";
+import {
+  unifiedGetMediaItemBySlug,
+  unifiedGetMediaItems,
+  unifiedGetMediaStaticParams,
+} from "./media-center/unified-provider";
 
-export type MediaContentType =
-  | "news"
-  | "video"
-  | "gallery"
-  | "press"
-  | "site-update";
-
-export type MediaContentItem = {
-  id: string;
-  slug: string;
-  title: string;
-  excerpt: string;
-  category: string;
-  date: string;
-  publishedAt: string;
-  image: string;
-  type: MediaContentType;
-  featured?: boolean;
-  isPopular?: boolean;
-  project?: string;
-  duration?: string;
-  content?: string[];
-};
-
-export type MediaNewsItem = MediaContentItem;
-
-export type MediaSidebarItem = {
-  title: string;
-  date: string;
-  image: string;
-  href: string;
-  label?: string;
-};
-
-type MediaItemRow = {
-  id: number | string;
-  slug: string | null;
-  title: string | null;
-  excerpt: string | null;
-  category: string | null;
-  date_label: string | null;
-  published_at: string | null;
-  image: string | null;
-  type: MediaContentType | string | null;
-  is_featured: boolean | null;
-  is_popular: boolean | null;
-  project: string | null;
-  duration: string | null;
-  content: string[] | string | null;
-};
-
-export const MEDIA_TYPE_PATHS: Record<MediaContentType, string> = {
-  news: "news",
-  video: "videos",
-  gallery: "gallery",
-  press: "press",
-  "site-update": "site-updates",
-};
-
-const MEDIA_TYPES: MediaContentType[] = [
-  "news",
-  "video",
-  "gallery",
-  "press",
-  "site-update",
-];
-
-function isMediaType(value: string | null): value is MediaContentType {
-  return MEDIA_TYPES.includes(value as MediaContentType);
-}
-
-function formatDateLabel(value: string | null) {
-  if (!value) return "";
-
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
-
-function normalizeContent(value: MediaItemRow["content"]) {
-  if (Array.isArray(value)) return value.filter(Boolean);
-  if (typeof value === "string" && value.trim()) return [value.trim()];
-  return [];
-}
-
-function mapMediaRow(row: MediaItemRow): MediaContentItem | null {
-  const type = typeof row.type === "string" ? row.type : null;
-  if (!isMediaType(type)) return null;
-
-  const publishedAt = row.published_at ?? "";
-
-  return {
-    id: String(row.id),
-    slug: row.slug ?? "",
-    title: row.title ?? "",
-    excerpt: row.excerpt ?? "",
-    category: row.category ?? "المركز الإعلامي",
-    date: row.date_label || formatDateLabel(publishedAt),
-    publishedAt,
-    image: row.image || "/images/venesia-5.png",
-    type,
-    featured: Boolean(row.is_featured),
-    isPopular: Boolean(row.is_popular),
-    project: row.project || undefined,
-    duration: row.duration || undefined,
-    content: normalizeContent(row.content),
-  };
-}
+export type { MediaContentItem, MediaContentType, MediaNewsItem, MediaSidebarItem };
+export { getMediaHref, MEDIA_TYPE_PATHS, MEDIA_CONTENT_TYPES };
 
 function sortByNewest<T extends { publishedAt: string }>(items: T[]) {
   return [...items].sort(
-    (a, b) =>
-      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    (left, right) => new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime(),
   );
 }
 
-export function getMediaHref(item: Pick<MediaContentItem, "type" | "slug">) {
-  const path = MEDIA_TYPE_PATHS[item.type] ?? "news";
-  return `/media-center/${path}/${item.slug}`;
+async function resolveMediaItemsForType(type: MediaContentType) {
+  const unifiedItems = await unifiedGetMediaItems(type);
+  if (unifiedItems.length > 0 || !isLegacyFallbackEnabled()) {
+    return unifiedItems;
+  }
+  return legacyGetMediaItems(type);
+}
+
+async function resolveMediaItems(type?: MediaContentType) {
+  const source = getPublicMediaContentSource();
+
+  if (source === "legacy") {
+    return legacyGetMediaItems(type);
+  }
+
+  if (type) {
+    return resolveMediaItemsForType(type);
+  }
+
+  const merged = await Promise.all(MEDIA_CONTENT_TYPES.map((mediaType) => resolveMediaItemsForType(mediaType)));
+  return sortByNewest(merged.flat());
+}
+
+async function resolveMediaItemBySlug(type: MediaContentType, slug: string) {
+  const source = getPublicMediaContentSource();
+
+  if (source === "legacy") {
+    return legacyGetMediaItemBySlug(type, slug);
+  }
+
+  const unifiedItem = await unifiedGetMediaItemBySlug(type, slug);
+  if (unifiedItem || !isLegacyFallbackEnabled()) {
+    return unifiedItem;
+  }
+
+  return legacyGetMediaItemBySlug(type, slug);
+}
+
+async function resolveMediaStaticParams(type: MediaContentType) {
+  const source = getPublicMediaContentSource();
+
+  if (source === "legacy") {
+    return legacyGetMediaStaticParams(type);
+  }
+
+  const unifiedParams = await unifiedGetMediaStaticParams(type);
+  if (unifiedParams.length > 0 || !isLegacyFallbackEnabled()) {
+    return unifiedParams;
+  }
+
+  return legacyGetMediaStaticParams(type);
 }
 
 export async function getMediaItems(type?: MediaContentType) {
-  let query = getSupabaseAdmin()
-    .from("media_items")
-    .select(
-      "id, slug, title, excerpt, category, date_label, published_at, image, type, is_featured, is_popular, project, duration, content"
-    )
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .order("published_at", { ascending: false })
-    .order("id", { ascending: false });
-
-  if (type) query = query.eq("type", type);
-
-  const { data, error } = await query;
-
-  if (error) {
-    logError("Media items fetch failed", error, { type });
-    return [];
-  }
-
-  return ((data ?? []) as MediaItemRow[])
-    .map(mapMediaRow)
-    .filter(Boolean) as MediaContentItem[];
+  return resolveMediaItems(type);
 }
 
 export async function getMediaItemBySlug(type: MediaContentType, slug: string) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("media_items")
-    .select(
-      "id, slug, title, excerpt, category, date_label, published_at, image, type, is_featured, is_popular, project, duration, content"
-    )
-    .eq("type", type)
-    .eq("slug", slug)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) {
-    logError("Media item fetch failed", error, { type, slug });
-    return null;
-  }
-
-  return data ? mapMediaRow(data as MediaItemRow) : null;
+  return resolveMediaItemBySlug(type, slug);
 }
 
 export async function getMediaStaticParams(type: MediaContentType) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("media_items")
-    .select("slug")
-    .eq("type", type)
-    .eq("status", "published")
-    .is("deleted_at", null);
-
-  if (error) {
-    logError("Media static params fetch failed", error, { type });
-    return [];
-  }
-
-  return (data ?? [])
-    .map((item) => ({ slug: item.slug }))
-    .filter((item): item is { slug: string } => Boolean(item.slug));
+  return resolveMediaStaticParams(type);
 }
 
 export async function getFeaturedNews() {

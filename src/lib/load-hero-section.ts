@@ -1,9 +1,9 @@
 import "server-only";
 
 import { resolveHeroConfigLinks } from "./admin/links/hero-config";
+import { getMediaHref, getMediaItems } from "./media-center";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { logError } from "./logging";
-import { MEDIA_TYPE_PATHS, type MediaContentType } from "./media-center";
 import { supabase } from "./supabase";
 import type {
   HeroSectionData,
@@ -167,38 +167,22 @@ async function resolveHeroItems(hero: PageSectionRecord): Promise<HeroSectionDat
     hero.source_type === "featured_media" ||
     hero.source_type === "media_category"
   ) {
-    let query = supabase
-      .from("media_items")
-      .select("id,title,excerpt,image,slug,type,category")
-      .eq("status", "published")
-      .is("deleted_at", null)
-      .order("published_at", { ascending: false })
-      .limit(limit);
+    let items = await getMediaItems();
 
     if (hero.source_type === "featured_media") {
-      query = query.eq("is_featured", true);
+      items = items.filter((item) => item.featured);
     }
 
     if (hero.source_type === "media_category" && hero.source_slug) {
-      query = query.eq("category_slug", hero.source_slug);
+      items = items.filter((item) => item.categorySlug === hero.source_slug);
     }
 
-    const { data } = await query;
-
-    return (data ?? []).map((item: {
-      id: number;
-      title: string;
-      excerpt: string | null;
-      image: string | null;
-      slug: string;
-      type: string;
-      category: string | null;
-    }) => ({
-      id: item.id,
+    return items.slice(0, limit).map((item) => ({
+      id: Number(item.id),
       title: item.title,
       excerpt: item.excerpt,
       image: item.image,
-      href: `/media-center/${MEDIA_TYPE_PATHS[item.type as MediaContentType] ?? "news"}/${item.slug}`,
+      href: getMediaHref(item),
       category: item.category,
     }));
   }
