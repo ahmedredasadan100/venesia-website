@@ -130,8 +130,8 @@ The 13 `media_categories` rows (e.g. «من أرض التنفيذ», «أخبا�
 | **0** | **ADR only** | This document | No | No |
 | **1** | `content_type` | Add column to `topics`, default `article`, CHECK constraint, backfill implicit | Yes | Minimal (hidden/default) |
 | **2** | Category tree + guards | Seed `media-center` branch; filter category pickers by `content_type` | Yes | Yes (forms) |
-| **3** | Admin content routing | List tabs / routes / edit forms per `content_type`; freeze legacy media admin UI | Maybe | Yes |
-| **4** | Data migration | `media_items` → `topics` with mapping table, slug dedup, dual-read adapter | Yes | Yes |
+| **3** | **Admin media (parallel)** | `/admin/content/media` — list/create/edit per `content_type` on `topics` only; **admin-only, no public touch** | Maybe | Yes (admin only) |
+| **4** | Data migration | `media_items` → `topics` with mapping table, slug dedup, dual-read adapter | Yes | Admin |
 | **5** | Public + modules cutover | Redirects `/media-center/*`, feed/hub/hero/link picker → `topics` | Maybe | Yes (public) |
 | **6** | Legacy archive | Deprecate media admin routes; read-only then drop `media_items` / `media_categories` | Yes | Yes |
 
@@ -196,4 +196,64 @@ For planning only — **no changes in Phase 0.**
 | Architecture review | Unified direction approved; Phase B0 seed-only **rejected** | 2026-07-05 |
 | Phase 0 | ADR documentation only | 2026-07-05 |
 
-**Next step when ready:** Phase 1 — migration adding `content_type` to `topics` with default `article` (separate PR / task).
+**Next step when ready:** Phase 3 — `/admin/content/media` (admin-only parallel build).
+
+---
+
+## 11. Phase 3 execution guard (confirmed 2026-07-05)
+
+> **No public website impact. Legacy media public rendering remains unchanged.**
+
+Phase 3 builds the **new admin surface only** — in parallel with the legacy stack. Nothing in this phase may change what visitors see or which tables public routes read from.
+
+### 11.1 In scope (Phase 3)
+
+| Deliverable | Notes |
+|---|---|
+| `/admin/content/media` | New admin hub for media content stored in `topics` + `content_type` |
+| List / create / edit | Per media `content_type` (`news`, `video`, `gallery`, `press`, `site_update`) |
+| Category pickers | Media branch under `topic_categories` only (guards from Phase 2) |
+| Cards / list UI | Admin presentation only — shape and filters for the new surface |
+
+**Data source for Phase 3 admin:** `topics` table with non-`article` `content_type` values (created/edited via new admin only — no import from `media_items` yet).
+
+### 11.2 Explicitly forbidden in Phase 3
+
+| Area | Rule |
+|---|---|
+| **Public website** | No changes to `/media-center`, `/media-center/*`, or any public page |
+| **Public modules** | No changes to media hub modules, media sidebar modules, hero sources, feed blocks, or any block/module that reads `media_items` |
+| **Legacy admin** | Do not modify `/admin/media-center` or its components |
+| **Legacy tables** | Do not read/write/migrate `media_items` or `media_categories` |
+| **Adapters** | No dual-read adapter, no public-facing bridge from `topics` → public media routes |
+| **Redirects** | No URL redirects, no canonical changes, no sitemap changes |
+| **Cutover** | No switch of public rendering to `topics` — that belongs to a **separate later phase** (Phase 5+) |
+
+### 11.3 Parallel-system rule
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  PUBLIC (unchanged)          │  ADMIN (Phase 3 adds)        │
+├──────────────────────────────┼──────────────────────────────┤
+│  /media-center/*             │  /admin/content/media  (NEW) │
+│  reads media_items           │  reads/writes topics         │
+│  media hub / sidebar blocks  │  content_type ≠ article      │
+│  legacy modules              │                              │
+├──────────────────────────────┼──────────────────────────────┤
+│  /admin/media-center (frozen, untouched in Phase 3)         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Phase 3 exit criteria (minimum):** create/edit flows work in `/admin/content/media`; list + cards match admin UX goals; article guards from Phase 2 remain intact; **zero diff in public routes and public module query targets.**
+
+**Deferred to later phases:** data migration (`media_items` → `topics`), public adapters, module rewiring, redirects, cutover decision.
+
+### 11.4 Phase completion log
+
+| Phase | Status | Commit / note |
+|---|---|---|
+| 0 | Done | ADR `db35ab1` |
+| 1 | Done | `content_type` on `topics` — `059b858` |
+| 2 | Done | Media branch seed + article guards — `0a0be6e` |
+| 2.5 | Verified | Migration applied; guards + build OK |
+| **3** | **Next** | Admin-only `/admin/content/media` — **guard §11 applies** |
