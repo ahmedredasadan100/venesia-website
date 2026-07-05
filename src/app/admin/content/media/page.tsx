@@ -1,12 +1,10 @@
 import Link from "next/link";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
+  ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
   AdminActionButton,
   AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
-  adminDataGridActionsColumn,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
@@ -22,6 +20,7 @@ import { bulkUpdateMediaContent } from "./actions";
 import MediaCategoryBadge from "./MediaCategoryBadge";
 import MediaListControls from "./MediaListControls";
 import MediaListFilters from "./MediaListFilters";
+import MediaRowActions from "./MediaRowActions";
 import {
   isMediaEditableContentType,
   MEDIA_LIST_CONTENT_TYPES,
@@ -47,6 +46,7 @@ type MediaTopicRow = {
   slug: string | null;
   content_type: MediaListContentType | string | null;
   category: string | null;
+  category_slug: string | null;
   status: string | null;
   is_featured: boolean | null;
   updated_at: string | null;
@@ -64,7 +64,7 @@ const DEFAULT_LIMIT = "10";
 const DEFAULT_SORT = "updated_desc";
 const VISIBLE_SORT_VALUES = new Set(["title_asc", "title_desc", "status_asc", "status_desc"]);
 
-const MEDIA_TABLE_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${adminDataGridActionsColumn(1, "compact")}`;
+const MEDIA_TABLE_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 function cleanSearch(value: string) {
   return value.replace(/[,%]/g, " ").replace(/\s+/g, " ").trim();
@@ -181,6 +181,10 @@ function getStatusLabel(status?: string | null) {
 }
 
 function getNoticeText(notice?: string) {
+  if (notice === "published") return "تم نشر المحتوى بنجاح.";
+  if (notice === "unpublished") return "تم إخفاء المحتوى بنجاح.";
+  if (notice === "deleted") return "تم حذف المحتوى حذفًا آمنًا.";
+  if (notice === "created") return "تم إنشاء النسخة بنجاح.";
   if (notice === "saved") return "تم تنفيذ الإجراء على العناصر المحددة بنجاح.";
   if (notice === "error") return "تعذر تنفيذ العملية. راجع البيانات وحاول مرة أخرى.";
   return null;
@@ -280,7 +284,7 @@ export default async function AdminUnifiedMediaContentPage({
     applyMediaListFilters(
       getSupabaseAdmin()
         .from("topics")
-        .select("id, title, slug, content_type, category, status, is_featured, updated_at", { count: "exact" }),
+        .select("id, title, slug, content_type, category, category_slug, status, is_featured, updated_at", { count: "exact" }),
       filters,
     ),
     sort,
@@ -369,11 +373,7 @@ export default async function AdminUnifiedMediaContentPage({
           </AdminDataGridHeader>
 
           {safeRows.length > 0 ? (
-            safeRows.map((row, index) => {
-              const editable = isMediaEditableContentType(row.content_type);
-              const editHref = editable ? `/admin/content/media/${row.id}` : undefined;
-
-              return (
+            safeRows.map((row, index) => (
                 <AdminDataGridRow key={row.id} columns={MEDIA_TABLE_COLUMNS} divided={index > 0}>
                   <label className="flex items-center justify-center">
                     <input
@@ -387,8 +387,11 @@ export default async function AdminUnifiedMediaContentPage({
                   </label>
 
                   <div className="min-w-0 text-right">
-                    {editHref ? (
-                      <Link href={editHref} className="block truncate text-base font-bold text-white transition hover:text-[#F4D99A]">
+                    {isMediaEditableContentType(row.content_type) ? (
+                      <Link
+                        href={`/admin/content/media/${row.id}`}
+                        className="block truncate text-base font-bold text-white transition hover:text-[#F4D99A]"
+                      >
                         {row.title || "بدون عنوان"}
                       </Link>
                     ) : (
@@ -405,16 +408,9 @@ export default async function AdminUnifiedMediaContentPage({
                     <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
                   </div>
 
-                  <AdminDataGridActionsCell compact>
-                    {editable && editHref ? (
-                      <AdminDataGridActionButton action="edit" href={editHref} size="compact" title="تعديل" />
-                    ) : (
-                      <AdminDataGridActionButton action="edit" size="compact" disabled title="التعديل غير متاح" />
-                    )}
-                  </AdminDataGridActionsCell>
+                  <MediaRowActions item={row} currentListPath={currentListPath} />
                 </AdminDataGridRow>
-              );
-            })
+              ))
           ) : (
             <AdminDataGridEmpty>
               <p className="text-lg font-semibold text-white">لا توجد عناصر مطابقة.</p>

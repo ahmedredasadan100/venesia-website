@@ -27,6 +27,7 @@ import {
   isMediaEditableContentType,
   MEDIA_CONTENT_TYPE_ERROR,
   MEDIA_EDITABLE_CONTENT_TYPES,
+  MEDIA_LIST_CONTENT_TYPES,
   MEDIA_SECTION_ERROR,
   type MediaEditableContentType,
 } from "./media-content-config";
@@ -517,12 +518,214 @@ function getMediaRedirectTo(formData: FormData) {
   return value.startsWith("/admin/content/media") ? value : "/admin/content/media";
 }
 
-function appendMediaListNotice(path: string, notice: string) {
+function appendMediaListNotice(path: string, notice: string, hash = "") {
   const [pathname, search = ""] = path.split("?");
   const params = new URLSearchParams(search);
   params.set("notice", notice);
   const query = params.toString();
-  return query ? `${pathname}?${query}` : pathname;
+  const base = query ? `${pathname}?${query}` : `${pathname}?notice=${notice}`;
+  return hash ? `${base}#${hash}` : base;
+}
+
+async function getMediaTopicForDuplicate(id: string) {
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select(
+      "title, slug, excerpt, content, image, category, category_slug, category_id, content_type, media_payload, is_featured, published_at",
+    )
+    .eq("id", id)
+    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
+    .is("deleted_at", null)
+    .maybeSingle<MediaTopicRow>();
+
+  if (error) {
+    logError("getMediaTopicForDuplicate failed", error, { id });
+    return null;
+  }
+
+  if (!data || !isMediaEditableContentType(data.content_type)) return null;
+  return data;
+}
+
+async function resolveDuplicateMediaCategory(
+  original: MediaTopicRow,
+  categoryChoice: string,
+): Promise<
+  | { ok: true; category: { id: number; name: string; slug: string }; contentType: MediaEditableContentType }
+  | { ok: false }
+> {
+  if (categoryChoice === "__same" || !categoryChoice) {
+    if (!original.category_slug || !isMediaEditableContentType(original.content_type)) {
+      return { ok: false };
+    }
+
+    const section = await resolveMediaSection(original.category_slug);
+    if (!section.ok || section.contentType !== original.content_type) {
+      return { ok: false };
+    }
+
+    return { ok: true, category: section.category, contentType: section.contentType };
+  }
+
+  const section = await resolveMediaSection(categoryChoice);
+  if (!section.ok || section.contentType !== original.content_type) {
+    return { ok: false };
+  }
+
+  return { ok: true, category: section.category, contentType: section.contentType };
+}
+
+export async function publishMediaContent(formData: FormData) {
+  await requireAdminSession();
+
+  const id = getString(formData, "id");
+  const redirectTo = getMediaRedirectTo(formData);
+  if (!id || !validateId(id)) redirect(appendMediaListNotice("/admin/content/media", "error", "media-table"));
+
+  const topic = await getEditableMediaTopicById(id);
+  if (!topic) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  const now = new Date().toISOString();
+  const { error } = await getSupabaseAdmin()
+    .from("topics")
+    .update({
+      status: "published",
+      published_at: topic.published_at || now,
+      updated_at: now,
+    })
+    .eq("id", id)
+    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
+    .is("deleted_at", null);
+
+  if (error) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  revalidateMediaContentPaths(id);
+  redirect(appendMediaListNotice(redirectTo, "published", "media-table"));
+}
+
+export async function unpublishMediaContent(formData: FormData) {
+  await requireAdminSession();
+
+  const id = getString(formData, "id");
+  const redirectTo = getMediaRedirectTo(formData);
+  if (!id || !validateId(id)) redirect(appendMediaListNotice("/admin/content/media", "error", "media-table"));
+
+  const topic = await getEditableMediaTopicById(id);
+  if (!topic) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  const now = new Date().toISOString();
+  const { error } = await getSupabaseAdmin()
+    .from("topics")
+    .update({
+      status: "unpublished",
+      updated_at: now,
+    })
+    .eq("id", id)
+    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
+    .is("deleted_at", null);
+
+  if (error) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  revalidateMediaContentPaths(id);
+  redirect(appendMediaListNotice(redirectTo, "unpublished", "media-table"));
+}
+
+export async function archiveMediaContent(formData: FormData) {
+  await requireAdminSession();
+
+  const id = getString(formData, "id");
+  const redirectTo = getMediaRedirectTo(formData);
+  if (!id || !validateId(id)) redirect(appendMediaListNotice("/admin/content/media", "error", "media-table"));
+
+  const topic = await getEditableMediaTopicById(id);
+  if (!topic) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  const now = new Date().toISOString();
+  const { error } = await getSupabaseAdmin()
+    .from("topics")
+    .update({
+      status: "archived",
+      deleted_at: now,
+      updated_at: now,
+    })
+    .eq("id", id)
+    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
+    .is("deleted_at", null);
+
+  if (error) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  revalidateMediaContentPaths(id);
+  redirect(appendMediaListNotice(redirectTo, "deleted", "media-table"));
+}
+
+export async function duplicateMediaContent(formData: FormData) {
+  await requireAdminSession();
+
+  const id = getString(formData, "id");
+  const redirectTo = getMediaRedirectTo(formData);
+  if (!id || !validateId(id)) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  const original = await getMediaTopicForDuplicate(id);
+  if (!original || !isMediaEditableContentType(original.content_type)) {
+    redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+  }
+
+  const title = getString(formData, "title");
+  const rawSlug = getString(formData, "slug");
+  const slug = rawSlug ? createSlug(rawSlug) : createSlug(title);
+  const status = getNormalizedStatus(getString(formData, "status"), "unpublished");
+  const categoryChoice = getString(formData, "category_slug");
+
+  if (!title) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+  if (!slug || !validateSlug(slug)) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  const isUniqueSlug = await ensureUniqueSlug(slug);
+  if (!isUniqueSlug) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  const resolvedCategory = await resolveDuplicateMediaCategory(original, categoryChoice);
+  if (!resolvedCategory.ok) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  const { category, contentType } = resolvedCategory;
+  const isRichMedia = contentType === "video" || contentType === "gallery";
+  const now = new Date().toISOString();
+  const { error } = await getSupabaseAdmin()
+    .from("topics")
+    .insert({
+      title,
+      slug,
+      excerpt: original.excerpt ?? "",
+      content: isRichMedia ? "" : (original.content ?? ""),
+      image: original.image ?? "",
+      image_alt: null,
+      media_payload: original.media_payload,
+      category: category.name,
+      category_slug: category.slug,
+      category_id: category.id,
+      content_type: contentType,
+      series_id: null,
+      series: null,
+      series_slug: null,
+      date_label: null,
+      status,
+      seo_title: null,
+      seo_description: null,
+      seo_keywords: [],
+      focus_keyword: null,
+      faq: [],
+      is_featured: original.is_featured ?? false,
+      is_popular: false,
+      published_at: status === "published" ? now : null,
+      deleted_at: null,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single<{ id: number }>();
+
+  if (error) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
+  revalidateMediaContentPaths();
+  redirect(appendMediaListNotice(redirectTo, "created", "media-table"));
 }
 
 export async function bulkUpdateMediaContent(formData: FormData) {
