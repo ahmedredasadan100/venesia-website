@@ -8,6 +8,7 @@ import {
 import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminMetricCardsGrid, AdminPageContextHeader, AdminTablePagination } from "../../../components/admin/ui";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
+import { applyAdminListTextSearch } from "../../../lib/admin/admin-list-search";
 import { formatAdminListDate } from "../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { bulkUpdateTopics } from "./actions";
@@ -87,9 +88,7 @@ function applyTopicListFilters(query: any, filters: TopicListFilterState) {
   let next = query;
 
   if (filters.q) {
-    next = next.or(
-      `title.ilike.%${filters.q}%,slug.ilike.%${filters.q}%,category.ilike.%${filters.q}%,excerpt.ilike.%${filters.q}%`,
-    );
+    next = applyAdminListTextSearch(next, filters.q, ["title", "slug", "category", "excerpt"]);
   }
 
   if (filters.status !== "all") next = next.eq("status", filters.status);
