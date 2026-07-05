@@ -6,16 +6,29 @@ import path from "path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import {
+  assertPayloadMatchesContentType,
+  normalizeVideoPayloadForStorage,
+  parseMediaPayloadFromForm,
+  resolveCoverImageForGallery,
+  resolveCoverImageForVideo,
+  validateGalleryPayload,
+  validateVideoPayload,
+  type GalleryMediaPayload,
+  type MediaTopicPayload,
+  type VideoMediaPayload,
+} from "../../../../lib/admin/media-topic-payload";
 import { resolveTopicPublishedAt } from "../../../../lib/content-dates";
 import { logError } from "../../../../lib/logging";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import {
   ALLOWED_MEDIA_SECTION_SLUGS,
   getContentTypeForSectionSlug,
-  isPhase3BEditableContentType,
+  isMediaEditableContentType,
   MEDIA_CONTENT_TYPE_ERROR,
+  MEDIA_EDITABLE_CONTENT_TYPES,
   MEDIA_SECTION_ERROR,
-  type Phase3BEditableContentType,
+  type MediaEditableContentType,
 } from "./media-content-config";
 
 const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
@@ -41,6 +54,7 @@ type MediaTopicRow = {
   status: MediaStatus | string | null;
   is_featured: boolean | null;
   published_at: string | null;
+  media_payload: MediaTopicPayload | null;
 };
 
 function getString(formData: FormData, key: string) {
@@ -198,6 +212,47 @@ function getValidationError(payload: ReturnType<typeof getPayload>) {
   return null;
 }
 
+function resolveWriteMediaPayload(
+  contentType: MediaEditableContentType,
+  formData: FormData,
+  payload: ReturnType<typeof getPayload>,
+) {
+  const mediaPayload = parseMediaPayloadFromForm(contentType, formData);
+  const matchError = assertPayloadMatchesContentType(contentType, mediaPayload);
+  if (matchError) return { ok: false as const, message: matchError };
+
+  if (contentType === "video" && mediaPayload?.kind === "video") {
+    const normalized = normalizeVideoPayloadForStorage(mediaPayload);
+    payload.image = resolveCoverImageForVideo(payload.image, normalized);
+    return { ok: true as const, mediaPayload: normalized };
+  }
+
+  if (contentType === "gallery" && mediaPayload?.kind === "gallery") {
+    payload.image = resolveCoverImageForGallery(payload.image, mediaPayload);
+    return { ok: true as const, mediaPayload };
+  }
+
+  return { ok: true as const, mediaPayload: null as MediaTopicPayload | null };
+}
+
+function getPublishedValidationError(
+  contentType: MediaEditableContentType,
+  mediaPayload: MediaTopicPayload | null,
+  status: MediaStatus,
+) {
+  if (status !== "published") return null;
+
+  if (contentType === "video" && mediaPayload?.kind === "video") {
+    return validateVideoPayload(mediaPayload as VideoMediaPayload, { published: true });
+  }
+
+  if (contentType === "gallery" && mediaPayload?.kind === "gallery") {
+    return validateGalleryPayload(mediaPayload as GalleryMediaPayload, { published: true });
+  }
+
+  return null;
+}
+
 async function resolveMediaSection(categorySlug: string) {
   const trimmedSlug = categorySlug.trim();
 
@@ -262,9 +317,11 @@ async function ensureUniqueSlug(slug: string, id?: string) {
 async function getEditableMediaTopicById(id: string) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
-    .select("id, title, slug, excerpt, content, image, category_slug, content_type, status, is_featured, published_at")
+    .select(
+      "id, title, slug, excerpt, content, image, category_slug, content_type, status, is_featured, published_at, media_payload",
+    )
     .eq("id", id)
-    .in("content_type", ["news", "press", "site_update"])
+    .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
     .is("deleted_at", null)
     .maybeSingle<MediaTopicRow>();
 
@@ -273,7 +330,7 @@ async function getEditableMediaTopicById(id: string) {
     return null;
   }
 
-  if (!data || !isPhase3BEditableContentType(data.content_type)) return null;
+  if (!data || !isMediaEditableContentType(data.content_type)) return null;
   return data;
 }
 
@@ -290,17 +347,21 @@ function revalidateMediaContentPaths(id?: string | number) {
 function buildMediaWritePayload(
   payload: ReturnType<typeof getPayload>,
   category: { id: number; name: string; slug: string },
-  contentType: Phase3BEditableContentType,
+  contentType: MediaEditableContentType,
+  mediaPayload: MediaTopicPayload | null,
   now: string,
   currentTopic?: MediaTopicRow | null,
 ) {
+  const isRichMedia = contentType === "video" || contentType === "gallery";
+
   return {
     title: payload.title,
     slug: payload.slug,
     excerpt: payload.excerpt,
-    content: payload.content,
+    content: isRichMedia ? "" : payload.content,
     image: payload.image,
     image_alt: null,
+    media_payload: mediaPayload,
     category: category.name,
     category_slug: category.slug,
     category_id: category.id,
@@ -344,6 +405,20 @@ export async function createMediaContent(formData: FormData) {
   const section = await resolveMediaSection(payload.categorySlug);
   if (!section.ok) redirectFormError("/admin/content/media/new", section.message);
 
+  if (!isMediaEditableContentType(section.contentType)) {
+    redirectFormError("/admin/content/media/new", MEDIA_CONTENT_TYPE_ERROR);
+  }
+
+  const writePayload = resolveWriteMediaPayload(section.contentType, formData, payload);
+  if (!writePayload.ok) redirectFormError("/admin/content/media/new", writePayload.message);
+
+  const publishError = getPublishedValidationError(
+    section.contentType,
+    writePayload.mediaPayload,
+    payload.status,
+  );
+  if (publishError) redirectFormError("/admin/content/media/new", publishError);
+
   const isUniqueSlug = await ensureUniqueSlug(payload.slug);
   if (!isUniqueSlug) redirectFormError("/admin/content/media/new", "هذا الـ Slug مستخدم بالفعل في محتوى آخر.");
 
@@ -351,7 +426,14 @@ export async function createMediaContent(formData: FormData) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .insert({
-      ...buildMediaWritePayload(payload, section.category, section.contentType, now, null),
+      ...buildMediaWritePayload(
+        payload,
+        section.category,
+        section.contentType,
+        writePayload.mediaPayload,
+        now,
+        null,
+      ),
       created_at: now,
     })
     .select("id")
@@ -391,9 +473,19 @@ export async function updateMediaContent(formData: FormData) {
   const section = await resolveMediaSection(payload.categorySlug);
   if (!section.ok) redirectEditError(id, section.message);
 
-  if (!isPhase3BEditableContentType(section.contentType)) {
+  if (!isMediaEditableContentType(section.contentType)) {
     redirectEditError(id, MEDIA_CONTENT_TYPE_ERROR);
   }
+
+  const writePayload = resolveWriteMediaPayload(section.contentType, formData, payload);
+  if (!writePayload.ok) redirectEditError(id, writePayload.message);
+
+  const publishError = getPublishedValidationError(
+    section.contentType,
+    writePayload.mediaPayload,
+    payload.status,
+  );
+  if (publishError) redirectEditError(id, publishError);
 
   const isUniqueSlug = await ensureUniqueSlug(payload.slug, id);
   if (!isUniqueSlug) redirectEditError(id, "هذا الـ Slug مستخدم بالفعل في محتوى آخر.");
@@ -401,9 +493,18 @@ export async function updateMediaContent(formData: FormData) {
   const now = new Date().toISOString();
   const { error } = await getSupabaseAdmin()
     .from("topics")
-    .update(buildMediaWritePayload(payload, section.category, section.contentType, now, currentTopic))
+    .update(
+      buildMediaWritePayload(
+        payload,
+        section.category,
+        section.contentType,
+        writePayload.mediaPayload,
+        now,
+        currentTopic,
+      ),
+    )
     .eq("id", id)
-    .in("content_type", ["news", "press", "site_update"]);
+    .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES]);
 
   if (error) redirectEditError(id, error.message);
 

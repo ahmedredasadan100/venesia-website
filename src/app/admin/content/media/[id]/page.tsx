@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import AdminNotice from "../../../../../components/admin/AdminNotice";
 import { AdminActionButton, AdminPageContextHeader } from "../../../../../components/admin/ui";
+import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { isPhase3BEditableContentType } from "../media-content-config";
+import { isMediaEditableContentType } from "../media-content-config";
 import MediaContentForm from "../MediaContentForm";
 
 export const dynamic = "force-dynamic";
@@ -33,12 +34,14 @@ export default async function EditMediaContentPage({
 
   const { data: topic, error } = await getSupabaseAdmin()
     .from("topics")
-    .select("id, title, slug, excerpt, content, image, category_slug, content_type, status, is_featured")
+    .select(
+      "id, title, slug, excerpt, content, image, category_slug, content_type, status, is_featured, media_payload",
+    )
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (error || !topic || !isPhase3BEditableContentType(topic.content_type)) {
+  if (error || !topic || !isMediaEditableContentType(topic.content_type)) {
     notFound();
   }
 
@@ -47,7 +50,7 @@ export default async function EditMediaContentPage({
       <AdminPageContextHeader
         eyebrow="UNIFIED MEDIA CONTENT"
         title="تعديل محتوى إعلامي"
-        description="عدّل محتوى topics ضمن الأقسام المسموحة فقط. video و gallery غير مدعومين في هذه المرحلة."
+        description="عدّل محتوى topics ضمن الأقسام المسموحة. الفيديو ومعرض الصور يُحفظان في media_payload — بدون تأثير على الواجهة العامة."
         actions={
           <>
             <AdminActionButton href="/admin/content/media" variant="dark">
@@ -75,6 +78,7 @@ export default async function EditMediaContentPage({
           category_slug: topic.category_slug,
           status: topic.status,
           is_featured: topic.is_featured,
+          media_payload: (topic.media_payload as MediaTopicPayload | null) ?? null,
         }}
       />
     </main>

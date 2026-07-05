@@ -25,9 +25,9 @@ import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
 import {
   getContentTypeLabel,
-  isPhase3BEditableContentType,
+  isMediaEditableContentType,
+  MEDIA_EDITABLE_CONTENT_TYPES,
   MEDIA_LIST_CONTENT_TYPES,
-  PHASE_3B_EDITABLE_CONTENT_TYPES,
   type MediaListContentType,
 } from "./media-content-config";
 
@@ -58,8 +58,6 @@ type MediaListFilterState = {
   status: string;
   featured: string;
 };
-
-const OPTIONAL_LIST_FILTER_TYPES = ["video", "gallery"] as const;
 
 const STATUS_FILTER_OPTIONS = [
   { value: "all", label: "كل الحالات" },
@@ -148,20 +146,14 @@ function getStatusLabel(status?: string | null) {
   return "مسودة";
 }
 
-function buildContentTypeFilterOptions(presentTypes: Set<string>) {
-  const options = [{ value: "all", label: "كل الأنواع" }];
-
-  PHASE_3B_EDITABLE_CONTENT_TYPES.forEach((type) => {
-    options.push({ value: type, label: getContentTypeLabel(type) });
-  });
-
-  OPTIONAL_LIST_FILTER_TYPES.forEach((type) => {
-    if (presentTypes.has(type)) {
-      options.push({ value: type, label: getContentTypeLabel(type) });
-    }
-  });
-
-  return options;
+function buildContentTypeFilterOptions() {
+  return [
+    { value: "all", label: "كل الأنواع" },
+    ...MEDIA_EDITABLE_CONTENT_TYPES.map((type) => ({
+      value: type,
+      label: getContentTypeLabel(type),
+    })),
+  ];
 }
 
 export default async function AdminUnifiedMediaContentPage({
@@ -183,7 +175,6 @@ export default async function AdminUnifiedMediaContentPage({
     { count: totalCount },
     { count: publishedCount },
     { count: featuredCount },
-    { data: typeRows },
   ] = await Promise.all([
     applyMediaListFilters(
       getSupabaseAdmin()
@@ -195,16 +186,10 @@ export default async function AdminUnifiedMediaContentPage({
     baseQuery,
     baseQuery.eq("status", "published"),
     baseQuery.eq("is_featured", true),
-    getSupabaseAdmin()
-      .from("topics")
-      .select("content_type")
-      .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
-      .is("deleted_at", null),
   ]);
 
   const safeRows = (rows ?? []) as MediaTopicRow[];
-  const presentTypes = new Set((typeRows ?? []).map((row) => String(row.content_type ?? "")));
-  const contentTypeOptions = buildContentTypeFilterOptions(presentTypes);
+  const contentTypeOptions = buildContentTypeFilterOptions();
   const filteredCount = safeRows.length;
   const allCount = totalCount ?? 0;
   const filtersActive = hasActiveFilters(filters);
@@ -233,7 +218,7 @@ export default async function AdminUnifiedMediaContentPage({
 
       <AdminInfoBar
         label="محتوى المركز الإعلامي — Unified"
-        description="الإنشاء والتعديل متاحان حاليًا للأخبار والبيانات الصحفية ومن أرض التنفيذ فقط. الفيديو ومعرض الصور يظهران في القائمة عند وجودهما، بدون create/edit حاليًا."
+        description="الإنشاء والتعديل متاحان للأخبار والبيانات الصحفية ومن أرض التنفيذ والفيديو ومعرض الصور. الفيديو والمعرض يُحفظان في media_payload داخل topics — بدون تأثير على الواجهة العامة."
         meta={`${allCount} إجمالي المحتوى / ${publishedCount ?? 0} منشور / ${featuredCount ?? 0} مميز`}
       />
 
@@ -305,7 +290,7 @@ export default async function AdminUnifiedMediaContentPage({
       <AdminDataGrid
         summary={
           filtersActive || filteredCount > 0
-            ? `عرض ${filteredCount} عنصرًا من ${allCount} — الإنشاء متاح للأخبار والبيانات الصحفية ومن أرض التنفيذ. الفيديو ومعرض الصور للعرض في القائمة فقط عند وجودهما، بدون create/edit حاليًا.`
+            ? `عرض ${filteredCount} عنصرًا من ${allCount} — الإنشاء والتعديل متاحان لجميع أقسام المركز الإعلامي الخمسة.`
             : undefined
         }
       >
@@ -350,10 +335,10 @@ export default async function AdminUnifiedMediaContentPage({
               </AdminDataGridCenterCell>
 
               <AdminDataGridActionsCell>
-                {isPhase3BEditableContentType(row.content_type) ? (
+                {isMediaEditableContentType(row.content_type) ? (
                   <AdminDataGridActionButton action="edit" href={`/admin/content/media/${row.id}`} title="تعديل" />
                 ) : (
-                  <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح لهذا النوع حاليًا" />
+                  <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح لهذا النوع" />
                 )}
               </AdminDataGridActionsCell>
             </AdminDataGridRow>
@@ -362,7 +347,7 @@ export default async function AdminUnifiedMediaContentPage({
           <AdminDataGridEmpty>
             {filtersActive
               ? "لا توجد نتائج مطابقة للفلاتر الحالية."
-              : "لا يوجد محتوى إعلامي في topics بعد. أنشئ عنصرًا جديدًا من «إضافة محتوى جديد» للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ."}
+              : "لا يوجد محتوى إعلامي في topics بعد. أنشئ عنصرًا جديدًا من «إضافة محتوى جديد» للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ، الفيديو، معرض الصور."}
           </AdminDataGridEmpty>
         )}
       </AdminDataGrid>

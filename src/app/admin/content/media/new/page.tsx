@@ -21,7 +21,7 @@ export default async function NewMediaContentPage({
       <AdminPageContextHeader
         eyebrow="UNIFIED MEDIA CONTENT"
         title="إضافة محتوى إعلامي"
-        description="أنشئ محتوى جديدًا داخل topics للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ. لا يؤثر هذا على الواجهة العامة أو media_items."
+        description="أنشئ محتوى جديدًا داخل topics للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ، الفيديو، معرض الصور. لا يؤثر هذا على الواجهة العامة أو media_items."
         actions={
           <>
             <AdminActionButton href="/admin/content/media" variant="dark">
