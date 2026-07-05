@@ -18,18 +18,21 @@ import {
 } from "../../../../components/admin/ui";
 import { formatAdminListDate } from "../../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { PlusIcon } from "../../../../components/admin/AdminRowActions";
+import {
+  getContentTypeLabel,
+  isPhase3BEditableContentType,
+  MEDIA_LIST_CONTENT_TYPES,
+  type MediaListContentType,
+} from "./media-content-config";
 
 export const dynamic = "force-dynamic";
-
-const MEDIA_CONTENT_TYPES = ["news", "video", "gallery", "press", "site_update"] as const;
-
-type MediaContentType = (typeof MEDIA_CONTENT_TYPES)[number];
 
 type MediaTopicRow = {
   id: number;
   title: string | null;
   slug: string | null;
-  content_type: MediaContentType | string | null;
+  content_type: MediaListContentType | string | null;
   category: string | null;
   category_slug: string | null;
   status: string | null;
@@ -37,22 +40,8 @@ type MediaTopicRow = {
   updated_at: string | null;
 };
 
-const CONTENT_TYPE_LABELS: Record<MediaContentType, string> = {
-  news: "أخبار",
-  video: "فيديو",
-  gallery: "معرض صور",
-  press: "بيانات صحفية",
-  site_update: "من أرض التنفيذ",
-};
-
 /** Date column width — matches Topics list published/updated column (125px). */
 const MEDIA_GRID_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_COLUMNS.count} 125px ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
-
-function getContentTypeLabel(value?: string | null) {
-  if (!value) return "غير محدد";
-  if (value in CONTENT_TYPE_LABELS) return CONTENT_TYPE_LABELS[value as MediaContentType];
-  return value;
-}
 
 function getStatusTone(status?: string | null): "green" | "gold" | "muted" | "red" {
   if (status === "published") return "green";
@@ -72,7 +61,7 @@ export default async function AdminUnifiedMediaContentPage() {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select("id, title, slug, content_type, category, category_slug, status, is_featured, updated_at")
-    .in("content_type", [...MEDIA_CONTENT_TYPES])
+    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
 
@@ -88,6 +77,10 @@ export default async function AdminUnifiedMediaContentPage() {
         description="قائمة المحتوى الإعلامي الجديد من جدول topics فقط. هذه الواجهة إدارية بالتوازي مع النظام القديم — لا تؤثر على الواجهة العامة أو media_items."
         actions={
           <>
+            <AdminActionButton href="/admin/content/media/new" variant="primary">
+              <PlusIcon />
+              إضافة محتوى جديد
+            </AdminActionButton>
             <AdminActionButton href="/admin/topics" variant="dark">
               عرض المقالات
             </AdminActionButton>
@@ -99,8 +92,8 @@ export default async function AdminUnifiedMediaContentPage() {
       />
 
       <AdminInfoBar
-        label="Phase 3A — Listing only"
-        description="عرض فقط لمحتوى topics بأنواع المركز الإعلامي. الإضافة والتعديل سيُضافان في مرحلة لاحقة."
+        label="Phase 3B — Create / Edit"
+        description="إنشاء وتعديل news / press / site_update داخل topics. video و gallery للمرحلة التالية."
         meta={`${rows.length} Items / ${publishedCount} Published / ${featuredCount} Featured`}
       />
 
@@ -111,7 +104,7 @@ export default async function AdminUnifiedMediaContentPage() {
       <AdminDataGrid
         summary={
           rows.length > 0
-            ? `عرض ${rows.length} عنصرًا — مصدر البيانات: topics (${MEDIA_CONTENT_TYPES.join(", ")})`
+            ? `عرض ${rows.length} عنصرًا — مصدر البيانات: topics (${MEDIA_LIST_CONTENT_TYPES.join(", ")})`
             : undefined
         }
       >
@@ -156,13 +149,17 @@ export default async function AdminUnifiedMediaContentPage() {
               </AdminDataGridCenterCell>
 
               <AdminDataGridActionsCell>
-                <AdminDataGridActionButton action="edit" disabled title="التعديل متاح في Phase 3B" />
+                {isPhase3BEditableContentType(row.content_type) ? (
+                  <AdminDataGridActionButton action="edit" href={`/admin/content/media/${row.id}`} title="تعديل" />
+                ) : (
+                  <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح لهذا النوع في Phase 3B" />
+                )}
               </AdminDataGridActionsCell>
             </AdminDataGridRow>
           ))
         ) : (
           <AdminDataGridEmpty>
-            لا يوجد محتوى إعلامي في topics بعد. عند إنشاء عناصر بأنواع news / video / gallery / press / site_update ستظهر هنا.
+            لا يوجد محتوى إعلامي في topics بعد. أنشئ عنصرًا جديدًا من «إضافة محتوى جديد» للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ.
           </AdminDataGridEmpty>
         )}
       </AdminDataGrid>
