@@ -1,12 +1,12 @@
 import Link from "next/link";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
-  ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
   AdminActionButton,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  adminDataGridActionsColumn,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
@@ -64,7 +64,7 @@ const DEFAULT_LIMIT = "10";
 const DEFAULT_SORT = "updated_desc";
 const VISIBLE_SORT_VALUES = new Set(["title_asc", "title_desc", "status_asc", "status_desc"]);
 
-const MEDIA_TABLE_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
+const MEDIA_TABLE_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${adminDataGridActionsColumn(1, "compact")}`;
 
 function cleanSearch(value: string) {
   return value.replace(/[,%]/g, " ").replace(/\s+/g, " ").trim();
@@ -405,11 +405,11 @@ export default async function AdminUnifiedMediaContentPage({
                     <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
                   </div>
 
-                  <AdminDataGridActionsCell>
+                  <AdminDataGridActionsCell compact>
                     {editable && editHref ? (
-                      <AdminDataGridActionButton action="edit" href={editHref} title="تعديل" />
+                      <AdminDataGridActionButton action="edit" href={editHref} size="compact" title="تعديل" />
                     ) : (
-                      <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح" />
+                      <AdminDataGridActionButton action="edit" size="compact" disabled title="التعديل غير متاح" />
                     )}
                   </AdminDataGridActionsCell>
                 </AdminDataGridRow>
