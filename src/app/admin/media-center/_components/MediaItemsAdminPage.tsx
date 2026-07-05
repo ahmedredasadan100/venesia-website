@@ -6,7 +6,7 @@ import {
   ADMIN_DATA_GRID_RULES,
   AdminActionButton,
   AdminDataGrid,
-  AdminMetricCard,
+  AdminMetricCardsGrid,
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -277,13 +277,15 @@ export default async function MediaItemsAdminPage({
       {notice ? <AdminNotice variant="success" message={notice} /> : null}
       {error ? <AdminNotice variant="danger" title="تعذر تحميل المركز الإعلامي" message={error.message} /> : null}
 
-      <section className="grid gap-4 md:grid-cols-5">
-        <AdminMetricCard compact label="إجمالي العناصر" value={totalStats.count ?? 0} tone="gold" />
-        <AdminMetricCard compact label="منشور" value={publishedStats.count ?? 0} tone="green" />
-        <AdminMetricCard compact label="مسودات" value={draftStats.count ?? 0} tone="amber" />
-        <AdminMetricCard compact label="مخفي" value={hiddenStats.count ?? 0} tone="violet" />
-        <AdminMetricCard compact label="أرشيف" value={archivedStats.count ?? 0} tone="cyan" />
-      </section>
+      <AdminMetricCardsGrid
+        items={[
+          { label: "إجمالي العناصر", value: totalStats.count ?? 0, tone: "gold", compact: true },
+          { label: "منشور", value: publishedStats.count ?? 0, tone: "green", compact: true },
+          { label: "مسودات", value: draftStats.count ?? 0, tone: "amber", compact: true },
+          { label: "مخفي", value: hiddenStats.count ?? 0, tone: "violet", compact: true },
+          { label: "أرشيف", value: archivedStats.count ?? 0, tone: "cyan", compact: true },
+        ]}
+      />
 
       <MediaAdminFilters
         basePath={basePath}

@@ -5,7 +5,7 @@ import {
   buildTopicCategoryFilterGroups,
   type TopicCategoryRecord,
 } from "./topics-category-groups";
-import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminMetricCard, AdminPageContextHeader, AdminTablePagination } from "../../../components/admin/ui";
+import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminMetricCardsGrid, AdminPageContextHeader, AdminTablePagination } from "../../../components/admin/ui";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
 import { formatAdminListDate } from "../../../lib/content-dates";
@@ -460,14 +460,16 @@ export default async function AdminTopicsPage({
         <AdminNotice variant="danger" title="تعذر تحميل الموضوعات" message={error.message} />
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-6">
-        <AdminMetricCard compact label="إجمالي الموضوعات" value={allTopicsCount} tone="gold" />
-        <AdminMetricCard compact label="منشور" value={publishedCount} tone="green" />
-        <AdminMetricCard compact label="مسودات" value={draftCount} tone="amber" />
-        <AdminMetricCard compact label="مخفي" value={hiddenCount} tone="violet" />
-        <AdminMetricCard compact label="أرشيف" value={archivedCount} tone="cyan" />
-        <AdminMetricCard compact label="متوسط SEO" value={averageSeo} suffix="/100" tone="blue" />
-      </section>
+      <AdminMetricCardsGrid
+        items={[
+          { label: "إجمالي الموضوعات", value: allTopicsCount, tone: "gold", compact: true },
+          { label: "منشور", value: publishedCount, tone: "green", compact: true },
+          { label: "مسودات", value: draftCount, tone: "amber", compact: true },
+          { label: "مخفي", value: hiddenCount, tone: "violet", compact: true },
+          { label: "أرشيف", value: archivedCount, tone: "cyan", compact: true },
+          { label: "متوسط SEO", value: averageSeo, suffix: "/100", tone: "blue", compact: true },
+        ]}
+      />
 
       <TopicsListFilters
         q={q}

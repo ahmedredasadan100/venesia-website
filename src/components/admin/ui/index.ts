@@ -11,6 +11,8 @@ export {
 } from "./AdminPagination";export type { AdminTablePaginationProps, PageSizeSelectorMode } from "./AdminTablePagination";
 export { default as AdminMetricCard } from "./AdminMetricCard";
 export type { AdminMetricCardProps, AdminMetricCardTone } from "./AdminMetricCard";
+export { default as AdminMetricCardsGrid } from "./AdminMetricCardsGrid";
+export type { AdminMetricCardsGridItem, AdminMetricCardsGridProps } from "./AdminMetricCardsGrid";
 export { default as AdminCard } from "./AdminCard";
 export { default as AdminToolbar } from "./AdminToolbar";
 export { default as AdminActionButton } from "./AdminActionButton";
