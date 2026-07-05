@@ -28,7 +28,7 @@ const menuItems: MenuItem[] = [
       { href: "/admin/projects/construction-updates", label: "تحديثات التنفيذ" },
     ],
   },
-  { href: "/admin/media-center", label: "مكتبة الوسائط", icon: "◉" },
+  { href: "/admin/content/media", label: "مكتبة الوسائط", icon: "◉" },
   {
     href: "/admin/pages-blocks/pages",
     label: "الصفحات والبلوكات",

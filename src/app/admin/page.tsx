@@ -170,7 +170,7 @@ export default async function AdminDashboardPage() {
   const quickActions = [
     { href: "/admin/topics/new", label: "مقال جديد", hint: "إضافة محتوى", icon: "+" },
     { href: "/admin/topics/categories", label: "تصنيف جديد", hint: "تنظيم الشجرة", icon: "▤" },
-    { href: "/admin/media-center/new", label: "عنصر إعلامي", hint: "خبر أو فيديو", icon: "◉" },
+    { href: "/admin/content/media/new", label: "عنصر إعلامي", hint: "خبر أو فيديو", icon: "◉" },
     { href: "/admin/settings/general", label: "الإعدادات", hint: "بيانات النظام", icon: "⚙" },
   ];
 

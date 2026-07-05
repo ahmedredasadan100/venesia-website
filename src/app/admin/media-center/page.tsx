@@ -1,12 +1,8 @@
-import MediaItemsAdminPage, { type MediaAdminSearchParams } from "./_components/MediaItemsAdminPage";
+import { redirect } from "next/navigation";
+import { UNIFIED_MEDIA_ADMIN_PATH } from "../../../lib/admin/legacy-media-admin-routes";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminMediaCenterPage({
-  searchParams,
-}: {
-  searchParams?: Promise<MediaAdminSearchParams>;
-}) {
-  const params = await searchParams;
-  return <MediaItemsAdminPage searchParams={params} />;
+export default function LegacyMediaCenterAdminPage() {
+  redirect(UNIFIED_MEDIA_ADMIN_PATH);
 }
