@@ -40,7 +40,7 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
               name="title"
               required
               defaultValue={values?.title ?? ""}
-              placeholder="مثال: Venesia تطلق مشروعًا جديدًا في بيت الوطن"
+              placeholder="اكتب عنوان المحتوى الإعلامي، مثل: Venesia تطلق بيانًا صحفيًا جديدًا"
               className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-xl font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
             />
           </label>
@@ -84,7 +84,7 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
               name="excerpt"
               rows={4}
               defaultValue={values?.excerpt ?? ""}
-              placeholder="اكتب وصفًا مختصرًا واضحًا للمحتوى..."
+              placeholder="ملخص قصير يظهر في قائمة المركز الإعلامي..."
               className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
             />
           </label>

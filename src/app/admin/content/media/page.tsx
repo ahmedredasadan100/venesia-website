@@ -2,6 +2,9 @@ import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
+  ADMIN_FILTER_ROW_CLASSES,
+  ADMIN_FILTER_SHELL_CLASSES,
+  ADMIN_FILTER_SHELL_GLOW_STYLE,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -16,6 +19,7 @@ import {
   AdminStatusPill,
   AdminActionButton,
 } from "../../../../components/admin/ui";
+import { applyAdminListTextSearch } from "../../../../lib/admin/admin-list-search";
 import { formatAdminListDate } from "../../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
@@ -23,10 +27,18 @@ import {
   getContentTypeLabel,
   isPhase3BEditableContentType,
   MEDIA_LIST_CONTENT_TYPES,
+  PHASE_3B_EDITABLE_CONTENT_TYPES,
   type MediaListContentType,
 } from "./media-content-config";
 
 export const dynamic = "force-dynamic";
+
+type SearchParams = {
+  q?: string;
+  content_type?: string;
+  status?: string;
+  featured?: string;
+};
 
 type MediaTopicRow = {
   id: number;
@@ -40,8 +52,87 @@ type MediaTopicRow = {
   updated_at: string | null;
 };
 
+type MediaListFilterState = {
+  q: string;
+  contentType: string;
+  status: string;
+  featured: string;
+};
+
+const OPTIONAL_LIST_FILTER_TYPES = ["video", "gallery"] as const;
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "all", label: "كل الحالات" },
+  { value: "published", label: "منشور" },
+  { value: "draft", label: "مسودة" },
+  { value: "unpublished", label: "مخفي" },
+  { value: "archived", label: "أرشيف" },
+] as const;
+
+const FEATURED_FILTER_OPTIONS = [
+  { value: "all", label: "الكل" },
+  { value: "yes", label: "مميز" },
+  { value: "no", label: "غير مميز" },
+] as const;
+
+const FILTER_FIELD_CLASS =
+  "h-12 w-full rounded-[8px] border border-white/10 bg-black/20 px-4 text-sm text-white outline-none transition placeholder:text-white/36 focus:border-[#D8B87A]/35";
+
 /** Date column width — matches Topics list published/updated column (125px). */
 const MEDIA_GRID_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_COLUMNS.count} 125px ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
+
+function cleanSearch(value: string) {
+  return value.replace(/[,%]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function isMediaListContentType(value: string): value is MediaListContentType {
+  return MEDIA_LIST_CONTENT_TYPES.includes(value as MediaListContentType);
+}
+
+function normalizeFilters(params?: SearchParams): MediaListFilterState {
+  const contentType = params?.content_type ?? "all";
+  const status = params?.status ?? "all";
+
+  return {
+    q: cleanSearch(params?.q ?? ""),
+    contentType: isMediaListContentType(contentType) || contentType === "all" ? contentType : "all",
+    status: STATUS_FILTER_OPTIONS.some((option) => option.value === status) ? status : "all",
+    featured: FEATURED_FILTER_OPTIONS.some((option) => option.value === params?.featured)
+      ? (params?.featured as string)
+      : "all",
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyMediaListFilters(query: any, filters: MediaListFilterState) {
+  let next = query.in("content_type", [...MEDIA_LIST_CONTENT_TYPES]).is("deleted_at", null);
+
+  if (filters.q) {
+    next = applyAdminListTextSearch(next, filters.q, ["title", "slug"]);
+  }
+
+  if (filters.contentType !== "all") {
+    next = next.eq("content_type", filters.contentType);
+  }
+
+  if (filters.status !== "all") {
+    next = next.eq("status", filters.status);
+  }
+
+  if (filters.featured === "yes") next = next.eq("is_featured", true);
+  if (filters.featured === "no") next = next.eq("is_featured", false);
+
+  return next;
+}
+
+function hasActiveFilters(filters: MediaListFilterState) {
+  return Boolean(
+    filters.q ||
+      filters.contentType !== "all" ||
+      filters.status !== "all" ||
+      filters.featured !== "all",
+  );
+}
 
 function getStatusTone(status?: string | null): "green" | "gold" | "muted" | "red" {
   if (status === "published") return "green";
@@ -57,17 +148,66 @@ function getStatusLabel(status?: string | null) {
   return "مسودة";
 }
 
-export default async function AdminUnifiedMediaContentPage() {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("id, title, slug, content_type, category, category_slug, status, is_featured, updated_at")
-    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
-    .is("deleted_at", null)
-    .order("updated_at", { ascending: false });
+function buildContentTypeFilterOptions(presentTypes: Set<string>) {
+  const options = [{ value: "all", label: "كل الأنواع" }];
 
-  const rows = (data ?? []) as MediaTopicRow[];
-  const publishedCount = rows.filter((row) => row.status === "published").length;
-  const featuredCount = rows.filter((row) => row.is_featured).length;
+  PHASE_3B_EDITABLE_CONTENT_TYPES.forEach((type) => {
+    options.push({ value: type, label: getContentTypeLabel(type) });
+  });
+
+  OPTIONAL_LIST_FILTER_TYPES.forEach((type) => {
+    if (presentTypes.has(type)) {
+      options.push({ value: type, label: getContentTypeLabel(type) });
+    }
+  });
+
+  return options;
+}
+
+export default async function AdminUnifiedMediaContentPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const filters = normalizeFilters(params);
+
+  const baseQuery = getSupabaseAdmin()
+    .from("topics")
+    .select("id", { count: "exact", head: true })
+    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
+    .is("deleted_at", null);
+
+  const [
+    { data: rows, error },
+    { count: totalCount },
+    { count: publishedCount },
+    { count: featuredCount },
+    { data: typeRows },
+  ] = await Promise.all([
+    applyMediaListFilters(
+      getSupabaseAdmin()
+        .from("topics")
+        .select("id, title, slug, content_type, category, category_slug, status, is_featured, updated_at")
+        .order("updated_at", { ascending: false }),
+      filters,
+    ),
+    baseQuery,
+    baseQuery.eq("status", "published"),
+    baseQuery.eq("is_featured", true),
+    getSupabaseAdmin()
+      .from("topics")
+      .select("content_type")
+      .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
+      .is("deleted_at", null),
+  ]);
+
+  const safeRows = (rows ?? []) as MediaTopicRow[];
+  const presentTypes = new Set((typeRows ?? []).map((row) => String(row.content_type ?? "")));
+  const contentTypeOptions = buildContentTypeFilterOptions(presentTypes);
+  const filteredCount = safeRows.length;
+  const allCount = totalCount ?? 0;
+  const filtersActive = hasActiveFilters(filters);
 
   return (
     <main className="space-y-7">
@@ -92,19 +232,80 @@ export default async function AdminUnifiedMediaContentPage() {
       />
 
       <AdminInfoBar
-        label="Phase 3B — Create / Edit"
-        description="إنشاء وتعديل news / press / site_update داخل topics. video و gallery للمرحلة التالية."
-        meta={`${rows.length} Items / ${publishedCount} Published / ${featuredCount} Featured`}
+        label="محتوى المركز الإعلامي — Unified"
+        description="الإنشاء والتعديل متاحان حاليًا للأخبار والبيانات الصحفية ومن أرض التنفيذ فقط. الفيديو ومعرض الصور يظهران في القائمة عند وجودهما، بدون create/edit حاليًا."
+        meta={`${allCount} إجمالي المحتوى / ${publishedCount ?? 0} منشور / ${featuredCount ?? 0} مميز`}
       />
 
       {error ? (
         <AdminNotice variant="danger" title="تعذر تحميل المحتوى الإعلامي" message={error.message} />
       ) : null}
 
+      <section className={ADMIN_FILTER_SHELL_CLASSES} style={ADMIN_FILTER_SHELL_GLOW_STYLE}>
+        <form method="get" action="/admin/content/media" className={ADMIN_FILTER_ROW_CLASSES}>
+          <label className="min-w-[220px] flex-1">
+            <span className="sr-only">بحث</span>
+            <input
+              type="search"
+              name="q"
+              defaultValue={filters.q}
+              placeholder="ابحث في العنوان أو slug..."
+              className={FILTER_FIELD_CLASS}
+            />
+          </label>
+
+          <label className="min-w-[170px]">
+            <span className="sr-only">نوع المحتوى</span>
+            <select name="content_type" defaultValue={filters.contentType} className={FILTER_FIELD_CLASS}>
+              {contentTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="min-w-[150px]">
+            <span className="sr-only">الحالة</span>
+            <select name="status" defaultValue={filters.status} className={FILTER_FIELD_CLASS}>
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="min-w-[150px]">
+            <span className="sr-only">مميز</span>
+            <select name="featured" defaultValue={filters.featured} className={FILTER_FIELD_CLASS}>
+              {FEATURED_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="submit"
+            className="h-12 shrink-0 rounded-full bg-[#D8B87A] px-5 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
+          >
+            تطبيق
+          </button>
+
+          {filtersActive ? (
+            <AdminActionButton href="/admin/content/media" variant="dark">
+              مسح الفلاتر
+            </AdminActionButton>
+          ) : null}
+        </form>
+      </section>
+
       <AdminDataGrid
         summary={
-          rows.length > 0
-            ? `عرض ${rows.length} عنصرًا — مصدر البيانات: topics (${MEDIA_LIST_CONTENT_TYPES.join(", ")})`
+          filtersActive || filteredCount > 0
+            ? `عرض ${filteredCount} عنصرًا من ${allCount} — الإنشاء متاح للأخبار والبيانات الصحفية ومن أرض التنفيذ. الفيديو ومعرض الصور للعرض في القائمة فقط عند وجودهما، بدون create/edit حاليًا.`
             : undefined
         }
       >
@@ -118,8 +319,8 @@ export default async function AdminUnifiedMediaContentPage() {
           <span className="text-center">الإجراءات</span>
         </AdminDataGridHeader>
 
-        {rows.length > 0 ? (
-          rows.map((row, index) => (
+        {safeRows.length > 0 ? (
+          safeRows.map((row, index) => (
             <AdminDataGridRow key={row.id} columns={MEDIA_GRID_COLUMNS} divided={index > 0}>
               <AdminDataGridPrimaryCell>
                 <div className="space-y-1">
@@ -152,14 +353,16 @@ export default async function AdminUnifiedMediaContentPage() {
                 {isPhase3BEditableContentType(row.content_type) ? (
                   <AdminDataGridActionButton action="edit" href={`/admin/content/media/${row.id}`} title="تعديل" />
                 ) : (
-                  <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح لهذا النوع في Phase 3B" />
+                  <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح لهذا النوع حاليًا" />
                 )}
               </AdminDataGridActionsCell>
             </AdminDataGridRow>
           ))
         ) : (
           <AdminDataGridEmpty>
-            لا يوجد محتوى إعلامي في topics بعد. أنشئ عنصرًا جديدًا من «إضافة محتوى جديد» للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ.
+            {filtersActive
+              ? "لا توجد نتائج مطابقة للفلاتر الحالية."
+              : "لا يوجد محتوى إعلامي في topics بعد. أنشئ عنصرًا جديدًا من «إضافة محتوى جديد» للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ."}
           </AdminDataGridEmpty>
         )}
       </AdminDataGrid>

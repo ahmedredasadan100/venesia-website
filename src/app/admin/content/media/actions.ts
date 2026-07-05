@@ -280,6 +280,7 @@ async function getEditableMediaTopicById(id: string) {
 function revalidateMediaContentPaths(id?: string | number) {
   revalidatePath("/admin/content/media");
   revalidatePath("/admin/content/media/new");
+  revalidatePath("/admin/topics/categories");
 
   if (id) {
     revalidatePath(`/admin/content/media/${id}`);
