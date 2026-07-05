@@ -16,11 +16,10 @@ import {
   AdminTablePagination,
 } from "../../../../components/admin/ui";
 import { applyAdminListTextSearch } from "../../../../lib/admin/admin-list-search";
-import { formatAdminListDate } from "../../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
 import { bulkUpdateMediaContent } from "./actions";
-import MediaContentTypeBadge from "./MediaContentTypeBadge";
+import MediaCategoryBadge from "./MediaCategoryBadge";
 import MediaListControls from "./MediaListControls";
 import MediaListFilters from "./MediaListFilters";
 import {
@@ -63,8 +62,9 @@ type MediaListFilterState = {
 const LIMIT_OPTIONS = ["10", "20", "30"];
 const DEFAULT_LIMIT = "10";
 const DEFAULT_SORT = "updated_desc";
+const VISIBLE_SORT_VALUES = new Set(["title_asc", "title_desc", "status_asc", "status_desc"]);
 
-const MEDIA_TABLE_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_COLUMNS.count} 125px ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
+const MEDIA_TABLE_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
 
 function cleanSearch(value: string) {
   return value.replace(/[,%]/g, " ").replace(/\s+/g, " ").trim();
@@ -128,6 +128,13 @@ function applyMediaListSort(query: any, sort: string) {
   return query.order("updated_at", { ascending: false });
 }
 
+function normalizeSort(sort?: string | null) {
+  const value = sort?.trim() || DEFAULT_SORT;
+  if (VISIBLE_SORT_VALUES.has(value)) return value;
+  if (value === DEFAULT_SORT || value === "updated_asc") return DEFAULT_SORT;
+  return DEFAULT_SORT;
+}
+
 function buildHref(params: URLSearchParams, patch: Record<string, string | null>) {
   const next = new URLSearchParams(params.toString());
 
@@ -140,13 +147,10 @@ function buildHref(params: URLSearchParams, patch: Record<string, string | null>
   return query ? `/admin/content/media?${query}#media-table` : "/admin/content/media#media-table";
 }
 
-function getNextSort(currentSort: string, column: "title" | "content_type" | "status" | "featured" | "updated") {
+function getNextSort(currentSort: string, column: "title" | "status") {
   const map: Record<string, [string, string]> = {
     title: ["title_asc", "title_desc"],
-    content_type: ["content_type_asc", "content_type_desc"],
     status: ["status_asc", "status_desc"],
-    featured: ["featured_desc", "featured_asc"],
-    updated: ["updated_desc", "updated_asc"],
   };
 
   const [first, second] = map[column];
@@ -233,7 +237,7 @@ export default async function AdminUnifiedMediaContentPage({
 }) {
   const params = await searchParams;
   const filters = normalizeFilters(params);
-  const sort = params?.sort ?? DEFAULT_SORT;
+  const sort = normalizeSort(params?.sort);
   const rawLimit = params?.limit ?? DEFAULT_LIMIT;
   const limitValue = LIMIT_OPTIONS.includes(rawLimit) ? rawLimit : DEFAULT_LIMIT;
   const currentPage = getPositiveNumber(params?.page, 1);
@@ -357,24 +361,9 @@ export default async function AdminUnifiedMediaContentPage({
             <span className="text-right">
               <SortHeader label="العنوان" href={buildHref(queryParams, { sort: getNextSort(sort, "title"), page: "1" })} />
             </span>
-            <span className="text-center">
-              <SortHeader
-                label="النوع"
-                href={buildHref(queryParams, { sort: getNextSort(sort, "content_type"), page: "1" })}
-              />
-            </span>
             <span className="text-center">التصنيف</span>
             <span className="text-center">
               <SortHeader label="الحالة" href={buildHref(queryParams, { sort: getNextSort(sort, "status"), page: "1" })} />
-            </span>
-            <span className="text-center">
-              <SortHeader label="مميز" href={buildHref(queryParams, { sort: getNextSort(sort, "featured"), page: "1" })} />
-            </span>
-            <span className="text-center">
-              <SortHeader
-                label="آخر تحديث"
-                href={buildHref(queryParams, { sort: getNextSort(sort, "updated"), page: "1" })}
-              />
             </span>
             <span className="text-center">الإجراءات</span>
           </AdminDataGridHeader>
@@ -409,24 +398,12 @@ export default async function AdminUnifiedMediaContentPage({
                   </div>
 
                   <div className="flex justify-center">
-                    <MediaContentTypeBadge contentType={row.content_type} compact />
+                    <MediaCategoryBadge label={row.category} contentType={row.content_type} />
                   </div>
-
-                  <div className="truncate text-center text-sm text-white/72">{row.category || "—"}</div>
 
                   <div className="flex justify-center">
                     <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
                   </div>
-
-                  <div className="text-center">
-                    {row.is_featured ? (
-                      <AdminStatusPill tone="gold">مميز</AdminStatusPill>
-                    ) : (
-                      <span className="text-sm text-white/28">—</span>
-                    )}
-                  </div>
-
-                  <div className="text-center font-en text-sm text-white/62">{formatAdminListDate(row.updated_at)}</div>
 
                   <AdminDataGridActionsCell>
                     {editable && editHref ? (
