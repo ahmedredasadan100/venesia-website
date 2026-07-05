@@ -85,7 +85,7 @@ type TopicListFilterState = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyTopicListFilters(query: any, filters: TopicListFilterState) {
-  let next = query;
+  let next = query.eq("content_type", "article");
 
   if (filters.q) {
     next = applyAdminListTextSearch(next, filters.q, ["title", "slug", "category", "excerpt"]);
@@ -396,23 +396,30 @@ export default async function AdminTopicsPage({
       .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true }),
-    getSupabaseAdmin().from("topics").select("id", { count: "exact", head: true }).is("deleted_at", null),
+    getSupabaseAdmin().from("topics").select("id", { count: "exact", head: true }).eq("content_type", "article").is("deleted_at", null),
     getSupabaseAdmin()
       .from("topics")
       .select("id", { count: "exact", head: true })
+      .eq("content_type", "article")
       .eq("status", "published")
       .is("deleted_at", null),
     getSupabaseAdmin()
       .from("topics")
       .select("id", { count: "exact", head: true })
+      .eq("content_type", "article")
       .eq("status", "draft")
       .is("deleted_at", null),
     getSupabaseAdmin()
       .from("topics")
       .select("id", { count: "exact", head: true })
+      .eq("content_type", "article")
       .eq("status", "unpublished")
       .is("deleted_at", null),
-    getSupabaseAdmin().from("topics").select("id", { count: "exact", head: true }).not("deleted_at", "is", null),
+    getSupabaseAdmin()
+      .from("topics")
+      .select("id", { count: "exact", head: true })
+      .eq("content_type", "article")
+      .not("deleted_at", "is", null),
   ]);
 
   const safeTopics = (topics ?? []) as TopicRow[];

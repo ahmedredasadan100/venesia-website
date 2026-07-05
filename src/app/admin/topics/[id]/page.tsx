@@ -13,12 +13,14 @@ import TopicMarkdownEditor from "../TopicMarkdownEditor";
 import TopicSeriesFields from "../TopicSeriesFields";
 import TopicSlugInput from "../TopicSlugInput";
 import { filterEditorTopicCategories } from "../../../../lib/admin/cms-test-data";
+import { buildArticleTopicCategoryFilterGroups } from "../../../../lib/admin/article-topic-categories";
+import ArticleTopicCategorySelect from "../ArticleTopicCategorySelect";
 import { publishTopic, saveDraftTopic, saveTopic, saveTopicAndClose, unpublishTopic } from "../actions";
 
 export const dynamic = "force-dynamic";
 
 type TopicFaqItem = { question?: string; answer?: string };
-type CategoryRow = { name: string; slug: string };
+type CategoryRow = { id: number; name: string; slug: string; parent_id: number | null; sort_order: number | null; is_active: boolean | null };
 function getNoticeText(notice?: string) {
   if (notice === "created") return "تم إنشاء الموضوع كمسودة بنجاح.";
   if (notice === "saved") return "تم حفظ التعديلات بنجاح.";
@@ -53,14 +55,19 @@ export default async function EditTopicPage({
   const query = await searchParams;
 
   const [{ data: topic }, { data: categories }, { data: seriesRows }] = await Promise.all([
-    getSupabaseAdmin().from("topics").select("*").eq("id", id).maybeSingle(),
-    getSupabaseAdmin().from("topic_categories").select("name, slug").eq("is_active", true).order("sort_order", { ascending: true }),
+    getSupabaseAdmin().from("topics").select("*").eq("id", id).eq("content_type", "article").maybeSingle(),
+    getSupabaseAdmin()
+      .from("topic_categories")
+      .select("id, name, slug, parent_id, sort_order, is_active")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
     getSupabaseAdmin().from("topic_series").select("id, name, slug").eq("status", "published").order("sort_order", { ascending: true }).order("name", { ascending: true }),
   ]);
 
   if (!topic) notFound();
 
   const safeCategories = filterEditorTopicCategories((categories ?? []) as CategoryRow[]);
+  const categoryGroups = buildArticleTopicCategoryFilterGroups(safeCategories);
   const safeSeries = (seriesRows ?? []) as { id: number; name: string; slug: string }[];
   const faq = getFaq(topic.faq);
   const seoKeywords = getSeoKeywords(topic.seo_keywords);
@@ -108,10 +115,7 @@ export default async function EditTopicPage({
 
                     <label className="block">
                       <span className="text-sm font-medium text-white/70">التصنيف</span>
-                      <select name="category_slug" required defaultValue={topic.category_slug ?? ""} className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#D8B87A]/45">
-                        <option value="">اختر التصنيف</option>
-                        {safeCategories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}
-                      </select>
+                      <ArticleTopicCategorySelect groups={categoryGroups} defaultValue={topic.category_slug ?? ""} />
                     </label>
 
                     <label className="block lg:col-span-2">

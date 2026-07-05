@@ -10,6 +10,10 @@ import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { logError } from "../../../lib/logging";
 import { parseFormPublishedDate, resolveTopicPublishedAt } from "../../../lib/content-dates";
+import {
+  resolveArticleTopicCategory,
+  type ArticleTopicCategoryRecord,
+} from "../../../lib/admin/article-topic-categories";
 
 const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
 type TopicStatus = (typeof VALID_STATUSES)[number];
@@ -36,6 +40,8 @@ type CategoryRow = {
   id: number;
   name: string;
   slug: string;
+  parent_id?: number | null;
+  is_active?: boolean | null;
 };
 
 type SeriesRow = {
@@ -336,6 +342,7 @@ async function getTopicById(id: string) {
       "id, title, slug, excerpt, content, image, image_alt, category_slug, status, published_at, seo_title, seo_description, focus_keyword, seo_keywords, faq"
     )
     .eq("id", id)
+    .eq("content_type", "article")
     .maybeSingle<TopicRow>();
 
   if (error) {
@@ -359,20 +366,36 @@ async function ensureUniqueSlug(slug: string, id?: string) {
   return !data;
 }
 
-async function getCategory(categorySlug: string) {
+async function loadActiveTopicCategoriesForValidation() {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
-    .select("id, name, slug")
-    .eq("slug", categorySlug)
-    .maybeSingle<CategoryRow>();
+    .select("id, name, slug, parent_id, is_active")
+    .eq("is_active", true);
 
   if (error) {
-    logError("getCategory failed", error, { categorySlug });
+    logError("loadActiveTopicCategoriesForValidation failed", error);
+    return [] as ArticleTopicCategoryRecord[];
+  }
+
+  return (data ?? []) as ArticleTopicCategoryRecord[];
+}
+
+async function getCategory(categorySlug: string) {
+  const categories = await loadActiveTopicCategoriesForValidation();
+  const result = resolveArticleTopicCategory(categorySlug, categories);
+
+  if (!result.ok) {
+    logError("getCategory rejected article category", new Error(result.message), { categorySlug });
     return null;
   }
 
-  if (!data) return null;
-  return data;
+  return result.category;
+}
+
+async function getCategoryValidationError(categorySlug: string) {
+  const categories = await loadActiveTopicCategoriesForValidation();
+  const result = resolveArticleTopicCategory(categorySlug, categories);
+  return result.ok ? null : result.message;
 }
 
 async function getSeries(seriesId: number | null) {
@@ -449,6 +472,7 @@ function buildTopicWritePayload(
     }),
     deleted_at: status === "archived" ? now : null,
     updated_at: now,
+    content_type: "article" as const,
   };
 }
 
@@ -470,7 +494,10 @@ export async function createTopic(formData: FormData) {
   if (validationError) redirectFormError("/admin/topics/new", validationError);
 
   const category = await getCategory(payload.categorySlug);
-  if (!category) redirectFormError("/admin/topics/new", "التصنيف المختار غير موجود أو غير مفعل.");
+  if (!category) {
+    const categoryError = await getCategoryValidationError(payload.categorySlug);
+    redirectFormError("/admin/topics/new", categoryError ?? "التصنيف المختار غير موجود أو غير مفعل.");
+  }
 
   const series = await getSeries(payload.seriesId);
   if (payload.seriesId && !series) redirectFormError("/admin/topics/new", "السلسلة المختارة غير موجودة.");
@@ -532,7 +559,10 @@ async function updateTopicWithStatus(
     if (!isUniqueSlug) redirectEditError(id, "هذا الـ Slug مستخدم بالفعل في موضوع آخر.");
 
     const category = await getCategory(payload.categorySlug);
-    if (!category) redirectEditError(id, "التصنيف المختار غير موجود أو غير مفعل.");
+    if (!category) {
+      const categoryError = await getCategoryValidationError(payload.categorySlug);
+      redirectEditError(id, categoryError ?? "التصنيف المختار غير موجود أو غير مفعل.");
+    }
 
     const series = await getSeries(payload.seriesId);
     if (payload.seriesId && !series) redirectEditError(id, "السلسلة المختارة غير موجودة.");
@@ -567,7 +597,10 @@ async function updateTopicWithStatus(
   if (!isUniqueSlug) redirectEditError(id, "هذا الـ Slug مستخدم بالفعل في موضوع آخر.");
 
   const category = await getCategory(payload.categorySlug);
-  if (!category) redirectEditError(id, "التصنيف المختار غير موجود أو غير مفعل.");
+  if (!category) {
+    const categoryError = await getCategoryValidationError(payload.categorySlug);
+    redirectEditError(id, categoryError ?? "التصنيف المختار غير موجود أو غير مفعل.");
+  }
 
   const series = await getSeries(payload.seriesId);
   if (payload.seriesId && !series) redirectEditError(id, "السلسلة المختارة غير موجودة.");
@@ -675,6 +708,7 @@ async function getTopicForDuplicate(id: string) {
     .from("topics")
     .select("title, slug, excerpt, content, image, image_alt, category, category_slug, category_id, series_id, series, series_slug, date_label, seo_title, seo_description, seo_keywords, focus_keyword, faq, is_featured, is_popular")
     .eq("id", id)
+    .eq("content_type", "article")
     .maybeSingle<Record<string, unknown>>();
 
   if (error || !data) return null;
@@ -712,7 +746,9 @@ export async function duplicateTopic(formData: FormData) {
     categoryId = null;
   } else if (categoryChoice && categoryChoice !== "__same") {
     const category = await getCategory(categoryChoice);
-    if (!category) redirect(appendNotice(redirectTo, "error"));
+    if (!category) {
+      redirect(appendNotice(redirectTo, "error"));
+    }
     categoryName = category.name;
     categorySlug = category.slug;
     categoryId = category.id;
@@ -743,6 +779,7 @@ export async function duplicateTopic(formData: FormData) {
     is_popular: original.is_popular ?? false,
     published_at: status === "published" ? now : null,
     deleted_at: null,
+    content_type: "article",
     created_at: now,
     updated_at: now,
   });
@@ -807,7 +844,9 @@ export async function bulkUpdateTopics(formData: FormData) {
   } else if (bulkAction === "move_category") {
     const categorySlug = getString(formData, "category_slug");
     const category = categorySlug ? await getCategory(categorySlug) : null;
-    if (!category) redirect(appendNotice(redirectTo, "error"));
+    if (!category) {
+      redirect(appendNotice(redirectTo, "error"));
+    }
 
     const { error } = await getSupabaseAdmin()
       .from("topics")
@@ -817,7 +856,8 @@ export async function bulkUpdateTopics(formData: FormData) {
         category_id: category.id,
         updated_at: now,
       })
-      .in("id", ids);
+      .in("id", ids)
+      .eq("content_type", "article");
     errorMessage = error?.message ?? null;
   } else {
     redirect(appendNotice(redirectTo, "error"));
