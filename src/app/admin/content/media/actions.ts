@@ -511,3 +511,86 @@ export async function updateMediaContent(formData: FormData) {
   revalidateMediaContentPaths(id);
   redirect(`/admin/content/media/${id}?notice=saved`);
 }
+
+function getMediaRedirectTo(formData: FormData) {
+  const value = getString(formData, "redirect_to");
+  return value.startsWith("/admin/content/media") ? value : "/admin/content/media";
+}
+
+function appendMediaListNotice(path: string, notice: string) {
+  const [pathname, search = ""] = path.split("?");
+  const params = new URLSearchParams(search);
+  params.set("notice", notice);
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+export async function bulkUpdateMediaContent(formData: FormData) {
+  await requireAdminSession();
+
+  const ids = formData
+    .getAll("media_ids")
+    .map(String)
+    .filter(validateId)
+    .map(Number);
+  const bulkAction = getString(formData, "bulk_action");
+  const redirectTo = getMediaRedirectTo(formData);
+
+  if (ids.length === 0) {
+    redirect(appendMediaListNotice(redirectTo, "error"));
+  }
+
+  const now = new Date().toISOString();
+  let errorMessage: string | null = null;
+
+  if (bulkAction === "publish") {
+    const { error } = await getSupabaseAdmin()
+      .from("topics")
+      .update({ status: "published", updated_at: now })
+      .in("id", ids)
+      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .is("deleted_at", null);
+    errorMessage = error?.message ?? null;
+  } else if (bulkAction === "unpublish") {
+    const { error } = await getSupabaseAdmin()
+      .from("topics")
+      .update({ status: "unpublished", updated_at: now })
+      .in("id", ids)
+      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .is("deleted_at", null);
+    errorMessage = error?.message ?? null;
+  } else if (bulkAction === "archive") {
+    const { error } = await getSupabaseAdmin()
+      .from("topics")
+      .update({ status: "archived", updated_at: now })
+      .in("id", ids)
+      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .is("deleted_at", null);
+    errorMessage = error?.message ?? null;
+  } else if (bulkAction === "feature") {
+    const { error } = await getSupabaseAdmin()
+      .from("topics")
+      .update({ is_featured: true, updated_at: now })
+      .in("id", ids)
+      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .is("deleted_at", null);
+    errorMessage = error?.message ?? null;
+  } else if (bulkAction === "unfeature") {
+    const { error } = await getSupabaseAdmin()
+      .from("topics")
+      .update({ is_featured: false, updated_at: now })
+      .in("id", ids)
+      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .is("deleted_at", null);
+    errorMessage = error?.message ?? null;
+  } else {
+    redirect(appendMediaListNotice(redirectTo, "error"));
+  }
+
+  if (errorMessage) {
+    redirect(appendMediaListNotice(redirectTo, "error"));
+  }
+
+  revalidatePath("/admin/content/media");
+  redirect(appendMediaListNotice(redirectTo, "saved"));
+}

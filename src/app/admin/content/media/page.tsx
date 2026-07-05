@@ -3,33 +3,28 @@ import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
-  ADMIN_FILTER_ROW_CLASSES,
-  ADMIN_FILTER_SHELL_CLASSES,
-  ADMIN_FILTER_SHELL_GLOW_STYLE,
+  AdminActionButton,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
-  AdminDataGridCenterCell,
+  AdminDataGridEmpty,
   AdminDataGridHeader,
-  AdminDataGridPrimaryCell,
   AdminDataGridRow,
-  AdminDataGridStatusCell,
   AdminMetricCardsGrid,
   AdminPageContextHeader,
   AdminStatusPill,
-  AdminActionButton,
+  AdminTablePagination,
 } from "../../../../components/admin/ui";
 import { applyAdminListTextSearch } from "../../../../lib/admin/admin-list-search";
 import { formatAdminListDate } from "../../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
+import { bulkUpdateMediaContent } from "./actions";
 import MediaContentTypeBadge from "./MediaContentTypeBadge";
-import MediaListEmptyState from "./MediaListEmptyState";
-import MediaListNavPanel from "./MediaListNavPanel";
+import MediaListControls from "./MediaListControls";
+import MediaListFilters from "./MediaListFilters";
 import {
-  getContentTypeLabel,
   isMediaEditableContentType,
-  MEDIA_EDITABLE_CONTENT_TYPES,
   MEDIA_LIST_CONTENT_TYPES,
   type MediaListContentType,
 } from "./media-content-config";
@@ -41,6 +36,10 @@ type SearchParams = {
   content_type?: string;
   status?: string;
   featured?: string;
+  sort?: string;
+  limit?: string;
+  page?: string;
+  notice?: string;
 };
 
 type MediaTopicRow = {
@@ -49,7 +48,6 @@ type MediaTopicRow = {
   slug: string | null;
   content_type: MediaListContentType | string | null;
   category: string | null;
-  category_slug: string | null;
   status: string | null;
   is_featured: boolean | null;
   updated_at: string | null;
@@ -62,28 +60,19 @@ type MediaListFilterState = {
   featured: string;
 };
 
-const STATUS_FILTER_OPTIONS = [
-  { value: "all", label: "كل الحالات" },
-  { value: "published", label: "منشور" },
-  { value: "draft", label: "مسودة" },
-  { value: "unpublished", label: "مخفي" },
-  { value: "archived", label: "أرشيف" },
-] as const;
+const LIMIT_OPTIONS = ["10", "20", "30"];
+const DEFAULT_LIMIT = "10";
+const DEFAULT_SORT = "updated_desc";
 
-const FEATURED_FILTER_OPTIONS = [
-  { value: "all", label: "الكل" },
-  { value: "yes", label: "مميز" },
-  { value: "no", label: "غير مميز" },
-] as const;
-
-const FILTER_FIELD_CLASS =
-  "h-12 w-full rounded-[8px] border border-white/10 bg-black/20 px-4 text-sm text-white outline-none transition placeholder:text-white/36 focus:border-[#D8B87A]/35";
-
-/** Type badge column — fixed width for Arabic type labels. */
-const MEDIA_GRID_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_COLUMNS.count} 125px ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
+const MEDIA_TABLE_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_COLUMNS.count} 125px ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
 
 function cleanSearch(value: string) {
   return value.replace(/[,%]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function getPositiveNumber(value: string | undefined, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
 }
 
 function isMediaListContentType(value: string): value is MediaListContentType {
@@ -97,10 +86,8 @@ function normalizeFilters(params?: SearchParams): MediaListFilterState {
   return {
     q: cleanSearch(params?.q ?? ""),
     contentType: isMediaListContentType(contentType) || contentType === "all" ? contentType : "all",
-    status: STATUS_FILTER_OPTIONS.some((option) => option.value === status) ? status : "all",
-    featured: FEATURED_FILTER_OPTIONS.some((option) => option.value === params?.featured)
-      ? (params?.featured as string)
-      : "all",
+    status: ["all", "published", "draft", "unpublished", "archived"].includes(status) ? status : "all",
+    featured: ["all", "yes", "no"].includes(params?.featured ?? "all") ? (params?.featured ?? "all") : "all",
   };
 }
 
@@ -126,12 +113,52 @@ function applyMediaListFilters(query: any, filters: MediaListFilterState) {
   return next;
 }
 
-function hasActiveFilters(filters: MediaListFilterState) {
-  return Boolean(
-    filters.q ||
-      filters.contentType !== "all" ||
-      filters.status !== "all" ||
-      filters.featured !== "all",
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyMediaListSort(query: any, sort: string) {
+  if (sort === "title_asc") return query.order("title", { ascending: true });
+  if (sort === "title_desc") return query.order("title", { ascending: false });
+  if (sort === "content_type_asc") return query.order("content_type", { ascending: true });
+  if (sort === "content_type_desc") return query.order("content_type", { ascending: false });
+  if (sort === "status_asc") return query.order("status", { ascending: true });
+  if (sort === "status_desc") return query.order("status", { ascending: false });
+  if (sort === "featured_asc") return query.order("is_featured", { ascending: true });
+  if (sort === "featured_desc") return query.order("is_featured", { ascending: false });
+  if (sort === "updated_asc") return query.order("updated_at", { ascending: true });
+  if (sort === "updated_desc") return query.order("updated_at", { ascending: false });
+  return query.order("updated_at", { ascending: false });
+}
+
+function buildHref(params: URLSearchParams, patch: Record<string, string | null>) {
+  const next = new URLSearchParams(params.toString());
+
+  Object.entries(patch).forEach(([key, value]) => {
+    if (!value) next.delete(key);
+    else next.set(key, value);
+  });
+
+  const query = next.toString();
+  return query ? `/admin/content/media?${query}#media-table` : "/admin/content/media#media-table";
+}
+
+function getNextSort(currentSort: string, column: "title" | "content_type" | "status" | "featured" | "updated") {
+  const map: Record<string, [string, string]> = {
+    title: ["title_asc", "title_desc"],
+    content_type: ["content_type_asc", "content_type_desc"],
+    status: ["status_asc", "status_desc"],
+    featured: ["featured_desc", "featured_asc"],
+    updated: ["updated_desc", "updated_asc"],
+  };
+
+  const [first, second] = map[column];
+  return currentSort === first ? second : first;
+}
+
+function SortHeader({ label, href }: { label: string; href: string }) {
+  return (
+    <Link href={href} className="inline-flex items-center justify-center gap-2 transition hover:text-[#D8B87A]">
+      {label}
+      <span className="font-en text-[10px] text-white/35">↕</span>
+    </Link>
   );
 }
 
@@ -149,14 +176,54 @@ function getStatusLabel(status?: string | null) {
   return "مسودة";
 }
 
-function buildContentTypeFilterOptions() {
-  return [
-    { value: "all", label: "كل الأنواع" },
-    ...MEDIA_EDITABLE_CONTENT_TYPES.map((type) => ({
-      value: type,
-      label: getContentTypeLabel(type),
-    })),
-  ];
+function getNoticeText(notice?: string) {
+  if (notice === "saved") return "تم تنفيذ الإجراء على العناصر المحددة بنجاح.";
+  if (notice === "error") return "تعذر تنفيذ العملية. راجع البيانات وحاول مرة أخرى.";
+  return null;
+}
+
+function MediaBulkActionsBar({ currentListPath }: { currentListPath: string }) {
+  return (
+    <form
+      id="media-bulk-form"
+      action={bulkUpdateMediaContent}
+      data-media-bulk-bar
+      hidden
+      className="mb-3 rounded-[14px] border border-[#D8B87A]/16 bg-[#0B1016] p-3 shadow-[0_18px_55px_rgba(0,0,0,0.32)]"
+    >
+      <input type="hidden" name="redirect_to" value={currentListPath} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm font-semibold text-white">
+          تم تحديد <span data-media-bulk-count className="font-en text-[#D8B87A]">0</span> عنصر
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            name="bulk_action"
+            defaultValue="publish"
+            className="h-10 rounded-[8px] border border-white/10 bg-black/22 px-3 text-sm text-white/72 outline-none focus:border-[#D8B87A]/35"
+          >
+            <option value="publish">نشر</option>
+            <option value="unpublish">إخفاء</option>
+            <option value="archive">أرشفة</option>
+            <option value="feature">تعيين كمميز</option>
+            <option value="unfeature">إلغاء التمييز</option>
+          </select>
+
+          <button className="h-10 rounded-full bg-[#D8B87A] px-5 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]">
+            تنفيذ
+          </button>
+          <button
+            type="button"
+            data-media-clear-selection
+            className="h-10 rounded-full border border-white/10 px-5 text-sm text-white/62 transition hover:border-white/20 hover:text-white"
+          >
+            إلغاء التحديد
+          </button>
+        </div>
+      </div>
+    </form>
+  );
 }
 
 export default async function AdminUnifiedMediaContentPage({
@@ -166,54 +233,79 @@ export default async function AdminUnifiedMediaContentPage({
 }) {
   const params = await searchParams;
   const filters = normalizeFilters(params);
+  const sort = params?.sort ?? DEFAULT_SORT;
+  const rawLimit = params?.limit ?? DEFAULT_LIMIT;
+  const limitValue = LIMIT_OPTIONS.includes(rawLimit) ? rawLimit : DEFAULT_LIMIT;
+  const currentPage = getPositiveNumber(params?.page, 1);
+  const notice = getNoticeText(params?.notice);
+  const perPage = Number(limitValue);
 
-  const baseQuery = getSupabaseAdmin()
+  const { count: rawTotalCount } = await applyMediaListFilters(
+    getSupabaseAdmin().from("topics").select("id", { count: "exact", head: true }),
+    filters,
+  );
+
+  const totalCount = rawTotalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const from = (safePage - 1) * perPage;
+  const to = from + perPage - 1;
+  const rangeStart = totalCount === 0 ? 0 : from + 1;
+  const rangeEnd = totalCount === 0 ? 0 : Math.min(safePage * perPage, totalCount);
+
+  const queryParams = new URLSearchParams();
+  if (filters.q) queryParams.set("q", filters.q);
+  if (filters.contentType !== "all") queryParams.set("content_type", filters.contentType);
+  if (filters.status !== "all") queryParams.set("status", filters.status);
+  if (filters.featured !== "all") queryParams.set("featured", filters.featured);
+  if (sort !== DEFAULT_SORT) queryParams.set("sort", sort);
+  if (limitValue !== DEFAULT_LIMIT) queryParams.set("limit", limitValue);
+  if (safePage > 1) queryParams.set("page", String(safePage));
+
+  const currentListPath = queryParams.toString()
+    ? `/admin/content/media?${queryParams.toString()}`
+    : "/admin/content/media";
+
+  const baseStatsQuery = getSupabaseAdmin()
     .from("topics")
     .select("id", { count: "exact", head: true })
     .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
     .is("deleted_at", null);
 
+  let query = applyMediaListSort(
+    applyMediaListFilters(
+      getSupabaseAdmin()
+        .from("topics")
+        .select("id, title, slug, content_type, category, status, is_featured, updated_at", { count: "exact" }),
+      filters,
+    ),
+    sort,
+  );
+
+  query = query.range(from, to);
+
   const [
     { data: rows, error },
-    { count: totalCount },
     { count: publishedCount },
     { count: draftCount },
     { count: featuredCount },
   ] = await Promise.all([
-    applyMediaListFilters(
-      getSupabaseAdmin()
-        .from("topics")
-        .select("id, title, slug, content_type, category, category_slug, status, is_featured, updated_at")
-        .order("updated_at", { ascending: false }),
-      filters,
-    ),
-    baseQuery,
-    baseQuery.eq("status", "published"),
-    baseQuery.eq("status", "draft"),
-    baseQuery.eq("is_featured", true),
+    query,
+    baseStatsQuery.eq("status", "published"),
+    baseStatsQuery.eq("status", "draft"),
+    baseStatsQuery.eq("is_featured", true),
   ]);
 
   const safeRows = (rows ?? []) as MediaTopicRow[];
-  const contentTypeOptions = buildContentTypeFilterOptions();
-  const filteredCount = safeRows.length;
-  const allCount = totalCount ?? 0;
-  const filtersActive = hasActiveFilters(filters);
 
   return (
     <main className="space-y-7">
+      <MediaListControls />
+
       <AdminPageContextHeader
         eyebrow="MEDIA CENTER CONTROL"
         title="إدارة محتوى المركز الإعلامي"
         description="أنشئ وحرّر الأخبار والبيانات الصحفية وتحديثات التنفيذ والفيديو ومعرض الصور من مكان واحد — مع ربط واضح بالتصنيفات والنشر."
-        breadcrumb={
-          <>
-            <Link href="/admin" className="transition hover:text-[#D8B87A]">
-              الرئيسية
-            </Link>
-            <span className="text-white/25">/</span>
-            <span className="text-white/72">المركز الإعلامي</span>
-          </>
-        }
         actions={
           <>
             <AdminActionButton href="/admin/content/media/new" variant="primary">
@@ -230,120 +322,84 @@ export default async function AdminUnifiedMediaContentPage({
         }
       />
 
-      <AdminMetricCardsGrid
-        items={[
-          { label: "إجمالي المحتوى", value: allCount, tone: "gold", compact: true },
-          { label: "منشور", value: publishedCount ?? 0, tone: "green", compact: true },
-          { label: "مسودات", value: draftCount ?? 0, tone: "amber", compact: true },
-          { label: "مميز", value: featuredCount ?? 0, tone: "violet", compact: true },
-          {
-            label: "المعروض الآن",
-            value: filtersActive ? filteredCount : allCount,
-            tone: "blue",
-            compact: true,
-          },
-          { label: "الأقسام", value: 5, suffix: "أنواع", tone: "cyan", compact: true },
-        ]}
-      />
-
-      <MediaListNavPanel activeContentType={filters.contentType} />
+      {notice ? <AdminNotice variant={params?.notice === "error" ? "danger" : "success"} message={notice} /> : null}
 
       {error ? (
         <AdminNotice variant="danger" title="تعذر تحميل المحتوى الإعلامي" message={error.message} />
       ) : null}
 
-      <section className={ADMIN_FILTER_SHELL_CLASSES} style={ADMIN_FILTER_SHELL_GLOW_STYLE}>
-        <form method="get" action="/admin/content/media" className={ADMIN_FILTER_ROW_CLASSES}>
-          <label className="min-w-[220px] flex-1">
-            <span className="sr-only">بحث</span>
-            <input
-              type="search"
-              name="q"
-              defaultValue={filters.q}
-              placeholder="ابحث في العنوان أو slug..."
-              className={FILTER_FIELD_CLASS}
-            />
-          </label>
+      <AdminMetricCardsGrid
+        items={[
+          { label: "إجمالي المحتوى", value: totalCount, tone: "gold", compact: true },
+          { label: "منشور", value: publishedCount ?? 0, tone: "green", compact: true },
+          { label: "مسودات", value: draftCount ?? 0, tone: "amber", compact: true },
+          { label: "مميز", value: featuredCount ?? 0, tone: "violet", compact: true },
+          { label: "المعروض الآن", value: safeRows.length, tone: "blue", compact: true },
+          { label: "الأقسام", value: 5, suffix: "أنواع", tone: "cyan", compact: true },
+        ]}
+      />
 
-          <label className="min-w-[170px]">
-            <span className="sr-only">نوع المحتوى</span>
-            <select name="content_type" defaultValue={filters.contentType} className={FILTER_FIELD_CLASS}>
-              {contentTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+      <MediaListFilters
+        q={filters.q}
+        contentType={filters.contentType}
+        status={filters.status}
+        featured={filters.featured}
+      />
 
-          <label className="min-w-[150px]">
-            <span className="sr-only">الحالة</span>
-            <select name="status" defaultValue={filters.status} className={FILTER_FIELD_CLASS}>
-              {STATUS_FILTER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+      <section id="media-table" className="scroll-mt-6">
+        <MediaBulkActionsBar currentListPath={currentListPath} />
 
-          <label className="min-w-[150px]">
-            <span className="sr-only">مميز</span>
-            <select name="featured" defaultValue={filters.featured} className={FILTER_FIELD_CLASS}>
-              {FEATURED_FILTER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <AdminDataGrid>
+          <AdminDataGridHeader columns={MEDIA_TABLE_COLUMNS}>
+            <label className="flex items-center justify-center">
+              <input type="checkbox" data-media-select-all className="h-4 w-4 accent-[#D8B87A]" />
+            </label>
+            <span className="text-right">
+              <SortHeader label="العنوان" href={buildHref(queryParams, { sort: getNextSort(sort, "title"), page: "1" })} />
+            </span>
+            <span className="text-center">
+              <SortHeader
+                label="النوع"
+                href={buildHref(queryParams, { sort: getNextSort(sort, "content_type"), page: "1" })}
+              />
+            </span>
+            <span className="text-center">التصنيف</span>
+            <span className="text-center">
+              <SortHeader label="الحالة" href={buildHref(queryParams, { sort: getNextSort(sort, "status"), page: "1" })} />
+            </span>
+            <span className="text-center">
+              <SortHeader label="مميز" href={buildHref(queryParams, { sort: getNextSort(sort, "featured"), page: "1" })} />
+            </span>
+            <span className="text-center">
+              <SortHeader
+                label="آخر تحديث"
+                href={buildHref(queryParams, { sort: getNextSort(sort, "updated"), page: "1" })}
+              />
+            </span>
+            <span className="text-center">الإجراءات</span>
+          </AdminDataGridHeader>
 
-          <button
-            type="submit"
-            className="h-12 shrink-0 rounded-full bg-[#D8B87A] px-5 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
-          >
-            تطبيق
-          </button>
+          {safeRows.length > 0 ? (
+            safeRows.map((row, index) => {
+              const editable = isMediaEditableContentType(row.content_type);
+              const editHref = editable ? `/admin/content/media/${row.id}` : undefined;
 
-          {filtersActive ? (
-            <AdminActionButton href="/admin/content/media" variant="dark">
-              مسح الفلاتر
-            </AdminActionButton>
-          ) : null}
-        </form>
-      </section>
+              return (
+                <AdminDataGridRow key={row.id} columns={MEDIA_TABLE_COLUMNS} divided={index > 0}>
+                  <label className="flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      name="media_ids"
+                      value={row.id}
+                      form="media-bulk-form"
+                      data-media-checkbox
+                      className="h-4 w-4 accent-[#D8B87A]"
+                    />
+                  </label>
 
-      <AdminDataGrid
-        summary={
-          safeRows.length > 0
-            ? `عرض ${filteredCount} عنصرًا${filtersActive ? ` من ${allCount}` : ""} — انقر «تعديل» أو عنوان العنصر للانتقال إلى شاشة التحرير.`
-            : undefined
-        }
-      >
-        <AdminDataGridHeader columns={MEDIA_GRID_COLUMNS}>
-          <span className="text-right">العنوان</span>
-          <span className="text-center">النوع</span>
-          <span className="text-center">التصنيف</span>
-          <span className="text-center">الحالة</span>
-          <span className="text-center">مميز</span>
-          <span className="text-center">آخر تحديث</span>
-          <span className="text-center">الإجراءات</span>
-        </AdminDataGridHeader>
-
-        {safeRows.length > 0 ? (
-          safeRows.map((row, index) => {
-            const editable = isMediaEditableContentType(row.content_type);
-            const editHref = editable ? `/admin/content/media/${row.id}` : undefined;
-
-            return (
-              <AdminDataGridRow key={row.id} columns={MEDIA_GRID_COLUMNS} divided={index > 0}>
-                <AdminDataGridPrimaryCell>
-                  <div className="space-y-1">
+                  <div className="min-w-0 text-right">
                     {editHref ? (
-                      <Link
-                        href={editHref}
-                        className="block truncate text-base font-bold text-white transition hover:text-[#F4D99A]"
-                      >
+                      <Link href={editHref} className="block truncate text-base font-bold text-white transition hover:text-[#F4D99A]">
                         {row.title || "بدون عنوان"}
                       </Link>
                     ) : (
@@ -351,46 +407,62 @@ export default async function AdminUnifiedMediaContentPage({
                     )}
                     {row.slug ? <p className="truncate font-en text-xs text-white/35">{row.slug}</p> : null}
                   </div>
-                </AdminDataGridPrimaryCell>
 
-                <AdminDataGridCenterCell>
-                  <MediaContentTypeBadge contentType={row.content_type} compact />
-                </AdminDataGridCenterCell>
+                  <div className="flex justify-center">
+                    <MediaContentTypeBadge contentType={row.content_type} compact />
+                  </div>
 
-                <AdminDataGridCenterCell>
-                  <span className="truncate text-sm text-white/72">{row.category || "—"}</span>
-                </AdminDataGridCenterCell>
+                  <div className="truncate text-center text-sm text-white/72">{row.category || "—"}</div>
 
-                <AdminDataGridStatusCell>
-                  <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
-                </AdminDataGridStatusCell>
+                  <div className="flex justify-center">
+                    <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
+                  </div>
 
-                <AdminDataGridCenterCell>
-                  {row.is_featured ? (
-                    <AdminStatusPill tone="gold">مميز</AdminStatusPill>
-                  ) : (
-                    <span className="text-sm text-white/28">—</span>
-                  )}
-                </AdminDataGridCenterCell>
+                  <div className="text-center">
+                    {row.is_featured ? (
+                      <AdminStatusPill tone="gold">مميز</AdminStatusPill>
+                    ) : (
+                      <span className="text-sm text-white/28">—</span>
+                    )}
+                  </div>
 
-                <AdminDataGridCenterCell>
-                  <span className="font-en text-sm text-white/62">{formatAdminListDate(row.updated_at)}</span>
-                </AdminDataGridCenterCell>
+                  <div className="text-center font-en text-sm text-white/62">{formatAdminListDate(row.updated_at)}</div>
 
-                <AdminDataGridActionsCell>
-                  {editable && editHref ? (
-                    <AdminDataGridActionButton action="edit" href={editHref} title="تعديل المحتوى" />
-                  ) : (
-                    <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح لهذا النوع" />
-                  )}
-                </AdminDataGridActionsCell>
-              </AdminDataGridRow>
-            );
-          })
-        ) : (
-          <MediaListEmptyState filtersActive={filtersActive} />
-        )}
-      </AdminDataGrid>
+                  <AdminDataGridActionsCell>
+                    {editable && editHref ? (
+                      <AdminDataGridActionButton action="edit" href={editHref} title="تعديل" />
+                    ) : (
+                      <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح" />
+                    )}
+                  </AdminDataGridActionsCell>
+                </AdminDataGridRow>
+              );
+            })
+          ) : (
+            <AdminDataGridEmpty>
+              <p className="text-lg font-semibold text-white">لا توجد عناصر مطابقة.</p>
+              <p className="mt-3 text-sm text-white/45">جرّب تصفير الفلاتر أو إنشاء محتوى جديد.</p>
+              <Link
+                href="/admin/content/media/new"
+                className="mt-6 inline-flex rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C]"
+              >
+                + إضافة محتوى جديد
+              </Link>
+            </AdminDataGridEmpty>
+          )}
+        </AdminDataGrid>
+
+        <AdminTablePagination
+          basePath="/admin/content/media"
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          totalCount={totalCount}
+          pageSize={limitValue}
+          currentPage={safePage}
+          totalPages={totalPages}
+          emptySummaryText="لا توجد عناصر مطابقة"
+        />
+      </section>
     </main>
   );
 }
