@@ -1,0 +1,199 @@
+# ADR: Unified Content Engine
+
+**Status:** Accepted (architecture)  
+**Date:** 2026-07-05  
+**Scope:** Topics + Media Center convergence — documentation only at Phase 0  
+**Related:** `docs/database/migration-metadata.md`, prior audit reports (Topics / Media / Series)
+
+---
+
+## 1. القرار المعتمد
+
+نعتمد **Unified Content Engine** كمسار تدريجي — وليس دمجًا فوريًا — بحيث يصبح Venesia CMS يدير كل المحتوى النصي/الإعلامي من **نظام واحد**:
+
+| Layer | Decision |
+|---|---|
+| **Content items (interim)** | `topics` becomes the temporary unified content table |
+| **Categories** | `topic_categories` becomes the single hierarchical taxonomy tree |
+| **Series** | `topic_series` remains **optional** — used when needed, never required for Media Center content |
+| **Media Center (future)** | Becomes a **branch** inside the same category tree — not a separate CMS domain |
+| **Legacy (now)** | `media_items` + `media_categories` stay **frozen** — no migration, no admin changes, no drops until later phases |
+
+**What we are NOT doing now:** schema changes, DB seeds, UI changes, public route changes, or media data migration.
+
+---
+
+## 2. الوضع الحالي
+
+### 2.1 Topics domain (production)
+
+| Table | Role |
+|---|---|
+| `topics` | Articles / editorial content — markdown `content`, global unique `slug`, optional `series_id` |
+| `topic_categories` | Tree via `parent_id` — currently: `topics` → `bait-al-watan`, `know-the-market` |
+| `topic_series` | Optional grouping — FK to `topic_categories`, linked from `topics.series_id` |
+
+**Admin:** `/admin/topics`, `/admin/topics/categories`, `/admin/content/series`  
+**Public:** `/topics`, `/topics/[slug]`  
+**Modules:** Feed modules query `topics` only.
+
+### 2.2 Media domain (legacy / frozen)
+
+| Table | Role |
+|---|---|
+| `media_items` | All media types in one table — `type` CHECK: `news \| video \| gallery \| press \| site-update`; `(type, slug)` unique; `content text[]` |
+| `media_categories` | Flat editorial tags (13 rows) — **not** the same as media `type` buckets |
+
+**Admin:** `/admin/media-center`, `/admin/media-center/categories` — **frozen after Phase 0** (no new features, no filter UI work, no migration prep in admin until Phase 3+)  
+**Public:** `/media-center/{type}`, `/media-center/{type}/[slug]`  
+**Modules:** Media hub, media sidebar, hero sources (`latest_media`, `featured_media`, `media_category`) query `media_items`.
+
+### 2.3 Parallel systems — the conflict
+
+- Two content tables, two category systems, two admin surfaces, two public URL namespaces.
+- `media_items.type` ≈ future `content_type`; `media_categories` ≈ editorial tags, not structural navigation.
+- Recent cleanup removed misplaced `media-center` rows from `topic_categories` because they were seeded **without** `content_type` or form UX guards — causing Media categories to appear in normal article forms.
+
+**Current DB snapshot (2026-07-05):** ~68 active topics, ~28 active media_items, 3 production `topic_categories`, 13 `media_categories`.
+
+---
+
+## 3. التصميم المستهدف
+
+### 3.1 Interim content model
+
+**`topics` = temporary `content_items` kernel** until a dedicated table is justified.
+
+Future column (Phase 1 — not now):
+
+```
+content_type:
+  article      — default for all existing topics (موضوعات تهمك)
+  news
+  video
+  gallery
+  press
+  site_update  — maps from media type site-update
+```
+
+Additional columns deferred to Phase 1+ / migration planning: `content_blocks`, `project`, `duration`, `sort_order`, `og_image`, `schema_type`, `legacy_media_id`.
+
+### 3.2 Target category tree (`topic_categories`)
+
+```
+موضوعات تهمك (topics)
+├── بيت الوطن (bait-al-watan)
+└── اعرف السوق (know-the-market)
+
+المركز الإعلامي (media-center)          ← NOT seeded until Phase 2
+├── الأخبار (media-news)
+├── من أرض التنفيذ (media-site-updates)
+├── الفيديوهات (media-videos)
+├── البيانات الصحفية (media-press)
+└── معرض الصور (media-gallery)
+```
+
+**Mapping intent:**
+
+- `content_type` drives renderer, admin form variant, SEO schema, list filters.
+- Category **leaf** drives navigation grouping and optional feed filters.
+- **Series:** optional on any content; Media Center content does **not** require series.
+
+### 3.3 Legacy media tags
+
+The 13 `media_categories` rows (e.g. «من أرض التنفيذ», «أخبار الشركة») are **editorial tags**, not structural tree nodes. Their migration strategy is deferred to Phase 4 planning — options: sub-categories under leaves, `tags[]` field, or archived denormalized labels.
+
+---
+
+## 4. قرار مهم — لا seed لـ media-center قبل UX guards
+
+**Do not seed the `media-center` branch into `topic_categories` until Phase 2**, and only together with (or after) **`content_type` on `topics` (Phase 1)** and **admin UX guards** so that:
+
+- Media Center category leaves **do not appear** in the normal **article** create/edit category picker in a confusing way.
+- Editors creating `content_type = article` see only the «موضوعات تهمك» branch (or equivalent filtered tree).
+- Editors creating `content_type = news | video | …` see the appropriate Media branch.
+
+**Rationale:** Phase B0-style seed-only was rejected because it recreates the taxonomy confusion we just cleaned up — Media categories visible inside generic topic forms without type discrimination.
+
+**Phase 2 minimum bar:**
+
+1. `content_type` column exists with default `article`.
+2. Category pickers filtered by `content_type` (or by allowed category subtree).
+3. Then — and only then — seed `media-center` + five children.
+
+---
+
+## 5. خطة التنفيذ المرحلية (معدّلة)
+
+| Phase | Name | Deliverables | Touch DB? | Touch UI? |
+|---|---|---|---|---|
+| **0** | **ADR only** | This document | No | No |
+| **1** | `content_type` | Add column to `topics`, default `article`, CHECK constraint, backfill implicit | Yes | Minimal (hidden/default) |
+| **2** | Category tree + guards | Seed `media-center` branch; filter category pickers by `content_type` | Yes | Yes (forms) |
+| **3** | Admin content routing | List tabs / routes / edit forms per `content_type`; freeze legacy media admin UI | Maybe | Yes |
+| **4** | Data migration | `media_items` → `topics` with mapping table, slug dedup, dual-read adapter | Yes | Yes |
+| **5** | Public + modules cutover | Redirects `/media-center/*`, feed/hub/hero/link picker → `topics` | Maybe | Yes (public) |
+| **6** | Legacy archive | Deprecate media admin routes; read-only then drop `media_items` / `media_categories` | Yes | Yes |
+
+**Phase 0 exit criteria:** ADR reviewed and accepted — **no other changes**.
+
+---
+
+## 6. ممنوعات حالية (Phase 0 → until Phase 1 kickoff)
+
+The following are **explicitly out of scope** until their phase:
+
+- No media data migration
+- No public route changes
+- No Media Center admin changes (frozen)
+- No drop / truncate of `media_items` or `media_categories`
+- **No seed of `media-center` branch in `topic_categories`**
+- No changes to TopicsListFilters / filter primitives
+- No changes to AdminMetricCardsGrid, pagination, table header systems, or page context header contracts
+
+---
+
+## 7. المخاطر
+
+| Risk | Description | Mitigation |
+|---|---|---|
+| **Category picker confusion** | Media leaves visible in article forms | Phase 2 blocked on `content_type` + UX guards (§4) |
+| **Slug collision** | `topics.slug` global unique vs `media_items (type, slug)` | Pre-migration audit; prefix/suffix strategy in Phase 4 |
+| **Public SEO** | Two URL namespaces today | Phase 5: 301 map + `legacy_media_id` |
+| **Module regression** | Feed (topics) vs hub/sidebar/hero (media) | Adapter layer in Phase 4 before cutover |
+| **media_categories mapping** | 13 editorial tags ≠ 5 structural leaves | Explicit mapping doc in Phase 4; no automatic 1:1 |
+| **Delete-guard inconsistency** | List filters vs delete checks (`deleted_at`, `series_id` vs `series_slug`) | Fix in separate maintenance pass; not Phase 0 |
+| **Premature seed** | Tree without `content_type` | **Rejected** — this ADR replaces Phase B0 seed-only |
+
+---
+
+## 8. Files and systems — expected impact (future phases)
+
+For planning only — **no changes in Phase 0.**
+
+**Schema:** `topics`, `topic_categories`, optional `legacy_content_map`  
+**Admin:** `src/app/admin/topics/**`, `src/app/admin/content/series/**`, `src/app/admin/media-center/**` (deprecate)  
+**Lib:** `src/lib/media-center.ts`, `src/lib/feed-modules/**`, `src/lib/media-hub-modules/**`, `src/lib/media-sidebar-modules/**`, `src/lib/load-hero-section.ts`, `src/lib/admin/links/**`, `src/lib/export/cms-backup-config.ts`  
+**Public:** `src/app/topics/**`, `src/app/media-center/**`
+
+---
+
+## 9. References
+
+- Foundational schema: `sql/migrations/20250618000000_foundational_schema_baseline.sql`
+- Media admin config: `src/app/admin/media-center/_components/media-admin-config.ts`
+- Feed modules: `src/lib/feed-modules/` (topics-only)
+- Media hub: `src/lib/media-hub-modules/` (media_items-only)
+- CMS backup tables: `src/lib/export/cms-backup-config.ts`
+- Admin UI filter primitives: `src/components/admin/ui/admin-filter-styles.ts` (do not modify in Phase 0)
+
+---
+
+## 10. Approval log
+
+| Role | Decision | Date |
+|---|---|---|
+| Architecture review | Unified direction approved; Phase B0 seed-only **rejected** | 2026-07-05 |
+| Phase 0 | ADR documentation only | 2026-07-05 |
+
+**Next step when ready:** Phase 1 — migration adding `content_type` to `topics` with default `article` (separate PR / task).
