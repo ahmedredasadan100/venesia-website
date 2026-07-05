@@ -172,13 +172,39 @@ function FilterIcon() {
   );
 }
 
+function formatContentCount(count: number) {
+  if (count === 0) return "0 محتوى";
+  if (count === 1) return "عنصر محتوى";
+  return `${count} عناصر محتوى`;
+}
+
+function formatChildCategoryCount(count: number) {
+  if (count === 1) return "تصنيف فرعي واحد";
+  return `${count} تصنيفات فرعية`;
+}
+
 function CountLabel({ category }: { category: CategoryNode }) {
   const count = category.totalCount;
-  if (category.children.length > 0 && count === 0)
-    return <>{category.children.length} فرعي</>;
-  if (count === 1) return <>عنصر</>;
-  if (count <= 10 && category.slug !== "topics") return <>{count} عناصر</>;
-  return <>{count} مقال</>;
+  const childCount = category.children.length;
+  const hasChildren = childCount > 0;
+
+  if (hasChildren && count === 0) {
+    return (
+      <>
+        0 محتوى / {formatChildCategoryCount(childCount)}
+      </>
+    );
+  }
+
+  if (hasChildren && count > 0) {
+    return (
+      <>
+        {formatContentCount(count)} (شامل الفروع)
+      </>
+    );
+  }
+
+  return <>{formatContentCount(count)}</>;
 }
 
 function TreeLines({
