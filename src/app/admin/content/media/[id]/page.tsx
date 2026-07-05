@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import AdminNotice from "../../../../../components/admin/AdminNotice";
 import { AdminActionButton, AdminPageContextHeader } from "../../../../../components/admin/ui";
 import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { isMediaEditableContentType } from "../media-content-config";
+import MediaContentTypeBadge from "../MediaContentTypeBadge";
+import { getContentTypeLabel, isMediaEditableContentType } from "../media-content-config";
 import MediaContentForm from "../MediaContentForm";
 
 export const dynamic = "force-dynamic";
@@ -48,9 +50,24 @@ export default async function EditMediaContentPage({
   return (
     <main className="space-y-7">
       <AdminPageContextHeader
-        eyebrow="UNIFIED MEDIA CONTENT"
+        eyebrow="MEDIA CENTER CONTROL"
         title="تعديل محتوى إعلامي"
-        description="عدّل محتوى topics ضمن الأقسام المسموحة. الفيديو ومعرض الصور يُحفظان في media_payload — بدون تأثير على الواجهة العامة."
+        contextLine={topic.title || "بدون عنوان"}
+        description="عدّل بيانات النشر والمحتوى حسب نوع القسم — الفيديو ومعرض الصور يستخدمان حقولًا مخصصة."
+        meta={<MediaContentTypeBadge contentType={topic.content_type} compact />}
+        breadcrumb={
+          <>
+            <Link href="/admin" className="transition hover:text-[#D8B87A]">
+              الرئيسية
+            </Link>
+            <span className="text-white/25">/</span>
+            <Link href="/admin/content/media" className="transition hover:text-[#D8B87A]">
+              المركز الإعلامي
+            </Link>
+            <span className="text-white/25">/</span>
+            <span className="text-white/72">{getContentTypeLabel(topic.content_type)}</span>
+          </>
+        }
         actions={
           <>
             <AdminActionButton href="/admin/content/media" variant="dark">
@@ -58,6 +75,9 @@ export default async function EditMediaContentPage({
             </AdminActionButton>
             <AdminActionButton href="/admin/content/media/new" variant="dark">
               إضافة محتوى
+            </AdminActionButton>
+            <AdminActionButton href="/admin/topics/categories" variant="dark">
+              إدارة التصنيفات
             </AdminActionButton>
           </>
         }

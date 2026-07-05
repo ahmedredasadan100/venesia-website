@@ -1,3 +1,4 @@
+import Link from "next/link";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
@@ -9,12 +10,11 @@ import {
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
   AdminDataGridCenterCell,
-  AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridStatusCell,
-  AdminInfoBar,
+  AdminMetricCardsGrid,
   AdminPageContextHeader,
   AdminStatusPill,
   AdminActionButton,
@@ -23,6 +23,9 @@ import { applyAdminListTextSearch } from "../../../../lib/admin/admin-list-searc
 import { formatAdminListDate } from "../../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
+import MediaContentTypeBadge from "./MediaContentTypeBadge";
+import MediaListEmptyState from "./MediaListEmptyState";
+import MediaListNavPanel from "./MediaListNavPanel";
 import {
   getContentTypeLabel,
   isMediaEditableContentType,
@@ -76,8 +79,8 @@ const FEATURED_FILTER_OPTIONS = [
 const FILTER_FIELD_CLASS =
   "h-12 w-full rounded-[8px] border border-white/10 bg-black/20 px-4 text-sm text-white outline-none transition placeholder:text-white/36 focus:border-[#D8B87A]/35";
 
-/** Date column width — matches Topics list published/updated column (125px). */
-const MEDIA_GRID_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_COLUMNS.count} 125px ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
+/** Type badge column — fixed width for Arabic type labels. */
+const MEDIA_GRID_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_COLUMNS.count} 125px ${ADMIN_DATA_GRID_ACTION_COLUMNS.one}`;
 
 function cleanSearch(value: string) {
   return value.replace(/[,%]/g, " ").replace(/\s+/g, " ").trim();
@@ -174,6 +177,7 @@ export default async function AdminUnifiedMediaContentPage({
     { data: rows, error },
     { count: totalCount },
     { count: publishedCount },
+    { count: draftCount },
     { count: featuredCount },
   ] = await Promise.all([
     applyMediaListFilters(
@@ -185,6 +189,7 @@ export default async function AdminUnifiedMediaContentPage({
     ),
     baseQuery,
     baseQuery.eq("status", "published"),
+    baseQuery.eq("status", "draft"),
     baseQuery.eq("is_featured", true),
   ]);
 
@@ -197,30 +202,51 @@ export default async function AdminUnifiedMediaContentPage({
   return (
     <main className="space-y-7">
       <AdminPageContextHeader
-        eyebrow="UNIFIED MEDIA CONTENT"
-        title="محتوى المركز الإعلامي"
-        description="قائمة المحتوى الإعلامي الجديد من جدول topics فقط. هذه الواجهة إدارية بالتوازي مع النظام القديم — لا تؤثر على الواجهة العامة أو media_items."
+        eyebrow="MEDIA CENTER CONTROL"
+        title="إدارة محتوى المركز الإعلامي"
+        description="أنشئ وحرّر الأخبار والبيانات الصحفية وتحديثات التنفيذ والفيديو ومعرض الصور من مكان واحد — مع ربط واضح بالتصنيفات والنشر."
+        breadcrumb={
+          <>
+            <Link href="/admin" className="transition hover:text-[#D8B87A]">
+              الرئيسية
+            </Link>
+            <span className="text-white/25">/</span>
+            <span className="text-white/72">المركز الإعلامي</span>
+          </>
+        }
         actions={
           <>
             <AdminActionButton href="/admin/content/media/new" variant="primary">
               <PlusIcon />
               إضافة محتوى جديد
             </AdminActionButton>
+            <AdminActionButton href="/admin/topics/categories" variant="dark">
+              إدارة التصنيفات
+            </AdminActionButton>
             <AdminActionButton href="/admin/topics" variant="dark">
               عرض المقالات
-            </AdminActionButton>
-            <AdminActionButton href="/admin/topics/categories" variant="dark">
-              عرض التصنيفات
             </AdminActionButton>
           </>
         }
       />
 
-      <AdminInfoBar
-        label="محتوى المركز الإعلامي — Unified"
-        description="الإنشاء والتعديل متاحان للأخبار والبيانات الصحفية ومن أرض التنفيذ والفيديو ومعرض الصور. الفيديو والمعرض يُحفظان في media_payload داخل topics — بدون تأثير على الواجهة العامة."
-        meta={`${allCount} إجمالي المحتوى / ${publishedCount ?? 0} منشور / ${featuredCount ?? 0} مميز`}
+      <AdminMetricCardsGrid
+        items={[
+          { label: "إجمالي المحتوى", value: allCount, tone: "gold", compact: true },
+          { label: "منشور", value: publishedCount ?? 0, tone: "green", compact: true },
+          { label: "مسودات", value: draftCount ?? 0, tone: "amber", compact: true },
+          { label: "مميز", value: featuredCount ?? 0, tone: "violet", compact: true },
+          {
+            label: "المعروض الآن",
+            value: filtersActive ? filteredCount : allCount,
+            tone: "blue",
+            compact: true,
+          },
+          { label: "الأقسام", value: 5, suffix: "أنواع", tone: "cyan", compact: true },
+        ]}
       />
+
+      <MediaListNavPanel activeContentType={filters.contentType} />
 
       {error ? (
         <AdminNotice variant="danger" title="تعذر تحميل المحتوى الإعلامي" message={error.message} />
@@ -289,14 +315,14 @@ export default async function AdminUnifiedMediaContentPage({
 
       <AdminDataGrid
         summary={
-          filtersActive || filteredCount > 0
-            ? `عرض ${filteredCount} عنصرًا من ${allCount} — الإنشاء والتعديل متاحان لجميع أقسام المركز الإعلامي الخمسة.`
+          safeRows.length > 0
+            ? `عرض ${filteredCount} عنصرًا${filtersActive ? ` من ${allCount}` : ""} — انقر «تعديل» أو عنوان العنصر للانتقال إلى شاشة التحرير.`
             : undefined
         }
       >
         <AdminDataGridHeader columns={MEDIA_GRID_COLUMNS}>
           <span className="text-right">العنوان</span>
-          <span className="text-center">نوع المحتوى</span>
+          <span className="text-center">النوع</span>
           <span className="text-center">التصنيف</span>
           <span className="text-center">الحالة</span>
           <span className="text-center">مميز</span>
@@ -305,50 +331,64 @@ export default async function AdminUnifiedMediaContentPage({
         </AdminDataGridHeader>
 
         {safeRows.length > 0 ? (
-          safeRows.map((row, index) => (
-            <AdminDataGridRow key={row.id} columns={MEDIA_GRID_COLUMNS} divided={index > 0}>
-              <AdminDataGridPrimaryCell>
-                <div className="space-y-1">
-                  <h3 className="truncate text-base font-bold text-white">{row.title || "بدون عنوان"}</h3>
-                  {row.slug ? <p className="truncate font-en text-xs text-white/35">{row.slug}</p> : null}
-                </div>
-              </AdminDataGridPrimaryCell>
+          safeRows.map((row, index) => {
+            const editable = isMediaEditableContentType(row.content_type);
+            const editHref = editable ? `/admin/content/media/${row.id}` : undefined;
 
-              <AdminDataGridCenterCell>
-                <span className="text-sm text-white/72">{getContentTypeLabel(row.content_type)}</span>
-              </AdminDataGridCenterCell>
+            return (
+              <AdminDataGridRow key={row.id} columns={MEDIA_GRID_COLUMNS} divided={index > 0}>
+                <AdminDataGridPrimaryCell>
+                  <div className="space-y-1">
+                    {editHref ? (
+                      <Link
+                        href={editHref}
+                        className="block truncate text-base font-bold text-white transition hover:text-[#F4D99A]"
+                      >
+                        {row.title || "بدون عنوان"}
+                      </Link>
+                    ) : (
+                      <h3 className="truncate text-base font-bold text-white">{row.title || "بدون عنوان"}</h3>
+                    )}
+                    {row.slug ? <p className="truncate font-en text-xs text-white/35">{row.slug}</p> : null}
+                  </div>
+                </AdminDataGridPrimaryCell>
 
-              <AdminDataGridCenterCell>
-                <span className="truncate text-sm text-white/72">{row.category || "—"}</span>
-              </AdminDataGridCenterCell>
+                <AdminDataGridCenterCell>
+                  <MediaContentTypeBadge contentType={row.content_type} compact />
+                </AdminDataGridCenterCell>
 
-              <AdminDataGridStatusCell>
-                <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
-              </AdminDataGridStatusCell>
+                <AdminDataGridCenterCell>
+                  <span className="truncate text-sm text-white/72">{row.category || "—"}</span>
+                </AdminDataGridCenterCell>
 
-              <AdminDataGridCenterCell>
-                <span className="font-en text-sm text-white/62">{row.is_featured ? "نعم" : "—"}</span>
-              </AdminDataGridCenterCell>
+                <AdminDataGridStatusCell>
+                  <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
+                </AdminDataGridStatusCell>
 
-              <AdminDataGridCenterCell>
-                <span className="font-en text-sm text-white/62">{formatAdminListDate(row.updated_at)}</span>
-              </AdminDataGridCenterCell>
+                <AdminDataGridCenterCell>
+                  {row.is_featured ? (
+                    <AdminStatusPill tone="gold">مميز</AdminStatusPill>
+                  ) : (
+                    <span className="text-sm text-white/28">—</span>
+                  )}
+                </AdminDataGridCenterCell>
 
-              <AdminDataGridActionsCell>
-                {isMediaEditableContentType(row.content_type) ? (
-                  <AdminDataGridActionButton action="edit" href={`/admin/content/media/${row.id}`} title="تعديل" />
-                ) : (
-                  <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح لهذا النوع" />
-                )}
-              </AdminDataGridActionsCell>
-            </AdminDataGridRow>
-          ))
+                <AdminDataGridCenterCell>
+                  <span className="font-en text-sm text-white/62">{formatAdminListDate(row.updated_at)}</span>
+                </AdminDataGridCenterCell>
+
+                <AdminDataGridActionsCell>
+                  {editable && editHref ? (
+                    <AdminDataGridActionButton action="edit" href={editHref} title="تعديل المحتوى" />
+                  ) : (
+                    <AdminDataGridActionButton action="edit" disabled title="التعديل غير متاح لهذا النوع" />
+                  )}
+                </AdminDataGridActionsCell>
+              </AdminDataGridRow>
+            );
+          })
         ) : (
-          <AdminDataGridEmpty>
-            {filtersActive
-              ? "لا توجد نتائج مطابقة للفلاتر الحالية."
-              : "لا يوجد محتوى إعلامي في topics بعد. أنشئ عنصرًا جديدًا من «إضافة محتوى جديد» للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ، الفيديو، معرض الصور."}
-          </AdminDataGridEmpty>
+          <MediaListEmptyState filtersActive={filtersActive} />
         )}
       </AdminDataGrid>
     </main>

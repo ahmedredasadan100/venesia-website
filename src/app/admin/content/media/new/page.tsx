@@ -1,3 +1,4 @@
+import Link from "next/link";
 import AdminNotice from "../../../../../components/admin/AdminNotice";
 import { AdminActionButton, AdminPageContextHeader } from "../../../../../components/admin/ui";
 import MediaContentForm from "../MediaContentForm";
@@ -19,16 +20,30 @@ export default async function NewMediaContentPage({
   return (
     <main className="space-y-7">
       <AdminPageContextHeader
-        eyebrow="UNIFIED MEDIA CONTENT"
+        eyebrow="MEDIA CENTER CONTROL"
         title="إضافة محتوى إعلامي"
-        description="أنشئ محتوى جديدًا داخل topics للأقسام: الأخبار، البيانات الصحفية، من أرض التنفيذ، الفيديو، معرض الصور. لا يؤثر هذا على الواجهة العامة أو media_items."
+        contextLine="إنشاء عنصر جديد"
+        description="اختر قسم المركز الإعلامي أولًا — النموذج يتكيّف تلقائيًا بين المحتوى النصي والفيديو ومعرض الصور."
+        breadcrumb={
+          <>
+            <Link href="/admin" className="transition hover:text-[#D8B87A]">
+              الرئيسية
+            </Link>
+            <span className="text-white/25">/</span>
+            <Link href="/admin/content/media" className="transition hover:text-[#D8B87A]">
+              المركز الإعلامي
+            </Link>
+            <span className="text-white/25">/</span>
+            <span className="text-white/72">إضافة جديد</span>
+          </>
+        }
         actions={
           <>
             <AdminActionButton href="/admin/content/media" variant="dark">
               عرض القائمة
             </AdminActionButton>
-            <AdminActionButton href="/admin/topics" variant="dark">
-              عرض المقالات
+            <AdminActionButton href="/admin/topics/categories" variant="dark">
+              إدارة التصنيفات
             </AdminActionButton>
           </>
         }
