@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import {
@@ -51,10 +52,15 @@ async function resolveMediaItems(type?: MediaContentType) {
   return sortByNewest(merged.flat());
 }
 
-const resolveMediaItemBySlug = cache(async function resolveMediaItemBySlug(
-  type: MediaContentType,
-  slug: string,
-) {
+async function resolveMediaItemsCached(type?: MediaContentType) {
+  return unstable_cache(
+    async () => resolveMediaItems(type),
+    ["media-items", type ?? "all"],
+    { revalidate: 300, tags: ["media-center"] },
+  )();
+}
+
+async function queryMediaItemBySlug(type: MediaContentType, slug: string) {
   const source = getPublicMediaContentSource();
 
   if (source === "legacy") {
@@ -67,6 +73,17 @@ const resolveMediaItemBySlug = cache(async function resolveMediaItemBySlug(
   }
 
   return legacyGetMediaItemBySlug(type, slug);
+}
+
+const resolveMediaItemBySlug = cache(async function resolveMediaItemBySlug(
+  type: MediaContentType,
+  slug: string,
+) {
+  return unstable_cache(
+    async () => queryMediaItemBySlug(type, slug),
+    ["media-item", type, slug],
+    { revalidate: 300, tags: ["media-center", "media-item"] },
+  )();
 });
 
 async function resolveMediaStaticParams(type: MediaContentType) {
@@ -85,7 +102,7 @@ async function resolveMediaStaticParams(type: MediaContentType) {
 }
 
 export async function getMediaItems(type?: MediaContentType) {
-  return resolveMediaItems(type);
+  return resolveMediaItemsCached(type);
 }
 
 export async function getMediaItemBySlug(type: MediaContentType, slug: string) {
