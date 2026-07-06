@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import { mapProjectBundleToPublicProject, mapProjectRowToPublicProject } from "./map-public-project";
@@ -64,7 +66,9 @@ export async function loadPublishedProjectSlugs(): Promise<string[]> {
   return (data ?? []).map((row) => String(row.slug)).filter(Boolean);
 }
 
-export async function loadProjectBySlug(slug: string): Promise<PublicProject | null> {
+export const loadProjectBySlug = cache(async function loadProjectBySlug(
+  slug: string,
+): Promise<PublicProject | null> {
   const supabase = getSupabaseAdmin();
 
   const { data: project, error: projectError } = await supabase
@@ -109,7 +113,7 @@ export async function loadProjectBySlug(slug: string): Promise<PublicProject | n
     deliverySpecItems: deliverySpecItems ?? [],
     media: (media ?? []) as ProjectMediaRow[],
   });
-}
+});
 
 export async function loadFeaturedProjects(): Promise<PublicProject[]> {
   const projects = await loadPublishedProjects();

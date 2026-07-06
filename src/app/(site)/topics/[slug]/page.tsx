@@ -1,3 +1,4 @@
+import { cache } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -69,7 +70,7 @@ function mapTopic(topic: DbTopic) {
   };
 }
 
-async function getTopicBySlug(slug: string) {
+const getTopicBySlug = cache(async function getTopicBySlug(slug: string) {
   if (isTestTopicSlug(slug)) return null;
 
   const { data, error } = await supabase
@@ -83,7 +84,7 @@ async function getTopicBySlug(slug: string) {
   if (error || !data) return null;
 
   return mapTopic(data as DbTopic);
-}
+});
 
 async function getRelatedTopics(topic: ReturnType<typeof mapTopic>) {
   const filters: string[] = [];

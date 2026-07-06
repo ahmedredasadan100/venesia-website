@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import {
   legacyGetMediaItemBySlug,
   legacyGetMediaItems,
@@ -49,7 +51,10 @@ async function resolveMediaItems(type?: MediaContentType) {
   return sortByNewest(merged.flat());
 }
 
-async function resolveMediaItemBySlug(type: MediaContentType, slug: string) {
+const resolveMediaItemBySlug = cache(async function resolveMediaItemBySlug(
+  type: MediaContentType,
+  slug: string,
+) {
   const source = getPublicMediaContentSource();
 
   if (source === "legacy") {
@@ -62,7 +67,7 @@ async function resolveMediaItemBySlug(type: MediaContentType, slug: string) {
   }
 
   return legacyGetMediaItemBySlug(type, slug);
-}
+});
 
 async function resolveMediaStaticParams(type: MediaContentType) {
   const source = getPublicMediaContentSource();
