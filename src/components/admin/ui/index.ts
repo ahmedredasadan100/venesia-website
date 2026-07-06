@@ -64,6 +64,9 @@ export {
   AdminDataGridActionButton,
   AdminDataGridEmpty,
 } from "./AdminDataGrid";
+export { default as AdminDataGridRowActions } from "./AdminDataGridRowActions";
+export type { AdminDataGridRowActionsProps } from "./AdminDataGridRowActions";
+export { default as AdminDuplicateResourceModal } from "./AdminDuplicateResourceModal";
 
 export { default as AdminSlugField } from "./AdminSlugField";
 export { default as AdminLinkField } from "./AdminLinkField";
