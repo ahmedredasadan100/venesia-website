@@ -9,7 +9,7 @@ import { loadProjectBySlug } from "../../../../lib/projects/load-published-proje
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { buildMetadata } from "../../../../lib/seo/build-metadata";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 type ProjectTrackPageProps = {
   params: Promise<{
