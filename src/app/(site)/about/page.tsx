@@ -2,7 +2,7 @@ import AboutPageContent from "../../../components/about/AboutPageContent";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { buildMetadata } from "../../../lib/seo/build-metadata";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 export const metadata = buildMetadata({ path: "/about" });
 
 export default async function AboutPage() {

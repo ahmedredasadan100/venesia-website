@@ -2,7 +2,7 @@ import TrackPageContent from "../../../components/track/TrackPageContent";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { buildMetadata } from "../../../lib/seo/build-metadata";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 export const metadata = buildMetadata({ path: "/track-your-project" });
 
 export default async function TrackYourProjectPage() {

@@ -4,7 +4,7 @@ import DynamicHeroSection from "../../components/sections/DynamicHeroSection";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 import { findHeroInComposition } from "../../lib/page-blocks/page-composition-utils";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export default async function HomePage() {
   const composition = await loadPageCompositionBySlug("home", "stack");
