@@ -1,6 +1,6 @@
 import Link from "next/link";
 import AdminNotice from "../../../components/admin/AdminNotice";
-import { AdminInfoBar, AdminPageHeader } from "../../../components/admin/ui";
+import { AdminInfoBar, AdminPageContextHeader, AdminPageHeader } from "../../../components/admin/ui";
 import { countProjectsByType } from "../../../lib/projects/queries";
 import { getProjectsTableReady } from "../../../lib/projects/seed-from-static-data";
 import { ProjectsHubCard } from "./ProjectsTableClient";
@@ -50,11 +50,10 @@ export default async function ProjectsHubPage({
 
   return (
     <main className="space-y-7">
-      <AdminPageHeader
-        variant="context"
-        title="المشاريع"
-        contextLine="أنت الآن تدير: مركز المشروعات"
-        description="اختر نوع المشاريع لإدارتها. الواجهة العامة تقرأ من Supabase — المصدر الوحيد بعد الإطلاق."
+      <AdminPageContextHeader
+        eyebrow="PROJECTS CONTROL"
+        title="إدارة المشاريع"
+        description="اختر نوع المشاريع لإدارتها. الواجهة العامة تقرأ من Supabase Projects — المصدر الرسمي للمحتوى بعد الإطلاق."
       />
 
       <AdminInfoBar
