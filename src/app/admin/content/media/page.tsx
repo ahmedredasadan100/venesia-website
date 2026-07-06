@@ -1,34 +1,16 @@
-import Link from "next/link";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
-  ADMIN_DATA_GRID_ACTION_COLUMNS,
-  ADMIN_DATA_GRID_COLUMNS,
-  ADMIN_DATA_GRID_RULES,
   AdminActionButton,
-  AdminDataGrid,
-  AdminDataGridCenterCell,
-  AdminDataGridCheckboxCell,
-  AdminDataGridEmpty,
-  AdminDataGridHeader,
-  AdminDataGridPrimaryCell,
-  AdminDataGridRow,
-  AdminDataGridSortLink,
-  AdminDataGridStatusCell,
   AdminMetricCardsGrid,
   AdminPageContextHeader,
-  AdminStatusPill,
   AdminTablePagination,
 } from "../../../../components/admin/ui";
 import { applyAdminListTextSearch } from "../../../../lib/admin/admin-list-search";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
-import { bulkUpdateMediaContent } from "./actions";
-import MediaCategoryBadge from "./MediaCategoryBadge";
-import MediaListControls from "./MediaListControls";
 import MediaListFilters from "./MediaListFilters";
-import MediaRowActions from "./MediaRowActions";
+import MediaTableClient from "./MediaTableClient";
 import {
-  isMediaEditableContentType,
   MEDIA_LIST_CONTENT_TYPES,
   type MediaListContentType,
 } from "./media-content-config";
@@ -69,8 +51,6 @@ const LIMIT_OPTIONS = ["10", "20", "30"];
 const DEFAULT_LIMIT = "10";
 const DEFAULT_SORT = "updated_desc";
 const VISIBLE_SORT_VALUES = new Set(["title_asc", "title_desc", "status_asc", "status_desc"]);
-
-const MEDIA_TABLE_COLUMNS = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slug} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 function cleanSearch(value: string) {
   return value.replace(/[,%]/g, " ").replace(/\s+/g, " ").trim();
@@ -171,20 +151,6 @@ function getSortMeta(sort: string, column: "title" | "status") {
   return { active: false, direction: "asc" as const };
 }
 
-function getStatusTone(status?: string | null): "green" | "gold" | "muted" | "red" {
-  if (status === "published") return "green";
-  if (status === "unpublished") return "red";
-  if (status === "archived") return "muted";
-  return "gold";
-}
-
-function getStatusLabel(status?: string | null) {
-  if (status === "published") return "منشور";
-  if (status === "unpublished") return "مخفي";
-  if (status === "archived") return "أرشيف";
-  return "مسودة";
-}
-
 function getNoticeText(notice?: string) {
   if (notice === "published") return "تم نشر المحتوى بنجاح.";
   if (notice === "unpublished") return "تم إخفاء المحتوى بنجاح.";
@@ -193,50 +159,6 @@ function getNoticeText(notice?: string) {
   if (notice === "saved") return "تم تنفيذ الإجراء على العناصر المحددة بنجاح.";
   if (notice === "error") return "تعذر تنفيذ العملية. راجع البيانات وحاول مرة أخرى.";
   return null;
-}
-
-function MediaBulkActionsBar({ currentListPath }: { currentListPath: string }) {
-  return (
-    <form
-      id="media-bulk-form"
-      action={bulkUpdateMediaContent}
-      data-media-bulk-bar
-      hidden
-      className="mb-3 rounded-[14px] border border-[#D8B87A]/16 bg-[#0B1016] p-3 shadow-[0_18px_55px_rgba(0,0,0,0.32)]"
-    >
-      <input type="hidden" name="redirect_to" value={currentListPath} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm font-semibold text-white">
-          تم تحديد <span data-media-bulk-count className="font-en text-[#D8B87A]">0</span> عنصر
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            name="bulk_action"
-            defaultValue="publish"
-            className="h-10 rounded-[8px] border border-white/10 bg-black/22 px-3 text-sm text-white/72 outline-none focus:border-[#D8B87A]/35"
-          >
-            <option value="publish">نشر</option>
-            <option value="unpublish">إخفاء</option>
-            <option value="archive">أرشفة</option>
-            <option value="feature">تعيين كمميز</option>
-            <option value="unfeature">إلغاء التمييز</option>
-          </select>
-
-          <button className="h-10 rounded-full bg-[#D8B87A] px-5 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]">
-            تنفيذ
-          </button>
-          <button
-            type="button"
-            data-media-clear-selection
-            className="h-10 rounded-full border border-white/10 px-5 text-sm text-white/62 transition hover:border-white/20 hover:text-white"
-          >
-            إلغاء التحديد
-          </button>
-        </div>
-      </div>
-    </form>
-  );
 }
 
 export default async function AdminUnifiedMediaContentPage({
@@ -315,8 +237,6 @@ export default async function AdminUnifiedMediaContentPage({
 
   return (
     <main className="space-y-7">
-      <MediaListControls />
-
       <AdminPageContextHeader
         eyebrow="MEDIA CENTER CONTROL"
         title="إدارة محتوى المركز الإعلامي"
@@ -362,89 +282,15 @@ export default async function AdminUnifiedMediaContentPage({
       />
 
       <section id="media-table" className="scroll-mt-6">
-        <MediaBulkActionsBar currentListPath={currentListPath} />
-
-        <AdminDataGrid>
-          <AdminDataGridHeader columns={MEDIA_TABLE_COLUMNS}>
-            <AdminDataGridCheckboxCell>
-              <input type="checkbox" data-media-select-all className={ADMIN_DATA_GRID_RULES.checkbox} />
-            </AdminDataGridCheckboxCell>
-            <AdminDataGridPrimaryCell>
-              <AdminDataGridSortLink
-                href={buildHref(queryParams, { sort: getNextSort(sort, "title"), page: "1" })}
-                active={titleSort.active}
-                direction={titleSort.direction}
-              >
-                العنوان
-              </AdminDataGridSortLink>
-            </AdminDataGridPrimaryCell>
-            <AdminDataGridCenterCell>التصنيف</AdminDataGridCenterCell>
-            <AdminDataGridCenterCell>
-              <AdminDataGridSortLink
-                href={buildHref(queryParams, { sort: getNextSort(sort, "status"), page: "1" })}
-                active={statusSort.active}
-                direction={statusSort.direction}
-              >
-                الحالة
-              </AdminDataGridSortLink>
-            </AdminDataGridCenterCell>
-            <AdminDataGridCenterCell>الإجراءات</AdminDataGridCenterCell>
-          </AdminDataGridHeader>
-
-          {safeRows.length > 0 ? (
-            safeRows.map((row, index) => (
-                <AdminDataGridRow key={row.id} columns={MEDIA_TABLE_COLUMNS} divided={index > 0}>
-                  <AdminDataGridCheckboxCell>
-                    <label>
-                      <input
-                        type="checkbox"
-                        name="media_ids"
-                        value={row.id}
-                        form="media-bulk-form"
-                        data-media-checkbox
-                        className={ADMIN_DATA_GRID_RULES.checkbox}
-                      />
-                    </label>
-                  </AdminDataGridCheckboxCell>
-
-                  <AdminDataGridPrimaryCell>
-                    {isMediaEditableContentType(row.content_type) ? (
-                      <Link
-                        href={`/admin/content/media/${row.id}`}
-                        className="block truncate text-base font-bold text-white transition hover:text-[#F4D99A]"
-                      >
-                        {row.title || "بدون عنوان"}
-                      </Link>
-                    ) : (
-                      <h3 className="truncate text-base font-bold text-white">{row.title || "بدون عنوان"}</h3>
-                    )}
-                    {row.slug ? <p className="truncate font-en text-xs text-white/35">{row.slug}</p> : null}
-                  </AdminDataGridPrimaryCell>
-
-                  <AdminDataGridCenterCell>
-                    <MediaCategoryBadge label={row.category} contentType={row.content_type} />
-                  </AdminDataGridCenterCell>
-
-                  <AdminDataGridStatusCell>
-                    <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
-                  </AdminDataGridStatusCell>
-
-                  <MediaRowActions item={row} currentListPath={currentListPath} />
-                </AdminDataGridRow>
-              ))
-          ) : (
-            <AdminDataGridEmpty>
-              <p className="text-lg font-semibold text-white">لا توجد عناصر مطابقة.</p>
-              <p className="mt-3 text-sm text-white/45">جرّب تصفير الفلاتر أو إنشاء محتوى جديد.</p>
-              <Link
-                href="/admin/content/media/new"
-                className="mt-6 inline-flex rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C]"
-              >
-                + إضافة محتوى جديد
-              </Link>
-            </AdminDataGridEmpty>
-          )}
-        </AdminDataGrid>
+        <MediaTableClient
+          key={currentListPath}
+          rows={safeRows}
+          currentListPath={currentListPath}
+          titleSortHref={buildHref(queryParams, { sort: getNextSort(sort, "title"), page: "1" })}
+          statusSortHref={buildHref(queryParams, { sort: getNextSort(sort, "status"), page: "1" })}
+          titleSort={titleSort}
+          statusSort={statusSort}
+        />
 
         <AdminTablePagination
           basePath="/admin/content/media"

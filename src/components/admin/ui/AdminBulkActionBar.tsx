@@ -19,6 +19,7 @@ type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
   isBusy?: boolean;
   actionFieldName?: string;
   idsFieldName?: string;
+  hiddenFields?: Record<string, string>;
 };
 
 export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>({
@@ -31,6 +32,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   isBusy = false,
   actionFieldName = "bulk_action",
   idsFieldName = "ids",
+  hiddenFields,
 }: AdminBulkActionBarProps<T>) {
   const [selectedAction, setSelectedAction] = useState(options[0]?.value ?? "");
 
@@ -47,6 +49,10 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
       onSubmit={handleSubmit}
       className="flex flex-col gap-4 rounded-[18px] border border-[#D8B87A]/14 bg-[#080B10]/92 px-4 py-4 shadow-[0_18px_70px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.035)] md:flex-row md:items-center md:justify-between"
     >
+      {Object.entries(hiddenFields ?? {}).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
+
       <div className="text-sm font-bold text-white/72">
         تم تحديد <span className="font-en text-[#D8B87A]">{selectedIds.length}</span> {entityLabel}
       </div>

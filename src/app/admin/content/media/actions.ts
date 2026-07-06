@@ -254,6 +254,40 @@ function getPublishedValidationError(
   return null;
 }
 
+function getMediaPublishValidationError(
+  contentType: MediaEditableContentType,
+  mediaPayload: MediaTopicPayload | null,
+): string | null {
+  const matchError = assertPayloadMatchesContentType(contentType, mediaPayload);
+  if (matchError) return matchError;
+
+  return getPublishedValidationError(contentType, mediaPayload, "published");
+}
+
+async function assertMediaTopicsCanPublish(ids: number[], redirectTo: string): Promise<void> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select("id, content_type, media_payload")
+    .in("id", ids)
+    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
+    .is("deleted_at", null);
+
+  if (error || !data || data.length !== ids.length) {
+    redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+  }
+
+  for (const topic of data) {
+    if (!isMediaEditableContentType(topic.content_type)) {
+      redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+    }
+
+    const validationError = getMediaPublishValidationError(topic.content_type, topic.media_payload);
+    if (validationError) {
+      redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+    }
+  }
+}
+
 async function resolveMediaSection(categorySlug: string) {
   const trimmedSlug = categorySlug.trim();
 
@@ -585,6 +619,13 @@ export async function publishMediaContent(formData: FormData) {
   const topic = await getEditableMediaTopicById(id);
   if (!topic) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
 
+  if (!isMediaEditableContentType(topic.content_type)) {
+    redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+  }
+
+  const publishError = getMediaPublishValidationError(topic.content_type, topic.media_payload);
+  if (publishError) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+
   const now = new Date().toISOString();
   const { error } = await getSupabaseAdmin()
     .from("topics")
@@ -740,18 +781,20 @@ export async function bulkUpdateMediaContent(formData: FormData) {
   const redirectTo = getMediaRedirectTo(formData);
 
   if (ids.length === 0) {
-    redirect(appendMediaListNotice(redirectTo, "error"));
+    redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
   }
 
   const now = new Date().toISOString();
   let errorMessage: string | null = null;
 
   if (bulkAction === "publish") {
+    await assertMediaTopicsCanPublish(ids, redirectTo);
+
     const { error } = await getSupabaseAdmin()
       .from("topics")
       .update({ status: "published", updated_at: now })
       .in("id", ids)
-      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
       .is("deleted_at", null);
     errorMessage = error?.message ?? null;
   } else if (bulkAction === "unpublish") {
@@ -759,15 +802,15 @@ export async function bulkUpdateMediaContent(formData: FormData) {
       .from("topics")
       .update({ status: "unpublished", updated_at: now })
       .in("id", ids)
-      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
       .is("deleted_at", null);
     errorMessage = error?.message ?? null;
   } else if (bulkAction === "archive") {
     const { error } = await getSupabaseAdmin()
       .from("topics")
-      .update({ status: "archived", updated_at: now })
+      .update({ status: "archived", deleted_at: now, updated_at: now })
       .in("id", ids)
-      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
       .is("deleted_at", null);
     errorMessage = error?.message ?? null;
   } else if (bulkAction === "feature") {
@@ -775,7 +818,7 @@ export async function bulkUpdateMediaContent(formData: FormData) {
       .from("topics")
       .update({ is_featured: true, updated_at: now })
       .in("id", ids)
-      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
       .is("deleted_at", null);
     errorMessage = error?.message ?? null;
   } else if (bulkAction === "unfeature") {
@@ -783,17 +826,17 @@ export async function bulkUpdateMediaContent(formData: FormData) {
       .from("topics")
       .update({ is_featured: false, updated_at: now })
       .in("id", ids)
-      .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+      .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
       .is("deleted_at", null);
     errorMessage = error?.message ?? null;
   } else {
-    redirect(appendMediaListNotice(redirectTo, "error"));
+    redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
   }
 
   if (errorMessage) {
-    redirect(appendMediaListNotice(redirectTo, "error"));
+    redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
   }
 
   revalidatePath("/admin/content/media");
-  redirect(appendMediaListNotice(redirectTo, "saved"));
+  redirect(appendMediaListNotice(redirectTo, "saved", "media-table"));
 }
