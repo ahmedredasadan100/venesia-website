@@ -1,3 +1,4 @@
+import AdminToneBadge from "../../../../components/admin/ui/AdminToneBadge";
 import { getMediaContentTypeBadgeClassName } from "./media-content-type-style";
 
 export default function MediaCategoryBadge({
@@ -10,13 +11,11 @@ export default function MediaCategoryBadge({
   const text = label?.trim() || "—";
 
   return (
-    <span
-      className={[
-        "inline-flex max-w-full min-w-[72px] justify-center truncate rounded-full border px-2.5 py-1 text-xs font-semibold",
-        getMediaContentTypeBadgeClassName(contentType),
-      ].join(" ")}
+    <AdminToneBadge
+      toneClassName={getMediaContentTypeBadgeClassName(contentType)}
+      className="max-w-full min-w-[72px] truncate px-2.5 py-1 text-xs"
     >
       {text}
-    </span>
+    </AdminToneBadge>
   );
 }

@@ -3,11 +3,17 @@ import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
+  ADMIN_DATA_GRID_RULES,
   AdminActionButton,
   AdminDataGrid,
+  AdminDataGridCenterCell,
+  AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
   AdminDataGridRow,
+  AdminDataGridSortLink,
+  AdminDataGridStatusCell,
   AdminMetricCardsGrid,
   AdminPageContextHeader,
   AdminStatusPill,
@@ -157,13 +163,12 @@ function getNextSort(currentSort: string, column: "title" | "status") {
   return currentSort === first ? second : first;
 }
 
-function SortHeader({ label, href }: { label: string; href: string }) {
-  return (
-    <Link href={href} className="inline-flex items-center justify-center gap-2 transition hover:text-[#D8B87A]">
-      {label}
-      <span className="font-en text-[10px] text-white/35">↕</span>
-    </Link>
-  );
+function getSortMeta(sort: string, column: "title" | "status") {
+  const asc = `${column}_asc`;
+  const desc = `${column}_desc`;
+  if (sort === asc) return { active: true, direction: "asc" as const };
+  if (sort === desc) return { active: true, direction: "desc" as const };
+  return { active: false, direction: "asc" as const };
 }
 
 function getStatusTone(status?: string | null): "green" | "gold" | "muted" | "red" {
@@ -305,6 +310,8 @@ export default async function AdminUnifiedMediaContentPage({
   ]);
 
   const safeRows = (rows ?? []) as MediaTopicRow[];
+  const titleSort = getSortMeta(sort, "title");
+  const statusSort = getSortMeta(sort, "status");
 
   return (
     <main className="space-y-7">
@@ -359,34 +366,48 @@ export default async function AdminUnifiedMediaContentPage({
 
         <AdminDataGrid>
           <AdminDataGridHeader columns={MEDIA_TABLE_COLUMNS}>
-            <label className="flex items-center justify-center">
-              <input type="checkbox" data-media-select-all className="h-4 w-4 accent-[#D8B87A]" />
-            </label>
-            <span className="text-right">
-              <SortHeader label="العنوان" href={buildHref(queryParams, { sort: getNextSort(sort, "title"), page: "1" })} />
-            </span>
-            <span className="text-center">التصنيف</span>
-            <span className="text-center">
-              <SortHeader label="الحالة" href={buildHref(queryParams, { sort: getNextSort(sort, "status"), page: "1" })} />
-            </span>
-            <span className="text-center">الإجراءات</span>
+            <AdminDataGridCheckboxCell>
+              <input type="checkbox" data-media-select-all className={ADMIN_DATA_GRID_RULES.checkbox} />
+            </AdminDataGridCheckboxCell>
+            <AdminDataGridPrimaryCell>
+              <AdminDataGridSortLink
+                href={buildHref(queryParams, { sort: getNextSort(sort, "title"), page: "1" })}
+                active={titleSort.active}
+                direction={titleSort.direction}
+              >
+                العنوان
+              </AdminDataGridSortLink>
+            </AdminDataGridPrimaryCell>
+            <AdminDataGridCenterCell>التصنيف</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
+              <AdminDataGridSortLink
+                href={buildHref(queryParams, { sort: getNextSort(sort, "status"), page: "1" })}
+                active={statusSort.active}
+                direction={statusSort.direction}
+              >
+                الحالة
+              </AdminDataGridSortLink>
+            </AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>الإجراءات</AdminDataGridCenterCell>
           </AdminDataGridHeader>
 
           {safeRows.length > 0 ? (
             safeRows.map((row, index) => (
                 <AdminDataGridRow key={row.id} columns={MEDIA_TABLE_COLUMNS} divided={index > 0}>
-                  <label className="flex items-center justify-center">
-                    <input
-                      type="checkbox"
-                      name="media_ids"
-                      value={row.id}
-                      form="media-bulk-form"
-                      data-media-checkbox
-                      className="h-4 w-4 accent-[#D8B87A]"
-                    />
-                  </label>
+                  <AdminDataGridCheckboxCell>
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="media_ids"
+                        value={row.id}
+                        form="media-bulk-form"
+                        data-media-checkbox
+                        className={ADMIN_DATA_GRID_RULES.checkbox}
+                      />
+                    </label>
+                  </AdminDataGridCheckboxCell>
 
-                  <div className="min-w-0 text-right">
+                  <AdminDataGridPrimaryCell>
                     {isMediaEditableContentType(row.content_type) ? (
                       <Link
                         href={`/admin/content/media/${row.id}`}
@@ -398,15 +419,15 @@ export default async function AdminUnifiedMediaContentPage({
                       <h3 className="truncate text-base font-bold text-white">{row.title || "بدون عنوان"}</h3>
                     )}
                     {row.slug ? <p className="truncate font-en text-xs text-white/35">{row.slug}</p> : null}
-                  </div>
+                  </AdminDataGridPrimaryCell>
 
-                  <div className="flex justify-center">
+                  <AdminDataGridCenterCell>
                     <MediaCategoryBadge label={row.category} contentType={row.content_type} />
-                  </div>
+                  </AdminDataGridCenterCell>
 
-                  <div className="flex justify-center">
+                  <AdminDataGridStatusCell>
                     <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
-                  </div>
+                  </AdminDataGridStatusCell>
 
                   <MediaRowActions item={row} currentListPath={currentListPath} />
                 </AdminDataGridRow>

@@ -20,7 +20,7 @@ type GridLineProps = BaseProps & {
   columns: string;
 };
 
-type DataGridAction = "edit" | "visibility" | "duplicate" | "delete";
+type DataGridAction = "edit" | "preview" | "visibility" | "duplicate" | "delete";
 
 type ActionButtonProps = {
   children?: ReactNode;
@@ -55,13 +55,14 @@ const actionTones: Record<NonNullable<ActionButtonProps["tone"]>, string> = {
 
 const actionDefaults: Record<DataGridAction, { tone: NonNullable<ActionButtonProps["tone"]>; title: string }> = {
   edit: { tone: "gold", title: "تعديل" },
+  preview: { tone: "dark", title: "معاينة" },
   visibility: { tone: "green", title: "إظهار / إخفاء" },
   duplicate: { tone: "blue", title: "نسخ" },
   delete: { tone: "red", title: "حذف" },
 };
 
 export const ADMIN_DATA_GRID_RULES = {
-  actionOrder: ["edit", "visibility", "duplicate", "delete"],
+  actionOrder: ["edit", "preview", "visibility", "duplicate", "delete"],
   actionButton: "h-11 w-11 rounded-[8px] cursor-pointer shrink-0",
   actionButtonCompact: "h-10 w-10 rounded-[8px] cursor-pointer shrink-0",
   actionIcon: "h-4 w-4 shrink-0",
@@ -173,6 +174,16 @@ function GridIcon({ action, hidden = false }: { action: DataGridAction; hidden?:
     );
   }
 
+  if (action === "preview") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M14 3h7v7" />
+        <path d="M10 14 21 3" />
+        <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
+      </svg>
+    );
+  }
+
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M4 7h16" />
@@ -260,6 +271,27 @@ export function AdminDataGridSortLabel({ children, onClick, active = false, dire
       <span>{children}</span>
       <span className={`font-en text-[11px] ${active ? "text-[#D8B87A]" : "text-white/25"}`}>{indicator}</span>
     </button>
+  );
+}
+
+type SortLinkProps = BaseProps & {
+  href: string;
+  active?: boolean;
+  direction?: "asc" | "desc";
+};
+
+/** Server-rendered sort header link — URL params drive sort state (no client onClick). */
+export function AdminDataGridSortLink({ children, href, active = false, direction = "asc", className = "" }: SortLinkProps) {
+  const indicator = active ? (direction === "asc" ? "↑" : "↓") : "↕";
+
+  return (
+    <Link
+      href={href}
+      className={`inline-flex items-center justify-center gap-2 rounded-full px-2 py-1 transition hover:bg-white/[0.055] hover:text-[#D8B87A] ${active ? "text-[#D8B87A]" : ""} ${className}`}
+    >
+      <span>{children}</span>
+      <span className={`font-en text-[11px] ${active ? "text-[#D8B87A]" : "text-white/25"}`}>{indicator}</span>
+    </Link>
   );
 }
 

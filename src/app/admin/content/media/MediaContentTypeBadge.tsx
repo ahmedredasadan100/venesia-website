@@ -1,3 +1,4 @@
+import AdminToneBadge from "../../../../components/admin/ui/AdminToneBadge";
 import {
   CONTENT_TYPE_LABELS,
   type MediaListContentType,
@@ -17,11 +18,12 @@ export default function MediaContentTypeBadge({
 }) {
   if (!isKnownMediaContentType(contentType)) {
     return (
-      <span
-        className={`inline-flex min-w-[72px] justify-center rounded-full border px-2.5 py-1 text-xs font-semibold ${MEDIA_CONTENT_TYPE_UNKNOWN_BADGE_CLASS}`}
+      <AdminToneBadge
+        toneClassName={MEDIA_CONTENT_TYPE_UNKNOWN_BADGE_CLASS}
+        className="min-w-[72px] px-2.5 py-1 text-xs"
       >
         غير محدد
-      </span>
+      </AdminToneBadge>
     );
   }
 
@@ -29,16 +31,16 @@ export default function MediaContentTypeBadge({
   const label = CONTENT_TYPE_LABELS[contentType as MediaListContentType];
 
   return (
-    <span
+    <AdminToneBadge
+      toneClassName={style.className}
       className={[
-        "inline-flex items-center justify-center gap-1.5 rounded-full border font-semibold",
+        "gap-1.5",
         compact ? "min-w-[88px] px-2.5 py-1 text-[11px]" : "min-w-[104px] px-3 py-1.5 text-xs",
-        style.className,
       ].join(" ")}
     >
       <span className="font-en text-[10px] opacity-80">{style.icon}</span>
       {label}
-    </span>
+    </AdminToneBadge>
   );
 }
 

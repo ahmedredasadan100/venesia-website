@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 
 import {
-  ADMIN_DATA_GRID_RULES,
   ADMIN_FORM,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -37,23 +36,6 @@ type MediaRowActionsProps = {
   };
   currentListPath: string;
 };
-
-function PublicPreviewIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={ADMIN_DATA_GRID_RULES.actionIcon}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
-      <path d="M14 3h7v7" />
-      <path d="M10 14 21 3" />
-      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
-    </svg>
-  );
-}
 
 function getMediaPreviewHref(item: MediaRowActionsProps["item"]) {
   if (!item.slug) return null;
@@ -173,14 +155,12 @@ export default function MediaRowActions({ item, currentListPath }: MediaRowActio
 
       {previewHref ? (
         <AdminDataGridActionButton
+          action="preview"
           href={previewHref}
           target="_blank"
-          tone="dark"
           size="compact"
           title="معاينة المحتوى"
-        >
-          <PublicPreviewIcon />
-        </AdminDataGridActionButton>
+        />
       ) : null}
 
       <form action={isPublished ? unpublishMediaContent : publishMediaContent} className="contents">

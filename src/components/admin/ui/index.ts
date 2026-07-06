@@ -38,6 +38,7 @@ export { default as AdminCard } from "./AdminCard";
 export { default as AdminToolbar } from "./AdminToolbar";
 export { default as AdminActionButton } from "./AdminActionButton";
 export { default as AdminStatusPill } from "./AdminStatusPill";
+export { default as AdminToneBadge } from "./AdminToneBadge";
 export { default as AdminInfoBar } from "./AdminInfoBar";
 export { default as AdminBulkActionBar } from "./AdminBulkActionBar";
 
@@ -52,6 +53,7 @@ export {
   AdminDataGridHeader,
   AdminDataGridRow,
   AdminDataGridSortLabel,
+  AdminDataGridSortLink,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
   AdminDataGridPrimaryCell,

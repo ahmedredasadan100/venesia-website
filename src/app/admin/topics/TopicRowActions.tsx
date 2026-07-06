@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 
 import {
-  ADMIN_DATA_GRID_RULES,
   ADMIN_FORM,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -25,23 +24,6 @@ type TopicRowActionsProps = {
   categories: Array<{ name: string; slug: string }>;
   currentListPath: string;
 };
-
-function PublicPreviewIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={ADMIN_DATA_GRID_RULES.actionIcon}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
-      <path d="M14 3h7v7" />
-      <path d="M10 14 21 3" />
-      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
-    </svg>
-  );
-}
 
 function TopicDuplicateModal({
   topic,
@@ -151,14 +133,12 @@ export default function TopicRowActions({ topic, categories, currentListPath }: 
       />
 
       <AdminDataGridActionButton
+        action="preview"
         href={previewHref}
         target="_blank"
-        tone="dark"
         size="compact"
         title="معاينة الموضوع"
-      >
-        <PublicPreviewIcon />
-      </AdminDataGridActionButton>
+      />
 
       <form action={isPublished ? unpublishTopic : publishTopic} className="contents">
         <input type="hidden" name="id" value={topic.id} />
