@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -42,11 +43,24 @@ async function queryPublishedProjects(options?: LoadPublishedProjectsOptions) {
   return (data ?? []).map((row) => parseProjectRow(row as Record<string, unknown>));
 }
 
+function publishedProjectsCacheScope(options?: LoadPublishedProjectsOptions) {
+  return options?.showOnHomepageOnly ? "homepage-only" : "all";
+}
+
+async function queryPublishedProjectsCached(options?: LoadPublishedProjectsOptions) {
+  const scope = publishedProjectsCacheScope(options);
+  return unstable_cache(
+    async () => queryPublishedProjects(options),
+    ["published-projects", scope],
+    { revalidate: 300, tags: ["projects"] },
+  )();
+}
+
 /** All published projects for public pages — single runtime source of truth. */
 export async function loadPublishedProjects(
   options?: LoadPublishedProjectsOptions,
 ): Promise<PublicProject[]> {
-  const rows = await queryPublishedProjects(options);
+  const rows = await queryPublishedProjectsCached(options);
   return rows.map((row) => mapProjectRowToPublicProject(row));
 }
 
@@ -66,9 +80,7 @@ export async function loadPublishedProjectSlugs(): Promise<string[]> {
   return (data ?? []).map((row) => String(row.slug)).filter(Boolean);
 }
 
-export const loadProjectBySlug = cache(async function loadProjectBySlug(
-  slug: string,
-): Promise<PublicProject | null> {
+async function queryProjectBySlug(slug: string): Promise<PublicProject | null> {
   const supabase = getSupabaseAdmin();
 
   const { data: project, error: projectError } = await supabase
@@ -113,6 +125,16 @@ export const loadProjectBySlug = cache(async function loadProjectBySlug(
     deliverySpecItems: deliverySpecItems ?? [],
     media: (media ?? []) as ProjectMediaRow[],
   });
+}
+
+export const loadProjectBySlug = cache(async function loadProjectBySlug(
+  slug: string,
+): Promise<PublicProject | null> {
+  return unstable_cache(
+    async () => queryProjectBySlug(slug),
+    ["published-project", slug],
+    { revalidate: 300, tags: ["projects", "project"] },
+  )();
 });
 
 export async function loadFeaturedProjects(): Promise<PublicProject[]> {
