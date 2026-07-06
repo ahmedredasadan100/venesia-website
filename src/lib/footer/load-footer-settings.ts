@@ -64,9 +64,7 @@ function buildSettingsFromRows(byKey: Map<string, unknown>): FooterSettings {
   };
 }
 
-export async function loadFooterSettings(): Promise<FooterSettings> {
-  noStore();
-
+async function queryFooterSettings(): Promise<FooterSettings> {
   const { data, error } = await getSupabaseAdmin()
     .from("site_settings")
     .select("key,value")
@@ -87,8 +85,13 @@ export async function loadFooterSettings(): Promise<FooterSettings> {
   return resolveFooterSettingsLinks(settings);
 }
 
+export async function loadFooterSettings(): Promise<FooterSettings> {
+  return queryFooterSettings();
+}
+
 export async function loadFooterSettingsForAdmin(): Promise<FooterSettings> {
-  const settings = await loadFooterSettings();
+  noStore();
+  const settings = await queryFooterSettings();
   return { ...settings, usesFallback: settings.usesFallback };
 }
 
