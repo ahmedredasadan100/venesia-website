@@ -3,7 +3,7 @@ import { loadPublishedProjects } from "../../../lib/projects/load-published-proj
 import { buildMetadata } from "../../../lib/seo/build-metadata";
 
 export const metadata = buildMetadata({ path: "/projects" });
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export default async function ProjectsPage() {
   const projects = await loadPublishedProjects();

@@ -8,7 +8,7 @@ import { stripHtml } from "../../../../lib/rich-text/html-utils";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { buildMetadata } from "../../../../lib/seo/build-metadata";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 type ProjectDetailsPageProps = {
   params: Promise<{
