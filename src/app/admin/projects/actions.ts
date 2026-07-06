@@ -5,11 +5,6 @@ import { requireAdminSession } from "../../../lib/admin/auth/require-admin-sessi
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
-import { seedProjectsFromStaticData } from "../../../lib/projects/seed-from-static-data";
-import {
-  isProjectsStaticReimportAllowed,
-  projectsStaticReimportBlockedMessage,
-} from "../../../lib/projects/static-reimport-policy";
 import type { ProjectCategory } from "../../../config/projects-data";
 import type { ProjectPublicationStatus, ProjectRow, ProjectStatus } from "../../../lib/projects/types";
 import { parseJsonArray } from "../../../lib/projects/types";
@@ -259,33 +254,6 @@ async function replaceChildren(projectId: number, formData: FormData) {
 
   const { error } = await supabase.rpc("sync_project_children", payload);
   if (error) throw new Error(error.message);
-}
-
-export async function seedProjectsAction() {
-  await requireAdminSession();
-  if (!isProjectsStaticReimportAllowed()) {
-    redirect(`/admin/projects?error=${encodeURIComponent(projectsStaticReimportBlockedMessage())}`);
-  }
-
-  const result = await seedProjectsFromStaticData();
-  revalidatePath("/admin/projects");
-  revalidatePath("/admin/projects/residential");
-  revalidatePath("/admin/projects/commercial");
-  revalidatePath("/projects", "page");
-
-  if (result.errors.length) {
-    redirect(
-      `/admin/projects?error=${encodeURIComponent(
-        `تم استيراد ${result.upserted} مشروع مع ${result.errors.length} أخطاء.`,
-      )}`,
-    );
-  }
-
-  redirect(
-    `/admin/projects?notice=${encodeURIComponent(
-      `تم استيراد ${result.upserted} مشروع (${result.floorPlans} مخطط / ${result.deliveryItems} مواصفة / ${result.media} وسيط).`,
-    )}`,
-  );
 }
 
 export async function checkProjectFieldsAvailable(code: string, slug: string) {

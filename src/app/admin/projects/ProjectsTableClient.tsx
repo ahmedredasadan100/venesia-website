@@ -233,7 +233,7 @@ function LegacyProjectsTable({
         <AdminDataGridEmpty>
           <p className="text-base font-semibold text-white">لا توجد مشاريع في هذه القائمة</p>
           <p className="mt-2 text-sm text-white/45">
-            نفّذ ملف SQL ثم استورد البيانات من projects-data.ts عبر زر الاستيراد في الصفحة الرئيسية للمشاريع.
+            أضف مشروعًا جديدًا من لوحة التحكم أو تأكد من تنفيذ ملف SQL للجداول.
           </p>
         </AdminDataGridEmpty>
       )}
@@ -404,7 +404,7 @@ function ReferenceProjectsTable({
         <AdminDataGridEmpty>
           <p className="text-base font-semibold text-white">لا توجد مشاريع في هذه القائمة</p>
           <p className="mt-2 text-sm text-white/45">
-            نفّذ ملف SQL ثم استورد البيانات من projects-data.ts عبر زر الاستيراد في الصفحة الرئيسية للمشاريع.
+            أضف مشروعًا جديدًا من لوحة التحكم أو تأكد من تنفيذ ملف SQL للجداول.
           </p>
         </AdminDataGridEmpty>
       )}

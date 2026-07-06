@@ -1,12 +1,11 @@
 /**
  * Guard for config/projects-data.ts → Supabase import.
- * Disabled in production unless ALLOW_PROJECTS_STATIC_REIMPORT=true.
+ * Requires development mode and an explicit opt-in flag.
  */
 export function isProjectsStaticReimportAllowed(): boolean {
-  if (process.env.NODE_ENV === "development") return true;
-  return process.env.ALLOW_PROJECTS_STATIC_REIMPORT === "true";
+  return process.env.NODE_ENV === "development" && process.env.ENABLE_PROJECTS_SEED === "true";
 }
 
 export function projectsStaticReimportBlockedMessage(): string {
-  return "استيراد projects-data.ts معطّل في بيئة الإنتاج. فعّل ALLOW_PROJECTS_STATIC_REIMPORT=true للتطوير فقط.";
+  return "استيراد projects-data.ts معطّل. فعّل ENABLE_PROJECTS_SEED=true في بيئة التطوير فقط.";
 }
