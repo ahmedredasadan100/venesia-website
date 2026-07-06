@@ -15,6 +15,8 @@ import { loadFeedModulesForPageSlug } from "../../../../lib/feed-modules/load-fe
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { buildMetadata } from "../../../../lib/seo/build-metadata";
 
+export const revalidate = 300;
+
 type DbTopic = {
   id: number;
   slug: string;
