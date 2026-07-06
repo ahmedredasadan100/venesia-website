@@ -1,6 +1,6 @@
 import "server-only";
 
-import { unstable_noStore as noStore } from "next/cache";
+import { unstable_cache, unstable_noStore as noStore } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
@@ -86,7 +86,11 @@ async function queryFooterSettings(): Promise<FooterSettings> {
 }
 
 export async function loadFooterSettings(): Promise<FooterSettings> {
-  return queryFooterSettings();
+  return unstable_cache(
+    async () => queryFooterSettings(),
+    ["public-footer-settings"],
+    { revalidate: 300, tags: ["footer", "site-settings"] },
+  )();
 }
 
 export async function loadFooterSettingsForAdmin(): Promise<FooterSettings> {

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import type { PublicNavigationItem } from "../public-navigation";
@@ -69,7 +71,7 @@ export async function getPublicNavigationItemsByMenuId(menuId: number): Promise<
   return getPublicNavigationItemsForMenuId(menuId);
 }
 
-export async function getPublicNavigationItems(location = "main"): Promise<PublicNavigationItem[]> {
+async function queryPublicNavigationItems(location: string): Promise<PublicNavigationItem[]> {
   const { data: menu, error: menuError } = await getSupabaseAdmin()
     .from("menus")
     .select("id, name, slug, location, is_active")
@@ -87,4 +89,12 @@ export async function getPublicNavigationItems(location = "main"): Promise<Publi
   if (!menu) return [];
 
   return getPublicNavigationItemsForMenuId(menu.id);
+}
+
+export async function getPublicNavigationItems(location = "main"): Promise<PublicNavigationItem[]> {
+  return unstable_cache(
+    async () => queryPublicNavigationItems(location),
+    ["public-navigation", location],
+    { revalidate: 300, tags: ["navigation", "menus"] },
+  )();
 }
