@@ -14,6 +14,8 @@ import { buildAiVisibilityJson } from "../../lib/seo/build-ai-visibility";
 import { buildFaqSchema } from "../../lib/seo/build-faq-schema";
 import { VENESIA_FAQS } from "../../config/seo/faq-schema";
 
+export const revalidate = 300;
+
 const organizationSchema = buildOrganizationSchema();
 const websiteSchema = buildWebsiteSchema();
 const aiVisibilitySchema = buildAiVisibilityJson();
