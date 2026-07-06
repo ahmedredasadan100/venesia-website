@@ -15,8 +15,9 @@ const menuItems: MenuItem[] = [
     icon: "✦",
     children: [
       { href: "/admin/topics", label: "المقالات" },
-      { href: "/admin/topics/categories", label: "التصنيفات" },
       { href: "/admin/content/series", label: "السلاسل" },
+      { href: "/admin/topics/categories", label: "التصنيفات" },
+      { href: "/admin/content/media", label: "المركز الإعلامي" },
     ],
   },
   {
@@ -28,7 +29,6 @@ const menuItems: MenuItem[] = [
       { href: "/admin/projects/construction-updates", label: "تحديثات التنفيذ" },
     ],
   },
-  { href: "/admin/content/media", label: "مكتبة الوسائط", icon: "◉" },
   {
     href: "/admin/pages-blocks/pages",
     label: "الصفحات والبلوكات",
