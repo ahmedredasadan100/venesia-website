@@ -4,16 +4,30 @@ import Image, { ImageProps } from "next/image";
 import { useState } from "react";
 import { logWarn } from "../../lib/logging";
 
+function normalizeTopicImageSrc(src: ImageProps["src"]) {
+  if (src == null) return null;
+  if (typeof src === "string") {
+    const trimmed = src.trim();
+    return trimmed ? trimmed : null;
+  }
+  return src;
+}
+
 export default function TopicImage(props: ImageProps) {
-  const [src, setSrc] = useState(props.src);
+  const [failed, setFailed] = useState(false);
+  const normalizedSrc = normalizeTopicImageSrc(props.src);
+
+  if (failed || normalizedSrc == null) {
+    return null;
+  }
 
   return (
     <Image
       {...props}
-      src={src}
+      src={normalizedSrc}
       onError={() => {
         logWarn("Topic image failed to load", { src: String(props.src) });
-        setSrc("/images/topics/default.jpg");
+        setFailed(true);
       }}
     />
   );
