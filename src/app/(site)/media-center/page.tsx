@@ -7,7 +7,7 @@ import { getMediaCenterCmsPageConfig } from "../../../lib/media-center-page-conf
 import InternalPageLayout from "../../../components/InternalPageLayout";
 import { buildMetadata } from "../../../lib/seo/build-metadata";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 export const metadata = buildMetadata({ path: "/media-center" });
 
 const CMS_PAGE_SLUG = "media-center" as const;

@@ -13,7 +13,7 @@ import { buildMetadata } from "../../../../../lib/seo/build-metadata";
 import { buildPageJsonLd } from "../../../../../lib/seo/build-jsonld";
 import { NO_INDEX_ROBOTS } from "../../../../../config/seo/seo-rules";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 type DetailsPageProps = {
   params: Promise<{
