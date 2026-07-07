@@ -1,11 +1,8 @@
+import { countMenuItemsByMenuIds } from "../../../../lib/admin/menus/count-menu-items";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import MenusTableClient, { type MenuListRow } from "./MenusTableClient";
 
 export const dynamic = "force-dynamic";
-
-type MenuItemCountRow = {
-  menu_id: number | string | null;
-};
 
 export default async function MenusPage({
   searchParams,
@@ -15,21 +12,23 @@ export default async function MenusPage({
   const query = searchParams ? await searchParams : {};
   const message = query?.message ? decodeURIComponent(query.message) : null;
 
-  const [menusResult, countsResult] = await Promise.all([
-    getSupabaseAdmin()
-      .from("menus")
-      .select("id, name, slug, location, is_active")
-      .order("id", { ascending: true }),
-    getSupabaseAdmin().from("menu_items").select("menu_id"),
-  ]);
+  const { data: menus, error } = await getSupabaseAdmin()
+    .from("menus")
+    .select("id, name, slug, location, is_active")
+    .order("id", { ascending: true });
 
-  const counts = new Map<number, number>();
-  ((countsResult.data ?? []) as MenuItemCountRow[]).forEach((row) => {
-    const menuId = Number(row.menu_id);
-    counts.set(menuId, (counts.get(menuId) ?? 0) + 1);
-  });
+  if (error) {
+    return (
+      <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
+        حدث خطأ أثناء قراءة القوائم: {error.message}
+      </div>
+    );
+  }
 
-  const menus: MenuListRow[] = (menusResult.data ?? []).map((menu) => ({
+  const menuRows = menus ?? [];
+  const counts = await countMenuItemsByMenuIds(menuRows.map((menu) => menu.id));
+
+  const rows: MenuListRow[] = menuRows.map((menu) => ({
     id: menu.id,
     name: menu.name,
     slug: menu.slug,
@@ -38,5 +37,5 @@ export default async function MenusPage({
     item_count: counts.get(menu.id) ?? 0,
   }));
 
-  return <MenusTableClient menus={menus} message={message} />;
+  return <MenusTableClient menus={rows} message={message} />;
 }

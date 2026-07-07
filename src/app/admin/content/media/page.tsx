@@ -6,6 +6,7 @@ import {
   AdminTablePagination,
 } from "../../../../components/admin/ui";
 import { applyAdminListTextSearch } from "../../../../lib/admin/admin-list-search";
+import { countMediaTopicsByStatus } from "../../../../lib/admin/topics/count-media-topics-by-status";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
 import MediaListFilters from "./MediaListFilters";
@@ -201,17 +202,9 @@ export default async function AdminUnifiedMediaContentPage({
     ? `/admin/content/media?${queryParams.toString()}`
     : "/admin/content/media";
 
-  const baseStatsQuery = getSupabaseAdmin()
-    .from("topics")
-    .select("id", { count: "exact", head: true })
-    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
-    .is("deleted_at", null);
-
   let query = applyMediaListSort(
     applyMediaListFilters(
-      getSupabaseAdmin()
-        .from("topics")
-        .select("id, title, slug, content_type, category, category_slug, status, is_featured, updated_at", { count: "exact" }),
+      getSupabaseAdmin().from("topics").select("id, title, slug, content_type, category, category_slug, status, is_featured, updated_at"),
       filters,
     ),
     sort,
@@ -219,17 +212,7 @@ export default async function AdminUnifiedMediaContentPage({
 
   query = query.range(from, to);
 
-  const [
-    { data: rows, error },
-    { count: publishedCount },
-    { count: draftCount },
-    { count: featuredCount },
-  ] = await Promise.all([
-    query,
-    baseStatsQuery.eq("status", "published"),
-    baseStatsQuery.eq("status", "draft"),
-    baseStatsQuery.eq("is_featured", true),
-  ]);
+  const [{ data: rows, error }, mediaStatusCounts] = await Promise.all([query, countMediaTopicsByStatus()]);
 
   const safeRows = (rows ?? []) as MediaTopicRow[];
   const titleSort = getSortMeta(sort, "title");
@@ -266,9 +249,9 @@ export default async function AdminUnifiedMediaContentPage({
       <AdminMetricCardsGrid
         items={[
           { label: "إجمالي المحتوى", value: totalCount, tone: "gold", compact: true },
-          { label: "منشور", value: publishedCount ?? 0, tone: "green", compact: true },
-          { label: "مسودات", value: draftCount ?? 0, tone: "amber", compact: true },
-          { label: "مميز", value: featuredCount ?? 0, tone: "violet", compact: true },
+          { label: "منشور", value: mediaStatusCounts.published, tone: "green", compact: true },
+          { label: "مسودات", value: mediaStatusCounts.draft, tone: "amber", compact: true },
+          { label: "مميز", value: mediaStatusCounts.featured, tone: "violet", compact: true },
           { label: "المعروض الآن", value: safeRows.length, tone: "blue", compact: true },
           { label: "الأقسام", value: 5, suffix: "أنواع", tone: "cyan", compact: true },
         ]}

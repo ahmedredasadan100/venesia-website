@@ -17,6 +17,11 @@ import {
 } from "../../../../lib/media-sidebar-modules/registry";
 import { cleanText, parseFormBoolean, parseNumber } from "../../../../lib/page-blocks/admin-utils";
 import { revalidatePageBlocksPath, revalidatePublicPagesWithBlockAssignments } from "../../../../lib/page-blocks/admin-revalidate";
+import { loadPageModuleCounts } from "../../../../lib/admin/pages/load-page-module-counts";
+import {
+  loadPagesTableRows,
+  type PagesTableRow,
+} from "../../../../lib/admin/pages/load-pages-table-rows";
 import {
   buildDuplicatePageIdentity,
   getPageDeleteBlockReason,
@@ -143,15 +148,7 @@ export async function deletePage(formData: FormData) {
   redirect(pagesListPath({ notice: `تم حذف الصفحة «${page.title}».` }));
 }
 
-export type PagesTableRow = {
-  id: number;
-  title: string;
-  slug: string;
-  path: string;
-  page_type: string;
-  status: string;
-  block_count: number;
-};
+export type { PagesTableRow } from "../../../../lib/admin/pages/load-pages-table-rows";
 
 export type PagesTableResult = {
   ok: boolean;
@@ -159,27 +156,13 @@ export type PagesTableResult = {
   rows?: PagesTableRow[];
 };
 
-async function loadPagesTableRows(): Promise<PagesTableRow[]> {
-  const { data: pages, error: loadError } = await getSupabaseAdmin()
-    .from("pages")
-    .select("id,title,slug,path,page_type,status")
-    .order("id", { ascending: true });
-
-  if (loadError) throw new Error(loadError.message);
-
-  const pageRows = pages ?? [];
-  const pageIds = pageRows.map((page) => page.id);
-  const blockCounts = await getPageModuleCounts(pageIds);
-
-  return pageRows.map((page) => ({
-    ...page,
-    block_count: blockCounts.get(page.id) ?? 0,
-  }));
+async function loadPagesTableRowsForAdmin(): Promise<PagesTableRow[]> {
+  await requireAdminSession();
+  return loadPagesTableRows();
 }
 
 export async function getPagesTableRows(): Promise<PagesTableRow[]> {
-  await requireAdminSession();
-  return loadPagesTableRows();
+  return loadPagesTableRowsForAdmin();
 }
 
 export async function bulkDeletePagesAjax(ids: number[]): Promise<PagesTableResult> {
@@ -216,7 +199,7 @@ export async function bulkDeletePagesAjax(ids: number[]): Promise<PagesTableResu
   revalidatePath("/admin/pages-blocks/pages", "layout");
   await revalidatePublicPagesWithBlockAssignments();
 
-  const rows = await loadPagesTableRows();
+  const rows = await loadPagesTableRowsForAdmin();
   let message = `تم حذف ${deletableIds.length} صفحة بنجاح.`;
   if (blockedCount > 0) {
     message += ` لم يُحذف ${blockedCount} صفحة محمية.`;
@@ -974,34 +957,7 @@ export async function bulkPageBlockAssignments(formData: FormData) {
 
 export async function getPageModuleCounts(pageIds: number[]) {
   await requireAdminSession();
-  if (!pageIds.length) return new Map<number, number>();
-
-  const counts = new Map<number, number>();
-  pageIds.forEach((id) => counts.set(id, 0));
-
-  const tables = ALL_ASSIGNMENT_TABLES;
-
-  await Promise.all(
-    tables.map(async (table) => {
-      const { data } = await getSupabaseAdmin().from(table).select("page_id").in("page_id", pageIds);
-      for (const row of data ?? []) {
-        counts.set(row.page_id, (counts.get(row.page_id) ?? 0) + 1);
-      }
-    }),
-  );
-
-  const { data: heroAssignments } = await getSupabaseAdmin()
-    .from("hero_assignments")
-    .select("target_id")
-    .eq("target_type", "page")
-    .eq("is_active", true)
-    .in("target_id", pageIds);
-
-  for (const row of heroAssignments ?? []) {
-    counts.set(row.target_id, (counts.get(row.target_id) ?? 0) + 1);
-  }
-
-  return counts;
+  return loadPageModuleCounts(pageIds);
 }
 
 /** @deprecated Use getPageModuleCounts */

@@ -9,6 +9,7 @@ import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminAc
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
 import { applyAdminListTextSearch } from "../../../lib/admin/admin-list-search";
+import { countArticleTopicsByStatus } from "../../../lib/admin/topics/count-article-topics-by-status";
 import { formatAdminListDate } from "../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { bulkUpdateTopics } from "./actions";
@@ -17,6 +18,9 @@ import TopicRowActions from "./TopicRowActions";
 import CopySlugButton from "./CopySlugButton";
 
 const TOPICS_TABLE_COLUMNS = `46px minmax(320px,1fr) 150px 125px 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+
+const TOPICS_LIST_SELECT =
+  "id, title, slug, excerpt, image, image_alt, category, category_slug, status, is_featured, is_popular, published_at, updated_at, seo_title, seo_description, seo_keywords, focus_keyword";
 
 export const dynamic = "force-dynamic";
 
@@ -34,17 +38,11 @@ type SearchParams = {
   notice?: string;
 };
 
-type TopicFaq = {
-  question?: string;
-  answer?: string;
-};
-
 type TopicRow = {
   id: number;
   title: string | null;
   slug: string | null;
   excerpt: string | null;
-  content: string | null;
   image: string | null;
   image_alt: string | null;
   category: string | null;
@@ -53,14 +51,11 @@ type TopicRow = {
   is_featured: boolean | null;
   is_popular: boolean | null;
   published_at: string | null;
-  created_at: string | null;
   updated_at: string | null;
-  deleted_at: string | null;
   seo_title: string | null;
   seo_description: string | null;
   seo_keywords: string[] | null;
   focus_keyword: string | null;
-  faq: TopicFaq[] | null;
 };
 
 type SeriesRow = {
@@ -164,14 +159,14 @@ function getSeoScore(topic: TopicRow) {
     title: topic.title ?? "",
     excerpt: topic.excerpt ?? "",
     slug: topic.slug ?? "",
-    content: topic.content ?? "",
+    content: "",
     image: topic.image ?? "",
     imageAlt: topic.image_alt ?? "",
     seoTitle: topic.seo_title ?? "",
     seoDescription: topic.seo_description ?? "",
     seoKeywords: Array.isArray(topic.seo_keywords) ? topic.seo_keywords : [],
     focusKeyword: topic.focus_keyword ?? "",
-    faq: Array.isArray(topic.faq) ? topic.faq : [],
+    faq: [],
   });
 }
 
@@ -359,13 +354,7 @@ export default async function AdminTopicsPage({
 
   let query = applyTopicListSort(
     applyTopicListFilters(
-      getSupabaseAdmin()
-        .from("topics")
-        .select(
-          "id, title, slug, excerpt, content, image, image_alt, category, category_slug, status, is_featured, is_popular, published_at, created_at, updated_at, deleted_at, seo_title, seo_description, seo_keywords, focus_keyword, faq",
-          { count: "exact" },
-        )
-        .is("deleted_at", null),
+      getSupabaseAdmin().from("topics").select(TOPICS_LIST_SELECT).is("deleted_at", null),
       listFilters,
     ),
     sort,
@@ -377,16 +366,13 @@ export default async function AdminTopicsPage({
     { data: topics, error },
     { data: categories },
     { data: seriesRows },
-    totalStats,
-    publishedStats,
-    draftStats,
-    hiddenStats,
-    archivedStats,
+    statusCounts,
   ] = await Promise.all([
     query,
     getSupabaseAdmin()
       .from("topic_categories")
       .select("id, name, slug, parent_id, sort_order, is_active")
+      .eq("is_active", true)
       .order("parent_id", { ascending: true, nullsFirst: true })
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
@@ -396,30 +382,7 @@ export default async function AdminTopicsPage({
       .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true }),
-    getSupabaseAdmin().from("topics").select("id", { count: "exact", head: true }).eq("content_type", "article").is("deleted_at", null),
-    getSupabaseAdmin()
-      .from("topics")
-      .select("id", { count: "exact", head: true })
-      .eq("content_type", "article")
-      .eq("status", "published")
-      .is("deleted_at", null),
-    getSupabaseAdmin()
-      .from("topics")
-      .select("id", { count: "exact", head: true })
-      .eq("content_type", "article")
-      .eq("status", "draft")
-      .is("deleted_at", null),
-    getSupabaseAdmin()
-      .from("topics")
-      .select("id", { count: "exact", head: true })
-      .eq("content_type", "article")
-      .eq("status", "unpublished")
-      .is("deleted_at", null),
-    getSupabaseAdmin()
-      .from("topics")
-      .select("id", { count: "exact", head: true })
-      .eq("content_type", "article")
-      .not("deleted_at", "is", null),
+    countArticleTopicsByStatus(),
   ]);
 
   const safeTopics = (topics ?? []) as TopicRow[];
@@ -428,11 +391,11 @@ export default async function AdminTopicsPage({
   const categoryGroups = buildTopicCategoryFilterGroups(safeCategories);
   const bulkCategories = categoryGroups.flatMap((group) => group.options);
 
-  const allTopicsCount = totalStats.count ?? 0;
-  const publishedCount = publishedStats.count ?? 0;
-  const draftCount = draftStats.count ?? 0;
-  const hiddenCount = hiddenStats.count ?? 0;
-  const archivedCount = archivedStats.count ?? 0;
+  const allTopicsCount = statusCounts.total;
+  const publishedCount = statusCounts.published;
+  const draftCount = statusCounts.draft;
+  const hiddenCount = statusCounts.unpublished;
+  const archivedCount = statusCounts.archived;
   const averageSeo =
     safeTopics.length > 0
       ? Math.round(

@@ -1,5 +1,4 @@
-import { getPageModuleCounts } from "./actions";
-import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { loadPagesTableRows } from "../../../../lib/admin/pages/load-pages-table-rows";
 import PagesTableClient, { type AdminPageListRow } from "./PagesTableClient";
 
 type PageProps = {
@@ -11,27 +10,22 @@ export default async function PagesManagerPage({ searchParams }: PageProps) {
   const notice = resolvedSearch.notice ? decodeURIComponent(resolvedSearch.notice) : null;
   const error = resolvedSearch.error ? decodeURIComponent(resolvedSearch.error) : null;
 
-  const { data: pages, error: loadError } = await getSupabaseAdmin()
-    .from("pages")
-    .select("id,title,slug,path,page_type,status")
-    .order("id", { ascending: true });
+  let rows: AdminPageListRow[] = [];
+  let loadError: string | null = null;
+
+  try {
+    rows = await loadPagesTableRows();
+  } catch (caught) {
+    loadError = caught instanceof Error ? caught.message : "تعذر تحميل الصفحات.";
+  }
 
   if (loadError) {
     return (
       <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
-        حدث خطأ أثناء قراءة الصفحات: {loadError.message}
+        حدث خطأ أثناء قراءة الصفحات: {loadError}
       </div>
     );
   }
-
-  const pageRows = pages ?? [];
-  const pageIds = pageRows.map((page) => page.id);
-  const blockCounts = await getPageModuleCounts(pageIds);
-
-  const rows: AdminPageListRow[] = pageRows.map((page) => ({
-    ...page,
-    block_count: blockCounts.get(page.id) ?? 0,
-  }));
 
   return <PagesTableClient pages={rows} notice={notice} error={error} />;
 }

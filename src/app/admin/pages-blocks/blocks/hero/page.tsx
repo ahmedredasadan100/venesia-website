@@ -6,15 +6,9 @@ type HeroRow = {
   name: string;
   slug: string;
   description: string | null;
-  variant: string;
-  style_preset: string;
-  source_type: string;
   is_visible: boolean;
-  updated_at: string;
   hero_assignments: Array<{
     id: number;
-    target_type: string;
-    target_slug: string | null;
     path: string | null;
     is_active: boolean;
   }>;
@@ -23,7 +17,7 @@ type HeroRow = {
 export default async function HeroesManagerPage() {
   const { data, error } = await getSupabaseAdmin()
     .from("hero_templates")
-    .select("id,name,slug,description,variant,style_preset,source_type,is_visible,updated_at,hero_assignments(id,target_type,target_slug,path,is_active)")
+    .select("id,name,slug,description,is_visible,hero_assignments(id,path,is_active)")
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 

@@ -28,8 +28,6 @@ import {
 
 type HeroAssignment = {
   id: number;
-  target_type: string;
-  target_slug: string | null;
   path: string | null;
   is_active: boolean;
 };
@@ -39,11 +37,7 @@ type HeroRow = {
   name: string;
   slug: string;
   description: string | null;
-  variant: string;
-  style_preset: string;
-  source_type: string;
   is_visible: boolean;
-  updated_at: string;
   hero_assignments: HeroAssignment[];
 };
 

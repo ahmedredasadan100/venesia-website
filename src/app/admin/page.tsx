@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MEDIA_LIST_CONTENT_TYPES } from "./content/media/media-content-config";
 import { PROJECTS } from "../../config/projects-data";
 import { getSupabaseAdmin } from "../../lib/supabase-admin";
 
@@ -28,6 +29,7 @@ type FilterableCountQuery = {
   is(column: string, value: null): FilterableCountQuery;
   eq(column: string, value: string): FilterableCountQuery;
   neq(column: string, value: string): FilterableCountQuery;
+  in(column: string, values: string[]): FilterableCountQuery;
 };
 
 async function getCount(table: string, filter?: (query: FilterableCountQuery) => FilterableCountQuery) {
@@ -45,14 +47,21 @@ async function getCount(table: string, filter?: (query: FilterableCountQuery) =>
 
 async function getDashboardStats(): Promise<DashboardStats> {
   const [articles, categories, media, published, drafts, recentResult] = await Promise.all([
-    getCount("topics", (query) => query.is("deleted_at", null)),
+    getCount("topics", (query) => query.eq("content_type", "article").is("deleted_at", null)),
     getCount("topic_categories"),
-    getCount("media_items", (query) => query.is("deleted_at", null)),
-    getCount("topics", (query) => query.eq("status", "published").is("deleted_at", null)),
-    getCount("topics", (query) => query.neq("status", "published").is("deleted_at", null)),
+    getCount("topics", (query) =>
+      query.in("content_type", [...MEDIA_LIST_CONTENT_TYPES]).is("deleted_at", null),
+    ),
+    getCount("topics", (query) =>
+      query.eq("content_type", "article").eq("status", "published").is("deleted_at", null),
+    ),
+    getCount("topics", (query) =>
+      query.eq("content_type", "article").neq("status", "published").is("deleted_at", null),
+    ),
     getSupabaseAdmin()
       .from("topics")
       .select("id,title,slug,status,category,updated_at,published_at")
+      .eq("content_type", "article")
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(6),
