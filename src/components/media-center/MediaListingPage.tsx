@@ -31,7 +31,9 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
   ]);
 
   const featuredNews =
-    config.showFeaturedNews ? items.find((item) => item.featured) ?? items[0] ?? null : null;
+    "showFeaturedNews" in config && config.showFeaturedNews
+      ? items.find((item) => item.featured) ?? items[0] ?? null
+      : null;
   const regularItems = featuredNews
     ? items.filter((item) => item.slug !== featuredNews.slug)
     : items;
