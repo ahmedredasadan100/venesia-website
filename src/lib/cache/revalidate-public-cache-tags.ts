@@ -34,7 +34,11 @@ export function revalidateMediaCenterCache() {
 }
 
 export function revalidateTopicsCache() {
-  revalidatePublicCacheTags([...PUBLIC_CACHE_TAG_GROUPS.topics, "media-center"]);
+  revalidatePublicCacheTags([
+    ...PUBLIC_CACHE_TAG_GROUPS.topics,
+    "media-center",
+    "feed-modules",
+  ]);
 }
 
 export function revalidatePageCompositionCache() {
