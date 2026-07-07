@@ -8,8 +8,13 @@ import AdminFloorPlansEditor from "../../../components/admin/projects/AdminFloor
 import AdminMediaListField from "../../../components/admin/projects/AdminMediaListField";
 import AdminStringListField from "../../../components/admin/projects/AdminStringListField";
 import AdminModuleTabs from "../../../components/admin/page-blocks/AdminModuleTabs";
+import ProjectIntelligenceCard from "../../../components/admin/projects/ProjectIntelligenceCard";
+import ProjectMediaCollectionHints from "../../../components/admin/projects/ProjectMediaCollectionHints";
+import ProjectPublishChecklistPanel from "../../../components/admin/projects/ProjectPublishChecklistPanel";
+import ProjectTrackReadinessPanel from "../../../components/admin/projects/ProjectTrackReadinessPanel";
 import { AdminActionButton, AdminCard } from "../../../components/admin/ui";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
+import { projectPublishInputFromBundle } from "../../../lib/admin/projects/project-publish-validation";
 import type { ProjectEditBundle, ProjectRow } from "../../../lib/projects/types";
 import { updateProject } from "./actions";
 
@@ -218,6 +223,36 @@ function ProjectBasicTab({ project }: { project: ProjectRow }) {
         />
       </BasicTabSection>
 
+      <BasicTabSection title="حالة التنفيذ" description="حقول موجودة — تُستخدم لاحقًا في Track Your Project.">
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="block space-y-1.5">
+            <BasicFieldLabel>Construction Status</BasicFieldLabel>
+            <select name="status" defaultValue={project.status} className={inputClass()}>
+              <option value="under-construction">تحت الإنشاء</option>
+              <option value="excavation">حفر وأساسات</option>
+              <option value="near-delivery">قرب التسليم</option>
+              <option value="delivered">تم التسليم</option>
+            </select>
+          </label>
+          <label className="block space-y-1.5">
+            <BasicFieldLabel>Status Label</BasicFieldLabel>
+            <input name="status_label" defaultValue={project.status_label} className={inputClass()} />
+          </label>
+          <label className="block space-y-1.5">
+            <BasicFieldLabel>Progress %</BasicFieldLabel>
+            <input
+              name="progress"
+              type="number"
+              min={0}
+              max={100}
+              defaultValue={project.progress}
+              dir="ltr"
+              className={inputClass("font-en")}
+            />
+          </label>
+        </div>
+      </BasicTabSection>
+
       <BasicTabSection title="إعدادات الظهور" description="أماكن ظهور المشروع في الموقع.">
         <div className="grid gap-2.5 sm:grid-cols-2">
           <VisibilityToggle
@@ -403,17 +438,21 @@ export default function ProjectEditForm({ bundle }: ProjectEditFormProps) {
       id: "execution",
       label: "رحلة التنفيذ",
       content: (
-        <SectionIntro
-          title="رحلة التنفيذ — Phase 2"
-          description="رحلة التنفيذ لم تُنقل إلى CMS بعد. باقي بيانات المشروع تُعرض للزوار من Supabase."
-        />
+        <div className="space-y-5">
+          <SectionIntro
+            title="رحلة التنفيذ — Phase 2"
+            description="رحلة التنفيذ العامة لم تُفعّل بعد — البيانات أدناه للتخطيط الإداري فقط."
+          />
+          <ProjectTrackReadinessPanel project={project} />
+        </div>
       ),
     },
     {
       id: "media",
       label: "الصور والوسائط",
       content: (
-        <>
+        <div className="space-y-5">
+          <ProjectMediaCollectionHints media={media} />
           <input type="hidden" name="gallery_media_section" value="1" />
           <AdminMediaListField
             imageName="gallery_media_image"
@@ -422,7 +461,7 @@ export default function ProjectEditForm({ bundle }: ProjectEditFormProps) {
             defaultItems={galleryMedia}
             addLabel="إضافة صورة"
           />
-        </>
+        </div>
       ),
     },
     {
@@ -459,9 +498,20 @@ export default function ProjectEditForm({ bundle }: ProjectEditFormProps) {
     },
   ];
 
+  const publishInitial = projectPublishInputFromBundle({
+    project,
+    media,
+    floorPlans,
+    deliverySpecItems,
+  });
+
   return (
-    <AdminCard className="p-6">
-      <form action={updateProject} className="space-y-6">
+    <div className="space-y-5">
+      <ProjectIntelligenceCard project={project} />
+      <ProjectPublishChecklistPanel formId="project-edit-form" initial={publishInitial} />
+
+      <AdminCard className="p-6">
+      <form id="project-edit-form" action={updateProject} className="space-y-6">
         <input type="hidden" name="id" value={project.id} />
         <AdminModuleTabs tabs={tabs} />
         <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
@@ -477,5 +527,6 @@ export default function ProjectEditForm({ bundle }: ProjectEditFormProps) {
         </div>
       </form>
     </AdminCard>
+    </div>
   );
 }
