@@ -14,6 +14,7 @@ import { formatAdminListDate } from "../../../lib/content-dates";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { bulkUpdateTopics } from "./actions";
 import TopicListControls from "./TopicListControls";
+import TopicBulkPublishGate from "../../../components/admin/content-workflow/TopicBulkPublishGate";
 import TopicRowActions from "./TopicRowActions";
 import CopySlugButton from "./CopySlugButton";
 
@@ -36,6 +37,9 @@ type SearchParams = {
   limit?: string;
   page?: string;
   notice?: string;
+  bulk_partial?: string;
+  bulk_skipped?: string;
+  bulk_error?: string;
 };
 
 type TopicRow = {
@@ -144,7 +148,17 @@ function getDateFromPeriod(period: string) {
   return null;
 }
 
-function getNoticeText(notice?: string) {
+function getNoticeText(params?: Pick<SearchParams, "notice" | "bulk_partial" | "bulk_skipped" | "bulk_error">) {
+  if (params?.bulk_error) return decodeURIComponent(params.bulk_error);
+
+  const notice = params?.notice;
+  const partial = params?.bulk_partial;
+  const skipped = params?.bulk_skipped;
+
+  if (partial && skipped) {
+    return `تم نشر ${partial} موضوعًا. تُرك ${skipped} موضوعًا لعدم اكتمال متطلبات النشر.`;
+  }
+
   if (notice === "published") return "تم نشر الموضوع بنجاح.";
   if (notice === "unpublished") return "تم إخفاء الموضوع بنجاح.";
   if (notice === "deleted") return "تم حذف الموضوع حذفًا آمنًا.";
@@ -318,7 +332,7 @@ export default async function AdminTopicsPage({
   const rawLimit = params?.limit ?? DEFAULT_LIMIT;
   const limitValue = LIMIT_OPTIONS.includes(rawLimit) ? rawLimit : DEFAULT_LIMIT;
   const currentPage = getPositiveNumber(params?.page, 1);
-  const notice = getNoticeText(params?.notice);
+  const notice = getNoticeText(params);
   const dateFrom = getDateFromPeriod(period);
   const listFilters: TopicListFilterState = { q, status, category, series, featured, popular, dateFrom };
   const perPage = Number(limitValue);
@@ -407,6 +421,7 @@ export default async function AdminTopicsPage({
   return (
     <main className="space-y-7">
       <TopicListControls />
+      <TopicBulkPublishGate formId="topics-bulk-form" />
       <AdminPageContextHeader
         eyebrow="TOPICS CONTROL"
         title="إدارة موضوعات تهمك"
@@ -423,7 +438,12 @@ export default async function AdminTopicsPage({
         }
       />
 
-      {notice ? <AdminNotice variant="success" message={notice} /> : null}
+      {notice ? (
+        <AdminNotice
+          variant={params?.notice === "error" || params?.bulk_error ? "danger" : "success"}
+          message={notice}
+        />
+      ) : null}
 
       {error ? (
         <AdminNotice variant="danger" title="تعذر تحميل الموضوعات" message={error.message} />

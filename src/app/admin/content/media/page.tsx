@@ -27,6 +27,8 @@ type SearchParams = {
   limit?: string;
   page?: string;
   notice?: string;
+  bulk_partial?: string;
+  bulk_skipped?: string;
 };
 
 type MediaTopicRow = {
@@ -152,7 +154,15 @@ function getSortMeta(sort: string, column: "title" | "status") {
   return { active: false, direction: "asc" as const };
 }
 
-function getNoticeText(notice?: string) {
+function getNoticeText(params?: Pick<SearchParams, "notice" | "bulk_partial" | "bulk_skipped">) {
+  const notice = params?.notice;
+  const partial = params?.bulk_partial;
+  const skipped = params?.bulk_skipped;
+
+  if (partial && skipped) {
+    return `تم نشر ${partial} عنصرًا. تُرك ${skipped} عنصرًا لعدم اكتمال متطلبات النشر.`;
+  }
+
   if (notice === "published") return "تم نشر المحتوى بنجاح.";
   if (notice === "unpublished") return "تم إخفاء المحتوى بنجاح.";
   if (notice === "deleted") return "تم حذف المحتوى حذفًا آمنًا.";
@@ -173,7 +183,7 @@ export default async function AdminUnifiedMediaContentPage({
   const rawLimit = params?.limit ?? DEFAULT_LIMIT;
   const limitValue = LIMIT_OPTIONS.includes(rawLimit) ? rawLimit : DEFAULT_LIMIT;
   const currentPage = getPositiveNumber(params?.page, 1);
-  const notice = getNoticeText(params?.notice);
+  const notice = getNoticeText(params);
   const perPage = Number(limitValue);
 
   const { count: rawTotalCount } = await applyMediaListFilters(

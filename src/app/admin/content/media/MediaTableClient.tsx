@@ -22,6 +22,7 @@ import {
   useAdminGridSelection,
 } from "../../../../components/admin/ui";
 import { bulkUpdateMediaContent } from "./actions";
+import MediaBulkPublishGate from "../../../../components/admin/content-workflow/MediaBulkPublishGate";
 import MediaCategoryBadge from "./MediaCategoryBadge";
 import MediaRowActions from "./MediaRowActions";
 import { isMediaEditableContentType, type MediaListContentType } from "./media-content-config";
@@ -79,7 +80,9 @@ export default function MediaTableClient({
 
   return (
     <div className="space-y-4">
+      <MediaBulkPublishGate formId="media-bulk-form" />
       <AdminBulkActionBar
+        formId="media-bulk-form"
         selectedIds={selection.selectedIds}
         entityLabel="عنصر"
         action={bulkUpdateMediaContent}

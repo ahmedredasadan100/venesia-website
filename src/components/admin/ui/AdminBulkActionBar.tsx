@@ -20,6 +20,7 @@ type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
   actionFieldName?: string;
   idsFieldName?: string;
   hiddenFields?: Record<string, string>;
+  formId?: string;
 };
 
 export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>({
@@ -33,6 +34,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   actionFieldName = "bulk_action",
   idsFieldName = "ids",
   hiddenFields,
+  formId,
 }: AdminBulkActionBarProps<T>) {
   const [selectedAction, setSelectedAction] = useState(options[0]?.value ?? "");
 
@@ -45,6 +47,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
 
   return (
     <form
+      id={formId}
       action={action}
       onSubmit={handleSubmit}
       className="flex flex-col gap-4 rounded-[18px] border border-[#D8B87A]/14 bg-[#080B10]/92 px-4 py-4 shadow-[0_18px_70px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.035)] md:flex-row md:items-center md:justify-between"
