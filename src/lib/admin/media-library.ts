@@ -4,7 +4,7 @@ import {
   listCmsFolderFromStorage,
   uploadCmsDocumentToStorage,
   uploadCmsImageToStorage,
-  useSupabaseCmsStorage,
+  isSupabaseCmsStorageEnabled,
 } from "../storage/upload-cms-asset";
 
 /**
@@ -16,7 +16,7 @@ export type { PublicMediaFolderListing } from "./media-library-paths";
 export { normalizeMediaFolder } from "./media-library-paths";
 
 export async function listPublicMediaFolder(folder = "images") {
-  if (useSupabaseCmsStorage()) {
+  if (isSupabaseCmsStorageEnabled()) {
     return listCmsFolderFromStorage(folder);
   }
 
@@ -29,7 +29,7 @@ export async function savePublicMediaUpload(
   file: File,
   options?: { replacePath?: string | null },
 ) {
-  if (useSupabaseCmsStorage()) {
+  if (isSupabaseCmsStorageEnabled()) {
     return uploadCmsImageToStorage(folder, file, options);
   }
 
@@ -42,7 +42,7 @@ export async function savePublicDocumentUpload(
   file: File,
   options?: { replacePath?: string | null },
 ) {
-  if (useSupabaseCmsStorage()) {
+  if (isSupabaseCmsStorageEnabled()) {
     return uploadCmsDocumentToStorage(folder, file, options);
   }
 

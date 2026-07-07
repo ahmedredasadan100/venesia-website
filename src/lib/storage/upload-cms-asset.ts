@@ -23,7 +23,7 @@ export const CMS_IMAGES_BUCKET =
 export const CMS_DOCUMENTS_BUCKET =
   process.env.SUPABASE_STORAGE_BUCKET_DOCUMENTS?.trim() || "cms-documents";
 
-export function useSupabaseCmsStorage() {
+export function isSupabaseCmsStorageEnabled() {
   if (process.env.CMS_STORAGE_UPLOADS === "filesystem") return false;
   if (process.env.CMS_STORAGE_UPLOADS === "supabase") return true;
   return process.env.VERCEL === "1" || process.env.NODE_ENV === "production";

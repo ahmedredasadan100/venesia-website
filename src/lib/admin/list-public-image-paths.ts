@@ -1,9 +1,9 @@
 import "server-only";
 
-import { listPublicImagePathsFromStorage, useSupabaseCmsStorage } from "../storage/upload-cms-asset";
+import { listPublicImagePathsFromStorage, isSupabaseCmsStorageEnabled } from "../storage/upload-cms-asset";
 
 export async function listPublicImagePaths(folder = "images", limit = 240) {
-  if (useSupabaseCmsStorage()) {
+  if (isSupabaseCmsStorageEnabled()) {
     return listPublicImagePathsFromStorage(folder, limit);
   }
 
