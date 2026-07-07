@@ -78,3 +78,40 @@ export async function getMediaHubModuleAssignmentContext(templateId: number) {
 export async function getMediaSidebarModuleAssignmentContext(templateId: number) {
   return loadModuleAssignmentContext(MEDIA_SIDEBAR_ASSIGNMENT_TABLE, templateId);
 }
+
+export async function getHeroModuleAssignmentContext(templateId: number): Promise<ModuleAssignmentContext> {
+  const [{ data: assignments }, { data: pages }] = await Promise.all([
+    getSupabaseAdmin()
+      .from("hero_assignments")
+      .select("id,target_id,is_active,priority")
+      .eq("hero_id", templateId)
+      .eq("target_type", "page")
+      .order("priority", { ascending: true }),
+    getSupabaseAdmin().from("pages").select("id,title,slug,path").order("sort_order", { ascending: true }),
+  ]);
+
+  const pageById = new Map((pages ?? []).map((page) => [page.id, page]));
+  const rows: ModuleAssignmentRow[] = [];
+
+  for (const row of assignments ?? []) {
+    const page = pageById.get(row.target_id);
+    if (!page) continue;
+
+    rows.push({
+      id: row.id,
+      page_id: page.id,
+      template_id: templateId,
+      slot: "hero",
+      sort_order: row.priority ?? 0,
+      is_visible: normalizeBoolean(row.is_active, true),
+      page_title: page.title ?? "—",
+      page_slug: page.slug ?? "—",
+      page_path: page.path ?? "—",
+    });
+  }
+
+  return {
+    assignments: rows,
+    pages: (pages ?? []) as Array<{ id: number; title: string; slug: string; path: string }>,
+  };
+}
