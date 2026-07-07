@@ -79,6 +79,13 @@ export default async function EditMediaContentPage({
             <AdminActionButton href="/admin/topics/categories" variant="dark">
               إدارة التصنيفات
             </AdminActionButton>
+            <Link
+              href={`/admin/content/media/${topic.id}/preview`}
+              target="_blank"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18 hover:bg-white/[0.05]"
+            >
+              معاينة داخلية
+            </Link>
           </>
         }
       />

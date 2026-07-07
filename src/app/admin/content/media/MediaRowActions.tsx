@@ -7,8 +7,6 @@ import {
   AdminDuplicateResourceModal,
   adminFormFieldClassName,
 } from "../../../../components/admin/ui";
-import { getMediaHref } from "../../../../lib/media-center/types";
-import { toPublicMediaType } from "../../../../lib/media-center/content-type-map";
 import {
   archiveMediaContent,
   duplicateMediaContent,
@@ -32,15 +30,6 @@ type MediaRowActionsProps = {
   };
   currentListPath: string;
 };
-
-function getMediaPreviewHref(item: MediaRowActionsProps["item"]) {
-  if (!item.slug) return null;
-
-  const publicType = toPublicMediaType(item.content_type);
-  if (!publicType) return null;
-
-  return getMediaHref({ type: publicType, slug: item.slug });
-}
 
 function MediaDuplicateFields({
   item,
@@ -115,7 +104,7 @@ export default function MediaRowActions({ item, currentListPath }: MediaRowActio
   const editable = isMediaEditableContentType(item.content_type);
   const editHref = editable ? `/admin/content/media/${item.id}` : undefined;
   const isPublished = item.status === "published";
-  const previewHref = getMediaPreviewHref(item);
+  const previewHref = editable ? `/admin/content/media/${item.id}/preview` : null;
   const hiddenFields = { id: item.id, redirect_to: currentListPath };
 
   return (
