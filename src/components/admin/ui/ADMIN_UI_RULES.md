@@ -153,11 +153,15 @@ const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.p
 - Sort labels
 - Pagination controls
 
-## 5) Dashboard Exclusion
+## 5) Empty / Loading / Error states
+
+List empty states should use `AdminListEmptyState` for consistent title, helper copy, and primary action rhythm. Data grids may wrap it inside `AdminDataGridEmpty` when the table shell is shared.
+
+## 6) Dashboard Exclusion
 
 صفحة `/admin` الرئيسية وكروتها تعتبر Pattern مستقل ولا يتم تعديلها ضمن CRUD UI Lockdown.
 
-## 6) Golden Reference
+## 7) Golden Reference
 
 المرجع البصري للجداول هو Topics Grid:
 
@@ -168,7 +172,7 @@ const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.p
 - نفس Pagination.
 - نفس المسافات داخل الصفوف.
 
-## 7) RTL Protection For Actions
+## 8) RTL Protection For Actions
 
 Because the admin is RTL, action rows must keep the visual order fixed from the right edge: edit -> visibility -> duplicate -> delete. Use `dir="rtl"` on inline action containers unless the page deliberately uses a two-button pattern like Topics.
 This prevents the visual order from flipping between pages.
@@ -179,7 +183,7 @@ Mandatory visual order remains:
 
 If a module cannot support one of these actions, the missing action must be documented in the page code with a clear reason. Otherwise, the action is considered missing.
 
-## 8) Actions Column Containment
+## 9) Actions Column Containment
 
 Every actions column must stay inside the table/card bounds. Overflow outside the grid is a bug.
 
@@ -197,7 +201,7 @@ Rules:
 - Never rely on a wider column than `adminDataGridActionsColumn()` returns.
 - Extra reorder/move buttons count toward the total button count.
 
-## 9) Page Context Header (`AdminPageHeader` variants)
+## 10) Page Context Header (`AdminPageHeader` variants)
 
 مكوّن `AdminPageHeader` له نمطان (variant):
 
