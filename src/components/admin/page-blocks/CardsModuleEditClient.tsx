@@ -1,13 +1,15 @@
 "use client";
 
-import Link from "next/link";
-
 import AdminModuleTabs from "./AdminModuleTabs";
+import BlockEditorContextHeader from "./BlockEditorContextHeader";
+import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
+import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
 import AdminCardsItemsField from "./editors/AdminCardsItemsField";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { CardsBlockConfig } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
+import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type CardsModuleEditClientProps = {
   block: {
@@ -35,14 +37,19 @@ export default function CardsModuleEditClient({
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <section className="rounded-[34px] border border-white/10 bg-[#080B10]/78 p-6">
-        <Link href="/admin/pages-blocks/blocks/cards" className="mb-4 inline-flex text-sm text-white/45 hover:text-[#D8B87A]">
-          → الرجوع لبلوكات الكروت
-        </Link>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D8B87A]/70">Cards Module</p>
-        <h1 className="mt-3 text-2xl font-semibold text-white">{block.name}</h1>
-        {saved ? <p className="mt-3 text-sm text-emerald-300">تم حفظ الموديول بنجاح.</p> : null}
-      </section>
+      <BlockEditorContextHeader
+        backHref="/admin/pages-blocks/blocks/cards"
+        backLabel="الرجوع لبلوكات الكروت"
+        eyebrow="CARDS MODULE"
+        title={block.name}
+        description="شبكة بطاقات بعنوان ووصف وعناصر — مناسبة للفتحة الرئيسية أو السفلية."
+        status={block.status}
+        saved={saved}
+        slotContext={getSlotCompatibilityLabel("cards")}
+      />
+
+      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+      <ModuleDependencyHintsPanel moduleKind="cards" templateSlug={block.slug} />
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />

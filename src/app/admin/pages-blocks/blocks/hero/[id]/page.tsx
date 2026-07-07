@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { getHeroModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
 import HeroEditClient from "./HeroEditClient";
 
@@ -39,7 +40,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
 
   if (!heroId) notFound();
 
-  const [{ data: hero, error }, { data: pages }] = await Promise.all([
+  const [{ data: hero, error }, { data: pages }, assignmentContext] = await Promise.all([
     getSupabaseAdmin()
       .from("hero_templates")
       .select("*,hero_assignments(id,target_type,target_id,target_slug,path,is_active)")
@@ -49,6 +50,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
       .from("pages")
       .select("id,title,slug,path,page_type,status")
       .order("sort_order", { ascending: true }),
+    getHeroModuleAssignmentContext(heroId),
   ]);
 
   if (error || !hero) notFound();
@@ -84,6 +86,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
       sourceOptions={sourceOptions}
       variantOptions={variantOptions}
       saved={Boolean(resolvedSearch.saved)}
+      assignmentContext={assignmentContext}
     />
   );
 }

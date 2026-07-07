@@ -1,13 +1,16 @@
 "use client";
 
-import Link from "next/link";
-
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
 import AdminModuleTabs from "../../../../../../components/admin/page-blocks/AdminModuleTabs";
+import BlockEditorContextHeader from "../../../../../../components/admin/page-blocks/BlockEditorContextHeader";
+import ModuleCrossPageUsageBanner from "../../../../../../components/admin/page-blocks/ModuleCrossPageUsageBanner";
+import ModuleDependencyHintsPanel from "../../../../../../components/admin/page-blocks/ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "../../../../../../components/admin/page-blocks/ModulePageAssignmentsField";
 import { AdminLinkField } from "../../../../../../components/admin/ui";
 import { legacyHrefFromConfig } from "../../../../../../lib/admin/links/serialize";
 import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
+import type { ModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
+import { getSlotCompatibilityLabel } from "../../../../../../lib/page-composition/slot-module-registry";
 import { updateHeroTemplateDetails } from "../actions";
 
 type PageOption = {
@@ -37,6 +40,7 @@ type HeroEditClientProps = {
   sourceOptions: [string, string][];
   variantOptions: [string, string][];
   saved?: boolean;
+  assignmentContext: ModuleAssignmentContext;
 };
 
 export default function HeroEditClient({
@@ -49,37 +53,26 @@ export default function HeroEditClient({
   sourceOptions,
   variantOptions,
   saved,
+  assignmentContext,
 }: HeroEditClientProps) {
   const primaryCtaLink = legacyHrefFromConfig(config, "primaryCtaLink", "primaryCtaHref");
   const secondaryCtaLink = legacyHrefFromConfig(config, "secondaryCtaLink", "secondaryCtaHref");
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <section className="rounded-[34px] border border-white/10 bg-[#080B10]/78 p-6 shadow-[0_30px_110px_rgba(0,0,0,0.26)] backdrop-blur-xl">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <Link
-              href="/admin/pages-blocks/blocks/hero"
-              className="mb-4 inline-flex items-center gap-2 text-sm text-white/45 hover:text-[#D8B87A]"
-            >
-              <span aria-hidden="true">→</span>
-              الرجوع لكل الهيروهات
-            </Link>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D8B87A]/70">Hero Module</p>
-            <h1 className="mt-3 text-2xl font-semibold text-white md:text-3xl">{hero.name}</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/56">
-              عدّل المحتوى والوسائط والأزرار والعرض والربط بالصفحات — كل تبويب يغطي جزءًا واحدًا من الموديول.
-            </p>
-            {saved ? <p className="mt-3 text-sm text-emerald-300">تم حفظ الهيرو بنجاح.</p> : null}
-          </div>
+      <BlockEditorContextHeader
+        backHref="/admin/pages-blocks/blocks/hero"
+        backLabel="الرجوع لكل الهيروهات"
+        eyebrow="HERO MODULE"
+        title={hero.name}
+        description="عدّل المحتوى والوسائط والأزرار والعرض والربط بالصفحات — فتحة Hero واحدة لكل صفحة."
+        status={hero.is_visible ? "published" : "unpublished"}
+        saved={saved}
+        slotContext={getSlotCompatibilityLabel("hero")}
+      />
 
-          <span
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${hero.is_visible ? "bg-emerald-500/10 text-emerald-300" : "bg-white/10 text-white/45"}`}
-          >
-            {hero.is_visible ? "ظاهر" : "مخفي"}
-          </span>
-        </div>
-      </section>
+      <ModuleCrossPageUsageBanner moduleName={hero.name} assignments={assignmentContext.assignments} />
+      <ModuleDependencyHintsPanel moduleKind="hero" templateSlug={hero.slug} />
 
       <form action={updateHeroTemplateDetails}>
         <input type="hidden" name="id" value={hero.id} />

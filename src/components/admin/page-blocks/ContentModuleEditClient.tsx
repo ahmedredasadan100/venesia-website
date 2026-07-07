@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
-
 import AdminModuleTabs from "./AdminModuleTabs";
+import BlockEditorContextHeader from "./BlockEditorContextHeader";
+import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
+import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
 import AboutIntroModuleEditor from "./editors/AboutIntroModuleEditor";
 import AboutApproachModuleEditor from "./editors/AboutApproachModuleEditor";
@@ -22,6 +23,7 @@ import {
   asVisionGoalsConfig,
 } from "../../../lib/page-blocks/configs";
 import { getContentModuleEditorKey } from "../../../lib/page-blocks/module-edit-registry";
+import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 
 type ContentModuleEditClientProps = {
@@ -64,58 +66,62 @@ export default function ContentModuleEditClient({
               ? asHomeProjectsConfig(block.config)
             : asContentConfig(block.config);
   const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
+  const eyebrow =
+    editorKey === "home-contact"
+      ? "HOME CONTACT MODULE"
+      : editorKey === "home-projects"
+        ? "HOME PROJECTS MODULE"
+        : editorKey === "home-trust"
+          ? "HOME TRUST MODULE"
+          : editorKey === "home-story"
+            ? "HOME STORY MODULE"
+            : editorKey === "about-intro"
+              ? "WHO WE ARE MODULE"
+              : editorKey === "vision-goals"
+                ? "VISION & GOALS MODULE"
+                : editorKey === "about-cta"
+                  ? "ABOUT CTA MODULE"
+                  : editorKey === "about-principles"
+                    ? "ABOUT PRINCIPLES MODULE"
+                    : editorKey === "about-approach"
+                      ? "ABOUT APPROACH MODULE"
+                      : "CONTENT MODULE";
+  const description =
+    editorKey === "home-contact"
+      ? "CTA الرئيسية: نص + زر + صورة + 4 وسائل تواصل — للصفحة الرئيسية فقط."
+      : editorKey === "home-projects"
+        ? "سكشن مشاريع فينيسيا — نصوص السكشن من هنا؛ بيانات الكروت من جدول projects."
+        : editorKey === "home-trust"
+          ? "لماذا يثق السوق العقاري في فينيسيا؟ — للصفحة الرئيسية فقط."
+          : editorKey === "home-story"
+            ? "FROM VISION TO EXECUTION — للصفحة الرئيسية فقط."
+            : editorKey === "about-intro"
+              ? "موديول Who We Are — قابل لإعادة الاستخدام على أي صفحة."
+              : editorKey === "vision-goals"
+                ? "موديول الرؤية والأهداف — قابل لإعادة الاستخدام."
+                : editorKey === "about-cta"
+                  ? "موديول CTA — قابل لإعادة الاستخدام."
+                  : editorKey === "about-principles"
+                    ? "موديول المبادئ — قابل لإعادة الاستخدام."
+                    : editorKey === "about-approach"
+                      ? "موديول Our Approach — قابل لإعادة الاستخدام."
+                      : "عدّل المحتوى ومواضع العرض من التبويبات أدناه.";
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <section className="rounded-[34px] border border-white/10 bg-[#080B10]/78 p-6">
-        <Link href="/admin/pages-blocks/blocks/content" className="mb-4 inline-flex text-sm text-white/45 hover:text-[#D8B87A]">
-          → الرجوع لبلوكات المحتوى
-        </Link>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D8B87A]/70">
-          {editorKey === "home-contact"
-            ? "Home Contact Module"
-            : editorKey === "home-projects"
-            ? "Home Projects Module"
-            : editorKey === "home-trust"
-            ? "Home Trust Module"
-            : editorKey === "home-story"
-            ? "Home Story Module"
-            : editorKey === "about-intro"
-              ? "Who We Are Module"
-              : editorKey === "vision-goals"
-              ? "Vision & Goals Module"
-              : editorKey === "about-cta"
-                ? "About CTA Module"
-                : editorKey === "about-principles"
-                  ? "About Principles Module"
-                  : editorKey === "about-approach"
-                    ? "About Approach Module"
-                    : "Content Module"}
-        </p>
-        <h1 className="mt-3 text-2xl font-semibold text-white">{block.name}</h1>
-        <p className="mt-2 text-sm text-white/45">
-          {editorKey === "home-contact"
-            ? "CTA الرئيسية: نص + زر + صورة + 4 وسائل تواصل — للصفحة الرئيسية فقط."
-            : editorKey === "home-projects"
-            ? "سكشن مشاريع فينيسيا — نصوص السكشن من هنا؛ بيانات الكروت من جدول projects (show_on_homepage + homepage_order)."
-            : editorKey === "home-trust"
-            ? "لماذا يثق السوق العقاري في فينيسيا؟ — نص يسار + 4 بطاقات ثقة — للصفحة الرئيسية فقط."
-            : editorKey === "home-story"
-            ? "FROM VISION TO EXECUTION: نص + صورتان متداخلتان + زر CTA — للصفحة الرئيسية فقط."
-            : editorKey === "about-intro"
-              ? "موديول Who We Are: نص + 3 صور + 3 بطاقات — قابل لإعادة الاستخدام على أي صفحة."
-              : editorKey === "vision-goals"
-              ? "موديول الرؤية والأهداف: نص + صورة + عمودان — قابل لإعادة الاستخدام على أي صفحة."
-              : editorKey === "about-cta"
-                ? "موديول CTA: تواصل + نص + زر + صورة — قابل لإعادة الاستخدام على أي صفحة."
-                : editorKey === "about-principles"
-                  ? "موديول المبادئ: عنوان + عناصر بأيقونات — قابل لإعادة الاستخدام على أي صفحة."
-                  : editorKey === "about-approach"
-                    ? "موديول Our Approach: eyebrow + نص مركزي — قابل لإعادة الاستخدام على أي صفحة."
-                    : "عدّل المحتوى ومواضع العرض من التبويبات أدناه."}
-        </p>
-        {saved ? <p className="mt-3 text-sm text-emerald-300">تم حفظ الموديول بنجاح.</p> : null}
-      </section>
+      <BlockEditorContextHeader
+        backHref="/admin/pages-blocks/blocks/content"
+        backLabel="الرجوع لبلوكات المحتوى"
+        eyebrow={eyebrow}
+        title={block.name}
+        description={description}
+        status={block.status}
+        saved={saved}
+        slotContext={getSlotCompatibilityLabel("content")}
+      />
+
+      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+      <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />

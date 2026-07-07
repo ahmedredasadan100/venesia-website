@@ -1,14 +1,16 @@
 "use client";
 
-import Link from "next/link";
-
 import AdminModuleTabs from "./AdminModuleTabs";
+import BlockEditorContextHeader from "./BlockEditorContextHeader";
+import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
+import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
 import { AdminLinkField } from "../ui";
 import { linkDefaultFromContainer } from "../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { CtaBlockConfig } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
+import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type CtaModuleEditClientProps = {
   block: {
@@ -36,14 +38,19 @@ export default function CtaModuleEditClient({
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <section className="rounded-[34px] border border-white/10 bg-[#080B10]/78 p-6">
-        <Link href="/admin/pages-blocks/blocks/cta" className="mb-4 inline-flex text-sm text-white/45 hover:text-[#D8B87A]">
-          → الرجوع لبلوكات CTA
-        </Link>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D8B87A]/70">CTA Module</p>
-        <h1 className="mt-3 text-2xl font-semibold text-white">{block.name}</h1>
-        {saved ? <p className="mt-3 text-sm text-emerald-300">تم حفظ الموديول بنجاح.</p> : null}
-      </section>
+      <BlockEditorContextHeader
+        backHref="/admin/pages-blocks/blocks/cta"
+        backLabel="الرجوع لبلوكات CTA"
+        eyebrow="CTA MODULE"
+        title={block.name}
+        description="شريط دعوة لإجراء — يحتاج عنوانًا ونصًا وزرًا ورابطًا صالحًا."
+        status={block.status}
+        saved={saved}
+        slotContext={getSlotCompatibilityLabel("cta")}
+      />
+
+      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+      <ModuleDependencyHintsPanel moduleKind="cta" templateSlug={block.slug} />
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />

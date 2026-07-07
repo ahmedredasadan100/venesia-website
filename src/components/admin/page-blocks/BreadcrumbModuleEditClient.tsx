@@ -1,13 +1,15 @@
 "use client";
 
-import Link from "next/link";
-
 import AdminModuleTabs from "./AdminModuleTabs";
+import BlockEditorContextHeader from "./BlockEditorContextHeader";
+import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
+import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
 import BreadcrumbManualItemsField from "./editors/BreadcrumbManualItemsField";
-import { fieldClassName, statusMeta } from "../../../lib/page-blocks/admin-utils";
+import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { BreadcrumbBlockConfig } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
+import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type BreadcrumbModuleEditClientProps = {
   block: {
@@ -32,42 +34,23 @@ export default function BreadcrumbModuleEditClient({
   saved,
   updateAction,
 }: BreadcrumbModuleEditClientProps) {
-  const status = statusMeta(block.status);
   const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <section className="rounded-[34px] border border-white/10 bg-[#080B10]/78 p-6 shadow-[0_30px_110px_rgba(0,0,0,0.26)] backdrop-blur-xl">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <Link
-              href="/admin/pages-blocks/blocks/breadcrumb"
-              className="mb-4 inline-flex items-center gap-2 text-sm text-white/45 hover:text-[#D8B87A]"
-            >
-              <span aria-hidden="true">→</span>
-              الرجوع لكل موديولات Breadcrumb
-            </Link>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D8B87A]/70">Breadcrumb Module</p>
-            <h1 className="mt-3 text-2xl font-semibold text-white md:text-3xl">{block.name}</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/56">
-              موديول مسار تنقّل قابل لإعادة الاستخدام — عدّل المحتوى والإعدادات واختر الصفحات من تبويب «يظهر في الصفحات».
-            </p>
-            {saved ? <p className="mt-3 text-sm text-emerald-300">تم حفظ الموديول بنجاح.</p> : null}
-          </div>
+      <BlockEditorContextHeader
+        backHref="/admin/pages-blocks/blocks/breadcrumb"
+        backLabel="الرجوع لكل موديولات Breadcrumb"
+        eyebrow="BREADCRUMB MODULE"
+        title={block.name}
+        description="موديول مسار تنقّل قابل لإعادة الاستخدام — يُفضّل في الفتحة الرئيسية أعلى المحتوى."
+        status={block.status}
+        saved={saved}
+        slotContext={getSlotCompatibilityLabel("breadcrumb")}
+      />
 
-          <span
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
-              status.tone === "green"
-                ? "bg-emerald-500/10 text-emerald-300"
-                : status.tone === "gold"
-                  ? "bg-[#D8B87A]/10 text-[#D8B87A]"
-                  : "bg-white/10 text-white/45"
-            }`}
-          >
-            {status.label}
-          </span>
-        </div>
-      </section>
+      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+      <ModuleDependencyHintsPanel moduleKind="breadcrumb" templateSlug={block.slug} />
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
