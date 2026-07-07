@@ -15,6 +15,15 @@ import {
   resolveArticleTopicCategory,
   type ArticleTopicCategoryRecord,
 } from "../../../lib/admin/article-topic-categories";
+import {
+  getTopicDraftValidationError,
+  getTopicPublishOnlyValidationError,
+  getTopicPublishReadyError,
+  getTopicPublishValidationError,
+  topicRowToPublishInput,
+  validateSlugFormat,
+  type TopicPublishInput,
+} from "../../../lib/admin/content-workflow/topic-publish-validation";
 
 const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
 type TopicStatus = (typeof VALID_STATUSES)[number];
@@ -133,7 +142,7 @@ function createSlug(value: string) {
 }
 
 function validateSlug(slug: string) {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+  return validateSlugFormat(slug);
 }
 
 function getFile(formData: FormData, key: string) {
@@ -242,30 +251,48 @@ function getPayload(formData: FormData) {
 }
 
 function getDraftValidationError(payload: ReturnType<typeof getPayload>) {
-  if (!payload.title) return "العنوان مطلوب.";
-  if (!payload.slug) return "الرابط مطلوب.";
-  if (!validateSlug(payload.slug)) {
-    return "الـ Slug لازم يكون إنجليزي صغير، أرقام، وشرطة بين الكلمات فقط.";
-  }
-  if (!payload.categorySlug) return "التصنيف مطلوب.";
-  return null;
+  return getTopicDraftValidationError(payloadToPublishInput(payload));
 }
 
 function getBaseValidationError(payload: ReturnType<typeof getPayload>) {
-  return getPublishReadyError(payload);
+  return getTopicPublishReadyError(payloadToPublishInput(payload));
 }
 
 function getPublishOnlyValidationError(payload: ReturnType<typeof getPayload>) {
-  if (payload.image && !payload.imageAlt) return "وصف الصورة Alt Text مطلوب قبل النشر.";
-  if (!payload.focusKeyword) return "Focus Keyword مطلوب قبل النشر.";
-  if (!payload.seoTitle) return "SEO Title مطلوب قبل النشر.";
-  if (payload.seoTitle.length < 45) return "SEO Title قصير. النطاق المقترح من 45 إلى 60 حرف.";
-  if (payload.seoTitle.length > 70) return "SEO Title طويل جدًا. الأفضل ألا يزيد عن 70 حرف.";
-  if (!payload.seoDescription) return "SEO Description مطلوب قبل النشر.";
-  if (payload.seoDescription.length < 120) return "SEO Description قصير. النطاق المقترح من 120 إلى 160 حرف.";
-  if (payload.seoDescription.length > 170) return "SEO Description طويل جدًا. الأفضل ألا يزيد عن 170 حرف.";
+  return getTopicPublishOnlyValidationError(payloadToPublishInput(payload));
+}
 
-  return null;
+function payloadToPublishInput(payload: ReturnType<typeof getPayload>): TopicPublishInput {
+  return {
+    title: payload.title,
+    slug: payload.slug,
+    excerpt: payload.excerpt,
+    content: payload.content,
+    image: payload.image,
+    imageAlt: payload.imageAlt,
+    categorySlug: payload.categorySlug,
+    seoTitle: payload.seoTitle,
+    seoDescription: payload.seoDescription,
+    focusKeyword: payload.focusKeyword,
+    faq: payload.faq,
+  };
+}
+
+function getValidationError(
+  payload: ReturnType<typeof getPayload>,
+  mode: "save" | "publish" | "draft",
+  _nextStatus: TopicStatus,
+) {
+  if (mode === "publish") return getPublishValidationError(payload);
+  return getDraftValidationError(payload);
+}
+
+function getPublishReadyError(payload: ReturnType<typeof getPayload>) {
+  return getTopicPublishReadyError(payloadToPublishInput(payload));
+}
+
+function getPublishValidationError(payload: ReturnType<typeof getPayload>) {
+  return getTopicPublishValidationError(payloadToPublishInput(payload));
 }
 
 function preserveImage(nextValue: string, currentValue: string) {
@@ -310,30 +337,63 @@ function preservePayloadFromCurrent(
   return payload;
 }
 
-function getValidationError(
-  payload: ReturnType<typeof getPayload>,
-  mode: "save" | "publish" | "draft",
-  _nextStatus: TopicStatus,
-) {
-  if (mode === "publish") return getPublishValidationError(payload);
-  return getDraftValidationError(payload);
-}
+export type BulkPublishValidationFailure = {
+  id: number;
+  title: string;
+  reason: string;
+};
 
-function getPublishReadyError(payload: ReturnType<typeof getPayload>) {
-  const draftError = getDraftValidationError(payload);
-  if (draftError) return draftError;
-  if (!payload.excerpt || payload.excerpt.length < 20) {
-    return "الوصف المختصر مطلوب ولا يقل عن 20 حرف.";
+export type BulkPublishValidationResult = {
+  validIds: number[];
+  failures: BulkPublishValidationFailure[];
+};
+
+export async function validateBulkTopicPublish(ids: number[]): Promise<BulkPublishValidationResult> {
+  await requireAdminSession();
+
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!uniqueIds.length) {
+    return { validIds: [], failures: [] };
   }
-  if (!payload.image) return "الصورة الرئيسية مطلوبة.";
-  return null;
-}
 
-function getPublishValidationError(payload: ReturnType<typeof getPayload>) {
-  const readyError = getPublishReadyError(payload);
-  if (readyError) return readyError;
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select(
+      "id, title, slug, excerpt, content, image, image_alt, category_slug, seo_title, seo_description, focus_keyword, faq",
+    )
+    .in("id", uniqueIds)
+    .eq("content_type", "article")
+    .is("deleted_at", null);
 
-  return getPublishOnlyValidationError(payload);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = data ?? [];
+  const foundIds = new Set(rows.map((row) => row.id));
+  const failures: BulkPublishValidationFailure[] = [];
+  const validIds: number[] = [];
+
+  for (const id of uniqueIds) {
+    if (!foundIds.has(id)) {
+      failures.push({ id, title: `#${id}`, reason: "الموضوع غير موجود أو غير متاح." });
+    }
+  }
+
+  for (const row of rows) {
+    const validationError = getTopicPublishValidationError(topicRowToPublishInput(row));
+    if (validationError) {
+      failures.push({
+        id: row.id,
+        title: row.title?.trim() || `موضوع #${row.id}`,
+        reason: validationError,
+      });
+    } else {
+      validIds.push(row.id);
+    }
+  }
+
+  return { validIds, failures };
 }
 
 async function getTopicById(id: string) {
@@ -808,11 +868,24 @@ export async function bulkUpdateTopics(formData: FormData) {
   let errorMessage: string | null = null;
 
   if (bulkAction === "publish") {
+    const validation = await validateBulkTopicPublish(ids);
+    if (!validation.validIds.length) {
+      redirect(
+        `${redirectTo}${redirectTo.includes("?") ? "&" : "?"}notice=error&bulk_error=${encodeURIComponent("لا يمكن نشر أي موضوع من التحديد — راجع قائمة الجاهزية لكل موضوع.")}#topics-table`,
+      );
+    }
+
     const { error } = await getSupabaseAdmin()
       .from("topics")
       .update({ status: "published", updated_at: now })
-      .in("id", ids);
+      .in("id", validation.validIds);
     errorMessage = error?.message ?? null;
+
+    if (!errorMessage && validation.failures.length > 0) {
+      redirect(
+        `${redirectTo}${redirectTo.includes("?") ? "&" : "?"}notice=published&bulk_partial=${validation.validIds.length}&bulk_skipped=${validation.failures.length}#topics-table`,
+      );
+    }
   } else if (bulkAction === "unpublish") {
     const { error } = await getSupabaseAdmin()
       .from("topics")

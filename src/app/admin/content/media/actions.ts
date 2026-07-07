@@ -16,12 +16,17 @@ import {
   parseMediaPayloadFromForm,
   resolveCoverImageForGallery,
   resolveCoverImageForVideo,
-  validateGalleryPayload,
-  validateVideoPayload,
   type GalleryMediaPayload,
   type MediaTopicPayload,
   type VideoMediaPayload,
 } from "../../../../lib/admin/media-topic-payload";
+import {
+  getMediaBaseValidationError,
+  getMediaPublishValidationError as validateMediaPublishInput,
+  mediaRowToPublishInput,
+  type MediaPublishInput,
+} from "../../../../lib/admin/content-workflow/media-publish-validation";
+import { validateSlugFormat } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import { resolveTopicPublishedAt } from "../../../../lib/content-dates";
 import { logError } from "../../../../lib/logging";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -139,7 +144,7 @@ function createSlug(value: string) {
 }
 
 function validateSlug(slug: string) {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+  return validateSlugFormat(slug);
 }
 
 function getNormalizedStatus(value: string, fallback: MediaStatus = "draft"): MediaStatus {
@@ -208,13 +213,108 @@ function getPayload(formData: FormData) {
 }
 
 function getValidationError(payload: ReturnType<typeof getPayload>) {
-  if (!payload.title) return "العنوان مطلوب.";
-  if (!payload.slug) return "الرابط مطلوب.";
-  if (!validateSlug(payload.slug)) {
-    return "الـ Slug لازم يكون إنجليزي صغير، أرقام، وشرطة بين الكلمات فقط.";
+  return getMediaBaseValidationError({
+    title: payload.title,
+    slug: payload.slug,
+    excerpt: payload.excerpt,
+    content: payload.content,
+    image: payload.image,
+    categorySlug: payload.categorySlug,
+    contentType: "news",
+    mediaPayload: null,
+  });
+}
+
+function payloadToMediaPublishInput(
+  payload: ReturnType<typeof getPayload>,
+  mediaPayload: MediaTopicPayload | null,
+  contentType: MediaEditableContentType,
+): MediaPublishInput {
+  return {
+    title: payload.title,
+    slug: payload.slug,
+    excerpt: payload.excerpt,
+    content: payload.content,
+    image: payload.image,
+    categorySlug: payload.categorySlug,
+    contentType,
+    mediaPayload,
+  };
+}
+
+function getPublishedValidationError(
+  contentType: MediaEditableContentType,
+  mediaPayload: MediaTopicPayload | null,
+  status: MediaStatus,
+  payload: ReturnType<typeof getPayload>,
+) {
+  if (status !== "published") return null;
+  return validateMediaPublishInput(payloadToMediaPublishInput(payload, mediaPayload, contentType));
+}
+
+function validateMediaTopicRow(topic: MediaTopicRow): string | null {
+  const input = mediaRowToPublishInput(topic);
+  if (!input) return "نوع المحتوى غير مدعوم للنشر.";
+  return validateMediaPublishInput(input);
+}
+
+export type BulkMediaPublishValidationFailure = {
+  id: number;
+  title: string;
+  reason: string;
+};
+
+export type BulkMediaPublishValidationResult = {
+  validIds: number[];
+  failures: BulkMediaPublishValidationFailure[];
+};
+
+export async function validateBulkMediaPublish(ids: number[]): Promise<BulkMediaPublishValidationResult> {
+  await requireAdminSession();
+
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!uniqueIds.length) {
+    return { validIds: [], failures: [] };
   }
-  if (!payload.categorySlug) return "قسم المركز الإعلامي مطلوب.";
-  return null;
+
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select(
+      "id, title, slug, excerpt, content, image, category_slug, content_type, media_payload",
+    )
+    .in("id", uniqueIds)
+    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
+    .is("deleted_at", null);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = (data ?? []) as MediaTopicRow[];
+  const foundIds = new Set(rows.map((row) => row.id));
+  const failures: BulkMediaPublishValidationFailure[] = [];
+  const validIds: number[] = [];
+
+  for (const id of uniqueIds) {
+    if (!foundIds.has(id)) {
+      failures.push({ id, title: `#${id}`, reason: "المحتوى غير موجود أو غير متاح." });
+    }
+  }
+
+  for (const row of rows) {
+    const validationError = validateMediaTopicRow(row);
+    if (validationError) {
+      failures.push({
+        id: row.id,
+        title: row.title?.trim() || `محتوى #${row.id}`,
+        reason: validationError,
+      });
+    } else {
+      validIds.push(row.id);
+    }
+  }
+
+  return { validIds, failures };
 }
 
 function resolveWriteMediaPayload(
@@ -238,58 +338,6 @@ function resolveWriteMediaPayload(
   }
 
   return { ok: true as const, mediaPayload: null as MediaTopicPayload | null };
-}
-
-function getPublishedValidationError(
-  contentType: MediaEditableContentType,
-  mediaPayload: MediaTopicPayload | null,
-  status: MediaStatus,
-) {
-  if (status !== "published") return null;
-
-  if (contentType === "video" && mediaPayload?.kind === "video") {
-    return validateVideoPayload(mediaPayload as VideoMediaPayload, { published: true });
-  }
-
-  if (contentType === "gallery" && mediaPayload?.kind === "gallery") {
-    return validateGalleryPayload(mediaPayload as GalleryMediaPayload, { published: true });
-  }
-
-  return null;
-}
-
-function getMediaPublishValidationError(
-  contentType: MediaEditableContentType,
-  mediaPayload: MediaTopicPayload | null,
-): string | null {
-  const matchError = assertPayloadMatchesContentType(contentType, mediaPayload);
-  if (matchError) return matchError;
-
-  return getPublishedValidationError(contentType, mediaPayload, "published");
-}
-
-async function assertMediaTopicsCanPublish(ids: number[], redirectTo: string): Promise<void> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("id, content_type, media_payload")
-    .in("id", ids)
-    .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
-    .is("deleted_at", null);
-
-  if (error || !data || data.length !== ids.length) {
-    redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
-  }
-
-  for (const topic of data) {
-    if (!isMediaEditableContentType(topic.content_type)) {
-      redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
-    }
-
-    const validationError = getMediaPublishValidationError(topic.content_type, topic.media_payload);
-    if (validationError) {
-      redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
-    }
-  }
 }
 
 async function resolveMediaSection(categorySlug: string) {
@@ -457,6 +505,7 @@ export async function createMediaContent(formData: FormData) {
     section.contentType,
     writePayload.mediaPayload,
     payload.status,
+    payload,
   );
   if (publishError) redirectFormError("/admin/content/media/new", publishError);
 
@@ -525,6 +574,7 @@ export async function updateMediaContent(formData: FormData) {
     section.contentType,
     writePayload.mediaPayload,
     payload.status,
+    payload,
   );
   if (publishError) redirectEditError(id, publishError);
 
@@ -629,7 +679,7 @@ export async function publishMediaContent(formData: FormData) {
     redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
   }
 
-  const publishError = getMediaPublishValidationError(topic.content_type, topic.media_payload);
+  const publishError = validateMediaTopicRow(topic);
   if (publishError) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
 
   const now = new Date().toISOString();
@@ -794,15 +844,28 @@ export async function bulkUpdateMediaContent(formData: FormData) {
   let errorMessage: string | null = null;
 
   if (bulkAction === "publish") {
-    await assertMediaTopicsCanPublish(ids, redirectTo);
+    const validation = await validateBulkMediaPublish(ids);
+    if (!validation.validIds.length) {
+      redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+    }
 
     const { error } = await getSupabaseAdmin()
       .from("topics")
       .update({ status: "published", updated_at: now })
-      .in("id", ids)
+      .in("id", validation.validIds)
       .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
       .is("deleted_at", null);
     errorMessage = error?.message ?? null;
+
+    if (!errorMessage && validation.failures.length > 0) {
+      redirect(
+        appendMediaListNotice(
+          `${redirectTo}${redirectTo.includes("?") ? "&" : "?"}bulk_partial=${validation.validIds.length}&bulk_skipped=${validation.failures.length}`,
+          "saved",
+          "media-table",
+        ),
+      );
+    }
   } else if (bulkAction === "unpublish") {
     const { error } = await getSupabaseAdmin()
       .from("topics")

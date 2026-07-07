@@ -15,6 +15,8 @@ import TopicSlugInput from "../TopicSlugInput";
 import { filterEditorTopicCategories } from "../../../../lib/admin/cms-test-data";
 import { buildArticleTopicCategoryFilterGroups } from "../../../../lib/admin/article-topic-categories";
 import ArticleTopicCategorySelect from "../ArticleTopicCategorySelect";
+import TopicPublishChecklistPanel from "../../../../components/admin/content-workflow/TopicPublishChecklistPanel";
+import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import { publishTopic, saveDraftTopic, saveTopic, saveTopicAndClose, unpublishTopic } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +76,7 @@ export default async function EditTopicPage({
   const notice = getNoticeText(query?.notice);
   const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
   const status = topic.status || "draft";
+  const publishInput = topicRowToPublishInput({ ...topic, faq });
 
   return (
     <main className="space-y-7">
@@ -94,7 +97,7 @@ export default async function EditTopicPage({
       {notice ? <AdminNotice variant="success" message={notice} /> : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={errorMessage} /> : null}
 
-      <form action={saveTopic} className="space-y-7" noValidate>
+      <form id="topic-edit-form" action={saveTopic} className="space-y-7" noValidate>
         <input type="hidden" name="id" value={topic.id} />
         <input type="hidden" name="status" value={status} />
 
@@ -164,7 +167,9 @@ export default async function EditTopicPage({
               id: "publish",
               label: "النشر",
               content: (
-                <section className="max-w-xl rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+                <div className="space-y-6">
+                  <TopicPublishChecklistPanel formId="topic-edit-form" initial={publishInput} />
+                  <section className="max-w-xl rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
                   <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">PUBLISHING</p>
                   <h3 className="mt-3 text-xl font-semibold text-white">إعدادات الظهور</h3>
                   <div className="mt-6 space-y-4">
@@ -181,6 +186,7 @@ export default async function EditTopicPage({
                     </label>
                   </div>
                 </section>
+                </div>
               ),
             },
           ]}

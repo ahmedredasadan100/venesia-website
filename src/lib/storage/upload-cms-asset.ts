@@ -5,7 +5,7 @@ import path from "path";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { normalizeMediaFolder, type PublicMediaFolderListing } from "../admin/media-library-paths";
 
-const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg"]);
+const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
 const PDF_EXTENSIONS = new Set([".pdf"]);
 
 export const CMS_IMAGES_BUCKET =
