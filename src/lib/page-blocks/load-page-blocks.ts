@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import { resolveHomeModuleSlugFromTemplate, type HomeModuleSlug } from "./home-module-slugs";
@@ -37,6 +39,14 @@ export type PageBlockLoadResult = {
  * Hero is intentionally excluded — use getHeroSectionByPageSlug().
  */
 export async function loadPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoadResult> {
+  return unstable_cache(
+    async () => queryPageBlockStateBySlug(pageSlug),
+    ["page-block-state", pageSlug],
+    { revalidate: 300, tags: ["page-composition", "page-blocks"] },
+  )();
+}
+
+async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoadResult> {
   const supabase = getSupabaseAdmin();
 
   const { data: page, error: pageError } = await supabase

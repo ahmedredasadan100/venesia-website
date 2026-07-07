@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import { normalizeBoolean } from "../page-blocks/admin-utils";
@@ -23,6 +25,14 @@ export type LoadedFeedModule = ResolvedFeedModule & {
 };
 
 export async function loadFeedModulesForPageSlug(pageSlug: string): Promise<LoadedFeedModule[]> {
+  return unstable_cache(
+    async () => queryFeedModulesForPageSlug(pageSlug),
+    ["feed-modules", pageSlug],
+    { revalidate: 300, tags: ["page-composition", "feed-modules"] },
+  )();
+}
+
+async function queryFeedModulesForPageSlug(pageSlug: string): Promise<LoadedFeedModule[]> {
   const supabase = getSupabaseAdmin();
 
   const { data: page, error: pageError } = await supabase
