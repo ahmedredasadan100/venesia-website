@@ -101,6 +101,172 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
   };
 }
 
+const LISTING_SELECT =
+  "id, slug, title, excerpt, image, category, category_slug, series, series_slug, date_label, published_at, reading_time, is_featured, is_popular";
+
+function applyPublicTopicFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  categorySlug?: string,
+) {
+  let next = query
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .not("slug", "like", "e2e-test%");
+
+  if (categorySlug) {
+    next = next.eq("category_slug", categorySlug);
+  }
+
+  return next;
+}
+
+async function queryFeaturedPublicTopic(categorySlug?: string): Promise<Topic | undefined> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: featuredRow, error: featuredError } = await applyPublicTopicFilters(
+    supabase.from("topics").select(LISTING_SELECT),
+    categorySlug,
+  )
+    .eq("is_featured", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (featuredError) {
+    logError("loadFeaturedPublicTopic failed", featuredError);
+    return undefined;
+  }
+
+  if (featuredRow) {
+    return mapDbTopicToListingTopic(featuredRow as DbTopic);
+  }
+
+  const { data: fallbackRow, error: fallbackError } = await applyPublicTopicFilters(
+    supabase.from("topics").select(LISTING_SELECT),
+    categorySlug,
+  )
+    .limit(1)
+    .maybeSingle();
+
+  if (fallbackError) {
+    logError("loadFeaturedPublicTopic fallback failed", fallbackError);
+    return undefined;
+  }
+
+  return fallbackRow ? mapDbTopicToListingTopic(fallbackRow as DbTopic) : undefined;
+}
+
+export type PublicTopicsListingParams = {
+  sort: "latest" | "oldest";
+  categorySlug?: string;
+  page: number;
+  itemsPerPage: number;
+};
+
+export type PublicTopicsListingResult = {
+  featuredTopic?: Topic;
+  visibleTopics: Topic[];
+  totalRegularTopics: number;
+  currentPage: number;
+  totalPages: number;
+  startIndex: number;
+  endIndex: number;
+};
+
+async function queryPublicTopicsListing(
+  params: PublicTopicsListingParams,
+): Promise<PublicTopicsListingResult> {
+  const categorySlug = params.categorySlug?.trim() ?? "";
+  const featuredTopic = await queryFeaturedPublicTopic(categorySlug || undefined);
+  const featuredId = featuredTopic?.id;
+
+  const supabase = getSupabaseAdmin();
+
+  let countQuery = applyPublicTopicFilters(
+    supabase.from("topics").select("id", { count: "exact", head: true }),
+    categorySlug || undefined,
+  );
+
+  if (featuredId) {
+    countQuery = countQuery.neq("id", featuredId);
+  }
+
+  const { count, error: countError } = await countQuery;
+
+  if (countError) {
+    logError("loadPublicTopicsListing count failed", countError);
+  }
+
+  const totalRegularTopics = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalRegularTopics / params.itemsPerPage));
+  const currentPage = Math.min(Math.max(params.page, 1), totalPages);
+  const startIndex = totalRegularTopics === 0 ? 0 : (currentPage - 1) * params.itemsPerPage;
+  const endIndex = Math.min(startIndex + params.itemsPerPage, totalRegularTopics);
+
+  let listQuery = applyPublicTopicFilters(
+    supabase.from("topics").select(LISTING_SELECT),
+    categorySlug || undefined,
+  );
+
+  if (featuredId) {
+    listQuery = listQuery.neq("id", featuredId);
+  }
+
+  listQuery = listQuery.order("published_at", {
+    ascending: params.sort === "oldest",
+  });
+
+  if (totalRegularTopics > 0) {
+    listQuery = listQuery.range(startIndex, endIndex - 1);
+  } else {
+    listQuery = listQuery.limit(0);
+  }
+
+  const { data, error: listError } = await listQuery;
+
+  if (listError) {
+    logError("loadPublicTopicsListing failed", listError);
+    return {
+      featuredTopic,
+      visibleTopics: [],
+      totalRegularTopics: 0,
+      currentPage: 1,
+      totalPages: 1,
+      startIndex: 0,
+      endIndex: 0,
+    };
+  }
+
+  return {
+    featuredTopic,
+    visibleTopics: (data ?? []).map((topic) => mapDbTopicToListingTopic(topic as DbTopic)),
+    totalRegularTopics,
+    currentPage,
+    totalPages,
+    startIndex,
+    endIndex,
+  };
+}
+
+export async function loadPublicTopicsListing(
+  params: PublicTopicsListingParams,
+): Promise<PublicTopicsListingResult> {
+  const categorySlug = params.categorySlug?.trim() ?? "";
+  const cacheKey = [
+    "public-topics-listing",
+    params.sort,
+    categorySlug,
+    String(params.page),
+    String(params.itemsPerPage),
+  ];
+
+  return unstable_cache(
+    async () => queryPublicTopicsListing(params),
+    cacheKey,
+    { revalidate: 300, tags: ["topics"] },
+  )();
+}
+
 async function queryPublishedPublicTopics(): Promise<Topic[]> {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
