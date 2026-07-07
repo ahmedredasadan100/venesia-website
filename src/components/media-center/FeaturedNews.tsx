@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { MediaNewsItem } from "../../lib/media-center";
 
@@ -9,10 +10,12 @@ export default function FeaturedNews({ item }: FeaturedNewsProps) {
   return (
     <article className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-[0_25px_90px_rgba(0,0,0,0.32)]">
       <div className="relative h-[420px] overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-cover bg-center transition duration-1000 group-hover:scale-105"
-          style={{ backgroundImage: `url(${item.image})` }}
+        <Image
+          src={item.image}
+          alt={item.title}
+          fill
+          sizes="(min-width: 1024px) 900px, 100vw"
+          className="object-cover transition duration-1000 group-hover:scale-105"
         />
 
         <div

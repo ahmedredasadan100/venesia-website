@@ -78,6 +78,8 @@ export default function InternalPageLayout({
                 <img
                   src={heroImage}
                   alt=""
+                  fetchPriority="high"
+                  decoding="async"
                   className={`hero-slide-ken-burns pointer-events-none absolute left-1/2 top-1/2 min-h-full min-w-full object-cover ${
                     heroImagePositionClassName ?? "object-center"
                   }`}

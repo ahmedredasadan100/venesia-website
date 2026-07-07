@@ -46,7 +46,7 @@ export default function MediaCenterHubGallery({
                 src={item.image}
                 alt={item.title}
                 fill
-                sizes="25vw"
+                sizes="(min-width: 1024px) 220px, 45vw"
                 className="object-cover transition duration-1000 group-hover:scale-105"
               />
 
@@ -76,7 +76,7 @@ export default function MediaCenterHubGallery({
             src={featuredImage.image}
             alt={featuredImage.title}
             fill
-            sizes="50vw"
+            sizes="(min-width: 1024px) 480px, 100vw"
             className="object-cover transition duration-1000 group-hover:scale-105"
           />
 

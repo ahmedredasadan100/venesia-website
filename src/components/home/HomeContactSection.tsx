@@ -134,6 +134,8 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
                   <img
                     src={resolved.image}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="h-full w-full object-cover object-[right_top] opacity-[1]"
                     style={{ filter: "brightness(1) contrast(1.03)" }}
                   />
@@ -146,6 +148,8 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
                   src={resolved.image}
                   alt=""
                   aria-hidden="true"
+                  loading="lazy"
+                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover object-[right_center] opacity-[1] max-md:hidden"
                   style={{ filter: "brightness(1) contrast(1.03)" }}
                 />

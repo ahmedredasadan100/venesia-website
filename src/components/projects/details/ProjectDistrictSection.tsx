@@ -55,6 +55,8 @@ export default function ProjectDistrictSection({
             <img
               src={districtProfile.image}
               alt={districtProfile.title}
+              loading="lazy"
+              decoding="async"
               className="h-full min-h-[360px] w-full object-cover"
             />
 

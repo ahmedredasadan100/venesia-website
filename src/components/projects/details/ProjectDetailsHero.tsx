@@ -14,6 +14,8 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
       <img
         src={project.heroImage}
         alt=""
+        fetchPriority="high"
+        decoding="async"
         className="absolute inset-0 h-full w-full object-cover opacity-55"
       />
 
@@ -57,6 +59,8 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
                 <img
                   src={project.image}
                   alt={project.code}
+                  loading="lazy"
+                  decoding="async"
                   className="h-[280px] w-full object-cover"
                 />
 

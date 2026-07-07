@@ -195,6 +195,8 @@ function ProjectRow({ project }: { project: PublicProject }) {
             <img
               src={project.image}
               alt={project.code}
+              loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover transition duration-700 group-hover:scale-105 md:absolute md:inset-0"
             />
 
@@ -249,6 +251,8 @@ function ProjectCard({ project }: { project: PublicProject }) {
           <img
             src={project.image}
             alt={project.code}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
           />
 

@@ -109,6 +109,8 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
                 <img
                   src={imageSrc}
                   alt={imageAlt}
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover object-[center_36%] transition-transform duration-[1400ms] ease-out group-hover:scale-[1.03]"
                 />
 

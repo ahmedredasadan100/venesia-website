@@ -166,6 +166,8 @@ function AreaCard({
         <img
           src={area.planImage}
           alt={area.area}
+          loading="lazy"
+          decoding="async"
           className="h-56 w-full cursor-zoom-in object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
         />
       </button>

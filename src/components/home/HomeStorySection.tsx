@@ -69,6 +69,8 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
               <img
                 src={resolved.images.main}
                 alt={resolved.images.mainAlt}
+                loading="lazy"
+                decoding="async"
                 className="h-full w-full object-cover transition duration-[1200ms] ease-out group-hover:scale-105"
               />
 
@@ -88,6 +90,8 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
               <img
                 src={resolved.images.secondary}
                 alt={resolved.images.secondaryAlt}
+                loading="lazy"
+                decoding="async"
                 className="h-full w-full object-cover transition duration-[1200ms] ease-out group-hover:scale-105"
               />
 

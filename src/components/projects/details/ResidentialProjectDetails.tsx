@@ -100,6 +100,8 @@ export default function ResidentialProjectDetails({
             <img
               src={details.overview.videoImage}
               alt={project.code}
+              loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover"
             />
 

@@ -122,6 +122,8 @@ function MainFeaturedCard({ project }: { project: PublicProject }) {
             <img
               src={project.image}
               alt={project.code}
+              fetchPriority="high"
+              decoding="async"
               className="h-full w-full object-cover transition duration-700 group-hover:scale-105 lg:absolute lg:inset-0"
             />
 
@@ -182,6 +184,8 @@ function SideFeaturedCard({ project }: { project: PublicProject }) {
         <img
           src={project.image}
           alt={project.code}
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
         />
 

@@ -271,6 +271,8 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
       <img
         src={project.image}
         alt={`${project.code} - ${project.englishName}`}
+        loading="lazy"
+        decoding="async"
         className="h-full w-full transform-gpu object-cover opacity-80 transition-transform duration-[1400ms] ease-out will-change-transform group-hover:scale-[1.035]"
         style={{
           filter: "brightness(0.92) contrast(1.08) saturate(0.94)",

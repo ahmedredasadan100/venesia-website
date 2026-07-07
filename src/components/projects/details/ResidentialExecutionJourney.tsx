@@ -207,6 +207,8 @@ export default function ResidentialExecutionJourney({
                       <img
                         src={image}
                         alt={activeUpdate?.title ?? activeStage.title}
+                        loading="lazy"
+                        decoding="async"
                         className="h-48 w-full object-cover transition duration-700 hover:scale-105"
                       />
                     </div>

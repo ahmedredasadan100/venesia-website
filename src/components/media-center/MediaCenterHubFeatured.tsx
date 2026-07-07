@@ -118,7 +118,6 @@ export default function MediaCenterHubFeatured({
               src={activeItem.image}
               alt={activeItem.title}
               fill
-              priority
               sizes="(min-width: 1024px) 45vw, 100vw"
               className="object-cover transition duration-1000 group-hover:scale-105"
             />

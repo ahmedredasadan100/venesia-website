@@ -92,6 +92,8 @@ export default function ProjectDeliverySpecsSection({
                     <img
                       src={image.image}
                       alt={image.label}
+                      loading="lazy"
+                      decoding="async"
                       className="h-24 w-full object-cover opacity-85 transition duration-700 hover:scale-105 hover:opacity-100"
                     />
                   </button>

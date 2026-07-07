@@ -91,6 +91,9 @@ export default function ProjectsHubHero({
             key={project.code}
             src={project.heroImage || project.image}
             alt=""
+            fetchPriority={index === 0 ? "high" : undefined}
+            loading={index === 0 ? "eager" : "lazy"}
+            decoding="async"
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1200ms] ease-in-out ${
               index === boundedSlide ? "opacity-55" : "opacity-0"
             }`}
@@ -138,6 +141,8 @@ export default function ProjectsHubHero({
                 <img
                   src={activeProject.image}
                   alt={activeProject.code}
+                  loading="lazy"
+                  decoding="async"
                   className="h-[280px] w-full object-cover"
                 />
 
