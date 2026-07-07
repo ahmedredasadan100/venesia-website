@@ -5,7 +5,7 @@ import {
   buildTopicCategoryFilterGroups,
   type TopicCategoryRecord,
 } from "./topics-category-groups";
-import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminMetricCardsGrid, AdminPageContextHeader, AdminTablePagination } from "../../../components/admin/ui";
+import { ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_HEADER_CLASSES, AdminActionButton, AdminListEmptyState, AdminMetricCardsGrid, AdminPageContextHeader, AdminTablePagination } from "../../../components/admin/ui";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { analyzeTopicSeo } from "../../../lib/admin/seo-score";
 import { applyAdminListTextSearch } from "../../../lib/admin/admin-list-search";
@@ -540,18 +540,11 @@ export default async function AdminTopicsPage({
               })}
             </div>
           ) : (
-            <div className="px-6 py-14 text-center">
-              <p className="text-lg font-semibold text-white">لا توجد موضوعات مطابقة.</p>
-
-              <p className="mt-3 text-sm text-white/45">جرّب تصفير الفلاتر أو إنشاء موضوع جديد.</p>
-
-              <Link
-                href="/admin/topics/new"
-                className="mt-6 inline-flex rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C]"
-              >
-                + إنشاء موضوع جديد
-              </Link>
-            </div>
+            <AdminListEmptyState
+              title="لا توجد موضوعات مطابقة."
+              description="جرّب تصفير الفلاتر أو إنشاء موضوع جديد."
+              action={{ href: "/admin/topics/new", label: "+ إنشاء موضوع جديد" }}
+            />
           )}
         </div>
 

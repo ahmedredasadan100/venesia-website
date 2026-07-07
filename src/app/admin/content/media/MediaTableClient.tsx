@@ -12,6 +12,7 @@ import {
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
+  AdminListEmptyState,
   AdminDataGridHeader,
   AdminDataGridPrimaryCell,
   AdminDataGridRow,
@@ -157,14 +158,11 @@ export default function MediaTableClient({
           ))
         ) : (
           <AdminDataGridEmpty>
-            <p className="text-lg font-semibold text-white">لا توجد عناصر مطابقة.</p>
-            <p className="mt-3 text-sm text-white/45">جرّب تصفير الفلاتر أو إنشاء محتوى جديد.</p>
-            <Link
-              href="/admin/content/media/new"
-              className="mt-6 inline-flex rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C]"
-            >
-              + إضافة محتوى جديد
-            </Link>
+            <AdminListEmptyState
+              title="لا توجد عناصر مطابقة."
+              description="جرّب تصفير الفلاتر أو إنشاء محتوى جديد."
+              action={{ href: "/admin/content/media/new", label: "+ إضافة محتوى جديد" }}
+            />
           </AdminDataGridEmpty>
         )}
       </AdminDataGrid>
