@@ -1,7 +1,8 @@
 /**
  * Page composition slot identifiers for admin page builder and public layout.
- * Phase 3 visual slot map will build on this registry.
  */
+import type { PageModuleKind } from "../page-blocks/types";
+
 export const PAGE_COMPOSITION_SLOTS = ["hero", "main", "sidebar", "bottom", "footer"] as const;
 
 export type PageCompositionSlot = (typeof PAGE_COMPOSITION_SLOTS)[number];
@@ -11,7 +12,7 @@ export type PageCompositionSlot = (typeof PAGE_COMPOSITION_SLOTS)[number];
  * Generic blocks fall through to SectionRenderer when not listed here.
  */
 export const SLOT_MODULE_SLUG_REGISTRY: Record<PageCompositionSlot, readonly string[]> = {
-  hero: [],
+  hero: ["hero-inline"],
   main: [
     "home-story",
     "home-trust",
@@ -32,15 +33,33 @@ export const SLOT_MODULE_SLUG_REGISTRY: Record<PageCompositionSlot, readonly str
     "contact-departments",
     "contact-faq",
     "topics-intro",
-    "topics-insight-cta",
+    "media-hub-sections",
   ],
-  sidebar: [],
-  bottom: [],
+  sidebar: ["topics-insight-cta", "topics-feed-sidebar", "media-sidebar-widgets"],
+  bottom: ["contact-faq", "about-cta", "topics-insight-cta"],
   footer: [],
 };
 
 export function isRegisteredSlotModuleSlug(slug: string) {
-  return PAGE_COMPOSITION_SLOTS.some((slot) =>
-    SLOT_MODULE_SLUG_REGISTRY[slot].includes(slug),
-  );
+  return PAGE_COMPOSITION_SLOTS.some((slot) => SLOT_MODULE_SLUG_REGISTRY[slot].includes(slug));
 }
+
+export function getTypicalSlotForModuleKind(kind: PageModuleKind | string): PageCompositionSlot {
+  if (kind === "hero" || kind === "breadcrumb") return "hero";
+  if (kind === "feed" || kind === "media-sidebar") return "sidebar";
+  if (kind === "media-hub") return "main";
+  return "main";
+}
+
+export function listRegistrySlugsForSlot(slot: PageCompositionSlot) {
+  return SLOT_MODULE_SLUG_REGISTRY[slot];
+}
+
+export {
+  getModuleDependencyHints,
+  getModuleKindMetadata,
+  getSlotCompatibilityLabel,
+  getSlotModuleSlugMetadata,
+  MODULE_KIND_METADATA,
+  SLOT_MODULE_SLUG_METADATA,
+} from "./module-registry-metadata";
