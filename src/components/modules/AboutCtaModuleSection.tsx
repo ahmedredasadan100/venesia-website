@@ -127,7 +127,7 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
             </div>
 
             <div className="relative order-1 min-h-[250px] min-w-0 overflow-hidden [direction:rtl] lg:order-3 lg:min-h-[220px]">
-              {showImage ? (
+              {showImage && imageSrc ? (
                 <Image
                   src={imageSrc}
                   alt={content.imageAlt || content.title || ""}
