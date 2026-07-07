@@ -2,12 +2,21 @@ import path from "path";
 
 const MEDIA_ROOT_FOLDERS = new Set(["images", "files"]);
 
+export type MediaAssetItem = {
+  path: string;
+  filename: string;
+  extension: string;
+  kind: "image" | "document";
+  sizeBytes: number | null;
+};
+
 export type PublicMediaFolderListing = {
   folder: string;
   parentFolder: string | null;
   subfolders: string[];
   images: string[];
   documents: string[];
+  items: MediaAssetItem[];
 };
 
 export function normalizeMediaFolder(folder: string) {

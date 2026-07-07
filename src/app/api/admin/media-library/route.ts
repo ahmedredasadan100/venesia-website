@@ -7,6 +7,10 @@ import {
   savePublicDocumentUpload,
   savePublicMediaUpload,
 } from "../../../../lib/admin/media-library";
+import {
+  resolveCmsUploadKind,
+  validateCmsUploadFile,
+} from "../../../../lib/admin/media-intelligence/cms-upload-policy";
 
 export async function GET(request: Request) {
   const authError = await requireAdminApi();
@@ -35,13 +39,19 @@ export async function POST(request: Request) {
     const folder = normalizeMediaFolder(String(formData.get("folder") || "images"));
 
     if (!(file instanceof File) || !file.size) {
-      return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
+      return NextResponse.json({ error: "لم يتم اختيار ملف للرفع." }, { status: 400 });
     }
 
     const kind = String(formData.get("kind") || "image");
+    const uploadKind = resolveCmsUploadKind(file.name, file.type, kind);
+    const validation = validateCmsUploadFile(file, uploadKind);
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.message }, { status: 400 });
+    }
+
     const replacePath = String(formData.get("replacePath") || "").trim() || null;
     const saved =
-      kind === "pdf"
+      uploadKind === "pdf"
         ? await savePublicDocumentUpload(folder, file, { replacePath })
         : await savePublicMediaUpload(folder, file, { replacePath });
     return NextResponse.json(saved);

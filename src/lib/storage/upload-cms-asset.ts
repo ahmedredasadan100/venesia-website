@@ -2,11 +2,21 @@ import "server-only";
 
 import path from "path";
 
+import {
+  CMS_IMAGE_EXTENSION_SET,
+  CMS_PDF_EXTENSION_SET,
+  sanitizeCmsUploadFilename,
+  validateCmsUploadFile,
+} from "../admin/media-intelligence/cms-upload-policy";
 import { getSupabaseAdmin } from "../supabase-admin";
-import { normalizeMediaFolder, type PublicMediaFolderListing } from "../admin/media-library-paths";
+import {
+  normalizeMediaFolder,
+  type MediaAssetItem,
+  type PublicMediaFolderListing,
+} from "../admin/media-library-paths";
 
-const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
-const PDF_EXTENSIONS = new Set([".pdf"]);
+const IMAGE_EXTENSIONS = CMS_IMAGE_EXTENSION_SET;
+const PDF_EXTENSIONS = CMS_PDF_EXTENSION_SET;
 
 export const CMS_IMAGES_BUCKET =
   process.env.SUPABASE_STORAGE_BUCKET_IMAGES?.trim() || "cms-images";
@@ -24,22 +34,6 @@ function bucketForFolder(folder: string) {
   return normalized.startsWith("files/") ? CMS_DOCUMENTS_BUCKET : CMS_IMAGES_BUCKET;
 }
 
-function sanitizeUploadFilename(filename: string, allowedExtensions: Set<string>, fallbackStem: string) {
-  const base = path.basename(filename);
-  const ext = path.extname(base).toLowerCase();
-  const stem = path
-    .basename(base, ext)
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  if (!allowedExtensions.has(ext)) {
-    throw new Error("Unsupported file type.");
-  }
-
-  return `${stem || fallbackStem}-${Date.now()}${ext}`;
-}
-
 function getMediaParentFolder(normalized: string) {
   const rootFolders = new Set(["images", "files"]);
   return rootFolders.has(normalized) ? null : path.posix.dirname(normalized);
@@ -51,6 +45,21 @@ function isImageFile(filename: string) {
 
 function isPdfFile(filename: string) {
   return PDF_EXTENSIONS.has(path.extname(filename).toLowerCase());
+}
+
+function buildAssetItem(
+  publicPath: string,
+  filename: string,
+  kind: "image" | "document",
+  sizeBytes: number | null,
+): MediaAssetItem {
+  return {
+    path: publicPath,
+    filename,
+    extension: path.extname(filename).toLowerCase(),
+    kind,
+    sizeBytes,
+  };
 }
 
 function publicUrlForObject(bucket: string, objectPath: string) {
@@ -116,17 +125,14 @@ export function storageObjectPathFromPublicValue(value: string, bucket: string) 
   return null;
 }
 
-async function removeStorageObject(bucket: string, objectPath: string) {
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.storage.from(bucket).remove([objectPath]);
-  if (error) throw new Error(error.message);
-}
-
 export async function uploadCmsImageToStorage(
   folder: string,
   file: File,
   options?: { replacePath?: string | null },
 ) {
+  const validation = validateCmsUploadFile(file, "image");
+  if (!validation.ok) throw new Error(validation.message);
+
   const normalized = normalizeMediaFolder(folder);
   const bucket = bucketForFolder(normalized);
   const bytes = Buffer.from(await file.arrayBuffer());
@@ -138,7 +144,7 @@ export async function uploadCmsImageToStorage(
   if (replaceKey && replaceKey.startsWith(`${normalized}/`)) {
     objectPath = replaceKey;
   } else {
-    objectPath = `${normalized}/${sanitizeUploadFilename(file.name, IMAGE_EXTENSIONS, "image")}`;
+    objectPath = `${normalized}/${sanitizeCmsUploadFilename(file.name, IMAGE_EXTENSIONS, "image")}`;
   }
 
   const supabase = getSupabaseAdmin();
@@ -163,6 +169,9 @@ export async function uploadCmsDocumentToStorage(
   file: File,
   options?: { replacePath?: string | null },
 ) {
+  const validation = validateCmsUploadFile(file, "pdf");
+  if (!validation.ok) throw new Error(validation.message);
+
   const normalized = normalizeMediaFolder(folder);
   const bucket = bucketForFolder(normalized);
   const bytes = Buffer.from(await file.arrayBuffer());
@@ -174,7 +183,7 @@ export async function uploadCmsDocumentToStorage(
   if (replaceKey && replaceKey.startsWith(`${normalized}/`)) {
     objectPath = replaceKey;
   } else {
-    objectPath = `${normalized}/${sanitizeUploadFilename(file.name, PDF_EXTENSIONS, "document")}`;
+    objectPath = `${normalized}/${sanitizeCmsUploadFilename(file.name, PDF_EXTENSIONS, "document")}`;
   }
 
   const supabase = getSupabaseAdmin();
@@ -211,6 +220,7 @@ export async function listCmsFolderFromStorage(folder = "images"): Promise<Publi
   const subfolders: string[] = [];
   const images: string[] = [];
   const documents: string[] = [];
+  const items: MediaAssetItem[] = [];
 
   for (const entry of data ?? []) {
     if (!entry.name) continue;
@@ -224,12 +234,16 @@ export async function listCmsFolderFromStorage(folder = "images"): Promise<Publi
     }
 
     const publicPath = publicUrlForObject(bucket, entryPath);
+    const sizeBytes = typeof entry.metadata?.size === "number" ? entry.metadata.size : null;
+
     if (isImageFile(entry.name)) {
       images.push(publicPath);
+      items.push(buildAssetItem(publicPath, entry.name, "image", sizeBytes));
       continue;
     }
     if (isPdfFile(entry.name)) {
       documents.push(publicPath);
+      items.push(buildAssetItem(publicPath, entry.name, "document", sizeBytes));
     }
   }
 
@@ -239,5 +253,6 @@ export async function listCmsFolderFromStorage(folder = "images"): Promise<Publi
     subfolders: subfolders.sort((a, b) => a.localeCompare(b)),
     images: images.sort((a, b) => a.localeCompare(b)),
     documents: documents.sort((a, b) => a.localeCompare(b)),
+    items: items.sort((a, b) => a.path.localeCompare(b.path)),
   };
 }

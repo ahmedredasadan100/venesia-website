@@ -4,6 +4,13 @@ import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
 import type { PublicMediaFolderListing } from "../../../lib/admin/media-library";
+import {
+  CMS_IMAGE_ACCEPT,
+  CMS_MAX_IMAGE_BYTES,
+  CMS_MAX_PDF_BYTES,
+  CMS_PDF_ACCEPT,
+  validateCmsUploadFile,
+} from "../../../lib/admin/media-intelligence/cms-upload-policy";
 
 type AdminMediaPickerModalProps = {
   open: boolean;
@@ -91,6 +98,12 @@ export default function AdminMediaPickerModal({
   async function handleUpload(file: File | null) {
     if (!file) return;
 
+    const validation = validateCmsUploadFile(file, isPdfMode ? "pdf" : "image");
+    if (!validation.ok) {
+      setError(validation.message);
+      return;
+    }
+
     setUploading(true);
     setError(null);
 
@@ -145,8 +158,8 @@ export default function AdminMediaPickerModal({
             <h3 className="text-lg font-semibold text-white">{isPdfMode ? "مكتبة الملفات" : "مكتبة الصور"}</h3>
             <p className="mt-1 text-sm text-white/45">
               {isPdfMode
-                ? "تصفح المجلدات، ارفع ملف PDF جديد، أو اختر ملفًا موجودًا."
-                : "تصفح المجلدات، ارفع صورة جديدة، أو اختر صورة موجودة."}
+                ? `تصفح المجلدات، ارفع PDF جديد (حد أقصى ${Math.round(CMS_MAX_PDF_BYTES / (1024 * 1024))} ميجابايت)، أو اختر ملفًا موجودًا.`
+                : `تصفح المجلدات، ارفع صورة جديدة (حد أقصى ${Math.round(CMS_MAX_IMAGE_BYTES / (1024 * 1024))} ميجابايت)، أو اختر صورة موجودة.`}
             </p>
           </div>
           <button
@@ -205,7 +218,7 @@ export default function AdminMediaPickerModal({
             {uploading ? "جاري الرفع…" : isPdfMode ? "رفع PDF" : "رفع صورة"}
             <input
               type="file"
-              accept={isPdfMode ? "application/pdf,.pdf" : "image/*"}
+              accept={isPdfMode ? CMS_PDF_ACCEPT : CMS_IMAGE_ACCEPT}
               className="hidden"
               disabled={uploading}
               onChange={(event) => {
