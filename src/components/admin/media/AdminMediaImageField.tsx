@@ -161,6 +161,7 @@ export default function AdminMediaImageField({
         onClose={() => setPickerOpen(false)}
         onSelect={updateValue}
         initialFolder={browseFolder}
+        replacePath={value || null}
       />
     </div>
   );

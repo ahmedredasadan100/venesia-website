@@ -18,6 +18,7 @@ export type MediaPublishInput = {
   excerpt: string;
   content: string;
   image: string;
+  imageAlt: string;
   categorySlug: string;
   contentType: MediaEditableContentType;
   mediaPayload: MediaTopicPayload | null;
@@ -51,6 +52,7 @@ export function getMediaPublishValidationError(input: MediaPublishInput): string
   if (["news", "press", "site_update"].includes(input.contentType)) {
     if (!input.content.trim()) return "نص المحتوى مطلوب قبل النشر.";
     if (!input.image.trim()) return "صورة الغلاف مطلوبة قبل النشر.";
+    if (!input.imageAlt.trim()) return "وصف الصورة Alt Text مطلوب قبل النشر.";
   }
 
   return null;
@@ -121,6 +123,16 @@ export function buildMediaPublishChecklist(input: MediaPublishInput): PublishChe
       status: input.image.trim() ? "pass" : "fail",
       hint: input.image.trim() ? "صورة الغلاف متوفرة." : "صورة الغلاف مطلوبة قبل النشر.",
     });
+    items.push({
+      id: "image-alt",
+      label: "Alt Text",
+      status: !input.image.trim() ? "info" : input.imageAlt.trim() ? "pass" : "fail",
+      hint: !input.image.trim()
+        ? "يُفعّل بعد اختيار صورة الغلاف."
+        : input.imageAlt.trim()
+          ? "وصف الصورة متوفر."
+          : "Alt Text مطلوب قبل النشر للمحتوى النصي.",
+    });
   }
 
   if (baseError) {
@@ -161,6 +173,7 @@ export function mediaRowToPublishInput(row: {
   excerpt?: string | null;
   content?: string | null;
   image?: string | null;
+  image_alt?: string | null;
   category_slug?: string | null;
   content_type?: string | null;
   media_payload?: MediaTopicPayload | null;
@@ -182,6 +195,7 @@ export function mediaRowToPublishInput(row: {
     excerpt: row.excerpt ?? "",
     content: row.content ?? "",
     image: row.image ?? "",
+    imageAlt: row.image_alt ?? "",
     categorySlug: row.category_slug ?? "",
     contentType,
     mediaPayload: row.media_payload ?? null,

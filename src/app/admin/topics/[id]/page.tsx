@@ -126,7 +126,7 @@ export default async function EditTopicPage({
                       <textarea name="excerpt" rows={4} defaultValue={topic.excerpt ?? ""} placeholder="اكتب وصفًا مختصرًا واضحًا للمقال..." className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45" />
                     </label>
 
-                    <TopicImageField defaultImage={topic.image ?? ""} defaultAlt={topic.image_alt ?? ""} />
+                    <TopicImageField defaultImage={topic.image ?? ""} defaultAlt={topic.image_alt ?? ""} formId="topic-edit-form" />
                     <TopicSeriesFields options={safeSeries} defaultSeriesId={topic.series_id ?? ""} defaultSeries={topic.series ?? ""} defaultSeriesSlug={topic.series_slug ?? ""} />
                     <TopicDateLabelField defaultValue={topic.date_label ?? ""} publishedAt={topic.published_at} />
                   </div>

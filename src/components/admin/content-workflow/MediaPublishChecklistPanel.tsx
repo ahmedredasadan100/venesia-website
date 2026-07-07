@@ -87,6 +87,7 @@ export default function MediaPublishChecklistPanel({ formId, initial }: MediaPub
         excerpt: readValue(form, "excerpt"),
         content: readValue(form, "content"),
         image: readValue(form, "image") || initial.image,
+        imageAlt: readValue(form, "image_alt"),
         categorySlug: section,
         contentType: contentType as MediaEditableContentType,
         mediaPayload: readMediaPayload(form, contentType as MediaEditableContentType),

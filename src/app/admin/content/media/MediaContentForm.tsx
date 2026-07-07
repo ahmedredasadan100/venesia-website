@@ -19,6 +19,7 @@ import { isTextMediaSectionSlug, MEDIA_SECTION_OPTIONS } from "./media-content-c
 import MediaVideoFields from "./MediaVideoFields";
 import ContentTemplatePicker from "../../../../components/admin/content-workflow/ContentTemplatePicker";
 import MediaPublishChecklistPanel from "../../../../components/admin/content-workflow/MediaPublishChecklistPanel";
+import AdminMediaAltWarning from "../../../../components/admin/media-intelligence/AdminMediaAltWarning";
 import { mediaRowToPublishInput } from "../../../../lib/admin/content-workflow/media-publish-validation";
 
 type MediaContentFormValues = {
@@ -28,6 +29,7 @@ type MediaContentFormValues = {
   excerpt?: string | null;
   content?: string | null;
   image?: string | null;
+  image_alt?: string | null;
   category_slug?: string | null;
   status?: string | null;
   is_featured?: boolean | null;
@@ -105,6 +107,7 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
       excerpt: values?.excerpt,
       content: values?.content,
       image: values?.image,
+      image_alt: values?.image_alt,
       category_slug: values?.category_slug ?? selectedSection,
       content_type: selectedOption?.contentType ?? "news",
       media_payload: values?.media_payload,
@@ -114,6 +117,7 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
       excerpt: "",
       content: "",
       image: "",
+      imageAlt: "",
       categorySlug: selectedSection,
       contentType: "news" as const,
       mediaPayload: null,
@@ -190,6 +194,21 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
                       : "اختر صورة من المكتبة أو ارفع صورة جديدة — يتم حفظ المسار تلقائيًا."
                 }
               />
+
+              {showTextFields ? (
+                <div className="mt-4 space-y-3">
+                  <label className="block">
+                    <span className="text-sm font-medium text-white/70">وصف الصورة Alt Text</span>
+                    <input
+                      name="image_alt"
+                      defaultValue={values?.image_alt ?? ""}
+                      placeholder="وصف مختصر للصورة يساعد SEO وإتاحة الوصول"
+                      className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+                    />
+                  </label>
+                  <AdminMediaAltWarning formId={formId} requiredForPublish={showTextFields} />
+                </div>
+              ) : null}
             </AdminFormSection>
 
             <MediaPublishChecklistPanel formId={formId} initial={publishInitial} />

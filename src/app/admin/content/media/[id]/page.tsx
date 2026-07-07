@@ -37,7 +37,7 @@ export default async function EditMediaContentPage({
   const { data: topic, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "id, title, slug, excerpt, content, image, category_slug, content_type, status, is_featured, media_payload",
+      "id, title, slug, excerpt, content, image, image_alt, category_slug, content_type, status, is_featured, media_payload",
     )
     .eq("id", id)
     .is("deleted_at", null)
@@ -102,6 +102,7 @@ export default async function EditMediaContentPage({
           excerpt: topic.excerpt,
           content: topic.content,
           image: topic.image,
+          image_alt: topic.image_alt,
           category_slug: topic.category_slug,
           status: topic.status,
           is_featured: topic.is_featured,

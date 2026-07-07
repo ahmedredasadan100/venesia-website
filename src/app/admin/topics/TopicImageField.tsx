@@ -1,13 +1,15 @@
 "use client";
 
 import AdminMediaImageField from "../../../components/admin/media/AdminMediaImageField";
+import AdminMediaAltWarning from "../../../components/admin/media-intelligence/AdminMediaAltWarning";
 
 type TopicImageFieldProps = {
   defaultImage?: string | null;
   defaultAlt?: string | null;
+  formId?: string;
 };
 
-export default function TopicImageField({ defaultImage = "", defaultAlt = "" }: TopicImageFieldProps) {
+export default function TopicImageField({ defaultImage = "", defaultAlt = "", formId }: TopicImageFieldProps) {
   return (
     <div className="space-y-4 lg:col-span-2">
       <AdminMediaImageField
@@ -28,6 +30,8 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "" }: 
           className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
         />
       </label>
+
+      {formId ? <AdminMediaAltWarning formId={formId} requiredForPublish /> : null}
     </div>
   );
 }

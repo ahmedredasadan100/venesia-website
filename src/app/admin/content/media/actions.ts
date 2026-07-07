@@ -59,6 +59,7 @@ type MediaTopicRow = {
   excerpt: string | null;
   content: string | null;
   image: string | null;
+  image_alt: string | null;
   category_slug: string | null;
   content_type: string | null;
   status: MediaStatus | string | null;
@@ -206,6 +207,7 @@ function getPayload(formData: FormData) {
     excerpt: getString(formData, "excerpt"),
     content: getString(formData, "content"),
     image: getString(formData, "image"),
+    imageAlt: getString(formData, "image_alt"),
     categorySlug: getString(formData, "category_slug"),
     status: getNormalizedStatus(getString(formData, "status"), "draft"),
     isFeatured: getBoolean(formData, "is_featured"),
@@ -219,6 +221,7 @@ function getValidationError(payload: ReturnType<typeof getPayload>) {
     excerpt: payload.excerpt,
     content: payload.content,
     image: payload.image,
+    imageAlt: payload.imageAlt,
     categorySlug: payload.categorySlug,
     contentType: "news",
     mediaPayload: null,
@@ -236,6 +239,7 @@ function payloadToMediaPublishInput(
     excerpt: payload.excerpt,
     content: payload.content,
     image: payload.image,
+    imageAlt: payload.imageAlt,
     categorySlug: payload.categorySlug,
     contentType,
     mediaPayload,
@@ -280,7 +284,7 @@ export async function validateBulkMediaPublish(ids: number[]): Promise<BulkMedia
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "id, title, slug, excerpt, content, image, category_slug, content_type, media_payload",
+      "id, title, slug, excerpt, content, image, image_alt, category_slug, content_type, media_payload",
     )
     .in("id", uniqueIds)
     .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
@@ -405,7 +409,7 @@ async function getEditableMediaTopicById(id: string) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "id, title, slug, excerpt, content, image, category_slug, content_type, status, is_featured, published_at, media_payload",
+      "id, title, slug, excerpt, content, image, image_alt, category_slug, content_type, status, is_featured, published_at, media_payload",
     )
     .eq("id", id)
     .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
@@ -449,7 +453,7 @@ function buildMediaWritePayload(
     excerpt: payload.excerpt,
     content: isRichMedia ? "" : payload.content,
     image: payload.image,
-    image_alt: null,
+    image_alt: payload.imageAlt.trim() || null,
     media_payload: mediaPayload,
     category: category.name,
     category_slug: category.slug,
@@ -621,7 +625,7 @@ async function getMediaTopicForDuplicate(id: string) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "title, slug, excerpt, content, image, category, category_slug, category_id, content_type, media_payload, is_featured, published_at",
+      "title, slug, excerpt, content, image, image_alt, category, category_slug, category_id, content_type, media_payload, is_featured, published_at",
     )
     .eq("id", id)
     .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
@@ -793,7 +797,7 @@ export async function duplicateMediaContent(formData: FormData) {
       excerpt: original.excerpt ?? "",
       content: isRichMedia ? "" : (original.content ?? ""),
       image: original.image ?? "",
-      image_alt: null,
+      image_alt: original.image_alt ?? null,
       media_payload: original.media_payload,
       category: category.name,
       category_slug: category.slug,
