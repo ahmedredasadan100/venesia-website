@@ -17,6 +17,9 @@ import MediaContentTypeBadge, { getSectionTypeHint } from "./MediaContentTypeBad
 import MediaGalleryFields from "./MediaGalleryFields";
 import { isTextMediaSectionSlug, MEDIA_SECTION_OPTIONS } from "./media-content-config";
 import MediaVideoFields from "./MediaVideoFields";
+import ContentTemplatePicker from "../../../../components/admin/content-workflow/ContentTemplatePicker";
+import MediaPublishChecklistPanel from "../../../../components/admin/content-workflow/MediaPublishChecklistPanel";
+import { mediaRowToPublishInput } from "../../../../lib/admin/content-workflow/media-publish-validation";
 
 type MediaContentFormValues = {
   id?: number;
@@ -94,9 +97,33 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
   const videoDefaults = getVideoDefaults(values?.media_payload);
   const galleryDefaults = getGalleryDefaults(values?.media_payload);
   const selectedOption = MEDIA_SECTION_OPTIONS.find((option) => option.slug === selectedSection);
+  const formId = mode === "edit" ? "media-content-form" : "media-content-form-create";
+  const publishInitial =
+    mediaRowToPublishInput({
+      title: values?.title,
+      slug: values?.slug,
+      excerpt: values?.excerpt,
+      content: values?.content,
+      image: values?.image,
+      category_slug: values?.category_slug ?? selectedSection,
+      content_type: selectedOption?.contentType ?? "news",
+      media_payload: values?.media_payload,
+    }) ?? {
+      title: "",
+      slug: "",
+      excerpt: "",
+      content: "",
+      image: "",
+      categorySlug: selectedSection,
+      contentType: "news" as const,
+      mediaPayload: null,
+    };
 
   return (
-    <form action={action} className="space-y-7" noValidate>
+    <>
+      {mode === "create" ? <ContentTemplatePicker target="media" formId={formId} /> : null}
+
+      <form id={formId} action={action} className="space-y-7" noValidate>
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
 
       <AdminFormLayout
@@ -164,6 +191,8 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
                 }
               />
             </AdminFormSection>
+
+            <MediaPublishChecklistPanel formId={formId} initial={publishInitial} />
           </>
         }
       >
@@ -258,5 +287,6 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
         </button>
       </AdminStickyFormBar>
     </form>
+    </>
   );
 }

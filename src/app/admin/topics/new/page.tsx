@@ -12,6 +12,9 @@ import TopicSlugInput from "../TopicSlugInput";
 import { filterEditorTopicCategories } from "../../../../lib/admin/cms-test-data";
 import { buildArticleTopicCategoryFilterGroups } from "../../../../lib/admin/article-topic-categories";
 import ArticleTopicCategorySelect from "../ArticleTopicCategorySelect";
+import ContentTemplatePicker from "../../../../components/admin/content-workflow/ContentTemplatePicker";
+import TopicPublishChecklistPanel from "../../../../components/admin/content-workflow/TopicPublishChecklistPanel";
+import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import { createTopic } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +50,7 @@ export default async function NewTopicPage({
   const categoryGroups = buildArticleTopicCategoryFilterGroups(safeCategories);
   const safeSeries = (seriesRows ?? []) as { id: number; name: string; slug: string }[];
   const defaultContent = "# عنوان المقال\n\nابدأ كتابة المقال هنا...\n\n## عنوان فرعي\n\nاكتب الفقرة هنا...";
+  const publishInput = topicRowToPublishInput({ content: defaultContent });
 
   return (
     <main className="space-y-7">
@@ -65,7 +69,9 @@ export default async function NewTopicPage({
 
       {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء الموضوع" message={errorMessage} /> : null}
 
-      <form action={createTopic} className="space-y-7" noValidate>
+      <ContentTemplatePicker target="article" formId="topic-create-form" />
+
+      <form id="topic-create-form" action={createTopic} className="space-y-7" noValidate>
         <TopicEditTabs
           tabs={[
             {
@@ -132,7 +138,9 @@ export default async function NewTopicPage({
               id: "publish",
               label: "النشر",
               content: (
-                <section className="max-w-xl rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+                <div className="space-y-6">
+                  <TopicPublishChecklistPanel formId="topic-create-form" initial={publishInput} />
+                  <section className="max-w-xl rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
                   <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">PUBLISHING</p>
                   <h3 className="mt-3 text-xl font-semibold text-white">إعدادات الظهور</h3>
                   <div className="mt-6 space-y-4">
@@ -146,6 +154,7 @@ export default async function NewTopicPage({
                     </label>
                   </div>
                 </section>
+                </div>
               ),
             },
           ]}
