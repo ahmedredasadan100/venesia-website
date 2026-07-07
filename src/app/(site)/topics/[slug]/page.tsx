@@ -1,4 +1,3 @@
-import { cache } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,36 +8,15 @@ import FeedModulesStack from "../../../../components/feed-modules/FeedModulesSta
 import TopicsSidebarSearchPanel from "../../../../components/topics/TopicsSidebarSearchPanel";
 import TopicCard from "../../../../components/topics/TopicCard";
 
-import { supabase } from "../../../../lib/supabase";
-import { isTestTopicSlug } from "../../../../lib/admin/cms-test-data";
-import { formatArabicContentDate } from "../../../../lib/content-dates";
 import { loadFeedModulesForPageSlug } from "../../../../lib/feed-modules/load-feed-modules";
+import {
+  loadPublicTopicBySlug,
+  loadRelatedPublicTopics,
+} from "../../../../lib/topics/load-public-topics";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { buildMetadata } from "../../../../lib/seo/build-metadata";
 
 export const revalidate = 300;
-
-type DbTopic = {
-  id: number;
-  slug: string;
-  title: string;
-  excerpt: string;
-  content: string;
-  image: string;
-  category: string;
-  category_slug: string;
-  series: string | null;
-  series_slug: string | null;
-  date_label: string | null;
-  published_at: string;
-  reading_time: string | null;
-  is_featured: boolean;
-  is_popular: boolean;
-  seo_title: string | null;
-  seo_description: string | null;
-  seo_keywords: string[];
-  faq: { question: string; answer: string }[];
-};
 
 type TopicDetailsPageProps = {
   params: Promise<{
@@ -46,81 +24,11 @@ type TopicDetailsPageProps = {
   }>;
 };
 
-function mapTopic(topic: DbTopic) {
-  return {
-    id: topic.id,
-    slug: topic.slug,
-    title: topic.title,
-    excerpt: topic.excerpt,
-    content: topic.content,
-    image: topic.image,
-    category: topic.category,
-    categorySlug: topic.category_slug,
-    series: topic.series ?? "",
-    seriesSlug: topic.series_slug ?? "",
-    date: topic.date_label || formatArabicContentDate(topic.published_at),
-    publishedAt: topic.published_at,
-    readingTime: topic.reading_time ?? "",
-    isFeatured: topic.is_featured,
-    isPopular: topic.is_popular,
-    seoTitle: topic.seo_title ?? "",
-    seoDescription: topic.seo_description ?? "",
-    seoKeywords: topic.seo_keywords ?? [],
-    faq: topic.faq ?? [],
-  };
-}
-
-const getTopicBySlug = cache(async function getTopicBySlug(slug: string) {
-  if (isTestTopicSlug(slug)) return null;
-
-  const { data, error } = await supabase
-    .from("topics")
-    .select("*")
-    .eq("slug", slug)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error || !data) return null;
-
-  return mapTopic(data as DbTopic);
-});
-
-async function getRelatedTopics(topic: ReturnType<typeof mapTopic>) {
-  const filters: string[] = [];
-
-  if (topic.categorySlug) {
-    filters.push(`category_slug.eq.${topic.categorySlug}`);
-  }
-
-  if (topic.seriesSlug) {
-    filters.push(`series_slug.eq.${topic.seriesSlug}`);
-  }
-
-  if (!filters.length) return [];
-
-  const { data, error } = await supabase
-    .from("topics")
-    .select("*")
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .neq("id", topic.id)
-    .or(filters.join(","))
-    .limit(6);
-
-  if (error || !data?.length) return [];
-
-  return data
-    .map((item) => mapTopic(item as DbTopic))
-    .filter((item) => item.id !== topic.id && item.slug !== topic.slug && !isTestTopicSlug(item.slug))
-    .slice(0, 3);
-}
-
 export async function generateMetadata({
   params,
 }: TopicDetailsPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const topic = await getTopicBySlug(slug);
+  const topic = await loadPublicTopicBySlug(slug);
 
   if (!topic) {
     return buildMetadata({
@@ -195,11 +103,11 @@ function renderContent(content?: string) {
 
 export default async function TopicDetailsPage({ params }: TopicDetailsPageProps) {
   const { slug } = await params;
-  const topic = await getTopicBySlug(slug);
+  const topic = await loadPublicTopicBySlug(slug);
 
   if (!topic) notFound();
 
-  const relatedTopics = await getRelatedTopics(topic);
+  const relatedTopics = await loadRelatedPublicTopics(topic);
   const sidebarFeeds = await loadFeedModulesForPageSlug("topics");
 
   const jsonLd = {

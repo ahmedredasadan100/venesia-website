@@ -12,10 +12,7 @@ import { asBreadcrumbConfig } from "../../../lib/page-blocks/configs";
 import TopicsInsightCtaSection from "../../../components/topics/TopicsInsightCtaSection";
 import TopicsIntroSection from "../../../components/topics/TopicsIntroSection";
 
-import { logError } from "../../../lib/logging";
-import { filterPublicTopics } from "../../../lib/admin/cms-test-data";
-import { supabase } from "../../../lib/supabase";
-import { formatArabicContentDate } from "../../../lib/content-dates";
+import { loadPublishedPublicTopics } from "../../../lib/topics/load-public-topics";
 import { buildMetadata } from "../../../lib/seo/build-metadata";
 import type { Topic } from "../../../lib/topics/types";
 import { getHeroSectionByPageSlug } from "../../../lib/load-hero-section";
@@ -53,44 +50,11 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const heroEntry = findHeroInComposition(composition);
   const breadcrumbBlock = findBreadcrumbInComposition(composition);
 
-  const { data: dbTopics, error } = await supabase
-    .from("topics")
-    .select("*")
-    .eq("status", "published")
-    .is("deleted_at", null);
-
-  if (error) {
-    logError("Failed to load published topics", error);
-  }
+  const liveTopics: Topic[] = await loadPublishedPublicTopics();
 
   const sort = params?.sort === "oldest" ? "oldest" : "latest";
   const categorySlug = params?.category?.trim() ?? "";
-
   const requestedPage = Number(params?.page ?? 1);
-  const liveTopics: Topic[] =
-    !error && dbTopics
-      ? filterPublicTopics(dbTopics).map((topic) => ({
-          id: topic.id,
-          slug: topic.slug,
-          title: topic.title ?? "",
-          excerpt: topic.excerpt ?? "",
-          image: topic.image ?? "",
-          category: topic.category ?? "",
-          categorySlug: topic.category_slug ?? "",
-          date: topic.date_label || formatArabicContentDate(topic.published_at),
-          publishedAt: topic.published_at ?? "",
-          readingTime: topic.reading_time ?? "",
-          isFeatured: topic.is_featured,
-          isPopular: topic.is_popular,
-          content: topic.content ?? undefined,
-          series: topic.series ?? undefined,
-          seriesSlug: topic.series_slug ?? undefined,
-          seoTitle: topic.seo_title ?? undefined,
-          seoDescription: topic.seo_description ?? undefined,
-          seoKeywords: topic.seo_keywords ?? undefined,
-          faq: topic.faq ?? undefined,
-        }))
-      : [];
 
   const filteredTopics = categorySlug
     ? liveTopics.filter((topic) => topic.categorySlug === categorySlug)
