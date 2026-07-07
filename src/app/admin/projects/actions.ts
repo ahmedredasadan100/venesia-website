@@ -12,6 +12,11 @@ import { parseJsonArray } from "../../../lib/projects/types";
 import { parseFloorPlanSpecsFromForm } from "../../../lib/projects/floor-plan-specs";
 import { parseFormBoolean } from "../../../lib/page-blocks/admin-utils";
 import { normalizeSlugInput, slugifyFromTitle, validateSlugFormat } from "../../../lib/admin/slug";
+import {
+  getProjectPublishValidationError,
+  projectPublishInputFromBundle,
+  type ProjectPublishInput,
+} from "../../../lib/admin/projects/project-publish-validation";
 
 const VALID_PUBLICATION_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
 
@@ -38,6 +43,57 @@ function getPublicationStatus(value: string): PublicationStatus {
   return VALID_PUBLICATION_STATUSES.includes(value as PublicationStatus)
     ? (value as PublicationStatus)
     : "published";
+}
+
+function getProjectStatus(formData: FormData, current: ProjectStatus): ProjectStatus {
+  const value = getString(formData, "status");
+  const allowed: ProjectStatus[] = ["under-construction", "excavation", "near-delivery", "delivered"];
+  return allowed.includes(value as ProjectStatus) ? (value as ProjectStatus) : current;
+}
+
+function getProjectProgress(formData: FormData, current: number) {
+  const parsed = Number.parseInt(getString(formData, "progress"), 10);
+  if (!Number.isFinite(parsed)) return current;
+  return Math.min(100, Math.max(0, parsed));
+}
+
+async function loadProjectPublishInput(id: number): Promise<ProjectPublishInput | null> {
+  const { data: project, error } = await getSupabaseAdmin().from("projects").select("*").eq("id", id).maybeSingle();
+  if (error || !project) return null;
+
+  const [{ data: media }, { data: floorPlans }, { data: deliverySpecItems }] = await Promise.all([
+    getSupabaseAdmin().from("project_media").select("label, collection").eq("project_id", id),
+    getSupabaseAdmin().from("project_floor_plans").select("id").eq("project_id", id),
+    getSupabaseAdmin().from("project_delivery_spec_items").select("id").eq("project_id", id),
+  ]);
+
+  return projectPublishInputFromBundle({
+    project: project as ProjectRow,
+    media: media ?? [],
+    floorPlans: floorPlans ?? [],
+    deliverySpecItems: deliverySpecItems ?? [],
+  });
+}
+
+async function validateProjectsCanPublish(ids: number[]) {
+  const failures: Array<{ id: number; message: string }> = [];
+  const validIds: number[] = [];
+
+  for (const id of ids) {
+    const input = await loadProjectPublishInput(id);
+    if (!input) {
+      failures.push({ id, message: "المشروع غير موجود." });
+      continue;
+    }
+    const error = getProjectPublishValidationError(input);
+    if (error) {
+      failures.push({ id, message: error });
+      continue;
+    }
+    validIds.push(id);
+  }
+
+  return { validIds, failures };
 }
 
 function validateId(id: string) {
@@ -389,6 +445,14 @@ export async function getProjectsTableRows(type: ProjectCategory) {
 export async function toggleProjectPublicationAjax(id: number, currentStatus: string | null) {
   await requireAdminSession();
   const nextStatus: PublicationStatus = currentStatus === "published" ? "unpublished" : "published";
+
+  if (nextStatus === "published") {
+    const input = await loadProjectPublishInput(id);
+    if (!input) return { ok: false as const, message: "المشروع غير موجود." };
+    const validationError = getProjectPublishValidationError(input);
+    if (validationError) return { ok: false as const, message: validationError };
+  }
+
   const { data, error } = await getSupabaseAdmin()
     .from("projects")
     .update({ publication_status: nextStatus, updated_at: new Date().toISOString() })
@@ -415,16 +479,40 @@ export async function bulkProjectsActionAjax(
   let message = "تم تنفيذ الإجراء.";
 
   if (action === "publish") {
-    payload = { publication_status: "published", updated_at: now };
-    message = "تم نشر المشاريع المحددة.";
+    const validation = await validateProjectsCanPublish(ids);
+    if (!validation.validIds.length) {
+      const first = validation.failures[0];
+      return {
+        ok: false as const,
+        message: first ? `تعذر النشر: ${first.message}` : "لا يمكن نشر المشاريع المحددة.",
+      };
+    }
+
+    const { error } = await getSupabaseAdmin()
+      .from("projects")
+      .update({ publication_status: "published", updated_at: now })
+      .in("id", validation.validIds);
+    if (error) return { ok: false as const, message: error.message };
+
+    revalidateProjectPaths(type);
+    if (validation.failures.length) {
+      return {
+        ok: true as const,
+        message: `تم نشر ${validation.validIds.length} مشروعًا. تم تخطي ${validation.failures.length} لعدم اكتمال البيانات.`,
+      };
+    }
+    return { ok: true as const, message: "تم نشر المشاريع المحددة." };
   } else if (action === "hide") {
     payload = { publication_status: "unpublished", updated_at: now };
     message = "تم إخفاء المشاريع المحددة.";
+  } else if (action === "archive") {
+    payload = { publication_status: "archived", updated_at: now };
+    message = "تم أرشفة المشاريع المحددة.";
   } else if (action === "delete") {
-    const { error } = await getSupabaseAdmin().from("projects").delete().in("id", ids);
-    if (error) return { ok: false as const, message: error.message };
-    revalidateProjectPaths(type);
-    return { ok: true as const, message: "تم حذف المشاريع المحددة." };
+    return {
+      ok: false as const,
+      message: "الحذف النهائي غير متاح من الإجراءات الجماعية — استخدم أرشفة المشروع أو الحذف النهائي لكل مشروع على حدة.",
+    };
   } else {
     return { ok: false as const, message: "إجراء غير معروف." };
   }
@@ -468,14 +556,39 @@ export async function updateProject(formData: FormData) {
 
   if (duplicate.data) redirectEditWithError(numericId, "هذا الـ Slug مستخدم في مشروع آخر.");
 
+  const nextPublicationStatus = getPublicationStatus(getString(formData, "publication_status"));
+  if (nextPublicationStatus === "published") {
+    const existingInput = await loadProjectPublishInput(numericId);
+    if (existingInput) {
+      const publishError = getProjectPublishValidationError({
+        ...existingInput,
+        arabicName,
+        slug,
+        locationLabel: getString(formData, "location_label"),
+        mapArea: getString(formData, "map_area"),
+        status: getProjectStatus(formData, (current.status as ProjectStatus) ?? "under-construction"),
+        statusLabel: getString(formData, "status_label") || existingInput.statusLabel,
+        image: preserveImage(getString(formData, "image"), String(current.image ?? "")),
+        heroImage: preserveImage(getString(formData, "hero_image"), String(current.hero_image ?? "")),
+        shortDescription: getString(formData, "short_description"),
+        seoTitle: getString(formData, "seo_title"),
+        seoDescription: getString(formData, "seo_description"),
+        progress: getProjectProgress(formData, Number(current.progress ?? 0)),
+        overviewTitle: getString(formData, "overview_title") || existingInput.overviewTitle,
+        deliverySpecsTitle: getString(formData, "delivery_specs_title") || existingInput.deliverySpecsTitle,
+      });
+      if (publishError) redirectEditWithError(numericId, publishError);
+    }
+  }
+
   const payload = {
     code,
     slug,
     arabic_name: arabicName,
     english_name: getString(formData, "english_name"),
     category_label: preserveCategoryLabel(formData, current.category_label),
-    status: ((current.status as ProjectStatus) ?? "under-construction") as ProjectStatus,
-    status_label: String(current.status_label ?? ""),
+    status: getProjectStatus(formData, (current.status as ProjectStatus) ?? "under-construction"),
+    status_label: getString(formData, "status_label") || String(current.status_label ?? ""),
     image: preserveImage(getString(formData, "image"), String(current.image ?? "")),
     hero_image: preserveImage(getString(formData, "hero_image"), String(current.hero_image ?? "")),
     location_label: getString(formData, "location_label"),
@@ -485,14 +598,14 @@ export async function updateProject(formData: FormData) {
     core_specs: (current.core_specs as ProjectRow["core_specs"]) ?? null,
     delivery_label: String(current.delivery_label ?? ""),
     area_label: String(current.area_label ?? ""),
-    progress: Number(current.progress ?? 0),
+    progress: getProjectProgress(formData, Number(current.progress ?? 0)),
     units_label: String(current.units_label ?? ""),
     featured: parseFormBoolean(formData, "featured", Boolean(current.featured)),
     show_on_homepage: parseFormBoolean(formData, "show_on_homepage", Boolean(current.show_on_homepage)),
     homepage_order: getNumber(formData, "homepage_order", Number(current.homepage_order ?? 0)),
     floors_label: current.floors_label ? String(current.floors_label) : null,
     brochure_url: preserveBrochureUrl(formData, current.brochure_url),
-    publication_status: getPublicationStatus(getString(formData, "publication_status")),
+    publication_status: nextPublicationStatus,
     overview_title: getString(formData, "overview_title") || null,
     overview_body: preserveRichText(getString(formData, "overview_body"), String(current.overview_body ?? "")) || null,
     overview_bullets: getAllStrings(formData, "overview_bullets"),
@@ -532,8 +645,43 @@ export async function updateProject(formData: FormData) {
   redirectEditWithNotice(numericId, "updated");
 }
 
-export async function deleteProjectAjax(id: number) {
+export async function archiveProjectAjax(id: number) {
   await requireAdminSession();
+  const { data, error } = await getSupabaseAdmin()
+    .from("projects")
+    .update({ publication_status: "archived", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("type")
+    .maybeSingle<{ type: ProjectCategory }>();
+
+  if (error || !data) return { ok: false as const, message: error?.message ?? "المشروع غير موجود." };
+  revalidateProjectPathsById(data.type, id);
+  return { ok: true as const, message: "تم أرشفة المشروع." };
+}
+
+export async function restoreProjectAjax(id: number) {
+  await requireAdminSession();
+  const { data, error } = await getSupabaseAdmin()
+    .from("projects")
+    .update({ publication_status: "draft", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("type")
+    .maybeSingle<{ type: ProjectCategory }>();
+
+  if (error || !data) return { ok: false as const, message: error?.message ?? "المشروع غير موجود." };
+  revalidateProjectPathsById(data.type, id);
+  return { ok: true as const, message: "تم استعادة المشروع كمسودة." };
+}
+
+export async function deleteProjectAjax(id: number, confirmPermanent = false) {
+  await requireAdminSession();
+  if (!confirmPermanent) {
+    return {
+      ok: false as const,
+      message: "الحذف النهائي يتطلب تأكيدًا صريحًا — استخدم الأرشفة للإخفاء الآمن.",
+    };
+  }
+
   const { data: existing, error: lookupError } = await getSupabaseAdmin()
     .from("projects")
     .select("type, slug")

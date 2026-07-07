@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_RULES,
@@ -18,12 +18,15 @@ import {
 } from "../../../components/admin/ui";
 import { useAdminTable } from "../../../components/admin/table-engine";
 import AdminStatusPill from "../../../components/admin/ui/AdminStatusPill";
+import VenesiaActionModal, { VenesiaActionModalButton } from "../../../components/admin/VenesiaActionModal";
 import type { ProjectCategory } from "../../../config/projects-data";
 import {
+  archiveProjectAjax,
   bulkProjectsActionAjax,
   deleteProjectAjax,
   duplicateProjectAjax,
   getProjectsTableRows,
+  restoreProjectAjax,
   toggleProjectPublicationAjax,
 } from "./actions";
 
@@ -82,6 +85,35 @@ function featuredLabel(item: ProjectGridRow) {
   return item.featured ? "نعم" : "لا";
 }
 
+function ArchiveIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 7h18" />
+      <path d="M5 7l1 12h12l1-12" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
+function RestoreIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 12a9 9 0 0 1 15-6.7" />
+      <path d="M18 3v4h-4" />
+      <path d="M21 12a9 9 0 0 1-15 6.7" />
+      <path d="M6 21v-4H2" />
+    </svg>
+  );
+}
+
+type ProjectRowActionHandlers = {
+  onTogglePublication: (id: number, status: string | null) => void;
+  onArchive: (id: number) => void;
+  onRestore: (id: number) => void;
+  onRequestPermanentDelete: (item: ProjectGridRow) => void;
+  isPending: boolean;
+};
+
 function PublicPreviewIcon() {
   return (
     <svg
@@ -132,11 +164,13 @@ function LegacyProjectsTable({
   table,
   columns,
   withDuplicateAction,
+  handlers,
 }: {
   type: ProjectCategory;
   table: ReturnType<typeof useAdminTable<ProjectGridRow, LegacyProjectSortKey>>;
   columns: string;
   withDuplicateAction: boolean;
+  handlers: ProjectRowActionHandlers;
 }) {
   function sortProps(key: LegacyProjectSortKey) {
     return {
@@ -171,6 +205,7 @@ function LegacyProjectsTable({
         table.rows.map((item) => {
           const published = publicationMeta(item.publication_status);
           const isHidden = item.publication_status !== "published";
+          const isArchived = item.publication_status === "archived";
 
           return (
             <AdminDataGridRow
@@ -203,28 +238,50 @@ function LegacyProjectsTable({
 
               <AdminDataGridActionsCell>
                 <AdminDataGridActionButton action="edit" href={`/admin/projects/${item.id}`} />
-                <AdminDataGridActionButton
-                  action="visibility"
-                  title={isHidden ? "نشر" : "إخفاء"}
-                  hidden={isHidden}
-                  disabled={table.isPending}
-                  onClick={() =>
-                    table.runAction(() => toggleProjectPublicationAjax(item.id, item.publication_status))
-                  }
-                />
+                {!isArchived ? (
+                  <AdminDataGridActionButton
+                    action="visibility"
+                    title={isHidden ? "نشر" : "إخفاء"}
+                    hidden={isHidden}
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onTogglePublication(item.id, item.publication_status)}
+                  />
+                ) : (
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    title="استعادة كمسودة"
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onRestore(item.id)}
+                  >
+                    <RestoreIcon />
+                  </AdminDataGridActionButton>
+                )}
                 {withDuplicateAction ? (
                   <AdminDataGridActionButton
                     action="duplicate"
                     title="نسخ المشروع"
-                    disabled={table.isPending}
+                    disabled={handlers.isPending}
                     onClick={() => table.runAction(() => duplicateProjectAjax(item.id))}
                   />
                 ) : null}
+                {!isArchived ? (
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    title="أرشفة المشروع"
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onArchive(item.id)}
+                  >
+                    <ArchiveIcon />
+                  </AdminDataGridActionButton>
+                ) : null}
                 <AdminDataGridActionButton
-                  action="delete"
-                  disabled={table.isPending}
-                  onClick={() => table.runAction(() => deleteProjectAjax(item.id))}
-                />
+                  tone="dark"
+                  title="حذف نهائي"
+                  disabled={handlers.isPending}
+                  onClick={() => handlers.onRequestPermanentDelete(item)}
+                >
+                  <span className="text-[10px] font-bold text-red-300">DEL</span>
+                </AdminDataGridActionButton>
               </AdminDataGridActionsCell>
             </AdminDataGridRow>
           );
@@ -245,10 +302,12 @@ function ReferenceProjectsTable({
   type,
   table,
   columns,
+  handlers,
 }: {
   type: ProjectCategory;
   table: ReturnType<typeof useAdminTable<ProjectGridRow, ReferenceProjectSortKey>>;
   columns: string;
+  handlers: ProjectRowActionHandlers;
 }) {
   function sortProps(key: ReferenceProjectSortKey) {
     return {
@@ -301,6 +360,7 @@ function ReferenceProjectsTable({
         table.rows.map((item) => {
           const published = publicationMeta(item.publication_status);
           const isPublished = item.publication_status === "published";
+          const isArchived = item.publication_status === "archived";
           const previewPath = item.slug ? `/projects/${item.slug}` : null;
 
           return (
@@ -371,31 +431,56 @@ function ReferenceProjectsTable({
                   </AdminDataGridActionButton>
                 )}
 
-                <AdminDataGridActionButton
-                  action="visibility"
-                  size="compact"
-                  hidden={isPublished}
-                  title={isPublished ? "إخفاء" : "نشر"}
-                  disabled={table.isPending}
-                  onClick={() =>
-                    table.runAction(() => toggleProjectPublicationAjax(item.id, item.publication_status))
-                  }
-                />
+                {!isArchived ? (
+                  <AdminDataGridActionButton
+                    action="visibility"
+                    size="compact"
+                    hidden={isPublished}
+                    title={isPublished ? "إخفاء" : "نشر"}
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onTogglePublication(item.id, item.publication_status)}
+                  />
+                ) : (
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    size="compact"
+                    title="استعادة كمسودة"
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onRestore(item.id)}
+                  >
+                    <RestoreIcon />
+                  </AdminDataGridActionButton>
+                )}
 
                 <AdminDataGridActionButton
                   action="duplicate"
                   size="compact"
                   title="نسخ المشروع"
-                  disabled={table.isPending}
+                  disabled={handlers.isPending}
                   onClick={() => table.runAction(() => duplicateProjectAjax(item.id))}
                 />
 
+                {!isArchived ? (
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    size="compact"
+                    title="أرشفة المشروع"
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onArchive(item.id)}
+                  >
+                    <ArchiveIcon />
+                  </AdminDataGridActionButton>
+                ) : null}
+
                 <AdminDataGridActionButton
-                  action="delete"
+                  tone="dark"
                   size="compact"
-                  disabled={table.isPending}
-                  onClick={() => table.runAction(() => deleteProjectAjax(item.id))}
-                />
+                  title="حذف نهائي"
+                  disabled={handlers.isPending}
+                  onClick={() => handlers.onRequestPermanentDelete(item)}
+                >
+                  <span className="text-[10px] font-bold text-red-300">DEL</span>
+                </AdminDataGridActionButton>
               </AdminDataGridActionsCell>
             </AdminDataGridRow>
           );
@@ -418,6 +503,7 @@ export default function ProjectsTableClient({
   withDuplicateAction = false,
   referenceLayout = false,
 }: ProjectsTableClientProps) {
+  const [pendingPermanentDelete, setPendingPermanentDelete] = useState<ProjectGridRow | null>(null);
   const columns = buildColumns(withDuplicateAction, referenceLayout);
 
   const legacySortAccessors = useMemo(
@@ -456,6 +542,22 @@ export default function ProjectsTableClient({
 
   const table = referenceLayout ? referenceTable : legacyTable;
 
+  const handlers: ProjectRowActionHandlers = {
+    isPending: table.isPending,
+    onTogglePublication: (id, status) => {
+      table.runAction(() => toggleProjectPublicationAjax(id, status));
+    },
+    onArchive: (id) => {
+      table.runAction(() => archiveProjectAjax(id));
+    },
+    onRestore: (id) => {
+      table.runAction(() => restoreProjectAjax(id));
+    },
+    onRequestPermanentDelete: (item) => {
+      setPendingPermanentDelete(item);
+    },
+  };
+
   return (
     <div className="space-y-4">
       {table.feedback ? (
@@ -476,7 +578,7 @@ export default function ProjectsTableClient({
         options={[
           { value: "publish", label: "نشر المحدد" },
           { value: "hide", label: "إخفاء المحدد" },
-          { value: "delete", label: "حذف المحدد" },
+          { value: "archive", label: "أرشفة المحدد" },
         ]}
         onClearSelection={table.selection.clearSelection}
         onExecute={(action, ids) =>
@@ -486,15 +588,47 @@ export default function ProjectsTableClient({
       />
 
       {referenceLayout ? (
-        <ReferenceProjectsTable type={type} table={referenceTable} columns={columns} />
+        <ReferenceProjectsTable type={type} table={referenceTable} columns={columns} handlers={handlers} />
       ) : (
         <LegacyProjectsTable
           type={type}
           table={legacyTable}
           columns={columns}
           withDuplicateAction={withDuplicateAction}
+          handlers={handlers}
         />
       )}
+
+      <VenesiaActionModal
+        open={Boolean(pendingPermanentDelete)}
+        title="حذف نهائي للمشروع"
+        subtitle="هذا الإجراء لا يمكن التراجع عنه — سيتم حذف المشروع وجميع المخططات والوسائط المرتبطة."
+        eyebrow="EMERGENCY DELETE"
+        onClose={() => setPendingPermanentDelete(null)}
+      >
+        {pendingPermanentDelete ? (
+          <>
+            <p className="rounded-[16px] border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm leading-7 text-red-100">
+              سيتم حذف «{pendingPermanentDelete.arabic_name || pendingPermanentDelete.code}» نهائيًا من قاعدة
+              البيانات. يُفضّل الأرشفة للإخفاء الآمن.
+            </p>
+            <VenesiaActionModalButton
+              tone="red"
+              disabled={table.isPending}
+              onClick={() => {
+                const target = pendingPermanentDelete;
+                setPendingPermanentDelete(null);
+                table.runAction(() => deleteProjectAjax(target.id, true));
+              }}
+            >
+              تأكيد الحذف النهائي
+            </VenesiaActionModalButton>
+            <VenesiaActionModalButton onClick={() => setPendingPermanentDelete(null)}>
+              إلغاء — استخدم الأرشفة بدلًا من ذلك
+            </VenesiaActionModalButton>
+          </>
+        ) : null}
+      </VenesiaActionModal>
     </div>
   );
 }
