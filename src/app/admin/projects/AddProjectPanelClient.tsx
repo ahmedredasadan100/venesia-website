@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import type { ProjectCategory } from "../../../config/projects-data";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
@@ -30,13 +30,13 @@ export default function AddProjectPanelClient({ type }: AddProjectPanelClientPro
 
   const typeLabel = type === "residential" ? "سكني" : "تجاري";
 
-  useEffect(() => {
-    if (!open) return;
+  function openPanel() {
     setSlug("");
     setSlugError(null);
     setFormError(null);
     setIsPending(false);
-  }, [open]);
+    setOpen(true);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,7 +89,7 @@ export default function AddProjectPanelClient({ type }: AddProjectPanelClientPro
 
   return (
     <>
-      <AdminActionButton variant="primary" onClick={() => setOpen(true)}>
+      <AdminActionButton variant="primary" onClick={openPanel}>
         <PlusIcon />
         إضافة مشروع
       </AdminActionButton>

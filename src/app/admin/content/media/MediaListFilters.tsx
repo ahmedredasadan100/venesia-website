@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -8,6 +8,7 @@ import {
   AdminFiltersShell,
   AdminSearchInput,
 } from "../../../../components/admin/ui";
+import { useClientMounted } from "../../../../hooks/use-client-mounted";
 import { getContentTypeLabel, MEDIA_EDITABLE_CONTENT_TYPES } from "./media-content-config";
 
 type MediaListFiltersProps = {
@@ -37,18 +38,17 @@ export default function MediaListFilters({ q, contentType, status, featured }: M
   const [statusValue, setStatusValue] = useState(status);
   const [featuredValue, setFeaturedValue] = useState(featured);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
+  const isMounted = useClientMounted();
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
+  const filterSyncKey = `${q}|${contentType}|${status}|${featured}`;
+  const [lastFilterSyncKey, setLastFilterSyncKey] = useState(filterSyncKey);
+  if (filterSyncKey !== lastFilterSyncKey) {
+    setLastFilterSyncKey(filterSyncKey);
     setSearchValue(q);
     setContentTypeValue(contentType);
     setStatusValue(status);
     setFeaturedValue(featured);
-  }, [q, contentType, status, featured]);
+  }
 
   const contentTypeOptions = MEDIA_EDITABLE_CONTENT_TYPES.map((type) => ({
     value: type,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
 import { validateSlugFormat } from "../../../../lib/admin/slug";
@@ -23,13 +23,13 @@ export default function AddMenuPanelClient() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
+  function openPanel() {
     setSlug("");
     setSlugError(null);
     setFormError(null);
     setIsPending(false);
-  }, [open]);
+    setOpen(true);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,7 +71,7 @@ export default function AddMenuPanelClient() {
 
   return (
     <>
-      <AdminActionButton variant="primary" onClick={() => setOpen(true)}>
+      <AdminActionButton variant="primary" onClick={openPanel}>
         <PlusIcon />
         إضافة منيو
       </AdminActionButton>

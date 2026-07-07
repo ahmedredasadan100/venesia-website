@@ -145,14 +145,18 @@ export default function PwaProvider({ children }: { children: ReactNode }) {
   }, [evaluateVisibility]);
 
   useEffect(() => {
-    setIsIOS(isIosDevice());
-    evaluateVisibility();
+    const timer = window.setTimeout(() => {
+      evaluateVisibility();
+    }, 0);
 
     const media = window.matchMedia("(max-width: 767px)");
     const onViewportChange = () => evaluateVisibility();
     media.addEventListener("change", onViewportChange);
 
-    return () => media.removeEventListener("change", onViewportChange);
+    return () => {
+      window.clearTimeout(timer);
+      media.removeEventListener("change", onViewportChange);
+    };
   }, [evaluateVisibility]);
 
   const value = useMemo(

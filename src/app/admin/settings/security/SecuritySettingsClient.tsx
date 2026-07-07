@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useState, useTransition } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 
 import AdminModuleTabs from "../../../../components/admin/page-blocks/AdminModuleTabs";
 import {
@@ -81,14 +81,17 @@ export default function SecuritySettingsClient({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
+  const accountPropsKey = `${email}|${fullName ?? ""}`;
+  const [lastAccountPropsKey, setLastAccountPropsKey] = useState(accountPropsKey);
+  if (accountPropsKey !== lastAccountPropsKey) {
+    setLastAccountPropsKey(accountPropsKey);
     setAccountForm((prev) => ({
       ...prev,
       full_name: fullName ?? "",
       email,
     }));
     setSavedEmail(email);
-  }, [email, fullName]);
+  }
 
   const emailChanged = normalizeAdminEmail(accountForm.email) !== normalizeAdminEmail(savedEmail);
 

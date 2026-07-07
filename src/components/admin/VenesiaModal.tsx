@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 
@@ -13,6 +13,7 @@ import {
   adminFormLabelClassName,
 } from "../../lib/admin/admin-ui-styles";
 import { AdminModalCancelButton, AdminModalDangerButton, AdminModalPrimaryButton } from "./ui/AdminModalButtons";
+import { useClientMounted } from "../../hooks/use-client-mounted";
 
 export type VenesiaModalSize = keyof typeof ADMIN_MODAL_SIZES;
 
@@ -37,11 +38,7 @@ export default function VenesiaModal({
   footer,
   onClose,
 }: VenesiaModalProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useClientMounted();
 
   useEffect(() => {
     if (!open) return;

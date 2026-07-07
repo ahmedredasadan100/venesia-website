@@ -223,43 +223,48 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
   useEffect(() => {
     if (!open || isFormResource(resource)) return;
 
-    if (resource === "menus" && !selectedMenuId) {
-      void loadBrowseItems();
-      return;
-    }
-
+    const delay = resource === "menus" && !selectedMenuId ? 0 : 220;
     const timer = window.setTimeout(() => {
       void loadBrowseItems();
-    }, 220);
+    }, delay);
+
     return () => window.clearTimeout(timer);
   }, [open, resource, selectedMenuId, query, loadBrowseItems]);
 
-  useEffect(() => {
-    if (!open) return;
-    resetBrowseState();
-    setResource(defaultResourceForValue(initialValue));
-    setPendingLink(null);
-    setPreview(null);
-  }, [open, initialValue, resetBrowseState]);
+  const resetKey = open ? `open:${JSON.stringify(initialValue ?? null)}` : "closed";
+  const [lastResetKey, setLastResetKey] = useState(resetKey);
+  if (resetKey !== lastResetKey) {
+    setLastResetKey(resetKey);
+    if (open) {
+      resetBrowseState();
+      setResource(defaultResourceForValue(initialValue));
+      setPendingLink(null);
+      setPreview(null);
+    }
+  }
 
   useEffect(() => {
     if (!open || !isFormResource(resource)) return;
 
-    if (resource === "external") {
-      void updatePreview(buildExternalLink());
-      return;
-    }
-    if (resource === "anchor") {
-      const anchor = anchorValue.trim().replace(/^#/, "");
-      void updatePreview(
-        anchor ? { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" } : null,
-      );
-      return;
-    }
-    if (resource === "download") {
-      const href = downloadHref.trim();
-      void updatePreview(href ? { link_kind: "download", href, target: "_blank" } : null);
-    }
+    const timer = window.setTimeout(() => {
+      if (resource === "external") {
+        void updatePreview(buildExternalLink());
+        return;
+      }
+      if (resource === "anchor") {
+        const anchor = anchorValue.trim().replace(/^#/, "");
+        void updatePreview(
+          anchor ? { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" } : null,
+        );
+        return;
+      }
+      if (resource === "download") {
+        const href = downloadHref.trim();
+        void updatePreview(href ? { link_kind: "download", href, target: "_blank" } : null);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [open, resource, externalHref, externalMode, externalTarget, anchorValue, downloadHref, updatePreview]);
 
   function handleResourceChange(next: ExplorerResourceId) {

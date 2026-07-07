@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import AdminModuleTabs from "../../../../components/admin/page-blocks/AdminModuleTabs";
 import { AdminActionButton, AdminCard, AdminPageHeader, AdminStatusPill } from "../../../../components/admin/ui";
@@ -68,9 +68,12 @@ export default function FooterBuilderClient({
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
+  const slotsSourceKey = JSON.stringify(settings.slots.slots);
+  const [lastSlotsSourceKey, setLastSlotsSourceKey] = useState(slotsSourceKey);
+  if (slotsSourceKey !== lastSlotsSourceKey) {
+    setLastSlotsSourceKey(slotsSourceKey);
     setSlots(structuredClone(settings.slots.slots));
-  }, [settings.slots]);
+  }
 
   const summary = useMemo(
     () =>

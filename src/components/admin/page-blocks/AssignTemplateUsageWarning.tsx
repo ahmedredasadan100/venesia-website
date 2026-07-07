@@ -20,35 +20,36 @@ export default function AssignTemplateUsageWarning({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!templateId) {
-      setAssignments([]);
-      return;
-    }
+    if (!templateId) return;
 
     let cancelled = false;
-    setLoading(true);
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      setLoading(true);
 
-    fetch(`/api/admin/page-blocks/module-usage?kind=${encodeURIComponent(moduleKind)}&templateId=${templateId}`)
-      .then(async (response) => {
-        const payload = (await response.json()) as {
-          assignments?: ModuleAssignmentRow[];
-          error?: string;
-        };
-        if (!response.ok) throw new Error(payload.error || "تعذر التحقق من الاستخدام.");
-        return payload.assignments ?? [];
-      })
-      .then((rows) => {
-        if (!cancelled) setAssignments(rows.filter((row) => row.page_id !== currentPageId));
-      })
-      .catch(() => {
-        if (!cancelled) setAssignments([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      fetch(`/api/admin/page-blocks/module-usage?kind=${encodeURIComponent(moduleKind)}&templateId=${templateId}`)
+        .then(async (response) => {
+          const payload = (await response.json()) as {
+            assignments?: ModuleAssignmentRow[];
+            error?: string;
+          };
+          if (!response.ok) throw new Error(payload.error || "تعذر التحقق من الاستخدام.");
+          return payload.assignments ?? [];
+        })
+        .then((rows) => {
+          if (!cancelled) setAssignments(rows.filter((row) => row.page_id !== currentPageId));
+        })
+        .catch(() => {
+          if (!cancelled) setAssignments([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 0);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [moduleKind, templateId, currentPageId]);
 

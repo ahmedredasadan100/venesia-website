@@ -46,7 +46,11 @@ export default function AdminMediaLibraryClient() {
   }, []);
 
   useEffect(() => {
-    void loadFolder("images");
+    const timer = window.setTimeout(() => {
+      void loadFolder("images");
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadFolder]);
 
   const items = useMemo(() => {

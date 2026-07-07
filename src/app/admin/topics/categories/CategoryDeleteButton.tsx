@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   AdminDataGridActionButton,
@@ -38,9 +38,7 @@ export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButto
   const [validationError, setValidationError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-
+  function loadDeletePreview() {
     setLoading(true);
     setPending(false);
     setValidationError(null);
@@ -80,7 +78,12 @@ export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButto
         setErrorMessage("تعذر تحميل بيانات الحذف.");
       })
       .finally(() => setLoading(false));
-  }, [open, categoryId]);
+  }
+
+  function openModal() {
+    setOpen(true);
+    loadDeletePreview();
+  }
 
   function closeModal() {
     if (pending) return;
@@ -153,7 +156,7 @@ export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButto
         action="delete"
         size="compact"
         title="حذف التصنيف"
-        onClick={() => setOpen(true)}
+        onClick={openModal}
       />
 
       <VenesiaModal

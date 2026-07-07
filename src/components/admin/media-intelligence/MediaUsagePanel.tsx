@@ -20,37 +20,37 @@ export default function MediaUsagePanel({ assetPath }: MediaUsagePanelProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!assetPath) {
-      setHits([]);
-      setError(null);
-      return;
-    }
+    if (!assetPath) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
 
-    fetch(`/api/admin/media-usage?asset=${encodeURIComponent(assetPath)}`)
-      .then(async (response) => {
-        const payload = (await response.json()) as { hits?: MediaUsageHit[]; error?: string };
-        if (!response.ok) throw new Error(payload.error || "تعذر فحص الاستخدام.");
-        return payload.hits ?? [];
-      })
-      .then((nextHits) => {
-        if (!cancelled) setHits(nextHits);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setHits([]);
-          setError(err.message);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      fetch(`/api/admin/media-usage?asset=${encodeURIComponent(assetPath)}`)
+        .then(async (response) => {
+          const payload = (await response.json()) as { hits?: MediaUsageHit[]; error?: string };
+          if (!response.ok) throw new Error(payload.error || "تعذر فحص الاستخدام.");
+          return payload.hits ?? [];
+        })
+        .then((nextHits) => {
+          if (!cancelled) setHits(nextHits);
+        })
+        .catch((err: Error) => {
+          if (!cancelled) {
+            setHits([]);
+            setError(err.message);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 0);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [assetPath]);
 

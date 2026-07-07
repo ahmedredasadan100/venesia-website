@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import type { HomepageProjectCard } from "../../lib/projects/types";
 import type { HomeProjectsContent } from "./home-projects-mappers";
 import PlainTextContent from "../content/PlainTextContent";
@@ -120,12 +120,9 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
 
   const projectsLimit = resolveProjectsLimit(sectionCopy.projectsLimit);
 
-  const limitedProjects = useMemo(() => {
-    if (!projectsLimit) return projects;
-    return projects.slice(0, projectsLimit);
-  }, [projects, projectsLimit]);
+  const limitedProjects = !projectsLimit ? projects : projects.slice(0, projectsLimit);
 
-  const projectPages = useMemo(() => buildProjectPages(limitedProjects), [limitedProjects]);
+  const projectPages = buildProjectPages(limitedProjects);
   const totalPages = projectPages.length;
   const hasMultiplePages = totalPages > 1;
   const safeActivePage = Math.min(activePage, Math.max(totalPages - 1, 0));
@@ -181,13 +178,6 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
     onSwipeLeft: goToNextPage,
     onSwipeRight: goToPrevPage,
   });
-
-  useEffect(() => {
-    setActivePage((current) => {
-      if (totalPages <= 0) return 0;
-      return current >= totalPages ? 0 : current;
-    });
-  }, [totalPages, projectsLimit]);
 
   if (limitedProjects.length === 0) return null;
 

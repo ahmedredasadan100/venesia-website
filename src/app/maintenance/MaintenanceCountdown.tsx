@@ -45,8 +45,6 @@ export default function MaintenanceCountdown({ endIso }: MaintenanceCountdownPro
   const [state, setState] = useState<CountdownState>(() => getCountdownState(endMs));
 
   useEffect(() => {
-    setState(getCountdownState(endMs));
-
     const timer = window.setInterval(() => {
       setState(getCountdownState(endMs));
     }, 1000);

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useClientMounted } from "../../../hooks/use-client-mounted";
 
 export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE = "10";
 export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS = ["10", "20", "30"] as const;
@@ -157,7 +158,6 @@ export default function AdminTablePagination({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const limitTriggerId = useId();
   const [isLimitOpen, setIsLimitOpen] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
   const menuPosition = useFixedDropupPosition(isLimitOpen, triggerRef);
   const paginationItems = buildAdminPaginationItems(currentPage, totalPages);
   const minPageSize = getMinPageSize(pageSizeOptions);
@@ -168,10 +168,7 @@ export default function AdminTablePagination({
         ? false
         : totalCount > minPageSize;
   const shouldShowFooter = forceShowSummary || totalCount > minPageSize || totalPages > 1;
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useClientMounted();
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {

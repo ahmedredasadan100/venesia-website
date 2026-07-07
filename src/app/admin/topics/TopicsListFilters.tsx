@@ -13,6 +13,7 @@ import {
   isInsideAdminFilterMenu,
   useAdminFloatingMenuPosition,
 } from "../../../components/admin/ui";
+import { useClientMounted } from "../../../hooks/use-client-mounted";
 import type { TopicCategoryGroup } from "./topics-category-groups";
 
 type SeriesOption = {
@@ -71,19 +72,18 @@ export default function TopicsListFilters({
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
+  const isMounted = useClientMounted();
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
+  const filterSyncKey = `${q}|${category}|${series}|${status}|${featured}`;
+  const [lastFilterSyncKey, setLastFilterSyncKey] = useState(filterSyncKey);
+  if (filterSyncKey !== lastFilterSyncKey) {
+    setLastFilterSyncKey(filterSyncKey);
     setSearchValue(q);
     setCategoryValue(category);
     setSeriesValue(series);
     setStatusValue(status);
     setFeaturedValue(featured);
-  }, [q, category, series, status, featured]);
+  }
 
   const categorySlugToId = useMemo(() => {
     const map = new Map<string, number>();
@@ -110,12 +110,12 @@ export default function TopicsListFilters({
     return seriesOptions.filter((item) => item.category_id === categoryId);
   }, [categoryValue, categorySlugToId, seriesOptions]);
 
-  useEffect(() => {
-    if (seriesValue === "all") return;
-    if (!visibleSeriesOptions.some((item) => item.slug === seriesValue)) {
-      setSeriesValue("all");
-    }
-  }, [seriesValue, visibleSeriesOptions]);
+  if (
+    seriesValue !== "all" &&
+    !visibleSeriesOptions.some((item) => item.slug === seriesValue)
+  ) {
+    setSeriesValue("all");
+  }
 
   const trimmedSearch = searchValue.trim();
   const canSuggest = trimmedSearch.length >= 2;
@@ -137,17 +137,12 @@ export default function TopicsListFilters({
   }, []);
 
   useEffect(() => {
-    if (!canSuggest) {
-      setSuggestions([]);
-      setIsSuggestionsOpen(false);
-      setIsSuggestionsLoading(false);
-      return;
-    }
+    if (!canSuggest) return;
 
     const controller = new AbortController();
-    setIsSuggestionsLoading(true);
 
     const timer = window.setTimeout(async () => {
+      setIsSuggestionsLoading(true);
       try {
         const response = await fetch(
           `/admin/topics/search?q=${encodeURIComponent(trimmedSearch)}`,
