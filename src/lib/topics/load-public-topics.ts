@@ -239,7 +239,7 @@ async function queryPublicTopicsListing(
 
   return {
     featuredTopic,
-    visibleTopics: (data ?? []).map((topic) => mapDbTopicToListingTopic(topic as DbTopic)),
+    visibleTopics: ((data ?? []) as DbTopic[]).map((topic) => mapDbTopicToListingTopic(topic)),
     totalRegularTopics,
     currentPage,
     totalPages,
