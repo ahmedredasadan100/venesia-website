@@ -4,6 +4,7 @@ import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-se
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
@@ -81,6 +82,7 @@ function redirectWithError(message: string): never {
 }
 
 function revalidateSeriesPaths() {
+  revalidateTopicsCache();
   revalidatePath("/admin/content/series");
   revalidatePath("/admin/topics");
   revalidatePath("/admin/topics/new");

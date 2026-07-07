@@ -4,6 +4,7 @@ import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-se
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateNavigationCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { revalidateMediaCenterPublicPaths } from "../../../../lib/media-center/revalidate-public-paths";
 import { revalidateFooterPublicPaths } from "../../../../lib/footer/revalidate-footer";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -120,6 +121,7 @@ async function resolveMenuItemLink(formData: FormData) {
 }
 
 function revalidateNavigation() {
+  revalidateNavigationCache();
   revalidateFooterPublicPaths();
   revalidatePath("/");
   revalidatePath("/about");

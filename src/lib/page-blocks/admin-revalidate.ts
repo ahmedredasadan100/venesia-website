@@ -1,6 +1,10 @@
 import "server-only";
 
 import { revalidatePath } from "next/cache";
+import {
+  revalidateBlockModuleCache,
+  revalidatePageCompositionCache,
+} from "../cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { MEDIA_CENTER_PUBLIC_PATHS } from "../media-center-page-config";
 
@@ -50,6 +54,7 @@ async function collectAssignedPublicPaths() {
 }
 
 export async function revalidatePublicPagesWithBlockAssignments() {
+  revalidatePageCompositionCache();
   const paths = await collectAssignedPublicPaths();
 
   for (const path of paths) {
@@ -57,12 +62,14 @@ export async function revalidatePublicPagesWithBlockAssignments() {
   }
 }
 
-export async function revalidateBlockModulePaths(_modulePath: string) {
+export async function revalidateBlockModulePaths(modulePath: string) {
   revalidatePath("/admin/pages-blocks/pages", "layout");
+  revalidateBlockModuleCache(modulePath);
   await revalidatePublicPagesWithBlockAssignments();
 }
 
 export async function revalidatePageBlocksPath(pageId: number) {
+  revalidatePageCompositionCache();
   revalidatePath("/admin/pages-blocks/pages", "layout");
   revalidatePath(`/admin/pages-blocks/pages/${pageId}`, "page");
 

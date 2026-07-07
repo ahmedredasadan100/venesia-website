@@ -6,6 +6,7 @@ import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { revalidatePath } from "next/cache";
+import { revalidateTopicsCache } from "../../../lib/cache/revalidate-public-cache-tags";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { logError } from "../../../lib/logging";
@@ -421,6 +422,7 @@ function revalidateTopicPaths(options: {
   oldSlug?: string | null;
   newSlug?: string | null;
 }) {
+  revalidateTopicsCache();
   revalidatePath("/topics");
   revalidatePath("/admin/topics");
   revalidatePath("/admin/topics/new");
@@ -865,6 +867,7 @@ export async function bulkUpdateTopics(formData: FormData) {
 
   if (errorMessage) redirect(appendNotice(redirectTo, "error"));
 
+  revalidateTopicsCache();
   revalidatePath("/admin/topics");
   revalidatePath("/topics");
   redirect(appendNotice(redirectTo, "saved"));

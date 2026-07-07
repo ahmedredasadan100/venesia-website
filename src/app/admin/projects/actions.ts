@@ -4,6 +4,7 @@ import { requireAdminSession } from "../../../lib/admin/auth/require-admin-sessi
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateProjectsCache } from "../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import type { ProjectCategory } from "../../../config/projects-data";
 import type { ProjectPublicationStatus, ProjectRow, ProjectStatus } from "../../../lib/projects/types";
@@ -64,6 +65,7 @@ function redirectEditWithError(id: number, message: string): never {
 }
 
 function revalidateProjectPaths(type: ProjectCategory, id?: number, slug?: string | null, previousSlug?: string | null) {
+  revalidateProjectsCache();
   revalidatePath("/admin/projects");
   revalidatePath(listPath(type));
   if (id) revalidatePath(`/admin/projects/${id}`);

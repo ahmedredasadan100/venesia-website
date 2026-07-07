@@ -7,6 +7,7 @@ import { isAdminLinkEmpty } from "../../../../../lib/admin/links/validate";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateHeroCache } from "../../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 
@@ -61,6 +62,7 @@ function buildHeroConfig(formData: FormData) {
 }
 
 async function revalidateHeroAdmin() {
+  revalidateHeroCache();
   revalidatePath("/admin/pages-blocks/blocks/hero");
   revalidatePath("/");
   revalidatePath("/about");

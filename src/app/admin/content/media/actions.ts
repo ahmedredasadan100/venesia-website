@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { revalidatePath } from "next/cache";
+import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import {
@@ -370,6 +371,7 @@ async function getEditableMediaTopicById(id: string) {
 }
 
 function revalidateMediaContentPaths(id?: string | number) {
+  revalidateTopicsCache();
   revalidatePath("/admin/content/media");
   revalidatePath("/admin/content/media/new");
   revalidatePath("/admin/topics/categories");
@@ -837,6 +839,7 @@ export async function bulkUpdateMediaContent(formData: FormData) {
     redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
   }
 
+  revalidateTopicsCache();
   revalidatePath("/admin/content/media");
   redirect(appendMediaListNotice(redirectTo, "saved", "media-table"));
 }

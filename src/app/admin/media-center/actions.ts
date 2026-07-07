@@ -7,6 +7,7 @@ import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateMediaCenterCache } from "../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { revalidateMediaCenterPublicPaths } from "../../../lib/media-center/revalidate-public-paths";
 import { getMediaAdminPath, getPublicMediaPath, isMediaAdminType, MEDIA_TYPE_CONFIG, type MediaAdminType } from "./_components/media-admin-config";
@@ -193,6 +194,7 @@ function getValidationError(payload: ReturnType<typeof getPayload>, mode: "draft
 }
 
 function revalidateMedia(type: MediaAdminType, slug?: string | null) {
+  revalidateMediaCenterCache();
   revalidatePath("/admin/media-center");
   revalidatePath(getMediaAdminPath(type));
   revalidateMediaCenterPublicPaths();

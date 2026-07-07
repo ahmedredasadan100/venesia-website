@@ -4,6 +4,7 @@ import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-se
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 function getString(formData: FormData, key: string) {
@@ -75,6 +76,7 @@ function redirectError(message: string): never {
 }
 
 function revalidateCategories() {
+  revalidateTopicsCache();
   revalidatePath("/admin/topics/categories");
   revalidatePath("/admin/topics");
   revalidatePath("/admin/topics/new");
