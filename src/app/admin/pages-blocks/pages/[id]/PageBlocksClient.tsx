@@ -47,6 +47,8 @@ import {
   movePageBlockAssignment,
   togglePageBlockAssignment,
 } from "../actions";
+import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
+import AssignTemplateUsageWarning from "../../../../../components/admin/page-blocks/AssignTemplateUsageWarning";
 
 type PageRow = {
   id: number;
@@ -120,6 +122,7 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [deletingAssignment, setDeletingAssignment] = useState<PageBlockAssignmentRow | null>(null);
   const [assignModuleKind, setAssignModuleKind] = useState<AssignableModuleKind>("content");
+  const [assignTemplateId, setAssignTemplateId] = useState<number | null>(null);
   const [assignVisible, setAssignVisible] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -377,11 +380,12 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
               إدارة الموديولات
             </AdminActionButton>
             <AdminActionButton href={page.path || "#"} variant="ghost">
-              معاينة
+              معاينة عامة
             </AdminActionButton>
             <button
               type="button"
               onClick={() => {
+                setAssignTemplateId(null);
                 setAssignModalSession((session) => session + 1);
                 setShowAssignModal(true);
               }}
@@ -417,6 +421,8 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
           {actionMessage}
         </div>
       ) : null}
+
+      <PageVisualSlotMap assignments={assignments} />
 
       <AdminBulkActionBar
         selectedIds={selection.selectedIds}
@@ -587,7 +593,10 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
                 <span className="text-xs font-semibold text-white/55">نوع الموديول</span>
                 <select
                   value={assignModuleKind}
-                  onChange={(event) => setAssignModuleKind(event.target.value as AssignableModuleKind)}
+                  onChange={(event) => {
+                    setAssignModuleKind(event.target.value as AssignableModuleKind);
+                    setAssignTemplateId(null);
+                  }}
                   className={fieldClassName()}
                 >
                   <option value="hero">Hero</option>
@@ -603,7 +612,16 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
 
               <label className="space-y-2 md:col-span-2">
                 <span className="text-xs font-semibold text-white/55">القالب</span>
-                <select name="template_id" required className={fieldClassName()} defaultValue="">
+                <select
+                  name="template_id"
+                  required
+                  className={fieldClassName()}
+                  defaultValue=""
+                  onChange={(event) => {
+                    const value = Number(event.currentTarget.value);
+                    setAssignTemplateId(Number.isFinite(value) && value > 0 ? value : null);
+                  }}
+                >
                   <option value="" disabled>اختر قالبًا…</option>
                   {assignableTemplates.map((template) => (
                     <option key={template.id} value={template.id}>
@@ -611,6 +629,11 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
                     </option>
                   ))}
                 </select>
+                <AssignTemplateUsageWarning
+                  moduleKind={assignModuleKind}
+                  templateId={assignTemplateId}
+                  currentPageId={page.id}
+                />
                 <p className="text-xs leading-6 text-white/42">
                   القوالب المرتبطة بهذه الصفحة لا تظهر في القائمة. لإعادة استخدام قالب، احذف الربط الحالي أو عدّله.
                 </p>
