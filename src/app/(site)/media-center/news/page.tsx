@@ -6,7 +6,7 @@ import { getMediaItems } from "../../../../lib/media-center";
 import { loadMediaCenterSidebarProps } from "../../../../lib/media-sidebar-modules/load-media-sidebar-modules";
 import { buildMetadata } from "../../../../lib/seo/build-metadata";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 export const metadata = buildMetadata({ path: "/media-center/news" });
 
 type PageProps = {

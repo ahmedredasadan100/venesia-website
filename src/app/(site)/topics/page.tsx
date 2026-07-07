@@ -19,7 +19,7 @@ import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-co
 import { loadFeedModulesForPageSlug } from "../../../lib/feed-modules/load-feed-modules";
 import { findBreadcrumbInComposition, findHeroInComposition } from "../../../lib/page-blocks/page-composition-utils";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 export const metadata = buildMetadata({ path: "/topics" });
 
 type TopicsPageProps = {
