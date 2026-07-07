@@ -33,12 +33,15 @@ export type AdminUserRecord = {
   updated_at: string;
 };
 
+const ADMIN_USER_SESSION_COLUMNS =
+  "id, email, username, full_name, role, is_active, session_version, last_login_at, created_at, updated_at";
+
 function mapAdminUser(row: Record<string, unknown>): AdminUserRecord {
   return {
     id: Number(row.id),
     email: String(row.email),
     username: String(row.username),
-    password_hash: String(row.password_hash),
+    password_hash: String(row.password_hash ?? ""),
     full_name: row.full_name ? String(row.full_name) : null,
     role: String(row.role ?? "admin"),
     is_active: Boolean(row.is_active),
@@ -49,10 +52,18 @@ function mapAdminUser(row: Record<string, unknown>): AdminUserRecord {
   };
 }
 
-export async function getAdminUserById(id: number) {
-  const { data, error } = await getSupabaseAdmin().from("admin_users").select("*").eq("id", id).maybeSingle();
+async function getAdminUserByIdWithColumns(id: number, columns: string) {
+  const { data, error } = await getSupabaseAdmin().from("admin_users").select(columns).eq("id", id).maybeSingle();
   if (error || !data) return null;
-  return mapAdminUser(data as Record<string, unknown>);
+  return mapAdminUser(data as unknown as Record<string, unknown>);
+}
+
+export async function getAdminUserById(id: number) {
+  return getAdminUserByIdWithColumns(id, "*");
+}
+
+async function getAdminUserForSession(id: number) {
+  return getAdminUserByIdWithColumns(id, ADMIN_USER_SESSION_COLUMNS);
 }
 
 async function getAdminUserByUsername(username: string) {
@@ -114,7 +125,7 @@ export async function authenticateAdminUser(identifier: string, password: string
 export async function validateAdminSessionPayload(payload: AdminSessionPayload | null) {
   if (!payload) return false;
 
-  const user = await getAdminUserById(payload.id);
+  const user = await getAdminUserForSession(payload.id);
   if (!user || !user.is_active) return false;
 
   return user.session_version === payload.sv;
@@ -132,7 +143,7 @@ export async function getCurrentAdminUserFromCookies() {
   const valid = await validateAdminSessionPayload(payload);
   if (!valid) return null;
 
-  return getAdminUserById(payload.id);
+  return getAdminUserForSession(payload.id);
 }
 
 export async function verifyAdminUserPassword(userId: number, password: string) {

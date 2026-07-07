@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { isAdminAuthPagePath } from "../../lib/admin/auth/session";
+import { isAdminAuthPagePath } from "../../lib/admin/auth/session-paths";
 import AdminShell from "./AdminShell";
 
 type AdminAccessLayoutProps = {
