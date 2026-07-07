@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect } from "react";
 
 import type { AboutDocumentaryBeat, AboutIntroContent } from "../about/about-cms-mappers";
@@ -36,10 +37,12 @@ function ImageFrame({
 }) {
   return (
     <div className={`relative group overflow-hidden ${className}`}>
-      <img
+      <Image
         src={src}
         alt={alt}
-        className="h-full w-full object-cover object-center transition-transform duration-[1.4s] ease-out will-change-transform group-hover:scale-[1.03]"
+        fill
+        sizes="(max-width: 1024px) 100vw, 40vw"
+        className="object-cover object-center transition-transform duration-[1.4s] ease-out will-change-transform group-hover:scale-[1.03]"
       />
       <div
         aria-hidden
@@ -126,11 +129,13 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                 ) : null}
 
                 {showSecondary ? (
-                  <div className="group absolute bottom-0 left-0 h-[56%] w-[72%] overflow-hidden rounded-[1.5rem] border border-[#D8B87A]/[0.13] bg-white/[0.035] shadow-[0_24px_70px_rgba(0,0,0,0.34)]">
-                    <img
-                      src={secondarySrc}
+                  <div className="group absolute bottom-0 left-0 h-[56%] w-[72%] overflow-hidden rounded-[1.5rem] border border-[#D8B87A]/[0.13] bg-white/[0.035] shadow-[0_24px_70px_rgba(0,0,0,0.34)] relative">
+                    <Image
+                      src={secondarySrc!}
                       alt={secondaryAlt}
-                      className="h-full w-full object-cover object-center transition-transform duration-[1.4s] ease-out will-change-transform group-hover:scale-[1.03]"
+                      fill
+                      sizes="(max-width: 1024px) 72vw, 30vw"
+                      className="object-cover object-center transition-transform duration-[1.4s] ease-out will-change-transform group-hover:scale-[1.03]"
                     />
                     <div
                       aria-hidden
@@ -144,11 +149,13 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                 ) : null}
 
                 {showAccent ? (
-                  <div className="group absolute bottom-[10%] right-0 h-[34%] w-[34%] overflow-hidden rounded-[1.25rem] border border-[#D8B87A]/[0.15] bg-[#05070B] shadow-[0_18px_45px_rgba(0,0,0,0.34)]">
-                    <img
-                      src={accentSrc}
+                  <div className="group absolute bottom-[10%] right-0 h-[34%] w-[34%] overflow-hidden rounded-[1.25rem] border border-[#D8B87A]/[0.15] bg-[#05070B] shadow-[0_18px_45px_rgba(0,0,0,0.34)] relative">
+                    <Image
+                      src={accentSrc!}
                       alt={accentAlt}
-                      className="h-full w-full object-cover object-center transition-transform duration-[1.4s] ease-out will-change-transform group-hover:scale-[1.04]"
+                      fill
+                      sizes="(max-width: 1024px) 34vw, 14vw"
+                      className="object-cover object-center transition-transform duration-[1.4s] ease-out will-change-transform group-hover:scale-[1.04]"
                     />
                     <div
                       aria-hidden

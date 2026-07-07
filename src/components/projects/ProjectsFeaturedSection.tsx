@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -119,12 +120,13 @@ function MainFeaturedCard({ project }: { project: PublicProject }) {
       <div className="flex flex-col lg:grid lg:min-h-[320px] lg:grid-cols-[1.08fr_0.92fr]">
         <div className="relative w-full shrink-0 pb-3.5 lg:min-h-[320px] lg:pb-0">
           <div className="relative h-56 w-full overflow-hidden sm:h-64 lg:absolute lg:inset-0 lg:h-auto">
-            <img
+            <Image
               src={project.image}
               alt={project.code}
-              fetchPriority="high"
-              decoding="async"
-              className="h-full w-full object-cover transition duration-700 group-hover:scale-105 lg:absolute lg:inset-0"
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 58vw"
+              className="object-cover transition duration-700 group-hover:scale-105 lg:absolute lg:inset-0"
             />
 
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/10 to-transparent lg:hidden" />
@@ -181,12 +183,12 @@ function SideFeaturedCard({ project }: { project: PublicProject }) {
   className="group animate-[featuredFade_520ms_ease-out] overflow-hidden rounded-[22px] border border-[#D8B87A]/20 bg-white/[0.035] transition duration-300 hover:border-[#D8B87A]/55"
     >
       <div className="relative h-[175px] overflow-hidden">
-        <img
+        <Image
           src={project.image}
           alt={project.code}
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+          fill
+          sizes="(max-width: 1024px) 100vw, 20vw"
+          className="object-cover transition duration-700 group-hover:scale-105"
         />
 
         <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/36 to-transparent" />

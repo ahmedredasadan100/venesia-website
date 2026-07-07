@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
@@ -192,12 +193,12 @@ function ProjectRow({ project }: { project: PublicProject }) {
       <div className="flex flex-col md:grid md:min-h-[250px] md:grid-cols-[250px_1fr]">
         <div className="relative w-full shrink-0 pb-3.5 md:min-h-[150px] md:pb-0">
           <div className="relative h-52 w-full overflow-hidden sm:h-56 md:absolute md:inset-0 md:h-auto">
-            <img
+            <Image
               src={project.image}
               alt={project.code}
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover transition duration-700 group-hover:scale-105 md:absolute md:inset-0"
+              fill
+              sizes="(max-width: 768px) 100vw, 250px"
+              className="object-cover transition duration-700 group-hover:scale-105 md:absolute md:inset-0"
             />
 
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/10 to-transparent md:hidden" />
@@ -248,12 +249,12 @@ function ProjectCard({ project }: { project: PublicProject }) {
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">
       <div className="relative shrink-0 pb-3.5 md:pb-0">
         <div className="relative h-52 overflow-hidden sm:h-60">
-          <img
+          <Image
             src={project.image}
             alt={project.code}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+            className="object-cover transition duration-700 group-hover:scale-105"
           />
 
           <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent md:hidden" />

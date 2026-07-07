@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 
 import type { AboutCtaContact, AboutCtaModuleContent } from "./about-cta-mappers";
@@ -127,10 +128,12 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
 
             <div className="relative order-1 min-h-[250px] min-w-0 overflow-hidden [direction:rtl] lg:order-3 lg:min-h-[220px]">
               {showImage ? (
-                <img
+                <Image
                   src={imageSrc}
                   alt={content.imageAlt || content.title || ""}
-                  className="absolute inset-0 h-full w-full scale-[1.04] object-cover object-center transition-transform duration-[1600ms] ease-out group-hover:scale-[1.07]"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 42vw"
+                  className="scale-[1.04] object-cover object-center transition-transform duration-[1600ms] ease-out group-hover:scale-[1.07]"
                 />
               ) : null}
 
