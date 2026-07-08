@@ -2,6 +2,10 @@ export const UNIFIED_MEDIA_ADMIN_PATH = "/admin/content/media";
 export const UNIFIED_MEDIA_ADMIN_NEW_PATH = "/admin/content/media/new";
 export const UNIFIED_TOPIC_CATEGORIES_PATH = "/admin/topics/categories";
 
+/**
+ * Single source of truth for Legacy Media Admin → Unified Media Admin redirects.
+ * Route stubs under src/app/admin/media-center must import from here only.
+ */
 const LEGACY_TYPE_PATH_TO_CONTENT_TYPE: Record<string, string> = {
   news: "news",
   videos: "video",

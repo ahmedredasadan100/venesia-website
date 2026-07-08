@@ -25,6 +25,7 @@ Names only — values belong in `.env.local` / hosting secrets:
 npm run lint
 npm run typecheck
 npm run verify:migrations
+npm run verify:legacy-media-admin
 npm run build
 ```
 
@@ -33,6 +34,12 @@ Optional combined check:
 ```bash
 npm run verify
 ```
+
+## Admin media
+
+- Unified Media Admin (official): `/admin/content/media`
+- Legacy `/admin/media-center` routes are **redirect-only** compatibility stubs
+- Do **not** add new CRUD under `/admin/media-center`
 
 ## SQL migrations
 
