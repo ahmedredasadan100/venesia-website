@@ -76,6 +76,7 @@ npm run verify:audit-coverage
 
 - [Unified Content Engine ADR](docs/architecture/UNIFIED_CONTENT_ENGINE.md)
 - [Admin Audit Coverage](docs/admin-audit-coverage.md)
+- [Oversized Actions Split Plan](docs/oversized-actions-split-plan.md)
 - [Migration Metadata Reference](docs/database/migration-metadata.md)
 - [Media Upload / Supabase Storage Migration Plan](docs/security-media-upload-migration.md)
 
