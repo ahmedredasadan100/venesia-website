@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function ProjectsHubCTA() {
   return (
@@ -29,10 +30,12 @@ export default function ProjectsHubCTA() {
           </div>
 
           <div className="relative min-h-[260px]">
-            <img
+            <Image
               src="/images/cta-building-night.png"
               alt=""
-              className="absolute inset-0 h-full w-full object-cover"
+              fill
+              sizes="(max-width: 1024px) 100vw, 40vw"
+              className="object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#080B10]" />
           </div>

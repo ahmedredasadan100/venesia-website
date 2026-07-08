@@ -9,7 +9,6 @@ import {
 } from "../../lib/projects/public-helpers";
 import type { ProjectHubFilterId, PublicProject } from "../../lib/projects/public-types";
 import ProjectsFeaturedSection from "./ProjectsFeaturedSection";
-import ProjectsHubCTA from "./ProjectsHubCTA";
 import ProjectsHubHero from "./ProjectsHubHero";
 import ProjectsListSection from "./ProjectsListSection";
 import ProjectsMapSection from "./ProjectsMapSection";

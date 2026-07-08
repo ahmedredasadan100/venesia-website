@@ -10,7 +10,7 @@ import { redirect } from "next/navigation";
 import { revalidateMediaCenterCache } from "../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { revalidateMediaCenterPublicPaths } from "../../../lib/media-center/revalidate-public-paths";
-import { getMediaAdminPath, getPublicMediaPath, isMediaAdminType, MEDIA_TYPE_CONFIG, type MediaAdminType } from "./_components/media-admin-config";
+import { getMediaAdminPath, getPublicMediaPath, isMediaAdminType, type MediaAdminType } from "./_components/media-admin-config";
 
 const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
 type MediaStatus = (typeof VALID_STATUSES)[number];

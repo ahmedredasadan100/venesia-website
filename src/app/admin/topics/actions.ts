@@ -18,7 +18,6 @@ import {
 import {
   getTopicDraftValidationError,
   getTopicPublishOnlyValidationError,
-  getTopicPublishReadyError,
   getTopicPublishValidationError,
   topicRowToPublishInput,
   validateSlugFormat,
@@ -254,10 +253,6 @@ function getDraftValidationError(payload: ReturnType<typeof getPayload>) {
   return getTopicDraftValidationError(payloadToPublishInput(payload));
 }
 
-function getBaseValidationError(payload: ReturnType<typeof getPayload>) {
-  return getTopicPublishReadyError(payloadToPublishInput(payload));
-}
-
 function getPublishOnlyValidationError(payload: ReturnType<typeof getPayload>) {
   return getTopicPublishOnlyValidationError(payloadToPublishInput(payload));
 }
@@ -281,14 +276,9 @@ function payloadToPublishInput(payload: ReturnType<typeof getPayload>): TopicPub
 function getValidationError(
   payload: ReturnType<typeof getPayload>,
   mode: "save" | "publish" | "draft",
-  _nextStatus: TopicStatus,
 ) {
   if (mode === "publish") return getPublishValidationError(payload);
   return getDraftValidationError(payload);
-}
-
-function getPublishReadyError(payload: ReturnType<typeof getPayload>) {
-  return getTopicPublishReadyError(payloadToPublishInput(payload));
 }
 
 function getPublishValidationError(payload: ReturnType<typeof getPayload>) {
@@ -612,7 +602,7 @@ async function updateTopicWithStatus(
   const currentStatus = getNormalizedStatus(String(currentTopic.status ?? "draft"), "draft");
 
   if (validationMode === "publish") {
-    const saveError = getValidationError(payload, "save", currentStatus);
+    const saveError = getValidationError(payload, "save");
     if (saveError) redirectEditError(id, saveError);
 
     const publishError = getPublishOnlyValidationError(payload);
@@ -651,7 +641,7 @@ async function updateTopicWithStatus(
 
   payload.imageAlt = preserveText(payload.imageAlt, String(currentTopic.image_alt ?? ""));
 
-  const validationError = getValidationError(payload, validationMode, nextStatus);
+  const validationError = getValidationError(payload, validationMode);
 
   if (validationError) redirectEditError(id, validationError);
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 import { getProjectTrackHref } from "../../../lib/projects/public-helpers";
 import { type PublicProject } from "../../../lib/projects/public-types";
@@ -11,12 +12,13 @@ type ProjectDetailsHeroProps = {
 export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps) {
   return (
     <section className="relative isolate min-h-[620px] overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]">
-      <img
+      <Image
         src={project.heroImage}
         alt=""
-        fetchPriority="high"
-        decoding="async"
-        className="absolute inset-0 h-full w-full object-cover opacity-55"
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover opacity-55"
       />
 
       <div
@@ -56,11 +58,11 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
           <div className="hidden lg:row-span-2 lg:flex lg:justify-end">
             <div className="w-[420px] rounded-[28px] border border-[#D8B87A]/20 bg-black/24 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)] backdrop-blur-md">
               <div className="relative overflow-hidden rounded-[22px]">
-                <img
+                <Image
                   src={project.image}
                   alt={project.code}
-                  loading="lazy"
-                  decoding="async"
+                  width={420}
+                  height={280}
                   className="h-[280px] w-full object-cover"
                 />
 

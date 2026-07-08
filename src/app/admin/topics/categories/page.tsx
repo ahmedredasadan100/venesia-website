@@ -208,7 +208,6 @@ function CountLabel({ category }: { category: CategoryNode }) {
 }
 
 function TreeLines({
-  category,
   level,
 }: {
   category: CategoryNode;

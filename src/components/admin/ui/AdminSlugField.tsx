@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { normalizeSlugInput, slugifyFromTitle } from "../../../lib/admin/slug";
 import {
@@ -32,12 +32,12 @@ export default function AdminSlugField({
 
   const slug = controlledValue ?? internalSlug;
 
-  function updateSlug(next: string) {
+  const updateSlug = useCallback((next: string) => {
     if (controlledValue === undefined) {
       setInternalSlug(next);
     }
     onChange?.(next);
-  }
+  }, [controlledValue, onChange]);
 
   useEffect(() => {
     const form = slugRef.current?.form;
@@ -53,7 +53,7 @@ export default function AdminSlugField({
     syncFromSource();
 
     return () => sourceInput.removeEventListener("input", syncFromSource);
-  }, [isManual, sourceInputName]);
+  }, [isManual, sourceInputName, updateSlug]);
 
   function handleGenerate() {
     const form = slugRef.current?.form;

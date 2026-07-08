@@ -1,4 +1,3 @@
-import type { AboutApproachModuleConfig } from "../../lib/page-blocks/configs";
 import { asAboutApproachConfig } from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 

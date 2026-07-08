@@ -98,12 +98,18 @@ export default function AdminTagsField({
     return addSingleTag(pending, baseTags);
   }
 
+  const flushPendingInputRef = useRef(flushPendingInput);
+
+  useEffect(() => {
+    flushPendingInputRef.current = flushPendingInput;
+  });
+
   useEffect(() => {
     const form = hiddenRef.current?.closest("form");
     if (!form) return;
 
     function handleSubmit() {
-      flushPendingInput();
+      flushPendingInputRef.current();
     }
 
     form.addEventListener("submit", handleSubmit);

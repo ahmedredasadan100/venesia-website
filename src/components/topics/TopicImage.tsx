@@ -13,7 +13,7 @@ function normalizeTopicImageSrc(src: ImageProps["src"]) {
   return src;
 }
 
-export default function TopicImage(props: ImageProps) {
+export default function TopicImage({ alt = "", ...props }: ImageProps) {
   const [failed, setFailed] = useState(false);
   const normalizedSrc = normalizeTopicImageSrc(props.src);
 
@@ -24,6 +24,7 @@ export default function TopicImage(props: ImageProps) {
   return (
     <Image
       {...props}
+      alt={alt}
       src={normalizedSrc}
       onError={() => {
         logWarn("Topic image failed to load", { src: String(props.src) });

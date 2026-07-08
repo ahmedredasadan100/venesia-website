@@ -1,4 +1,5 @@
 import ProjectDetailsHero from "./ProjectDetailsHero";
+import Image from "next/image";
 import ProjectDistrictSection from "./ProjectDistrictSection";
 import ProjectPlansAndAreasSection from "./ProjectPlansAndAreasSection";
 import ProjectDeliverySpecsSection from "./ProjectDeliverySpecsSection";
@@ -97,12 +98,12 @@ export default function ResidentialProjectDetails({
           </div>
 
           <div className="relative min-h-[320px] overflow-hidden rounded-[26px] border border-[#D8B87A]/20">
-            <img
+            <Image
               src={details.overview.videoImage}
               alt={project.code}
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover"
+              fill
+              sizes="(max-width: 1024px) 100vw, 60vw"
+              className="object-cover"
             />
 
             <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/75 via-[#05070B]/20 to-transparent" />

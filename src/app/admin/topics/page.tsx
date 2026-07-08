@@ -16,7 +16,6 @@ import { bulkUpdateTopics } from "./actions";
 import TopicListControls from "./TopicListControls";
 import TopicBulkPublishGate from "../../../components/admin/content-workflow/TopicBulkPublishGate";
 import TopicRowActions from "./TopicRowActions";
-import CopySlugButton from "./CopySlugButton";
 
 const TOPICS_TABLE_COLUMNS = `46px minmax(320px,1fr) 150px 125px 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
@@ -495,8 +494,6 @@ export default async function AdminTopicsPage({
           {safeTopics.length > 0 ? (
             <div className="divide-y divide-white/8">
               {safeTopics.map((topic) => {
-                const slug = topic.slug ?? "";
-
                 return (
                   <article
                     key={topic.id}

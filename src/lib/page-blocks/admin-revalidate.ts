@@ -8,7 +8,7 @@ import {
 import { getSupabaseAdmin } from "../supabase-admin";
 import { MEDIA_CENTER_PUBLIC_PATHS } from "../media-center-page-config";
 
-import { ASSIGNMENT_TABLES, ALL_ASSIGNMENT_TABLES } from "./block-module-registry";
+import { ALL_ASSIGNMENT_TABLES } from "./block-module-registry";
 
 const BASE_PUBLIC_PATHS = ["/", "/about", "/contact", "/topics", "/track-your-project", ...MEDIA_CENTER_PUBLIC_PATHS];
 

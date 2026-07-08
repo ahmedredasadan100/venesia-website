@@ -186,14 +186,17 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
   const visibleRowIds = useMemo(() => manageableRows.map((row) => assignmentRowId(row)), [manageableRows]);
   const selection = useAdminGridSelection<string>(visibleRowIds);
 
-  const templateOptions =
-    assignModuleKind === "hero"
-      ? templates.hero
-      : assignModuleKind === "media-sidebar"
-        ? templates.mediaSidebar
-        : assignModuleKind === "media-hub"
-          ? templates.mediaHub
-          : templates[assignModuleKind as PageBlockType] ?? [];
+  const templateOptions = useMemo(
+    () =>
+      assignModuleKind === "hero"
+        ? templates.hero
+        : assignModuleKind === "media-sidebar"
+          ? templates.mediaSidebar
+          : assignModuleKind === "media-hub"
+            ? templates.mediaHub
+            : templates[assignModuleKind as PageBlockType] ?? [],
+    [assignModuleKind, templates],
+  );
 
   const assignedTemplateIds = useMemo(() => {
     const ids = new Set<number>();
@@ -253,9 +256,11 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     [templateOptions, assignedTemplateIds],
   );
 
+  const { setRows } = table;
+
   useEffect(() => {
-    table.setRows(assignments);
-  }, [assignments, table.setRows]);
+    setRows(assignments);
+  }, [assignments, setRows]);
 
   function sortProps(key: SortKey) {
     return {

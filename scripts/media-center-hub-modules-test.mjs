@@ -281,11 +281,6 @@ if (!adminRes.ok) {
   }
 
   for (const marker of SECTION_MARKERS) {
-    const label = marker.slug
-      .replace("media-hub-", "")
-      .split("-")
-      .map((part) => part[0].toUpperCase() + part.slice(1))
-      .join(" ");
     const expectedName = adminHtml.includes(
       marker.slug === "media-hub-featured"
         ? "Media Featured News Module"

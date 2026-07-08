@@ -42,7 +42,6 @@ export function parseMediaSidebarModuleConfig(
   if (!raw || typeof raw !== "object") return { ...fallback };
 
   const value = raw as Record<string, unknown>;
-  const source = value.source === "navigation" ? "navigation" : value.source === "media_items" ? "media_items" : fallback.source;
 
   if (widgetKey === "sections") {
     return {

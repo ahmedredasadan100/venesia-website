@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Image from "next/image";
 
 import { useSwipeSlider } from "../../../hooks/use-swipe-slider";
 
@@ -125,9 +126,11 @@ export default function ProjectPlansAndAreasSection({
             ×
           </button>
 
-          <img
+          <Image
             src={selectedImage}
             alt="مخطط الوحدة"
+            width={1200}
+            height={900}
             onClick={(event) => event.stopPropagation()}
             className="max-h-[90vh] max-w-[90vw] rounded-3xl object-contain shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
           />
@@ -161,14 +164,14 @@ function AreaCard({
       <button
         type="button"
         onClick={() => onOpenImage(area.planImage)}
-        className="group relative block w-full overflow-hidden rounded-2xl border border-[#D8B87A]/15 bg-black/25 text-right"
+        className="group relative block h-56 w-full overflow-hidden rounded-2xl border border-[#D8B87A]/15 bg-black/25 text-right"
       >
-        <img
+        <Image
           src={area.planImage}
           alt={area.area}
-          loading="lazy"
-          decoding="async"
-          className="h-56 w-full cursor-zoom-in object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
+          fill
+          sizes="(max-width: 768px) 100vw, 33vw"
+          className="cursor-zoom-in object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
         />
       </button>
 

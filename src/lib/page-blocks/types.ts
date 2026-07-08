@@ -1,6 +1,5 @@
 import type { BreadcrumbBlockConfig, CardsBlockConfig, ContentBlockConfig, CtaBlockConfig } from "./configs";
 import type { PageLayoutSlot } from "./layout-slots";
-import { PAGE_LAYOUT_SLOTS } from "./layout-slots";
 
 export { PAGE_LAYOUT_SLOTS, PAGE_BLOCK_SLOTS, type PageLayoutSlot, type PageBlockSlot } from "./layout-slots";
 

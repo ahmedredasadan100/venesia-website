@@ -324,7 +324,6 @@ export async function duplicateMediaCategory(formData: FormData) {
   const baseSlug = `${source.slug}-copy`;
   let candidate = baseSlug;
   let attempt = 1;
-  // eslint-disable-next-line no-await-in-loop
   while (!(await ensureUniqueSlug(candidate))) {
     attempt += 1;
     candidate = `${baseSlug}-${attempt}`;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Image from "next/image";
 
 import { type ResidentialExecutionJourneyStage } from "../../../lib/projects/public-types";
 
@@ -80,10 +81,12 @@ export default function ResidentialExecutionJourney({
             </aside>
 
             <div className="relative h-[225px] overflow-hidden">
-              <img
+              <Image
                 src={activeStage.image}
                 alt={activeStage.title}
-                className="h-full w-full object-cover"
+                fill
+                sizes="(max-width: 1024px) 100vw, 60vw"
+                className="object-cover"
               />
 
               <div className="absolute inset-0 bg-[linear-gradient(to_left,rgba(5,7,11,0.16),rgba(5,7,11,0.18),rgba(5,7,11,0.82))]" />
@@ -204,11 +207,11 @@ export default function ResidentialExecutionJourney({
                         index === 0 ? "border-[#D8B87A]" : "border-white/10"
                       }`}
                     >
-                      <img
+                      <Image
                         src={image}
                         alt={activeUpdate?.title ?? activeStage.title}
-                        loading="lazy"
-                        decoding="async"
+                        width={240}
+                        height={192}
                         className="h-48 w-full object-cover transition duration-700 hover:scale-105"
                       />
                     </div>

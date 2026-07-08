@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 
 import RichTextContent from "../../content/RichTextContent";
 
@@ -69,9 +70,11 @@ export default function ProjectDeliverySpecsSection({
         <div>
           <div className="overflow-hidden rounded-[30px] border border-[#D8B87A]/20 bg-white/[0.025] p-3 shadow-[0_24px_90px_rgba(0,0,0,0.35)]">
             {activeImage ? (
-              <img
+              <Image
                 src={activeImage.image}
                 alt={activeImage.label}
+                width={960}
+                height={360}
                 className="h-[360px] w-full rounded-[24px] object-cover"
               />
             ) : null}
@@ -89,11 +92,11 @@ export default function ProjectDeliverySpecsSection({
                         : "border-white/10 hover:border-[#D8B87A]/40"
                     }`}
                   >
-                    <img
+                    <Image
                       src={image.image}
                       alt={image.label}
-                      loading="lazy"
-                      decoding="async"
+                      width={240}
+                      height={96}
                       className="h-24 w-full object-cover opacity-85 transition duration-700 hover:scale-105 hover:opacity-100"
                     />
                   </button>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 
 import type { HomeStoryContent } from "./home-cms-mappers";
 
@@ -66,12 +67,12 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
           <div className="relative min-h-[500px] max-md:min-h-[280px] md:max-lg:mx-auto md:max-lg:min-h-[360px] md:max-lg:w-full md:max-lg:max-w-md">
             {/* Main Image */}
             <div className="group absolute right-0 top-0 h-[380px] w-[78%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40 max-md:h-[220px] max-md:w-[70%] md:max-lg:h-[265px] md:max-lg:w-[74%]">
-              <img
+              <Image
                 src={resolved.images.main}
                 alt={resolved.images.mainAlt}
-                loading="lazy"
-                decoding="async"
-                className="h-full w-full object-cover transition duration-[1200ms] ease-out group-hover:scale-105"
+                fill
+                sizes="(max-width: 768px) 70vw, 40vw"
+                className="object-cover transition duration-[1200ms] ease-out group-hover:scale-105"
               />
 
               <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/65 via-transparent to-transparent" />
@@ -87,12 +88,12 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
 
             {/* Floating Image */}
             <div className="group absolute bottom-0 left-0 h-[320px] w-[65%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50 max-md:h-[185px] max-md:w-[58%] md:max-lg:h-[220px] md:max-lg:w-[60%]">
-              <img
+              <Image
                 src={resolved.images.secondary}
                 alt={resolved.images.secondaryAlt}
-                loading="lazy"
-                decoding="async"
-                className="h-full w-full object-cover transition duration-[1200ms] ease-out group-hover:scale-105"
+                fill
+                sizes="(max-width: 768px) 58vw, 35vw"
+                className="object-cover transition duration-[1200ms] ease-out group-hover:scale-105"
               />
 
               <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-transparent to-transparent" />

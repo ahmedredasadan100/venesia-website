@@ -217,11 +217,11 @@ export default function SecuritySettingsClient({
                   return;
                 }
 
-                setAccountForm((prev) => ({
+                setAccountForm({
                   full_name: result.fullName ?? "",
                   email: result.email,
                   currentPassword: "",
-                }));
+                });
                 setSavedEmail(result.email);
                 setAccountFieldErrors({});
                 setMessage("تم حفظ بيانات الحساب.");

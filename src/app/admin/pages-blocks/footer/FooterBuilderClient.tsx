@@ -204,7 +204,7 @@ export default function FooterBuilderClient({
         ),
       },
     ],
-    [contactItems, footerMenuId, legal, menuOptions, quickLinks, slots, socialLinks],
+    [contactItems, footerMenuId, legal, menuOptions, quickLinks, slots, socialLinks, sortedSlots],
   );
 
   return (

@@ -16,9 +16,7 @@ import {
   parseMediaPayloadFromForm,
   resolveCoverImageForGallery,
   resolveCoverImageForVideo,
-  type GalleryMediaPayload,
   type MediaTopicPayload,
-  type VideoMediaPayload,
 } from "../../../../lib/admin/media-topic-payload";
 import {
   getMediaBaseValidationError,

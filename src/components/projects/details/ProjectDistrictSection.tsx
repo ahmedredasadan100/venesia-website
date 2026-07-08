@@ -1,5 +1,6 @@
 import RichTextContent from "../../content/RichTextContent";
 import PlainTextContent from "../../content/PlainTextContent";
+import Image from "next/image";
 
 type DistrictProfile = {
   title: string;
@@ -52,12 +53,12 @@ export default function ProjectDistrictSection({
 
         <div className="order-1 lg:order-2">
           <div className="relative min-h-[360px] overflow-hidden rounded-[30px] border border-[#D8B87A]/20 bg-white/[0.025] shadow-[0_24px_90px_rgba(0,0,0,0.35)]">
-            <img
+            <Image
               src={districtProfile.image}
               alt={districtProfile.title}
-              loading="lazy"
-              decoding="async"
-              className="h-full min-h-[360px] w-full object-cover"
+              fill
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              className="min-h-[360px] object-cover"
             />
 
             <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/20 to-transparent" />

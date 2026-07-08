@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 
 import type { PublicProject } from "../../lib/projects/public-types";
 import PlainTextContent from "../content/PlainTextContent";
@@ -87,17 +88,21 @@ export default function ProjectsHubHero({
     >
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         {heroSlides.map((project, index) => (
-          <img
+          <div
             key={project.code}
-            src={project.heroImage || project.image}
-            alt=""
-            fetchPriority={index === 0 ? "high" : undefined}
-            loading={index === 0 ? "eager" : "lazy"}
-            decoding="async"
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1200ms] ease-in-out ${
+            className={`absolute inset-0 transition-opacity duration-[1200ms] ease-in-out ${
               index === boundedSlide ? "opacity-55" : "opacity-0"
             }`}
-          />
+          >
+            <Image
+              src={project.heroImage || project.image}
+              alt=""
+              fill
+              priority={index === 0}
+              sizes="100vw"
+              className="object-cover"
+            />
+          </div>
         ))}
       </div>
 
@@ -138,11 +143,11 @@ export default function ProjectsHubHero({
           <div className="hidden justify-end lg:flex">
             <div className="w-[420px] rounded-[28px] border border-[#D8B87A]/20 bg-black/24 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)] backdrop-blur-md">
               <div className="relative overflow-hidden rounded-[22px]">
-                <img
+                <Image
                   src={activeProject.image}
                   alt={activeProject.code}
-                  loading="lazy"
-                  decoding="async"
+                  width={420}
+                  height={280}
                   className="h-[280px] w-full object-cover"
                 />
 

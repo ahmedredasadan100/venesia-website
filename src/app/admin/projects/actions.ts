@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { revalidateProjectsCache } from "../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import type { ProjectCategory } from "../../../config/projects-data";
-import type { ProjectPublicationStatus, ProjectRow, ProjectStatus } from "../../../lib/projects/types";
+import type { ProjectRow, ProjectStatus } from "../../../lib/projects/types";
 import { parseJsonArray } from "../../../lib/projects/types";
 import { parseFloorPlanSpecsFromForm } from "../../../lib/projects/floor-plan-specs";
 import { parseFormBoolean } from "../../../lib/page-blocks/admin-utils";
@@ -102,10 +102,6 @@ function validateId(id: string) {
 
 function listPath(type: ProjectCategory) {
   return type === "residential" ? "/admin/projects/residential" : "/admin/projects/commercial";
-}
-
-function redirectWithNotice(type: ProjectCategory, notice: string): never {
-  redirect(`${listPath(type)}?notice=${notice}`);
 }
 
 function redirectWithError(type: ProjectCategory, message: string): never {
@@ -744,11 +740,14 @@ export async function duplicateProjectAjax(id: number) {
   const nextSlug = await ensureUniqueProjectField("slug", sourceSlug);
 
   const {
-    id: _sourceId,
-    created_at: _createdAt,
-    updated_at: _updatedAt,
+    id: sourceId,
+    created_at: sourceCreatedAt,
+    updated_at: sourceUpdatedAt,
     ...projectFields
   } = source;
+  void sourceId;
+  void sourceCreatedAt;
+  void sourceUpdatedAt;
 
   const { data: inserted, error: insertError } = await supabase
     .from("projects")

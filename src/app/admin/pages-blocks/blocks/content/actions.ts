@@ -28,7 +28,6 @@ import type {
 } from "../../../../../lib/page-blocks/configs";
 import {
   isAboutApproachTemplate,
-  isAboutPrinciplesTemplate,
   isHomeProjectsTemplate,
   isVisionGoalsTemplate,
   usesAboutIntroConfigSchema,

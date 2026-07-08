@@ -43,7 +43,6 @@ const relFiles = allFiles.map((f) => toPosix(path.relative(ROOT, f)));
 const fileContents = new Map(
   allFiles.map((f) => [toPosix(path.relative(ROOT, f)), fs.readFileSync(f, "utf8")]),
 );
-const allText = [...fileContents.values()].join("\n");
 
 function importPatterns(rel) {
   const noExt = rel.replace(/\.(tsx?|jsx?)$/, "");

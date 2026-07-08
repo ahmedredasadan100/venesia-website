@@ -1,5 +1,6 @@
 
 import { Fragment } from "react";
+import Image from "next/image";
 
 import { HOME_IMAGES } from "../../config/home-images";
 import type { HomeContactContent } from "./home-contact-mappers";
@@ -131,12 +132,12 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
                   aria-hidden
                   className="absolute inset-0 overflow-hidden md:hidden"
                 >
-                  <img
+                  <Image
                     src={resolved.image}
                     alt=""
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover object-[right_top] opacity-[1]"
+                    fill
+                    sizes="100vw"
+                    className="object-cover object-[right_top] opacity-[1]"
                     style={{ filter: "brightness(1) contrast(1.03)" }}
                   />
                   {/* readability — dark base at bottom for text, advisor stays clear at top; anchored to page bg so block end blends seamlessly */}
@@ -144,13 +145,13 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
                 </div>
 
                 {/* building image — full-bleed inside MAIN column, advisor anchored right */}
-                <img
+                <Image
                   src={resolved.image}
                   alt=""
-                  aria-hidden="true"
-                  loading="lazy"
-                  decoding="async"
-                  className="absolute inset-0 h-full w-full object-cover object-[right_center] opacity-[1] max-md:hidden"
+                  aria-hidden
+                  fill
+                  sizes="100vw"
+                  className="object-cover object-[right_center] opacity-[1] max-md:hidden"
                   style={{ filter: "brightness(1) contrast(1.03)" }}
                 />
                 {/* text legibility — single soft dissolve from the left, keeps image natural */}

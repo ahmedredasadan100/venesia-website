@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { VisionGoalsContent, VisionGoalsItem } from "./vision-goals-mappers";
 
 export type VisionGoalsModuleSectionProps = {
@@ -100,18 +101,18 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
             </div>
           </div>
 
-          {showImage ? (
+          {showImage && imageSrc ? (
             <div
               data-reveal
               className="group relative w-full overflow-hidden rounded-[1.75rem] border border-[#D8B87A]/10"
             >
               <div className="relative aspect-[16/12] overflow-hidden">
-                <img
+                <Image
                   src={imageSrc}
                   alt={imageAlt}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover object-[center_36%] transition-transform duration-[1400ms] ease-out group-hover:scale-[1.03]"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  className="object-cover object-[center_36%] transition-transform duration-[1400ms] ease-out group-hover:scale-[1.03]"
                 />
 
                 <div

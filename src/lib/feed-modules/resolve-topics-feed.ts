@@ -21,34 +21,6 @@ function getSeriesFilterHref(slug: string) {
   return `/topics?series=${slug}`;
 }
 
-async function loadPublishedTopicsForFilters(config: FeedModuleConfig) {
-  let query = getSupabaseAdmin()
-    .from("topics")
-    .select("slug, title, excerpt, image, date_label, published_at, is_popular, series_slug, category_slug")
-    .eq("status", "published")
-    .is("deleted_at", null);
-
-  if (config.query.categorySlug) {
-    query = query.eq("category_slug", config.query.categorySlug);
-  }
-
-  if (config.query.seriesSlug) {
-    query = query.eq("series_slug", config.query.seriesSlug);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    logError("resolveTopicsFeed: topics query failed", error, {
-      categorySlug: config.query.categorySlug,
-      seriesSlug: config.query.seriesSlug,
-    });
-    return [];
-  }
-
-  return filterPublicTopics(data ?? []);
-}
-
 async function resolveLatestOrPopular(
   feedType: Extract<TopicsFeedType, "latest" | "popular">,
   config: FeedModuleConfig,

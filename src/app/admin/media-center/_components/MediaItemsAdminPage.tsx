@@ -226,8 +226,22 @@ export default async function MediaItemsAdminPage({
   const to = perPage ? from + perPage - 1 : undefined;
   if (perPage) query = query.range(from, to as number);
 
-  const statsBase = getSupabaseAdmin().from("media_items").select("id", { count: "exact", head: true }).is("deleted_at", null);
-  const withType = (builder: typeof statsBase) => (activeType ? builder.eq("type", activeType) : builder);
+  function statsCountQuery(status?: string) {
+    let builder = getSupabaseAdmin()
+      .from("media_items")
+      .select("id", { count: "exact", head: true });
+
+    if (status) {
+      builder = builder.eq("status", status);
+      if (status !== "archived") {
+        builder = builder.is("deleted_at", null);
+      }
+    } else {
+      builder = builder.is("deleted_at", null);
+    }
+
+    return activeType ? builder.eq("type", activeType) : builder;
+  }
 
   const [
     { data: items, error, count },
@@ -240,11 +254,11 @@ export default async function MediaItemsAdminPage({
   ] = await Promise.all([
     query,
     getSupabaseAdmin().from("media_categories").select("name, slug").eq("is_active", true).order("sort_order", { ascending: true }),
-    withType(getSupabaseAdmin().from("media_items").select("id", { count: "exact", head: true }).is("deleted_at", null)),
-    withType(getSupabaseAdmin().from("media_items").select("id", { count: "exact", head: true }).eq("status", "published").is("deleted_at", null)),
-    withType(getSupabaseAdmin().from("media_items").select("id", { count: "exact", head: true }).eq("status", "draft").is("deleted_at", null)),
-    withType(getSupabaseAdmin().from("media_items").select("id", { count: "exact", head: true }).eq("status", "unpublished").is("deleted_at", null)),
-    withType(getSupabaseAdmin().from("media_items").select("id", { count: "exact", head: true }).eq("status", "archived")),
+    statsCountQuery(),
+    statsCountQuery("published"),
+    statsCountQuery("draft"),
+    statsCountQuery("unpublished"),
+    statsCountQuery("archived"),
   ]);
 
   const safeItems = (items ?? []) as MediaRow[];

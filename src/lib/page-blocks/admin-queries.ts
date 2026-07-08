@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { blockModuleHref, blockModuleListHref, normalizeBoolean } from "./admin-utils";
 import { normalizeLayoutSlot } from "./layout-slots";
-import type { PageBlockAssignmentRow, PageBlockType } from "./types";
+import type { PageBlockAssignmentRow } from "./types";
 
 export { blockModuleHref, blockModuleListHref };
 
