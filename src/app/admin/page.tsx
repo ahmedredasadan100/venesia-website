@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { MEDIA_LIST_CONTENT_TYPES } from "./content/media/media-content-config";
-import { PROJECTS } from "../../config/projects-data";
 import { getSupabaseAdmin } from "../../lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +14,12 @@ type RecentTopic = {
   published_at: string | null;
 };
 
+type RecentProject = {
+  code: string | null;
+  arabic_name: string | null;
+  slug: string | null;
+};
+
 type DashboardStats = {
   articles: number;
   categories: number;
@@ -23,6 +28,7 @@ type DashboardStats = {
   published: number;
   drafts: number;
   recentTopics: RecentTopic[];
+  recentProjects: RecentProject[];
 };
 
 type FilterableCountQuery = {
@@ -46,12 +52,13 @@ async function getCount(table: string, filter?: (query: FilterableCountQuery) =>
 }
 
 async function getDashboardStats(): Promise<DashboardStats> {
-  const [articles, categories, media, published, drafts, recentResult] = await Promise.all([
+  const [articles, categories, media, projects, published, drafts, recentResult, recentProjectsResult] = await Promise.all([
     getCount("topics", (query) => query.eq("content_type", "article").is("deleted_at", null)),
     getCount("topic_categories"),
     getCount("topics", (query) =>
       query.in("content_type", [...MEDIA_LIST_CONTENT_TYPES]).is("deleted_at", null),
     ),
+    getCount("projects"),
     getCount("topics", (query) =>
       query.eq("content_type", "article").eq("status", "published").is("deleted_at", null),
     ),
@@ -65,16 +72,22 @@ async function getDashboardStats(): Promise<DashboardStats> {
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(6),
+    getSupabaseAdmin()
+      .from("projects")
+      .select("code, arabic_name, slug")
+      .order("updated_at", { ascending: false })
+      .limit(4),
   ]);
 
   return {
     articles,
     categories,
     media,
-    projects: PROJECTS.length,
+    projects,
     published,
     drafts,
     recentTopics: Array.isArray(recentResult.data) ? recentResult.data : [],
+    recentProjects: Array.isArray(recentProjectsResult.data) ? recentProjectsResult.data : [],
   };
 }
 
@@ -170,7 +183,7 @@ export default async function AdminDashboardPage() {
   const kpis = [
     { label: "إجمالي المقالات", value: stats.articles, hint: "كل محتوى مواضيع تهمك", icon: "01", tone: "gold" as const },
     { label: "التصنيفات", value: stats.categories, hint: "شجرة المحتوى الحالية", icon: "02", tone: "purple" as const },
-    { label: "المشروعات", value: stats.projects, hint: "من بيانات الموقع", icon: "03", tone: "green" as const },
+    { label: "المشروعات", value: stats.projects, hint: "مسجّلة في النظام", icon: "03", tone: "green" as const },
     { label: "المنشور", value: stats.published, hint: "ظاهر على الموقع", icon: "04", tone: "blue" as const },
     { label: "المسودات", value: stats.drafts, hint: "تحتاج مراجعة", icon: "05", tone: "amber" as const },
     { label: "الوسائط", value: stats.media, hint: "مركز إعلامي", icon: "06", tone: "cyan" as const },
@@ -288,15 +301,19 @@ export default async function AdminDashboardPage() {
 
         <Panel title="ملخص المشروعات" subtitle="نظرة تنفيذية سريعة">
           <div className="space-y-4">
-            {PROJECTS.slice(0, 4).map((project) => (
-              <div
-                key={project.slug}
-                className="rounded-[22px] border border-[#D8B87A]/10 bg-white/[0.032] p-4 transition hover:border-[#D8B87A]/24 hover:bg-white/[0.048]"
-              >
-                <p className="font-en text-sm font-semibold text-[#D8B87A]">{project.code}</p>
-                <p className="mt-1 line-clamp-1 text-sm text-white/72">{project.arabicName}</p>
-              </div>
-            ))}
+            {stats.recentProjects.length ? (
+              stats.recentProjects.map((project) => (
+                <div
+                  key={project.slug ?? project.code ?? "project"}
+                  className="rounded-[22px] border border-[#D8B87A]/10 bg-white/[0.032] p-4 transition hover:border-[#D8B87A]/24 hover:bg-white/[0.048]"
+                >
+                  <p className="font-en text-sm font-semibold text-[#D8B87A]">{project.code}</p>
+                  <p className="mt-1 line-clamp-1 text-sm text-white/72">{project.arabic_name}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-white/42">لا توجد مشروعات للعرض حاليًا.</p>
+            )}
           </div>
         </Panel>
       </section>
