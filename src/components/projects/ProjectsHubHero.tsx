@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { PublicProject } from "../../lib/projects/public-types";
@@ -88,14 +87,14 @@ export default function ProjectsHubHero({
     >
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         {heroSlides.map((project, index) => (
-          <Image
+          <img
             key={project.code}
             src={project.heroImage || project.image}
             alt=""
-            fill
-            priority={index === 0}
-            sizes="100vw"
-            className={`object-cover transition-opacity duration-[1200ms] ease-in-out ${
+            fetchPriority={index === 0 ? "high" : undefined}
+            loading={index === 0 ? "eager" : "lazy"}
+            decoding="async"
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1200ms] ease-in-out ${
               index === boundedSlide ? "opacity-55" : "opacity-0"
             }`}
           />
@@ -139,26 +138,24 @@ export default function ProjectsHubHero({
           <div className="hidden justify-end lg:flex">
             <div className="w-[420px] rounded-[28px] border border-[#D8B87A]/20 bg-black/24 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)] backdrop-blur-md">
               <div className="relative overflow-hidden rounded-[22px]">
-                <div className="relative h-[280px] w-full">
-                  <Image
-                    src={activeProject.image}
-                    alt={activeProject.code}
-                    fill
-                    sizes="420px"
-                    className="object-cover"
-                  />
+                <img
+                  src={activeProject.image}
+                  alt={activeProject.code}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-[280px] w-full object-cover"
+                />
 
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/90 via-transparent to-transparent" />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/90 via-transparent to-transparent" />
 
-                  <div className="absolute bottom-5 right-5">
-                    <p className="font-en text-4xl font-semibold text-[#D8B87A]">
-                      {activeProject.code}
-                    </p>
+                <div className="absolute bottom-5 right-5">
+                  <p className="font-en text-4xl font-semibold text-[#D8B87A]">
+                    {activeProject.code}
+                  </p>
 
-                    <p className="mt-1 text-sm text-white/75">
-                      {activeProject.arabicName}
-                    </p>
-                  </div>
+                  <p className="mt-1 text-sm text-white/75">
+                    {activeProject.arabicName}
+                  </p>
                 </div>
               </div>
 

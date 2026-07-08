@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
@@ -76,13 +75,12 @@ export default function InternalPageLayout({
           {heroImage ? (
             <>
               <div className="absolute inset-0 z-0 overflow-hidden">
-                <Image
+                <img
                   src={heroImage}
                   alt=""
-                  fill
-                  priority
-                  sizes="100vw"
-                  className={`hero-slide-ken-burns object-cover ${
+                  fetchPriority="high"
+                  decoding="async"
+                  className={`hero-slide-ken-burns pointer-events-none absolute left-1/2 top-1/2 min-h-full min-w-full object-cover ${
                     heroImagePositionClassName ?? "object-center"
                   }`}
                   style={{ filter: "brightness(1.04) contrast(1.04) saturate(1.02)" }}

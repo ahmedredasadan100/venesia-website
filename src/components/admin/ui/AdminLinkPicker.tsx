@@ -92,6 +92,31 @@ function menuItemIsSelectable(item: PickerMenuItemRow) {
   return link.link_kind !== "none";
 }
 
+function buildExternalLinkFromValues(
+  href: string,
+  mode: "https" | "http" | "mailto" | "tel",
+  target: "_self" | "_blank",
+): AdminLinkValue | null {
+  const trimmed = href.trim();
+  if (!trimmed) return null;
+
+  if (mode === "mailto") {
+    const normalized = trimmed.startsWith("mailto:") ? trimmed : `mailto:${trimmed}`;
+    return { link_kind: "email", href: normalized, target: "_self" };
+  }
+
+  if (mode === "tel") {
+    const normalized = trimmed.startsWith("tel:") ? trimmed : `tel:${trimmed}`;
+    return { link_kind: "phone", href: normalized, target: "_self" };
+  }
+
+  const normalized =
+    trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? trimmed
+      : `https://${trimmed.replace(/^\/+/, "")}`;
+  return { link_kind: "external", href: normalized, target };
+}
+
 export default function AdminLinkPicker({ open, onClose, onSelect, initialValue }: AdminLinkPickerProps) {
   const [resource, setResource] = useState<ExplorerResourceId>(() => defaultResourceForValue(initialValue));
   const [query, setQuery] = useState("");
@@ -223,10 +248,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
   useEffect(() => {
     if (!open || isFormResource(resource)) return;
 
-    const delay = resource === "menus" && !selectedMenuId ? 0 : 220;
     const timer = window.setTimeout(() => {
       void loadBrowseItems();
-    }, delay);
+    }, 220);
 
     return () => window.clearTimeout(timer);
   }, [open, resource, selectedMenuId, query, loadBrowseItems]);
@@ -237,35 +261,15 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
     setLastResetKey(resetKey);
     if (open) {
       resetBrowseState();
-      setResource(defaultResourceForValue(initialValue));
+      const nextResource = defaultResourceForValue(initialValue);
+      setResource(nextResource);
       setPendingLink(null);
       setPreview(null);
+      if (initialValue && initialValue.link_kind !== "none" && isFormResource(nextResource)) {
+        void updatePreview(initialValue);
+      }
     }
   }
-
-  useEffect(() => {
-    if (!open || !isFormResource(resource)) return;
-
-    const timer = window.setTimeout(() => {
-      if (resource === "external") {
-        void updatePreview(buildExternalLink());
-        return;
-      }
-      if (resource === "anchor") {
-        const anchor = anchorValue.trim().replace(/^#/, "");
-        void updatePreview(
-          anchor ? { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" } : null,
-        );
-        return;
-      }
-      if (resource === "download") {
-        const href = downloadHref.trim();
-        void updatePreview(href ? { link_kind: "download", href, target: "_blank" } : null);
-      }
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [open, resource, externalHref, externalMode, externalTarget, anchorValue, downloadHref, updatePreview]);
 
   function handleResourceChange(next: ExplorerResourceId) {
     setResource(next);
@@ -277,6 +281,22 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
     setSelectedMenuId(null);
     setMenuItems([]);
     setError(null);
+
+    if (next === "external") {
+      void updatePreview(buildExternalLinkFromValues(externalHref, externalMode, externalTarget));
+      return;
+    }
+    if (next === "anchor") {
+      const anchor = anchorValue.trim().replace(/^#/, "");
+      void updatePreview(
+        anchor ? { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" } : null,
+      );
+      return;
+    }
+    if (next === "download") {
+      const href = downloadHref.trim();
+      void updatePreview(href ? { link_kind: "download", href, target: "_blank" } : null);
+    }
   }
 
   function handleSelectBrowseResult(result: LinkSearchResult) {
@@ -293,24 +313,7 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
   }
 
   function buildExternalLink(): AdminLinkValue | null {
-    const href = externalHref.trim();
-    if (!href) return null;
-
-    if (externalMode === "mailto") {
-      const normalized = href.startsWith("mailto:") ? href : `mailto:${href}`;
-      return { link_kind: "email", href: normalized, target: "_self" };
-    }
-
-    if (externalMode === "tel") {
-      const normalized = href.startsWith("tel:") ? href : `tel:${href}`;
-      return { link_kind: "phone", href: normalized, target: "_self" };
-    }
-
-    const normalized =
-      href.startsWith("http://") || href.startsWith("https://")
-        ? href
-        : `https://${href.replace(/^\/+/, "")}`;
-    return { link_kind: "external", href: normalized, target: externalTarget };
+    return buildExternalLinkFromValues(externalHref, externalMode, externalTarget);
   }
 
   function resolvePendingLink(): AdminLinkValue | null {
@@ -393,10 +396,13 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                   key={mode}
                   type="button"
                   onClick={() => {
+                    let nextHref = externalHref;
+                    if (mode === "mailto") nextHref = "mailto:";
+                    else if (mode === "tel") nextHref = "tel:";
+                    else nextHref = `${mode}://`;
                     setExternalMode(mode);
-                    if (mode === "mailto") setExternalHref("mailto:");
-                    else if (mode === "tel") setExternalHref("tel:");
-                    else setExternalHref(`${mode}://`);
+                    setExternalHref(nextHref);
+                    void updatePreview(buildExternalLinkFromValues(nextHref, mode, externalTarget));
                   }}
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                     externalMode === mode ? "bg-[#D8B87A]/15 text-[#D8B87A]" : "bg-white/5 text-white/50"
@@ -410,7 +416,11 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
               <span>الرابط</span>
               <input
                 value={externalHref}
-                onChange={(event) => setExternalHref(event.target.value)}
+                onChange={(event) => {
+                  const nextHref = event.target.value;
+                  setExternalHref(nextHref);
+                  void updatePreview(buildExternalLinkFromValues(nextHref, externalMode, externalTarget));
+                }}
                 dir="ltr"
                 className={adminFormFieldClassName("text-left font-en")}
               />
@@ -421,7 +431,11 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                 <input
                   type="checkbox"
                   checked={externalTarget === "_blank"}
-                  onChange={(event) => setExternalTarget(event.target.checked ? "_blank" : "_self")}
+                  onChange={(event) => {
+                    const nextTarget = event.target.checked ? "_blank" : "_self";
+                    setExternalTarget(nextTarget);
+                    void updatePreview(buildExternalLinkFromValues(externalHref, externalMode, nextTarget));
+                  }}
                 />
               </label>
             ) : null}
@@ -435,7 +449,14 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
             <span>Anchor ID</span>
             <input
               value={anchorValue}
-              onChange={(event) => setAnchorValue(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value;
+                setAnchorValue(next);
+                const anchor = next.trim().replace(/^#/, "");
+                void updatePreview(
+                  anchor ? { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" } : null,
+                );
+              }}
               placeholder="section-id"
               dir="ltr"
               className={adminFormFieldClassName("text-left font-en")}
@@ -472,6 +493,7 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
             onSelect={(path) => {
               setDownloadHref(path);
               setMediaPickerOpen(false);
+              void updatePreview({ link_kind: "download", href: path, target: "_blank" });
             }}
             initialFolder="files"
             mode="pdf"

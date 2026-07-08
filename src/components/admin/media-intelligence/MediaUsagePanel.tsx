@@ -15,45 +15,6 @@ type MediaUsagePanelProps = {
 };
 
 export default function MediaUsagePanel({ assetPath }: MediaUsagePanelProps) {
-  const [hits, setHits] = useState<MediaUsageHit[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!assetPath) return;
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError(null);
-
-      fetch(`/api/admin/media-usage?asset=${encodeURIComponent(assetPath)}`)
-        .then(async (response) => {
-          const payload = (await response.json()) as { hits?: MediaUsageHit[]; error?: string };
-          if (!response.ok) throw new Error(payload.error || "تعذر فحص الاستخدام.");
-          return payload.hits ?? [];
-        })
-        .then((nextHits) => {
-          if (!cancelled) setHits(nextHits);
-        })
-        .catch((err: Error) => {
-          if (!cancelled) {
-            setHits([]);
-            setError(err.message);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 0);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [assetPath]);
-
   if (!assetPath) {
     return (
       <section className="rounded-[24px] border border-white/10 bg-[#080B10]/88 p-5">
@@ -63,6 +24,41 @@ export default function MediaUsagePanel({ assetPath }: MediaUsagePanelProps) {
       </section>
     );
   }
+
+  return <MediaUsagePanelContent key={assetPath} assetPath={assetPath} />;
+}
+
+function MediaUsagePanelContent({ assetPath }: { assetPath: string }) {
+  const [hits, setHits] = useState<MediaUsageHit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(`/api/admin/media-usage?asset=${encodeURIComponent(assetPath)}`)
+      .then(async (response) => {
+        const payload = (await response.json()) as { hits?: MediaUsageHit[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || "تعذر فحص الاستخدام.");
+        return payload.hits ?? [];
+      })
+      .then((nextHits) => {
+        if (!cancelled) setHits(nextHits);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) {
+          setHits([]);
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assetPath]);
 
   return (
     <section className="rounded-[24px] border border-[#D8B87A]/14 bg-[#080B10]/92 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.24)]">

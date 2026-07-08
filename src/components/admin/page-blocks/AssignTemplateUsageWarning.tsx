@@ -16,44 +16,57 @@ export default function AssignTemplateUsageWarning({
   templateId,
   currentPageId,
 }: AssignTemplateUsageWarningProps) {
+  if (!templateId) return null;
+
+  return (
+    <AssignTemplateUsageWarningContent
+      key={`${moduleKind}-${templateId}-${currentPageId}`}
+      moduleKind={moduleKind}
+      templateId={templateId}
+      currentPageId={currentPageId}
+    />
+  );
+}
+
+function AssignTemplateUsageWarningContent({
+  moduleKind,
+  templateId,
+  currentPageId,
+}: {
+  moduleKind: string;
+  templateId: number;
+  currentPageId: number;
+}) {
   const [assignments, setAssignments] = useState<ModuleAssignmentRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!templateId) return;
-
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      setLoading(true);
 
-      fetch(`/api/admin/page-blocks/module-usage?kind=${encodeURIComponent(moduleKind)}&templateId=${templateId}`)
-        .then(async (response) => {
-          const payload = (await response.json()) as {
-            assignments?: ModuleAssignmentRow[];
-            error?: string;
-          };
-          if (!response.ok) throw new Error(payload.error || "تعذر التحقق من الاستخدام.");
-          return payload.assignments ?? [];
-        })
-        .then((rows) => {
-          if (!cancelled) setAssignments(rows.filter((row) => row.page_id !== currentPageId));
-        })
-        .catch(() => {
-          if (!cancelled) setAssignments([]);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 0);
+    fetch(`/api/admin/page-blocks/module-usage?kind=${encodeURIComponent(moduleKind)}&templateId=${templateId}`)
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          assignments?: ModuleAssignmentRow[];
+          error?: string;
+        };
+        if (!response.ok) throw new Error(payload.error || "تعذر التحقق من الاستخدام.");
+        return payload.assignments ?? [];
+      })
+      .then((rows) => {
+        if (!cancelled) setAssignments(rows.filter((row) => row.page_id !== currentPageId));
+      })
+      .catch(() => {
+        if (!cancelled) setAssignments([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
   }, [moduleKind, templateId, currentPageId]);
 
-  if (!templateId) return null;
   if (loading) return <p className="text-sm text-white/45">جاري فحص استخدام الموديول على صفحات أخرى…</p>;
   if (!assignments.length) {
     return (

@@ -46,12 +46,30 @@ export default function AdminMediaLibraryClient() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadFolder("images");
-    }, 0);
+    let cancelled = false;
 
-    return () => window.clearTimeout(timer);
-  }, [loadFolder]);
+    void (async () => {
+      try {
+        const response = await fetch(`/api/admin/media-library?folder=${encodeURIComponent("images")}`);
+        const payload = (await response.json()) as PublicMediaFolderListing & { error?: string };
+        if (!response.ok) throw new Error(payload.error || "تعذر تحميل المكتبة.");
+        if (cancelled) return;
+        setListing(payload);
+        setFolder(payload.folder);
+        setSelectedPath(null);
+      } catch (err) {
+        if (cancelled) return;
+        setListing(null);
+        setError(err instanceof Error ? err.message : "تعذر تحميل المكتبة.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const items = useMemo(() => {
     const source = listing?.items ?? [];

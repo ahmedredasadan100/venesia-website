@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -39,6 +40,18 @@ type PwaInstallContextValue = {
 
 const PwaInstallContext = createContext<PwaInstallContextValue | null>(null);
 
+function subscribeNoop() {
+  return () => {};
+}
+
+function getIosClientSnapshot() {
+  return isIosDevice();
+}
+
+function getIosServerSnapshot() {
+  return false;
+}
+
 export function usePwaInstall() {
   const context = useContext(PwaInstallContext);
   if (!context) {
@@ -49,7 +62,7 @@ export function usePwaInstall() {
 
 export default function PwaProvider({ children }: { children: ReactNode }) {
   const [visible, setVisible] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
+  const isIOS = useSyncExternalStore(subscribeNoop, getIosClientSnapshot, getIosServerSnapshot);
   const [canNativeInstall, setCanNativeInstall] = useState(false);
   const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
   const engagementReadyRef = useRef(false);
@@ -86,16 +99,13 @@ export default function PwaProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const ios = isIosDevice();
-    setIsIOS(ios);
-
-    if (ios) {
+    if (isIOS) {
       setVisible(true);
       return;
     }
 
     setVisible(Boolean(deferredPromptRef.current));
-  }, []);
+  }, [isIOS]);
 
   useEffect(() => {
     if (!canRegisterServiceWorker()) return;
@@ -145,16 +155,11 @@ export default function PwaProvider({ children }: { children: ReactNode }) {
   }, [evaluateVisibility]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      evaluateVisibility();
-    }, 0);
-
     const media = window.matchMedia("(max-width: 767px)");
     const onViewportChange = () => evaluateVisibility();
     media.addEventListener("change", onViewportChange);
 
     return () => {
-      window.clearTimeout(timer);
       media.removeEventListener("change", onViewportChange);
     };
   }, [evaluateVisibility]);

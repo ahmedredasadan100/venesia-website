@@ -140,13 +140,13 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               index === safeIndex ? "opacity-100" : "opacity-0"
             }`}
           >
-            <Image
+            <img
               src={src}
               alt=""
-              fill
-              priority={index === 0}
-              sizes="100vw"
-              className={`hero-slide-ken-burns object-cover ${
+              fetchPriority={index === 0 ? "high" : undefined}
+              loading={index === 0 ? "eager" : "lazy"}
+              decoding="async"
+              className={`hero-slide-ken-burns pointer-events-none absolute left-1/2 top-1/2 min-h-full min-w-full object-cover ${
                 config.imagePositionClassName ?? "object-center"
               }`}
               style={{ filter: "brightness(1.12) contrast(1.08) saturate(1.04)" }}
@@ -340,34 +340,24 @@ function InternalDynamicHero({
       {image ? (
         <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden>
           {mobileImage ? (
-            <>
-              <Image
-                src={mobileImage}
-                alt=""
-                fill
-                priority
-                sizes="100vw"
-                className={`hero-slide-ken-burns object-cover md:hidden ${imagePosition}`}
-                style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
-              />
-              <Image
+            <picture>
+              <source media="(max-width: 767px)" srcSet={mobileImage} />
+              <img
                 src={image}
                 alt=""
-                fill
-                priority
-                sizes="100vw"
-                className={`hero-slide-ken-burns hidden object-cover md:block ${imagePosition}`}
+                fetchPriority="high"
+                decoding="async"
+                className={`hero-slide-ken-burns pointer-events-none absolute left-1/2 top-1/2 min-h-full min-w-full object-cover ${imagePosition}`}
                 style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
               />
-            </>
+            </picture>
           ) : (
-            <Image
+            <img
               src={image}
               alt=""
-              fill
-              priority
-              sizes="100vw"
-              className={`hero-slide-ken-burns object-cover ${imagePosition}`}
+              fetchPriority="high"
+              decoding="async"
+              className={`hero-slide-ken-burns pointer-events-none absolute left-1/2 top-1/2 min-h-full min-w-full object-cover ${imagePosition}`}
               style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
             />
           )}
