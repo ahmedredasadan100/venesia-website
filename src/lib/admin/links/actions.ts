@@ -6,12 +6,8 @@ import {
   describeAdminLink,
   resolveAdminLink,
   searchAdminLinks,
-  findLinkUsages,
-  isResourceLinked,
-  getResourceLinkUsageCount,
   type AdminLinkValue,
   type LinkedResourceType,
-  type LinkUsageQuery,
   type LinkSearchResult,
 } from "./index";
 
@@ -185,23 +181,6 @@ export async function browseTopicCategoriesPickerAjax(options?: { query?: string
   }
 }
 
-export async function searchAdminLinksAjax(options: {
-  query?: string;
-  types?: LinkedResourceType[];
-  limit?: number;
-}) {
-  await requireAdminSession();
-  try {
-    const results = await searchAdminLinks(options);
-    return { ok: true as const, results };
-  } catch (error) {
-    return {
-      ok: false as const,
-      message: error instanceof Error ? error.message : "تعذر البحث في الروابط.",
-    };
-  }
-}
-
 export async function resolveAdminLinkAjax(value: AdminLinkValue) {
   await requireAdminSession();
   try {
@@ -211,46 +190,6 @@ export async function resolveAdminLinkAjax(value: AdminLinkValue) {
     return {
       ok: false as const,
       message: error instanceof Error ? error.message : "تعذر حل الرابط.",
-    };
-  }
-}
-
-export async function resolveAdminLinksAjax(values: AdminLinkValue[]) {
-  await requireAdminSession();
-  try {
-    const paths = await Promise.all(values.map((value) => resolveAdminLink(value)));
-    return { ok: true as const, paths };
-  } catch (error) {
-    return {
-      ok: false as const,
-      message: error instanceof Error ? error.message : "تعذر حل الروابط.",
-    };
-  }
-}
-
-export async function findLinkUsagesAjax(query: LinkUsageQuery) {
-  await requireAdminSession();
-  try {
-    const usages = await findLinkUsages(query);
-    return { ok: true as const, usages, count: usages.length };
-  } catch (error) {
-    return {
-      ok: false as const,
-      message: error instanceof Error ? error.message : "تعذر البحث عن استخدامات الرابط.",
-    };
-  }
-}
-
-export async function isResourceLinkedAjax(query: LinkUsageQuery) {
-  await requireAdminSession();
-  try {
-    const linked = await isResourceLinked(query);
-    const count = linked ? await getResourceLinkUsageCount(query) : 0;
-    return { ok: true as const, linked, count };
-  } catch (error) {
-    return {
-      ok: false as const,
-      message: error instanceof Error ? error.message : "تعذر التحقق من استخدامات المورد.",
     };
   }
 }

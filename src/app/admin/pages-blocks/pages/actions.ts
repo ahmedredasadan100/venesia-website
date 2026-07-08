@@ -17,7 +17,6 @@ import {
 } from "../../../../lib/media-sidebar-modules/registry";
 import { cleanText, parseFormBoolean, parseNumber } from "../../../../lib/page-blocks/admin-utils";
 import { revalidatePageBlocksPath, revalidatePublicPagesWithBlockAssignments } from "../../../../lib/page-blocks/admin-revalidate";
-import { loadPageModuleCounts } from "../../../../lib/admin/pages/load-page-module-counts";
 import {
   loadPagesTableRows,
   type PagesTableRow,
@@ -953,43 +952,4 @@ export async function bulkPageBlockAssignments(formData: FormData) {
   }
 
   await revalidatePageBlocksPath(pageId);
-}
-
-export async function getPageModuleCounts(pageIds: number[]) {
-  await requireAdminSession();
-  return loadPageModuleCounts(pageIds);
-}
-
-/** @deprecated Use getPageModuleCounts */
-export async function getPageBlockCounts(pageIds: number[]) {
-  await requireAdminSession();
-  return getPageModuleCounts(pageIds);
-}
-
-/** @deprecated Legacy page_sections CRUD — kept for backward compatibility only. */
-export async function createPageSection() {
-  await requireAdminSession();
-  throw new Error("Legacy page_sections creation is disabled. Assign a block template instead.");
-}
-
-export async function togglePageSection(formData: FormData) {
-  await requireAdminSession();
-  const pageId = parseNumber(formData.get("page_id"));
-  revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
-}
-
-export async function deletePageSection(formData: FormData) {
-  await requireAdminSession();
-  const pageId = parseNumber(formData.get("page_id"));
-  const sectionId = parseNumber(formData.get("section_id"));
-  if (!pageId || !sectionId) throw new Error("Page section id is missing.");
-  const { error } = await getSupabaseAdmin().from("page_sections").delete().eq("id", sectionId);
-  if (error) throw new Error(error.message);
-  revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
-}
-
-export async function updatePageSectionPlacement(formData: FormData) {
-  await requireAdminSession();
-  const pageId = parseNumber(formData.get("page_id"));
-  revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
 }
