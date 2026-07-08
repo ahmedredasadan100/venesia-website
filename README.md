@@ -62,6 +62,12 @@ CI does **not** run production SQL migrations.
 - Legacy `/admin/media-center` routes are **redirect-only** compatibility stubs
 - Do **not** add new CRUD under `/admin/media-center`
 
+## Documentation
+
+- [Unified Content Engine ADR](docs/architecture/UNIFIED_CONTENT_ENGINE.md)
+- [Migration Metadata Reference](docs/database/migration-metadata.md)
+- [Media Upload / Supabase Storage Migration Plan](docs/security-media-upload-migration.md)
+
 ## SQL migrations
 
 Migration files live in:

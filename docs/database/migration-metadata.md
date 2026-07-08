@@ -4,6 +4,13 @@ Documentation only. This file contains **no executable SQL**, no secrets, no
 environment values, and no database rows. It explains the state and intent of
 the SQL files under `sql/migrations/`.
 
+## 0. Current update (2026-07-08)
+
+- **`sql/migrations/` is official in the repository** (commit `24731a7` — `build: stabilize production build and restore migrations`).
+- **Current migration count:** 35 `.sql` files under `sql/migrations/`.
+- **Verification command:** `npm run verify:migrations` (also included in `npm run verify` and CI).
+- Migrations are **version-controlled for history and fresh-environment rebuilds** — not an instruction to re-apply against the live production database.
+
 ## 1. Purpose
 
 - The recovered migrations under `sql/migrations/` are committed for

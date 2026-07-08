@@ -44,9 +44,10 @@
 | `media_items` | All media types in one table — `type` CHECK: `news \| video \| gallery \| press \| site-update`; `(type, slug)` unique; `content text[]` |
 | `media_categories` | Flat editorial tags (13 rows) — **not** the same as media `type` buckets |
 
-**Admin:** `/admin/media-center`, `/admin/media-center/categories` — **frozen after Phase 0** (no new features, no filter UI work, no migration prep in admin until Phase 3+)  
-**Public:** `/media-center/{type}`, `/media-center/{type}/[slug]`  
-**Modules:** Media hub, media sidebar, hero sources (`latest_media`, `featured_media`, `media_category`) query `media_items`.
+**Admin (legacy):** `/admin/media-center` — **redirect-only** since `850534b` (no CRUD, no forms, no uploads)  
+**Admin (official):** `/admin/content/media` — Unified Media Admin on `topics`  
+**Public:** `/media-center/{type}`, `/media-center/{type}/[slug]` — see §12 for current runtime note; not re-verified in this doc pass  
+**Modules:** Media hub, media sidebar, hero sources (`latest_media`, `featured_media`, `media_category`) may still reference `media_items` depending on module config and env.
 
 ### 2.3 Parallel systems — the conflict
 
@@ -172,7 +173,7 @@ The following are **explicitly out of scope** until their phase:
 For planning only — **no changes in Phase 0.**
 
 **Schema:** `topics`, `topic_categories`, optional `legacy_content_map`  
-**Admin:** `src/app/admin/topics/**`, `src/app/admin/content/series/**`, `src/app/admin/media-center/**` (deprecate)  
+**Admin:** `src/app/admin/topics/**`, `src/app/admin/content/series/**`, `src/app/admin/content/media/**` (official), `src/app/admin/media-center/**` (redirect stubs only)  
 **Lib:** `src/lib/media-center.ts`, `src/lib/feed-modules/**`, `src/lib/media-hub-modules/**`, `src/lib/media-sidebar-modules/**`, `src/lib/load-hero-section.ts`, `src/lib/admin/links/**`, `src/lib/export/cms-backup-config.ts`  
 **Public:** `src/app/topics/**`, `src/app/media-center/**`
 
@@ -181,7 +182,8 @@ For planning only — **no changes in Phase 0.**
 ## 9. References
 
 - Foundational schema: `sql/migrations/20250618000000_foundational_schema_baseline.sql`
-- Media admin config: `src/app/admin/media-center/_components/media-admin-config.ts`
+- Legacy media admin redirects: `src/lib/admin/legacy-media-admin-routes.ts`
+- Unified media admin: `src/app/admin/content/media/**`
 - Feed modules: `src/lib/feed-modules/` (topics-only)
 - Media hub: `src/lib/media-hub-modules/` (media_items-only)
 - CMS backup tables: `src/lib/export/cms-backup-config.ts`
@@ -196,11 +198,13 @@ For planning only — **no changes in Phase 0.**
 | Architecture review | Unified direction approved; Phase B0 seed-only **rejected** | 2026-07-05 |
 | Phase 0 | ADR documentation only | 2026-07-05 |
 
-**Next step when ready:** Phase 3 — `/admin/content/media` (admin-only parallel build).
+*Historical (2026-07-05): next step was Phase 3 — `/admin/content/media` (admin-only parallel build; guard §11 applied). **Phase 3 is Done** as of 2026-07-08 — see §12.*
 
 ---
 
-## 11. Phase 3 execution guard (confirmed 2026-07-05)
+## 11. Phase 3 execution guard (historical — confirmed 2026-07-05)
+
+> **Historical context only.** This section records the guard accepted before Phase 3 was built. Phase 3 is **Done**; `/admin/content/media` is the official Unified Media Admin route. Current status: §12.
 
 > **No public website impact. Legacy media public rendering remains unchanged.**
 
@@ -248,7 +252,46 @@ Phase 3 builds the **new admin surface only** — in parallel with the legacy st
 
 **Deferred to later phases:** data migration (`media_items` → `topics`), public adapters, module rewiring, redirects, cutover decision.
 
-### 11.4 Phase completion log
+### 11.4 Phase completion log (historical snapshot)
+
+At guard acceptance (2026-07-05), Phase 3 was the next build target. **Do not use this table as current status** — see §12.
+
+---
+
+## 12. 2026-07-08 Production Update
+
+**Baseline commits on `origin/main`:** `24731a7`, `850534b`, `f0ae7ca`
+
+| Area | Current production state |
+|---|---|
+| **Official Unified Media Admin** | `/admin/content/media` — list/create/edit on `topics` with media `content_type` values |
+| **Legacy Media Admin** | `/admin/media-center` and child routes are **redirect-only** compatibility stubs; CRUD, forms, tables, upload actions, and `_components` were **removed** (`850534b`) |
+| **Redirect mapping** | Centralized in `src/lib/admin/legacy-media-admin-routes.ts` |
+| **Category management** | `/admin/topics/categories` (legacy `/admin/media-center/categories` redirects here) |
+| **CI quality gate** | GitHub Actions Quality Gate active and green (`f0ae7ca`) — lint, typecheck, migration verify, legacy-media-admin verify, build |
+| **SQL migrations** | `sql/migrations/` official in repo (35 `.sql` files); `npm run verify:migrations` (`24731a7`) |
+
+### Redirect compatibility (legacy admin URLs)
+
+| Legacy URL | Redirect target |
+|---|---|
+| `/admin/media-center` | `/admin/content/media` |
+| `/admin/media-center/new` | `/admin/content/media/new` |
+| `/admin/media-center/items/[id]` | `/admin/content/media` |
+| `/admin/media-center/categories` | `/admin/topics/categories` |
+| `/admin/media-center/news` etc. | `/admin/content/media?content_type=…` |
+
+### Public `/media-center` (not re-verified in this doc pass)
+
+This documentation sync does **not** assert full public cutover status. Code includes `src/lib/media-center/source.ts` with a default unified topics provider and optional legacy env overrides (`PUBLIC_MEDIA_CONTENT_SOURCE`, `PUBLIC_MEDIA_LEGACY_FALLBACK`). Module-level rewiring and SEO redirects remain **future phases** unless separately verified and documented.
+
+### Remaining future work (unchanged intent)
+
+- **`media_items` → `topics` data migration** — if not fully complete, remains Phase 4 planning; do not assume all legacy rows are migrated.
+- **Public/module cutover** — Phase 5+; not claimed done here.
+- **Legacy table archive/drop** — Phase 6; `media_items` and `media_categories` are **not** dropped.
+
+### Phase completion log (current)
 
 | Phase | Status | Commit / note |
 |---|---|---|
@@ -256,4 +299,9 @@ Phase 3 builds the **new admin surface only** — in parallel with the legacy st
 | 1 | Done | `content_type` on `topics` — `059b858` |
 | 2 | Done | Media branch seed + article guards — `0a0be6e` |
 | 2.5 | Verified | Migration applied; guards + build OK |
-| **3** | **Next** | Admin-only `/admin/content/media` — **guard §11 applies** |
+| **3** | **Done** | Admin-only `/admin/content/media` — official Unified Media Admin route |
+| **Legacy admin closure** | **Done** | Redirect-only `/admin/media-center`; active CRUD removed — `850534b` |
+| **CI quality gate** | **Done** | `.github/workflows/quality-gate.yml` — `f0ae7ca` |
+| 4 | Future | `media_items` → `topics` data migration |
+| 5 | Future | Public + modules cutover |
+| 6 | Future | Legacy archive / table drop (not started) |
