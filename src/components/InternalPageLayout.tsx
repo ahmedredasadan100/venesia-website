@@ -82,7 +82,7 @@ export default function InternalPageLayout({
                   fill
                   priority
                   sizes="100vw"
-                  className={`hero-slide-ken-burns pointer-events-none !left-1/2 !top-1/2 !right-auto !bottom-auto h-auto w-auto min-h-full min-w-full object-cover ${
+                  className={`hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none object-cover ${
                     heroImagePositionClassName ?? "object-center"
                   }`}
                   style={{ filter: "brightness(1.04) contrast(1.04) saturate(1.02)" }}

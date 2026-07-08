@@ -1,4 +1,5 @@
 import AboutPageContent from "../../../components/about/AboutPageContent";
+import RevealAnimations from "../../../components/RevealAnimations";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { buildMetadata } from "../../../lib/seo/build-metadata";
 
@@ -12,6 +13,7 @@ export default async function AboutPage() {
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white">
       <div aria-hidden className="venesia-grain pointer-events-none fixed inset-0 z-[4]" />
       <AboutPageContent composition={composition} />
+      <RevealAnimations />
     </div>
   );
 }

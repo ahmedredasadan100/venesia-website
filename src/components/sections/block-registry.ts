@@ -1,5 +1,3 @@
-"use client";
-
 import type { ComponentType } from "react";
 import type { ResolvedPageBlock } from "../../lib/page-blocks";
 import CardsSection from "./CardsSection";

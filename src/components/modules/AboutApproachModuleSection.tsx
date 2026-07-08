@@ -1,5 +1,3 @@
-"use client";
-
 import type { AboutApproachModuleContent } from "./about-approach-mappers";
 
 export type AboutApproachModuleSectionProps = {

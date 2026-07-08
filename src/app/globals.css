@@ -93,6 +93,20 @@ p {
   will-change: transform;
 }
 
+/* next/image fill defaults conflict with ken-burns center-origin transforms */
+.hero-slide-ken-burns-image {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 100%;
+  min-height: 100%;
+  max-width: none;
+}
+
 .hero-slide-ken-burns-alt {
   /* 48 s — slightly longer to avoid feeling synchronised with even slides */
   animation: hero-ken-burns-alt 48s ease-in-out infinite alternate;

@@ -1,5 +1,3 @@
-"use client";
-
 import type { AboutPrinciplesModuleContent } from "./about-principles-mappers";
 import { PrincipleIcon } from "./about-principles-icons";
 

@@ -1,5 +1,3 @@
-"use client";
-
 import type { BlockRendererProps } from "./block-registry";
 import type { ContentBlockConfig } from "../../lib/page-blocks";
 

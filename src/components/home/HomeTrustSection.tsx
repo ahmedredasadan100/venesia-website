@@ -12,8 +12,6 @@
             · Gold reveal line sweeps in from right on hover — keep it
         */
 
-"use client";
-
 import type { HomeTrustContent } from "./home-trust-mappers";
 
 const STATIC_DEFAULTS = {

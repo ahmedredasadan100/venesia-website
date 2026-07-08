@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import type { BlockRendererProps } from "./block-registry";
 import type { CtaBlockConfig } from "../../lib/page-blocks";

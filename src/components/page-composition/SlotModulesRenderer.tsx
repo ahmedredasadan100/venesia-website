@@ -1,6 +1,4 @@
-"use client";
-
-import { Fragment, useMemo } from "react";
+import { Fragment } from "react";
 
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 import type { HomepageProjectCard } from "../../lib/projects/types";
@@ -15,10 +13,7 @@ type SlotModulesRendererProps = {
 };
 
 export default function SlotModulesRenderer({ blocks, homepageProjects }: SlotModulesRendererProps) {
-  const nodes = useMemo(
-    () => buildSlotModuleNodes(blocks, { homepageProjects }),
-    [blocks, homepageProjects],
-  );
+  const nodes = buildSlotModuleNodes(blocks, { homepageProjects });
 
   if (!nodes.length) return null;
 

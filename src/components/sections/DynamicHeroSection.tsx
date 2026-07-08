@@ -146,7 +146,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               fill
               priority={index === 0}
               sizes="100vw"
-              className={`hero-slide-ken-burns pointer-events-none !left-1/2 !top-1/2 !right-auto !bottom-auto h-auto w-auto min-h-full min-w-full object-cover ${
+              className={`hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none object-cover ${
                 config.imagePositionClassName ?? "object-center"
               }`}
               style={{ filter: "brightness(1.12) contrast(1.08) saturate(1.04)" }}
@@ -347,7 +347,7 @@ function InternalDynamicHero({
                 fill
                 priority
                 sizes="100vw"
-                className={`hero-slide-ken-burns pointer-events-none !left-1/2 !top-1/2 !right-auto !bottom-auto h-auto w-auto min-h-full min-w-full object-cover md:hidden ${imagePosition}`}
+                className={`hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none object-cover md:hidden ${imagePosition}`}
                 style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
               />
               <Image
@@ -356,7 +356,7 @@ function InternalDynamicHero({
                 fill
                 priority
                 sizes="100vw"
-                className={`hero-slide-ken-burns pointer-events-none !left-1/2 !top-1/2 !right-auto !bottom-auto h-auto w-auto min-h-full min-w-full object-cover max-md:hidden ${imagePosition}`}
+                className={`hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none object-cover max-md:hidden ${imagePosition}`}
                 style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
               />
             </>
@@ -367,7 +367,7 @@ function InternalDynamicHero({
               fill
               priority
               sizes="100vw"
-              className={`hero-slide-ken-burns pointer-events-none !left-1/2 !top-1/2 !right-auto !bottom-auto h-auto w-auto min-h-full min-w-full object-cover ${imagePosition}`}
+              className={`hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none object-cover ${imagePosition}`}
               style={{ filter: isCompactHero ? "brightness(1.05) contrast(1.04) saturate(1.02)" : "brightness(1.04) contrast(1.04) saturate(1.02)" }}
             />
           )}
