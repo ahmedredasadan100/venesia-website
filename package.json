@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "verify:migrations": "node scripts/verify-migrations-present.mjs",
     "verify:legacy-media-admin": "node scripts/verify-no-active-legacy-media-admin.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin"
+    "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin",
+    "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

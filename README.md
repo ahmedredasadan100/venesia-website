@@ -29,11 +29,32 @@ npm run verify:legacy-media-admin
 npm run build
 ```
 
-Optional combined check:
+Optional combined checks:
 
 ```bash
 npm run verify
+npm run ci:check
 ```
+
+## CI / Quality Gate
+
+GitHub Actions workflow: `.github/workflows/quality-gate.yml`
+
+Runs on pull requests and pushes to `main`:
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm run verify:migrations`
+- `npm run verify:legacy-media-admin`
+- `npm run build`
+
+Required GitHub repository secrets (names only):
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+CI does **not** run production SQL migrations.
 
 ## Admin media
 
