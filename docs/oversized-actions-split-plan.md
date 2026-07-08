@@ -1,8 +1,15 @@
 # Oversized Admin Actions — Architecture Split Plan
 
-Baseline: `origin/main` @ `1b60d54` (Audit Log Coverage + CI parity complete).
+Baseline: `origin/main` @ `f2b2519` (split plan pushed; CI green).
 
-This document plans future splits only. **No implementation in this phase.**
+This document plans and tracks admin action file splits.
+
+## Batch status
+
+| Batch | Target | Status |
+|-------|--------|--------|
+| **1** | `src/app/admin/projects/actions.ts` | **Completed** — see below |
+| 2+ | topics, media, pages, clients | Planned |
 
 ## Purpose
 
@@ -23,7 +30,7 @@ Several admin mutation surfaces grew large while audit logging, validation, AJAX
 | `src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx` | ~766 | 1 default component | **High** |
 | `src/app/admin/topics/actions.ts` | ~837 | 12 functions + 2 types | **Medium** |
 | `src/app/admin/content/media/actions.ts` | ~829 | 9 functions + 2 types | **Medium** |
-| `src/app/admin/projects/actions.ts` | ~664 | 10 functions | **Medium** |
+| `src/app/admin/projects/actions.ts` | ~15 (barrel) | 10 re-exports | **Medium** — **split done** |
 | `src/app/admin/projects/ProjectEditForm.tsx` | ~533 | 1 default component | **Medium** |
 
 Note: There is no `src/app/admin/pages/actions.ts`. Pages live under `pages-blocks/pages/`.
@@ -177,9 +184,30 @@ Same as topics; plus `content_type` / media section resolution must stay with wr
 
 ---
 
-## 4. `projects/actions.ts`
+## 4. `projects/actions.ts` — Batch 1 completed
 
-### Responsibilities
+### Implemented structure (Batch 1)
+
+```
+src/app/admin/projects/
+  actions.ts                 # stable public import path (re-exports from project-actions/)
+  project-actions/
+    index.ts                 # re-exports all public actions
+    types.ts                 # PublicationStatus
+    helpers.ts               # form parsing, redirects, preserve* helpers
+    revalidate.ts            # revalidateProjectPaths, revalidateProjectPathsById
+    validation.ts            # loadProjectPublishInput, validateProjectsCanPublish, checkProjectFieldsAvailable
+    create.ts                # createProject
+    update.ts                # updateProject
+    status.ts                # getProjectsTableRows, toggle, archive, restore
+    delete.ts                # deleteProjectAjax
+    duplicate.ts             # duplicateProjectAjax
+    bulk.ts                  # bulkProjectsActionAjax
+```
+
+Caller imports unchanged: `./actions` from `ProjectEditForm`, `ProjectsTableClient`, `AddProjectPanelClient`.
+
+### Original responsibilities (pre-split reference)
 
 | Group | Functions |
 |-------|-----------|
@@ -296,9 +324,13 @@ Optimistic reorder rollback, four `useActionState` assign flows, and session/dis
 
 **Biggest risk file:** `pages-blocks/pages/[id]/PageBlocksClient.tsx` (client orchestration + optimistic mutations).
 
-**Recommended first split target:** `projects/actions.ts` — smallest export surface for block mutations, clear ajax vs form split, and fewer cross-app type exports than topics/media.
+**Recommended next split target:** `topics/actions.ts` (follow projects module pattern).
 
-Alternative first target (helper-only, lowest risk): extract **pure helpers** from `projects/actions.ts` (`form-helpers.ts`, `revalidate.ts`) with barrel re-export — zero consumer import changes.
+---
+
+## Batch 1: projects actions (completed)
+
+Commit scope: split `src/app/admin/projects/actions.ts` into `actions/` modules; keep `actions.ts` as `"use server"` barrel. All 10 public exports preserved; caller imports unchanged.
 
 ---
 
@@ -309,15 +341,14 @@ Safest sequence for future commits (one scoped slice per commit):
 | Phase | Work | Risk |
 |-------|------|------|
 | **0** | This plan (`docs/oversized-actions-split-plan.md`) | None |
-| **1** | Extract **pure helpers** + revalidation from `projects/actions.ts` (barrel unchanged) | Low |
-| **2** | Split `projects/actions.ts` ajax/table vs create/update (keep `actions.ts` barrel) | Medium |
-| **3** | Extract topics **form-helpers** + **revalidate** (barrel); run audit verify | Low–Medium |
-| **4** | Split topics mutations (create / update / status / duplicate / bulk) | Medium |
-| **5** | Repeat phases 3–4 for **media/actions.ts** (follow topics template) | Medium |
-| **6** | Extract pages **page-lifecycle** from block assignment bulk | Medium |
-| **7** | Split pages **page-block-*** modules (shared → assign → mutations) | High |
-| **8** | Split `ProjectEditForm.tsx` into tab components | Medium |
-| **9** | Split `PageBlocksClient.tsx` (utils → modal → grid → shell) | High |
+| **1** | ~~Split `projects/actions.ts`~~ | **Done** (Batch 1) |
+| **2** | Extract topics **form-helpers** + **revalidate** (barrel); run audit verify | Low–Medium |
+| **3** | Split topics mutations (create / update / status / duplicate / bulk) | Medium |
+| **4** | Repeat phases 2–3 for **media/actions.ts** (follow topics template) | Medium |
+| **5** | Extract pages **page-lifecycle** from block assignment bulk | Medium |
+| **6** | Split pages **page-block-*** modules (shared → assign → mutations) | High |
+| **7** | Split `ProjectEditForm.tsx` into tab components | Medium |
+| **8** | Split `PageBlocksClient.tsx` (utils → modal → grid → shell) | High |
 
 Preferred ordering principle: **documentation → helper extraction → low-risk action groups → medium action files → client components last.**
 
