@@ -324,7 +324,7 @@ Optimistic reorder rollback, four `useActionState` assign flows, and session/dis
 
 **Biggest risk file:** `pages-blocks/pages/[id]/PageBlocksClient.tsx` (client orchestration + optimistic mutations).
 
-**Recommended next split target:** `content/media/actions.ts` (follow topics module pattern).
+**Recommended next split target:** `pages-blocks/pages/actions.ts` (page lifecycle extraction).
 
 ---
 
@@ -361,6 +361,32 @@ Audit verify script updated to target mutation modules under `topic-actions/`.
 
 ---
 
+## Batch 3: unified media actions (completed)
+
+Commit scope: split `src/app/admin/content/media/actions.ts` into `media-actions/` modules; keep `actions.ts` as re-export barrel (no `"use server"`). All 10 public exports preserved (8 functions + 2 types); caller imports unchanged.
+
+Structure:
+
+```
+src/app/admin/content/media/
+  actions.ts
+  media-actions/
+    index.ts
+    types.ts
+    helpers.ts
+    validation.ts
+    revalidate.ts
+    create.ts
+    update.ts
+    status.ts
+    duplicate.ts
+    bulk.ts
+```
+
+Audit verify script updated to target mutation modules under `media-actions/`. Unified Media guards (`content_type`, section/category, `media_payload`, slug, status, featured) unchanged.
+
+---
+
 ## Recommended execution order
 
 Safest sequence for future commits (one scoped slice per commit):
@@ -370,7 +396,7 @@ Safest sequence for future commits (one scoped slice per commit):
 | **0** | This plan (`docs/oversized-actions-split-plan.md`) | None |
 | **1** | ~~Split `projects/actions.ts`~~ | **Done** (Batch 1) |
 | **2–3** | ~~Split `topics/actions.ts`~~ | **Done** (Batch 2) |
-| **4** | Repeat for **media/actions.ts** (follow topics template) | Medium |
+| **4** | ~~Split `media/actions.ts`~~ | **Done** (Batch 3) |
 | **5** | Extract pages **page-lifecycle** from block assignment bulk | Medium |
 | **6** | Split pages **page-block-*** modules (shared → assign → mutations) | High |
 | **7** | Split `ProjectEditForm.tsx` into tab components | Medium |
