@@ -4,6 +4,9 @@ import AdminAccessLayout from "../../components/admin/AdminAccessLayout";
 import { NO_INDEX_ROBOTS } from "../../config/seo/seo-rules";
 import { buildMetadata } from "../../lib/seo/build-metadata";
 
+/** Admin depends on auth/searchParams/runtime data and must not be statically prerendered. */
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = buildMetadata({
   path: "/admin",
   title: "لوحة التحكم | فينيسيا للتطوير العقاري",

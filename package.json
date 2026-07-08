@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "verify:migrations": "node scripts/verify-migrations-present.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run verify:migrations"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

@@ -2,6 +2,8 @@ import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { createSupabaseFetch } from "./supabase-fetch";
+
 let adminClient: SupabaseClient | null = null;
 
 function missingEnvMessage() {
@@ -29,6 +31,9 @@ export function getSupabaseAdmin(): SupabaseClient {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
+      },
+      global: {
+        fetch: createSupabaseFetch(),
       },
     });
   }
