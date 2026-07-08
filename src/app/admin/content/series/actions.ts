@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -153,6 +155,12 @@ export async function createSeries(formData: FormData) {
 
   if (error) redirectWithError(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_series", "create"),
+    entityType: "topic_series",
+    entityLabel: payload.name,
+    metadata: { slug: payload.slug, status: payload.status },
+  });
   revalidateSeriesPaths();
   redirectWithNotice("created");
 }
@@ -190,6 +198,13 @@ export async function updateSeries(formData: FormData) {
     .update({ series: payload.name, series_slug: payload.slug, updated_at: now })
     .eq("series_id", id);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_series", "update"),
+    entityType: "topic_series",
+    entityId: Number(id),
+    entityLabel: payload.name,
+    metadata: { slug: payload.slug, status: payload.status },
+  });
   revalidateSeriesPaths();
   redirectWithNotice("updated");
 }
@@ -210,6 +225,12 @@ export async function toggleSeriesStatus(formData: FormData) {
 
   if (error) redirectWithError(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_series", nextStatus === "published" ? "publish" : "unpublish"),
+    entityType: "topic_series",
+    entityId: Number(id),
+    metadata: { status: nextStatus },
+  });
   revalidateSeriesPaths();
   redirectWithNotice(nextStatus === "published" ? "published" : "unpublished");
 }
@@ -250,6 +271,12 @@ export async function duplicateSeries(formData: FormData) {
 
   if (insertError) redirectWithError(insertError.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_series", "duplicate"),
+    entityType: "topic_series",
+    entityLabel: `${data.name} - نسخة`,
+    metadata: { slug, source_series_id: Number(id) },
+  });
   revalidateSeriesPaths();
   redirectWithNotice("duplicated");
 }
@@ -270,6 +297,11 @@ export async function deleteSeries(formData: FormData) {
   const { error } = await getSupabaseAdmin().from("topic_series").delete().eq("id", id);
   if (error) redirectWithError(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_series", "delete"),
+    entityType: "topic_series",
+    entityId: Number(id),
+  });
   revalidateSeriesPaths();
   redirectWithNotice("deleted");
 }
@@ -289,6 +321,11 @@ export async function bulkSeriesAction(formData: FormData) {
       .update({ status, deleted_at: null, updated_at: now })
       .in("id", ids);
     if (error) redirectWithError(error.message);
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("topic_series", status === "published" ? "publish" : "unpublish"),
+      entityType: "topic_series",
+      metadata: { bulk_action: action, ids: ids.map(Number) },
+    });
     revalidateSeriesPaths();
     redirectWithNotice(status === "published" ? "published" : "unpublished");
   }
@@ -304,6 +341,11 @@ export async function bulkSeriesAction(formData: FormData) {
 
     const { error } = await getSupabaseAdmin().from("topic_series").delete().in("id", ids);
     if (error) redirectWithError(error.message);
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("topic_series", "delete"),
+      entityType: "topic_series",
+      metadata: { bulk_action: action, ids: ids.map(Number) },
+    });
     revalidateSeriesPaths();
     redirectWithNotice("deleted");
   }
@@ -380,6 +422,12 @@ export async function toggleSeriesStatusAjax(id: number, currentStatus: string |
     .eq("id", id);
 
   if (error) return failure(error.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_series", nextStatus === "published" ? "publish" : "unpublish"),
+    entityType: "topic_series",
+    entityId: id,
+    metadata: { status: nextStatus },
+  });
   return successWithFreshRows(nextStatus === "published" ? "تم إظهار السلسلة بنجاح." : "تم إخفاء السلسلة بنجاح.");
 }
 
@@ -417,6 +465,12 @@ export async function duplicateSeriesAjax(id: number): Promise<SeriesTableResult
   });
 
   if (insertError) return failure(insertError.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_series", "duplicate"),
+    entityType: "topic_series",
+    entityLabel: `${data.name} - نسخة`,
+    metadata: { slug, source_series_id: id },
+  });
   return successWithFreshRows("تم نسخ السلسلة بنجاح.");
 }
 
@@ -435,6 +489,11 @@ export async function deleteSeriesAjax(id: number): Promise<SeriesTableResult> {
   const { error } = await getSupabaseAdmin().from("topic_series").delete().eq("id", id);
   if (error) return failure(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_series", "delete"),
+    entityType: "topic_series",
+    entityId: id,
+  });
   return successWithFreshRows("تم حذف السلسلة بنجاح.");
 }
 
@@ -453,6 +512,11 @@ export async function bulkSeriesActionAjax(action: string, ids: number[]): Promi
       .in("id", validIds);
 
     if (error) return failure(error.message);
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("topic_series", status === "published" ? "publish" : "unpublish"),
+      entityType: "topic_series",
+      metadata: { bulk_action: action, ids: validIds.map(Number) },
+    });
     return successWithFreshRows(status === "published" ? "تم إظهار السلاسل المحددة بنجاح." : "تم إخفاء السلاسل المحددة بنجاح.");
   }
 
@@ -468,6 +532,11 @@ export async function bulkSeriesActionAjax(action: string, ids: number[]): Promi
     const { error } = await getSupabaseAdmin().from("topic_series").delete().in("id", validIds);
     if (error) return failure(error.message);
 
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("topic_series", "delete"),
+      entityType: "topic_series",
+      metadata: { bulk_action: action, ids: validIds.map(Number) },
+    });
     return successWithFreshRows("تم حذف السلاسل المحددة بنجاح.");
   }
 

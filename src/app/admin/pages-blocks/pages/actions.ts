@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -33,6 +35,20 @@ function pagesListPath(options?: { notice?: string; error?: string }) {
   if (options?.error) params.set("error", options.error);
   const query = params.toString();
   return `/admin/pages-blocks/pages${query ? `?${query}` : ""}`;
+}
+
+async function auditPageBlockAssignment(
+  verb: "create" | "update" | "delete" | "reorder" | "publish" | "unpublish",
+  pageId: number,
+  assignmentId?: number | null,
+  metadata?: Record<string, unknown>,
+) {
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("page_block_assignment", verb),
+    entityType: "page_block_assignment",
+    entityId: assignmentId ?? null,
+    metadata: { page_id: pageId, ...metadata },
+  });
 }
 
 async function copyPageModuleAssignments(sourcePageId: number, targetPageId: number) {
@@ -113,6 +129,13 @@ export async function togglePageStatus(formData: FormData) {
 
   if (error) redirect(pagesListPath({ error: error.message }));
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("page", nextStatus === "published" ? "publish" : "unpublish"),
+    entityType: "page",
+    entityId: pageId,
+    metadata: { status: nextStatus },
+  });
+
   await revalidatePageBlocksPath(pageId);
   redirect(
     pagesListPath({
@@ -141,6 +164,14 @@ export async function deletePage(formData: FormData) {
 
   const { error } = await getSupabaseAdmin().from("pages").delete().eq("id", pageId);
   if (error) redirect(pagesListPath({ error: error.message }));
+
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("page", "delete"),
+    entityType: "page",
+    entityId: pageId,
+    entityLabel: page.title,
+    metadata: { slug: page.slug },
+  });
 
   revalidatePath("/admin/pages-blocks/pages", "layout");
   await revalidatePublicPagesWithBlockAssignments();
@@ -195,6 +226,12 @@ export async function bulkDeletePagesAjax(ids: number[]): Promise<PagesTableResu
   const { error: deleteError } = await getSupabaseAdmin().from("pages").delete().in("id", deletableIds);
   if (deleteError) return { ok: false, message: deleteError.message };
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("page", "delete"),
+    entityType: "page",
+    metadata: { page_ids: deletableIds, count: deletableIds.length },
+  });
+
   revalidatePath("/admin/pages-blocks/pages", "layout");
   await revalidatePublicPagesWithBlockAssignments();
 
@@ -248,6 +285,14 @@ export async function duplicatePage(formData: FormData) {
     await getSupabaseAdmin().from("pages").delete().eq("id", copiedPage.id);
     redirect(pagesListPath({ error: error instanceof Error ? error.message : "تعذر نسخ موديولات الصفحة." }));
   }
+
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("page", "duplicate"),
+    entityType: "page",
+    entityId: copiedPage.id,
+    entityLabel: identity.title,
+    metadata: { source_page_id: pageId, slug: identity.slug },
+  });
 
   await revalidatePageBlocksPath(copiedPage.id);
   redirect(`/admin/pages-blocks/pages/${copiedPage.id}?notice=duplicated`);
@@ -363,6 +408,7 @@ export async function assignPageBlock(
     return failure(error.message);
   }
 
+  await auditPageBlockAssignment("create", pageId, null, { block_type: blockType, template_id: templateId });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -415,6 +461,7 @@ export async function assignMediaSidebarModule(
     return failure(error.message);
   }
 
+  await auditPageBlockAssignment("create", pageId, null, { module: "media-sidebar", template_id: templateId });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -467,6 +514,7 @@ export async function assignMediaHubModule(
     return failure(error.message);
   }
 
+  await auditPageBlockAssignment("create", pageId, null, { module: "media-hub", template_id: templateId });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -515,6 +563,7 @@ export async function assignHeroModule(
 
   if (error) return failure(error.message);
 
+  await auditPageBlockAssignment("create", pageId, null, { module: "hero", hero_id: heroId });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -551,6 +600,7 @@ export async function updatePageBlockAssignment(
 
     if (error) return failure(error.message);
 
+    await auditPageBlockAssignment("update", pageId, assignmentId, { module: "media-sidebar" });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -571,6 +621,7 @@ export async function updatePageBlockAssignment(
 
     if (error) return failure(error.message);
 
+    await auditPageBlockAssignment("update", pageId, assignmentId, { module: "media-hub" });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -592,6 +643,7 @@ export async function updatePageBlockAssignment(
 
   if (error) return failure(error.message);
 
+  await auditPageBlockAssignment("update", pageId, assignmentId, { block_type: blockType });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -617,6 +669,7 @@ export async function updateHeroPageAssignment(
 
   if (error) return failure(error.message);
 
+  await auditPageBlockAssignment("update", pageId, assignmentId, { module: "hero" });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -667,6 +720,7 @@ export async function movePageBlockAssignment(formData: FormData): Promise<PageB
       .eq("target_type", "page");
     if (e2) return failure(e2.message);
 
+    await auditPageBlockAssignment("reorder", pageId, currentId, { module: "hero", target_id: targetId });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -711,6 +765,10 @@ export async function movePageBlockAssignment(formData: FormData): Promise<PageB
     .eq("page_id", pageId);
   if (e2) return failure(e2.message);
 
+  await auditPageBlockAssignment("reorder", pageId, currentId, {
+    module: moduleKind,
+    target_id: targetId,
+  });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -721,6 +779,7 @@ export async function togglePageBlockAssignment(formData: FormData): Promise<Pag
   const assignmentId = parseNumber(formData.get("assignment_id"));
   const blockType = cleanText(formData.get("block_type")) as PageBlockType | "hero" | "media-sidebar" | "media-hub";
   const nextVisible = parseFormBoolean(formData, "next_visible", false);
+  const visibilityVerb = nextVisible ? "publish" : "unpublish";
 
   if (!pageId || !assignmentId) return failure("بيانات الربط غير مكتملة.");
 
@@ -733,6 +792,7 @@ export async function togglePageBlockAssignment(formData: FormData): Promise<Pag
       .eq("target_type", "page");
 
     if (error) return failure(error.message);
+    await auditPageBlockAssignment(visibilityVerb, pageId, assignmentId, { module: "hero" });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -745,6 +805,7 @@ export async function togglePageBlockAssignment(formData: FormData): Promise<Pag
       .eq("page_id", pageId);
 
     if (error) return failure(error.message);
+    await auditPageBlockAssignment(visibilityVerb, pageId, assignmentId, { module: "media-sidebar" });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -757,6 +818,7 @@ export async function togglePageBlockAssignment(formData: FormData): Promise<Pag
       .eq("page_id", pageId);
 
     if (error) return failure(error.message);
+    await auditPageBlockAssignment(visibilityVerb, pageId, assignmentId, { module: "media-hub" });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -771,6 +833,7 @@ export async function togglePageBlockAssignment(formData: FormData): Promise<Pag
 
   if (error) return failure(error.message);
 
+  await auditPageBlockAssignment(visibilityVerb, pageId, assignmentId, { block_type: blockType });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -792,6 +855,7 @@ export async function deletePageBlockAssignment(formData: FormData): Promise<Pag
       .eq("target_type", "page");
 
     if (error) return failure(error.message);
+    await auditPageBlockAssignment("delete", pageId, assignmentId, { module: "hero" });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -804,6 +868,7 @@ export async function deletePageBlockAssignment(formData: FormData): Promise<Pag
       .eq("page_id", pageId);
 
     if (error) return failure(error.message);
+    await auditPageBlockAssignment("delete", pageId, assignmentId, { module: "media-sidebar" });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -816,6 +881,7 @@ export async function deletePageBlockAssignment(formData: FormData): Promise<Pag
       .eq("page_id", pageId);
 
     if (error) return failure(error.message);
+    await auditPageBlockAssignment("delete", pageId, assignmentId, { module: "media-hub" });
     await revalidatePageBlocksPath(pageId);
     return success();
   }
@@ -830,6 +896,7 @@ export async function deletePageBlockAssignment(formData: FormData): Promise<Pag
 
   if (error) return failure(error.message);
 
+  await auditPageBlockAssignment("delete", pageId, assignmentId, { block_type: blockType });
   await revalidatePageBlocksPath(pageId);
   return success();
 }
@@ -948,6 +1015,15 @@ export async function bulkPageBlockAssignments(formData: FormData) {
           .eq("id", entry.assignmentId)
           .eq("page_id", pageId);
       }),
+    );
+  }
+
+  if (action === "show" || action === "hide" || action === "delete") {
+    await auditPageBlockAssignment(
+      action === "delete" ? "delete" : action === "show" ? "publish" : "unpublish",
+      pageId,
+      null,
+      { bulk_action: action, assignment_ids: entries.map((entry) => entry.assignmentId) },
     );
   }
 

@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -259,6 +261,12 @@ export async function createCategory(formData: FormData) {
 
   if (error) redirectError(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_category", "create"),
+    entityType: "topic_category",
+    entityLabel: name,
+    metadata: { slug, parent_id: parentId },
+  });
   revalidateCategories();
   redirect("/admin/topics/categories?notice=created");
 }
@@ -312,6 +320,13 @@ export async function updateCategory(formData: FormData) {
       .eq("category_slug", slug);
   }
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_category", "update"),
+    entityType: "topic_category",
+    entityId: Number(id),
+    entityLabel: name,
+    metadata: { slug },
+  });
   revalidateCategories();
   redirect("/admin/topics/categories?notice=updated");
 }
@@ -332,6 +347,12 @@ export async function toggleCategoryStatus(formData: FormData) {
 
   if (error) redirectError(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_category", nextStatus ? "publish" : "unpublish"),
+    entityType: "topic_category",
+    entityId: Number(id),
+    metadata: { is_active: nextStatus },
+  });
   revalidateCategories();
   redirect(`/admin/topics/categories?notice=${nextStatus ? "shown" : "hidden"}`);
 }
@@ -382,6 +403,12 @@ export async function duplicateCategory(formData: FormData) {
 
   if (error) redirectError(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_category", "duplicate"),
+    entityType: "topic_category",
+    entityLabel: `${current.name} - نسخة`,
+    metadata: { slug: nextSlug, source_category_id: Number(id) },
+  });
   revalidateCategories();
   redirect("/admin/topics/categories?notice=created");
 }
@@ -516,6 +543,12 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
   const { error: deleteError } = await supabase.from("topic_categories").delete().eq("id", id);
   if (deleteError) return { ok: false as const, message: deleteError.message };
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_category", "delete"),
+    entityType: "topic_category",
+    entityId: id,
+    metadata: { transfer_to_id: transferToId ?? null },
+  });
   revalidateCategories();
   return { ok: true as const, message: "تم حذف التصنيف بنجاح." };
 }
@@ -534,6 +567,11 @@ export async function deleteCategory(formData: FormData) {
   const { error } = await getSupabaseAdmin().from("topic_categories").delete().eq("id", id);
   if (error) redirectError(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic_category", "delete"),
+    entityType: "topic_category",
+    entityId: Number(id),
+  });
   revalidateCategories();
   redirect("/admin/topics/categories?notice=deleted");
 }

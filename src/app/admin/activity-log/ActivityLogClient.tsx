@@ -17,6 +17,7 @@ import {
   AUDIT_ACTION_LABELS,
   type AuditAction,
 } from "../../../lib/admin/audit/audit-actions";
+import { formatCmsAuditActionLabel } from "../../../lib/admin/audit/cms-audit-actions";
 import type { AuditLogListResult, AuditLogRecord } from "../../../lib/admin/audit/audit-types";
 
 import { listAuditLogsAction } from "./actions";
@@ -65,7 +66,11 @@ function formatMetadata(metadata: Record<string, unknown>) {
 }
 
 function actionLabel(action: string) {
-  return AUDIT_ACTION_LABELS[action as AuditAction] ?? action;
+  return (
+    AUDIT_ACTION_LABELS[action as AuditAction] ??
+    formatCmsAuditActionLabel(action) ??
+    action
+  );
 }
 
 export default function ActivityLogClient({

@@ -1,9 +1,10 @@
 import type { AuditAction } from "./audit-actions";
+import type { CmsAuditAction } from "./cms-audit-actions";
 
 export type AuditEventInput = {
   actorAdminUserId?: number | null;
   actorUsername: string;
-  action: AuditAction;
+  action: AuditAction | CmsAuditAction;
   entityType?: string | null;
   entityId?: number | null;
   entityLabel?: string | null;

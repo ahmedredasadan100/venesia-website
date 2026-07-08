@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 
 import { revalidatePath } from "next/cache";
 
@@ -138,6 +140,17 @@ export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
   await upsertSetting("footer.social_links", socialLinks);
   await upsertSetting("footer.legal", legal);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("footer_settings", "update"),
+    entityType: "footer_settings",
+    entityLabel: FOOTER_SLOTS_SETTING_KEY,
+    metadata: {
+      slots_count: validatedSlots.slots.length,
+      contact_items_count: contactItems.length,
+      social_links_count: socialLinks.length,
+    },
+  });
+
   revalidateFooterPublicPaths();
   revalidatePath("/admin/pages-blocks/footer");
 
@@ -152,6 +165,12 @@ export async function restoreDefaultFooterAction() {
 
   await upsertSetting(FOOTER_SLOTS_SETTING_KEY, defaultSlots);
   await upsertSetting("footer.brand", brand);
+
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("footer_settings", "restore_default"),
+    entityType: "footer_settings",
+    entityLabel: FOOTER_SLOTS_SETTING_KEY,
+  });
 
   revalidateFooterPublicPaths();
   revalidatePath("/admin/pages-blocks/footer");

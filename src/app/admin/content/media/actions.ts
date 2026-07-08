@@ -10,6 +10,8 @@ import {
 } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import {
   assertPayloadMatchesContentType,
   normalizeVideoPayloadForStorage,
@@ -536,6 +538,13 @@ export async function createMediaContent(formData: FormData) {
   }
 
   revalidateMediaContentPaths(data.id);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("media_content", payload.status === "published" ? "publish" : "create"),
+    entityType: "media_content",
+    entityId: data.id,
+    entityLabel: payload.title,
+    metadata: { slug: payload.slug, content_type: section.contentType, status: payload.status },
+  });
   redirect(`/admin/content/media/${data.id}?notice=created`);
 }
 
@@ -602,6 +611,13 @@ export async function updateMediaContent(formData: FormData) {
   if (error) redirectEditError(id, error.message);
 
   revalidateMediaContentPaths(id);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("media_content", "update"),
+    entityType: "media_content",
+    entityId: Number(id),
+    entityLabel: payload.title,
+    metadata: { slug: payload.slug, content_type: section.contentType, status: payload.status },
+  });
   redirect(`/admin/content/media/${id}?notice=saved`);
 }
 
@@ -699,6 +715,13 @@ export async function publishMediaContent(formData: FormData) {
   if (error) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
 
   revalidateMediaContentPaths(id);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("media_content", "publish"),
+    entityType: "media_content",
+    entityId: Number(id),
+    entityLabel: topic.title,
+    metadata: { content_type: topic.content_type },
+  });
   redirect(appendMediaListNotice(redirectTo, "published", "media-table"));
 }
 
@@ -726,6 +749,13 @@ export async function unpublishMediaContent(formData: FormData) {
   if (error) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
 
   revalidateMediaContentPaths(id);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("media_content", "unpublish"),
+    entityType: "media_content",
+    entityId: Number(id),
+    entityLabel: topic.title,
+    metadata: { content_type: topic.content_type },
+  });
   redirect(appendMediaListNotice(redirectTo, "unpublished", "media-table"));
 }
 
@@ -754,6 +784,13 @@ export async function archiveMediaContent(formData: FormData) {
   if (error) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
 
   revalidateMediaContentPaths(id);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("media_content", "delete"),
+    entityType: "media_content",
+    entityId: Number(id),
+    entityLabel: topic.title,
+    metadata: { content_type: topic.content_type },
+  });
   redirect(appendMediaListNotice(redirectTo, "deleted", "media-table"));
 }
 
@@ -787,7 +824,7 @@ export async function duplicateMediaContent(formData: FormData) {
   const { category, contentType } = resolvedCategory;
   const isRichMedia = contentType === "video" || contentType === "gallery";
   const now = new Date().toISOString();
-  const { error } = await getSupabaseAdmin()
+  const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .insert({
       title,
@@ -821,9 +858,16 @@ export async function duplicateMediaContent(formData: FormData) {
     .select("id")
     .single<{ id: number }>();
 
-  if (error) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
+  if (error || !data) redirect(appendMediaListNotice(redirectTo, "error", "media-table"));
 
-  revalidateMediaContentPaths();
+  revalidateMediaContentPaths(data.id);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("media_content", "duplicate"),
+    entityType: "media_content",
+    entityId: data.id,
+    entityLabel: title,
+    metadata: { slug, content_type: contentType, source_id: Number(id) },
+  });
   redirect(appendMediaListNotice(redirectTo, "created", "media-table"));
 }
 
@@ -911,5 +955,13 @@ export async function bulkUpdateMediaContent(formData: FormData) {
   revalidateTopicsCache();
   revalidateMediaCenterCache();
   revalidatePath("/admin/content/media");
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "media_content",
+      bulkAction === "publish" ? "publish" : bulkAction === "unpublish" ? "unpublish" : "update",
+    ),
+    entityType: "media_content",
+    metadata: { bulk_action: bulkAction, media_ids: ids, count: ids.length },
+  });
   redirect(appendMediaListNotice(redirectTo, "saved", "media-table"));
 }

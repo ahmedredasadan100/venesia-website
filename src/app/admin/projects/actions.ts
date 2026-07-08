@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../lib/admin/audit-log";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -305,6 +307,13 @@ export async function createProject(formData: FormData) {
     .single();
 
   if (error) redirectWithError(type, error.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("project", "create"),
+    entityType: "project",
+    entityId: data.id,
+    entityLabel: arabicName,
+    metadata: { slug, type, code },
+  });
   revalidateProjectPaths(type, data.id, slug);
   redirectEditWithNotice(data.id, "created");
 }
@@ -342,6 +351,12 @@ export async function toggleProjectPublicationAjax(id: number, currentStatus: st
 
   if (error || !data) return { ok: false as const, message: error?.message ?? "المشروع غير موجود." };
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("project", nextStatus === "published" ? "publish" : "unpublish"),
+    entityType: "project",
+    entityId: id,
+    metadata: { publication_status: nextStatus },
+  });
   revalidateProjectPathsById(data.type, id);
   return { ok: true as const, message: nextStatus === "published" ? "تم نشر المشروع." : "تم إخفاء المشروع." };
 }
@@ -374,6 +389,11 @@ export async function bulkProjectsActionAjax(
       .in("id", validation.validIds);
     if (error) return { ok: false as const, message: error.message };
 
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("project", "publish"),
+      entityType: "project",
+      metadata: { bulk_action: action, project_ids: validation.validIds, count: validation.validIds.length },
+    });
     revalidateProjectPaths(type);
     if (validation.failures.length) {
       return {
@@ -400,6 +420,19 @@ export async function bulkProjectsActionAjax(
   const { error } = await getSupabaseAdmin().from("projects").update(payload).in("id", ids);
   if (error) return { ok: false as const, message: error.message };
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "project",
+      action === "hide" ? "unpublish" : action === "archive" ? "delete" : "update",
+    ),
+    entityType: "project",
+    metadata: {
+      bulk_action: action,
+      project_ids: ids,
+      count: ids.length,
+      ...(action === "archive" ? { publication_status: "archived" } : {}),
+    },
+  });
   revalidateProjectPaths(type);
   return { ok: true as const, message };
 }
@@ -522,6 +555,27 @@ export async function updateProject(formData: FormData) {
   }
 
   revalidateProjectPaths(type, numericId, slug, String(current.slug ?? ""));
+  const childrenSynced =
+    formData.has("floor_plans_section") ||
+    formData.has("delivery_spec_items_section") ||
+    formData.has("overview_media_section") ||
+    formData.has("delivery_media_section") ||
+    formData.has("gallery_media_section");
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("project", "update"),
+    entityType: "project",
+    entityId: numericId,
+    entityLabel: arabicName,
+    metadata: { slug, publication_status: nextPublicationStatus, children_synced: childrenSynced },
+  });
+  if (childrenSynced) {
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("project_children", "update"),
+      entityType: "project_children",
+      entityId: numericId,
+      entityLabel: arabicName,
+    });
+  }
   redirectEditWithNotice(numericId, "updated");
 }
 
@@ -535,6 +589,12 @@ export async function archiveProjectAjax(id: number) {
     .maybeSingle<{ type: ProjectCategory }>();
 
   if (error || !data) return { ok: false as const, message: error?.message ?? "المشروع غير موجود." };
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("project", "delete"),
+    entityType: "project",
+    entityId: id,
+    metadata: { publication_status: "archived" },
+  });
   revalidateProjectPathsById(data.type, id);
   return { ok: true as const, message: "تم أرشفة المشروع." };
 }
@@ -549,6 +609,12 @@ export async function restoreProjectAjax(id: number) {
     .maybeSingle<{ type: ProjectCategory }>();
 
   if (error || !data) return { ok: false as const, message: error?.message ?? "المشروع غير موجود." };
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("project", "restore"),
+    entityType: "project",
+    entityId: id,
+    metadata: { publication_status: "draft" },
+  });
   revalidateProjectPathsById(data.type, id);
   return { ok: true as const, message: "تم استعادة المشروع كمسودة." };
 }
@@ -575,6 +641,12 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
   const { error } = await getSupabaseAdmin().from("projects").delete().eq("id", id);
   if (error) return { ok: false as const, message: error.message };
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("project", "delete"),
+    entityType: "project",
+    entityId: id,
+    metadata: { permanent: true, slug: existing.slug },
+  });
   revalidateProjectPaths(existing.type, undefined, existing.slug);
   return { ok: true as const, message: "تم حذف المشروع." };
 }
@@ -683,5 +755,11 @@ export async function duplicateProjectAjax(id: number) {
   }
 
   revalidateProjectPaths(type, newProjectId, nextSlug);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("project", "duplicate"),
+    entityType: "project",
+    entityId: newProjectId,
+    metadata: { source_project_id: id, slug: nextSlug, code: nextCode },
+  });
   return { ok: true as const, message: "تم نسخ المشروع كمسودة." };
 }

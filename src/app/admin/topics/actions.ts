@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../lib/admin/audit-log";
 
 import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
@@ -573,6 +575,13 @@ export async function createTopic(formData: FormData) {
   }
 
   revalidateTopicPaths({ id: data.id, newSlug: data.slug });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic", status === "published" ? "publish" : "create"),
+    entityType: "topic",
+    entityId: data.id,
+    entityLabel: payload.title,
+    metadata: { slug: data.slug, status },
+  });
   redirect(`/admin/topics/${data.id}?notice=${status === "published" ? "published" : "created"}`);
 }
 
@@ -636,6 +645,17 @@ async function updateTopicWithStatus(
 
     if (publishError) redirectEditError(id, publishError);
 
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction(
+        "topic",
+        statusToWrite === "published" ? "publish" : statusToWrite === "unpublished" ? "unpublish" : "update",
+      ),
+      entityType: "topic",
+      entityId: Number(id),
+      entityLabel: payload.title,
+      metadata: { slug: payload.slug, status: statusToWrite },
+    });
+
     redirect(redirectToList ? `/admin/topics?notice=${notice}` : `/admin/topics/${id}?notice=${notice}`);
   }
 
@@ -666,6 +686,16 @@ async function updateTopicWithStatus(
   if (error) redirectEditError(id, error.message);
 
   revalidateTopicPaths({ id, oldSlug: currentTopic.slug, newSlug: payload.slug });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "topic",
+      nextStatus === "published" ? "publish" : nextStatus === "unpublished" ? "unpublish" : "update",
+    ),
+    entityType: "topic",
+    entityId: Number(id),
+    entityLabel: payload.title,
+    metadata: { slug: payload.slug, status: nextStatus },
+  });
   redirect(redirectToList ? `/admin/topics?notice=${notice}` : `/admin/topics/${id}?notice=${notice}`);
 }
 
@@ -706,6 +736,13 @@ async function setTopicStatusFromList(formData: FormData, nextStatus: TopicStatu
   if (error) redirectEditError(id, error.message);
 
   revalidateTopicPaths({ id, oldSlug: topic.slug, newSlug: topic.slug });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic", nextStatus === "published" ? "publish" : "unpublish"),
+    entityType: "topic",
+    entityId: Number(id),
+    entityLabel: topic.title,
+    metadata: { status: nextStatus },
+  });
   const redirectTo = getRedirectTo(formData);
   redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}notice=${notice}#topics-table`);
 }
@@ -745,6 +782,12 @@ export async function softDeleteTopic(formData: FormData) {
   if (error) redirectEditError(id, error.message);
 
   revalidateTopicPaths({ id, oldSlug: topic.slug, newSlug: topic.slug });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic", "delete"),
+    entityType: "topic",
+    entityId: Number(id),
+    entityLabel: topic.title,
+  });
   const redirectTo = getRedirectTo(formData);
   redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}notice=deleted#topics-table`);
 }
@@ -839,6 +882,12 @@ export async function duplicateTopic(formData: FormData) {
   if (error) redirect(appendNotice(redirectTo, "error"));
 
   revalidateTopicPaths({ newSlug: slug });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic", "duplicate"),
+    entityType: "topic",
+    entityLabel: title,
+    metadata: { slug, source_topic_id: Number(id) },
+  });
   redirect(appendNotice(redirectTo, "created"));
 }
 
@@ -933,5 +982,10 @@ export async function bulkUpdateTopics(formData: FormData) {
   revalidateTopicsCache();
   revalidatePath("/admin/topics");
   revalidatePath("/topics");
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("topic", bulkAction === "publish" ? "publish" : bulkAction === "unpublish" ? "unpublish" : "update"),
+    entityType: "topic",
+    metadata: { bulk_action: bulkAction, topic_ids: ids, count: ids.length },
+  });
   redirect(appendNotice(redirectTo, "saved"));
 }

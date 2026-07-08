@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction, type CmsAuditVerb } from "../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -31,6 +33,20 @@ function getNumber(formData: FormData, key: string) {
 
 function getBoolean(formData: FormData, key: string) {
   return formData.get(key) === "on" || formData.get(key) === "true";
+}
+
+async function auditMenuAction(
+  entityType: "menu" | "menu_item",
+  verb: CmsAuditVerb,
+  options?: { entityId?: number | null; entityLabel?: string | null; metadata?: Record<string, unknown> },
+) {
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(entityType, verb),
+    entityType,
+    entityId: options?.entityId ?? null,
+    entityLabel: options?.entityLabel ?? null,
+    metadata: options?.metadata,
+  });
 }
 
 function createSlug(value: string) {
@@ -167,6 +183,7 @@ export async function createMenu(formData: FormData) {
     .single();
 
   if (error) backToMenus(error.message);
+  await auditMenuAction("menu", "create", { entityId: data.id, entityLabel: name, metadata: { slug, location } });
   revalidateNavigation();
   backToMenu(data.id, "تم إنشاء القائمة. ابدأ بإضافة عناصرها.");
 }
@@ -190,6 +207,7 @@ export async function updateMenu(formData: FormData) {
     .eq("id", id);
 
   if (error) backToMenus(error.message);
+  await auditMenuAction("menu", "update", { entityId: id, entityLabel: name, metadata: { slug, location } });
   revalidateNavigation();
   backToMenus("تم تحديث القائمة.");
 }
@@ -203,6 +221,7 @@ export async function toggleMenuVisibility(formData: FormData) {
   const { error } = await getSupabaseAdmin().from("menus").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", id);
   if (error) backToMenus(error.message);
 
+  await auditMenuAction("menu", "update", { entityId: id, metadata: { is_active: isActive } });
   revalidateNavigation();
   backToMenus("تم تغيير حالة القائمة.");
 }
@@ -216,6 +235,7 @@ export async function deleteMenu(formData: FormData) {
   const { error } = await getSupabaseAdmin().from("menus").delete().eq("id", id);
   if (error) backToMenus(error.message);
 
+  await auditMenuAction("menu", "delete", { entityId: id });
   revalidateNavigation();
   backToMenus("تم حذف القائمة.");
 }
@@ -270,6 +290,11 @@ export async function duplicateMenu(formData: FormData) {
     idMap.set(Number(item.id), Number(newItem.id));
   }
 
+  await auditMenuAction("menu", "duplicate", {
+    entityId: copiedMenu.id,
+    entityLabel: `${menu.name} - نسخة`,
+    metadata: { source_menu_id: id, items_copied: sortedItems.length },
+  });
   revalidateNavigation();
   backToMenu(copiedMenu.id, "تم نسخ القائمة كمسودة مخفية.");
 }
@@ -300,6 +325,7 @@ export async function createMenuItem(formData: FormData) {
   });
 
   if (error) backToMenu(menuId, error.message);
+  await auditMenuAction("menu_item", "create", { entityLabel: label, metadata: { menu_id: menuId } });
   revalidateNavigation();
   backToMenu(menuId, "تم إضافة عنصر للقائمة.");
 }
@@ -334,6 +360,7 @@ export async function updateMenuItem(formData: FormData) {
     .eq("id", id);
 
   if (error) backToMenu(menuId, error.message);
+  await auditMenuAction("menu_item", "update", { entityId: id, entityLabel: label, metadata: { menu_id: menuId } });
   revalidateNavigation();
   backToMenu(menuId, "تم تحديث العنصر.");
 }
@@ -347,6 +374,7 @@ export async function deleteMenuItem(formData: FormData) {
   const { error } = await getSupabaseAdmin().from("menu_items").delete().eq("id", id);
   if (error) backToMenu(menuId, error.message);
 
+  await auditMenuAction("menu_item", "delete", { entityId: id, metadata: { menu_id: menuId } });
   revalidateNavigation();
   backToMenu(menuId, "تم حذف العنصر.");
 }
@@ -361,6 +389,7 @@ export async function toggleMenuItemVisibility(formData: FormData) {
   const { error } = await getSupabaseAdmin().from("menu_items").update({ is_visible: isVisible, updated_at: new Date().toISOString() }).eq("id", id);
   if (error) backToMenu(menuId, error.message);
 
+  await auditMenuAction("menu_item", "update", { entityId: id, metadata: { menu_id: menuId, is_visible: isVisible } });
   revalidateNavigation();
   backToMenu(menuId, "تم تغيير حالة العنصر.");
 }
@@ -402,6 +431,10 @@ export async function moveMenuItemSortOrder(formData: FormData) {
 
   if (updateTargetError) backToMenu(menuId, updateTargetError.message);
 
+  await auditMenuAction("menu_item", "reorder", {
+    entityId: currentId,
+    metadata: { menu_id: menuId, target_id: targetId },
+  });
   revalidateNavigation();
   backToMenu(menuId, "تم تحديث ترتيب العنصر.");
 }
@@ -432,6 +465,10 @@ export async function duplicateMenuItem(formData: FormData) {
   });
 
   if (insertError) backToMenu(menuId, insertError.message);
+  await auditMenuAction("menu_item", "duplicate", {
+    entityLabel: `${item.label} - نسخة`,
+    metadata: { menu_id: menuId, source_item_id: id },
+  });
   revalidateNavigation();
   backToMenu(menuId, "تم نسخ العنصر كمسودة مخفية.");
 }
@@ -444,6 +481,7 @@ export async function clearMenuItems(formData: FormData) {
   const { error } = await getSupabaseAdmin().from("menu_items").delete().eq("menu_id", id);
   if (error) backToMenus(error.message);
 
+  await auditMenuAction("menu_item", "delete", { entityId: id, metadata: { cleared_menu_id: id } });
   revalidateNavigation();
   backToMenus("تم تفريغ عناصر القائمة.");
 }
@@ -465,6 +503,9 @@ export async function bulkMenuAction(formData: FormData) {
       .in("id", ids);
 
     if (error) backToMenus(error.message);
+    await auditMenuAction("menu", "update", {
+      metadata: { bulk_action: action, menu_ids: ids, is_active: action === "show" },
+    });
     revalidateNavigation();
     backToMenus(action === "show" ? "تم إظهار القوائم المحددة." : "تم إخفاء القوائم المحددة.");
   }
@@ -474,6 +515,7 @@ export async function bulkMenuAction(formData: FormData) {
     const { error } = await getSupabaseAdmin().from("menus").delete().in("id", ids);
 
     if (error) backToMenus(error.message);
+    await auditMenuAction("menu", "delete", { metadata: { bulk_action: action, menu_ids: ids } });
     revalidateNavigation();
     backToMenus("تم حذف القوائم المحددة.");
   }
@@ -531,6 +573,10 @@ export async function importMenuJson(formData: FormData) {
     if (oldId && newItem?.id) idMap.set(oldId, Number(newItem.id));
   }
 
+  await auditMenuAction("menu", "update", {
+    entityId: menuId,
+    metadata: { import: true, imported_items_count: sortedItems.length },
+  });
   revalidateNavigation();
   backToMenus("تم استيراد عناصر القائمة كمسودة مخفية.");
 }

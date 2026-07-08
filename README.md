@@ -26,6 +26,7 @@ npm run lint
 npm run typecheck
 npm run verify:migrations
 npm run verify:legacy-media-admin
+npm run verify:audit-coverage
 npm run build
 ```
 
@@ -56,6 +57,14 @@ Required GitHub repository secrets (names only):
 
 CI does **not** run production SQL migrations.
 
+## Admin audit logging
+
+Critical CMS write actions (pages, topics, media, projects, menus, footer, site settings) are recorded in `admin_audit_logs`. Logging is **non-blocking** — a failed audit insert does not roll back the primary mutation.
+
+```bash
+npm run verify:audit-coverage
+```
+
 ## Admin media
 
 - Unified Media Admin (official): `/admin/content/media`
@@ -65,6 +74,7 @@ CI does **not** run production SQL migrations.
 ## Documentation
 
 - [Unified Content Engine ADR](docs/architecture/UNIFIED_CONTENT_ENGINE.md)
+- [Admin Audit Coverage](docs/admin-audit-coverage.md)
 - [Migration Metadata Reference](docs/database/migration-metadata.md)
 - [Media Upload / Supabase Storage Migration Plan](docs/security-media-upload-migration.md)
 
