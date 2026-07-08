@@ -42,5 +42,8 @@ jobs:
       - name: Verify legacy media admin closed
         run: npm run verify:legacy-media-admin
 
+      - name: Verify audit coverage
+        run: npm run verify:audit-coverage
+
       - name: Production build
         run: npm run build

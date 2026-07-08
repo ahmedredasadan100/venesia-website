@@ -47,6 +47,7 @@ Runs on pull requests and pushes to `main`:
 - `npm run typecheck`
 - `npm run verify:migrations`
 - `npm run verify:legacy-media-admin`
+- `npm run verify:audit-coverage`
 - `npm run build`
 
 Required GitHub repository secrets (names only):
