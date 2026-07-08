@@ -324,13 +324,40 @@ Optimistic reorder rollback, four `useActionState` assign flows, and session/dis
 
 **Biggest risk file:** `pages-blocks/pages/[id]/PageBlocksClient.tsx` (client orchestration + optimistic mutations).
 
-**Recommended next split target:** `topics/actions.ts` (follow projects module pattern).
+**Recommended next split target:** `content/media/actions.ts` (follow topics module pattern).
 
 ---
 
 ## Batch 1: projects actions (completed)
 
-Commit scope: split `src/app/admin/projects/actions.ts` into `actions/` modules; keep `actions.ts` as `"use server"` barrel. All 10 public exports preserved; caller imports unchanged.
+Commit scope: split `src/app/admin/projects/actions.ts` into `project-actions/` modules; keep `actions.ts` as re-export barrel (no `"use server"`). All 10 public exports preserved; caller imports unchanged.
+
+---
+
+## Batch 2: topics actions (completed)
+
+Commit scope: split `src/app/admin/topics/actions.ts` into `topic-actions/` modules; keep `actions.ts` as re-export barrel (no `"use server"`). All 12 public exports preserved (10 functions + 2 types); caller imports unchanged.
+
+Structure:
+
+```
+src/app/admin/topics/
+  actions.ts
+  topic-actions/
+    index.ts
+    types.ts
+    helpers.ts
+    validation.ts
+    revalidate.ts
+    create.ts
+    update.ts
+    status.ts
+    delete.ts
+    duplicate.ts
+    bulk.ts
+```
+
+Audit verify script updated to target mutation modules under `topic-actions/`.
 
 ---
 
@@ -342,9 +369,8 @@ Safest sequence for future commits (one scoped slice per commit):
 |-------|------|------|
 | **0** | This plan (`docs/oversized-actions-split-plan.md`) | None |
 | **1** | ~~Split `projects/actions.ts`~~ | **Done** (Batch 1) |
-| **2** | Extract topics **form-helpers** + **revalidate** (barrel); run audit verify | Low–Medium |
-| **3** | Split topics mutations (create / update / status / duplicate / bulk) | Medium |
-| **4** | Repeat phases 2–3 for **media/actions.ts** (follow topics template) | Medium |
+| **2–3** | ~~Split `topics/actions.ts`~~ | **Done** (Batch 2) |
+| **4** | Repeat for **media/actions.ts** (follow topics template) | Medium |
 | **5** | Extract pages **page-lifecycle** from block assignment bulk | Medium |
 | **6** | Split pages **page-block-*** modules (shared → assign → mutations) | High |
 | **7** | Split `ProjectEditForm.tsx` into tab components | Medium |

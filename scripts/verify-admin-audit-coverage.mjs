@@ -12,7 +12,12 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const TARGET_FILES = [
   "src/app/admin/pages-blocks/pages/actions.ts",
-  "src/app/admin/topics/actions.ts",
+  "src/app/admin/topics/topic-actions/create.ts",
+  "src/app/admin/topics/topic-actions/update.ts",
+  "src/app/admin/topics/topic-actions/status.ts",
+  "src/app/admin/topics/topic-actions/delete.ts",
+  "src/app/admin/topics/topic-actions/duplicate.ts",
+  "src/app/admin/topics/topic-actions/bulk.ts",
   "src/app/admin/topics/categories/actions.ts",
   "src/app/admin/content/media/actions.ts",
   "src/app/admin/projects/project-actions/create.ts",
