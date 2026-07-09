@@ -428,9 +428,36 @@ All four oversized server-action targets are split; public `actions.ts` barrels 
 | `content/media/actions.ts` | `media-actions/` | 3 |
 | `pages-blocks/pages/actions.ts` | `page-actions/` | 4 |
 
-**Deferred (Batch 5):** `pages-blocks/menus/actions.ts` — see plan doc. **Split (Batch 5):** `pages-blocks/footer/actions.ts` → `footer-actions/`.
+**Batch 5:** `pages-blocks/footer/actions.ts` → `footer-actions/` (`7cc2221`).
+
+**Batch 6:** `pages-blocks/menus/actions.ts` → `menu-actions/` (`3d56bf2`).
 
 Remaining oversized work is **client components** (see `docs/client-components-split-plan.md`).
+
+---
+
+## Block Template Actions Review — Completed
+
+**Baseline:** `origin/main` @ `3d56bf2`.
+
+**Review:** `pages-blocks/blocks/*/actions.ts` (8 module-specific files).
+
+**Recommendation:** **No split required.** Block template actions are already domain-separated; no single file matches the prior oversized monolith pattern (~500–850 lines, 15+ exports in one file).
+
+| Module file | Lines (approx.) | Exports | Split? |
+|-------------|----------------:|--------:|--------|
+| `blocks/content/actions.ts` | 372 | 9 | No — largest file; monitor only |
+| `blocks/hero/actions.ts` | 232 | 6 | No — unique revalidation model |
+| `blocks/cards/actions.ts` | 188 | 8 | No |
+| `blocks/breadcrumb/actions.ts` | 163 | 6 | No |
+| `blocks/cta/actions.ts` | 171 | 8 | No |
+| `blocks/feed/actions.ts` | 159 | 6 | No |
+| `blocks/media-hub/actions.ts` | 44 | 1 | No |
+| `blocks/media-sidebar/actions.ts` | 41 | 1 | No |
+
+**Documentation:** [block-template-actions-architecture.md](block-template-actions-architecture.md)
+
+**Deferred (explicit):** `menu-actions/`-style splits for block templates. Future work limited to documentation, optional shared helper extraction, or behavior changes (audit, hero revalidation alignment) — each requires its own planning gate.
 
 ---
 
@@ -473,8 +500,9 @@ Preferred ordering principle: **documentation → helper extraction → low-risk
 
 | Area | Reason |
 |------|--------|
-| `pages-blocks/blocks/*/actions.ts` | Out of scope; template libraries separate from page assignments |
-| `pages-blocks/menus/actions.ts`, `footer/actions.ts` | Menus deferred (Batch 5); footer split in Batch 5 |
+| `pages-blocks/blocks/*/actions.ts` | **Reviewed — no split required** (see [block-template-actions-architecture.md](block-template-actions-architecture.md)) |
+| `pages-blocks/menus/actions.ts` | **Split done** (Batch 6 → `menu-actions/`) |
+| `pages-blocks/footer/actions.ts` | **Split done** (Batch 5 → `footer-actions/`) |
 | `lib/admin/audit/*` | Audit system complete; only move wrappers with actions if needed |
 | Public components / routes | Explicitly out of scope |
 | `TopicBulkPublishGate` / `MediaBulkPublishGate` | Touch only when moving bulk validation exports |
@@ -496,5 +524,6 @@ No change expected to audit coverage script (no action file moves).
 
 ## Related docs
 
+- [Block Template Actions Architecture](block-template-actions-architecture.md) — block template review closure (no split)
 - [Admin Audit Coverage](admin-audit-coverage.md) — audit call sites per action file
 - [Unified Content Engine ADR](architecture/UNIFIED_CONTENT_ENGINE.md)
