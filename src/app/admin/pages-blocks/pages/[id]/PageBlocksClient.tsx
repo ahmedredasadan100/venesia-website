@@ -3,20 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
-import {
-  ADMIN_DATA_GRID_ACTION_COLUMNS,
-  ADMIN_DATA_GRID_COLUMNS,
-  AdminBulkActionBar,
-  AdminDataGrid,
-  AdminDataGridCenterCell,
-  AdminDataGridCheckbox,
-  AdminDataGridCheckboxCell,
-  AdminDataGridEmpty,
-  AdminDataGridHeader,
-  AdminDataGridPrimaryCell,
-  AdminDataGridSortLabel,
-  useAdminGridSelection,
-} from "../../../../../components/admin/ui";
+import { AdminBulkActionBar, useAdminGridSelection } from "../../../../../components/admin/ui";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
 import { PAGE_BLOCK_ACTION_INITIAL } from "../../../../../lib/page-blocks/action-result";
 import {
@@ -38,7 +25,7 @@ import {
 } from "../actions";
 import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
 import AssignTemplateUsageWarning from "../../../../../components/admin/page-blocks/AssignTemplateUsageWarning";
-import PageBlocksAssignmentRow from "./page-blocks/PageBlocksAssignmentRow";
+import PageBlocksAssignmentsGrid from "./page-blocks/PageBlocksAssignmentsGrid";
 import PageBlocksDeleteConfirm from "./page-blocks/PageBlocksDeleteConfirm";
 import PageBlocksHeader from "./page-blocks/PageBlocksHeader";
 import { buildReorderInfo } from "./page-blocks/build-reorder-info";
@@ -78,9 +65,6 @@ type PageBlocksClientProps = {
 type AssignableModuleKind = PageBlockType | "hero" | "media-sidebar" | "media-hub";
 
 type SortKey = "module_kind" | "template_name" | "visibility";
-
-// 150px = secondary module-type column (no dedicated preset).
-const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.statusCompact} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
 
 const slotLabels = LAYOUT_SLOT_LABELS_AR;
 
@@ -224,14 +208,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     setRows(assignments);
   }, [assignments, setRows]);
 
-  function sortProps(key: SortKey) {
-    return {
-      active: table.sort.key === key,
-      direction: table.sort.direction,
-      onClick: () => table.toggleSort(key),
-    } as const;
-  }
-
   function handleToggleVisibility(row: PageBlockAssignmentRow) {
     if (!isManageableAssignment(row)) return;
     const isVisible = normalizeBoolean(row.is_visible, true);
@@ -324,59 +300,21 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
         isBusy={isPending}
       />
 
-      <AdminDataGrid summary={`${table.rows.length} موديول`}>
-        <AdminDataGridHeader columns={gridColumns}>
-          <AdminDataGridCheckboxCell>
-            <AdminDataGridCheckbox
-              checked={selection.allSelected}
-              onChange={(event) => selection.toggleAll(event.target.checked)}
-              inputRef={selection.selectAllRef}
-              label="تحديد الكل"
-            />
-          </AdminDataGridCheckboxCell>
-          <AdminDataGridPrimaryCell>
-            <AdminDataGridSortLabel {...sortProps("template_name")} className="justify-end">القالب</AdminDataGridSortLabel>
-          </AdminDataGridPrimaryCell>
-          <AdminDataGridCenterCell>
-            <AdminDataGridSortLabel {...sortProps("module_kind")} className="justify-center">النوع</AdminDataGridSortLabel>
-          </AdminDataGridCenterCell>
-          <AdminDataGridCenterCell>
-            <AdminDataGridSortLabel {...sortProps("visibility")} className="justify-center">الحالة</AdminDataGridSortLabel>
-          </AdminDataGridCenterCell>
-          <div className="text-center">الإجراءات</div>
-        </AdminDataGridHeader>
-
-        {table.rows.map((row, index) => {
-          const rowId = assignmentRowId(row);
-          const isVisible = normalizeBoolean(row.is_visible, true);
-          const manageable = isManageableAssignment(row);
-          return (
-            <PageBlocksAssignmentRow
-              key={rowId}
-              row={row}
-              rowId={rowId}
-              index={index}
-              columns={gridColumns}
-              manageable={manageable}
-              isVisible={isVisible}
-              isSelected={selection.selectedSet.has(rowId)}
-              isPending={isPending}
-              canReorderUp={Boolean(reorderInfo.get(rowId)?.up)}
-              canReorderDown={Boolean(reorderInfo.get(rowId)?.down)}
-              onToggleSelect={(checked) => selection.toggleOne(rowId, checked)}
-              onReorder={(direction) => handleReorder(row, direction)}
-              onToggleVisibility={() => handleToggleVisibility(row)}
-              onDelete={() => setDeletingAssignment(row)}
-            />
-          );
-        })}
-
-        {!table.rows.length ? (
-          <AdminDataGridEmpty>
-            لا توجد موديولات معيّنة. أنشئ موديولًا من Blocks Hub ثم اضغط «ربط موديول»، أو عيّن Hero من Hero Manager.
-          </AdminDataGridEmpty>
-        ) : null}
-      </AdminDataGrid>
+      <PageBlocksAssignmentsGrid
+        rows={table.rows}
+        sort={table.sort}
+        onToggleSort={table.toggleSort}
+        allSelected={selection.allSelected}
+        selectedSet={selection.selectedSet}
+        selectAllRef={selection.selectAllRef}
+        onToggleAll={(checked) => selection.toggleAll(checked)}
+        onToggleSelect={(rowId, checked) => selection.toggleOne(rowId, checked)}
+        isPending={isPending}
+        reorderInfo={reorderInfo}
+        onReorder={handleReorder}
+        onToggleVisibility={handleToggleVisibility}
+        onDelete={setDeletingAssignment}
+      />
 
       {assignModalOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setShowAssignModal(false)}>
