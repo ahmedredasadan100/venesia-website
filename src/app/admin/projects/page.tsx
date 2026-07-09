@@ -3,7 +3,7 @@ import AdminNotice from "../../../components/admin/AdminNotice";
 import { AdminInfoBar, AdminPageContextHeader, AdminPageHeader } from "../../../components/admin/ui";
 import { countProjectsByType } from "../../../lib/projects/queries";
 import { getProjectsTableReady } from "../../../lib/projects/seed-from-static-data";
-import { ProjectsHubCard } from "./ProjectsTableClient";
+import ProjectsHubCard from "./projects-table/ProjectsHubCard";
 
 export const dynamic = "force-dynamic";
 

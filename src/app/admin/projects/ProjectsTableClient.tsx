@@ -3,10 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
-  ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_RULES,
   AdminBulkActionBar,
-  AdminCard,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -29,61 +27,19 @@ import {
   restoreProjectAjax,
   toggleProjectPublicationAjax,
 } from "./actions";
+import {
+  buildColumns,
+  featuredLabel,
+  formatDate,
+  locationLabel,
+  publicationMeta,
+} from "./projects-table/projects-table-utils";
+import type { ProjectGridRow } from "./projects-table/projects-table-types";
 
-export type ProjectGridRow = {
-  id: number;
-  code: string;
-  slug?: string | null;
-  arabic_name: string;
-  location_label: string;
-  map_area: string;
-  featured: boolean;
-  publication_status: string | null;
-  updated_at: string;
-};
+export type { ProjectGridRow } from "./projects-table/projects-table-types";
 
 type LegacyProjectSortKey = "code" | "location" | "updated_at";
 type ReferenceProjectSortKey = "name" | "code" | "featured" | "status" | "updated_at";
-
-function buildColumns(withDuplicateAction: boolean, referenceLayout: boolean) {
-  if (referenceLayout) {
-    return `44px minmax(260px, 1fr) 96px 72px 96px 120px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
-  }
-
-  const actionsColumn = withDuplicateAction
-    ? ADMIN_DATA_GRID_ACTION_COLUMNS.four
-    : ADMIN_DATA_GRID_ACTION_COLUMNS.three;
-
-  return `44px minmax(96px,110px) minmax(200px,1.2fr) 90px 110px 150px ${actionsColumn}`;
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(value));
-  } catch {
-    return "—";
-  }
-}
-
-function publicationMeta(status?: string | null) {
-  if (status === "published") return { label: "منشور", tone: "green" as const };
-  if (status === "unpublished") return { label: "مخفي", tone: "gold" as const };
-  if (status === "archived") return { label: "أرشيف", tone: "muted" as const };
-  return { label: "مسودة", tone: "muted" as const };
-}
-
-function locationLabel(item: ProjectGridRow) {
-  return item.location_label || item.map_area || "—";
-}
-
-function featuredLabel(item: ProjectGridRow) {
-  return item.featured ? "نعم" : "لا";
-}
 
 function ArchiveIcon() {
   return (
@@ -630,36 +586,5 @@ export default function ProjectsTableClient({
         ) : null}
       </VenesiaActionModal>
     </div>
-  );
-}
-
-export function ProjectsHubCard({
-  href,
-  emoji,
-  title,
-  description,
-  count,
-}: {
-  href: string;
-  emoji: string;
-  title: string;
-  description: string;
-  count: number;
-}) {
-  return (
-    <Link href={href} className="block h-full">
-      <AdminCard interactive className="group h-full p-6">
-        <div className="flex items-start justify-between gap-4">
-          <span className="text-3xl">{emoji}</span>
-          <AdminStatusPill tone="green">{count} مشروع</AdminStatusPill>
-        </div>
-        <h2 className="mt-5 text-2xl font-semibold text-white">{title}</h2>
-        <p className="mt-4 min-h-[72px] text-sm leading-7 text-white/52">{description}</p>
-        <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#D8B87A]">
-          فتح المدير
-          <span aria-hidden="true">←</span>
-        </div>
-      </AdminCard>
-    </Link>
   );
 }
