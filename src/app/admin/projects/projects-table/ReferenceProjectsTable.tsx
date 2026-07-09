@@ -1,0 +1,280 @@
+import Link from "next/link";
+import {
+  ADMIN_DATA_GRID_RULES,
+  AdminDataGrid,
+  AdminDataGridActionButton,
+  AdminDataGridActionsCell,
+  AdminDataGridCheckbox,
+  AdminDataGridEmpty,
+  AdminDataGridHeader,
+  AdminDataGridRow,
+  AdminDataGridSortLabel,
+} from "../../../../components/admin/ui";
+import { useAdminTable } from "../../../../components/admin/table-engine";
+import AdminStatusPill from "../../../../components/admin/ui/AdminStatusPill";
+import type { ProjectCategory } from "../../../../config/projects-data";
+import { duplicateProjectAjax } from "../actions";
+import { featuredLabel, formatDate, publicationMeta } from "./projects-table-utils";
+import type { ProjectGridRow, ProjectRowActionHandlers } from "./projects-table-types";
+
+export type ReferenceProjectSortKey = "name" | "code" | "featured" | "status" | "updated_at";
+
+function ArchiveIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 7h18" />
+      <path d="M5 7l1 12h12l1-12" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+
+function RestoreIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 12a9 9 0 0 1 15-6.7" />
+      <path d="M18 3v4h-4" />
+      <path d="M21 12a9 9 0 0 1-15 6.7" />
+      <path d="M6 21v-4H2" />
+    </svg>
+  );
+}
+
+function PublicPreviewIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={ADMIN_DATA_GRID_RULES.actionIcon}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M14 3h7v7" />
+      <path d="M10 14 21 3" />
+      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
+    </svg>
+  );
+}
+
+function ProjectIcon({ type }: { type: ProjectCategory }) {
+  return (
+    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/16 bg-[#D8B87A]/8 text-[#D8B87A]">
+      {type === "commercial" ? (
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+          <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+          <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+          <path d="M10 6h4M10 10h4M10 14h4M10 18h4" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          <path d="M8 7h8M8 11h8M8 15h5" strokeLinecap="round" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+type ReferenceProjectsTableProps = {
+  type: ProjectCategory;
+  table: ReturnType<typeof useAdminTable<ProjectGridRow, ReferenceProjectSortKey>>;
+  columns: string;
+  handlers: ProjectRowActionHandlers;
+};
+
+export default function ReferenceProjectsTable({
+  type,
+  table,
+  columns,
+  handlers,
+}: ReferenceProjectsTableProps) {
+  function sortProps(key: ReferenceProjectSortKey) {
+    return {
+      active: table.sort.key === key,
+      direction: table.sort.direction,
+      onClick: () => table.toggleSort(key),
+    } as const;
+  }
+
+  return (
+    <AdminDataGrid summary={`${table.rows.length} مشروع`}>
+      <AdminDataGridHeader columns={columns}>
+        <div className="flex justify-center">
+          <AdminDataGridCheckbox
+            inputRef={table.selection.selectAllRef}
+            checked={table.selection.allSelected}
+            onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
+            label="تحديد الكل"
+          />
+        </div>
+        <div className="min-w-0 text-right">
+          <AdminDataGridSortLabel {...sortProps("name")} className="justify-end">
+            المشروع
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">
+          <AdminDataGridSortLabel {...sortProps("code")} className="justify-center">
+            Code
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">
+          <AdminDataGridSortLabel {...sortProps("featured")} className="justify-center">
+            Featured
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">
+          <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
+            Published
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">
+          <AdminDataGridSortLabel {...sortProps("updated_at")} className="justify-center">
+            التحديث
+          </AdminDataGridSortLabel>
+        </div>
+        <div className="text-center">الإجراءات</div>
+      </AdminDataGridHeader>
+
+      {table.rows.length ? (
+        table.rows.map((item) => {
+          const published = publicationMeta(item.publication_status);
+          const isPublished = item.publication_status === "published";
+          const isArchived = item.publication_status === "archived";
+          const previewPath = item.slug ? `/projects/${item.slug}` : null;
+
+          return (
+            <AdminDataGridRow key={item.id} columns={columns}>
+              <div className="flex justify-center">
+                <AdminDataGridCheckbox
+                  checked={table.selection.selectedSet.has(item.id)}
+                  onChange={(event) => table.selection.toggleOne(item.id, event.currentTarget.checked)}
+                  label={`تحديد ${item.arabic_name}`}
+                />
+              </div>
+
+              <div className="flex min-w-0 items-center gap-3">
+                <ProjectIcon type={type} />
+                <div className="min-w-0 text-right">
+                  <Link
+                    href={`/admin/projects/${item.id}`}
+                    className="block truncate font-semibold text-white transition hover:text-[#D8B87A]"
+                  >
+                    {item.arabic_name}
+                  </Link>
+                  <p className="mt-1 truncate font-en text-xs text-white/38">{item.code}</p>
+                </div>
+              </div>
+
+              <div className="min-w-0 text-center">
+                <span className="font-en block truncate text-xs text-[#D8B87A]/78">{item.code}</span>
+              </div>
+
+              <div className="flex justify-center">
+                <AdminStatusPill tone={item.featured ? "green" : "muted"}>{featuredLabel(item)}</AdminStatusPill>
+              </div>
+
+              <div className="flex justify-center">
+                <AdminStatusPill tone={published.tone}>{published.label}</AdminStatusPill>
+              </div>
+
+              <div className="text-center font-en text-xs tabular-nums text-white/55">
+                {formatDate(item.updated_at)}
+              </div>
+
+              <AdminDataGridActionsCell compact>
+                <AdminDataGridActionButton
+                  action="edit"
+                  href={`/admin/projects/${item.id}`}
+                  size="compact"
+                  title="تعديل المشروع"
+                />
+
+                {previewPath ? (
+                  <AdminDataGridActionButton
+                    href={previewPath}
+                    target="_blank"
+                    tone="dark"
+                    title="معاينة الصفحة العامة"
+                    size="compact"
+                  >
+                    <PublicPreviewIcon />
+                  </AdminDataGridActionButton>
+                ) : (
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    disabled
+                    title="لا يوجد slug للمعاينة"
+                    size="compact"
+                  >
+                    <PublicPreviewIcon />
+                  </AdminDataGridActionButton>
+                )}
+
+                {!isArchived ? (
+                  <AdminDataGridActionButton
+                    action="visibility"
+                    size="compact"
+                    hidden={isPublished}
+                    title={isPublished ? "إخفاء" : "نشر"}
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onTogglePublication(item.id, item.publication_status)}
+                  />
+                ) : (
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    size="compact"
+                    title="استعادة كمسودة"
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onRestore(item.id)}
+                  >
+                    <RestoreIcon />
+                  </AdminDataGridActionButton>
+                )}
+
+                <AdminDataGridActionButton
+                  action="duplicate"
+                  size="compact"
+                  title="نسخ المشروع"
+                  disabled={handlers.isPending}
+                  onClick={() => table.runAction(() => duplicateProjectAjax(item.id))}
+                />
+
+                {!isArchived ? (
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    size="compact"
+                    title="أرشفة المشروع"
+                    disabled={handlers.isPending}
+                    onClick={() => handlers.onArchive(item.id)}
+                  >
+                    <ArchiveIcon />
+                  </AdminDataGridActionButton>
+                ) : null}
+
+                <AdminDataGridActionButton
+                  tone="dark"
+                  size="compact"
+                  title="حذف نهائي"
+                  disabled={handlers.isPending}
+                  onClick={() => handlers.onRequestPermanentDelete(item)}
+                >
+                  <span className="text-[10px] font-bold text-red-300">DEL</span>
+                </AdminDataGridActionButton>
+              </AdminDataGridActionsCell>
+            </AdminDataGridRow>
+          );
+        })
+      ) : (
+        <AdminDataGridEmpty>
+          <p className="text-base font-semibold text-white">لا توجد مشاريع في هذه القائمة</p>
+          <p className="mt-2 text-sm text-white/45">
+            أضف مشروعًا جديدًا من لوحة التحكم أو تأكد من تنفيذ ملف SQL للجداول.
+          </p>
+        </AdminDataGridEmpty>
+      )}
+    </AdminDataGrid>
+  );
+}
