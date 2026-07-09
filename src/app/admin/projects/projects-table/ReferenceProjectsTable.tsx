@@ -78,6 +78,17 @@ function ProjectIcon({ type }: { type: ProjectCategory }) {
   );
 }
 
+function DeleteIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 7h16" />
+      <path d="M9 7V5h6v2" />
+      <path d="M7 7l1 13h8l1-13" />
+      <path d="M10 11v5M14 11v5" />
+    </svg>
+  );
+}
+
 type ReferenceProjectsTableProps = {
   type: ProjectCategory;
   table: ReturnType<typeof useAdminTable<ProjectGridRow, ReferenceProjectSortKey>>;
@@ -99,8 +110,12 @@ export default function ReferenceProjectsTable({
     } as const;
   }
 
+  const publishedCount = table.rows.filter((item) => item.publication_status === "published").length;
+
   return (
-    <AdminDataGrid summary={`${table.rows.length} مشروع`}>
+    <AdminDataGrid
+      summary={`${table.rows.length} مشروع${publishedCount ? ` — ${publishedCount} منشور` : ""}`}
+    >
       <AdminDataGridHeader columns={columns}>
         <div className="flex justify-center">
           <AdminDataGridCheckbox
@@ -117,17 +132,17 @@ export default function ReferenceProjectsTable({
         </div>
         <div className="text-center">
           <AdminDataGridSortLabel {...sortProps("code")} className="justify-center">
-            Code
+            الكود
           </AdminDataGridSortLabel>
         </div>
         <div className="text-center">
           <AdminDataGridSortLabel {...sortProps("featured")} className="justify-center">
-            Featured
+            مميز
           </AdminDataGridSortLabel>
         </div>
         <div className="text-center">
           <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
-            Published
+            حالة النشر
           </AdminDataGridSortLabel>
         </div>
         <div className="text-center">
@@ -146,7 +161,7 @@ export default function ReferenceProjectsTable({
           const previewPath = item.slug ? `/projects/${item.slug}` : null;
 
           return (
-            <AdminDataGridRow key={item.id} columns={columns}>
+            <AdminDataGridRow key={item.id} columns={columns} divided>
               <div className="flex justify-center">
                 <AdminDataGridCheckbox
                   checked={table.selection.selectedSet.has(item.id)}
@@ -161,15 +176,17 @@ export default function ReferenceProjectsTable({
                   <Link
                     href={`/admin/projects/${item.id}`}
                     className="block truncate font-semibold text-white transition hover:text-[#D8B87A]"
+                    title={`تعديل ${item.arabic_name}`}
                   >
                     {item.arabic_name}
                   </Link>
-                  <p className="mt-1 truncate font-en text-xs text-white/38">{item.code}</p>
                 </div>
               </div>
 
               <div className="min-w-0 text-center">
-                <span className="font-en block truncate text-xs text-[#D8B87A]/78">{item.code}</span>
+                <span className="font-en block truncate text-sm font-medium text-[#D8B87A]/85" title={item.code}>
+                  {item.code}
+                </span>
               </div>
 
               <div className="flex justify-center">
@@ -218,7 +235,7 @@ export default function ReferenceProjectsTable({
                     action="visibility"
                     size="compact"
                     hidden={isPublished}
-                    title={isPublished ? "إخفاء" : "نشر"}
+                    title={isPublished ? "إخفاء من الموقع" : "نشر في الموقع"}
                     disabled={handlers.isPending}
                     onClick={() => handlers.onTogglePublication(item.id, item.publication_status)}
                   />
@@ -257,11 +274,11 @@ export default function ReferenceProjectsTable({
                 <AdminDataGridActionButton
                   tone="dark"
                   size="compact"
-                  title="حذف نهائي"
+                  title="حذف نهائي — يتطلب تأكيدًا"
                   disabled={handlers.isPending}
                   onClick={() => handlers.onRequestPermanentDelete(item)}
                 >
-                  <span className="text-[10px] font-bold text-red-300">DEL</span>
+                  <DeleteIcon />
                 </AdminDataGridActionButton>
               </AdminDataGridActionsCell>
             </AdminDataGridRow>
@@ -269,9 +286,10 @@ export default function ReferenceProjectsTable({
         })
       ) : (
         <AdminDataGridEmpty>
-          <p className="text-base font-semibold text-white">لا توجد مشاريع في هذه القائمة</p>
-          <p className="mt-2 text-sm text-white/45">
-            أضف مشروعًا جديدًا من لوحة التحكم أو تأكد من تنفيذ ملف SQL للجداول.
+          <p className="text-base font-semibold text-white">لا توجد مشاريع سكنية في هذه القائمة</p>
+          <p className="mt-2 text-sm leading-7 text-white/45">
+            أضف مشروعًا سكنيًا جديدًا من زر «إضافة مشروع» أعلى الصفحة، أو راجع مركز المشروعات إن كنت تبحث عن مشروع
+            تجاري.
           </p>
         </AdminDataGridEmpty>
       )}

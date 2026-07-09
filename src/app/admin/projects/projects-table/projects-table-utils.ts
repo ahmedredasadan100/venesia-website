@@ -1,9 +1,11 @@
-import { ADMIN_DATA_GRID_ACTION_COLUMNS } from "../../../../components/admin/ui";
+import { adminDataGridActionsColumn, ADMIN_DATA_GRID_ACTION_COLUMNS } from "../../../../components/admin/ui";
 import type { ProjectGridRow } from "./projects-table-types";
 
 export function buildColumns(withDuplicateAction: boolean, referenceLayout: boolean) {
   if (referenceLayout) {
-    return `44px minmax(260px, 1fr) 96px 72px 96px 120px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+    // Reference rows expose 6 compact actions (edit, preview, publish, duplicate, archive, delete).
+    const referenceActions = adminDataGridActionsColumn(6, "compact");
+    return `44px minmax(280px, 1fr) 104px 80px 104px 124px ${referenceActions}`;
   }
 
   const actionsColumn = withDuplicateAction

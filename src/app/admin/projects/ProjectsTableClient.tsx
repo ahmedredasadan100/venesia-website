@@ -97,6 +97,8 @@ export default function ProjectsTableClient({
     <div className="space-y-4">
       {table.feedback ? (
         <div
+          role="status"
+          aria-live="polite"
           className={`rounded-[16px] border px-4 py-3 text-sm font-semibold ${
             table.feedback.type === "success"
               ? "border-emerald-400/18 bg-emerald-500/10 text-emerald-100"
