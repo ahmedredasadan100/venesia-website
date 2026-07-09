@@ -8,18 +8,13 @@ import {
   ADMIN_DATA_GRID_COLUMNS,
   AdminBulkActionBar,
   AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
   AdminDataGridCenterCell,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridPrimaryCell,
-  AdminDataGridRow,
   AdminDataGridSortLabel,
-  AdminDataGridStatusCell,
-  AdminStatusPill,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
@@ -27,7 +22,6 @@ import { PAGE_BLOCK_ACTION_INITIAL } from "../../../../../lib/page-blocks/action
 import {
   blockModuleListHref,
   fieldClassName,
-  moduleEditHref,
   moduleKindLabel,
   normalizeBoolean,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -44,6 +38,7 @@ import {
 } from "../actions";
 import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
 import AssignTemplateUsageWarning from "../../../../../components/admin/page-blocks/AssignTemplateUsageWarning";
+import PageBlocksAssignmentRow from "./page-blocks/PageBlocksAssignmentRow";
 import PageBlocksDeleteConfirm from "./page-blocks/PageBlocksDeleteConfirm";
 import PageBlocksHeader from "./page-blocks/PageBlocksHeader";
 import { buildReorderInfo } from "./page-blocks/build-reorder-info";
@@ -352,94 +347,27 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
         </AdminDataGridHeader>
 
         {table.rows.map((row, index) => {
+          const rowId = assignmentRowId(row);
           const isVisible = normalizeBoolean(row.is_visible, true);
           const manageable = isManageableAssignment(row);
           return (
-            <AdminDataGridRow
-              key={assignmentRowId(row)}
+            <PageBlocksAssignmentRow
+              key={rowId}
+              row={row}
+              rowId={rowId}
+              index={index}
               columns={gridColumns}
-              divided={index > 0}
-            >
-              <AdminDataGridCheckboxCell>
-                {manageable ? (
-                  <AdminDataGridCheckbox
-                    checked={selection.selectedSet.has(assignmentRowId(row))}
-                    onChange={(event) => selection.toggleOne(assignmentRowId(row), event.target.checked)}
-                    label={`تحديد ${row.template_name}`}
-                  />
-                ) : (
-                  <span className="text-xs text-white/25">—</span>
-                )}
-              </AdminDataGridCheckboxCell>
-
-              <AdminDataGridPrimaryCell className="flex items-center gap-2">
-                <Link
-                  href={moduleEditHref(row.module_kind, row.template_id)}
-                  className="min-w-0 truncate text-sm font-semibold text-white hover:text-[#D8B87A]"
-                  title={row.template_slug}
-                >
-                  {row.template_name}
-                </Link>
-                {row.module_kind !== "hero" && row.template_status !== "published" ? (
-                  <span className="shrink-0 rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-200/85">
-                    غير منشور
-                  </span>
-                ) : null}
-              </AdminDataGridPrimaryCell>
-
-              <AdminDataGridCenterCell className="truncate text-sm font-semibold text-white/75">
-                {moduleKindLabel(row.module_kind)}
-              </AdminDataGridCenterCell>
-
-              <AdminDataGridStatusCell>
-                <AdminStatusPill tone={isVisible ? "green" : "muted"}>
-                  {isVisible ? "ظاهر" : "مخفي"}
-                </AdminStatusPill>
-              </AdminDataGridStatusCell>
-
-              <AdminDataGridActionsCell compact>
-                {manageable ? (
-                  <>
-                    <AdminDataGridActionButton
-                      tone="dark"
-                      title="تحريك لأعلى"
-                      size="compact"
-                      disabled={isPending || !reorderInfo.get(assignmentRowId(row))?.up}
-                      onClick={() => handleReorder(row, "up")}
-                    >
-                      <span className="text-sm">↑</span>
-                    </AdminDataGridActionButton>
-                    <AdminDataGridActionButton
-                      tone="dark"
-                      title="تحريك لأسفل"
-                      size="compact"
-                      disabled={isPending || !reorderInfo.get(assignmentRowId(row))?.down}
-                      onClick={() => handleReorder(row, "down")}
-                    >
-                      <span className="text-sm">↓</span>
-                    </AdminDataGridActionButton>
-                  </>
-                ) : null}
-                <AdminDataGridActionButton
-                  action="edit"
-                  title="تعديل الموديول"
-                  href={moduleEditHref(row.module_kind, row.template_id)}
-                  size="compact"
-                />
-                {manageable ? (
-                  <>
-                    <AdminDataGridActionButton
-                      action="visibility"
-                      title={isVisible ? "إخفاء" : "إظهار"}
-                      size="compact"
-                      disabled={isPending}
-                      onClick={() => handleToggleVisibility(row)}
-                    />
-                    <AdminDataGridActionButton action="delete" title="حذف الربط" size="compact" onClick={() => setDeletingAssignment(row)} />
-                  </>
-                ) : null}
-              </AdminDataGridActionsCell>
-            </AdminDataGridRow>
+              manageable={manageable}
+              isVisible={isVisible}
+              isSelected={selection.selectedSet.has(rowId)}
+              isPending={isPending}
+              canReorderUp={Boolean(reorderInfo.get(rowId)?.up)}
+              canReorderDown={Boolean(reorderInfo.get(rowId)?.down)}
+              onToggleSelect={(checked) => selection.toggleOne(rowId, checked)}
+              onReorder={(direction) => handleReorder(row, direction)}
+              onToggleVisibility={() => handleToggleVisibility(row)}
+              onDelete={() => setDeletingAssignment(row)}
+            />
           );
         })}
 
