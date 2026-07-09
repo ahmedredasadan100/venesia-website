@@ -40,19 +40,19 @@ import {
   assignPageBlock,
   bulkPageBlockAssignments,
   deletePageBlockAssignment,
-  movePageBlockAssignment,
   togglePageBlockAssignment,
 } from "../actions";
 import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
 import AssignTemplateUsageWarning from "../../../../../components/admin/page-blocks/AssignTemplateUsageWarning";
 import PageBlocksDeleteConfirm from "./page-blocks/PageBlocksDeleteConfirm";
 import PageBlocksHeader from "./page-blocks/PageBlocksHeader";
+import { buildReorderInfo } from "./page-blocks/build-reorder-info";
 import {
   assignmentRowId,
-  compareAssignments,
   getSlotOptions,
   isManageableAssignment,
 } from "./page-blocks/page-blocks-utils";
+import { usePageBlocksReorder } from "./page-blocks/use-page-blocks-reorder";
 
 type PageRow = {
   id: number;
@@ -206,28 +206,15 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
   }, [assignments]);
 
   /** Up/down neighbour per row, scoped to same module kind + slot, ordered by sort_order. */
-  const reorderInfo = useMemo(() => {
-    const groups = new Map<string, PageBlockAssignmentRow[]>();
-    for (const row of table.rawRows) {
-      if (!isManageableAssignment(row)) continue;
-      const key = `${row.module_kind}::${row.slot}`;
-      const list = groups.get(key);
-      if (list) list.push(row);
-      else groups.set(key, [row]);
-    }
+  const reorderInfo = useMemo(() => buildReorderInfo(table.rawRows), [table.rawRows]);
 
-    const info = new Map<string, { up: PageBlockAssignmentRow | null; down: PageBlockAssignmentRow | null }>();
-    for (const group of groups.values()) {
-      const sorted = [...group].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
-      sorted.forEach((row, index) => {
-        info.set(assignmentRowId(row), {
-          up: index > 0 ? sorted[index - 1] : null,
-          down: index < sorted.length - 1 ? sorted[index + 1] : null,
-        });
-      });
-    }
-    return info;
-  }, [table.rawRows]);
+  const { handleReorder } = usePageBlocksReorder({
+    pageId: page.id,
+    table,
+    reorderInfo,
+    setActionMessage,
+    startTransition,
+  });
 
   const slotOptions = useMemo((): PageLayoutSlot[] => getSlotOptions(assignModuleKind), [assignModuleKind]);
 
@@ -267,43 +254,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
       }
       setActionMessage(null);
       router.refresh();
-    });
-  }
-
-  /** Optimistic in-table reorder — swaps sort_order with the adjacent sibling, rolls back on failure. */
-  function handleReorder(row: PageBlockAssignmentRow, direction: "up" | "down") {
-    const neighbour = reorderInfo.get(assignmentRowId(row));
-    const target = direction === "up" ? neighbour?.up : neighbour?.down;
-    if (!target) return;
-
-    const previousRows = table.rawRows;
-    const nextRows = previousRows
-      .map((current) => {
-        if (current.module_kind === row.module_kind && current.id === row.id) {
-          return { ...current, sort_order: target.sort_order };
-        }
-        if (current.module_kind === target.module_kind && current.id === target.id) {
-          return { ...current, sort_order: row.sort_order };
-        }
-        return current;
-      })
-      .sort(compareAssignments);
-
-    table.setRows(nextRows);
-    setActionMessage(null);
-
-    const formData = new FormData();
-    formData.set("page_id", String(page.id));
-    formData.set("block_type", row.module_kind);
-    formData.set("current_id", String(row.id));
-    formData.set("target_id", String(target.id));
-
-    startTransition(async () => {
-      const result = await movePageBlockAssignment(formData);
-      if (!result.ok) {
-        table.setRows(previousRows);
-        setActionMessage(result.message);
-      }
     });
   }
 
