@@ -84,10 +84,12 @@ Verbs: `create`, `update`, `delete`, `restore`, `publish`, `unpublish`, `reorder
 
 ### Menus
 
-`src/app/admin/pages-blocks/menus/actions.ts`
+`src/app/admin/pages-blocks/menus/menu-actions/`
 
-- Menu: create, update, visibility, delete, duplicate, bulk show/hide/delete, JSON import
-- Menu item: create, update, delete, visibility, reorder, duplicate, clear-all
+- Menu: create, update, visibility, delete, duplicate, bulk show/hide/delete, JSON import (`save.ts`, `menu-status.ts`, `delete.ts`, `duplicate.ts`, `bulk.ts`, `import.ts`)
+- Menu item: create, update, delete, visibility, reorder, duplicate, clear-all (`items-save.ts`, `items-delete.ts`, `items-status.ts`, `reorder.ts`, `duplicate.ts`, `bulk.ts`)
+
+Public barrel: `src/app/admin/pages-blocks/menus/actions.ts`
 
 ### Footer
 

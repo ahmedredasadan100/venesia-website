@@ -1,0 +1,131 @@
+import { buildCmsAuditAction, type CmsAuditVerb } from "../../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
+import { parseAdminLinkFromFormData } from "../../../../../lib/admin/links/form-fields";
+import {
+  adminLinkToMenuItemColumns,
+  parentOnlyMenuItemColumns,
+} from "../../../../../lib/admin/links/menu-bridge";
+import { resolveAdminLink } from "../../../../../lib/admin/links";
+import { validateAdminLink } from "../../../../../lib/admin/links/validate";
+import { normalizeSlugInput, slugifyFromTitle, validateSlugFormat } from "../../../../../lib/admin/slug";
+import { revalidateNavigationCache } from "../../../../../lib/cache/revalidate-public-cache-tags";
+import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidate-footer";
+import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
+import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import type { ImportedMenuItem } from "./types";
+
+export function getString(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function getNumber(formData: FormData, key: string) {
+  const raw = getString(formData, key);
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+export function getBoolean(formData: FormData, key: string) {
+  return formData.get(key) === "on" || formData.get(key) === "true";
+}
+
+export async function auditMenuAction(
+  entityType: "menu" | "menu_item",
+  verb: CmsAuditVerb,
+  options?: { entityId?: number | null; entityLabel?: string | null; metadata?: Record<string, unknown> },
+) {
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(entityType, verb),
+    entityType,
+    entityId: options?.entityId ?? null,
+    entityLabel: options?.entityLabel ?? null,
+    metadata: options?.metadata,
+  });
+}
+
+export function createSlug(value: string) {
+  const normalized = normalizeSlugInput(value);
+  if (normalized) return normalized;
+  return slugifyFromTitle(value);
+}
+
+export function menusPath(message?: string) {
+  return `/admin/pages-blocks/menus${message ? `?message=${encodeURIComponent(message)}` : ""}`;
+}
+
+export function menuPath(menuId: number | string, message?: string) {
+  return `/admin/pages-blocks/menus/${menuId}${message ? `?message=${encodeURIComponent(message)}` : ""}`;
+}
+
+export function backToMenus(message?: string): never {
+  redirect(menusPath(message));
+}
+
+export function backToMenu(menuId: number | string | null | undefined, message?: string): never {
+  if (!menuId) backToMenus(message);
+  redirect(menuPath(menuId, message));
+}
+
+export function assertValidMenuSlug(slug: string) {
+  const formatError = validateSlugFormat(slug);
+  if (formatError) backToMenus(formatError);
+}
+
+export function sortParentsBeforeChildren<T extends { parent_id?: unknown }>(items: T[]) {
+  return [...items].sort((a, b) => (a.parent_id ? 1 : 0) - (b.parent_id ? 1 : 0));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function parseImportedMenuItems(payload: unknown): ImportedMenuItem[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecord);
+  }
+
+  if (isRecord(payload) && Array.isArray(payload.items)) {
+    return payload.items.filter(isRecord);
+  }
+
+  return [];
+}
+
+export async function getMenuIdFromItem(itemId: number) {
+  const { data } = await getSupabaseAdmin().from("menu_items").select("menu_id").eq("id", itemId).maybeSingle();
+  return data?.menu_id ? Number(data.menu_id) : null;
+}
+
+export async function resolveMenuItemLink(formData: FormData) {
+  const menuId = getNumber(formData, "menu_id");
+
+  if (getBoolean(formData, "menu_item_is_parent")) {
+    return parentOnlyMenuItemColumns();
+  }
+
+  const link = parseAdminLinkFromFormData(formData, "menu_link");
+  if (link.link_kind === "none") {
+    backToMenu(menuId, "اختر رابطًا للعنصر أو فعّل Parent بدون رابط.");
+  }
+
+  const validation = validateAdminLink(link);
+  if (!validation.ok) backToMenu(menuId, validation.message);
+
+  const resolvedHref = await resolveAdminLink({ ...link, anchor: null });
+  return adminLinkToMenuItemColumns(link, resolvedHref);
+}
+
+export function revalidateNavigation() {
+  revalidateNavigationCache();
+  revalidateFooterPublicPaths();
+  revalidatePath("/");
+  revalidatePath("/about");
+  revalidatePath("/projects");
+  revalidatePath("/topics");
+  revalidateMediaCenterPublicPaths();
+  revalidatePath("/contact");
+  revalidatePath("/admin/pages-blocks/menus");
+}
