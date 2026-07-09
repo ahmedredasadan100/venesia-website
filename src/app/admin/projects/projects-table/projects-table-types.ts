@@ -9,3 +9,11 @@ export type ProjectGridRow = {
   publication_status: string | null;
   updated_at: string;
 };
+
+export type ProjectRowActionHandlers = {
+  onTogglePublication: (id: number, status: string | null) => void;
+  onArchive: (id: number) => void;
+  onRestore: (id: number) => void;
+  onRequestPermanentDelete: (item: ProjectGridRow) => void;
+  isPending: boolean;
+};
