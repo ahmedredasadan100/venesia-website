@@ -324,7 +324,7 @@ Optimistic reorder rollback, four `useActionState` assign flows, and session/dis
 
 **Biggest risk file:** `pages-blocks/pages/[id]/PageBlocksClient.tsx` (client orchestration + optimistic mutations).
 
-**Recommended next split target:** `pages-blocks/pages/actions.ts` (page lifecycle extraction).
+**Recommended next split target:** `pages-blocks/pages/[id]/PageBlocksClient.tsx` (client orchestration split — highest remaining risk).
 
 ---
 
@@ -387,6 +387,34 @@ Audit verify script updated to target mutation modules under `media-actions/`. U
 
 ---
 
+## Batch 4: page block actions (completed)
+
+Commit scope: split `src/app/admin/pages-blocks/pages/actions.ts` into `page-actions/` modules; keep `actions.ts` as re-export barrel (no `"use server"`). All 17 public exports preserved (15 functions + 2 types); caller imports unchanged.
+
+Structure:
+
+```
+src/app/admin/pages-blocks/pages/
+  actions.ts
+  page-actions/
+    index.ts
+    types.ts
+    helpers.ts
+    page-status.ts
+    page-delete.ts
+    page-duplicate.ts
+    assignment-create.ts
+    assignment-update.ts
+    assignment-reorder.ts
+    assignment-status.ts
+    assignment-delete.ts
+    bulk.ts
+```
+
+Audit verify script updated to target mutation modules under `page-actions/`. PageBlocksClient.tsx not touched.
+
+---
+
 ## Recommended execution order
 
 Safest sequence for future commits (one scoped slice per commit):
@@ -397,8 +425,7 @@ Safest sequence for future commits (one scoped slice per commit):
 | **1** | ~~Split `projects/actions.ts`~~ | **Done** (Batch 1) |
 | **2–3** | ~~Split `topics/actions.ts`~~ | **Done** (Batch 2) |
 | **4** | ~~Split `media/actions.ts`~~ | **Done** (Batch 3) |
-| **5** | Extract pages **page-lifecycle** from block assignment bulk | Medium |
-| **6** | Split pages **page-block-*** modules (shared → assign → mutations) | High |
+| **5–6** | ~~Split `pages-blocks/pages/actions.ts`~~ | **Done** (Batch 4) |
 | **7** | Split `ProjectEditForm.tsx` into tab components | Medium |
 | **8** | Split `PageBlocksClient.tsx` (utils → modal → grid → shell) | High |
 

@@ -11,7 +11,15 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const TARGET_FILES = [
-  "src/app/admin/pages-blocks/pages/actions.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/page-status.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/page-delete.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/page-duplicate.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/assignment-update.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/assignment-reorder.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/assignment-status.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/assignment-delete.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/bulk.ts",
   "src/app/admin/topics/topic-actions/create.ts",
   "src/app/admin/topics/topic-actions/update.ts",
   "src/app/admin/topics/topic-actions/status.ts",
