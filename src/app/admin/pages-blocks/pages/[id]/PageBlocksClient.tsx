@@ -6,7 +6,6 @@ import { useActionState, useEffect, useMemo, useState, useTransition } from "rea
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
-  AdminActionButton,
   AdminBulkActionBar,
   AdminDataGrid,
   AdminDataGridActionButton,
@@ -20,9 +19,7 @@ import {
   AdminDataGridRow,
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
-  AdminPageHeader,
   AdminStatusPill,
-  AdminInfoBar,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
@@ -32,10 +29,9 @@ import {
   fieldClassName,
   moduleEditHref,
   moduleKindLabel,
-  moduleListHref,
   normalizeBoolean,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { PAGE_LAYOUT_SLOTS, type PageBlockAssignmentRow, type PageBlockType } from "../../../../../lib/page-blocks/types";
+import { type PageBlockAssignmentRow, type PageBlockType } from "../../../../../lib/page-blocks/types";
 import { LAYOUT_SLOT_LABELS_AR, type PageLayoutSlot } from "../../../../../lib/page-blocks/layout-slots";
 import {
   assignHeroModule,
@@ -49,6 +45,14 @@ import {
 } from "../actions";
 import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
 import AssignTemplateUsageWarning from "../../../../../components/admin/page-blocks/AssignTemplateUsageWarning";
+import PageBlocksDeleteConfirm from "./page-blocks/PageBlocksDeleteConfirm";
+import PageBlocksHeader from "./page-blocks/PageBlocksHeader";
+import {
+  assignmentRowId,
+  compareAssignments,
+  getSlotOptions,
+  isManageableAssignment,
+} from "./page-blocks/page-blocks-utils";
 
 type PageRow = {
   id: number;
@@ -82,30 +86,6 @@ type SortKey = "module_kind" | "template_name" | "visibility";
 
 // 150px = secondary module-type column (no dedicated preset).
 const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.statusCompact} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
-
-function assignmentRowId(row: PageBlockAssignmentRow) {
-  return `${row.module_kind}:${row.id}`;
-}
-
-function isManageableAssignment(row: PageBlockAssignmentRow) {
-  return row.manages_assignment_on_page;
-}
-
-/** Canonical row order — mirrors getPageModuleAssignmentsForAdmin so optimistic order == server order. */
-function compareAssignments(a: PageBlockAssignmentRow, b: PageBlockAssignmentRow) {
-  const kindOrder = (kind: string) => (kind === "hero" ? -2 : kind === "breadcrumb" ? -1 : 0);
-  const byKind = kindOrder(a.module_kind) - kindOrder(b.module_kind);
-  if (byKind !== 0) return byKind;
-  return a.sort_order - b.sort_order || a.id - b.id;
-}
-
-/** Valid layout slots for a module kind — kinds with >1 option are inline-editable. */
-function getSlotOptions(kind: string): PageLayoutSlot[] {
-  if (kind === "hero" || kind === "breadcrumb") return ["hero"];
-  if (kind === "feed" || kind === "media-sidebar") return ["sidebar"];
-  if (kind === "media-hub") return ["main"];
-  return [...PAGE_LAYOUT_SLOTS];
-}
 
 const slotLabels = LAYOUT_SLOT_LABELS_AR;
 
@@ -363,63 +343,20 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     });
   }
 
+  function openAssignModal() {
+    setAssignTemplateId(null);
+    setAssignModalSession((session) => session + 1);
+    setShowAssignModal(true);
+  }
+
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <AdminPageHeader
-        eyebrow="مدير موديولات الصفحة"
-        title={page.title}
-        description="من هنا تراجع الموديولات المرتبطة بهذه الصفحة، وتتحكم في موضع ظهورها وترتيبها داخل الصفحة، بينما يظل تعديل المحتوى من مدير كل موديول."
-        meta={(
-          <div className="space-y-1 text-right leading-6">
-            <div>المسار: <span dir="ltr" className="font-en">{page.path || "/"}</span></div>
-            <div>الكود: <span dir="ltr" className="font-en">{page.slug}</span></div>
-            <div>عدد الموديولات بالصفحة: {assignments.length}</div>
-          </div>
-        )}
-        actions={(
-          <div className="flex flex-wrap items-center gap-3">
-            <AdminActionButton href="/admin/pages-blocks/pages" variant="ghost">
-              رجوع للصفحات
-            </AdminActionButton>
-            <AdminActionButton href="/admin/pages-blocks/blocks" variant="ghost">
-              إدارة الموديولات
-            </AdminActionButton>
-            <AdminActionButton href={page.path || "#"} variant="ghost">
-              معاينة عامة
-            </AdminActionButton>
-            <button
-              type="button"
-              onClick={() => {
-                setAssignTemplateId(null);
-                setAssignModalSession((session) => session + 1);
-                setShowAssignModal(true);
-              }}
-              className="inline-flex min-h-11 cursor-pointer items-center rounded-2xl bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
-            >
-              ربط موديول
-            </button>
-          </div>
-        )}
+      <PageBlocksHeader
+        page={page}
+        assignmentCount={assignments.length}
+        usedModuleKinds={usedModuleKinds}
+        onOpenAssignModal={openAssignModal}
       />
-
-      {usedModuleKinds.length ? (
-        <AdminInfoBar
-          label={`مرجع موديولات الصفحة ${page.title || page.slug}`}
-          description={(
-            <span className="flex flex-wrap items-center gap-2">
-              {usedModuleKinds.map((kind) => (
-                <Link
-                  key={kind}
-                  href={moduleListHref(kind)}
-                  className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
-                >
-                  {moduleKindLabel(kind)}
-                </Link>
-              ))}
-            </span>
-          )}
-        />
-      ) : null}
 
       {actionMessage ? (
         <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm text-red-100">
@@ -733,33 +670,13 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
       ) : null}
 
       {deletingAssignment ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setDeletingAssignment(null)}>
-          <div className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[#080B10] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.5)]" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-              <div>
-                <h3 className="text-xl font-semibold text-white">تأكيد حذف الربط</h3>
-                <p className="mt-1 text-sm text-white/45">يُحذف الربط من هذه الصفحة فقط — القالب يبقى في المكتبة.</p>
-              </div>
-              <CloseButton onClick={() => setDeletingAssignment(null)} />
-            </div>
-            <div className="mt-5 rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm leading-7 text-red-100">
-              حذف {moduleKindLabel(deletingAssignment.module_kind)} «{deletingAssignment.template_name}» من {page.title}؟
-            </div>
-            <div className="mt-5 flex justify-end gap-3">
-              <button type="button" onClick={() => setDeletingAssignment(null)} className="cursor-pointer rounded-2xl border border-white/10 px-5 py-3 text-sm text-white/60 hover:bg-white/5 hover:text-white">
-                إلغاء
-              </button>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={handleDeleteAssignment}
-                className="cursor-pointer rounded-2xl bg-red-500 px-5 py-3 text-sm font-bold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                حذف الربط
-              </button>
-            </div>
-          </div>
-        </div>
+        <PageBlocksDeleteConfirm
+          assignment={deletingAssignment}
+          pageTitle={page.title}
+          isPending={isPending}
+          onClose={() => setDeletingAssignment(null)}
+          onConfirm={handleDeleteAssignment}
+        />
       ) : null}
     </div>
   );
