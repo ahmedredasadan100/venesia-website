@@ -47,7 +47,7 @@ function BasicTabSection({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3 rounded-[20px] border border-white/10 bg-[#080B10]/72 p-4">
+    <section className="space-y-4 rounded-[20px] border border-white/10 bg-[#080B10]/72 p-5">
       <div className="space-y-1">
         <h3 className="text-[13px] font-semibold text-white">{title}</h3>
         {description ? <p className="text-[11px] leading-5 text-white/38">{description}</p> : null}
@@ -57,8 +57,17 @@ function BasicTabSection({
   );
 }
 
-function BasicFieldLabel({ children }: { children: ReactNode }) {
-  return <span className="text-[11px] font-semibold text-white/50">{children}</span>;
+function BasicFieldLabel({ children, optional }: { children: ReactNode; optional?: boolean }) {
+  return (
+    <span className="text-[11px] font-semibold text-white/50">
+      {children}
+      {optional ? <span className="font-normal text-white/30"> (اختياري)</span> : null}
+    </span>
+  );
+}
+
+function RequiredMark() {
+  return <span className="text-[#D8B87A]"> *</span>;
 }
 
 function PreservedLegacyFields({ project }: { project: ProjectRow }) {
@@ -104,7 +113,7 @@ function CompactSlugField({ project }: { project: ProjectRow }) {
 
   return (
     <div className="space-y-1.5">
-      <BasicFieldLabel>Slug</BasicFieldLabel>
+      <BasicFieldLabel>رابط الصفحة العامة (Slug)</BasicFieldLabel>
       <input type="hidden" name="slug" value={slug} />
       <div className="flex min-h-[46px] items-center gap-2 rounded-xl border border-white/10 bg-[#05070B] px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-en text-xs text-white/60" dir="ltr">
@@ -137,10 +146,15 @@ function CompactSlugField({ project }: { project: ProjectRow }) {
           onChange={(event) => setSlug(event.target.value.trim().toLowerCase())}
           placeholder={project.code.toLowerCase()}
           dir="ltr"
-          aria-label="Slug"
+          aria-label="رابط الصفحة العامة"
           className={inputClass("py-2 font-en text-sm")}
         />
       ) : null}
+      <p className="text-[10px] leading-5 text-white/35">
+        {showSlugEditor
+          ? "حروف إنجليزية صغيرة وشرطات فقط — يظهر في رابط المعاينة العامة."
+          : "يُستخدم في رابط المعاينة العامة. اضغط «تعديل» لتغييره."}
+      </p>
     </div>
   );
 }
@@ -150,15 +164,21 @@ function ProjectBasicTopSection({ project }: { project: ProjectRow }) {
     <BasicTabSection title="هوية المشروع وبيانات البطاقة" description="الحقول الأساسية للمشروع في صفين مدمجين.">
       <div className="grid gap-3 lg:grid-cols-12">
         <label className="block space-y-1.5 lg:col-span-4">
-          <BasicFieldLabel>Arabic Name</BasicFieldLabel>
+          <BasicFieldLabel>
+            الاسم بالعربية
+            <RequiredMark />
+          </BasicFieldLabel>
           <input name="arabic_name" required defaultValue={project.arabic_name} className={inputClass()} />
         </label>
         <label className="block space-y-1.5 lg:col-span-4">
-          <BasicFieldLabel>English Name</BasicFieldLabel>
+          <BasicFieldLabel optional>الاسم بالإنجليزية</BasicFieldLabel>
           <input name="english_name" defaultValue={project.english_name} dir="ltr" className={inputClass("font-en")} />
         </label>
         <label className="block space-y-1.5 lg:col-span-2">
-          <BasicFieldLabel>Project Code</BasicFieldLabel>
+          <BasicFieldLabel>
+            كود المشروع
+            <RequiredMark />
+          </BasicFieldLabel>
           <input name="code" required defaultValue={project.code} dir="ltr" className={inputClass("font-en")} />
         </label>
         <div className="lg:col-span-2">
@@ -168,17 +188,18 @@ function ProjectBasicTopSection({ project }: { project: ProjectRow }) {
 
       <div className="grid gap-3 lg:grid-cols-3 lg:items-start">
         <label className="block space-y-1.5 lg:col-span-1">
-          <BasicFieldLabel>Project Location</BasicFieldLabel>
+          <BasicFieldLabel optional>موقع المشروع</BasicFieldLabel>
           <input name="location_label" defaultValue={project.location_label} className={inputClass()} />
         </label>
         <label className="block space-y-1.5 lg:col-span-2">
-          <BasicFieldLabel>Short Description</BasicFieldLabel>
+          <BasicFieldLabel optional>وصف مختصر للبطاقة</BasicFieldLabel>
           <textarea
             name="short_description"
             rows={3}
             defaultValue={project.short_description}
             className={inputClass("min-h-[92px] resize-y leading-6")}
           />
+          <p className="text-[10px] leading-5 text-white/35">يظهر في بطاقات المشروع والقوائم — جملة أو جملتان.</p>
         </label>
       </div>
     </BasicTabSection>
@@ -196,7 +217,7 @@ function ProjectBasicTab({ project }: { project: ProjectRow }) {
         <div className="grid gap-4 md:grid-cols-2">
           <AdminMediaImageField
             name="image"
-            label="Project Image"
+            label="صورة البطاقة"
             defaultValue={project.image}
             browseFolder="images/projects"
             dimensionHint="content"
@@ -204,7 +225,7 @@ function ProjectBasicTab({ project }: { project: ProjectRow }) {
           />
           <AdminMediaImageField
             name="hero_image"
-            label="Hero Background"
+            label="خلفية الهيرو"
             defaultValue={project.hero_image}
             dimensionHint="hero"
             browseFolder="images/projects"
@@ -213,20 +234,20 @@ function ProjectBasicTab({ project }: { project: ProjectRow }) {
         </div>
       </BasicTabSection>
 
-      <BasicTabSection title="Brochure PDF" description="Optional project brochure for the download button on the public page.">
+      <BasicTabSection title="كتيب PDF" description="اختياري — يُفعّل زر التحميل في الصفحة العامة عند رفع ملف.">
         <AdminMediaFileField
           name="brochure_url"
-          label="Brochure PDF"
+          label="ملف الكتيب (PDF)"
           defaultValue={project.brochure_url}
           browseFolder="files/projects"
-          helperText="PDF only. Leave empty to hide the download button on the public site."
+          helperText="PDF فقط. اتركه فارغًا لإخفاء زر التحميل في الموقع."
         />
       </BasicTabSection>
 
       <BasicTabSection title="حالة التنفيذ" description="حقول موجودة — تُستخدم لاحقًا في Track Your Project.">
         <div className="grid gap-3 md:grid-cols-3">
           <label className="block space-y-1.5">
-            <BasicFieldLabel>Construction Status</BasicFieldLabel>
+            <BasicFieldLabel>حالة التنفيذ</BasicFieldLabel>
             <select name="status" defaultValue={project.status} className={inputClass()}>
               <option value="under-construction">تحت الإنشاء</option>
               <option value="excavation">حفر وأساسات</option>
@@ -235,11 +256,11 @@ function ProjectBasicTab({ project }: { project: ProjectRow }) {
             </select>
           </label>
           <label className="block space-y-1.5">
-            <BasicFieldLabel>Status Label</BasicFieldLabel>
+            <BasicFieldLabel optional>تسمية الحالة (عرض)</BasicFieldLabel>
             <input name="status_label" defaultValue={project.status_label} className={inputClass()} />
           </label>
           <label className="block space-y-1.5">
-            <BasicFieldLabel>Progress %</BasicFieldLabel>
+            <BasicFieldLabel optional>نسبة الإنجاز %</BasicFieldLabel>
             <input
               name="progress"
               type="number"
@@ -258,20 +279,20 @@ function ProjectBasicTab({ project }: { project: ProjectRow }) {
           <VisibilityToggle
             name="show_on_homepage"
             checked={project.show_on_homepage}
-            title="Show on Homepage"
+            title="الظهور في الصفحة الرئيسية"
             description="يظهر في slider الصفحة الرئيسية."
           />
           <VisibilityToggle
             name="featured"
             checked={project.featured}
-            title="Featured Project"
+            title="مشروع مميز"
             description="يظهر في قسم المشروع المميز."
           />
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block max-w-xs space-y-1.5">
-            <BasicFieldLabel>Homepage Order</BasicFieldLabel>
+            <BasicFieldLabel optional>ترتيب الصفحة الرئيسية</BasicFieldLabel>
             <input
               name="homepage_order"
               type="number"
@@ -282,13 +303,16 @@ function ProjectBasicTab({ project }: { project: ProjectRow }) {
             <p className="text-[10px] text-white/35">رقم أقل = ظهور أبكر.</p>
           </label>
           <label className="block max-w-sm space-y-1.5">
-            <BasicFieldLabel>Publication Status</BasicFieldLabel>
-            <select name="publication_status" defaultValue={project.publication_status} className={inputClass()}>
+            <BasicFieldLabel>حالة النشر في CMS</BasicFieldLabel>
+            <select name="publication_status" defaultValue={project.publication_status} className={inputClass()} aria-describedby="publication-status-hint">
               <option value="published">منشور</option>
               <option value="unpublished">مخفي</option>
               <option value="draft">مسودة</option>
               <option value="archived">أرشيف</option>
             </select>
+            <p id="publication-status-hint" className="text-[10px] leading-5 text-white/35">
+              «منشور» = ظاهر للزوار. «مخفي» أو «مسودة» = غير ظاهر. «أرشيف» = محفوظ وغير منشور.
+            </p>
           </label>
         </div>
       </BasicTabSection>
@@ -370,6 +394,7 @@ export default function ProjectEditForm({ bundle }: ProjectEditFormProps) {
             defaultItems={project.overview_bullets}
             placeholder="ميزة عن المشروع"
             addLabel="إضافة ميزة"
+            emptyHint="لا توجد مميزات — سيتم حفظ قائمة فارغة."
           />
           <AdminMediaImageField
             name="overview_video_image"
@@ -474,25 +499,27 @@ export default function ProjectEditForm({ bundle }: ProjectEditFormProps) {
             description="إعدادات SEO الأساسية فقط — التحسين المتقدم سيأتي في مرحلة لاحقة."
           />
           <label className="block">
-            <span className="text-sm font-medium text-white/70">SEO Title</span>
+            <span className="text-sm font-medium text-white/70">عنوان SEO</span>
             <input name="seo_title" defaultValue={project.seo_title ?? ""} className={`${inputClass} mt-3`} />
+            <p className="mt-2 text-[10px] leading-5 text-white/35">يظهر في عنوان تبويب المتصفح ونتائج البحث — اتركه فارغًا لاستخدام اسم المشروع.</p>
           </label>
           <label className="block">
-            <span className="text-sm font-medium text-white/70">SEO Description</span>
+            <span className="text-sm font-medium text-white/70">وصف SEO</span>
             <textarea name="seo_description" rows={4} defaultValue={project.seo_description ?? ""} className={`${inputClass} mt-3`} />
           </label>
           <AdminStringListField
             name="seo_keywords"
-            label="SEO Keywords"
+            label="كلمات مفتاحية"
             defaultItems={project.seo_keywords}
             placeholder="كلمة مفتاحية"
             addLabel="إضافة كلمة"
+            emptyHint="لا توجد كلمات مفتاحية — اختياري."
           />
           <label className="block">
-            <span className="text-sm font-medium text-white/70">Focus Keyword</span>
+            <span className="text-sm font-medium text-white/70">الكلمة المحورية</span>
             <input name="focus_keyword" defaultValue={project.focus_keyword ?? ""} className={`${inputClass} mt-3`} />
           </label>
-          <AdminMediaImageField name="og_image" label="OG Image" defaultValue={project.og_image ?? project.hero_image} browseFolder="images/projects" />
+          <AdminMediaImageField name="og_image" label="صورة المشاركة (OG)" defaultValue={project.og_image ?? project.hero_image} browseFolder="images/projects" />
         </div>
       ),
     },
@@ -515,16 +542,23 @@ export default function ProjectEditForm({ bundle }: ProjectEditFormProps) {
         <input type="hidden" name="id" value={project.id} />
         <AdminModuleTabs tabs={tabs} />
         <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-5">
-          <button type="submit" className="rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]">
+          <button
+            type="submit"
+            aria-label="حفظ تعديلات المشروع"
+            className="rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
+          >
             حفظ التعديلات
           </button>
           <AdminActionButton href={listPath} variant="dark">
             رجوع للقائمة
           </AdminActionButton>
           <AdminActionButton href={`/projects/${project.slug}`} variant="dark">
-            النسخة العامة
+            معاينة الصفحة العامة
           </AdminActionButton>
         </div>
+        <p className="text-[11px] leading-5 text-white/35">
+          الحفظ لا ينشر المشروع تلقائيًا — راجع «حالة النشر في CMS» في تبويب البيانات الأساسية.
+        </p>
       </form>
     </AdminCard>
     </div>
