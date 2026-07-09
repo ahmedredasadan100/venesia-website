@@ -415,6 +415,25 @@ Audit verify script updated to target mutation modules under `page-actions/`. Pa
 
 ---
 
+## Server Actions Split Workstream — Closed
+
+**Baseline:** `origin/main` after Batch 4 (`157959f`), Quality Gate green.
+
+All four oversized server-action targets are split; public `actions.ts` barrels preserved:
+
+| Target | Module folder | Batch |
+|--------|---------------|-------|
+| `projects/actions.ts` | `project-actions/` | 1 |
+| `topics/actions.ts` | `topic-actions/` | 2 |
+| `content/media/actions.ts` | `media-actions/` | 3 |
+| `pages-blocks/pages/actions.ts` | `page-actions/` | 4 |
+
+**Deferred (Batch 5):** `pages-blocks/menus/actions.ts` — see plan doc. **Split (Batch 5):** `pages-blocks/footer/actions.ts` → `footer-actions/`.
+
+Remaining oversized work is **client components** (see `docs/client-components-split-plan.md`).
+
+---
+
 ## Recommended execution order
 
 Safest sequence for future commits (one scoped slice per commit):
@@ -455,7 +474,7 @@ Preferred ordering principle: **documentation → helper extraction → low-risk
 | Area | Reason |
 |------|--------|
 | `pages-blocks/blocks/*/actions.ts` | Out of scope; template libraries separate from page assignments |
-| `pages-blocks/menus/actions.ts`, `footer/actions.ts` | Already moderate size; not in this audit |
+| `pages-blocks/menus/actions.ts`, `footer/actions.ts` | Menus deferred (Batch 5); footer split in Batch 5 |
 | `lib/admin/audit/*` | Audit system complete; only move wrappers with actions if needed |
 | Public components / routes | Explicitly out of scope |
 | `TopicBulkPublishGate` / `MediaBulkPublishGate` | Touch only when moving bulk validation exports |
