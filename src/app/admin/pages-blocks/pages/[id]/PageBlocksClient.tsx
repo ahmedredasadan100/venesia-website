@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { AdminBulkActionBar, useAdminGridSelection } from "../../../../../components/admin/ui";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
-import { PAGE_BLOCK_ACTION_INITIAL } from "../../../../../lib/page-blocks/action-result";
 import {
   blockModuleListHref,
   fieldClassName,
@@ -13,12 +12,8 @@ import {
   normalizeBoolean,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { type PageBlockAssignmentRow, type PageBlockType } from "../../../../../lib/page-blocks/types";
-import { LAYOUT_SLOT_LABELS_AR, type PageLayoutSlot } from "../../../../../lib/page-blocks/layout-slots";
+import { LAYOUT_SLOT_LABELS_AR } from "../../../../../lib/page-blocks/layout-slots";
 import {
-  assignHeroModule,
-  assignMediaHubModule,
-  assignMediaSidebarModule,
-  assignPageBlock,
   bulkPageBlockAssignments,
   deletePageBlockAssignment,
   togglePageBlockAssignment,
@@ -31,10 +26,13 @@ import PageBlocksHeader from "./page-blocks/PageBlocksHeader";
 import { buildReorderInfo } from "./page-blocks/build-reorder-info";
 import {
   assignmentRowId,
-  getSlotOptions,
   isManageableAssignment,
 } from "./page-blocks/page-blocks-utils";
 import { usePageBlocksReorder } from "./page-blocks/use-page-blocks-reorder";
+import {
+  type AssignableModuleKind,
+  usePageBlocksAssignModal,
+} from "./page-blocks/use-page-blocks-assign-modal";
 
 type PageRow = {
   id: number;
@@ -62,8 +60,6 @@ type PageBlocksClientProps = {
   };
 };
 
-type AssignableModuleKind = PageBlockType | "hero" | "media-sidebar" | "media-hub";
-
 type SortKey = "module_kind" | "template_name" | "visibility";
 
 const slotLabels = LAYOUT_SLOT_LABELS_AR;
@@ -78,53 +74,39 @@ function CloseButton({ onClick }: { onClick: () => void }) {
 
 export default function PageBlocksClient({ page, assignments, templates }: PageBlocksClientProps) {
   const router = useRouter();
-  const [showAssignModal, setShowAssignModal] = useState(false);
   const [deletingAssignment, setDeletingAssignment] = useState<PageBlockAssignmentRow | null>(null);
-  const [assignModuleKind, setAssignModuleKind] = useState<AssignableModuleKind>("content");
-  const [assignTemplateId, setAssignTemplateId] = useState<number | null>(null);
-  const [assignVisible, setAssignVisible] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const [assignState, assignBlockAction, assignBlockPending] = useActionState(assignPageBlock, PAGE_BLOCK_ACTION_INITIAL);
-  const [assignHeroState, assignHeroAction, assignHeroPending] = useActionState(assignHeroModule, PAGE_BLOCK_ACTION_INITIAL);
-  const [assignMediaSidebarState, assignMediaSidebarAction, assignMediaSidebarPending] = useActionState(
-    assignMediaSidebarModule,
-    PAGE_BLOCK_ACTION_INITIAL,
-  );
-  const [assignMediaHubState, assignMediaHubAction, assignMediaHubPending] = useActionState(
-    assignMediaHubModule,
-    PAGE_BLOCK_ACTION_INITIAL,
-  );
-  const assignPending = assignBlockPending || assignHeroPending || assignMediaSidebarPending || assignMediaHubPending;
-  const [assignModalSession, setAssignModalSession] = useState(0);
-  const [assignDismissSession, setAssignDismissSession] = useState<number | null>(null);
-  const [assignSubmitSession, setAssignSubmitSession] = useState<number | null>(null);
-  const [prevAssignPending, setPrevAssignPending] = useState(assignPending);
-  const [assignRefreshNonce, setAssignRefreshNonce] = useState(0);
-  const assignModalOpen = showAssignModal && assignDismissSession !== assignModalSession;
-
-  if (assignPending !== prevAssignPending) {
-    setPrevAssignPending(assignPending);
-
-      if (assignPending) {
-      setAssignSubmitSession(assignModalSession);
-    } else if (showAssignModal) {
-      if (assignState.ok || assignHeroState.ok || assignMediaSidebarState.ok || assignMediaHubState.ok) {
-        setAssignDismissSession(assignModalSession);
-        setAssignVisible(true);
-        setActionMessage(null);
-        setAssignRefreshNonce((value) => value + 1);
-      } else if (assignSubmitSession === assignModalSession) {
-        setActionMessage(assignState.message ?? assignHeroState.message ?? assignMediaSidebarState.message ?? assignMediaHubState.message);
-      }
-    }
-  }
-
-  useEffect(() => {
-    if (assignRefreshNonce === 0) return;
-    router.refresh();
-  }, [assignRefreshNonce, router]);
+  const {
+    assignModalOpen,
+    openAssignModal,
+    closeAssignModal,
+    assignModuleKind,
+    setAssignModuleKind,
+    assignTemplateId,
+    setAssignTemplateId,
+    assignVisible,
+    setAssignVisible,
+    assignPending,
+    templateOptions,
+    assignableTemplates,
+    slotOptions,
+    assignState,
+    assignHeroState,
+    assignMediaSidebarState,
+    assignMediaHubState,
+    assignBlockAction,
+    assignHeroAction,
+    assignMediaSidebarAction,
+    assignMediaHubAction,
+  } = usePageBlocksAssignModal({
+    pageId: page.id,
+    assignments,
+    templates,
+    setActionMessage,
+    router,
+  });
 
   const sortAccessors = useMemo(
     () => ({
@@ -144,34 +126,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
   const manageableRows = useMemo(() => assignments.filter(isManageableAssignment), [assignments]);
   const visibleRowIds = useMemo(() => manageableRows.map((row) => assignmentRowId(row)), [manageableRows]);
   const selection = useAdminGridSelection<string>(visibleRowIds);
-
-  const templateOptions = useMemo(
-    () =>
-      assignModuleKind === "hero"
-        ? templates.hero
-        : assignModuleKind === "media-sidebar"
-          ? templates.mediaSidebar
-          : assignModuleKind === "media-hub"
-            ? templates.mediaHub
-            : templates[assignModuleKind as PageBlockType] ?? [],
-    [assignModuleKind, templates],
-  );
-
-  const assignedTemplateIds = useMemo(() => {
-    const ids = new Set<number>();
-    for (const assignment of assignments) {
-      if (assignModuleKind === "hero" && assignment.module_kind === "hero") {
-        ids.add(assignment.template_id);
-      } else if (assignModuleKind === "media-sidebar" && assignment.module_kind === "media-sidebar") {
-        ids.add(assignment.template_id);
-      } else if (assignModuleKind === "media-hub" && assignment.module_kind === "media-hub") {
-        ids.add(assignment.template_id);
-      } else if (assignment.block_type === assignModuleKind) {
-        ids.add(assignment.template_id);
-      }
-    }
-    return ids;
-  }, [assignments, assignModuleKind]);
 
   const usedModuleKinds = useMemo(() => {
     const seen = new Set<string>();
@@ -194,13 +148,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     setActionMessage,
     startTransition,
   });
-
-  const slotOptions = useMemo((): PageLayoutSlot[] => getSlotOptions(assignModuleKind), [assignModuleKind]);
-
-  const assignableTemplates = useMemo(
-    () => templateOptions.filter((template) => !assignedTemplateIds.has(template.id)),
-    [templateOptions, assignedTemplateIds],
-  );
 
   const { setRows } = table;
 
@@ -264,12 +211,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     });
   }
 
-  function openAssignModal() {
-    setAssignTemplateId(null);
-    setAssignModalSession((session) => session + 1);
-    setShowAssignModal(true);
-  }
-
   return (
     <div className="space-y-6 pb-10" dir="rtl">
       <PageBlocksHeader
@@ -317,14 +258,14 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
       />
 
       {assignModalOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setShowAssignModal(false)}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={closeAssignModal}>
           <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[#080B10] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.5)]" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
               <div>
                 <h3 className="text-xl font-semibold text-white">ربط بلوك بالصفحة</h3>
                 <p className="mt-1 text-sm text-white/45">اختر قالبًا موجودًا — لن يُنشأ صف فارغ.</p>
               </div>
-              <CloseButton onClick={() => setShowAssignModal(false)} />
+              <CloseButton onClick={closeAssignModal} />
             </div>
 
             <form
@@ -473,7 +414,7 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
               ) : null}
 
               <div className="flex justify-end gap-3 md:col-span-2">
-                <button type="button" onClick={() => setShowAssignModal(false)} className="cursor-pointer rounded-2xl border border-white/10 px-5 py-3 text-sm text-white/60 hover:bg-white/5 hover:text-white">
+                <button type="button" onClick={closeAssignModal} className="cursor-pointer rounded-2xl border border-white/10 px-5 py-3 text-sm text-white/60 hover:bg-white/5 hover:text-white">
                   إلغاء
                 </button>
                 <button disabled={!assignableTemplates.length || assignPending} className="cursor-pointer rounded-2xl bg-[#D8B87A] px-5 py-3 text-sm font-bold text-[#06101C] hover:bg-[#e5c98d] disabled:cursor-not-allowed disabled:opacity-40">
