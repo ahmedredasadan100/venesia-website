@@ -40,7 +40,8 @@ const TARGET_FILES = [
   "src/app/admin/projects/project-actions/bulk.ts",
   "src/app/admin/content/series/actions.ts",
   "src/app/admin/pages-blocks/menus/actions.ts",
-  "src/app/admin/pages-blocks/footer/actions.ts",
+  "src/app/admin/pages-blocks/footer/footer-actions/save.ts",
+  "src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts",
   "src/app/admin/settings/general/actions.ts",
 ];
 
