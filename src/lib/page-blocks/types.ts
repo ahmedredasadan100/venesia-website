@@ -1,7 +1,7 @@
 import type { BreadcrumbBlockConfig, CardsBlockConfig, ContentBlockConfig, CtaBlockConfig } from "./configs";
 import type { PageLayoutSlot } from "./layout-slots";
 
-export { PAGE_LAYOUT_SLOTS, PAGE_BLOCK_SLOTS, type PageLayoutSlot, type PageBlockSlot } from "./layout-slots";
+export { PAGE_LAYOUT_SLOTS, type PageLayoutSlot } from "./layout-slots";
 
 export const PAGE_BLOCK_TYPES = ["content", "cta", "cards", "breadcrumb", "feed"] as const;
 /** Assignable block types — Slider was never included; use Hero instead (see deprecated-block-modules.ts). */

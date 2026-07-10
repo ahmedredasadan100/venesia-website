@@ -6,11 +6,6 @@ export const MEDIA_EDITABLE_CONTENT_TYPES = ["news", "press", "site_update", "vi
 
 export type MediaEditableContentType = (typeof MEDIA_EDITABLE_CONTENT_TYPES)[number];
 
-/** @deprecated use MEDIA_EDITABLE_CONTENT_TYPES */
-export const PHASE_3B_EDITABLE_CONTENT_TYPES = MEDIA_EDITABLE_CONTENT_TYPES;
-
-export type Phase3BEditableContentType = MediaEditableContentType;
-
 export const MEDIA_SECTION_OPTIONS = [
   { slug: "media-news", label: "الأخبار", contentType: "news" as const },
   { slug: "media-press", label: "البيانات الصحفية", contentType: "press" as const },
@@ -46,11 +41,6 @@ export function getContentTypeForSectionSlug(slug: string): MediaEditableContent
 
 export function isMediaEditableContentType(value?: string | null): value is MediaEditableContentType {
   return MEDIA_EDITABLE_CONTENT_TYPES.includes(value as MediaEditableContentType);
-}
-
-/** @deprecated use isMediaEditableContentType */
-export function isPhase3BEditableContentType(value?: string | null): value is MediaEditableContentType {
-  return isMediaEditableContentType(value);
 }
 
 export function isTextMediaSectionSlug(slug: string) {

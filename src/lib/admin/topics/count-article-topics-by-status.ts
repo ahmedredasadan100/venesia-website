@@ -10,34 +10,38 @@ export type ArticleTopicStatusCounts = {
   archived: number;
 };
 
-export async function countArticleTopicsByStatus(): Promise<ArticleTopicStatusCounts> {
-  const { data, error } = await getSupabaseAdmin()
+function articleTopicsCountQuery() {
+  return getSupabaseAdmin()
     .from("topics")
-    .select("status, deleted_at")
+    .select("*", { count: "exact", head: true })
     .eq("content_type", "article");
+}
 
-  if (error) throw new Error(error.message);
+async function readCount(
+  label: string,
+  result: { count: number | null; error: { message: string } | null },
+): Promise<number> {
+  if (result.error) throw new Error(`${label}: ${result.error.message}`);
+  return result.count ?? 0;
+}
 
-  const counts: ArticleTopicStatusCounts = {
-    total: 0,
-    published: 0,
-    draft: 0,
-    unpublished: 0,
-    archived: 0,
-  };
+export async function countArticleTopicsByStatus(): Promise<ArticleTopicStatusCounts> {
+  const [archivedResult, publishedResult, draftResult, unpublishedResult, totalResult] =
+    await Promise.all([
+      articleTopicsCountQuery().not("deleted_at", "is", null),
+      articleTopicsCountQuery().is("deleted_at", null).eq("status", "published"),
+      articleTopicsCountQuery().is("deleted_at", null).eq("status", "draft"),
+      articleTopicsCountQuery().is("deleted_at", null).eq("status", "unpublished"),
+      articleTopicsCountQuery().is("deleted_at", null),
+    ]);
 
-  for (const row of data ?? []) {
-    if (row.deleted_at) {
-      counts.archived += 1;
-      continue;
-    }
+  const [archived, published, draft, unpublished, total] = await Promise.all([
+    readCount("archived", archivedResult),
+    readCount("published", publishedResult),
+    readCount("draft", draftResult),
+    readCount("unpublished", unpublishedResult),
+    readCount("total", totalResult),
+  ]);
 
-    counts.total += 1;
-
-    if (row.status === "published") counts.published += 1;
-    else if (row.status === "draft") counts.draft += 1;
-    else if (row.status === "unpublished") counts.unpublished += 1;
-  }
-
-  return counts;
+  return { total, published, draft, unpublished, archived };
 }

@@ -327,8 +327,3 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
     },
   };
 }
-
-/** @deprecated Use getPageModuleAssignmentsForAdmin */
-export async function getPageBlockAssignmentsForAdmin(pageId: number): Promise<AssignmentQueryResult> {
-  return getPageModuleAssignmentsForAdmin(pageId);
-}

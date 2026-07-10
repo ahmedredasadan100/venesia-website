@@ -9,26 +9,34 @@ export type MediaTopicStatusCounts = {
   featured: number;
 };
 
-export async function countMediaTopicsByStatus(): Promise<MediaTopicStatusCounts> {
-  const { data, error } = await getSupabaseAdmin()
+function mediaTopicsCountQuery() {
+  return getSupabaseAdmin()
     .from("topics")
-    .select("status, is_featured")
+    .select("*", { count: "exact", head: true })
     .in("content_type", [...MEDIA_LIST_CONTENT_TYPES])
     .is("deleted_at", null);
+}
 
-  if (error) throw new Error(error.message);
+async function readCount(
+  label: string,
+  result: { count: number | null; error: { message: string } | null },
+): Promise<number> {
+  if (result.error) throw new Error(`${label}: ${result.error.message}`);
+  return result.count ?? 0;
+}
 
-  const counts: MediaTopicStatusCounts = {
-    published: 0,
-    draft: 0,
-    featured: 0,
-  };
+export async function countMediaTopicsByStatus(): Promise<MediaTopicStatusCounts> {
+  const [publishedResult, draftResult, featuredResult] = await Promise.all([
+    mediaTopicsCountQuery().eq("status", "published"),
+    mediaTopicsCountQuery().eq("status", "draft"),
+    mediaTopicsCountQuery().eq("is_featured", true),
+  ]);
 
-  for (const row of data ?? []) {
-    if (row.status === "published") counts.published += 1;
-    if (row.status === "draft") counts.draft += 1;
-    if (row.is_featured) counts.featured += 1;
-  }
+  const [published, draft, featured] = await Promise.all([
+    readCount("published", publishedResult),
+    readCount("draft", draftResult),
+    readCount("featured", featuredResult),
+  ]);
 
-  return counts;
+  return { published, draft, featured };
 }

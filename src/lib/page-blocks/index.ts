@@ -48,10 +48,9 @@ export {
 } from "./layout-slots";
 export type {
   PageBlockAssignmentRow,
-  PageBlockSlot,
   PageBlockStatus,
   PageBlockTemplateBase,
   PageBlockType,
   ResolvedPageBlock,
 } from "./types";
-export { PAGE_BLOCK_SLOTS, PAGE_BLOCK_TYPES } from "./types";
+export { PAGE_BLOCK_TYPES } from "./types";

@@ -1,5 +1,3 @@
-import { logError } from "./logging";
-
 export type PublicNavigationItem = {
   id?: number;
   label: string;
@@ -14,27 +12,6 @@ export type BreadcrumbItem = {
   label: string;
   href?: string;
 };
-
-/** Client-side fallback when navigation was not preloaded on the server. */
-export async function fetchPublicNavigation(location = "main") {
-  try {
-    const response = await fetch(`/api/navigation/${location}`, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to load navigation: ${response.status}`);
-    }
-
-    const payload = await response.json();
-    return Array.isArray(payload?.items)
-      ? (payload.items as PublicNavigationItem[])
-      : [];
-  } catch (error) {
-    logError("Client navigation fetch failed", error, { location });
-    return [];
-  }
-}
 
 export function flattenNavigationItems(items: readonly PublicNavigationItem[]): PublicNavigationItem[] {
   return items.flatMap((item) => [

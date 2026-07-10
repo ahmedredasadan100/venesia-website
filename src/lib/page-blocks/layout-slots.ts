@@ -6,12 +6,6 @@ export const PAGE_LAYOUT_SLOTS = ["hero", "main", "sidebar", "bottom", "footer"]
 
 export type PageLayoutSlot = (typeof PAGE_LAYOUT_SLOTS)[number];
 
-/** @deprecated Use PAGE_LAYOUT_SLOTS */
-export const PAGE_BLOCK_SLOTS = PAGE_LAYOUT_SLOTS;
-
-/** @deprecated Use PageLayoutSlot */
-export type PageBlockSlot = PageLayoutSlot;
-
 /** Render order for full-page stack layouts. */
 export const PAGE_LAYOUT_SLOT_ORDER: PageLayoutSlot[] = [
   "hero",

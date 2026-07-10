@@ -3,12 +3,12 @@ export { default as AdminPageContextHeader } from "./AdminPageContextHeader";
 export type { AdminPageContextHeaderProps } from "./AdminPageContextHeader";
 export {
   default as AdminTablePagination,
-  AdminPagination,
   buildAdminPaginationHref,
   buildAdminPaginationItems,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
-} from "./AdminPagination";export type { AdminTablePaginationProps, PageSizeSelectorMode } from "./AdminTablePagination";
+} from "./AdminTablePagination";
+export type { AdminTablePaginationProps, PageSizeSelectorMode } from "./AdminTablePagination";
 export { default as AdminMetricCard } from "./AdminMetricCard";
 export type { AdminMetricCardProps, AdminMetricCardTone } from "./AdminMetricCard";
 export { default as AdminMetricCardsGrid } from "./AdminMetricCardsGrid";
