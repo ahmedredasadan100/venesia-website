@@ -1,5 +1,9 @@
 import type { GlobalSeoSettings } from "./global-seo-types";
 import {
+  getFallbackGlobalOrganizationIdentity,
+  resolveGlobalOrganizationIdentity,
+} from "./resolve-global-organization-identity";
+import {
   buildBreadcrumbSchema,
   type BreadcrumbItem,
 } from "./build-breadcrumbs";
@@ -8,43 +12,44 @@ import type { JsonLdObject, JsonLdValue } from "./jsonld-types";
 import { absoluteAssetUrl, absoluteUrlWithBase } from "./seo-utils";
 
 export function buildOrganizationSchema(global?: GlobalSeoSettings): JsonLdObject {
-  const baseUrl = global?.canonicalBaseUrl || global?.siteUrl || "";
-  const name = global?.organizationName || global?.siteName || "";
-  const logo = global?.organizationLogo || "";
+  const identity = global
+    ? resolveGlobalOrganizationIdentity(global)
+    : getFallbackGlobalOrganizationIdentity();
+  const baseUrl = identity.canonicalBaseUrl || identity.siteUrl || "";
 
   const schema: JsonLdObject = {
     "@context": "https://schema.org",
     "@type": "RealEstateAgent",
-    name,
+    name: identity.displayName,
     url: baseUrl || undefined,
   };
 
-  if (global?.organizationDescription) {
-    schema.description = global.organizationDescription;
+  if (identity.description) {
+    schema.description = identity.description;
   }
 
-  if (logo) {
-    schema.logo = absoluteAssetUrl(logo, baseUrl);
-    schema.image = absoluteAssetUrl(logo, baseUrl);
+  if (identity.logo) {
+    schema.logo = absoluteAssetUrl(identity.logo, baseUrl);
+    schema.image = absoluteAssetUrl(identity.logo, baseUrl);
   }
 
-  if (global?.organizationPhone) {
-    schema.telephone = global.organizationPhone;
+  if (identity.phone) {
+    schema.telephone = identity.phone;
   }
 
-  if (global?.organizationEmail) {
-    schema.email = global.organizationEmail;
+  if (identity.email) {
+    schema.email = identity.email;
   }
 
-  if (global?.organizationAddress) {
+  if (identity.address) {
     schema.address = {
       "@type": "PostalAddress",
-      streetAddress: global.organizationAddress,
+      streetAddress: identity.address,
     };
   }
 
-  if (global?.organizationSocialLinks?.length) {
-    schema.sameAs = global.organizationSocialLinks.map((item) => item.href);
+  if (identity.socialLinks.length) {
+    schema.sameAs = identity.socialLinks.map((item) => item.href);
   }
 
   return schema;

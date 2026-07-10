@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { usePublicNavigation } from "./PublicNavigationProvider";
+import { usePublicBrand } from "./PublicBrandProvider";
 
 type DynamicNavItem = {
   id?: number;
@@ -73,6 +74,7 @@ function MenuLink({
 export default function SiteNavbar() {
   const pathname = usePathname();
   const navItems = usePublicNavigation() as DynamicNavItem[];
+  const brand = usePublicBrand();
   const [navScrolled, setNavScrolled] = useState(false);
   const [pathnameKey, setPathnameKey] = useState(pathname);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -131,10 +133,10 @@ export default function SiteNavbar() {
 
             <div className="min-h-10 min-w-[10.5rem] shrink-0">
               <p className="truncate whitespace-nowrap text-[15px] font-medium leading-5 tracking-wide text-white/90">
-                Venesia Developments
+                {brand.displayName}
               </p>
               <p className="truncate whitespace-nowrap text-[11px] leading-4 tracking-wide text-white/35">
-                Trust Built On Ground
+                {brand.displayTagline}
               </p>
             </div>
           </Link>
@@ -251,7 +253,7 @@ export default function SiteNavbar() {
               <span className="text-[10px] leading-none text-[#D8B87A]">◆</span>
             </div>
             <span className="text-[14px] font-medium text-white/85">
-              Venesia
+              {brand.mobileShortName}
             </span>
           </Link>
 

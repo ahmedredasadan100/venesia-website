@@ -1,6 +1,7 @@
 import JsonLd from "../../components/seo/JsonLd";
 import AppChrome from "../../components/AppChrome";
 import { FooterSettingsProvider } from "../../components/FooterSettingsProvider";
+import { PublicBrandProvider } from "../../components/PublicBrandProvider";
 import { PublicNavigationProvider } from "../../components/PublicNavigationProvider";
 import { loadFooterSettings } from "../../lib/footer/load-footer-settings";
 import { resolveFooterComposition } from "../../lib/footer/resolve-footer-composition";
@@ -12,6 +13,7 @@ import {
 } from "../../lib/seo/build-jsonld";
 import { buildAiVisibilityJson } from "../../lib/seo/build-ai-visibility";
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
+import { resolveGlobalOrganizationIdentity } from "../../lib/seo/resolve-global-organization-identity";
 
 /** DB-backed public layout: cached loaders (300s) with graceful fallbacks when Supabase is unavailable. */
 export const revalidate = 300;
@@ -25,6 +27,7 @@ export default async function SiteLayout({
   let footerNavItems: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
   let footerSettings = await loadFooterSettings().catch(() => null);
   const globalSeo = await loadResolvedGlobalSeo();
+  const organizationIdentity = resolveGlobalOrganizationIdentity(globalSeo);
 
   try {
     [navigationItems, footerNavItems] = await Promise.all([
@@ -56,13 +59,15 @@ export default async function SiteLayout({
       <JsonLd data={aiVisibilitySchema} />
 
       <PublicNavigationProvider items={navigationItems}>
-        <FooterSettingsProvider
-          settings={footerSettings}
-          footerNavItems={footerNavItems}
-          footerComposition={footerComposition}
-        >
-          <AppChrome>{children}</AppChrome>
-        </FooterSettingsProvider>
+        <PublicBrandProvider identity={organizationIdentity}>
+          <FooterSettingsProvider
+            settings={footerSettings}
+            footerNavItems={footerNavItems}
+            footerComposition={footerComposition}
+          >
+            <AppChrome>{children}</AppChrome>
+          </FooterSettingsProvider>
+        </PublicBrandProvider>
       </PublicNavigationProvider>
     </>
   );
