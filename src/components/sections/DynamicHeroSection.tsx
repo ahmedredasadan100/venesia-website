@@ -170,8 +170,8 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               </div>
             ) : null}
 
-            <h1 className="max-w-[12ch] max-md:max-w-none text-4xl font-bold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:text-6xl lg:text-7xl">
-              <span className="max-md:block max-md:whitespace-nowrap">{title}</span>
+            <h1 className="max-w-[12ch] max-md:max-w-none lg:max-w-none lg:pb-[1.06em] text-4xl font-bold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:text-6xl lg:text-7xl">
+              <span className="max-md:block max-md:whitespace-nowrap lg:whitespace-nowrap">{title}</span>
               {highlight ? (
                 <span className="mt-2 block bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-transparent md:mt-3">
                   {highlight}
