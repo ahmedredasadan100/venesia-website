@@ -66,7 +66,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       />
 
       <AdminInfoBar label="Series Edit" description="أي تعديل على اسم السلسلة أو الـ Slug يتم مزامنته مع الموضوعات المرتبطة بها." />
-      <SeriesForm mode="edit" series={data} categories={categories} />
+      <SeriesForm key={data.id} mode="edit" series={data} categories={categories} />
     </main>
   );
 }

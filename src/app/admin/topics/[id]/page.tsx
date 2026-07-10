@@ -56,8 +56,18 @@ export default async function EditTopicPage({
   const { id } = await params;
   const query = await searchParams;
 
+  if (!/^\d+$/.test(id)) notFound();
+
+  const topicId = Number(id);
+
   const [{ data: topic }, { data: categories }, { data: seriesRows }] = await Promise.all([
-    getSupabaseAdmin().from("topics").select("*").eq("id", id).eq("content_type", "article").maybeSingle(),
+    getSupabaseAdmin()
+      .from("topics")
+      .select("*")
+      .eq("id", topicId)
+      .eq("content_type", "article")
+      .is("deleted_at", null)
+      .maybeSingle(),
     getSupabaseAdmin()
       .from("topic_categories")
       .select("id, name, slug, parent_id, sort_order, is_active")
@@ -97,7 +107,7 @@ export default async function EditTopicPage({
       {notice ? <AdminNotice variant="success" message={notice} /> : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={errorMessage} /> : null}
 
-      <form id="topic-edit-form" action={saveTopic} className="space-y-7" noValidate>
+      <form id="topic-edit-form" key={topic.id} action={saveTopic} className="space-y-7" noValidate>
         <input type="hidden" name="id" value={topic.id} />
         <input type="hidden" name="status" value={status} />
 

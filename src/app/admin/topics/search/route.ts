@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   const { data } = await getSupabaseAdmin()
     .from("topics")
     .select("id, title, slug, category")
+    .eq("content_type", "article")
     .is("deleted_at", null)
     .or(`title.ilike.${q}%,slug.ilike.${q}%,category.ilike.${q}%`)
     .order("id", { ascending: false })

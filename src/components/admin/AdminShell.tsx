@@ -45,7 +45,7 @@ const menuItems: MenuItem[] = [
     label: "تحسين محركات البحث",
     icon: "◎",
     children: [
-      { href: "/admin/seo/meta-manager", label: "Meta Manager" },
+      { href: "/admin/seo/meta-manager", label: "إعدادات السيو العامة" },
       { href: "/admin/seo/redirects", label: "Redirects" },
       { href: "/admin/seo/sitemap", label: "Sitemap" },
     ],
