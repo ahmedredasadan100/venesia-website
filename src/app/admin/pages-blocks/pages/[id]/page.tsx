@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
+import { deriveHomepageFallbackStatus } from "../../../../../lib/home/derive-homepage-fallback-status";
 import { getPageModuleAssignmentsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
+import { loadPageCompositionBySlug } from "../../../../../lib/page-blocks/load-page-composition";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import HomepageFallbackStatusPanel from "./HomepageFallbackStatusPanel";
 import PageBlocksClient from "./PageBlocksClient";
 import PageSeoPanel from "./PageSeoPanel";
 
@@ -48,8 +51,15 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     );
   }
 
+  const homepageFallbackReport =
+    page.slug === "home"
+      ? deriveHomepageFallbackStatus(await loadPageCompositionBySlug("home", "stack"))
+      : null;
+
   return (
     <div className="space-y-7">
+      {homepageFallbackReport ? <HomepageFallbackStatusPanel report={homepageFallbackReport} /> : null}
+
       <PageSeoPanel
         pageId={page.id}
         path={page.path}
