@@ -120,9 +120,10 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
 
   const title = config.title ?? "";
   const highlight = config.highlight ?? "";
-  const description = config.description || config.subtitle || "";
+  const subtitle = config.subtitle ?? "";
+  const description = config.description ?? "";
 
-  const hasHeroContent = Boolean(images.length || title || highlight || description || config.eyebrow);
+  const hasHeroContent = Boolean(images.length || title || highlight || subtitle || description || config.eyebrow);
   if (!hasHeroContent) return null;
 
   return (
@@ -178,8 +179,16 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               ) : null}
             </h1>
 
-            {description ? (
-              <p className="mt-6 max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9">
+            {subtitle ? (
+              <p className="mt-5 max-w-2xl text-base leading-8 text-white/72 md:text-lg md:leading-9">
+                {subtitle}
+              </p>
+            ) : null}
+
+            {description && description !== subtitle ? (
+              <p
+                className={`${subtitle ? "mt-4" : "mt-6"} max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9`}
+              >
                 {description}
               </p>
             ) : null}
