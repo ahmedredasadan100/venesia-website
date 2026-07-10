@@ -1,16 +1,25 @@
 import "server-only";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import {
   revalidateBlockModuleCache,
   revalidatePageCompositionCache,
 } from "../cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { MEDIA_CENTER_PUBLIC_PATHS } from "../media-center-page-config";
+import { normalizePath } from "../seo/seo-utils";
 
 import { ALL_ASSIGNMENT_TABLES } from "./block-module-registry";
 
 const BASE_PUBLIC_PATHS = ["/", "/about", "/contact", "/topics", "/track-your-project", ...MEDIA_CENTER_PUBLIC_PATHS];
+
+function revalidateStoredPublicPagePath(path: string | null | undefined) {
+  if (!path) return;
+
+  const normalizedPath = normalizePath(path);
+  revalidatePath(normalizedPath, "page");
+  revalidateTag(`page-seo:${normalizedPath}`, "max");
+}
 
 function addPagePaths(paths: Set<string>, page?: { path: string | null; slug: string | null } | null) {
   if (!page) return;
@@ -58,7 +67,7 @@ export async function revalidatePublicPagesWithBlockAssignments() {
   const paths = await collectAssignedPublicPaths();
 
   for (const path of paths) {
-    revalidatePath(path, "page");
+    revalidateStoredPublicPagePath(path);
   }
 }
 
@@ -83,6 +92,6 @@ export async function revalidatePageBlocksPath(pageId: number) {
   addPagePaths(paths, page);
 
   for (const path of paths) {
-    revalidatePath(path, "page");
+    revalidateStoredPublicPagePath(path);
   }
 }

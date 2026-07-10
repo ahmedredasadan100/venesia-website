@@ -108,6 +108,25 @@ export function normalizePagePathInput(raw: string): NormalizePagePathResult {
 }
 
 /**
+ * Converts App Router catch-all segments into a normalized public path.
+ */
+export function resolvePublicPathFromSlugSegments(segments: string[]): NormalizePagePathResult {
+  if (!segments.length) {
+    return { ok: false, error: "مسار الصفحة غير صالح." };
+  }
+
+  const decodedSegments = segments.map((segment) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return segment;
+    }
+  });
+
+  return normalizePagePathInput(`/${decodedSegments.join("/")}`);
+}
+
+/**
  * Derives the internal pages.slug from a normalized public path.
  * Example: /company/our-vision → company-our-vision
  */

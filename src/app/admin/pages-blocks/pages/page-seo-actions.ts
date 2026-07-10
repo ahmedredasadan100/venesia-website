@@ -1,12 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import { revalidatePublicCacheTags } from "../../../../lib/cache/revalidate-public-cache-tags";
+import { normalizePath } from "../../../../lib/seo/seo-utils";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 function readString(formData: FormData, key: string) {
@@ -52,7 +53,18 @@ export async function savePageSeoAction(formData: FormData) {
     redirect(`${redirectTo}?seo_error=${encodeURIComponent(error.message)}`);
   }
 
+  const { data: page } = await getSupabaseAdmin()
+    .from("pages")
+    .select("path")
+    .eq("id", pageId)
+    .maybeSingle<{ path: string | null }>();
+
   revalidatePublicCacheTags(["page-seo", "pages"]);
+  if (page?.path) {
+    const normalizedPath = normalizePath(page.path);
+    revalidatePath(normalizedPath, "page");
+    revalidateTag(`page-seo:${normalizedPath}`, "max");
+  }
   revalidatePath(redirectTo);
 
   await recordCmsAdminAudit({
