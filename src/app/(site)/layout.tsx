@@ -14,8 +14,7 @@ import { buildAiVisibilityJson } from "../../lib/seo/build-ai-visibility";
 import { buildFaqSchema } from "../../lib/seo/build-faq-schema";
 import { VENESIA_FAQS } from "../../config/seo/faq-schema";
 
-/** DB-backed public layout: avoid build-time prerender hangs if Supabase is unreachable. */
-export const dynamic = "force-dynamic";
+/** DB-backed public layout: cached loaders (300s) with graceful fallbacks when Supabase is unavailable. */
 export const revalidate = 300;
 
 const organizationSchema = buildOrganizationSchema();
