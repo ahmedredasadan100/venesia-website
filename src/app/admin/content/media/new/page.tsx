@@ -23,7 +23,7 @@ export default async function NewMediaContentPage({
         eyebrow="MEDIA CENTER CONTROL"
         title="إضافة محتوى إعلامي"
         contextLine="إنشاء عنصر جديد"
-        description="اختر قسم المركز الإعلامي أولًا — النموذج يتكيّف تلقائيًا بين المحتوى النصي والفيديو ومعرض الصور."
+        description="اختر قسم المركز الإعلامي أولًا — النموذج يتكيّف تلقائيًا بين المحتوى النصي والفيديو ومعرض الصور. الحقول المطلوبة: القسم، العنوان، والـ slug. تُحفظ الحالة الافتراضية كمسودة."
         breadcrumb={
           <>
             <Link href="/admin" className="transition hover:text-[#D8B87A]">

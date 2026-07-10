@@ -53,7 +53,7 @@ export default async function EditMediaContentPage({
         eyebrow="MEDIA CENTER CONTROL"
         title="تعديل محتوى إعلامي"
         contextLine={topic.title || "بدون عنوان"}
-        description="عدّل بيانات النشر والمحتوى حسب نوع القسم — الفيديو ومعرض الصور يستخدمان حقولًا مخصصة."
+        description="عدّل بيانات النشر والمحتوى حسب نوع القسم — الفيديو ومعرض الصور يستخدمان حقولًا مخصصة. يُحفظ التعديل في مكانه دون نقل أو إعادة نشر تلقائية."
         meta={<MediaContentTypeBadge contentType={topic.content_type} compact />}
         breadcrumb={
           <>
@@ -82,6 +82,9 @@ export default async function EditMediaContentPage({
             <Link
               href={`/admin/content/media/${topic.id}/preview`}
               target="_blank"
+              rel="noopener noreferrer"
+              aria-label="معاينة داخلية — تفتح في نافذة جديدة"
+              title="معاينة داخلية — تفتح في نافذة جديدة"
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18 hover:bg-white/[0.05]"
             >
               معاينة داخلية
@@ -90,7 +93,11 @@ export default async function EditMediaContentPage({
         }
       />
 
-      {notice ? <AdminNotice variant="success" message={notice} /> : null}
+      {notice ? (
+        <div role="status" aria-live="polite">
+          <AdminNotice variant="success" message={notice} />
+        </div>
+      ) : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر حفظ المحتوى" message={errorMessage} /> : null}
 
       <MediaContentForm

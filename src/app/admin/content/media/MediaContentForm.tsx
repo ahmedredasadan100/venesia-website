@@ -137,7 +137,11 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
               <div className="space-y-4">
                 <SectionTypeHint sectionSlug={selectedSection} />
 
-                <AdminFormField label="قسم المركز الإعلامي" required>
+                <AdminFormField
+                  label="قسم المركز الإعلامي"
+                  hint="يحدد نوع المحتوى والحقول المتاحة — لا يمكن تغييره بسهولة بعد الإنشاء."
+                  required
+                >
                   <select
                     name="category_slug"
                     required
@@ -154,7 +158,10 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
                   </select>
                 </AdminFormField>
 
-                <AdminFormField label="الحالة">
+                <AdminFormField
+                  label="الحالة"
+                  hint="مسودة: غير مرئية. منشور: متاح للعرض. مخفي: محفوظ لكن غير معروض. أرشيف: غير نشط."
+                >
                   <select
                     name="status"
                     defaultValue={values?.status ?? "draft"}
@@ -167,15 +174,22 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
                   </select>
                 </AdminFormField>
 
-                <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                  <span className="text-sm font-medium text-white/70">مميز</span>
-                  <input
-                    type="checkbox"
-                    name="is_featured"
-                    defaultChecked={Boolean(values?.is_featured)}
-                    className="h-4 w-4 accent-[#D8B87A]"
-                  />
-                </label>
+                <AdminFormField
+                  label="محتوى مميز"
+                  hint="يُبرز هذا المحتوى في مواقع بارزة داخل المركز الإعلامي."
+                  className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-white/70">تفعيل التمييز</span>
+                    <input
+                      type="checkbox"
+                      name="is_featured"
+                      defaultChecked={Boolean(values?.is_featured)}
+                      aria-label="تفعيل التمييز"
+                      className="h-4 w-4 accent-[#D8B87A]"
+                    />
+                  </div>
+                </AdminFormField>
               </div>
             </AdminFormSection>
 
@@ -233,7 +247,7 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
 
             <TopicSlugInput defaultValue={values?.slug ?? ""} />
 
-            <AdminFormField label="الموجز">
+            <AdminFormField label="الموجز" hint="اختياري — يظهر في قوائم المركز الإعلامي وبطاقات المحتوى.">
               <textarea
                 name="excerpt"
                 rows={4}
@@ -250,7 +264,7 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
             eyebrow="VIDEO PAYLOAD"
             eyebrowClassName="text-rose-200/60"
             title="بيانات الفيديو"
-            description="YouTube فقط — يُحفظ في media_payload داخل topics."
+            description="YouTube فقط — الرابط مطلوب عند النشر، والمدة والصورة المصغّرة اختياريان."
             compactHeader
             className="border-rose-400/12"
           >
@@ -268,7 +282,7 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
             eyebrow="GALLERY PAYLOAD"
             eyebrowClassName="text-amber-200/60"
             title="معرض الصور"
-            description="أضف روابط الصور مع alt وcaption اختياريين."
+            description="أضف روابط الصور مع alt وcaption اختياريين. صورة واحدة على الأقل مطلوبة عند النشر."
             compactHeader
             className="border-amber-400/12"
           >
@@ -293,13 +307,18 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
 
       <AdminStickyFormBar
         title={mode === "edit" ? "حفظ التعديلات" : "إنشاء المحتوى"}
-        description="تأكد من اختيار القسم الصحيح قبل الحفظ — الحقول تتغير حسب نوع المحتوى."
+        description={
+          mode === "edit"
+            ? "يُحفظ التعديل فورًا عند الضغط على «حفظ التعديلات» دون مغادرة الصفحة."
+            : "يُنشأ المحتوى كمسودة ما لم تغيّر الحالة. تأكد من اختيار القسم الصحيح — الحقول تتغير حسب النوع."
+        }
       >
         <AdminActionButton href="/admin/content/media" variant="dark">
-          {mode === "edit" ? "رجوع للقائمة" : "إلغاء"}
+          {mode === "edit" ? "رجوع للقائمة" : "إلغاء والعودة للقائمة"}
         </AdminActionButton>
         <button
           type="submit"
+          aria-label={mode === "edit" ? "حفظ التعديلات" : "إنشاء المحتوى"}
           className="rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
         >
           {mode === "edit" ? "حفظ التعديلات" : "إنشاء المحتوى"}

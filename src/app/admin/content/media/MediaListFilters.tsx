@@ -26,7 +26,7 @@ const STATUS_OPTIONS = [
 ];
 
 const FEATURED_OPTIONS = [
-  { value: "yes", label: "مميز" },
+  { value: "yes", label: "مميز فقط" },
   { value: "no", label: "غير مميز" },
 ];
 
@@ -104,7 +104,8 @@ export default function MediaListFilters({ q, contentType, status, featured }: M
         onClear={() => {
           setSearchValue("");
         }}
-        placeholder="البحث بالعنوان أو slug..."
+        placeholder="ابحث بالعنوان أو الرابط (slug)..."
+        clearLabel="مسح البحث"
       />
 
       <AdminFilterListbox
@@ -150,12 +151,12 @@ export default function MediaListFilters({ q, contentType, status, featured }: M
       <AdminFilterListbox
         id="featured"
         isMounted={isMounted}
-        placeholder="مميز"
+        placeholder="التمييز"
         value={featuredValue}
         displayValue={
           featuredValue === "all"
-            ? "مميز"
-            : FEATURED_OPTIONS.find((item) => item.value === featuredValue)?.label ?? "مميز"
+            ? "التمييز"
+            : FEATURED_OPTIONS.find((item) => item.value === featuredValue)?.label ?? "التمييز"
         }
         isOpen={openDropdown === "featured"}
         onToggle={() => setOpenDropdown((current) => (current === "featured" ? null : "featured"))}
@@ -171,18 +172,20 @@ export default function MediaListFilters({ q, contentType, status, featured }: M
         {hasActiveFilters ? (
           <Link
             href="/admin/content/media#media-table"
+            aria-label="إعادة تعيين جميع الفلاتر"
             className="inline-flex h-10 items-center rounded-full border border-white/10 px-4 text-sm text-white/55 transition hover:border-white/20 hover:text-white"
           >
-            تصفير
+            إعادة تعيين
           </Link>
         ) : null}
 
         <button
           type="button"
           onClick={() => applyFilters()}
+          aria-label="تطبيق البحث والفلاتر"
           className="inline-flex h-10 items-center rounded-full bg-[#D8B87A] px-5 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
         >
-          بحث
+          تطبيق
         </button>
       </div>
     </AdminFiltersShell>

@@ -233,7 +233,7 @@ export default async function AdminUnifiedMediaContentPage({
       <AdminPageContextHeader
         eyebrow="MEDIA CENTER CONTROL"
         title="إدارة محتوى المركز الإعلامي"
-        description="أنشئ وحرّر الأخبار والبيانات الصحفية وتحديثات التنفيذ والفيديو ومعرض الصور من مكان واحد — مع ربط واضح بالتصنيفات والنشر."
+        description="أنشئ وحرّر الأخبار والبيانات الصحفية وتحديثات التنفيذ والفيديو ومعرض الصور من مكان واحد. استخدم الفلاتر للبحث بالعنوان أو الرابط، أو حسب النوع والحالة والتمييز."
         actions={
           <>
             <AdminActionButton href="/admin/content/media/new" variant="primary">
@@ -250,7 +250,11 @@ export default async function AdminUnifiedMediaContentPage({
         }
       />
 
-      {notice ? <AdminNotice variant={params?.notice === "error" ? "danger" : "success"} message={notice} /> : null}
+      {notice ? (
+        <div role="status" aria-live="polite">
+          <AdminNotice variant={params?.notice === "error" ? "danger" : "success"} message={notice} />
+        </div>
+      ) : null}
 
       {error ? (
         <AdminNotice variant="danger" title="تعذر تحميل المحتوى الإعلامي" message={error.message} />
@@ -261,8 +265,8 @@ export default async function AdminUnifiedMediaContentPage({
           { label: "إجمالي المحتوى", value: totalCount, tone: "gold", compact: true },
           { label: "منشور", value: mediaStatusCounts.published, tone: "green", compact: true },
           { label: "مسودات", value: mediaStatusCounts.draft, tone: "amber", compact: true },
-          { label: "مميز", value: mediaStatusCounts.featured, tone: "violet", compact: true },
-          { label: "المعروض الآن", value: safeRows.length, tone: "blue", compact: true },
+          { label: "محتوى مميز", value: mediaStatusCounts.featured, tone: "violet", compact: true },
+          { label: "في هذه الصفحة", value: safeRows.length, tone: "blue", compact: true },
           { label: "الأقسام", value: 5, suffix: "أنواع", tone: "cyan", compact: true },
         ]}
       />
@@ -274,7 +278,7 @@ export default async function AdminUnifiedMediaContentPage({
         featured={filters.featured}
       />
 
-      <section id="media-table" className="scroll-mt-6">
+      <section id="media-table" className="scroll-mt-6" aria-label="جدول المحتوى الإعلامي">
         <MediaTableClient
           key={currentListPath}
           rows={safeRows}
@@ -293,7 +297,7 @@ export default async function AdminUnifiedMediaContentPage({
           pageSize={limitValue}
           currentPage={safePage}
           totalPages={totalPages}
-          emptySummaryText="لا توجد عناصر مطابقة"
+          emptySummaryText="لا يوجد محتوى مطابق للفلاتر الحالية"
         />
       </section>
     </main>

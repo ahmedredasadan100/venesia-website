@@ -114,7 +114,7 @@ export default function MediaRowActions({ item, currentListPath }: MediaRowActio
           ? { href: editHref, title: "تعديل" }
           : { disabled: true, title: "التعديل غير متاح" }
       }
-      preview={previewHref ? { href: previewHref, title: "معاينة المحتوى" } : null}
+      preview={previewHref ? { href: previewHref, title: "معاينة داخلية" } : null}
       visibility={{
         action: isPublished ? unpublishMediaContent : publishMediaContent,
         hiddenFields,

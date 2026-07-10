@@ -67,6 +67,13 @@ function getStatusLabel(status?: string | null) {
   return "مسودة";
 }
 
+function getStatusHint(status?: string | null) {
+  if (status === "published") return "متاح للعرض في المركز الإعلامي";
+  if (status === "unpublished") return "محفوظ لكن غير معروض للجمهور";
+  if (status === "archived") return "غير نشط — محفوظ للأرشيف";
+  return "غير منشور — يمكن متابعة التحرير";
+}
+
 export default function MediaTableClient({
   rows,
   currentListPath,
@@ -153,7 +160,9 @@ export default function MediaTableClient({
               </AdminDataGridCenterCell>
 
               <AdminDataGridStatusCell>
-                <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
+                <span title={getStatusHint(row.status)}>
+                  <AdminStatusPill tone={getStatusTone(row.status)}>{getStatusLabel(row.status)}</AdminStatusPill>
+                </span>
               </AdminDataGridStatusCell>
 
               <MediaRowActions item={row} currentListPath={currentListPath} />
@@ -162,9 +171,9 @@ export default function MediaTableClient({
         ) : (
           <AdminDataGridEmpty>
             <AdminListEmptyState
-              title="لا توجد عناصر مطابقة."
-              description="جرّب تصفير الفلاتر أو إنشاء محتوى جديد."
-              action={{ href: "/admin/content/media/new", label: "+ إضافة محتوى جديد" }}
+              title="لا يوجد محتوى مطابق"
+              description="جرّب تعديل معايير البحث أو إعادة تعيين الفلاتر، أو أنشئ محتوى جديدًا."
+              action={{ href: "/admin/content/media/new", label: "إضافة محتوى جديد" }}
             />
           </AdminDataGridEmpty>
         )}

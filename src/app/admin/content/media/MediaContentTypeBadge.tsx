@@ -48,7 +48,7 @@ export function getSectionTypeHint(sectionSlug: string) {
   if (sectionSlug === "media-videos") {
     return {
       title: "محتوى فيديو",
-      description: "أدخل رابط YouTube والمدة والصورة المصغّرة. يُحفظ في media_payload.",
+      description: "أدخل رابط YouTube والمدة والصورة المصغّرة. الرابط مطلوب عند النشر.",
       tone: "video" as const,
     };
   }
@@ -56,7 +56,7 @@ export function getSectionTypeHint(sectionSlug: string) {
   if (sectionSlug === "media-gallery") {
     return {
       title: "معرض صور",
-      description: "أضف صور المعرض مع alt وcaption. يُحفظ في media_payload.",
+      description: "أضف صور المعرض مع alt وcaption. صورة واحدة على الأقل مطلوبة عند النشر.",
       tone: "gallery" as const,
     };
   }
