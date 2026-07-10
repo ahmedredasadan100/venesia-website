@@ -28,6 +28,7 @@ async function resolveLatestOrPopular(
   let query = getSupabaseAdmin()
     .from("topics")
     .select("slug, title, excerpt, image, date_label, published_at")
+    .eq("content_type", "article")
     .eq("status", "published")
     .is("deleted_at", null);
 
@@ -128,6 +129,7 @@ async function loadTopicImagesBySeriesSlug(seriesSlugs: string[]) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select("series_slug, image, slug")
+    .eq("content_type", "article")
     .eq("status", "published")
     .is("deleted_at", null)
     .in("series_slug", seriesSlugs);

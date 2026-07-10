@@ -65,6 +65,7 @@ async function getPublishedTopicRoutes(): Promise<MetadataRoute.Sitemap> {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select("slug, published_at, updated_at, is_featured")
+    .eq("content_type", "article")
     .eq("status", "published")
     .is("deleted_at", null)
     .not("slug", "is", null);

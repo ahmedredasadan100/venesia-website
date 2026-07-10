@@ -104,12 +104,16 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
 const LISTING_SELECT =
   "id, slug, title, excerpt, image, category, category_slug, series, series_slug, date_label, published_at, reading_time, is_featured, is_popular";
 
+/** Public /topics routes only expose article topics; media lives under /media-center. */
+const PUBLIC_TOPIC_CONTENT_TYPE = "article";
+
 function applyPublicTopicFilters(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
   categorySlug?: string,
 ) {
   let next = query
+    .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
     .eq("status", "published")
     .is("deleted_at", null)
     .not("slug", "like", "e2e-test%");
@@ -271,6 +275,7 @@ async function queryPublishedPublicTopics(): Promise<Topic[]> {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select("*")
+    .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
     .eq("status", "published")
     .is("deleted_at", null);
 
@@ -297,6 +302,7 @@ async function queryPublicTopicBySlug(slug: string): Promise<PublicTopicDetail |
     .from("topics")
     .select("*")
     .eq("slug", slug)
+    .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
     .eq("status", "published")
     .is("deleted_at", null)
     .maybeSingle();
@@ -332,6 +338,7 @@ async function queryRelatedPublicTopics(topic: PublicTopicDetail): Promise<Publi
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select("*")
+    .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
     .eq("status", "published")
     .is("deleted_at", null)
     .neq("id", topic.id)
