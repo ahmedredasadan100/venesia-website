@@ -16,7 +16,6 @@ type PageBlocksHeaderPage = {
 
 type PageBlocksHeaderProps = {
   page: PageBlocksHeaderPage;
-  assignmentCount: number;
   onOpenAssignModal: () => void;
 };
 
@@ -58,7 +57,6 @@ export function PageModuleKindsBar({ page, usedModuleKinds }: PageModuleKindsBar
 
 export default function PageBlocksHeader({
   page,
-  assignmentCount,
   onOpenAssignModal,
 }: PageBlocksHeaderProps) {
   const previewPath = page.path || "/";
@@ -68,23 +66,6 @@ export default function PageBlocksHeader({
       eyebrow="PAGE BUILDER"
       title={resolveEditorTitle(page)}
       description="تحكّم في إعدادات الصفحة، هيكلها، والموديولات المعروضة داخلها."
-      meta={(
-        <div className="space-y-1 text-right text-xs leading-6 text-[#D8B87A]/90">
-          <div>
-            المسار:{" "}
-            <span dir="ltr" className="font-en">
-              {previewPath}
-            </span>
-          </div>
-          <div>
-            الكود:{" "}
-            <span dir="ltr" className="font-en">
-              {page.slug}
-            </span>
-          </div>
-          <div>الموديولات: {assignmentCount}</div>
-        </div>
-      )}
       actions={(
         <>
           <AdminActionButton href="/admin/pages-blocks/pages" variant="dark">

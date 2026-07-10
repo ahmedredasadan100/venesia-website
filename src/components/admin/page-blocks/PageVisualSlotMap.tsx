@@ -40,21 +40,8 @@ export default function PageVisualSlotMap({ assignments }: PageVisualSlotMapProp
   const grouped = groupAssignmentsBySlot(assignments);
 
   return (
-    <section className="rounded-[28px] border border-[#D8B87A]/14 bg-[#080B10]/92 p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-en text-[11px] tracking-[0.32em] text-[#D8B87A]/70">PAGE MAP</p>
-          <h2 className="mt-2 text-xl font-semibold text-white">خريطة الصفحة</h2>
-          <p className="mt-2 text-sm text-white/45">
-            راجع ترتيب أقسام الصفحة وهيكل المحتوى الظاهر للزائر.
-          </p>
-        </div>
-        <span className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/50">
-          {assignments.length} موديول
-        </span>
-      </div>
-
-      <div className="mt-6 grid gap-4 xl:grid-cols-5">
+    <div>
+      <div className="grid gap-4 xl:grid-cols-5">
         {PAGE_LAYOUT_SLOT_ORDER.map((slot) => {
           const rows = grouped.get(slot) ?? [];
           const isEmpty = rows.length === 0;
@@ -131,7 +118,7 @@ export default function PageVisualSlotMap({ assignments }: PageVisualSlotMapProp
         </Link>{" "}
         — فتحة footer هنا للموديولات قبل الفوتر على مستوى الصفحة فقط.
       </p>
-    </section>
+    </div>
   );
 }
 
