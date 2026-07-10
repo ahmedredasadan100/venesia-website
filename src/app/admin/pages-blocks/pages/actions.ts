@@ -3,6 +3,8 @@ export {
   assignMediaHubModule,
   assignMediaSidebarModule,
   assignPageBlock,
+  checkPagePathAvailable,
+  createPage,
   bulkDeletePagesAjax,
   bulkPageBlockAssignments,
   deletePage,

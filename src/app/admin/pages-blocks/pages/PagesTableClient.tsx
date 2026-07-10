@@ -31,6 +31,7 @@ import { ADMIN_LIST_PAGE } from "../../../../lib/admin/admin-ui-styles";
 import { formatPageTypeLabel } from "../../../../lib/admin/pages/format-page-type-label";
 import type { PagesListSort } from "../../../../lib/admin/pages/load-pages-table-rows";
 import { getPageDeleteBlockReason } from "../../../../lib/pages/page-admin-policy";
+import CreatePageModal from "./CreatePageModal";
 import { bulkDeletePagesAjax, deletePage, duplicatePage, togglePageStatus } from "./actions";
 
 export type AdminPageListRow = {
@@ -179,6 +180,7 @@ export default function PagesTableClient({
         eyebrow="Admin Panel"
         title="إدارة الصفحات"
         description="إدارة صفحات الموقع ومكوناتها، مع التحكم في الترتيب، الربط، وحالة النشر."
+        actions={<CreatePageModal />}
       />
 
       {notice ? <AdminNotice variant="success" message={notice} /> : null}
