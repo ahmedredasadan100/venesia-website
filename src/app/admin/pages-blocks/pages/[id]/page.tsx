@@ -5,12 +5,19 @@ import { loadPageCompositionBySlug } from "../../../../../lib/page-blocks/load-p
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import HomepageFallbackStatusPanel from "./HomepageFallbackStatusPanel";
 import PageBlocksClient from "./PageBlocksClient";
-import PageSeoPanel from "./PageSeoPanel";
 
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
-  searchParams?: Promise<{ seo_notice?: string; seo_error?: string }> | { seo_notice?: string; seo_error?: string };
+  searchParams?:
+    | Promise<{ seo_notice?: string; seo_error?: string; tab?: string }>
+    | { seo_notice?: string; seo_error?: string; tab?: string };
 };
+
+function resolveInitialTabId(tab: string | undefined, hasSeoFeedback: boolean) {
+  if (tab === "seo" || tab === "map" || tab === "modules") return tab;
+  if (hasSeoFeedback) return "seo";
+  return "modules";
+}
 
 export default async function PageBlocksDetailsPage({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
@@ -56,24 +63,27 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       ? deriveHomepageFallbackStatus(await loadPageCompositionBySlug("home", "stack"))
       : null;
 
+  const seoNotice = resolvedSearchParams?.seo_notice ?? null;
+  const seoError = resolvedSearchParams?.seo_error
+    ? decodeURIComponent(resolvedSearchParams.seo_error)
+    : null;
+
   return (
     <div className="space-y-7">
       {homepageFallbackReport ? <HomepageFallbackStatusPanel report={homepageFallbackReport} /> : null}
-
-      <PageSeoPanel
-        pageId={page.id}
-        path={page.path}
-        seoTitle={page.seo_title ?? ""}
-        seoDescription={page.seo_description ?? ""}
-        seoKeywords={Array.isArray(page.seo_keywords) ? page.seo_keywords : []}
-        notice={resolvedSearchParams?.seo_notice ?? null}
-        error={resolvedSearchParams?.seo_error ? decodeURIComponent(resolvedSearchParams.seo_error) : null}
-      />
 
       <PageBlocksClient
         page={page}
         assignments={assignmentsData.assignments}
         templates={assignmentsData.templates}
+        seo={{
+          seoTitle: page.seo_title ?? "",
+          seoDescription: page.seo_description ?? "",
+          seoKeywords: Array.isArray(page.seo_keywords) ? page.seo_keywords : [],
+          notice: seoNotice,
+          error: seoError,
+        }}
+        initialTabId={resolveInitialTabId(resolvedSearchParams?.tab, Boolean(seoNotice || seoError))}
       />
     </div>
   );

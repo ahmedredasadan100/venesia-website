@@ -63,7 +63,7 @@ export default function PageSeoPanel({
         <input
           type="hidden"
           name="redirect_to"
-          value={`/admin/pages-blocks/pages/${pageId}`}
+          value={`/admin/pages-blocks/pages/${pageId}?tab=seo`}
         />
 
         <AdminFormSection eyebrow="METADATA" title="العنوان والوصف" compactHeader>

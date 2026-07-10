@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import AdminModuleTabs from "../../../../../components/admin/page-blocks/AdminModuleTabs";
+import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
 import { AdminBulkActionBar, useAdminGridSelection } from "../../../../../components/admin/ui";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
 import {
@@ -14,11 +16,11 @@ import {
   deletePageBlockAssignment,
   togglePageBlockAssignment,
 } from "../actions";
-import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
+import PageSeoPanel from "./PageSeoPanel";
 import PageBlocksAssignModal from "./page-blocks/PageBlocksAssignModal";
 import PageBlocksAssignmentsGrid from "./page-blocks/PageBlocksAssignmentsGrid";
 import PageBlocksDeleteConfirm from "./page-blocks/PageBlocksDeleteConfirm";
-import PageBlocksHeader from "./page-blocks/PageBlocksHeader";
+import PageBlocksHeader, { PageModuleKindsBar } from "./page-blocks/PageBlocksHeader";
 import { buildReorderInfo } from "./page-blocks/build-reorder-info";
 import {
   assignmentRowId,
@@ -51,11 +53,25 @@ type PageBlocksClientProps = {
     mediaSidebar: TemplateOption[];
     mediaHub: TemplateOption[];
   };
+  seo: {
+    seoTitle: string;
+    seoDescription: string;
+    seoKeywords: string[];
+    notice?: string | null;
+    error?: string | null;
+  };
+  initialTabId?: string;
 };
 
 type SortKey = "module_kind" | "template_name" | "visibility";
 
-export default function PageBlocksClient({ page, assignments, templates }: PageBlocksClientProps) {
+export default function PageBlocksClient({
+  page,
+  assignments,
+  templates,
+  seo,
+  initialTabId,
+}: PageBlocksClientProps) {
   const router = useRouter();
   const [deletingAssignment, setDeletingAssignment] = useState<PageBlockAssignmentRow | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -121,7 +137,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
     return list;
   }, [assignments]);
 
-  /** Up/down neighbour per row, scoped to same module kind + slot, ordered by sort_order. */
   const reorderInfo = useMemo(() => buildReorderInfo(table.rawRows), [table.rawRows]);
 
   const { handleReorder } = usePageBlocksReorder({
@@ -199,7 +214,6 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
       <PageBlocksHeader
         page={page}
         assignmentCount={assignments.length}
-        usedModuleKinds={usedModuleKinds}
         onOpenAssignModal={openAssignModal}
       />
 
@@ -209,35 +223,85 @@ export default function PageBlocksClient({ page, assignments, templates }: PageB
         </div>
       ) : null}
 
-      <PageVisualSlotMap assignments={assignments} />
+      <AdminModuleTabs
+        initialTabId={initialTabId}
+        tabs={[
+          {
+            id: "seo",
+            label: "إعدادات السيو",
+            content: (
+              <PageSeoPanel
+                pageId={page.id}
+                path={page.path}
+                seoTitle={seo.seoTitle}
+                seoDescription={seo.seoDescription}
+                seoKeywords={seo.seoKeywords}
+                notice={seo.notice}
+                error={seo.error}
+              />
+            ),
+          },
+          {
+            id: "map",
+            label: "خريطة الصفحة",
+            content: (
+              <div className="space-y-4">
+                <div className="rounded-[22px] border border-white/8 bg-black/20 px-5 py-4">
+                  <p className="text-sm font-semibold text-white">خريطة الصفحة</p>
+                  <p className="mt-1 text-sm leading-7 text-white/50">
+                    راجع ترتيب أقسام الصفحة وهيكل المحتوى الظاهر للزائر.
+                  </p>
+                </div>
+                <PageVisualSlotMap assignments={assignments} />
+              </div>
+            ),
+          },
+          {
+            id: "modules",
+            label: "موديولات الصفحة",
+            content: (
+              <div className="space-y-4">
+                <div className="rounded-[22px] border border-white/8 bg-black/20 px-5 py-4">
+                  <p className="text-sm font-semibold text-white">موديولات الصفحة</p>
+                  <p className="mt-1 text-sm leading-7 text-white/50">
+                    إدارة الموديولات المرتبطة بالصفحة والتحكم في ترتيبها وظهورها.
+                  </p>
+                </div>
 
-      <AdminBulkActionBar
-        selectedIds={selection.selectedIds}
-        entityLabel="ربط"
-        options={[
-          { value: "show", label: "إظهار على الموقع" },
-          { value: "hide", label: "إخفاء من الموقع" },
-          { value: "delete", label: "حذف الربط" },
+                <PageModuleKindsBar page={page} usedModuleKinds={usedModuleKinds} />
+
+                <AdminBulkActionBar
+                  selectedIds={selection.selectedIds}
+                  entityLabel="ربط"
+                  options={[
+                    { value: "show", label: "إظهار على الموقع" },
+                    { value: "hide", label: "إخفاء من الموقع" },
+                    { value: "delete", label: "إزالة من الصفحة" },
+                  ]}
+                  onExecute={handleBulkExecute}
+                  onClearSelection={selection.clearSelection}
+                  isBusy={isPending}
+                />
+
+                <PageBlocksAssignmentsGrid
+                  rows={table.rows}
+                  sort={table.sort}
+                  onToggleSort={table.toggleSort}
+                  allSelected={selection.allSelected}
+                  selectedSet={selection.selectedSet}
+                  selectAllRef={selection.selectAllRef}
+                  onToggleAll={(checked) => selection.toggleAll(checked)}
+                  onToggleSelect={(rowId, checked) => selection.toggleOne(rowId, checked)}
+                  isPending={isPending}
+                  reorderInfo={reorderInfo}
+                  onReorder={handleReorder}
+                  onToggleVisibility={handleToggleVisibility}
+                  onDelete={setDeletingAssignment}
+                />
+              </div>
+            ),
+          },
         ]}
-        onExecute={handleBulkExecute}
-        onClearSelection={selection.clearSelection}
-        isBusy={isPending}
-      />
-
-      <PageBlocksAssignmentsGrid
-        rows={table.rows}
-        sort={table.sort}
-        onToggleSort={table.toggleSort}
-        allSelected={selection.allSelected}
-        selectedSet={selection.selectedSet}
-        selectAllRef={selection.selectAllRef}
-        onToggleAll={(checked) => selection.toggleAll(checked)}
-        onToggleSelect={(rowId, checked) => selection.toggleOne(rowId, checked)}
-        isPending={isPending}
-        reorderInfo={reorderInfo}
-        onReorder={handleReorder}
-        onToggleVisibility={handleToggleVisibility}
-        onDelete={setDeletingAssignment}
       />
 
       {assignModalOpen ? (

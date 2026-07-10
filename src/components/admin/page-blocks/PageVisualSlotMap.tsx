@@ -43,10 +43,10 @@ export default function PageVisualSlotMap({ assignments }: PageVisualSlotMapProp
     <section className="rounded-[28px] border border-[#D8B87A]/14 bg-[#080B10]/92 p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="font-en text-[11px] tracking-[0.32em] text-[#D8B87A]/70">PAGE SLOT MAP</p>
-          <h2 className="mt-2 text-xl font-semibold text-white">خريطة فتحات الصفحة</h2>
+          <p className="font-en text-[11px] tracking-[0.32em] text-[#D8B87A]/70">PAGE MAP</p>
+          <h2 className="mt-2 text-xl font-semibold text-white">خريطة الصفحة</h2>
           <p className="mt-2 text-sm text-white/45">
-            عرض بصري لتركيب الصفحة — للقراءة والتوجيه فقط. جدول الربط أدناه يبقى المصدر الكامل للتحرير.
+            راجع ترتيب أقسام الصفحة وهيكل المحتوى الظاهر للزائر.
           </p>
         </div>
         <span className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/50">

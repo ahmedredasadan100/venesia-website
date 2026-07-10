@@ -25,14 +25,21 @@ function readKeywords(formData: FormData) {
     .filter(Boolean);
 }
 
+function appendSeoQuery(redirectTo: string, key: "seo_notice" | "seo_error", value: string) {
+  const url = new URL(redirectTo, "http://localhost");
+  url.searchParams.set("tab", "seo");
+  url.searchParams.set(key, value);
+  return `${url.pathname}${url.search}`;
+}
+
 export async function savePageSeoAction(formData: FormData) {
   await requireAdminSession();
 
   const pageId = Number(readString(formData, "page_id"));
-  const redirectTo = readString(formData, "redirect_to") || `/admin/pages-blocks/pages/${pageId}`;
+  const redirectTo = readString(formData, "redirect_to") || `/admin/pages-blocks/pages/${pageId}?tab=seo`;
 
   if (!pageId || Number.isNaN(pageId)) {
-    redirect(`${redirectTo}?seo_error=${encodeURIComponent("معرّف الصفحة غير صالح")}`);
+    redirect(appendSeoQuery(redirectTo, "seo_error", "معرّف الصفحة غير صالح"));
   }
 
   const seoTitle = readString(formData, "seo_title") || null;
@@ -50,7 +57,7 @@ export async function savePageSeoAction(formData: FormData) {
     .eq("id", pageId);
 
   if (error) {
-    redirect(`${redirectTo}?seo_error=${encodeURIComponent(error.message)}`);
+    redirect(appendSeoQuery(redirectTo, "seo_error", error.message));
   }
 
   const { data: page } = await getSupabaseAdmin()
@@ -65,7 +72,7 @@ export async function savePageSeoAction(formData: FormData) {
     revalidatePath(normalizedPath, "page");
     revalidateTag(`page-seo:${normalizedPath}`, "max");
   }
-  revalidatePath(redirectTo);
+  revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("page", "update"),
@@ -74,5 +81,5 @@ export async function savePageSeoAction(formData: FormData) {
     metadata: { scope: "page_seo" },
   });
 
-  redirect(`${redirectTo}?seo_notice=saved`);
+  redirect(appendSeoQuery(redirectTo, "seo_notice", "saved"));
 }

@@ -126,7 +126,7 @@ export default function PageBlocksAssignmentRow({
               disabled={isPending}
               onClick={onToggleVisibility}
             />
-            <AdminDataGridActionButton action="delete" title="حذف الربط" size="compact" onClick={onDelete} />
+            <AdminDataGridActionButton action="delete" title="إزالة من الصفحة" size="compact" onClick={onDelete} />
           </>
         ) : null}
       </AdminDataGridActionsCell>
