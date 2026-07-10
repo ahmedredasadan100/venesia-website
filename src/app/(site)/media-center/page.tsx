@@ -5,10 +5,13 @@ import { findHeroInComposition } from "../../../lib/page-blocks/page-composition
 import { getHeroSectionState } from "../../../lib/load-hero-section";
 import { getMediaCenterCmsPageConfig } from "../../../lib/media-center-page-config";
 import InternalPageLayout from "../../../components/InternalPageLayout";
-import { buildMetadata } from "../../../lib/seo/build-metadata";
+import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
 
 export const revalidate = 300;
-export const metadata = buildMetadata({ path: "/media-center" });
+
+export async function generateMetadata() {
+  return generatePublicMetadata({ path: "/media-center" });
+}
 
 const CMS_PAGE_SLUG = "media-center" as const;
 

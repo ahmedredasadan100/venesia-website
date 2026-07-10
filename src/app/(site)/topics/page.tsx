@@ -13,14 +13,17 @@ import TopicsInsightCtaSection from "../../../components/topics/TopicsInsightCta
 import TopicsIntroSection from "../../../components/topics/TopicsIntroSection";
 
 import { loadPublicTopicsListing } from "../../../lib/topics/load-public-topics";
-import { buildMetadata } from "../../../lib/seo/build-metadata";
+import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
 import { getHeroSectionByPageSlug } from "../../../lib/load-hero-section";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { loadFeedModulesForPageSlug } from "../../../lib/feed-modules/load-feed-modules";
 import { findBreadcrumbInComposition, findHeroInComposition } from "../../../lib/page-blocks/page-composition-utils";
 
 export const revalidate = 300;
-export const metadata = buildMetadata({ path: "/topics" });
+
+export async function generateMetadata() {
+  return generatePublicMetadata({ path: "/topics" });
+}
 
 type TopicsPageProps = {
   searchParams?: Promise<{

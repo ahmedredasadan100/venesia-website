@@ -3,8 +3,13 @@ import RevealAnimations from "../../components/RevealAnimations";
 import DynamicHeroSection from "../../components/sections/DynamicHeroSection";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 import { findHeroInComposition } from "../../lib/page-blocks/page-composition-utils";
+import { generatePublicMetadata } from "../../lib/seo/generate-public-metadata";
 
 export const revalidate = 300;
+
+export async function generateMetadata() {
+  return generatePublicMetadata({ path: "/" });
+}
 
 export default async function HomePage() {
   const composition = await loadPageCompositionBySlug("home", "stack");

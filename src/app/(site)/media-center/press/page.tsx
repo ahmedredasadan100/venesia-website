@@ -1,9 +1,12 @@
 import MediaListingPage from "../../../../components/media-center/MediaListingPage";
 import { MEDIA_LISTING_PAGE_CONFIG } from "../../../../lib/media-center/listing-page-config";
-import { buildMetadata } from "../../../../lib/seo/build-metadata";
+import { generatePublicMetadata } from "../../../../lib/seo/generate-public-metadata";
 
 export const revalidate = 300;
-export const metadata = buildMetadata({ path: MEDIA_LISTING_PAGE_CONFIG.press.metadataPath });
+
+export async function generateMetadata() {
+  return generatePublicMetadata({ path: MEDIA_LISTING_PAGE_CONFIG.press.metadataPath });
+}
 
 type PageProps = {
   searchParams?: Promise<{

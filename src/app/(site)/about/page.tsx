@@ -1,10 +1,13 @@
 import AboutPageContent from "../../../components/about/AboutPageContent";
 import RevealAnimations from "../../../components/RevealAnimations";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
-import { buildMetadata } from "../../../lib/seo/build-metadata";
+import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
 
 export const revalidate = 300;
-export const metadata = buildMetadata({ path: "/about" });
+
+export async function generateMetadata() {
+  return generatePublicMetadata({ path: "/about" });
+}
 
 export default async function AboutPage() {
   const composition = await loadPageCompositionBySlug("about", "stack");

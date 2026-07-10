@@ -1,9 +1,12 @@
 import TrackPageContent from "../../../components/track/TrackPageContent";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
-import { buildMetadata } from "../../../lib/seo/build-metadata";
+import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
 
 export const revalidate = 300;
-export const metadata = buildMetadata({ path: "/track-your-project" });
+
+export async function generateMetadata() {
+  return generatePublicMetadata({ path: "/track-your-project" });
+}
 
 export default async function TrackYourProjectPage() {
   const composition = await loadPageCompositionBySlug("track-your-project", "stack");
