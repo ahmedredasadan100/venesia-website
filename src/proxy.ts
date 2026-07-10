@@ -12,6 +12,7 @@ import {
 } from "./lib/admin/auth/session";
 import { isMaintenancePublicPath } from "./lib/maintenance/paths";
 import { isMaintenanceModeEnabled } from "./lib/maintenance/read-maintenance-mode";
+import { resolvePublicRedirect } from "./lib/redirects/resolve-public-redirect";
 
 function redirectToLogin(request: NextRequest) {
   const loginUrl = new URL("/admin/login", request.url);
@@ -85,6 +86,11 @@ export async function proxy(request: NextRequest) {
 
   if (isMaintenancePublicPath(pathname)) {
     return NextResponse.next();
+  }
+
+  const publicRedirect = await resolvePublicRedirect(request);
+  if (publicRedirect) {
+    return NextResponse.redirect(publicRedirect.destination, publicRedirect.status);
   }
 
   const maintenanceOn = await isMaintenanceModeEnabled();
