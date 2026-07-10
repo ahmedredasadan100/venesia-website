@@ -161,7 +161,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(216,184,122,0.14),transparent_32%),radial-gradient(circle_at_84%_8%,rgba(30,58,95,0.22),transparent_36%)]" />
       </div>
 
-      <div className="relative z-10 flex min-h-screen items-center max-md:items-start max-md:pt-28">
+      <div className="relative z-10 flex min-h-screen items-center max-md:items-start max-md:pt-32">
         <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-6 pt-28 pb-20 max-md:pt-0 max-md:pb-24 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="min-w-0 text-right">
             {config.eyebrow ? (
