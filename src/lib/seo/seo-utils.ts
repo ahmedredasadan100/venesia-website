@@ -16,14 +16,29 @@ export function absoluteUrl(path = "/"): string {
   return `${SEO_SITE.defaultUrl}${normalizedPath === "/" ? "" : normalizedPath}`;
 }
 
-export function absoluteAssetUrl(path?: string): string {
-  if (!path) return absoluteUrl(SEO_SITE.defaultImage);
+export function absoluteUrlWithBase(path = "/", baseUrl = SEO_SITE.defaultUrl): string {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+
+  const normalizedBase = baseUrl.replace(/\/$/, "");
+  const normalizedPath = normalizePath(path);
+
+  return `${normalizedBase}${normalizedPath === "/" ? "" : normalizedPath}`;
+}
+
+export function absoluteAssetUrl(path?: string, baseUrl?: string): string {
+  if (!path) return absoluteUrlWithBase(SEO_SITE.defaultImage, baseUrl);
 
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
 
-  return absoluteUrl(path);
+  return absoluteUrlWithBase(path, baseUrl);
+}
+
+export function buildCanonicalWithBase(path: string, baseUrl = SEO_SITE.defaultUrl): string {
+  return absoluteUrlWithBase(path, baseUrl);
 }
 
 export function cleanText(value: string): string {
