@@ -161,8 +161,8 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(216,184,122,0.14),transparent_32%),radial-gradient(circle_at_84%_8%,rgba(30,58,95,0.22),transparent_36%)]" />
       </div>
 
-      <div className="relative z-10 flex min-h-screen items-center">
-        <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-6 pt-28 pb-20 lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="relative z-10 flex min-h-screen items-center max-md:items-start max-md:pt-28">
+        <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-6 pt-28 pb-20 max-md:pt-0 max-md:pb-24 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="min-w-0 text-right">
             {config.eyebrow ? (
               <div className="mb-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
@@ -170,8 +170,8 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               </div>
             ) : null}
 
-            <h1 className="max-w-[12ch] text-4xl font-bold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:text-6xl lg:text-7xl">
-              {title}
+            <h1 className="max-w-[12ch] max-md:max-w-none text-4xl font-bold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:text-6xl lg:text-7xl">
+              <span className="max-md:block max-md:whitespace-nowrap">{title}</span>
               {highlight ? (
                 <span className="mt-2 block bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-transparent md:mt-3">
                   {highlight}
