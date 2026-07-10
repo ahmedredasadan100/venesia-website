@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
-import { buildMetadata } from "../lib/seo/build-metadata";
-import { SEO_SITE } from "../config/seo/seo-site";
 import { PWA_CONFIG } from "../config/pwa";
+import { SEO_SITE } from "../config/seo/seo-site";
+import { loadResolvedGlobalSeo } from "../lib/seo/generate-public-metadata";
 import "./globals.css";
 
 const ibmArabic = localFont({
@@ -42,14 +42,18 @@ const inter = localFont({
   variable: "--font-inter",
 });
 
-export const metadata: Metadata = {
-  ...buildMetadata({ path: "/" }),
-  appleWebApp: {
-    capable: true,
-    title: PWA_CONFIG.shortName,
-    statusBarStyle: "black-translucent",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const globalSeo = await loadResolvedGlobalSeo();
+
+  return {
+    metadataBase: new URL(globalSeo.canonicalBaseUrl || globalSeo.siteUrl || SEO_SITE.defaultUrl),
+    appleWebApp: {
+      capable: true,
+      title: PWA_CONFIG.shortName,
+      statusBarStyle: "black-translucent",
+    },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: SEO_SITE.themeColor,
