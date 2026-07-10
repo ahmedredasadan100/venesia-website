@@ -20,7 +20,7 @@ import {
   AdminDataGridRow,
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
-  AdminPageHeader,
+  AdminPageContextHeader,
   AdminStatusPill,
   AdminTablePagination,
   buildAdminPaginationHref,
@@ -176,8 +176,8 @@ export default function PagesTableClient({
 
   return (
     <div className={ADMIN_LIST_PAGE.wrapper} dir="rtl">
-      <AdminPageHeader
-        eyebrow="Admin Panel"
+      <AdminPageContextHeader
+        eyebrow="PAGES CONTROL"
         title="إدارة الصفحات"
         description="إدارة صفحات الموقع ومكوناتها، مع التحكم في الترتيب، الربط، وحالة النشر."
         actions={<CreatePageModal />}
