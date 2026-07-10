@@ -20,6 +20,11 @@ export type UnifiedMediaTopicRow = {
   is_featured: boolean | null;
   is_popular: boolean | null;
   media_payload: MediaTopicPayload | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_keywords: string[] | null;
+  focus_keyword: string | null;
+  image_alt: string | null;
 };
 
 function splitMarkdownParagraphs(content: string | null | undefined) {
@@ -95,5 +100,10 @@ export function adaptTopicRowToMediaItem(row: UnifiedMediaTopicRow): MediaConten
     isPopular: Boolean(row.is_popular),
     duration: videoPayload?.duration?.trim() || undefined,
     content: resolveTopicContent(row, publicType),
+    seoTitle: row.seo_title ?? undefined,
+    seoDescription: row.seo_description ?? undefined,
+    seoKeywords: Array.isArray(row.seo_keywords) ? row.seo_keywords : undefined,
+    imageAlt: row.image_alt ?? undefined,
+    ogImage: row.image ?? undefined,
   };
 }

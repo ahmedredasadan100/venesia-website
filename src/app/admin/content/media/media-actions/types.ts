@@ -26,6 +26,11 @@ export type MediaTopicRow = {
   is_featured: boolean | null;
   published_at: string | null;
   media_payload: MediaTopicPayload | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_keywords?: string[] | null;
+  focus_keyword?: string | null;
+  faq?: { question: string; answer: string }[] | null;
 };
 
 export type BulkMediaPublishValidationFailure = {

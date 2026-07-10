@@ -7,6 +7,7 @@ import InternalPageLayout from "../../../../components/InternalPageLayout";
 import FeedModulesStack from "../../../../components/feed-modules/FeedModulesStack";
 import TopicsSidebarSearchPanel from "../../../../components/topics/TopicsSidebarSearchPanel";
 import TopicCard from "../../../../components/topics/TopicCard";
+import JsonLd from "../../../../components/seo/JsonLd";
 
 import { loadFeedModulesForPageSlug } from "../../../../lib/feed-modules/load-feed-modules";
 import {
@@ -14,7 +15,8 @@ import {
   loadRelatedPublicTopics,
 } from "../../../../lib/topics/load-public-topics";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
-import { buildMetadata } from "../../../../lib/seo/build-metadata";
+import { generatePublicMetadata, loadResolvedGlobalSeo } from "../../../../lib/seo/generate-public-metadata";
+import { buildPageJsonLd } from "../../../../lib/seo/build-jsonld";
 
 export const revalidate = 300;
 
@@ -31,25 +33,35 @@ export async function generateMetadata({
   const topic = await loadPublicTopicBySlug(slug);
 
   if (!topic) {
-    return buildMetadata({
+    return generatePublicMetadata({
       path: `/topics/${slug}`,
       title: "الموضوع غير موجود | فينيسيا للتطوير العقاري",
       description: "الموضوع المطلوب غير متاح حاليًا.",
       robots: NO_INDEX_ROBOTS,
+      includePageSeo: false,
     });
   }
 
   const pagePath = `/topics/${topic.slug}`;
 
-  return buildMetadata({
+  return generatePublicMetadata({
     path: pagePath,
+    entitySeo: {
+      title: topic.seoTitle,
+      description: topic.seoDescription,
+      keywords: topic.seoKeywords,
+      image: topic.image,
+      imageAlt: topic.title,
+    },
     title: `${topic.seoTitle || topic.title} | فينيسيا للتطوير العقاري`,
     description: topic.seoDescription || topic.excerpt,
     image: topic.image,
+    imageAlt: topic.title,
     type: "article",
     publishedTime: topic.publishedAt,
     modifiedTime: topic.publishedAt,
     authors: ["Venesia Developments"],
+    includePageSeo: false,
   });
 }
 
@@ -109,24 +121,22 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
 
   const relatedTopics = await loadRelatedPublicTopics(topic);
   const sidebarFeeds = await loadFeedModulesForPageSlug("topics");
+  const globalSeo = await loadResolvedGlobalSeo();
+  const pagePath = `/topics/${topic.slug}`;
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Article",
-    headline: topic.title,
-    description: topic.seoDescription || topic.excerpt,
-    image: topic.image,
-    datePublished: topic.publishedAt,
-    dateModified: topic.publishedAt,
-    author: {
-      "@type": "Organization",
-      name: "Venesia Developments",
+  const pageJsonLd = buildPageJsonLd(
+    {
+      path: pagePath,
+      title: topic.seoTitle || topic.title,
+      description: topic.seoDescription || topic.excerpt,
+      type: "article",
+      image: topic.image,
+      publishedAt: topic.publishedAt,
+      updatedAt: topic.publishedAt,
+      faqs: topic.faq.length > 0 ? topic.faq : undefined,
     },
-    publisher: {
-      "@type": "Organization",
-      name: "Venesia Developments",
-    },
-  };
+    globalSeo,
+  );
 
   return (
     <InternalPageLayout
@@ -135,10 +145,7 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
       subtitle={topic.excerpt}
       heroImage={topic.image}
     >
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={pageJsonLd} />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:[direction:ltr]">
         <main dir="rtl" className="space-y-10 text-right">

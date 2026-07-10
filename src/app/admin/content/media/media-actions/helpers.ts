@@ -165,6 +165,9 @@ export function getPayload(formData: FormData) {
     categorySlug: getString(formData, "category_slug"),
     status: getNormalizedStatus(getString(formData, "status"), "draft"),
     isFeatured: getBoolean(formData, "is_featured"),
+    seoTitle: getString(formData, "seo_title"),
+    seoDescription: getString(formData, "seo_description"),
+    focusKeyword: getString(formData, "focus_keyword"),
   };
 }
 
@@ -268,11 +271,11 @@ export function buildMediaWritePayload(
     series_slug: null,
     date_label: null,
     status: payload.status,
-    seo_title: null,
-    seo_description: null,
-    seo_keywords: [],
-    focus_keyword: null,
-    faq: [],
+    seo_title: payload.seoTitle || null,
+    seo_description: payload.seoDescription || null,
+    seo_keywords: Array.isArray(currentTopic?.seo_keywords) ? currentTopic.seo_keywords : [],
+    focus_keyword: payload.focusKeyword || null,
+    faq: Array.isArray(currentTopic?.faq) ? currentTopic.faq : [],
     is_featured: payload.isFeatured,
     is_popular: false,
     published_at: resolveTopicPublishedAt({

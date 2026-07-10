@@ -133,7 +133,7 @@ export async function getEditableMediaTopicById(id: string) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "id, title, slug, excerpt, content, image, image_alt, category_slug, content_type, status, is_featured, published_at, media_payload",
+      "id, title, slug, excerpt, content, image, image_alt, category_slug, content_type, status, is_featured, published_at, media_payload, seo_title, seo_description, seo_keywords, focus_keyword, faq",
     )
     .eq("id", id)
     .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])

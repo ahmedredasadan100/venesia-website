@@ -34,6 +34,9 @@ type MediaContentFormValues = {
   status?: string | null;
   is_featured?: boolean | null;
   media_payload?: MediaTopicPayload | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  focus_keyword?: string | null;
 };
 
 type MediaContentFormProps = {
@@ -304,6 +307,44 @@ export default function MediaContentForm({ mode, values }: MediaContentFormProps
           </AdminFormSection>
         ) : null}
       </AdminFormLayout>
+
+      <AdminFormSection
+        eyebrow="SEO"
+        title="إعدادات السيو"
+        description="حقول اختيارية لعنوان ووصف محركات البحث. إن تُركت فارغة يُستخدم العنوان والموجز."
+        compactHeader
+        className="border-[#D8B87A]/12"
+      >
+        <div className="grid gap-5 lg:grid-cols-2">
+          <AdminFormField label="SEO Title">
+            <input
+              name="seo_title"
+              defaultValue={values?.seo_title ?? ""}
+              placeholder="عنوان يظهر في نتائج البحث..."
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+            />
+          </AdminFormField>
+
+          <AdminFormField label="Focus Keyword">
+            <input
+              name="focus_keyword"
+              defaultValue={values?.focus_keyword ?? ""}
+              placeholder="الكلمة الرئيسية المستهدفة"
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+            />
+          </AdminFormField>
+        </div>
+
+        <AdminFormField label="Meta Description">
+          <textarea
+            name="seo_description"
+            rows={4}
+            defaultValue={values?.seo_description ?? ""}
+            placeholder="وصف مختصر يظهر في نتائج البحث..."
+            className="w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+          />
+        </AdminFormField>
+      </AdminFormSection>
 
       <AdminStickyFormBar
         title={mode === "edit" ? "حفظ التعديلات" : "إنشاء المحتوى"}

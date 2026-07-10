@@ -22,6 +22,11 @@ export type MediaContentItem = {
   content?: string[];
   /** Used by hero media_category filter — not rendered in public media UI. */
   categorySlug?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string[];
+  imageAlt?: string;
+  ogImage?: string;
 };
 
 export type MediaNewsItem = MediaContentItem;

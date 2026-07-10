@@ -107,6 +107,10 @@ export type PublicProject = {
   homepageOrder: number;
   brochureUrl?: string;
   residentialDetails?: ResidentialDetails;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string[];
+  ogImage?: string;
 };
 
 /** @deprecated Use PublicProject — kept for incremental UI migration. */

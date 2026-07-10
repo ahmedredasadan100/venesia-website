@@ -126,6 +126,10 @@ export function mapProjectRowToPublicProject(
     showOnHomepage: project.show_on_homepage,
     homepageOrder: project.homepage_order,
     brochureUrl: project.brochure_url ?? undefined,
+    seoTitle: project.seo_title ?? undefined,
+    seoDescription: project.seo_description ?? undefined,
+    seoKeywords: project.seo_keywords?.length ? project.seo_keywords : undefined,
+    ogImage: project.og_image ?? undefined,
     residentialDetails: includeResidentialDetails
       ? mapResidentialDetails(project, floorPlans, deliverySpecItems, media)
       : undefined,

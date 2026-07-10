@@ -11,7 +11,7 @@ import {
 import type { MediaContentItem, MediaContentType } from "./types";
 
 const UNIFIED_SELECT =
-  "id, slug, title, excerpt, content, image, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload";
+  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, seo_title, seo_description, seo_keywords, focus_keyword";
 
 const UNIFIED_MEDIA_CONTENT_TYPES = ["news", "press", "site_update", "video", "gallery"] as const;
 
