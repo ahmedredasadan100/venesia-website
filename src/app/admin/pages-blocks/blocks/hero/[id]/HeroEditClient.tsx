@@ -1,16 +1,14 @@
 "use client";
 
+import AdminNotice from "../../../../../../components/admin/AdminNotice";
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
 import AdminModuleTabs from "../../../../../../components/admin/page-blocks/AdminModuleTabs";
-import BlockEditorContextHeader from "../../../../../../components/admin/page-blocks/BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "../../../../../../components/admin/page-blocks/ModuleCrossPageUsageBanner";
-import ModuleDependencyHintsPanel from "../../../../../../components/admin/page-blocks/ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "../../../../../../components/admin/page-blocks/ModulePageAssignmentsField";
-import { AdminLinkField } from "../../../../../../components/admin/ui";
+import { AdminActionButton, AdminLinkField, AdminPageContextHeader } from "../../../../../../components/admin/ui";
 import { legacyHrefFromConfig } from "../../../../../../lib/admin/links/serialize";
-import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
+import { fieldClassName, statusMeta } from "../../../../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
-import { getSlotCompatibilityLabel } from "../../../../../../lib/page-composition/slot-module-registry";
 import { updateHeroTemplateDetails } from "../actions";
 
 type PageOption = {
@@ -57,22 +55,26 @@ export default function HeroEditClient({
 }: HeroEditClientProps) {
   const primaryCtaLink = legacyHrefFromConfig(config, "primaryCtaLink", "primaryCtaHref");
   const secondaryCtaLink = legacyHrefFromConfig(config, "secondaryCtaLink", "secondaryCtaHref");
+  const statusInfo = statusMeta(hero.is_visible ? "published" : "unpublished");
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <BlockEditorContextHeader
-        backHref="/admin/pages-blocks/blocks/hero"
-        backLabel="الرجوع لكل الهيروهات"
-        eyebrow="HERO MODULE"
-        title={hero.name}
-        description="عدّل المحتوى والوسائط والأزرار والعرض والربط بالصفحات — فتحة Hero واحدة لكل صفحة."
-        status={hero.is_visible ? "published" : "unpublished"}
-        saved={saved}
-        slotContext={getSlotCompatibilityLabel("hero")}
+      <AdminPageContextHeader
+        eyebrow="MODULE EDITOR"
+        contextLine={hero.name}
+        title="إدارة موديول الهيرو"
+        description="تحكّم في محتوى الموديول وإعداداته وطريقة ظهوره داخل الصفحات المرتبطة به."
+        meta={statusInfo.label}
+        actions={
+          <AdminActionButton href="/admin/pages-blocks/blocks/hero" variant="dark">
+            الرجوع لكل الهيروهات
+          </AdminActionButton>
+        }
       />
 
+      {saved ? <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." /> : null}
+
       <ModuleCrossPageUsageBanner moduleName={hero.name} assignments={assignmentContext.assignments} />
-      <ModuleDependencyHintsPanel moduleKind="hero" templateSlug={hero.slug} />
 
       <form action={updateHeroTemplateDetails}>
         <input type="hidden" name="id" value={hero.id} />
