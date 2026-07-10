@@ -1,8 +1,21 @@
-import { loadPagesTableRows } from "../../../../lib/admin/pages/load-pages-table-rows";
+import {
+  loadPagesTableRowsPaginated,
+  type PagesListSort,
+} from "../../../../lib/admin/pages/load-pages-table-rows";
 import PagesTableClient, { type AdminPageListRow } from "./PagesTableClient";
 
+export const dynamic = "force-dynamic";
+
+type SearchParams = {
+  notice?: string;
+  error?: string;
+  page?: string;
+  limit?: string;
+  sort?: string;
+};
+
 type PageProps = {
-  searchParams?: Promise<{ notice?: string; error?: string }> | { notice?: string; error?: string };
+  searchParams?: Promise<SearchParams> | SearchParams;
 };
 
 export default async function PagesManagerPage({ searchParams }: PageProps) {
@@ -12,9 +25,32 @@ export default async function PagesManagerPage({ searchParams }: PageProps) {
 
   let rows: AdminPageListRow[] = [];
   let loadError: string | null = null;
+  let pagination = {
+    currentPage: 1,
+    totalPages: 1,
+    totalCount: 0,
+    rangeStart: 0,
+    rangeEnd: 0,
+    pageSize: "10",
+  };
+  let sort: PagesListSort = "id_asc";
 
   try {
-    rows = await loadPagesTableRows();
+    const result = await loadPagesTableRowsPaginated({
+      page: resolvedSearch.page,
+      limit: resolvedSearch.limit,
+      sort: resolvedSearch.sort,
+    });
+    rows = result.rows;
+    sort = result.sort;
+    pagination = {
+      currentPage: result.page,
+      totalPages: result.totalPages,
+      totalCount: result.totalCount,
+      rangeStart: result.rangeStart,
+      rangeEnd: result.rangeEnd,
+      pageSize: String(result.limit),
+    };
   } catch (caught) {
     loadError = caught instanceof Error ? caught.message : "تعذر تحميل الصفحات.";
   }
@@ -27,5 +63,13 @@ export default async function PagesManagerPage({ searchParams }: PageProps) {
     );
   }
 
-  return <PagesTableClient pages={rows} notice={notice} error={error} />;
+  return (
+    <PagesTableClient
+      pages={rows}
+      pagination={pagination}
+      sort={sort}
+      notice={notice}
+      error={error}
+    />
+  );
 }

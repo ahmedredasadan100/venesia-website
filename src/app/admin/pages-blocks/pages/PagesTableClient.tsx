@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
@@ -21,12 +22,16 @@ import {
   AdminDataGridStatusCell,
   AdminPageHeader,
   AdminStatusPill,
+  AdminTablePagination,
+  buildAdminPaginationHref,
+  useAdminGridSelection,
 } from "../../../../components/admin/ui";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import { ADMIN_LIST_PAGE } from "../../../../lib/admin/admin-ui-styles";
-import { useAdminTable } from "../../../../components/admin/table-engine";
+import { formatPageTypeLabel } from "../../../../lib/admin/pages/format-page-type-label";
+import type { PagesListSort } from "../../../../lib/admin/pages/load-pages-table-rows";
 import { getPageDeleteBlockReason } from "../../../../lib/pages/page-admin-policy";
-import { bulkDeletePagesAjax, deletePage, duplicatePage, getPagesTableRows, togglePageStatus } from "./actions";
+import { bulkDeletePagesAjax, deletePage, duplicatePage, togglePageStatus } from "./actions";
 
 export type AdminPageListRow = {
   id: number;
@@ -38,20 +43,28 @@ export type AdminPageListRow = {
   block_count: number;
 };
 
+type PagesPaginationState = {
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  rangeStart: number;
+  rangeEnd: number;
+  pageSize: string;
+};
+
 type PagesTableClientProps = {
   pages: AdminPageListRow[];
+  pagination: PagesPaginationState;
+  sort: PagesListSort;
   notice?: string | null;
   error?: string | null;
 };
 
-type PageSortKey = "title" | "block_count" | "status";
+type SortableColumn = "title" | "status";
 
-/**
- * RTL table: الصفحة (1fr, يمين) → … → الإجراءات (ثابت، شمال).
- * الـ 1fr يملأ المساحة المتبقية فلا يبقى فراغ بعد عمود الإجراءات.
- */
-// 96px (4th) = secondary page-type column (no dedicated preset).
 const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.count} 96px ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+
+const PAGES_LIST_BASE_PATH = "/admin/pages-blocks/pages";
 
 function statusMeta(status: string) {
   if (status === "published") return { label: "منشورة", tone: "green" as const };
@@ -83,29 +96,81 @@ function PublicPreviewIcon() {
   );
 }
 
-export default function PagesTableClient({ pages, notice, error }: PagesTableClientProps) {
-  const sortAccessors = useMemo(
-    () => ({
-      title: (item: AdminPageListRow) => item.title,
-      block_count: (item: AdminPageListRow) => item.block_count,
-      status: (item: AdminPageListRow) => statusMeta(item.status).label,
-    }),
-    [],
-  );
+function getNextSort(current: PagesListSort, column: SortableColumn): PagesListSort | null {
+  const asc = `${column}_asc` as PagesListSort;
+  const desc = `${column}_desc` as PagesListSort;
 
-  const table = useAdminTable<AdminPageListRow, PageSortKey>({
-    initialRows: pages,
-    getRowId: (item) => item.id,
-    sortAccessors,
-    refresh: getPagesTableRows,
-  });
+  if (current === asc) return desc;
+  if (current === desc) return null;
+  return asc;
+}
 
-  function sortProps(key: PageSortKey) {
+export default function PagesTableClient({
+  pages,
+  pagination,
+  sort,
+  notice,
+  error,
+}: PagesTableClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const rowIds = useMemo(() => pages.map((page) => page.id), [pages]);
+  const selection = useAdminGridSelection(rowIds);
+
+  useEffect(() => {
+    selection.clearSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset selection when the server page slice changes
+  }, [pages]);
+
+  function buildListHref(patch: Record<string, string | null>) {
+    return buildAdminPaginationHref(PAGES_LIST_BASE_PATH, new URLSearchParams(searchParams.toString()), patch);
+  }
+
+  function sortProps(column: SortableColumn) {
+    const asc = `${column}_asc` as PagesListSort;
+    const desc = `${column}_desc` as PagesListSort;
+    const active = sort === asc || sort === desc;
+
     return {
-      active: table.sort.key === key,
-      direction: table.sort.direction,
-      onClick: () => table.toggleSort(key),
-    } as const;
+      active,
+      direction: sort === desc ? ("desc" as const) : ("asc" as const),
+      onClick: () => {
+        const nextSort = getNextSort(sort, column);
+        router.push(
+          buildListHref({
+            sort: nextSort,
+            page: "1",
+          }),
+        );
+      },
+    };
+  }
+
+  function handleBulkDelete(ids: number[]) {
+    if (!window.confirm(`حذف ${ids.length} صفحة؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+
+    setFeedback(null);
+    startTransition(async () => {
+      try {
+        const result = await bulkDeletePagesAjax(ids);
+        if (!result.ok) {
+          setFeedback({ type: "error", message: result.message ?? "تعذر تنفيذ العملية." });
+          return;
+        }
+
+        selection.clearSelection();
+        setFeedback({ type: "success", message: result.message ?? "تم تنفيذ العملية بنجاح." });
+        router.refresh();
+      } catch (caught) {
+        setFeedback({
+          type: "error",
+          message: caught instanceof Error ? caught.message : "تعذر تنفيذ العملية.",
+        });
+      }
+    });
   }
 
   return (
@@ -113,160 +178,169 @@ export default function PagesTableClient({ pages, notice, error }: PagesTableCli
       <AdminPageHeader
         eyebrow="Admin Panel"
         title="إدارة الصفحات"
-        description="كل صفحة حاوية للموديولات المعيّنة: Hero، Content، CTA، Cards، وغيرها. افتح الصفحة لرؤية الترتيب والحالة والربط."
-        meta={`${pages.length} صفحة`}
+        description="إدارة صفحات الموقع ومكوناتها، مع التحكم في الترتيب، الربط، وحالة النشر."
       />
 
       {notice ? <AdminNotice variant="success" message={notice} /> : null}
       {error ? <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={error} /> : null}
 
       <div className="space-y-4">
-        {table.feedback ? (
+        {feedback ? (
           <div
             className={`rounded-[16px] border px-4 py-3 text-sm font-semibold ${
-              table.feedback.type === "success"
+              feedback.type === "success"
                 ? "border-emerald-400/18 bg-emerald-500/10 text-emerald-100"
                 : "border-red-400/18 bg-red-500/10 text-red-100"
             }`}
           >
-            {table.feedback.message}
+            {feedback.message}
           </div>
         ) : null}
 
         <AdminBulkActionBar
-          selectedIds={table.selection.selectedIds}
+          selectedIds={selection.selectedIds}
           entityLabel="صفحة"
           options={[{ value: "delete", label: "حذف المحدد" }]}
-          onClearSelection={table.selection.clearSelection}
+          onClearSelection={selection.clearSelection}
           onExecute={(action, ids) => {
             if (action !== "delete") return;
-            if (!window.confirm(`حذف ${ids.length} صفحة؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
-            table.runAction(() => bulkDeletePagesAjax(ids.map(Number)));
+            handleBulkDelete(ids.map(Number));
           }}
-          isBusy={table.isPending}
+          isBusy={isPending}
         />
 
-        <AdminDataGrid summary={`${table.rows.length} صفحة`}>
-        <AdminDataGridHeader columns={columns}>
-          <AdminDataGridCheckboxCell>
-            <AdminDataGridCheckbox
-              inputRef={table.selection.selectAllRef}
-              checked={table.selection.allSelected}
-              onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
-              label="تحديد الكل"
-            />
-          </AdminDataGridCheckboxCell>
-          <AdminDataGridPrimaryCell>
-            <AdminDataGridSortLabel {...sortProps("title")} className="justify-end">
-              الصفحة
-            </AdminDataGridSortLabel>
-          </AdminDataGridPrimaryCell>
-          <AdminDataGridCenterCell>
-            <AdminDataGridSortLabel {...sortProps("block_count")} className="justify-center">
-              الموديولات
-            </AdminDataGridSortLabel>
-          </AdminDataGridCenterCell>
-          <AdminDataGridCenterCell>النوع</AdminDataGridCenterCell>
-          <AdminDataGridCenterCell>
-            <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
-              الحالة
-            </AdminDataGridSortLabel>
-          </AdminDataGridCenterCell>
-          <div className="text-center">الإجراءات</div>
-        </AdminDataGridHeader>
+        <AdminDataGrid>
+          <AdminDataGridHeader columns={columns}>
+            <AdminDataGridCheckboxCell>
+              <AdminDataGridCheckbox
+                inputRef={selection.selectAllRef}
+                checked={selection.allSelected}
+                onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
+                label="تحديد الكل"
+              />
+            </AdminDataGridCheckboxCell>
+            <AdminDataGridPrimaryCell>
+              <AdminDataGridSortLabel {...sortProps("title")} className="justify-end">
+                الصفحة
+              </AdminDataGridSortLabel>
+            </AdminDataGridPrimaryCell>
+            <AdminDataGridCenterCell>الموديولات</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>النوع</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
+              <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
+                الحالة
+              </AdminDataGridSortLabel>
+            </AdminDataGridCenterCell>
+            <div className="text-center">الإجراءات</div>
+          </AdminDataGridHeader>
 
-        {table.rows.map((page) => {
-          const status = statusMeta(page.status);
-          const deleteBlockReason = getPageDeleteBlockReason(page.slug);
-          const isPublished = page.status === "published";
-          const publicPath = resolvePublicPath(page);
+          {pages.map((page) => {
+            const status = statusMeta(page.status);
+            const deleteBlockReason = getPageDeleteBlockReason(page.slug);
+            const isPublished = page.status === "published";
+            const publicPath = resolvePublicPath(page);
 
-          return (
-            <AdminDataGridRow key={page.id} columns={columns}>
-              <AdminDataGridCheckboxCell>
-                <AdminDataGridCheckbox
-                  checked={table.selection.selectedSet.has(page.id)}
-                  onChange={(event) => table.selection.toggleOne(page.id, event.currentTarget.checked)}
-                  label={`تحديد ${page.title}`}
-                />
-              </AdminDataGridCheckboxCell>
-              <AdminDataGridPrimaryCell>
-                <Link
-                  href={`/admin/pages-blocks/pages/${page.id}`}
-                  className="block truncate font-semibold text-white hover:text-[#D8B87A]"
-                >
-                  {page.title}
-                </Link>
-              </AdminDataGridPrimaryCell>
-              <AdminDataGridCenterCell className="font-en text-sm tabular-nums text-white/60">{page.block_count}</AdminDataGridCenterCell>
-              <AdminDataGridCenterCell className="truncate text-sm text-white/55">{page.page_type}</AdminDataGridCenterCell>
-              <AdminDataGridStatusCell>
-                <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-              </AdminDataGridStatusCell>
-              <AdminDataGridActionsCell compact>
-                <AdminDataGridActionButton
-                  action="edit"
-                  href={`/admin/pages-blocks/pages/${page.id}`}
-                  title="إدارة الموديولات"
-                  size="compact"
-                />
-
-                <AdminDataGridActionButton
-                  href={publicPath}
-                  target="_blank"
-                  tone="dark"
-                  title="معاينة الصفحة العامة"
-                  size="compact"
-                >
-                  <PublicPreviewIcon />
-                </AdminDataGridActionButton>
-
-                <form action={togglePageStatus} className="contents">
-                  <input type="hidden" name="id" value={page.id} />
-                  <AdminDataGridActionButton
-                    type="submit"
-                    action="visibility"
-                    size="compact"
-                    hidden={isPublished}
-                    title={isPublished ? "إخفاء الصفحة" : "نشر / إظهار الصفحة"}
+            return (
+              <AdminDataGridRow key={page.id} columns={columns}>
+                <AdminDataGridCheckboxCell>
+                  <AdminDataGridCheckbox
+                    checked={selection.selectedSet.has(page.id)}
+                    onChange={(event) => selection.toggleOne(page.id, event.currentTarget.checked)}
+                    label={`تحديد ${page.title}`}
                   />
-                </form>
-
-                <form action={duplicatePage} className="contents">
-                  <input type="hidden" name="id" value={page.id} />
+                </AdminDataGridCheckboxCell>
+                <AdminDataGridPrimaryCell>
+                  <Link
+                    href={`/admin/pages-blocks/pages/${page.id}`}
+                    className="block truncate font-semibold text-white hover:text-[#D8B87A]"
+                  >
+                    {page.title}
+                  </Link>
+                </AdminDataGridPrimaryCell>
+                <AdminDataGridCenterCell className="font-en text-sm tabular-nums text-white/60">
+                  {page.block_count}
+                </AdminDataGridCenterCell>
+                <AdminDataGridCenterCell className="truncate text-sm text-white/55">
+                  {formatPageTypeLabel(page.page_type)}
+                </AdminDataGridCenterCell>
+                <AdminDataGridStatusCell>
+                  <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+                </AdminDataGridStatusCell>
+                <AdminDataGridActionsCell compact>
                   <AdminDataGridActionButton
-                    type="submit"
-                    action="duplicate"
+                    action="edit"
+                    href={`/admin/pages-blocks/pages/${page.id}`}
+                    title="إدارة الموديولات"
                     size="compact"
-                    title="نسخ الصفحة مع الموديولات (مسودة مخفية)"
                   />
-                </form>
 
-                {deleteBlockReason ? (
                   <AdminDataGridActionButton
-                    action="delete"
+                    href={publicPath}
+                    target="_blank"
+                    tone="dark"
+                    title="معاينة الصفحة العامة"
                     size="compact"
-                    disabled
-                    title={deleteBlockReason}
-                  />
-                ) : (
-                  <form action={deletePage} className="contents">
+                  >
+                    <PublicPreviewIcon />
+                  </AdminDataGridActionButton>
+
+                  <form action={togglePageStatus} className="contents">
                     <input type="hidden" name="id" value={page.id} />
                     <AdminDataGridActionButton
                       type="submit"
-                      action="delete"
+                      action="visibility"
                       size="compact"
-                      title="حذف الصفحة وجميع ربط الموديولات"
+                      hidden={isPublished}
+                      title={isPublished ? "إخفاء الصفحة" : "نشر / إظهار الصفحة"}
                     />
                   </form>
-                )}
-              </AdminDataGridActionsCell>
-            </AdminDataGridRow>
-          );
-        })}
 
-        {!table.rows.length ? <AdminDataGridEmpty>لا توجد صفحات بعد.</AdminDataGridEmpty> : null}
+                  <form action={duplicatePage} className="contents">
+                    <input type="hidden" name="id" value={page.id} />
+                    <AdminDataGridActionButton
+                      type="submit"
+                      action="duplicate"
+                      size="compact"
+                      title="نسخ الصفحة مع الموديولات (مسودة مخفية)"
+                    />
+                  </form>
+
+                  {deleteBlockReason ? (
+                    <AdminDataGridActionButton
+                      action="delete"
+                      size="compact"
+                      disabled
+                      title={deleteBlockReason}
+                    />
+                  ) : (
+                    <form action={deletePage} className="contents">
+                      <input type="hidden" name="id" value={page.id} />
+                      <AdminDataGridActionButton
+                        type="submit"
+                        action="delete"
+                        size="compact"
+                        title="حذف الصفحة وجميع ربط الموديولات"
+                      />
+                    </form>
+                  )}
+                </AdminDataGridActionsCell>
+              </AdminDataGridRow>
+            );
+          })}
+
+          {!pages.length ? <AdminDataGridEmpty>لا توجد صفحات بعد.</AdminDataGridEmpty> : null}
         </AdminDataGrid>
+
+        <AdminTablePagination
+          basePath={PAGES_LIST_BASE_PATH}
+          rangeStart={pagination.rangeStart}
+          rangeEnd={pagination.rangeEnd}
+          totalCount={pagination.totalCount}
+          pageSize={pagination.pageSize}
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          emptySummaryText="لا توجد صفحات"
+        />
       </div>
     </div>
   );
