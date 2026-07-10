@@ -3,7 +3,9 @@ export type FaqSchemaItem = {
   answer: string;
 };
 
-export function buildFaqSchema(items: readonly FaqSchemaItem[]) {
+import type { JsonLdObject } from "./jsonld-types";
+
+export function buildFaqSchema(items: readonly FaqSchemaItem[]): JsonLdObject {
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",

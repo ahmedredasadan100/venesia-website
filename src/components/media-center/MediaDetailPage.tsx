@@ -6,6 +6,7 @@ import { getMediaItemBySlug, getMediaItems } from "../../lib/media-center";
 import { MEDIA_DETAIL_PAGE_CONFIG, type MediaDetailPageKey } from "../../lib/media-center/detail-page-config";
 import { loadMediaCenterSidebarProps } from "../../lib/media-sidebar-modules/load-media-sidebar-modules";
 import { buildPageJsonLd } from "../../lib/seo/build-jsonld";
+import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 import MediaDetailArticle from "./MediaDetailArticle";
 import MediaPageShell from "./MediaPageShell";
 
@@ -33,22 +34,26 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
 
   const pagePath = `${config.basePath}/${item.slug}`;
   const content = item.content?.length ? item.content : config.fallbackContent;
+  const globalSeo = await loadResolvedGlobalSeo();
 
-  const pageJsonLd = buildPageJsonLd({
-    path: pagePath,
-    title: item.title,
-    description: item.excerpt,
-    type: "article",
-    image: item.image,
-    publishedAt: item.publishedAt,
-    updatedAt: item.publishedAt,
-    breadcrumbs: [
-      { name: "الرئيسية", path: "/" },
-      { name: "المركز الإعلامي", path: "/media-center" },
-      { name: config.breadcrumbSectionLabel, path: config.basePath },
-      { name: item.title, path: pagePath },
-    ],
-  });
+  const pageJsonLd = buildPageJsonLd(
+    {
+      path: pagePath,
+      title: item.seoTitle || item.title,
+      description: item.seoDescription || item.excerpt,
+      type: "article",
+      image: item.ogImage || item.image,
+      publishedAt: item.publishedAt,
+      updatedAt: item.publishedAt,
+      breadcrumbs: [
+        { name: "الرئيسية", path: "/" },
+        { name: "المركز الإعلامي", path: "/media-center" },
+        { name: config.breadcrumbSectionLabel, path: config.basePath },
+        { name: item.title, path: pagePath },
+      ],
+    },
+    globalSeo,
+  );
 
   return (
     <InternalPageLayout

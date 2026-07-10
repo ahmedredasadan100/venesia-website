@@ -1,12 +1,12 @@
 import { SEO_SITE } from "../../config/seo/seo-site";
-import { absoluteUrl, normalizePath } from "./seo-utils";
+import { absoluteUrl, absoluteUrlWithBase, normalizePath } from "./seo-utils";
 
 export type BreadcrumbItem = {
   name: string;
   path: string;
 };
 
-export function buildBreadcrumbItems(items: BreadcrumbItem[]) {
+export function buildBreadcrumbItems(items: BreadcrumbItem[], baseUrl?: string) {
   const homeItem: BreadcrumbItem = {
     name: "الرئيسية",
     path: "/",
@@ -19,15 +19,19 @@ export function buildBreadcrumbItems(items: BreadcrumbItem[]) {
     "@type": "ListItem",
     position: index + 1,
     name: item.name,
-    item: absoluteUrl(normalizePath(item.path)),
+    item: baseUrl
+      ? absoluteUrlWithBase(normalizePath(item.path), baseUrl)
+      : absoluteUrl(normalizePath(item.path)),
   }));
 }
 
-export function buildBreadcrumbSchema(items: BreadcrumbItem[]) {
+import type { JsonLdObject } from "./jsonld-types";
+
+export function buildBreadcrumbSchema(items: BreadcrumbItem[], baseUrl?: string): JsonLdObject {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
-    itemListElement: buildBreadcrumbItems(items),
+    itemListElement: buildBreadcrumbItems(items, baseUrl),
   };
 }
 

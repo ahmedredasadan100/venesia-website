@@ -1,107 +1,208 @@
-import {
-  SCHEMA_ORGANIZATION,
-  SCHEMA_WEBSITE,
-} from "../../config/seo/schema-data";
-import { SEO_SITE } from "../../config/seo/seo-site";
-import type { SeoOpenGraphType } from "../../config/seo/seo-types";
-import { absoluteAssetUrl, absoluteUrl } from "./seo-utils";
+import type { GlobalSeoSettings } from "./global-seo-types";
 import {
   buildBreadcrumbSchema,
   type BreadcrumbItem,
 } from "./build-breadcrumbs";
 import { buildFaqSchema, type FaqSchemaItem } from "./build-faq-schema";
+import type { JsonLdObject, JsonLdValue } from "./jsonld-types";
+import { absoluteAssetUrl, absoluteUrlWithBase } from "./seo-utils";
 
-export function buildOrganizationSchema() {
-  return {
+export function buildOrganizationSchema(global?: GlobalSeoSettings): JsonLdObject {
+  const baseUrl = global?.canonicalBaseUrl || global?.siteUrl || "";
+  const name = global?.organizationName || global?.siteName || "";
+  const logo = global?.organizationLogo || "";
+
+  const schema: JsonLdObject = {
     "@context": "https://schema.org",
     "@type": "RealEstateAgent",
-    ...SCHEMA_ORGANIZATION,
+    name,
+    url: baseUrl || undefined,
   };
+
+  if (global?.organizationDescription) {
+    schema.description = global.organizationDescription;
+  }
+
+  if (logo) {
+    schema.logo = absoluteAssetUrl(logo, baseUrl);
+    schema.image = absoluteAssetUrl(logo, baseUrl);
+  }
+
+  if (global?.organizationPhone) {
+    schema.telephone = global.organizationPhone;
+  }
+
+  if (global?.organizationEmail) {
+    schema.email = global.organizationEmail;
+  }
+
+  if (global?.organizationAddress) {
+    schema.address = {
+      "@type": "PostalAddress",
+      streetAddress: global.organizationAddress,
+    };
+  }
+
+  if (global?.organizationSocialLinks?.length) {
+    schema.sameAs = global.organizationSocialLinks.map((item) => item.href);
+  }
+
+  return schema;
 }
 
-export function buildWebsiteSchema() {
+export function buildWebsiteSchema(global?: GlobalSeoSettings): JsonLdObject {
+  const baseUrl = global?.canonicalBaseUrl || global?.siteUrl || "";
+  const siteName = global?.siteName || global?.organizationName || "";
+
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    ...SCHEMA_WEBSITE,
+    name: siteName,
+    url: baseUrl || undefined,
     publisher: {
       "@type": "Organization",
-      name: SEO_SITE.name,
-      url: SEO_SITE.defaultUrl,
+      name: global?.organizationName || siteName,
+      url: baseUrl || undefined,
     },
   };
 }
 
-export function buildArticleSchema(input: {
-  path: string;
-  title: string;
-  description: string;
-  image?: string;
-  publishedAt?: string;
-  updatedAt?: string;
-  authorName?: string;
-}) {
+export function buildArticleSchema(
+  input: {
+    path: string;
+    title: string;
+    description: string;
+    image?: string;
+    publishedAt?: string;
+    updatedAt?: string;
+    authorName?: string;
+  },
+  global?: GlobalSeoSettings,
+): JsonLdObject {
+  const baseUrl = global?.canonicalBaseUrl || global?.siteUrl || "";
+  const publisherName = global?.organizationName || global?.siteName || "";
+  const logo = global?.organizationLogo || "";
+
   return {
     "@context": "https://schema.org",
     "@type": "Article",
     headline: input.title,
     description: input.description,
-    image: absoluteAssetUrl(input.image ?? SEO_SITE.defaultImage),
+    image: absoluteAssetUrl(input.image, baseUrl),
     datePublished: input.publishedAt,
     dateModified: input.updatedAt ?? input.publishedAt,
     author: {
       "@type": "Organization",
-      name: input.authorName ?? SEO_SITE.name,
+      name: input.authorName ?? publisherName,
     },
     publisher: {
       "@type": "Organization",
-      name: SEO_SITE.name,
-      logo: {
-        "@type": "ImageObject",
-        url: absoluteAssetUrl(SEO_SITE.logo),
-      },
+      name: publisherName,
+      ...(logo
+        ? {
+            logo: {
+              "@type": "ImageObject",
+              url: absoluteAssetUrl(logo, baseUrl),
+            },
+          }
+        : {}),
     },
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": absoluteUrl(input.path),
+      "@id": absoluteUrlWithBase(input.path, baseUrl),
     },
   };
 }
 
-type PageJsonLdSchema =
-  | ReturnType<typeof buildOrganizationSchema>
-  | ReturnType<typeof buildWebsiteSchema>
-  | ReturnType<typeof buildBreadcrumbSchema>
-  | ReturnType<typeof buildArticleSchema>
-  | ReturnType<typeof buildFaqSchema>;
+export function buildProjectSchema(
+  input: {
+    path: string;
+    name: string;
+    description: string;
+    image?: string;
+    locationLabel?: string;
+  },
+  global?: GlobalSeoSettings,
+): JsonLdObject {
+  const baseUrl = global?.canonicalBaseUrl || global?.siteUrl || "";
 
-export function buildPageJsonLd(input: {
-  path: string;
-  title: string;
-  description: string;
-  type?: SeoOpenGraphType;
-  image?: string;
-  breadcrumbs?: BreadcrumbItem[];
-  publishedAt?: string;
-  updatedAt?: string;
-  faqs?: readonly FaqSchemaItem[];
-}) {
-  const schemas: PageJsonLdSchema[] = [buildOrganizationSchema(), buildWebsiteSchema()];
+  const schema: JsonLdObject = {
+    "@context": "https://schema.org",
+    "@type": "RealEstateListing",
+    name: input.name,
+    description: input.description,
+    url: absoluteUrlWithBase(input.path, baseUrl),
+  };
+
+  if (input.image) {
+    schema.image = absoluteAssetUrl(input.image, baseUrl);
+  }
+
+  if (input.locationLabel) {
+    schema.address = {
+      "@type": "PostalAddress",
+      addressLocality: input.locationLabel,
+    };
+  }
+
+  return schema;
+}
+
+export function buildPageJsonLd(
+  input: {
+    path: string;
+    title: string;
+    description: string;
+    type?: "website" | "article";
+    image?: string;
+    breadcrumbs?: BreadcrumbItem[];
+    publishedAt?: string;
+    updatedAt?: string;
+    faqs?: readonly FaqSchemaItem[];
+    project?: {
+      name: string;
+      description: string;
+      image?: string;
+      locationLabel?: string;
+    };
+  },
+  global?: GlobalSeoSettings,
+): JsonLdValue[] {
+  const baseUrl = global?.canonicalBaseUrl || global?.siteUrl;
+  const schemas: JsonLdValue[] = [];
 
   if (input.breadcrumbs?.length) {
-    schemas.push(buildBreadcrumbSchema(input.breadcrumbs));
+    schemas.push(buildBreadcrumbSchema(input.breadcrumbs, baseUrl));
   }
 
   if (input.type === "article") {
     schemas.push(
-      buildArticleSchema({
-        path: input.path,
-        title: input.title,
-        description: input.description,
-        image: input.image,
-        publishedAt: input.publishedAt,
-        updatedAt: input.updatedAt,
-      })
+      buildArticleSchema(
+        {
+          path: input.path,
+          title: input.title,
+          description: input.description,
+          image: input.image,
+          publishedAt: input.publishedAt,
+          updatedAt: input.updatedAt,
+        },
+        global,
+      ),
+    );
+  }
+
+  if (input.project) {
+    schemas.push(
+      buildProjectSchema(
+        {
+          path: input.path,
+          name: input.project.name,
+          description: input.project.description,
+          image: input.project.image,
+          locationLabel: input.project.locationLabel,
+        },
+        global,
+      ),
     );
   }
 

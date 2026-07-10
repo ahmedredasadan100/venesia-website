@@ -11,16 +11,10 @@ import {
   buildWebsiteSchema,
 } from "../../lib/seo/build-jsonld";
 import { buildAiVisibilityJson } from "../../lib/seo/build-ai-visibility";
-import { buildFaqSchema } from "../../lib/seo/build-faq-schema";
-import { VENESIA_FAQS } from "../../config/seo/faq-schema";
+import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 
 /** DB-backed public layout: cached loaders (300s) with graceful fallbacks when Supabase is unavailable. */
 export const revalidate = 300;
-
-const organizationSchema = buildOrganizationSchema();
-const websiteSchema = buildWebsiteSchema();
-const aiVisibilitySchema = buildAiVisibilityJson();
-const faqSchema = buildFaqSchema(VENESIA_FAQS);
 
 export default async function SiteLayout({
   children,
@@ -30,6 +24,7 @@ export default async function SiteLayout({
   let navigationItems: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
   let footerNavItems: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
   let footerSettings = await loadFooterSettings().catch(() => null);
+  const globalSeo = await loadResolvedGlobalSeo();
 
   try {
     [navigationItems, footerNavItems] = await Promise.all([
@@ -50,12 +45,15 @@ export default async function SiteLayout({
     footerNavItems,
   });
 
+  const organizationSchema = buildOrganizationSchema(globalSeo);
+  const websiteSchema = buildWebsiteSchema(globalSeo);
+  const aiVisibilitySchema = buildAiVisibilityJson();
+
   return (
     <>
       <JsonLd data={organizationSchema} />
       <JsonLd data={websiteSchema} />
       <JsonLd data={aiVisibilitySchema} />
-      <JsonLd data={faqSchema} />
 
       <PublicNavigationProvider items={navigationItems}>
         <FooterSettingsProvider
