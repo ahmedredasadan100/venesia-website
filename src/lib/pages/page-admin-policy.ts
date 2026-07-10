@@ -1,34 +1,37 @@
-/** System pages that must not be deleted from CMS. Duplicate/toggle remain allowed. */
+/** Homepage is the only page that cannot be deleted from CMS. */
 
-const CORE_PROTECTED_SLUGS = new Set(["home", "about", "contact", "topics"]);
+export type PageDeleteIdentity = {
+  slug: string;
+  path?: string | null;
+};
 
-const SYSTEM_PROTECTED_SLUGS = new Set([
-  "track-your-project",
-  "media-center",
-  "media-center-news",
-  "media-center-videos",
-  "media-center-gallery",
-  "media-center-press",
-  "media-center-site-updates",
-  "projects",
-]);
+function normalizeSlug(slug: string) {
+  return slug.trim().toLowerCase();
+}
 
-export function getPageDeleteBlockReason(slug: string) {
-  const normalized = slug.trim().toLowerCase();
+function normalizeStoredPath(path: string | null | undefined) {
+  if (path == null) return "";
+  const trimmed = path.trim();
+  if (!trimmed || trimmed === "/") return trimmed === "/" ? "/" : "";
+  return `/${trimmed.replace(/^\/+/, "").replace(/\/+$/, "")}`;
+}
 
-  if (CORE_PROTECTED_SLUGS.has(normalized)) {
-    return "صفحة نظام أساسية (Home / About / Contact / Topics) — الحذف غير مسموح.";
-  }
+export function isHomepagePage(page: PageDeleteIdentity) {
+  const slug = normalizeSlug(page.slug);
+  const path = normalizeStoredPath(page.path);
+  return slug === "home" || path === "/";
+}
 
-  if (SYSTEM_PROTECTED_SLUGS.has(normalized) || normalized.startsWith("media-center")) {
-    return "صفحة CMS أساسية أو مسار المركز الإعلامي — الحذف غير مسموح.";
+export function getPageDeleteBlockReason(page: PageDeleteIdentity) {
+  if (isHomepagePage(page)) {
+    return "الصفحة الرئيسية محمية — الحذف غير مسموح.";
   }
 
   return null;
 }
 
-export function canDeletePage(slug: string) {
-  return getPageDeleteBlockReason(slug) === null;
+export function canDeletePage(page: PageDeleteIdentity) {
+  return getPageDeleteBlockReason(page) === null;
 }
 
 export function buildDuplicatePageIdentity(

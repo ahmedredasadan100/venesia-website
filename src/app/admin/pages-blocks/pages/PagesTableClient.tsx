@@ -67,6 +67,9 @@ const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.p
 
 const PAGES_LIST_BASE_PATH = "/admin/pages-blocks/pages";
 
+const PAGE_DELETE_CONFIRM =
+  "سيتم حذف الصفحة وروابط الموديلات الخاصة بها فقط.\nالموديلات والقوالب نفسها لن يتم حذفها.";
+
 function statusMeta(status: string) {
   if (status === "published") return { label: "منشورة", tone: "green" as const };
   if (status === "hidden") return { label: "مخفية", tone: "gold" as const };
@@ -151,7 +154,7 @@ export default function PagesTableClient({
   }
 
   function handleBulkDelete(ids: number[]) {
-    if (!window.confirm(`حذف ${ids.length} صفحة؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    if (!window.confirm(PAGE_DELETE_CONFIRM)) return;
 
     setFeedback(null);
     startTransition(async () => {
@@ -238,7 +241,7 @@ export default function PagesTableClient({
 
           {pages.map((page) => {
             const status = statusMeta(page.status);
-            const deleteBlockReason = getPageDeleteBlockReason(page.slug);
+            const deleteBlockReason = getPageDeleteBlockReason({ slug: page.slug, path: page.path });
             const isPublished = page.status === "published";
             const publicPath = resolvePublicPath(page);
 
@@ -315,13 +318,21 @@ export default function PagesTableClient({
                       title={deleteBlockReason}
                     />
                   ) : (
-                    <form action={deletePage} className="contents">
+                    <form
+                      action={deletePage}
+                      className="contents"
+                      onSubmit={(event) => {
+                        if (!window.confirm(PAGE_DELETE_CONFIRM)) {
+                          event.preventDefault();
+                        }
+                      }}
+                    >
                       <input type="hidden" name="id" value={page.id} />
                       <AdminDataGridActionButton
                         type="submit"
                         action="delete"
                         size="compact"
-                        title="حذف الصفحة وجميع ربط الموديولات"
+                        title="حذف الصفحة وروابط الموديلات الخاصة بها فقط"
                       />
                     </form>
                   )}

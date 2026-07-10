@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
@@ -8,10 +8,30 @@ import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { revalidatePublicPagesWithBlockAssignments } from "../../../../../lib/page-blocks/admin-revalidate";
 import { parseNumber } from "../../../../../lib/page-blocks/admin-utils";
 import { getPageDeleteBlockReason } from "../../../../../lib/pages/page-admin-policy";
+import { normalizePath } from "../../../../../lib/seo/seo-utils";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type { PagesTableRow } from "../../../../../lib/admin/pages/load-pages-table-rows";
 import { loadPagesTableRowsForAdmin, pagesListPath } from "./helpers";
 import type { PagesTableResult } from "./types";
+
+async function deletePageHeroAssignments(pageId: number) {
+  const { error } = await getSupabaseAdmin()
+    .from("hero_assignments")
+    .delete()
+    .eq("target_type", "page")
+    .eq("target_id", pageId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+function revalidateDeletedPublicPath(path: string | null | undefined) {
+  if (!path) return;
+  const normalizedPath = normalizePath(path);
+  revalidatePath(normalizedPath, "page");
+  revalidateTag(`page-seo:${normalizedPath}`, "max");
+}
 
 export async function getPagesTableRows(): Promise<PagesTableRow[]> {
   return loadPagesTableRowsForAdmin();
@@ -24,27 +44,39 @@ export async function bulkDeletePagesAjax(ids: number[]): Promise<PagesTableResu
 
   const { data: pages, error: loadError } = await getSupabaseAdmin()
     .from("pages")
-    .select("id, slug")
+    .select("id, slug, path, title")
     .in("id", validIds);
 
   if (loadError) return { ok: false, message: loadError.message };
 
-  const deletableIds: number[] = [];
+  const deletable: Array<{ id: number; path: string | null; title: string }> = [];
   let blockedCount = 0;
 
   for (const page of pages ?? []) {
-    const blockReason = getPageDeleteBlockReason(page.slug);
+    const blockReason = getPageDeleteBlockReason({ slug: page.slug, path: page.path });
     if (blockReason) {
       blockedCount += 1;
     } else {
-      deletableIds.push(page.id);
+      deletable.push({ id: page.id, path: page.path, title: page.title });
     }
   }
 
-  if (!deletableIds.length) {
-    return { ok: false, message: "لا يمكن حذف الصفحات المحددة — صفحات نظامية محمية." };
+  if (!deletable.length) {
+    return { ok: false, message: "لا يمكن حذف الصفحات المحددة — الصفحة الرئيسية محمية." };
   }
 
+  for (const page of deletable) {
+    try {
+      await deletePageHeroAssignments(page.id);
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "تعذر حذف ربط الهيرو للصفحة.",
+      };
+    }
+  }
+
+  const deletableIds = deletable.map((page) => page.id);
   const { error: deleteError } = await getSupabaseAdmin().from("pages").delete().in("id", deletableIds);
   if (deleteError) return { ok: false, message: deleteError.message };
 
@@ -53,6 +85,10 @@ export async function bulkDeletePagesAjax(ids: number[]): Promise<PagesTableResu
     entityType: "page",
     metadata: { page_ids: deletableIds, count: deletableIds.length },
   });
+
+  for (const page of deletable) {
+    revalidateDeletedPublicPath(page.path);
+  }
 
   revalidatePath("/admin/pages-blocks/pages", "layout");
   await revalidatePublicPagesWithBlockAssignments();
@@ -73,16 +109,26 @@ export async function deletePage(formData: FormData) {
 
   const { data: page, error: loadError } = await getSupabaseAdmin()
     .from("pages")
-    .select("slug,title")
+    .select("slug,path,title")
     .eq("id", pageId)
-    .maybeSingle<{ slug: string; title: string }>();
+    .maybeSingle<{ slug: string; path: string; title: string }>();
 
   if (loadError || !page) {
     redirect(pagesListPath({ error: loadError?.message ?? "الصفحة غير موجودة." }));
   }
 
-  const blockReason = getPageDeleteBlockReason(page.slug);
+  const blockReason = getPageDeleteBlockReason({ slug: page.slug, path: page.path });
   if (blockReason) redirect(pagesListPath({ error: blockReason }));
+
+  try {
+    await deletePageHeroAssignments(pageId);
+  } catch (error) {
+    redirect(
+      pagesListPath({
+        error: error instanceof Error ? error.message : "تعذر حذف ربط الهيرو للصفحة.",
+      }),
+    );
+  }
 
   const { error } = await getSupabaseAdmin().from("pages").delete().eq("id", pageId);
   if (error) redirect(pagesListPath({ error: error.message }));
@@ -92,9 +138,10 @@ export async function deletePage(formData: FormData) {
     entityType: "page",
     entityId: pageId,
     entityLabel: page.title,
-    metadata: { slug: page.slug },
+    metadata: { slug: page.slug, path: page.path },
   });
 
+  revalidateDeletedPublicPath(page.path);
   revalidatePath("/admin/pages-blocks/pages", "layout");
   await revalidatePublicPagesWithBlockAssignments();
   redirect(pagesListPath({ notice: `تم حذف الصفحة «${page.title}».` }));
