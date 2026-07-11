@@ -1,0 +1,187 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+
+import AdminMediaImageField from "../../media/AdminMediaImageField";
+import AdminNotice from "../../AdminNotice";
+import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
+import {
+  PROJECTS_HUB_DEFAULT_MAP_IMAGE,
+  type ProjectsHubMapModuleConfig,
+  type ProjectsHubMapPinConfig,
+} from "../../../../lib/page-blocks/projects-hub-config";
+
+type ProjectsHubMapModuleEditorProps = {
+  config: ProjectsHubMapModuleConfig;
+};
+
+function normalizePins(pins: ProjectsHubMapPinConfig[] | undefined) {
+  const rows = [...(pins ?? [])];
+  return rows.length ? rows : [{ code: "", district: "", right: "50%", top: "50%" }];
+}
+
+export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapModuleEditorProps) {
+  const [pins, setPins] = useState<ProjectsHubMapPinConfig[]>(() => normalizePins(config.mapPins));
+
+  const movePin = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= pins.length) return;
+    const next = [...pins];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    setPins(next);
+  };
+
+  const updatePin = (index: number, patch: Partial<ProjectsHubMapPinConfig>) => {
+    setPins((current) => current.map((pin, i) => (i === index ? { ...pin, ...patch } : pin)));
+  };
+
+  const removePin = (index: number) => {
+    if (pins.length <= 1) return;
+    setPins((current) => current.filter((_, i) => i !== index));
+  };
+
+  const addPin = () => {
+    if (pins.length >= 30) return;
+    setPins((current) => [...current, { code: "", district: "", right: "50%", top: "50%" }]);
+  };
+
+  return (
+    <div className="space-y-6">
+      <input type="hidden" name="config_schema" value="projects-hub-map" />
+      <input type="hidden" name="pin_count" value={String(pins.length)} />
+
+      <AdminNotice
+        variant="info"
+        title="بيانات المشروعات"
+        message="بيانات المشروعات نفسها تُدار من قسم إدارة المشروعات. الدبابيس تُطابق عبر كود المشروع وmapArea."
+      />
+
+      <div className="flex flex-wrap gap-3 text-sm">
+        <Link href="/admin/projects" className="text-[#D8B87A] underline-offset-2 hover:underline">
+          إدارة بيانات المشروعات
+        </Link>
+        <Link href="/projects" target="_blank" rel="noreferrer" className="text-white/55 underline-offset-2 hover:underline">
+          معاينة صفحة المشروعات
+        </Link>
+      </div>
+
+      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        <h2 className="text-sm font-semibold text-white">خريطة المشروعات</h2>
+
+        <label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">العنوان</span>
+          <input name="title" defaultValue={config.title} className={fieldClassName()} />
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">نص زر الاستكشاف</span>
+          <input name="explore_button_label" defaultValue={config.exploreButtonLabel} className={fieldClassName()} />
+        </label>
+
+        <AdminMediaImageField
+          name="map_image"
+          label="صورة الخريطة"
+          defaultValue={config.mapImage || PROJECTS_HUB_DEFAULT_MAP_IMAGE}
+          browseFolder="images/projects"
+          dimensionHint="content"
+          helperText={`الافتراضي: ${PROJECTS_HUB_DEFAULT_MAP_IMAGE}`}
+        />
+      </section>
+
+      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-white">دبابيس الخريطة</h2>
+          <button
+            type="button"
+            onClick={addPin}
+            disabled={pins.length >= 30}
+            className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            إضافة دبوس
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {pins.map((pin, index) => (
+            <div key={index} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-[#D8B87A]/70">دبوس {index + 1}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => movePin(index, -1)}
+                    disabled={index === 0}
+                    className="rounded-xl border border-white/10 px-3 py-1 text-xs text-white/60 disabled:opacity-30"
+                  >
+                    أعلى
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => movePin(index, 1)}
+                    disabled={index === pins.length - 1}
+                    className="rounded-xl border border-white/10 px-3 py-1 text-xs text-white/60 disabled:opacity-30"
+                  >
+                    أسفل
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removePin(index)}
+                    disabled={pins.length <= 1}
+                    className="rounded-xl border border-red-400/30 px-3 py-1 text-xs text-red-300 disabled:opacity-30"
+                  >
+                    حذف
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-xs font-semibold text-white/55">كود المشروع</span>
+                  <input
+                    name={`pin_${index}_code`}
+                    value={pin.code}
+                    onChange={(event) => updatePin(index, { code: event.target.value })}
+                    dir="ltr"
+                    className={fieldClassName()}
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-xs font-semibold text-white/55">المنطقة / الحي</span>
+                  <input
+                    name={`pin_${index}_district`}
+                    value={pin.district}
+                    onChange={(event) => updatePin(index, { district: event.target.value })}
+                    className={fieldClassName()}
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-xs font-semibold text-white/55">Right %</span>
+                  <input
+                    name={`pin_${index}_right`}
+                    value={pin.right}
+                    onChange={(event) => updatePin(index, { right: event.target.value })}
+                    placeholder="20%"
+                    dir="ltr"
+                    className={fieldClassName()}
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-xs font-semibold text-white/55">Top %</span>
+                  <input
+                    name={`pin_${index}_top`}
+                    value={pin.top}
+                    onChange={(event) => updatePin(index, { top: event.target.value })}
+                    placeholder="50%"
+                    dir="ltr"
+                    className={fieldClassName()}
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}

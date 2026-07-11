@@ -25,7 +25,8 @@ export type CmsEntityType =
   | "menu_item"
   | "footer_settings"
   | "site_settings"
-  | "redirect";
+  | "redirect"
+  | "content_block_template";
 
 export type CmsAuditAction = `${CmsEntityType}.${CmsAuditVerb}`;
 
@@ -59,6 +60,7 @@ const ENTITY_LABELS: Record<CmsEntityType, string> = {
   footer_settings: "إعدادات الفوتر",
   site_settings: "إعدادات الموقع",
   redirect: "تحويل URL",
+  content_block_template: "قالب بلوك محتوى",
 };
 
 export function formatCmsAuditActionLabel(action: string): string | null {

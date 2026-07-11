@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
+import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
@@ -34,6 +36,39 @@ import {
   usesAboutCtaConfigSchema,
   usesAboutPrinciplesConfigSchema,
 } from "../../../../../lib/page-blocks/configs";
+import {
+  PROJECTS_HUB_FEATURED_KEYS,
+  PROJECTS_HUB_FEATURED_SELECTION_MODES,
+  PROJECTS_HUB_FILTER_IDS,
+  PROJECTS_HUB_HERO_KEYS,
+  PROJECTS_HUB_HERO_SELECTION_MODES,
+  PROJECTS_HUB_LISTING_KEYS,
+  PROJECTS_HUB_MAP_KEYS,
+  PROJECTS_HUB_SORT_MODES,
+  PROJECTS_HUB_VIEW_MODES,
+  assertAutoplayMs,
+  assertMapPercent,
+  assertPageSize,
+  assertProjectCode,
+  assertSafeCmsMediaPath,
+  assertSafePlainText,
+  isProjectsHubFeaturedTemplate,
+  isProjectsHubHeroTemplate,
+  isProjectsHubListingTemplate,
+  isProjectsHubMapTemplate,
+  isProjectsHubTemplate,
+  mergeProjectsHubConfig,
+  type ProjectsHubFeaturedModuleConfig,
+  type ProjectsHubFeaturedSelectionMode,
+  type ProjectsHubFilterId,
+  type ProjectsHubHeroModuleConfig,
+  type ProjectsHubHeroSelectionMode,
+  type ProjectsHubListingModuleConfig,
+  type ProjectsHubMapModuleConfig,
+  type ProjectsHubMapPinConfig,
+  type ProjectsHubSortMode,
+  type ProjectsHubViewMode,
+} from "../../../../../lib/page-blocks/projects-hub-config";
 
 function buildGenericContentConfig(formData: FormData): ContentBlockConfig {
   return {
@@ -211,6 +246,120 @@ function buildHomeProjectsConfig(formData: FormData): HomeProjectsModuleConfig {
   };
 }
 
+function buildProjectsHubHeroTypedConfig(formData: FormData): ProjectsHubHeroModuleConfig {
+  const selectionMode = cleanText(formData.get("selection_mode")) as ProjectsHubHeroSelectionMode;
+  if (!PROJECTS_HUB_HERO_SELECTION_MODES.includes(selectionMode)) {
+    throw new Error("طريقة اختيار شرائح الهيرو غير مدعومة.");
+  }
+  const autoplayMs = assertAutoplayMs(Number(cleanText(formData.get("autoplay_ms")) || 6000));
+  const emptyRaw = cleanText(formData.get("empty_state"));
+  const emptyState = emptyRaw ? assertSafePlainText(emptyRaw, "نص الحالة الفارغة", 400) : null;
+  return { selectionMode, autoplayMs, emptyState };
+}
+
+function buildProjectsHubFeaturedTypedConfig(formData: FormData): ProjectsHubFeaturedModuleConfig {
+  const selectionMode = cleanText(formData.get("selection_mode")) as ProjectsHubFeaturedSelectionMode;
+  if (!PROJECTS_HUB_FEATURED_SELECTION_MODES.includes(selectionMode)) {
+    throw new Error("قاعدة اختيار المشروعات المميزة غير مدعومة.");
+  }
+  const title = assertSafePlainText(cleanText(formData.get("title")) || "مشروع مميز", "العنوان", 120);
+  const subtitle = assertSafePlainText(
+    cleanText(formData.get("subtitle")) || "اختيار يعكس مسار التنفيذ على الأرض",
+    "العنوان الفرعي",
+    240,
+  );
+  const limitRaw = cleanText(formData.get("limit"));
+  const limit = limitRaw ? assertPageSize(Number(limitRaw)) : null;
+  const autoplayMs = assertAutoplayMs(Number(cleanText(formData.get("autoplay_ms")) || 6000));
+  return { selectionMode, title, subtitle, limit, autoplayMs };
+}
+
+function buildProjectsHubListingTypedConfig(formData: FormData): ProjectsHubListingModuleConfig {
+  const visibleFilters = formData
+    .getAll("visible_filters")
+    .map((value) => cleanText(value))
+    .filter((value): value is ProjectsHubFilterId =>
+      (PROJECTS_HUB_FILTER_IDS as readonly string[]).includes(value),
+    );
+  if (!visibleFilters.length) {
+    throw new Error("يجب إظهار فلتر واحد على الأقل.");
+  }
+  const defaultFilter = cleanText(formData.get("default_filter")) as ProjectsHubFilterId;
+  if (!(PROJECTS_HUB_FILTER_IDS as readonly string[]).includes(defaultFilter)) {
+    throw new Error("الفلتر الافتراضي غير صالح.");
+  }
+  if (!visibleFilters.includes(defaultFilter)) {
+    throw new Error("الفلتر الافتراضي يجب أن يكون ضمن الفلاتر الظاهرة.");
+  }
+  const defaultView = cleanText(formData.get("default_view")) as ProjectsHubViewMode;
+  if (!(PROJECTS_HUB_VIEW_MODES as readonly string[]).includes(defaultView)) {
+    throw new Error("وضع العرض الافتراضي غير مدعوم.");
+  }
+  const sort = cleanText(formData.get("sort")) as ProjectsHubSortMode;
+  if (!(PROJECTS_HUB_SORT_MODES as readonly string[]).includes(sort)) {
+    throw new Error("طريقة الترتيب غير مدعومة.");
+  }
+  return {
+    eyebrow: assertSafePlainText(cleanText(formData.get("eyebrow")) || "Projects Index", "Eyebrow", 80),
+    title: assertSafePlainText(cleanText(formData.get("title")) || "جميع المشروعات", "العنوان", 120),
+    defaultFilter,
+    visibleFilters,
+    defaultView,
+    pageSize: assertPageSize(Number(cleanText(formData.get("page_size")) || 6)),
+    sort,
+  };
+}
+
+async function buildProjectsHubMapTypedConfig(formData: FormData): Promise<ProjectsHubMapModuleConfig> {
+  const pinCount = Math.min(30, Math.max(0, Number(cleanText(formData.get("pin_count")) || 0)));
+  const mapPins: ProjectsHubMapPinConfig[] = [];
+
+  for (let index = 0; index < pinCount; index += 1) {
+    const codeRaw = cleanText(formData.get(`pin_${index}_code`));
+    const districtRaw = cleanText(formData.get(`pin_${index}_district`));
+    const rightRaw = cleanText(formData.get(`pin_${index}_right`));
+    const topRaw = cleanText(formData.get(`pin_${index}_top`));
+    if (!codeRaw && !districtRaw && !rightRaw && !topRaw) continue;
+
+    const code = assertProjectCode(codeRaw);
+    mapPins.push({
+      code,
+      district: assertSafePlainText(districtRaw || "—", "المنطقة", 80),
+      right: assertMapPercent(rightRaw, "Right %"),
+      top: assertMapPercent(topRaw, "Top %"),
+    });
+  }
+
+  if (!mapPins.length) {
+    throw new Error("أضف دبوس خريطة واحدًا على الأقل.");
+  }
+
+  const codes = mapPins.map((pin) => pin.code);
+  const { data: projectRows, error } = await getSupabaseAdmin()
+    .from("projects")
+    .select("code")
+    .in("code", codes);
+  if (error) throw new Error(error.message);
+
+  const knownCodes = new Set((projectRows ?? []).map((row) => String(row.code).toUpperCase()));
+  for (const code of codes) {
+    if (!knownCodes.has(code.toUpperCase())) {
+      throw new Error(`كود المشروع غير موجود في قاعدة البيانات: ${code}`);
+    }
+  }
+
+  return {
+    title: assertSafePlainText(cleanText(formData.get("title")) || "مشروعاتنا على الخريطة", "العنوان", 120),
+    mapImage: assertSafeCmsMediaPath(cleanText(formData.get("map_image")), "صورة الخريطة"),
+    exploreButtonLabel: assertSafePlainText(
+      cleanText(formData.get("explore_button_label")) || "استكشف على الخريطة",
+      "نص زر الاستكشاف",
+      80,
+    ),
+    mapPins,
+  };
+}
+
 function resolveStructuredVariant(slug: string, variantInput: string | null) {
   if (usesAboutIntroConfigSchema(slug, variantInput)) return "about-intro";
   if (isVisionGoalsTemplate(slug, variantInput)) return "vision-goals";
@@ -218,41 +367,91 @@ function resolveStructuredVariant(slug: string, variantInput: string | null) {
   if (usesAboutPrinciplesConfigSchema(slug, variantInput)) return "about-principles";
   if (isAboutApproachTemplate(slug, variantInput)) return "about-approach";
   if (isHomeProjectsTemplate(slug, variantInput)) return "home-projects";
+  if (isProjectsHubHeroTemplate(slug, variantInput)) return "projects-hub-hero";
+  if (isProjectsHubFeaturedTemplate(slug, variantInput)) return "projects-hub-featured";
+  if (isProjectsHubListingTemplate(slug, variantInput)) return "projects-hub-listing";
+  if (isProjectsHubMapTemplate(slug, variantInput)) return "projects-hub-map";
   return variantInput || "default";
 }
 
-function buildContentConfig(
+async function buildContentConfig(
   formData: FormData,
   slug?: string,
-):
+  existingConfig?: unknown,
+): Promise<
   | ContentBlockConfig
   | AboutIntroModuleConfig
   | VisionGoalsModuleConfig
   | AboutCtaModuleConfig
   | AboutPrinciplesModuleConfig
   | AboutApproachModuleConfig
-  | HomeProjectsModuleConfig {
+  | HomeProjectsModuleConfig
+  | Record<string, unknown>
+> {
   const variantInput = cleanText(formData.get("variant")) || null;
+  const schema = cleanText(formData.get("config_schema"));
+  const resolvedSlug = slug ?? "";
 
-  if (cleanText(formData.get("config_schema")) === "about-intro" || usesAboutIntroConfigSchema(slug ?? "", variantInput)) {
+  if (isProjectsHubTemplate(resolvedSlug, variantInput)) {
+    if (
+      schema === "projects-hub-hero" ||
+      (!schema && isProjectsHubHeroTemplate(resolvedSlug, variantInput))
+    ) {
+      return mergeProjectsHubConfig(
+        existingConfig,
+        buildProjectsHubHeroTypedConfig(formData),
+        PROJECTS_HUB_HERO_KEYS,
+      );
+    }
+    if (
+      schema === "projects-hub-featured" ||
+      (!schema && isProjectsHubFeaturedTemplate(resolvedSlug, variantInput))
+    ) {
+      return mergeProjectsHubConfig(
+        existingConfig,
+        buildProjectsHubFeaturedTypedConfig(formData),
+        PROJECTS_HUB_FEATURED_KEYS,
+      );
+    }
+    if (
+      schema === "projects-hub-listing" ||
+      (!schema && isProjectsHubListingTemplate(resolvedSlug, variantInput))
+    ) {
+      return mergeProjectsHubConfig(
+        existingConfig,
+        buildProjectsHubListingTypedConfig(formData),
+        PROJECTS_HUB_LISTING_KEYS,
+      );
+    }
+    if (
+      schema === "projects-hub-map" ||
+      (!schema && isProjectsHubMapTemplate(resolvedSlug, variantInput))
+    ) {
+      return mergeProjectsHubConfig(
+        existingConfig,
+        await buildProjectsHubMapTypedConfig(formData),
+        PROJECTS_HUB_MAP_KEYS,
+      );
+    }
+    throw new Error("موديولات صفحة المشروعات لا يمكن حفظها عبر المحرر العام.");
+  }
+
+  if (schema === "about-intro" || usesAboutIntroConfigSchema(resolvedSlug, variantInput)) {
     return buildAboutIntroConfig(formData);
   }
-  if (cleanText(formData.get("config_schema")) === "vision-goals" || isVisionGoalsTemplate(slug ?? "", variantInput)) {
+  if (schema === "vision-goals" || isVisionGoalsTemplate(resolvedSlug, variantInput)) {
     return buildVisionGoalsConfig(formData);
   }
-  if (cleanText(formData.get("config_schema")) === "about-cta" || usesAboutCtaConfigSchema(slug ?? "", variantInput)) {
+  if (schema === "about-cta" || usesAboutCtaConfigSchema(resolvedSlug, variantInput)) {
     return buildAboutCtaConfig(formData);
   }
-  if (
-    cleanText(formData.get("config_schema")) === "about-principles" ||
-    usesAboutPrinciplesConfigSchema(slug ?? "", variantInput)
-  ) {
+  if (schema === "about-principles" || usesAboutPrinciplesConfigSchema(resolvedSlug, variantInput)) {
     return buildAboutPrinciplesConfig(formData);
   }
-  if (cleanText(formData.get("config_schema")) === "about-approach" || isAboutApproachTemplate(slug ?? "", variantInput)) {
+  if (schema === "about-approach" || isAboutApproachTemplate(resolvedSlug, variantInput)) {
     return buildAboutApproachConfig(formData);
   }
-  if (cleanText(formData.get("config_schema")) === "home-projects" || isHomeProjectsTemplate(slug ?? "", variantInput)) {
+  if (schema === "home-projects" || isHomeProjectsTemplate(resolvedSlug, variantInput)) {
     return buildHomeProjectsConfig(formData);
   }
   return buildGenericContentConfig(formData);
@@ -285,12 +484,20 @@ export async function createContentBlock(formData: FormData) {
       variant,
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
       status: getStatus(cleanText(formData.get("status")) || "draft"),
-      config: buildContentConfig(formData, slug),
+      config: await buildContentConfig(formData, slug),
     })
     .select("id")
     .single();
 
   if (error) throw new Error(error.message);
+
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "create"),
+    entityType: "content_block_template",
+    entityId: data.id,
+    entityLabel: name,
+    metadata: { slug, variant },
+  });
 
   await revalidateBlockModulePaths("content");
   redirect(`/admin/pages-blocks/blocks/content/${data.id}`);
@@ -305,8 +512,20 @@ export async function updateContentBlock(formData: FormData) {
   if (!id || !name || !slug) throw new Error("بيانات البلوك غير مكتملة.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
 
+  const { data: existing, error: existingError } = await getSupabaseAdmin()
+    .from("content_block_templates")
+    .select("id, slug, variant, config")
+    .eq("id", id)
+    .maybeSingle();
+  if (existingError || !existing) throw new Error(existingError?.message || "البلوك غير موجود.");
+
+  if (isProjectsHubTemplate(existing.slug, existing.variant) && !isProjectsHubTemplate(slug, cleanText(formData.get("variant")) || null)) {
+    throw new Error("لا يمكن تحويل موديول صفحة المشروعات إلى نوع عام.");
+  }
+
   const variantInput = cleanText(formData.get("variant")) || null;
   const variant = resolveStructuredVariant(slug, variantInput);
+  const nextConfig = await buildContentConfig(formData, slug, existing.config);
 
   const { error } = await getSupabaseAdmin()
     .from("content_block_templates")
@@ -317,7 +536,7 @@ export async function updateContentBlock(formData: FormData) {
       variant,
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
       status: getStatus(cleanText(formData.get("status")) || "draft"),
-      config: buildContentConfig(formData, slug),
+      config: nextConfig,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -325,6 +544,13 @@ export async function updateContentBlock(formData: FormData) {
   if (error) throw new Error(error.message);
 
   await syncBlockModulePageAssignments("content", id, parsePageIdsFromForm(formData));
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "update"),
+    entityType: "content_block_template",
+    entityId: id,
+    entityLabel: name,
+    metadata: { slug, variant, projects_hub: isProjectsHubTemplate(slug, variant) },
+  });
   await revalidateBlockModulePaths("content");
   redirect(`/admin/pages-blocks/blocks/content/${id}?saved=1`);
 }

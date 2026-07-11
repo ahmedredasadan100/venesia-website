@@ -11,6 +11,10 @@ import AboutCtaModuleEditor from "./editors/AboutCtaModuleEditor";
 import AboutPrinciplesModuleEditor from "./editors/AboutPrinciplesModuleEditor";
 import GenericContentModuleEditor from "./editors/GenericContentModuleEditor";
 import HomeProjectsPlacementEditor from "./editors/HomeProjectsPlacementEditor";
+import ProjectsHubFeaturedModuleEditor from "./editors/ProjectsHubFeaturedModuleEditor";
+import ProjectsHubHeroModuleEditor from "./editors/ProjectsHubHeroModuleEditor";
+import ProjectsHubListingModuleEditor from "./editors/ProjectsHubListingModuleEditor";
+import ProjectsHubMapModuleEditor from "./editors/ProjectsHubMapModuleEditor";
 import VisionGoalsModuleEditor from "./editors/VisionGoalsModuleEditor";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import {
@@ -22,6 +26,12 @@ import {
   asHomeProjectsConfig,
   asVisionGoalsConfig,
 } from "../../../lib/page-blocks/configs";
+import {
+  asProjectsHubFeaturedConfig,
+  asProjectsHubHeroConfig,
+  asProjectsHubListingConfig,
+  asProjectsHubMapConfig,
+} from "../../../lib/page-blocks/projects-hub-config";
 import { getContentModuleEditorKey } from "../../../lib/page-blocks/module-edit-registry";
 import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
@@ -64,7 +74,15 @@ export default function ContentModuleEditClient({
             ? asAboutApproachConfig(block.config)
             : editorKey === "home-projects"
               ? asHomeProjectsConfig(block.config)
-            : asContentConfig(block.config);
+              : editorKey === "projects-hub-hero"
+                ? asProjectsHubHeroConfig(block.config)
+                : editorKey === "projects-hub-featured"
+                  ? asProjectsHubFeaturedConfig(block.config)
+                  : editorKey === "projects-hub-listing"
+                    ? asProjectsHubListingConfig(block.config)
+                    : editorKey === "projects-hub-map"
+                      ? asProjectsHubMapConfig(block.config)
+                      : asContentConfig(block.config);
   const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
   const eyebrow =
     editorKey === "home-contact"
@@ -85,7 +103,15 @@ export default function ContentModuleEditClient({
                     ? "ABOUT PRINCIPLES MODULE"
                     : editorKey === "about-approach"
                       ? "ABOUT APPROACH MODULE"
-                      : "CONTENT MODULE";
+                      : editorKey === "projects-hub-hero"
+                        ? "PROJECTS HUB HERO"
+                        : editorKey === "projects-hub-featured"
+                          ? "PROJECTS HUB FEATURED"
+                          : editorKey === "projects-hub-listing"
+                            ? "PROJECTS HUB LISTING"
+                            : editorKey === "projects-hub-map"
+                              ? "PROJECTS HUB MAP"
+                              : "CONTENT MODULE";
   const description =
     editorKey === "home-contact"
       ? "CTA الرئيسية: نص + زر + صورة + 4 وسائل تواصل — للصفحة الرئيسية فقط."
@@ -105,7 +131,9 @@ export default function ContentModuleEditClient({
                     ? "موديول المبادئ — قابل لإعادة الاستخدام."
                     : editorKey === "about-approach"
                       ? "موديول Our Approach — قابل لإعادة الاستخدام."
-                      : "عدّل المحتوى ومواضع العرض من التبويبات أدناه.";
+                      : editorKey.startsWith("projects-hub-")
+                        ? "إعدادات عرض صفحة المشروعات فقط — بيانات المشروعات من إدارة المشروعات."
+                        : "عدّل المحتوى ومواضع العرض من التبويبات أدناه.";
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
@@ -138,10 +166,18 @@ export default function ContentModuleEditClient({
                   : editorKey === "home-projects"
                     ? "home-projects"
                     : editorKey === "vision-goals"
-                ? "vision-goals"
-                : editorKey === "about-approach"
-                    ? "about-approach"
-                    : block.variant ?? "default"
+                      ? "vision-goals"
+                      : editorKey === "about-approach"
+                        ? "about-approach"
+                        : editorKey === "projects-hub-hero"
+                          ? "projects-hub-hero"
+                          : editorKey === "projects-hub-featured"
+                            ? "projects-hub-featured"
+                            : editorKey === "projects-hub-listing"
+                              ? "projects-hub-listing"
+                              : editorKey === "projects-hub-map"
+                                ? "projects-hub-map"
+                                : block.variant ?? "default"
           }
         />
         <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
@@ -153,6 +189,14 @@ export default function ContentModuleEditClient({
         ) : null}
         {editorKey === "about-approach" ? <input type="hidden" name="config_schema" value="about-approach" /> : null}
         {editorKey === "home-projects" ? <input type="hidden" name="config_schema" value="home-projects" /> : null}
+        {editorKey === "projects-hub-hero" ? <input type="hidden" name="config_schema" value="projects-hub-hero" /> : null}
+        {editorKey === "projects-hub-featured" ? (
+          <input type="hidden" name="config_schema" value="projects-hub-featured" />
+        ) : null}
+        {editorKey === "projects-hub-listing" ? (
+          <input type="hidden" name="config_schema" value="projects-hub-listing" />
+        ) : null}
+        {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
 
         <AdminModuleTabs
           tabs={[
@@ -196,6 +240,18 @@ export default function ContentModuleEditClient({
                   />
                 ) : editorKey === "about-approach" ? (
                   <AboutApproachModuleEditor config={config as ReturnType<typeof asAboutApproachConfig>} />
+                ) : editorKey === "projects-hub-hero" ? (
+                  <ProjectsHubHeroModuleEditor config={config as ReturnType<typeof asProjectsHubHeroConfig>} />
+                ) : editorKey === "projects-hub-featured" ? (
+                  <ProjectsHubFeaturedModuleEditor
+                    config={config as ReturnType<typeof asProjectsHubFeaturedConfig>}
+                  />
+                ) : editorKey === "projects-hub-listing" ? (
+                  <ProjectsHubListingModuleEditor
+                    config={config as ReturnType<typeof asProjectsHubListingConfig>}
+                  />
+                ) : editorKey === "projects-hub-map" ? (
+                  <ProjectsHubMapModuleEditor config={config as ReturnType<typeof asProjectsHubMapConfig>} />
                 ) : (
                   <GenericContentModuleEditor config={config as ReturnType<typeof asContentConfig>} />
                 ),
