@@ -27,6 +27,18 @@ export const PAGE_MODULE_HINTS: Record<
     { module: "Hero", slugs: [], note: "slot: hero" },
     { module: "Content", slugs: ["home-story", "home-trust", "home-contact", "home-projects"], note: "slot: main" },
   ],
+  projects: [
+    {
+      module: "Content",
+      slugs: [
+        "projects-hub-hero",
+        "projects-hub-featured",
+        "projects-hub-listing",
+        "projects-hub-map",
+      ],
+      note: "slot: main — بيانات المشروعات من جدول projects",
+    },
+  ],
   "media-center": [
     { module: "Hero", slugs: ["hero-media-center"], note: "slot: hero" },
     { module: "Breadcrumb", slugs: ["breadcrumb-media-center"], note: "slot: hero" },

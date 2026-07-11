@@ -1,4 +1,4 @@
-/** Homepage is the only page that cannot be deleted from CMS. */
+/** System hub pages that cannot be deleted from CMS. */
 
 export type PageDeleteIdentity = {
   slug: string;
@@ -22,9 +22,19 @@ export function isHomepagePage(page: PageDeleteIdentity) {
   return slug === "home" || path === "/";
 }
 
+export function isProjectsHubPage(page: PageDeleteIdentity) {
+  const slug = normalizeSlug(page.slug);
+  const path = normalizeStoredPath(page.path);
+  return slug === "projects" || path === "/projects";
+}
+
 export function getPageDeleteBlockReason(page: PageDeleteIdentity) {
   if (isHomepagePage(page)) {
     return "الصفحة الرئيسية محمية — الحذف غير مسموح.";
+  }
+
+  if (isProjectsHubPage(page)) {
+    return "صفحة المشروعات محمية — الحذف غير مسموح.";
   }
 
   return null;
