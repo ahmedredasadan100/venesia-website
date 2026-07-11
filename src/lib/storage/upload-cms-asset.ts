@@ -23,10 +23,16 @@ export const CMS_IMAGES_BUCKET =
 export const CMS_DOCUMENTS_BUCKET =
   process.env.SUPABASE_STORAGE_BUCKET_DOCUMENTS?.trim() || "cms-documents";
 
+/**
+ * Site assets still live under `public/images` and `public/files` until the
+ * Storage migration is completed (see docs/security-media-upload-migration.md).
+ * Only enable Supabase CMS storage when explicitly opted in — never auto-enable
+ * from NODE_ENV/VERCEL, or Media Library lists an empty bucket while the site
+ * still serves filesystem paths.
+ */
 export function isSupabaseCmsStorageEnabled() {
   if (process.env.CMS_STORAGE_UPLOADS === "filesystem") return false;
-  if (process.env.CMS_STORAGE_UPLOADS === "supabase") return true;
-  return process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+  return process.env.CMS_STORAGE_UPLOADS === "supabase";
 }
 
 function bucketForFolder(folder: string) {

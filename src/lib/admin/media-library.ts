@@ -8,7 +8,8 @@ import {
 } from "../storage/upload-cms-asset";
 
 /**
- * Media uploads: filesystem in local dev, Supabase Storage in production.
+ * Media library read/upload: filesystem (`public/…`) by default.
+ * Supabase Storage only when CMS_STORAGE_UPLOADS=supabase.
  * Migration plan: docs/security-media-upload-migration.md
  */
 
