@@ -15,21 +15,32 @@ import {
 
 type ProjectsFeaturedSectionProps = {
   projects: PublicProject[];
+  title?: string;
+  subtitle?: string;
+  autoplayMs?: number;
 };
+
+const DEFAULT_TITLE = "مشروع مميز";
+const DEFAULT_SUBTITLE = "اختيار يعكس مسار التنفيذ على الأرض";
+const DEFAULT_AUTOPLAY_MS = 6000;
 
 export default function ProjectsFeaturedSection({
   projects,
+  title = DEFAULT_TITLE,
+  subtitle = DEFAULT_SUBTITLE,
+  autoplayMs = DEFAULT_AUTOPLAY_MS,
 }: ProjectsFeaturedSectionProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const canSwipe = projects.length > 1;
+  const resolvedAutoplayMs = autoplayMs > 0 ? autoplayMs : DEFAULT_AUTOPLAY_MS;
 
   const startAutoplay = useCallback(() => {
     if (!canSwipe) return undefined;
 
     return window.setInterval(() => {
       setActiveIndex((prev) => (prev === projects.length - 1 ? 0 : prev + 1));
-    }, 6000);
-  }, [canSwipe, projects.length]);
+    }, resolvedAutoplayMs);
+  }, [canSwipe, projects.length, resolvedAutoplayMs]);
 
   useEffect(() => {
     const timer = startAutoplay();
@@ -71,11 +82,11 @@ const visibleSideProjects = [1, 2]
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-semibold text-[#D8B87A]">
-            مشروع مميز
+            {title}
           </h2>
 
           <span className="text-xs leading-6 text-white/40">
-            اختيار يعكس مسار التنفيذ على الأرض
+            {subtitle}
           </span>
         </div>
 

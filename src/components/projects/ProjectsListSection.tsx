@@ -26,9 +26,14 @@ type ProjectsListSectionProps = {
     residential: number;
     commercial: number;
   };
+  eyebrow?: string;
+  title?: string;
+  pageSize?: number;
+  defaultView?: ViewMode;
+  visibleFilters?: ProjectHubFilterId[];
 };
 
-const PROJECTS_PER_PAGE = 6;
+const DEFAULT_PAGE_SIZE = 6;
 
 function getCategoryLabel(category: PublicProject["category"]) {
   return category === "residential" ? "سكني" : "تجاري";
@@ -39,18 +44,24 @@ export default function ProjectsListSection({
   activeFilter,
   onFilterChange,
   stats,
+  eyebrow = "Projects Index",
+  title = "جميع المشروعات",
+  pageSize = DEFAULT_PAGE_SIZE,
+  defaultView = "list",
+  visibleFilters,
 }: ProjectsListSectionProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [currentPage, setCurrentPage] = useState(1);
   const projectsStartRef = useRef<HTMLDivElement | null>(null);
+  const resolvedPageSize = pageSize > 0 ? pageSize : DEFAULT_PAGE_SIZE;
 
-  const totalPages = Math.max(1, Math.ceil(projects.length / PROJECTS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(projects.length / resolvedPageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
   const paginatedProjects = useMemo(() => {
-    const start = (safeCurrentPage - 1) * PROJECTS_PER_PAGE;
-    return projects.slice(start, start + PROJECTS_PER_PAGE);
-  }, [projects, safeCurrentPage]);
+    const start = (safeCurrentPage - 1) * resolvedPageSize;
+    return projects.slice(start, start + resolvedPageSize);
+  }, [projects, safeCurrentPage, resolvedPageSize]);
 
   const handleFilterChange = (filter: ProjectHubFilterId) => {
     setCurrentPage(1);
@@ -74,11 +85,11 @@ export default function ProjectsListSection({
         <div className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="min-w-0">
             <p className="mb-2 font-en text-[11px] uppercase tracking-[0.24em] text-[#D8B87A]/55">
-              Projects Index
+              {eyebrow}
             </p>
 
             <h2 className="text-xl font-semibold text-[#D8B87A] sm:text-2xl">
-              جميع المشروعات
+              {title}
               <span className="mr-2 text-sm font-normal text-white/45">
                 ({projects.length} مشروع)
               </span>
@@ -123,6 +134,7 @@ export default function ProjectsListSection({
             activeFilter={activeFilter}
             onFilterChange={handleFilterChange}
             stats={stats}
+            visibleFilters={visibleFilters}
           />
         </div>
 

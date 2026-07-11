@@ -3,29 +3,26 @@ import Link from "next/link";
 
 import { getProjectHref } from "../../lib/projects/public-helpers";
 import type { PublicProject } from "../../lib/projects/public-types";
+import {
+  PROJECTS_HUB_MAP_DEFAULTS,
+  type ProjectsHubMapPresentationProps,
+} from "../../lib/projects/map-projects-hub-module-props";
 
 type ProjectsMapSectionProps = {
   projects: PublicProject[];
+  title?: string;
+  mapImage?: string;
+  exploreButtonLabel?: string;
+  mapPins?: ProjectsHubMapPresentationProps["mapPins"];
 };
 
-const mapPins = [
-  { code: "I87", district: "الحي الأول", right: "20%", top: "50%" },
-  { code: "I76", district: "الحي الأول", right: "27%", top: "45%" },
-  { code: "B84", district: "الحي الأول", right: "34%", top: "52%" },
-
-  { code: "C35", district: "الحي الثاني", right: "50%", top: "46%" },
-  { code: "J118", district: "الحي الثاني", right: "57%", top: "53%" },
-  { code: "J191", district: "الحي الثاني", right: "63%", top: "46%" },
-
-  { code: "F92", district: "الحي الرابع", right: "45%", top: "72%" },
-  { code: "F222", district: "الحي الرابع", right: "55%", top: "74%" },
-
-  { code: "D174", district: "النورث هاوس", right: "38%", top: "25%" },
-  { code: "B137", district: "النورث هاوس", right: "48%", top: "21%" },
-  { code: "B138", district: "النورث هاوس", right: "58%", top: "27%" },
-];
-
-export default function ProjectsMapSection({ projects }: ProjectsMapSectionProps) {
+export default function ProjectsMapSection({
+  projects,
+  title = PROJECTS_HUB_MAP_DEFAULTS.title,
+  mapImage = PROJECTS_HUB_MAP_DEFAULTS.mapImage,
+  exploreButtonLabel = PROJECTS_HUB_MAP_DEFAULTS.exploreButtonLabel,
+  mapPins = PROJECTS_HUB_MAP_DEFAULTS.mapPins,
+}: ProjectsMapSectionProps) {
   const residentialProjects = projects.filter(
     (project) => project.category === "residential"
   );
@@ -43,7 +40,7 @@ export default function ProjectsMapSection({ projects }: ProjectsMapSectionProps
       <div className="mx-auto grid max-w-7xl gap-5 rounded-[28px] border border-[#D8B87A]/15 bg-white/[0.025] p-5 lg:grid-cols-[280px_1fr]">
         <div className="rounded-2xl border border-white/10 bg-black/20 p-6">
           <h2 className="text-xl font-semibold text-[#D8B87A]">
-            مشروعاتنا على الخريطة
+            {title}
           </h2>
 
           <div className="mt-6 space-y-4">
@@ -59,13 +56,13 @@ export default function ProjectsMapSection({ projects }: ProjectsMapSectionProps
           </div>
 
           <button className="mt-7 w-full rounded-xl border border-[#D8B87A]/35 px-5 py-3 text-sm text-[#D8B87A]">
-            استكشف على الخريطة
+            {exploreButtonLabel}
           </button>
         </div>
 
         <div className="relative min-h-[500px] overflow-hidden rounded-2xl border border-white/10 bg-[#080B10]">
           <Image
-            src="/images/projects/beit-elwatan-map1.webp"
+            src={mapImage}
             alt="خريطة بيت الوطن"
             fill
             className="object-cover"

@@ -1,0 +1,105 @@
+"use client";
+
+import type { ProjectsHubRenderPlanModule } from "../../lib/projects/build-projects-hub-render-plan";
+import {
+  applyFeaturedLimit,
+  mapProjectsHubFeaturedProps,
+  mapProjectsHubHeroProps,
+  mapProjectsHubListingProps,
+  mapProjectsHubMapProps,
+} from "../../lib/projects/map-projects-hub-module-props";
+import type { ProjectHubFilterId, PublicProject } from "../../lib/projects/public-types";
+import ProjectsFeaturedSection from "./ProjectsFeaturedSection";
+import ProjectsHubHero from "./ProjectsHubHero";
+import ProjectsListSection from "./ProjectsListSection";
+import ProjectsMapSection from "./ProjectsMapSection";
+
+type ProjectsHubModulesRendererProps = {
+  projects: PublicProject[];
+  featuredProjects: PublicProject[];
+  filteredProjects: PublicProject[];
+  modules: ProjectsHubRenderPlanModule[];
+  activeFilter: ProjectHubFilterId;
+  onFilterChange: (filter: ProjectHubFilterId) => void;
+  stats: {
+    total: number;
+    residential: number;
+    commercial: number;
+  };
+};
+
+/**
+ * Maps Projects Hub plan nodes onto the existing public section components.
+ * Receives projects from the route — never loads from Supabase.
+ */
+export default function ProjectsHubModulesRenderer({
+  projects,
+  featuredProjects,
+  filteredProjects,
+  modules,
+  activeFilter,
+  onFilterChange,
+  stats,
+}: ProjectsHubModulesRendererProps) {
+  return (
+    <>
+      {modules.map((module) => {
+        if (module.slug === "projects-hub-hero") {
+          const props = mapProjectsHubHeroProps(module);
+          return (
+            <ProjectsHubHero
+              key={`hub-${module.assignmentId}`}
+              projects={projects}
+              featuredProject={featuredProjects[0]}
+              autoplayMs={props.autoplayMs}
+              emptyState={props.emptyState}
+            />
+          );
+        }
+
+        if (module.slug === "projects-hub-featured") {
+          const props = mapProjectsHubFeaturedProps(module);
+          return (
+            <ProjectsFeaturedSection
+              key={`hub-${module.assignmentId}`}
+              projects={applyFeaturedLimit(featuredProjects, props.limit)}
+              title={props.title}
+              subtitle={props.subtitle}
+              autoplayMs={props.autoplayMs}
+            />
+          );
+        }
+
+        if (module.slug === "projects-hub-listing") {
+          const props = mapProjectsHubListingProps(module);
+          return (
+            <ProjectsListSection
+              key={`hub-${module.assignmentId}`}
+              projects={filteredProjects}
+              activeFilter={activeFilter}
+              onFilterChange={onFilterChange}
+              stats={stats}
+              eyebrow={props.eyebrow}
+              title={props.title}
+              pageSize={props.pageSize}
+              defaultView={props.defaultView}
+              visibleFilters={props.visibleFilters}
+            />
+          );
+        }
+
+        const props = mapProjectsHubMapProps(module);
+        return (
+          <ProjectsMapSection
+            key={`hub-${module.assignmentId}`}
+            projects={filteredProjects}
+            title={props.title}
+            mapImage={props.mapImage}
+            exploreButtonLabel={props.exploreButtonLabel}
+            mapPins={props.mapPins}
+          />
+        );
+      })}
+    </>
+  );
+}

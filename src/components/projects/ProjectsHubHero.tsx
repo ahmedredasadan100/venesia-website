@@ -10,11 +10,18 @@ import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 type ProjectsHubHeroProps = {
   projects: PublicProject[];
   featuredProject?: PublicProject;
+  /** Optional CMS presentation — defaults match current hard-coded behavior. */
+  autoplayMs?: number;
+  emptyState?: string | null;
 };
+
+const DEFAULT_AUTOPLAY_MS = 6000;
 
 export default function ProjectsHubHero({
   projects,
   featuredProject,
+  autoplayMs = DEFAULT_AUTOPLAY_MS,
+  emptyState = null,
 }: ProjectsHubHeroProps) {
   const heroSlides = useMemo(() => {
     const sourceProjects = projects.length
@@ -39,6 +46,7 @@ export default function ProjectsHubHero({
   const boundedSlide = heroSlides.length ? activeSlide % heroSlides.length : 0;
   const activeProject = heroSlides[boundedSlide];
   const canSwipe = heroSlides.length > 1;
+  const resolvedAutoplayMs = autoplayMs > 0 ? autoplayMs : DEFAULT_AUTOPLAY_MS;
 
   const goToNext = useCallback(() => {
     if (!canSwipe) return;
@@ -55,8 +63,8 @@ export default function ProjectsHubHero({
 
     return window.setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 6000);
-  }, [canSwipe, heroSlides.length]);
+    }, resolvedAutoplayMs);
+  }, [canSwipe, heroSlides.length, resolvedAutoplayMs]);
 
   useEffect(() => {
     const timer = startAutoplay();
@@ -78,7 +86,14 @@ export default function ProjectsHubHero({
     onSwipeRight: goToPrev,
   });
 
-  if (!activeProject) return null;
+  if (!activeProject) {
+    if (!emptyState) return null;
+    return (
+      <section className="relative isolate min-h-[200px] border-b border-[#D8B87A]/15 bg-[#05070B] px-6 py-16 text-center text-white/55">
+        <p>{emptyState}</p>
+      </section>
+    );
+  }
 
   return (
     <section

@@ -8,9 +8,10 @@ type ProjectsHubFiltersProps = {
     residential: number;
     commercial: number;
   };
+  visibleFilters?: ProjectHubFilterId[];
 };
 
-const visibleFilters: Array<{
+const ALL_FILTERS: Array<{
   id: ProjectHubFilterId;
   label: string;
   getCount: (stats: ProjectsHubFiltersProps["stats"]) => number;
@@ -36,13 +37,18 @@ export default function ProjectsHubFilters({
   activeFilter,
   onFilterChange,
   stats,
+  visibleFilters,
 }: ProjectsHubFiltersProps) {
+  const filters = visibleFilters?.length
+    ? ALL_FILTERS.filter((filter) => visibleFilters.includes(filter.id))
+    : ALL_FILTERS;
+
   return (
     <section className="relative mt-0">
       <div className="mx-auto max-w-7xl rounded-2xl border border-[#D8B87A]/15 bg-[#080B10]/90 p-3 shadow-[0_22px_70px_rgba(0,0,0,0.38)] backdrop-blur-xl sm:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-nowrap gap-1 md:flex-wrap md:gap-2">
-            {visibleFilters.map((filter) => {
+            {filters.map((filter) => {
               const isActive = activeFilter === filter.id;
               const count = filter.getCount(stats);
 
