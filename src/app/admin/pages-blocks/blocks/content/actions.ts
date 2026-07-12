@@ -39,7 +39,6 @@ import {
 import {
   PROJECTS_HUB_FEATURED_KEYS,
   PROJECTS_HUB_FEATURED_SELECTION_MODES,
-  PROJECTS_HUB_FILTER_IDS,
   PROJECTS_HUB_HERO_KEYS,
   PROJECTS_HUB_HERO_SELECTION_MODES,
   PROJECTS_HUB_LISTING_KEYS,
@@ -275,22 +274,9 @@ function buildProjectsHubFeaturedTypedConfig(formData: FormData): ProjectsHubFea
 }
 
 function buildProjectsHubListingTypedConfig(formData: FormData): ProjectsHubListingModuleConfig {
-  const visibleFilters = formData
-    .getAll("visible_filters")
-    .map((value) => cleanText(value))
-    .filter((value): value is ProjectsHubFilterId =>
-      (PROJECTS_HUB_FILTER_IDS as readonly string[]).includes(value),
-    );
-  if (!visibleFilters.length) {
-    throw new Error("يجب إظهار فلتر واحد على الأقل.");
-  }
-  const defaultFilter = cleanText(formData.get("default_filter")) as ProjectsHubFilterId;
-  if (!(PROJECTS_HUB_FILTER_IDS as readonly string[]).includes(defaultFilter)) {
-    throw new Error("الفلتر الافتراضي غير صالح.");
-  }
-  if (!visibleFilters.includes(defaultFilter)) {
-    throw new Error("الفلتر الافتراضي يجب أن يكون ضمن الفلاتر الظاهرة.");
-  }
+  // Public chips derive from loaded project types; CMS does not choose classifications.
+  const visibleFilters: ProjectsHubFilterId[] = ["all", "residential", "commercial"];
+  const defaultFilter: ProjectsHubFilterId = "all";
   const defaultView = cleanText(formData.get("default_view")) as ProjectsHubViewMode;
   if (!(PROJECTS_HUB_VIEW_MODES as readonly string[]).includes(defaultView)) {
     throw new Error("وضع العرض الافتراضي غير مدعوم.");

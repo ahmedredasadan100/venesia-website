@@ -5,10 +5,8 @@ import Link from "next/link";
 import AdminNotice from "../../AdminNotice";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
-  PROJECTS_HUB_FILTER_IDS,
   PROJECTS_HUB_SORT_MODES,
   PROJECTS_HUB_VIEW_MODES,
-  type ProjectsHubFilterId,
   type ProjectsHubListingModuleConfig,
 } from "../../../../lib/page-blocks/projects-hub-config";
 
@@ -16,21 +14,20 @@ type ProjectsHubListingModuleEditorProps = {
   config: ProjectsHubListingModuleConfig;
 };
 
-const FILTER_LABELS: Record<ProjectsHubFilterId, string> = {
-  all: "الكل",
-  residential: "سكني",
-  commercial: "تجاري",
-};
-
 export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubListingModuleEditorProps) {
   return (
     <div className="space-y-6">
       <input type="hidden" name="config_schema" value="projects-hub-listing" />
+      {/* Filters are derived from loaded project types on the public page — not Admin-selected. */}
+      <input type="hidden" name="default_filter" value="all" />
+      <input type="hidden" name="visible_filters" value="all" />
+      <input type="hidden" name="visible_filters" value="residential" />
+      <input type="hidden" name="visible_filters" value="commercial" />
 
       <AdminNotice
         variant="info"
         title="بيانات المشروعات"
-        message="بيانات المشروعات نفسها تُدار من قسم إدارة المشروعات. هذا الموديول يضبط عنوان القائمة والفلاتر وطريقة العرض فقط."
+        message="بيانات المشروعات نفسها تُدار من قسم إدارة المشروعات. فلاتر القائمة (الكل / سكني / تجاري) تُشتق تلقائياً من أنواع المشروعات المنشورة، وليست اختياراً من هذا المحرر."
       />
 
       <div className="flex flex-wrap gap-3 text-sm">
@@ -53,37 +50,6 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">العنوان</span>
           <input name="title" defaultValue={config.title} className={fieldClassName()} />
-        </label>
-
-        <fieldset className="space-y-3">
-          <legend className="text-xs font-semibold text-white/55">الفلاتر الظاهرة</legend>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {PROJECTS_HUB_FILTER_IDS.map((filterId) => (
-              <label
-                key={filterId}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70"
-              >
-                <span>{FILTER_LABELS[filterId]}</span>
-                <input
-                  type="checkbox"
-                  name="visible_filters"
-                  value={filterId}
-                  defaultChecked={config.visibleFilters.includes(filterId)}
-                />
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">الفلتر الافتراضي</span>
-          <select name="default_filter" defaultValue={config.defaultFilter} className={fieldClassName()}>
-            {PROJECTS_HUB_FILTER_IDS.map((filterId) => (
-              <option key={filterId} value={filterId}>
-                {FILTER_LABELS[filterId]}
-              </option>
-            ))}
-          </select>
         </label>
 
         <label className="block space-y-2">

@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import type { ProjectsHubRenderPlanModule } from "../../lib/projects/build-projects-hub-render-plan";
 import {
   getFeaturedProjects,
-  getProjectStats,
   getProjectsByFilter,
 } from "../../lib/projects/public-helpers";
 import type { ProjectHubFilterId, PublicProject } from "../../lib/projects/public-types";
@@ -21,16 +20,9 @@ type ProjectsHubPageProps = {
   modulePlan?: ProjectsHubRenderPlanModule[];
 };
 
-function resolveInitialFilter(modulePlan?: ProjectsHubRenderPlanModule[]): ProjectHubFilterId {
-  const listing = modulePlan?.find((module) => module.slug === "projects-hub-listing");
-  if (!listing || listing.slug !== "projects-hub-listing") return "all";
-  return listing.config.defaultFilter;
-}
-
 export default function ProjectsHubPage({ projects, modulePlan }: ProjectsHubPageProps) {
-  const [activeFilter, setActiveFilter] = useState<ProjectHubFilterId>(() =>
-    resolveInitialFilter(modulePlan),
-  );
+  /** Shared Listing + Map filter; always starts at `all` (not chosen from Admin). */
+  const [activeFilter, setActiveFilter] = useState<ProjectHubFilterId>("all");
 
   const filteredProjects = useMemo(
     () => getProjectsByFilter(projects, activeFilter),
@@ -38,7 +30,6 @@ export default function ProjectsHubPage({ projects, modulePlan }: ProjectsHubPag
   );
 
   const featuredProjects = useMemo(() => getFeaturedProjects(projects), [projects]);
-  const stats = useMemo(() => getProjectStats(projects), [projects]);
   const useCmsPlan = Boolean(modulePlan?.length);
 
   return (
@@ -59,7 +50,6 @@ export default function ProjectsHubPage({ projects, modulePlan }: ProjectsHubPag
           modules={modulePlan!}
           activeFilter={activeFilter}
           onFilterChange={setActiveFilter}
-          stats={stats}
         />
       ) : (
         <>
@@ -69,9 +59,9 @@ export default function ProjectsHubPage({ projects, modulePlan }: ProjectsHubPag
 
           <ProjectsListSection
             projects={filteredProjects}
+            allProjects={projects}
             activeFilter={activeFilter}
             onFilterChange={setActiveFilter}
-            stats={stats}
           />
 
           <ProjectsMapSection projects={filteredProjects} />

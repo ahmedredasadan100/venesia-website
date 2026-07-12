@@ -21,11 +21,6 @@ type ProjectsHubModulesRendererProps = {
   modules: ProjectsHubRenderPlanModule[];
   activeFilter: ProjectHubFilterId;
   onFilterChange: (filter: ProjectHubFilterId) => void;
-  stats: {
-    total: number;
-    residential: number;
-    commercial: number;
-  };
 };
 
 /**
@@ -39,7 +34,6 @@ export default function ProjectsHubModulesRenderer({
   modules,
   activeFilter,
   onFilterChange,
-  stats,
 }: ProjectsHubModulesRendererProps) {
   return (
     <>
@@ -76,14 +70,13 @@ export default function ProjectsHubModulesRenderer({
             <ProjectsListSection
               key={`hub-${module.assignmentId}`}
               projects={filteredProjects}
+              allProjects={projects}
               activeFilter={activeFilter}
               onFilterChange={onFilterChange}
-              stats={stats}
               eyebrow={props.eyebrow}
               title={props.title}
               pageSize={props.pageSize}
               defaultView={props.defaultView}
-              visibleFilters={props.visibleFilters}
             />
           );
         }

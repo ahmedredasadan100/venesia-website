@@ -1,47 +1,39 @@
-import { type ProjectHubFilterId } from "../../lib/projects/public-types";
+import { useEffect } from "react";
+
+import {
+  getHubFilterOptionsFromProjects,
+  getProjectStats,
+  type HubFilterOption,
+} from "../../lib/projects/public-helpers";
+import { type ProjectHubFilterId, type PublicProject } from "../../lib/projects/public-types";
 
 type ProjectsHubFiltersProps = {
   activeFilter: ProjectHubFilterId;
   onFilterChange: (filter: ProjectHubFilterId) => void;
-  stats: {
-    total: number;
-    residential: number;
-    commercial: number;
-  };
-  visibleFilters?: ProjectHubFilterId[];
+  /** Full loaded projects array — filter chips are derived from present categories. */
+  allProjects: PublicProject[];
 };
 
-const ALL_FILTERS: Array<{
-  id: ProjectHubFilterId;
-  label: string;
-  getCount: (stats: ProjectsHubFiltersProps["stats"]) => number;
-}> = [
-  {
-    id: "all",
-    label: "كل المشروعات",
-    getCount: (stats) => stats.total,
-  },
-  {
-    id: "residential",
-    label: "سكني",
-    getCount: (stats) => stats.residential,
-  },
-  {
-    id: "commercial",
-    label: "تجاري",
-    getCount: (stats) => stats.commercial,
-  },
-];
+function countForFilter(option: HubFilterOption, stats: ReturnType<typeof getProjectStats>) {
+  if (option.id === "all") return stats.total;
+  if (option.id === "residential") return stats.residential;
+  if (option.id === "commercial") return stats.commercial;
+  return 0;
+}
 
 export default function ProjectsHubFilters({
   activeFilter,
   onFilterChange,
-  stats,
-  visibleFilters,
+  allProjects,
 }: ProjectsHubFiltersProps) {
-  const filters = visibleFilters?.length
-    ? ALL_FILTERS.filter((filter) => visibleFilters.includes(filter.id))
-    : ALL_FILTERS;
+  const stats = getProjectStats(allProjects);
+  const filters = getHubFilterOptionsFromProjects(allProjects);
+
+  useEffect(() => {
+    const options = getHubFilterOptionsFromProjects(allProjects);
+    if (options.some((filter) => filter.id === activeFilter)) return;
+    onFilterChange("all");
+  }, [activeFilter, allProjects, onFilterChange]);
 
   return (
     <section className="relative mt-0">
@@ -50,7 +42,7 @@ export default function ProjectsHubFilters({
           <div className="flex min-w-0 flex-nowrap gap-1 md:flex-wrap md:gap-2">
             {filters.map((filter) => {
               const isActive = activeFilter === filter.id;
-              const count = filter.getCount(stats);
+              const count = countForFilter(filter, stats);
 
               return (
                 <button

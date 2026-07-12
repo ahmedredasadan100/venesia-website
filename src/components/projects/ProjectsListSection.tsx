@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import {
   getProjectHref,
+  PROJECT_CATEGORY_LABELS,
 } from "../../lib/projects/public-helpers";
 import type { ProjectHubFilterId, PublicProject } from "../../lib/projects/public-types";
 import ProjectsHubFilters from "./ProjectsHubFilters";
@@ -19,36 +20,31 @@ type ViewMode = "list" | "cards";
 
 type ProjectsListSectionProps = {
   projects: PublicProject[];
+  /** Full route-loaded projects — used only to derive filter chips (not re-queried). */
+  allProjects: PublicProject[];
   activeFilter: ProjectHubFilterId;
   onFilterChange: (filter: ProjectHubFilterId) => void;
-  stats: {
-    total: number;
-    residential: number;
-    commercial: number;
-  };
   eyebrow?: string;
   title?: string;
   pageSize?: number;
   defaultView?: ViewMode;
-  visibleFilters?: ProjectHubFilterId[];
 };
 
 const DEFAULT_PAGE_SIZE = 6;
 
 function getCategoryLabel(category: PublicProject["category"]) {
-  return category === "residential" ? "سكني" : "تجاري";
+  return PROJECT_CATEGORY_LABELS[category];
 }
 
 export default function ProjectsListSection({
   projects,
+  allProjects,
   activeFilter,
   onFilterChange,
-  stats,
   eyebrow = "Projects Index",
   title = "جميع المشروعات",
   pageSize = DEFAULT_PAGE_SIZE,
   defaultView = "list",
-  visibleFilters,
 }: ProjectsListSectionProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,8 +129,7 @@ export default function ProjectsListSection({
           <ProjectsHubFilters
             activeFilter={activeFilter}
             onFilterChange={handleFilterChange}
-            stats={stats}
-            visibleFilters={visibleFilters}
+            allProjects={allProjects}
           />
         </div>
 

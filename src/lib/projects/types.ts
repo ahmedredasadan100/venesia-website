@@ -1,4 +1,5 @@
 import type { Project, ProjectCategory } from "./public-types";
+import { PROJECT_CATEGORY_LABELS } from "./public-helpers";
 import type { FloorPlanSpec } from "./floor-plan-specs";
 
 export type ProjectStatus =
@@ -143,7 +144,7 @@ export function mapStaticProjectToDbRow(project: Project) {
     type: project.category,
     arabic_name: project.arabicName,
     english_name: project.englishName,
-    category_label: project.category === "residential" ? "سكني" : "تجاري",
+    category_label: PROJECT_CATEGORY_LABELS[project.category],
     status: "under-construction",
     status_label: "تحت الإنشاء",
     image: project.image,

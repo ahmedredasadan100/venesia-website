@@ -25,10 +25,12 @@ async function loadTs(relPath) {
 const flagMod = await loadTs("src/lib/projects/projects-hub-cms-flag.ts");
 const planMod = await loadTs("src/lib/projects/build-projects-hub-render-plan.ts");
 const mapMod = await loadTs("src/lib/projects/map-projects-hub-module-props.ts");
+const helpersMod = await loadTs("src/lib/projects/public-helpers.ts");
 
 const { isProjectsHubCmsEnabled } = flagMod;
 const { buildProjectsHubRenderPlan } = planMod;
 const { applyFeaturedLimit, mapProjectsHubListingProps } = mapMod;
+const { getHubFilterOptionsFromProjects, getProjectsByFilter, PROJECT_CATEGORY_LABELS } = helpersMod;
 
 delete process.env.PROJECTS_HUB_CMS;
 assert.equal(isProjectsHubCmsEnabled(), false, "missing env => false");
@@ -244,6 +246,30 @@ const baseComposition = {
   const props = mapProjectsHubListingProps(listing);
   assert.equal(props.defaultFilter, "all");
   assert.deepEqual(props.visibleFilters, ["all", "residential", "commercial"]);
+}
+
+// 9b. Filter chips derive from present categories; labels from registry
+{
+  const mixed = [
+    { category: "residential", homepageOrder: 1, code: "A" },
+    { category: "commercial", homepageOrder: 2, code: "B" },
+    { category: "residential", homepageOrder: 3, code: "C" },
+  ];
+  assert.deepEqual(getHubFilterOptionsFromProjects(mixed), [
+    { id: "all", label: "كل المشروعات" },
+    { id: "residential", label: PROJECT_CATEGORY_LABELS.residential },
+    { id: "commercial", label: PROJECT_CATEGORY_LABELS.commercial },
+  ]);
+  assert.deepEqual(
+    getHubFilterOptionsFromProjects([{ category: "residential", homepageOrder: 1, code: "A" }]),
+    [
+      { id: "all", label: "كل المشروعات" },
+      { id: "residential", label: PROJECT_CATEGORY_LABELS.residential },
+    ],
+  );
+  assert.equal(getProjectsByFilter(mixed, "all").length, 3);
+  assert.equal(getProjectsByFilter(mixed, "residential").length, 2);
+  assert.equal(getProjectsByFilter(mixed, "commercial").length, 1);
 }
 
 // 10. Duplicate supported slug skipped
