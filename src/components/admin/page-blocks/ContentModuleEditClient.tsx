@@ -1,5 +1,7 @@
 "use client";
 
+import AdminNotice from "../AdminNotice";
+import { AdminActionButton, AdminPageContextHeader } from "../ui";
 import AdminModuleTabs from "./AdminModuleTabs";
 import BlockEditorContextHeader from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
@@ -16,7 +18,7 @@ import ProjectsHubHeroModuleEditor from "./editors/ProjectsHubHeroModuleEditor";
 import ProjectsHubListingModuleEditor from "./editors/ProjectsHubListingModuleEditor";
 import ProjectsHubMapModuleEditor from "./editors/ProjectsHubMapModuleEditor";
 import VisionGoalsModuleEditor from "./editors/VisionGoalsModuleEditor";
-import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
+import { fieldClassName, statusMeta } from "../../../lib/page-blocks/admin-utils";
 import {
   asAboutApproachConfig,
   asAboutCtaConfig,
@@ -131,25 +133,58 @@ export default function ContentModuleEditClient({
                     ? "موديول المبادئ — قابل لإعادة الاستخدام."
                     : editorKey === "about-approach"
                       ? "موديول Our Approach — قابل لإعادة الاستخدام."
-                      : editorKey.startsWith("projects-hub-")
-                        ? "إعدادات عرض صفحة المشروعات فقط — بيانات المشروعات من إدارة المشروعات."
-                        : "عدّل المحتوى ومواضع العرض من التبويبات أدناه.";
+                      : editorKey === "projects-hub-listing"
+                        ? "تحكّم في العناصر الظاهرة داخل قائمة المشروعات. بيانات كل مشروع نفسها تُدار من قسم إدارة المشروعات."
+                        : editorKey.startsWith("projects-hub-")
+                          ? "إعدادات عرض صفحة المشروعات فقط — بيانات المشروعات من إدارة المشروعات."
+                          : "عدّل المحتوى ومواضع العرض من التبويبات أدناه.";
+
+  const isProjectsHubListing = editorKey === "projects-hub-listing";
+  const listingStatus = statusMeta(block.status);
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <BlockEditorContextHeader
-        backHref="/admin/pages-blocks/blocks/content"
-        backLabel="الرجوع لبلوكات المحتوى"
-        eyebrow={eyebrow}
-        title={block.name}
-        description={description}
-        status={block.status}
-        saved={saved}
-        slotContext={getSlotCompatibilityLabel("content")}
-      />
+      {isProjectsHubListing ? (
+        <AdminPageContextHeader
+          eyebrow="PROJECTS HUB LISTING"
+          title="قائمة المشروعات"
+          description="تحكّم في العناصر الظاهرة داخل قائمة المشروعات. بيانات كل مشروع نفسها تُدار من قسم إدارة المشروعات."
+          meta={listingStatus.label}
+          actions={
+            <>
+              <AdminActionButton href="/admin/projects" variant="dark">
+                إدارة بيانات المشروعات
+              </AdminActionButton>
+              <AdminActionButton href="/projects" variant="dark">
+                معاينة صفحة المشروعات
+              </AdminActionButton>
+              <AdminActionButton href="/admin/pages-blocks/blocks/content" variant="ghost">
+                الرجوع لبلوكات المحتوى
+              </AdminActionButton>
+            </>
+          }
+        />
+      ) : (
+        <BlockEditorContextHeader
+          backHref="/admin/pages-blocks/blocks/content"
+          backLabel="الرجوع لبلوكات المحتوى"
+          eyebrow={eyebrow}
+          title={block.name}
+          description={description}
+          status={block.status}
+          saved={saved}
+          slotContext={getSlotCompatibilityLabel("content")}
+        />
+      )}
+
+      {isProjectsHubListing && saved ? (
+        <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
+      ) : null}
 
       <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
+      {isProjectsHubListing ? null : (
+        <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
+      )}
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />

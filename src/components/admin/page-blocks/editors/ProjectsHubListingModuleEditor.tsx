@@ -1,8 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
-import AdminNotice from "../../AdminNotice";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   PROJECTS_HUB_VIEW_MODES,
@@ -40,21 +37,6 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
       <input type="hidden" name="visible_filters" value="residential" />
       <input type="hidden" name="visible_filters" value="commercial" />
       <input type="hidden" name="sort" value={config.sort || "homepage_order"} />
-
-      <AdminNotice
-        variant="info"
-        title="بيانات المشروعات"
-        message="تحكّم في العناصر الظاهرة داخل قائمة المشروعات. بيانات كل مشروع نفسها تُدار من قسم إدارة المشروعات."
-      />
-
-      <div className="flex flex-wrap gap-3 text-sm">
-        <Link href="/admin/projects" className="text-[#D8B87A] underline-offset-2 hover:underline">
-          إدارة بيانات المشروعات
-        </Link>
-        <Link href="/projects" target="_blank" rel="noreferrer" className="text-white/55 underline-offset-2 hover:underline">
-          معاينة صفحة المشروعات
-        </Link>
-      </div>
 
       <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <h2 className="text-sm font-semibold text-white">عنوان قسم قائمة المشروعات</h2>
