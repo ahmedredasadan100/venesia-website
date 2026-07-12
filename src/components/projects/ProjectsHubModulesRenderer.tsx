@@ -75,8 +75,20 @@ export default function ProjectsHubModulesRenderer({
               onFilterChange={onFilterChange}
               eyebrow={props.eyebrow}
               title={props.title}
+              showEyebrow={props.showEyebrow}
+              showTitle={props.showTitle}
+              showFilterBar={props.showFilterBar}
               pageSize={props.pageSize}
               defaultView={props.defaultView}
+              showViewToggle={props.showViewToggle}
+              showPagination={props.showPagination}
+              showProjectCount={props.showProjectCount}
+              showProjectImage={props.showProjectImage}
+              showProjectCode={props.showProjectCode}
+              showProjectDescription={props.showProjectDescription}
+              showProjectType={props.showProjectType}
+              showProjectLocation={props.showProjectLocation}
+              showExploreButton={props.showExploreButton}
             />
           );
         }

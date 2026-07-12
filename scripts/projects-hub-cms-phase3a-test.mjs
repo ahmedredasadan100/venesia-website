@@ -246,6 +246,20 @@ const baseComposition = {
   const props = mapProjectsHubListingProps(listing);
   assert.equal(props.defaultFilter, "all");
   assert.deepEqual(props.visibleFilters, ["all", "residential", "commercial"]);
+  assert.equal(props.showEyebrow, true);
+  assert.equal(props.showTitle, true);
+  assert.equal(props.showFilterBar, true);
+  assert.equal(props.showProjectImage, true);
+  assert.equal(props.showProjectCode, true);
+  assert.equal(props.showProjectDescription, true);
+  assert.equal(props.showProjectType, true);
+  assert.equal(props.showProjectLocation, true);
+  assert.equal(props.showExploreButton, true);
+  assert.equal(props.showViewToggle, true);
+  assert.equal(props.showPagination, true);
+  assert.equal(props.showProjectCount, true);
+  assert.equal(props.pageSize, 6);
+  assert.equal(props.defaultView, "list");
 }
 
 // 9b. Filter chips derive from present categories; labels from registry

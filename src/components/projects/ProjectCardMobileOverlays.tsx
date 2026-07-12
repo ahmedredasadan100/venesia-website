@@ -30,21 +30,31 @@ export function ProjectCodeBadge({
 export function ProjectImageBottomBadges({
   project,
   hideFrom = "md",
+  showLocation = true,
+  showType = true,
 }: {
   project: PublicProject;
   hideFrom?: OverlayBreakpoint;
+  showLocation?: boolean;
+  showType?: boolean;
 }) {
+  if (!showLocation && !showType) return null;
+
   return (
     <div
       className={`pointer-events-none absolute inset-x-3 bottom-0 z-20 flex translate-y-1/2 flex-wrap items-center gap-1.5 ${hideAt[hideFrom]}`}
     >
-      <span className="inline-flex max-w-full rounded-lg bg-[#D8B87A] px-2.5 py-1 text-[11px] font-medium leading-snug text-[#111]">
-        {project.locationLabel}
-      </span>
+      {showLocation ? (
+        <span className="inline-flex max-w-full rounded-lg bg-[#D8B87A] px-2.5 py-1 text-[11px] font-medium leading-snug text-[#111]">
+          {project.locationLabel}
+        </span>
+      ) : null}
 
-      <span className="inline-flex rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-2.5 py-1 text-[11px] font-medium text-[#D8B87A]">
-        {getCategoryLabel(project.category)}
-      </span>
+      {showType ? (
+        <span className="inline-flex rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-2.5 py-1 text-[11px] font-medium text-[#D8B87A]">
+          {getCategoryLabel(project.category)}
+        </span>
+      ) : null}
     </div>
   );
 }

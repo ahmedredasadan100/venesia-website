@@ -44,11 +44,24 @@ export type ProjectsHubFeaturedModuleConfig = {
 export type ProjectsHubListingModuleConfig = {
   eyebrow: string;
   title: string;
+  showEyebrow: boolean;
+  showTitle: boolean;
+  /** Filters remain derived from loaded project types — not Admin-selected. */
   defaultFilter: ProjectsHubFilterId;
   visibleFilters: ProjectsHubFilterId[];
+  showFilterBar: boolean;
+  showProjectImage: boolean;
+  showProjectCode: boolean;
+  showProjectDescription: boolean;
+  showProjectType: boolean;
+  showProjectLocation: boolean;
+  showExploreButton: boolean;
   defaultView: ProjectsHubViewMode;
   pageSize: number;
   sort: ProjectsHubSortMode;
+  showViewToggle: boolean;
+  showPagination: boolean;
+  showProjectCount: boolean;
 };
 
 export type ProjectsHubMapModuleConfig = {
@@ -69,11 +82,23 @@ export const PROJECTS_HUB_FEATURED_KEYS = [
 export const PROJECTS_HUB_LISTING_KEYS = [
   "eyebrow",
   "title",
+  "showEyebrow",
+  "showTitle",
   "defaultFilter",
   "visibleFilters",
+  "showFilterBar",
+  "showProjectImage",
+  "showProjectCode",
+  "showProjectDescription",
+  "showProjectType",
+  "showProjectLocation",
+  "showExploreButton",
   "defaultView",
   "pageSize",
   "sort",
+  "showViewToggle",
+  "showPagination",
+  "showProjectCount",
 ] as const;
 export const PROJECTS_HUB_MAP_KEYS = ["title", "mapImage", "exploreButtonLabel", "mapPins"] as const;
 
@@ -133,6 +158,14 @@ function isFilterId(value: string): value is ProjectsHubFilterId {
   return (PROJECTS_HUB_FILTER_IDS as readonly string[]).includes(value);
 }
 
+/** Missing keys resolve to current public Listing defaults (visible = true). */
+function readShowFlag(value: unknown, fallback = true) {
+  if (typeof value === "boolean") return value;
+  if (value === "false" || value === "0") return false;
+  if (value === "true" || value === "1") return true;
+  return fallback;
+}
+
 export function asProjectsHubHeroConfig(raw: unknown): ProjectsHubHeroModuleConfig {
   const config = asRecord(raw);
   const selectionMode = readText(config.selectionMode);
@@ -163,21 +196,29 @@ export function asProjectsHubFeaturedConfig(raw: unknown): ProjectsHubFeaturedMo
 
 export function asProjectsHubListingConfig(raw: unknown): ProjectsHubListingModuleConfig {
   const config = asRecord(raw);
+  // Chips are derived from loaded project types on the public page; keep registry keys for compat.
   const visibleRaw = Array.isArray(config.visibleFilters) ? config.visibleFilters : ["all", "residential", "commercial"];
   const visibleFilters = visibleRaw
     .map((item) => readText(item))
     .filter(isFilterId);
   const filters = visibleFilters.length ? visibleFilters : (["all", "residential", "commercial"] as ProjectsHubFilterId[]);
-  const defaultFilterRaw = readText(config.defaultFilter);
-  const defaultFilter = isFilterId(defaultFilterRaw) && filters.includes(defaultFilterRaw) ? defaultFilterRaw : filters[0];
   const defaultViewRaw = readText(config.defaultView);
   const sortRaw = readText(config.sort);
 
   return {
     eyebrow: readText(config.eyebrow) || "Projects Index",
     title: readText(config.title) || "جميع المشروعات",
-    defaultFilter,
-    visibleFilters: filters,
+    showEyebrow: readShowFlag(config.showEyebrow ?? config.show_eyebrow),
+    showTitle: readShowFlag(config.showTitle ?? config.show_title),
+    defaultFilter: "all",
+    visibleFilters: filters.length ? filters : (["all", "residential", "commercial"] as ProjectsHubFilterId[]),
+    showFilterBar: readShowFlag(config.showFilterBar ?? config.show_filter_bar),
+    showProjectImage: readShowFlag(config.showProjectImage ?? config.show_project_image),
+    showProjectCode: readShowFlag(config.showProjectCode ?? config.show_project_code),
+    showProjectDescription: readShowFlag(config.showProjectDescription ?? config.show_project_description),
+    showProjectType: readShowFlag(config.showProjectType ?? config.show_project_type),
+    showProjectLocation: readShowFlag(config.showProjectLocation ?? config.show_project_location),
+    showExploreButton: readShowFlag(config.showExploreButton ?? config.show_explore_button),
     defaultView: PROJECTS_HUB_VIEW_MODES.includes(defaultViewRaw as ProjectsHubViewMode)
       ? (defaultViewRaw as ProjectsHubViewMode)
       : "list",
@@ -185,6 +226,9 @@ export function asProjectsHubListingConfig(raw: unknown): ProjectsHubListingModu
     sort: PROJECTS_HUB_SORT_MODES.includes(sortRaw as ProjectsHubSortMode)
       ? (sortRaw as ProjectsHubSortMode)
       : "homepage_order",
+    showViewToggle: readShowFlag(config.showViewToggle ?? config.show_view_toggle),
+    showPagination: readShowFlag(config.showPagination ?? config.show_pagination),
+    showProjectCount: readShowFlag(config.showProjectCount ?? config.show_project_count),
   };
 }
 

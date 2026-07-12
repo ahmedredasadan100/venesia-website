@@ -22,11 +22,23 @@ export type ProjectsHubFeaturedPresentationProps = {
 export type ProjectsHubListingPresentationProps = {
   eyebrow: string;
   title: string;
+  showEyebrow: boolean;
+  showTitle: boolean;
   defaultFilter: ProjectHubFilterId;
   visibleFilters: ProjectHubFilterId[];
+  showFilterBar: boolean;
+  showProjectImage: boolean;
+  showProjectCode: boolean;
+  showProjectDescription: boolean;
+  showProjectType: boolean;
+  showProjectLocation: boolean;
+  showExploreButton: boolean;
   defaultView: "list" | "cards";
   pageSize: number;
   sort: "homepage_order";
+  showViewToggle: boolean;
+  showPagination: boolean;
+  showProjectCount: boolean;
 };
 
 export type ProjectsHubMapPresentationProps = {
@@ -54,11 +66,23 @@ export const PROJECTS_HUB_FEATURED_DEFAULTS: ProjectsHubFeaturedPresentationProp
 export const PROJECTS_HUB_LISTING_DEFAULTS: ProjectsHubListingPresentationProps = {
   eyebrow: "Projects Index",
   title: "جميع المشروعات",
+  showEyebrow: true,
+  showTitle: true,
   defaultFilter: "all",
   visibleFilters: ["all", "residential", "commercial"],
+  showFilterBar: true,
+  showProjectImage: true,
+  showProjectCode: true,
+  showProjectDescription: true,
+  showProjectType: true,
+  showProjectLocation: true,
+  showExploreButton: true,
   defaultView: "list",
   pageSize: 6,
   sort: "homepage_order",
+  showViewToggle: true,
+  showPagination: true,
+  showProjectCount: true,
 };
 
 export const PROJECTS_HUB_MAP_DEFAULTS: ProjectsHubMapPresentationProps = {
@@ -108,13 +132,25 @@ export function mapProjectsHubListingProps(
   return {
     eyebrow: module.config.eyebrow || PROJECTS_HUB_LISTING_DEFAULTS.eyebrow,
     title: module.config.title || PROJECTS_HUB_LISTING_DEFAULTS.title,
+    showEyebrow: module.config.showEyebrow !== false,
+    showTitle: module.config.showTitle !== false,
     defaultFilter: module.config.defaultFilter,
     visibleFilters: module.config.visibleFilters.length
       ? module.config.visibleFilters
       : PROJECTS_HUB_LISTING_DEFAULTS.visibleFilters,
+    showFilterBar: module.config.showFilterBar !== false,
+    showProjectImage: module.config.showProjectImage !== false,
+    showProjectCode: module.config.showProjectCode !== false,
+    showProjectDescription: module.config.showProjectDescription !== false,
+    showProjectType: module.config.showProjectType !== false,
+    showProjectLocation: module.config.showProjectLocation !== false,
+    showExploreButton: module.config.showExploreButton !== false,
     defaultView: module.config.defaultView,
     pageSize: module.config.pageSize || PROJECTS_HUB_LISTING_DEFAULTS.pageSize,
     sort: module.config.sort,
+    showViewToggle: module.config.showViewToggle !== false,
+    showPagination: module.config.showPagination !== false,
+    showProjectCount: module.config.showProjectCount !== false,
   };
 }
 

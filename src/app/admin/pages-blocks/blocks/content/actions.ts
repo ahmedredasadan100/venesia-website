@@ -286,13 +286,25 @@ function buildProjectsHubListingTypedConfig(formData: FormData): ProjectsHubList
     throw new Error("طريقة الترتيب غير مدعومة.");
   }
   return {
-    eyebrow: assertSafePlainText(cleanText(formData.get("eyebrow")) || "Projects Index", "Eyebrow", 80),
-    title: assertSafePlainText(cleanText(formData.get("title")) || "جميع المشروعات", "العنوان", 120),
+    eyebrow: assertSafePlainText(cleanText(formData.get("eyebrow")) || "Projects Index", "النص التمهيدي", 80),
+    title: assertSafePlainText(cleanText(formData.get("title")) || "جميع المشروعات", "عنوان القسم", 120),
+    showEyebrow: parseFormBoolean(formData, "show_eyebrow", false),
+    showTitle: parseFormBoolean(formData, "show_title", false),
     defaultFilter,
     visibleFilters,
+    showFilterBar: parseFormBoolean(formData, "show_filter_bar", false),
+    showProjectImage: parseFormBoolean(formData, "show_project_image", false),
+    showProjectCode: parseFormBoolean(formData, "show_project_code", false),
+    showProjectDescription: parseFormBoolean(formData, "show_project_description", false),
+    showProjectType: parseFormBoolean(formData, "show_project_type", false),
+    showProjectLocation: parseFormBoolean(formData, "show_project_location", false),
+    showExploreButton: parseFormBoolean(formData, "show_explore_button", false),
     defaultView,
     pageSize: assertPageSize(Number(cleanText(formData.get("page_size")) || 6)),
     sort,
+    showViewToggle: parseFormBoolean(formData, "show_view_toggle", false),
+    showPagination: parseFormBoolean(formData, "show_pagination", false),
+    showProjectCount: parseFormBoolean(formData, "show_project_count", false),
   };
 }
 
