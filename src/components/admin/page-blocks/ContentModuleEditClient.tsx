@@ -139,17 +139,55 @@ export default function ContentModuleEditClient({
                           ? "إعدادات عرض صفحة المشروعات فقط — بيانات المشروعات من إدارة المشروعات."
                           : "عدّل المحتوى ومواضع العرض من التبويبات أدناه.";
 
-  const isProjectsHubListing = editorKey === "projects-hub-listing";
-  const listingStatus = statusMeta(block.status);
+  const projectsHubHeader =
+    editorKey === "projects-hub-hero"
+      ? {
+          eyebrow: "PROJECTS HUB HERO",
+          title: "هيرو صفحة المشروعات",
+          description:
+            "تحكّم في إعدادات عرض هيرو صفحة المشروعات. بيانات المشروعات نفسها تُدار من قسم إدارة المشروعات.",
+          backHref: "/admin/pages-blocks/pages/36",
+          backLabel: "الرجوع لصفحة المشروعات",
+        }
+      : editorKey === "projects-hub-featured"
+        ? {
+            eyebrow: "PROJECTS HUB FEATURED",
+            title: "المشروعات المميزة",
+            description:
+              "تحكّم في طريقة عرض قسم المشروعات المميزة. بيانات كل مشروع وحالة التمييز تُدار من قسم إدارة المشروعات.",
+            backHref: "/admin/pages-blocks/pages/36",
+            backLabel: "الرجوع لصفحة المشروعات",
+          }
+        : editorKey === "projects-hub-listing"
+          ? {
+              eyebrow: "PROJECTS HUB LISTING",
+              title: "قائمة المشروعات",
+              description:
+                "تحكّم في العناصر الظاهرة داخل قائمة المشروعات. بيانات كل مشروع نفسها تُدار من قسم إدارة المشروعات.",
+              backHref: "/admin/pages-blocks/blocks/content",
+              backLabel: "الرجوع لبلوكات المحتوى",
+            }
+          : editorKey === "projects-hub-map"
+            ? {
+                eyebrow: "PROJECTS HUB MAP",
+                title: "خريطة المشروعات",
+                description: "تحكّم في إعدادات عرض خريطة المشروعات وربطها بالمشروعات المسجّلة في النظام.",
+                backHref: "/admin/pages-blocks/pages/36",
+                backLabel: "الرجوع لصفحة المشروعات",
+              }
+            : null;
+
+  const usesProjectsHubHeader = Boolean(projectsHubHeader);
+  const hubStatus = statusMeta(block.status);
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      {isProjectsHubListing ? (
+      {projectsHubHeader ? (
         <AdminPageContextHeader
-          eyebrow="PROJECTS HUB LISTING"
-          title="قائمة المشروعات"
-          description="تحكّم في العناصر الظاهرة داخل قائمة المشروعات. بيانات كل مشروع نفسها تُدار من قسم إدارة المشروعات."
-          meta={listingStatus.label}
+          eyebrow={projectsHubHeader.eyebrow}
+          title={projectsHubHeader.title}
+          description={projectsHubHeader.description}
+          meta={hubStatus.label}
           actions={
             <>
               <AdminActionButton href="/admin/projects" variant="dark">
@@ -158,8 +196,8 @@ export default function ContentModuleEditClient({
               <AdminActionButton href="/projects" variant="dark">
                 معاينة صفحة المشروعات
               </AdminActionButton>
-              <AdminActionButton href="/admin/pages-blocks/blocks/content" variant="ghost">
-                الرجوع لبلوكات المحتوى
+              <AdminActionButton href={projectsHubHeader.backHref} variant="ghost">
+                {projectsHubHeader.backLabel}
               </AdminActionButton>
             </>
           }
@@ -177,12 +215,12 @@ export default function ContentModuleEditClient({
         />
       )}
 
-      {isProjectsHubListing && saved ? (
+      {usesProjectsHubHeader && saved ? (
         <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
       ) : null}
 
       <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      {isProjectsHubListing ? null : (
+      {usesProjectsHubHeader ? null : (
         <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
       )}
 

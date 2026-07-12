@@ -1,10 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import AdminNotice from "../../AdminNotice";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   PROJECTS_HUB_DEFAULT_MAP_IMAGE,
@@ -50,21 +48,6 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
     <div className="space-y-6">
       <input type="hidden" name="config_schema" value="projects-hub-map" />
       <input type="hidden" name="pin_count" value={String(pins.length)} />
-
-      <AdminNotice
-        variant="info"
-        title="بيانات المشروعات"
-        message="بيانات المشروعات نفسها تُدار من قسم إدارة المشروعات. الدبابيس تُطابق عبر كود المشروع وmapArea."
-      />
-
-      <div className="flex flex-wrap gap-3 text-sm">
-        <Link href="/admin/projects" className="text-[#D8B87A] underline-offset-2 hover:underline">
-          إدارة بيانات المشروعات
-        </Link>
-        <Link href="/projects" target="_blank" rel="noreferrer" className="text-white/55 underline-offset-2 hover:underline">
-          معاينة صفحة المشروعات
-        </Link>
-      </div>
 
       <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <h2 className="text-sm font-semibold text-white">خريطة المشروعات</h2>

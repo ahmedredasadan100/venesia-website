@@ -1,8 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
-import AdminNotice from "../../AdminNotice";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   PROJECTS_HUB_FEATURED_SELECTION_MODES,
@@ -17,21 +14,6 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
   return (
     <div className="space-y-6">
       <input type="hidden" name="config_schema" value="projects-hub-featured" />
-
-      <AdminNotice
-        variant="info"
-        title="بيانات المشروعات"
-        message="بيانات المشروعات نفسها تُدار من قسم إدارة المشروعات. اختيار «مميز» يتم عبر حقل featured في جدول المشروعات — وليس من هنا."
-      />
-
-      <div className="flex flex-wrap gap-3 text-sm">
-        <Link href="/admin/projects" className="text-[#D8B87A] underline-offset-2 hover:underline">
-          إدارة بيانات المشروعات
-        </Link>
-        <Link href="/projects" target="_blank" rel="noreferrer" className="text-white/55 underline-offset-2 hover:underline">
-          معاينة صفحة المشروعات
-        </Link>
-      </div>
 
       <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <h2 className="text-sm font-semibold text-white">المشروعات المميزة</h2>
