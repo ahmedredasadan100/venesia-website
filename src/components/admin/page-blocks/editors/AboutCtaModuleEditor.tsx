@@ -15,9 +15,16 @@ import {
   resolveContactIconKey,
 } from "../../../page-blocks/contact-icons";
 
+type AboutCtaEditorSection = "all" | "text" | "image" | "cta" | "contacts";
+
 type AboutCtaModuleEditorProps = {
   config: AboutCtaModuleConfig;
   editorMode?: "about-cta" | "home-contact";
+  /**
+   * When set for home-contact flat tabs, render only one section.
+   * Defaults to `"all"` for the classic about-cta nested-tab layout.
+   */
+  section?: AboutCtaEditorSection;
 };
 
 const CONTACT_SLOTS = 4;
@@ -46,9 +53,14 @@ function buildInitialRows(contacts: AboutCtaContactConfig[] | undefined): Contac
 export default function AboutCtaModuleEditor({
   config,
   editorMode = "about-cta",
+  section = "all",
 }: AboutCtaModuleEditorProps) {
   const isHomeContact = editorMode === "home-contact";
   const [contactRows, setContactRows] = useState<ContactRow[]>(() => buildInitialRows(config.contacts));
+  const showText = section === "all" || section === "text";
+  const showImage = section === "all" || section === "image";
+  const showCta = section === "all" || section === "cta";
+  const showContacts = section === "all" || section === "contacts";
 
   function updateRow(uid: string, patch: Partial<Pick<ContactRow, "label" | "value" | "icon">>) {
     setContactRows((rows) => rows.map((row) => (row.uid === uid ? { ...row, ...patch } : row)));
@@ -64,64 +76,64 @@ export default function AboutCtaModuleEditor({
     });
   }
 
-  const contentTab = (
-    <div className="space-y-6">
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-        <h2 className="text-sm font-semibold text-white">النص الرئيسي</h2>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Eyebrow</span>
-          <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-        </label>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Title</span>
-          {isHomeContact ? (
-            <textarea
-              name="title"
-              defaultValue={config.title ?? ""}
-              rows={2}
-              placeholder="سطران مفصولان بسطر فارغ"
-              className={fieldClassName("resize-y leading-7")}
-            />
-          ) : (
-            <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-          )}
-        </label>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Description</span>
+  const textFields = showText ? (
+    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      {section === "all" ? <h2 className="text-sm font-semibold text-white">النص الرئيسي</h2> : null}
+      <label className="block space-y-2">
+        <span className="text-xs font-semibold text-white/55">Eyebrow</span>
+        <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+      </label>
+      <label className="block space-y-2">
+        <span className="text-xs font-semibold text-white/55">Title</span>
+        {isHomeContact ? (
           <textarea
-            name="description"
-            defaultValue={config.description ?? ""}
-            rows={4}
+            name="title"
+            defaultValue={config.title ?? ""}
+            rows={2}
+            placeholder="سطران مفصولان بسطر فارغ"
             className={fieldClassName("resize-y leading-7")}
           />
-        </label>
-      </section>
+        ) : (
+          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
+        )}
+      </label>
+      <label className="block space-y-2">
+        <span className="text-xs font-semibold text-white/55">Description</span>
+        <textarea
+          name="description"
+          defaultValue={config.description ?? ""}
+          rows={4}
+          className={fieldClassName("resize-y leading-7")}
+        />
+      </label>
+    </section>
+  ) : null;
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-        <h2 className="text-sm font-semibold text-white">الزر والملاحظة</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">Button label</span>
-            <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
-          </label>
-          <AdminLinkField
-            prefix="button"
-            label="Button Link"
-            defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
-            showAnchor
-          />
-        </div>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Note تحت الزر</span>
-          <input name="note" defaultValue={config.note ?? ""} className={fieldClassName()} />
-        </label>
-      </section>
-    </div>
-  );
-
-  const imageTab = (
+  const ctaFields = showCta ? (
     <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-      <h2 className="text-sm font-semibold text-white">الصورة</h2>
+      {section === "all" ? <h2 className="text-sm font-semibold text-white">الزر والملاحظة</h2> : null}
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">Button label</span>
+          <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
+        </label>
+        <AdminLinkField
+          prefix="button"
+          label="Button Link"
+          defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
+          showAnchor
+        />
+      </div>
+      <label className="block space-y-2">
+        <span className="text-xs font-semibold text-white/55">Note تحت الزر</span>
+        <input name="note" defaultValue={config.note ?? ""} className={fieldClassName()} />
+      </label>
+    </section>
+  ) : null;
+
+  const imageFields = showImage ? (
+    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      {section === "all" ? <h2 className="text-sm font-semibold text-white">الصورة</h2> : null}
       <AdminMediaImageField
         name="image"
         label="صورة القسم"
@@ -134,14 +146,14 @@ export default function AboutCtaModuleEditor({
         <input name="image_alt" defaultValue={config.imageAlt ?? ""} className={fieldClassName()} />
       </label>
     </section>
-  );
+  ) : null;
 
-  const contactsTab = (
+  const contactsFields = showContacts ? (
     <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-      <h2 className="text-sm font-semibold text-white">بيانات التواصل (4 كحد أقصى)</h2>
+      {section === "all" ? <h2 className="text-sm font-semibold text-white">بيانات التواصل (4 كحد أقصى)</h2> : null}
       <p className="text-xs leading-6 text-white/45">
-        اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر. استخدم أسهم الترتيب لتغيير
-        ترتيب الصفوف كما يظهر في الصفحة العامة، واختر أيقونة كل صف.
+        اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر. استخدم أسهم الترتيب لتغيير ترتيب
+        الصفوف كما يظهر في الصفحة العامة، واختر أيقونة كل صف.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
         {contactRows.map((row, index) => (
@@ -154,7 +166,7 @@ export default function AboutCtaModuleEditor({
                   onClick={() => moveRow(index, -1)}
                   disabled={index === 0}
                   aria-label="تحريك الصف لأعلى"
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   ↑
                 </button>
@@ -163,7 +175,7 @@ export default function AboutCtaModuleEditor({
                   onClick={() => moveRow(index, 1)}
                   disabled={index === contactRows.length - 1}
                   aria-label="تحريك الصف لأسفل"
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   ↓
                 </button>
@@ -220,6 +232,24 @@ export default function AboutCtaModuleEditor({
         ))}
       </div>
     </section>
+  ) : null;
+
+  if (section !== "all") {
+    return (
+      <div className="space-y-6">
+        {textFields}
+        {imageFields}
+        {ctaFields}
+        {contactsFields}
+      </div>
+    );
+  }
+
+  const contentTab = (
+    <div className="space-y-6">
+      {textFields}
+      {ctaFields}
+    </div>
   );
 
   return (
@@ -229,8 +259,8 @@ export default function AboutCtaModuleEditor({
       <AdminModuleTabs
         tabs={[
           { id: "content", label: "المحتوى الأساسي", content: contentTab },
-          { id: "image", label: "الصورة", content: imageTab },
-          { id: "contacts", label: "بيانات التواصل", content: contactsTab },
+          { id: "image", label: "الصورة", content: imageFields },
+          { id: "contacts", label: "بيانات التواصل", content: contactsFields },
         ]}
       />
     </div>

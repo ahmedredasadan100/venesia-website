@@ -9,6 +9,7 @@ export type HomeContactContent = {
   button: {
     label: string;
     href: string;
+    target?: "_self" | "_blank";
   };
   note: string;
   image: string;

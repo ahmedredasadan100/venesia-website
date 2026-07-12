@@ -386,11 +386,29 @@ export function asVisionGoalsConfig(raw: unknown): VisionGoalsModuleConfig {
 export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
   const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readTarget = (value: unknown): "_self" | "_blank" | undefined =>
+    value === "_blank" || value === "_self" ? value : undefined;
 
-  const buttonRaw = config.button as Record<string, unknown> | undefined;
+  const buttonRaw =
+    config.button && typeof config.button === "object"
+      ? (config.button as Record<string, unknown>)
+      : undefined;
   const buttonLabel = readText(buttonRaw?.label) || readText(config.button_label) || undefined;
   const buttonHref = readText(buttonRaw?.href) || readText(config.button_href) || undefined;
-  const button = buttonLabel || buttonHref ? { label: buttonLabel, href: buttonHref } : undefined;
+  const buttonLink =
+    buttonRaw?.link && typeof buttonRaw.link === "object"
+      ? (buttonRaw.link as Record<string, unknown>)
+      : undefined;
+  const buttonTarget = readTarget(buttonRaw?.target);
+  const button =
+    buttonLabel || buttonHref || buttonLink
+      ? {
+          ...(buttonLabel ? { label: buttonLabel } : {}),
+          ...(buttonHref ? { href: buttonHref } : {}),
+          ...(buttonLink ? { link: buttonLink } : {}),
+          ...(buttonTarget ? { target: buttonTarget } : {}),
+        }
+      : undefined;
 
   const image =
     readText(config.image) ||
@@ -408,8 +426,18 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
           const value = readText(row.value);
           const href = readText(row.href) || undefined;
           const icon = readText(row.icon) || undefined;
-          if (!label && !value) return null;
-          return { label: label || undefined, value: value || undefined, href, icon };
+          const link =
+            row.link && typeof row.link === "object" ? (row.link as Record<string, unknown>) : undefined;
+          const target = readTarget(row.target);
+          if (!label && !value && !href && !link) return null;
+          return {
+            ...(label ? { label } : {}),
+            ...(value ? { value } : {}),
+            ...(href ? { href } : {}),
+            ...(icon ? { icon } : {}),
+            ...(link ? { link } : {}),
+            ...(target ? { target } : {}),
+          };
         })
         .filter(Boolean) as AboutCtaContactConfig[]
     : undefined;

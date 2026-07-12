@@ -39,15 +39,11 @@ import { getContentModuleEditorKey } from "../../../lib/page-blocks/module-edit-
 import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 
-function HomeStorySaveDock() {
+function StickyModuleSaveDock({ title, description }: { title: string; description: string }) {
   const { pending } = useFormStatus();
 
   return (
-    <AdminStickyFormBar
-      className="mt-8"
-      title="حفظ موديول Home Story"
-      description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
-    >
+    <AdminStickyFormBar className="mt-8" title={title} description={description}>
       <button
         type="submit"
         disabled={pending}
@@ -139,7 +135,7 @@ export default function ContentModuleEditClient({
                               : "CONTENT MODULE";
   const description =
     editorKey === "home-contact"
-      ? "CTA الرئيسية: نص + زر + صورة + 4 وسائل تواصل — للصفحة الرئيسية فقط."
+      ? "تحكّم في نصوص وصورة وزر ووسائل التواصل داخل قسم التواصل في الصفحة الرئيسية. كل التغييرات تنعكس على العرض العام بعد الحفظ."
       : editorKey === "home-projects"
         ? "سكشن مشاريع فينيسيا — نصوص السكشن من هنا؛ بيانات الكروت من جدول projects."
         : editorKey === "home-trust"
@@ -202,8 +198,11 @@ export default function ContentModuleEditClient({
 
   const usesProjectsHubHeader = Boolean(projectsHubHeader);
   const isHomeStory = editorKey === "home-story";
+  const isHomeContact = editorKey === "home-contact";
+  const usesHomeModuleChrome = isHomeStory || isHomeContact;
   const hubStatus = statusMeta(block.status);
   const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
+  const homeContactConfig = isHomeContact ? (config as ReturnType<typeof asAboutCtaConfig>) : null;
 
   const settingsTab = {
     id: "settings",
@@ -237,7 +236,7 @@ export default function ContentModuleEditClient({
 
   const pagesTab = {
     id: "pages",
-    label: isHomeStory ? "الظهور في الصفحات" : "يظهر في الصفحات",
+    label: usesHomeModuleChrome ? "الظهور في الصفحات" : "يظهر في الصفحات",
     content: (
       <ModulePageAssignmentsField pages={assignmentContext.pages} assignedPageIds={assignedPageIds} />
     ),
@@ -265,13 +264,57 @@ export default function ContentModuleEditClient({
       ]
     : [];
 
+  const homeContactTabs = homeContactConfig
+    ? [
+        {
+          id: "text",
+          label: "النص",
+          content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="text" />,
+        },
+        {
+          id: "image",
+          label: "الصورة",
+          content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="image" />,
+        },
+        {
+          id: "cta",
+          label: "الزر والرابط",
+          content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="cta" />,
+        },
+        {
+          id: "contacts",
+          label: "وسائل التواصل",
+          content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="contacts" />,
+        },
+        pagesTab,
+        settingsTab,
+      ]
+    : [];
+
   return (
-    <div className={`space-y-6 ${isHomeStory ? "pb-28" : "pb-10"}`} dir="rtl">
+    <div className={`space-y-6 ${usesHomeModuleChrome ? "pb-28" : "pb-10"}`} dir="rtl">
       {isHomeStory ? (
         <AdminPageContextHeader
           eyebrow="HOME STORY MODULE"
           title={block.name}
           description="تحكّم في نصوص وصور وزر قسم القصة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
+          meta={hubStatus.label}
+          actions={
+            <>
+              <AdminActionButton href="/" variant="dark">
+                معاينة الصفحة الرئيسية
+              </AdminActionButton>
+              <AdminActionButton href="/admin/pages-blocks/blocks/content" variant="ghost">
+                الرجوع لبلوكات المحتوى
+              </AdminActionButton>
+            </>
+          }
+        />
+      ) : isHomeContact ? (
+        <AdminPageContextHeader
+          eyebrow="HOME CONTACT MODULE"
+          title={block.name}
+          description="تحكّم في نصوص وصورة وزر ووسائل التواصل داخل قسم التواصل في الصفحة الرئيسية. كل التغييرات تنعكس على العرض العام بعد الحفظ."
           meta={hubStatus.label}
           actions={
             <>
@@ -321,12 +364,16 @@ export default function ContentModuleEditClient({
         <AdminNotice variant="success" message="تم حفظ الموديول وتحديث الصفحة الرئيسية بنجاح." />
       ) : null}
 
+      {isHomeContact && saved ? (
+        <AdminNotice variant="success" message="تم حفظ موديول التواصل وتحديث الصفحة الرئيسية بنجاح." />
+      ) : null}
+
       {usesProjectsHubHeader && saved ? (
         <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
       ) : null}
 
       <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      {usesProjectsHubHeader || isHomeStory ? null : (
+      {usesProjectsHubHeader || usesHomeModuleChrome ? null : (
         <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
       )}
 
@@ -380,6 +427,8 @@ export default function ContentModuleEditClient({
 
         {isHomeStory ? (
           <AdminModuleTabs nowrap tabs={homeStoryTabs} />
+        ) : isHomeContact ? (
+          <AdminModuleTabs nowrap tabs={homeContactTabs} />
         ) : (
           <AdminModuleTabs
             tabs={[
@@ -398,11 +447,6 @@ export default function ContentModuleEditClient({
                     <AboutCtaModuleEditor
                       config={config as ReturnType<typeof asAboutCtaConfig>}
                       editorMode="about-cta"
-                    />
-                  ) : editorKey === "home-contact" ? (
-                    <AboutCtaModuleEditor
-                      config={config as ReturnType<typeof asAboutCtaConfig>}
-                      editorMode="home-contact"
                     />
                   ) : editorKey === "home-trust" ? (
                     <AboutPrinciplesModuleEditor
@@ -441,7 +485,15 @@ export default function ContentModuleEditClient({
         )}
 
         {isHomeStory ? (
-          <HomeStorySaveDock />
+          <StickyModuleSaveDock
+            title="حفظ موديول Home Story"
+            description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
+          />
+        ) : isHomeContact ? (
+          <StickyModuleSaveDock
+            title="حفظ موديول Home Contact"
+            description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
+          />
         ) : (
           <div className="mt-6 flex justify-end">
             <button

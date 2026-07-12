@@ -16,6 +16,7 @@ export type AboutCtaModuleContent = {
   button: {
     label: string;
     href: string;
+    target?: "_self" | "_blank";
   };
   note: string;
   image?: string;
@@ -53,6 +54,7 @@ export function mapAboutCtaBlock(block: ResolvedPageBlock): AboutCtaModuleConten
     button: {
       label: config.button?.label ?? "",
       href: config.button?.href ?? "/projects",
+      target: config.button?.target,
     },
     note: config.note ?? "",
     image: normalizePublicImageSrc(config.image),
