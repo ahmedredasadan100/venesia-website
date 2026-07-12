@@ -16,6 +16,8 @@ type AdminLinkFieldProps = {
   defaultValue?: AdminLinkValue;
   helperText?: string;
   showAnchor?: boolean;
+  chooseLinkLabel?: string;
+  clearLinkLabel?: string;
   /** When set, skips hidden form inputs and uses callback state (Footer Builder, etc.). */
   onControlledChange?: (value: AdminLinkValue) => void;
   controlledValue?: AdminLinkValue;
@@ -43,6 +45,8 @@ export default function AdminLinkField({
   defaultValue,
   helperText,
   showAnchor = false,
+  chooseLinkLabel = "Choose Link",
+  clearLinkLabel = "Clear",
   onControlledChange,
   controlledValue,
 }: AdminLinkFieldProps) {
@@ -94,11 +98,11 @@ export default function AdminLinkField({
         </div>
         <div className="flex flex-wrap gap-2">
           <AdminActionButton variant="gold" onClick={() => setPickerOpen(true)}>
-            Choose Link
+            {chooseLinkLabel}
           </AdminActionButton>
           {value.link_kind !== "none" ? (
             <AdminActionButton variant="ghost" onClick={() => setLink(emptyAdminLink())}>
-              Clear
+              {clearLinkLabel}
             </AdminActionButton>
           ) : null}
         </div>

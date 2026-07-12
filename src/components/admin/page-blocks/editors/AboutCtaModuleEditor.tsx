@@ -56,6 +56,33 @@ export default function AboutCtaModuleEditor({
   section = "all",
 }: AboutCtaModuleEditorProps) {
   const isHomeContact = editorMode === "home-contact";
+  const fieldLabels = isHomeContact
+    ? {
+        eyebrow: "العنوان التمهيدي الصغير",
+        title: "العنوان",
+        description: "الوصف",
+        imageAlt: "وصف الصورة",
+        buttonLabel: "نص الزر",
+        buttonLink: "رابط الزر",
+        chooseLink: "اختيار الرابط",
+        clearLink: "مسح الرابط",
+        note: "ملاحظة أسفل الزر",
+        contactLabel: "اسم وسيلة التواصل",
+        contactValue: "بيانات التواصل",
+      }
+    : {
+        eyebrow: "Eyebrow",
+        title: "Title",
+        description: "Description",
+        imageAlt: "Alt",
+        buttonLabel: "Button label",
+        buttonLink: "Button Link",
+        chooseLink: "Choose Link",
+        clearLink: "Clear",
+        note: "Note تحت الزر",
+        contactLabel: "Label",
+        contactValue: "Value",
+      };
   const [contactRows, setContactRows] = useState<ContactRow[]>(() => buildInitialRows(config.contacts));
   const showText = section === "all" || section === "text";
   const showImage = section === "all" || section === "image";
@@ -80,11 +107,11 @@ export default function AboutCtaModuleEditor({
     <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
       {section === "all" ? <h2 className="text-sm font-semibold text-white">النص الرئيسي</h2> : null}
       <label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">Eyebrow</span>
+        <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
         <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
       </label>
       <label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">Title</span>
+        <span className="text-xs font-semibold text-white/55">{fieldLabels.title}</span>
         {isHomeContact ? (
           <textarea
             name="title"
@@ -98,7 +125,7 @@ export default function AboutCtaModuleEditor({
         )}
       </label>
       <label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">Description</span>
+        <span className="text-xs font-semibold text-white/55">{fieldLabels.description}</span>
         <textarea
           name="description"
           defaultValue={config.description ?? ""}
@@ -114,18 +141,20 @@ export default function AboutCtaModuleEditor({
       {section === "all" ? <h2 className="text-sm font-semibold text-white">الزر والملاحظة</h2> : null}
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Button label</span>
+          <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
           <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
         </label>
         <AdminLinkField
           prefix="button"
-          label="Button Link"
+          label={fieldLabels.buttonLink}
+          chooseLinkLabel={fieldLabels.chooseLink}
+          clearLinkLabel={fieldLabels.clearLink}
           defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
           showAnchor
         />
       </div>
       <label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">Note تحت الزر</span>
+        <span className="text-xs font-semibold text-white/55">{fieldLabels.note}</span>
         <input name="note" defaultValue={config.note ?? ""} className={fieldClassName()} />
       </label>
     </section>
@@ -142,7 +171,7 @@ export default function AboutCtaModuleEditor({
         browseFolder={isHomeContact ? "images/home" : "images/about"}
       />
       <label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">Alt</span>
+        <span className="text-xs font-semibold text-white/55">{fieldLabels.imageAlt}</span>
         <input name="image_alt" defaultValue={config.imageAlt ?? ""} className={fieldClassName()} />
       </label>
     </section>
@@ -183,7 +212,7 @@ export default function AboutCtaModuleEditor({
             </div>
 
             <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">Label</span>
+              <span className="text-xs font-semibold text-white/55">{fieldLabels.contactLabel}</span>
               <input
                 name={`contact_${index}_label`}
                 value={row.label}
@@ -193,7 +222,7 @@ export default function AboutCtaModuleEditor({
             </label>
 
             <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">Value</span>
+              <span className="text-xs font-semibold text-white/55">{fieldLabels.contactValue}</span>
               <input
                 name={`contact_${index}_value`}
                 value={row.value}
