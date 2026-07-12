@@ -1,7 +1,8 @@
 "use client";
 
+import { useFormStatus } from "react-dom";
 import AdminNotice from "../AdminNotice";
-import { AdminActionButton, AdminPageContextHeader } from "../ui";
+import { AdminActionButton, AdminPageContextHeader, AdminStickyFormBar } from "../ui";
 import AdminModuleTabs from "./AdminModuleTabs";
 import BlockEditorContextHeader from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
@@ -37,6 +38,28 @@ import {
 import { getContentModuleEditorKey } from "../../../lib/page-blocks/module-edit-registry";
 import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
+
+function HomeStorySaveDock() {
+  const { pending } = useFormStatus();
+
+  return (
+    <AdminStickyFormBar
+      className="mt-8"
+      title="حفظ موديول Home Story"
+      description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
+    >
+      <button
+        type="submit"
+        disabled={pending}
+        className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-[#D8B87A] px-6 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d] ${
+          pending ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+        }`}
+      >
+        {pending ? "جارٍ الحفظ..." : "حفظ الموديول"}
+      </button>
+    </AdminStickyFormBar>
+  );
+}
 
 type ContentModuleEditClientProps = {
   block: {
@@ -122,7 +145,7 @@ export default function ContentModuleEditClient({
         : editorKey === "home-trust"
           ? "لماذا يثق السوق العقاري في فينيسيا؟ — للصفحة الرئيسية فقط."
           : editorKey === "home-story"
-            ? "FROM VISION TO EXECUTION — للصفحة الرئيسية فقط."
+            ? "تحكّم في نصوص وصور وزر قسم القصة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
             : editorKey === "about-intro"
               ? "موديول Who We Are — قابل لإعادة الاستخدام على أي صفحة."
               : editorKey === "vision-goals"
@@ -178,11 +201,90 @@ export default function ContentModuleEditClient({
             : null;
 
   const usesProjectsHubHeader = Boolean(projectsHubHeader);
+  const isHomeStory = editorKey === "home-story";
   const hubStatus = statusMeta(block.status);
+  const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
+
+  const settingsTab = {
+    id: "settings",
+    label: "الإعدادات",
+    content: (
+      <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        <label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">الاسم</span>
+          <input name="name" defaultValue={block.name} required className={fieldClassName()} />
+        </label>
+        <label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">Slug</span>
+          <input name="slug" defaultValue={block.slug} required dir="ltr" className={fieldClassName()} />
+        </label>
+        <label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
+          <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
+        </label>
+        <label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">الحالة</span>
+          <select name="status" defaultValue={block.status} className={fieldClassName()}>
+            <option value="draft">مسودة</option>
+            <option value="published">منشور</option>
+            <option value="unpublished">مخفي</option>
+            <option value="archived">أرشيف</option>
+          </select>
+        </label>
+      </section>
+    ),
+  };
+
+  const pagesTab = {
+    id: "pages",
+    label: isHomeStory ? "الظهور في الصفحات" : "يظهر في الصفحات",
+    content: (
+      <ModulePageAssignmentsField pages={assignmentContext.pages} assignedPageIds={assignedPageIds} />
+    ),
+  };
+
+  const homeStoryTabs = homeStoryConfig
+    ? [
+        {
+          id: "text",
+          label: "النص",
+          content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="text" />,
+        },
+        {
+          id: "images",
+          label: "الصور",
+          content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="images" />,
+        },
+        {
+          id: "cta",
+          label: "الزر والرابط",
+          content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="cta" />,
+        },
+        pagesTab,
+        settingsTab,
+      ]
+    : [];
 
   return (
-    <div className="space-y-6 pb-10" dir="rtl">
-      {projectsHubHeader ? (
+    <div className={`space-y-6 ${isHomeStory ? "pb-28" : "pb-10"}`} dir="rtl">
+      {isHomeStory ? (
+        <AdminPageContextHeader
+          eyebrow="HOME STORY MODULE"
+          title={block.name}
+          description="تحكّم في نصوص وصور وزر قسم القصة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
+          meta={hubStatus.label}
+          actions={
+            <>
+              <AdminActionButton href="/" variant="dark">
+                معاينة الصفحة الرئيسية
+              </AdminActionButton>
+              <AdminActionButton href="/admin/pages-blocks/blocks/content" variant="ghost">
+                الرجوع لبلوكات المحتوى
+              </AdminActionButton>
+            </>
+          }
+        />
+      ) : projectsHubHeader ? (
         <AdminPageContextHeader
           eyebrow={projectsHubHeader.eyebrow}
           title={projectsHubHeader.title}
@@ -215,12 +317,16 @@ export default function ContentModuleEditClient({
         />
       )}
 
+      {isHomeStory && saved ? (
+        <AdminNotice variant="success" message="تم حفظ الموديول وتحديث الصفحة الرئيسية بنجاح." />
+      ) : null}
+
       {usesProjectsHubHeader && saved ? (
         <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
       ) : null}
 
       <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      {usesProjectsHubHeader ? null : (
+      {usesProjectsHubHeader || isHomeStory ? null : (
         <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
       )}
 
@@ -255,6 +361,7 @@ export default function ContentModuleEditClient({
         />
         <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
         {usesAboutIntroConfig ? <input type="hidden" name="config_schema" value="about-intro" /> : null}
+        {isHomeStory ? <input type="hidden" name="include_story_cta" value="1" /> : null}
         {editorKey === "vision-goals" ? <input type="hidden" name="config_schema" value="vision-goals" /> : null}
         {usesAboutCtaConfig ? <input type="hidden" name="config_schema" value="about-cta" /> : null}
         {usesAboutPrinciplesConfig ? (
@@ -271,111 +378,80 @@ export default function ContentModuleEditClient({
         ) : null}
         {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
 
-        <AdminModuleTabs
-          tabs={[
-            {
-              id: "content",
-              label: "المحتوى",
-              content:
-                editorKey === "about-intro" ? (
-                  <AboutIntroModuleEditor
-                    config={config as ReturnType<typeof asAboutIntroConfig>}
-                    editorMode="about-intro"
-                  />
-                ) : editorKey === "home-story" ? (
-                  <AboutIntroModuleEditor
-                    config={config as ReturnType<typeof asAboutIntroConfig>}
-                    editorMode="home-story"
-                  />
-                ) : editorKey === "vision-goals" ? (
-                  <VisionGoalsModuleEditor config={config as ReturnType<typeof asVisionGoalsConfig>} />
-                ) : editorKey === "about-cta" ? (
-                  <AboutCtaModuleEditor
-                    config={config as ReturnType<typeof asAboutCtaConfig>}
-                    editorMode="about-cta"
-                  />
-                ) : editorKey === "home-contact" ? (
-                  <AboutCtaModuleEditor
-                    config={config as ReturnType<typeof asAboutCtaConfig>}
-                    editorMode="home-contact"
-                  />
-                ) : editorKey === "home-trust" ? (
-                  <AboutPrinciplesModuleEditor
-                    config={config as ReturnType<typeof asAboutPrinciplesConfig>}
-                    editorMode="home-trust"
-                  />
-                ) : editorKey === "home-projects" ? (
-                  <HomeProjectsPlacementEditor config={config as ReturnType<typeof asHomeProjectsConfig>} />
-                ) : editorKey === "about-principles" ? (
-                  <AboutPrinciplesModuleEditor
-                    config={config as ReturnType<typeof asAboutPrinciplesConfig>}
-                    editorMode="about-principles"
-                  />
-                ) : editorKey === "about-approach" ? (
-                  <AboutApproachModuleEditor config={config as ReturnType<typeof asAboutApproachConfig>} />
-                ) : editorKey === "projects-hub-hero" ? (
-                  <ProjectsHubHeroModuleEditor config={config as ReturnType<typeof asProjectsHubHeroConfig>} />
-                ) : editorKey === "projects-hub-featured" ? (
-                  <ProjectsHubFeaturedModuleEditor
-                    config={config as ReturnType<typeof asProjectsHubFeaturedConfig>}
-                  />
-                ) : editorKey === "projects-hub-listing" ? (
-                  <ProjectsHubListingModuleEditor
-                    config={config as ReturnType<typeof asProjectsHubListingConfig>}
-                  />
-                ) : editorKey === "projects-hub-map" ? (
-                  <ProjectsHubMapModuleEditor config={config as ReturnType<typeof asProjectsHubMapConfig>} />
-                ) : (
-                  <GenericContentModuleEditor config={config as ReturnType<typeof asContentConfig>} />
-                ),
-            },
-            {
-              id: "meta",
-              label: "الإعدادات",
-              content: (
-                <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">الاسم</span>
-                    <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Slug</span>
-                    <input name="slug" defaultValue={block.slug} required dir="ltr" className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
-                    <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">الحالة</span>
-                    <select name="status" defaultValue={block.status} className={fieldClassName()}>
-                      <option value="draft">مسودة</option>
-                      <option value="published">منشور</option>
-                      <option value="unpublished">مخفي</option>
-                      <option value="archived">أرشيف</option>
-                    </select>
-                  </label>
-                </section>
-              ),
-            },
-            {
-              id: "pages",
-              label: "يظهر في الصفحات",
-              content: (
-                <ModulePageAssignmentsField
-                  pages={assignmentContext.pages}
-                  assignedPageIds={assignedPageIds}
-                />
-              ),
-            },
-          ]}
-        />
+        {isHomeStory ? (
+          <AdminModuleTabs nowrap tabs={homeStoryTabs} />
+        ) : (
+          <AdminModuleTabs
+            tabs={[
+              {
+                id: "content",
+                label: "المحتوى",
+                content:
+                  editorKey === "about-intro" ? (
+                    <AboutIntroModuleEditor
+                      config={config as ReturnType<typeof asAboutIntroConfig>}
+                      editorMode="about-intro"
+                    />
+                  ) : editorKey === "vision-goals" ? (
+                    <VisionGoalsModuleEditor config={config as ReturnType<typeof asVisionGoalsConfig>} />
+                  ) : editorKey === "about-cta" ? (
+                    <AboutCtaModuleEditor
+                      config={config as ReturnType<typeof asAboutCtaConfig>}
+                      editorMode="about-cta"
+                    />
+                  ) : editorKey === "home-contact" ? (
+                    <AboutCtaModuleEditor
+                      config={config as ReturnType<typeof asAboutCtaConfig>}
+                      editorMode="home-contact"
+                    />
+                  ) : editorKey === "home-trust" ? (
+                    <AboutPrinciplesModuleEditor
+                      config={config as ReturnType<typeof asAboutPrinciplesConfig>}
+                      editorMode="home-trust"
+                    />
+                  ) : editorKey === "home-projects" ? (
+                    <HomeProjectsPlacementEditor config={config as ReturnType<typeof asHomeProjectsConfig>} />
+                  ) : editorKey === "about-principles" ? (
+                    <AboutPrinciplesModuleEditor
+                      config={config as ReturnType<typeof asAboutPrinciplesConfig>}
+                      editorMode="about-principles"
+                    />
+                  ) : editorKey === "about-approach" ? (
+                    <AboutApproachModuleEditor config={config as ReturnType<typeof asAboutApproachConfig>} />
+                  ) : editorKey === "projects-hub-hero" ? (
+                    <ProjectsHubHeroModuleEditor config={config as ReturnType<typeof asProjectsHubHeroConfig>} />
+                  ) : editorKey === "projects-hub-featured" ? (
+                    <ProjectsHubFeaturedModuleEditor
+                      config={config as ReturnType<typeof asProjectsHubFeaturedConfig>}
+                    />
+                  ) : editorKey === "projects-hub-listing" ? (
+                    <ProjectsHubListingModuleEditor
+                      config={config as ReturnType<typeof asProjectsHubListingConfig>}
+                    />
+                  ) : editorKey === "projects-hub-map" ? (
+                    <ProjectsHubMapModuleEditor config={config as ReturnType<typeof asProjectsHubMapConfig>} />
+                  ) : (
+                    <GenericContentModuleEditor config={config as ReturnType<typeof asContentConfig>} />
+                  ),
+              },
+              { ...settingsTab, id: "meta", label: "الإعدادات" },
+              { ...pagesTab, id: "pages", label: "يظهر في الصفحات" },
+            ]}
+          />
+        )}
 
-        <div className="mt-6 flex justify-end">
-          <button type="submit" className="rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] hover:bg-[#e5c98d]">
-            حفظ الموديول
-          </button>
-        </div>
+        {isHomeStory ? (
+          <HomeStorySaveDock />
+        ) : (
+          <div className="mt-6 flex justify-end">
+            <button
+              type="submit"
+              className="cursor-pointer rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] hover:bg-[#e5c98d]"
+            >
+              حفظ الموديول
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );

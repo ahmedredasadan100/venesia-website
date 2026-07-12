@@ -286,14 +286,27 @@ export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
         })
     : undefined;
 
-  const buttonRaw = config.button as Record<string, unknown> | undefined;
-  const buttonLabel = readText(buttonRaw?.label ?? config.button_label);
-  const buttonHref = readText(buttonRaw?.href ?? config.button_href);
+  const buttonRaw =
+    config.button && typeof config.button === "object"
+      ? (config.button as Record<string, unknown>)
+      : undefined;
+  const buttonLabel = readText(buttonRaw?.label ?? config.button_label) || undefined;
+  const buttonHref = readText(buttonRaw?.href ?? config.button_href) || undefined;
+  const buttonLink =
+    buttonRaw?.link && typeof buttonRaw.link === "object"
+      ? (buttonRaw.link as Record<string, unknown>)
+      : undefined;
+  const buttonTarget =
+    buttonRaw?.target === "_blank" || buttonRaw?.target === "_self"
+      ? (buttonRaw.target as "_blank" | "_self")
+      : undefined;
   const button =
-    buttonLabel || buttonHref
+    buttonLabel || buttonHref || buttonLink
       ? {
-          label: buttonLabel || undefined,
-          href: buttonHref || undefined,
+          ...(buttonLabel ? { label: buttonLabel } : {}),
+          ...(buttonHref ? { href: buttonHref } : {}),
+          ...(buttonLink ? { link: buttonLink } : {}),
+          ...(buttonTarget ? { target: buttonTarget } : {}),
         }
       : undefined;
 

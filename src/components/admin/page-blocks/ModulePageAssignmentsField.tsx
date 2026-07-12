@@ -26,7 +26,7 @@ export default function ModulePageAssignmentsField({
         {pages.map((page) => (
           <label
             key={page.id}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70"
+            className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70"
           >
             <span>
               {page.title}

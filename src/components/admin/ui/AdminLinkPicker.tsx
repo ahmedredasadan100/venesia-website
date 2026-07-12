@@ -362,7 +362,7 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
         key={result.id}
         type="button"
         onClick={() => handleSelectBrowseResult(result)}
-        className={`block w-full rounded-xl border px-3 py-2.5 text-right transition ${
+        className={`block w-full cursor-pointer rounded-xl border px-3 py-2.5 text-right transition ${
           isActive
             ? "border-[#D8B87A]/35 bg-[#D8B87A]/10"
             : "border-white/8 bg-[#05070B] hover:border-[#D8B87A]/25 hover:bg-[#D8B87A]/5"
@@ -638,7 +638,7 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                   key={item.id}
                   type="button"
                   onClick={() => handleResourceChange(item.id)}
-                  className={`w-full rounded-xl px-3 py-2.5 text-right text-sm font-semibold transition ${
+                  className={`w-full cursor-pointer rounded-xl px-3 py-2.5 text-right text-sm font-semibold transition ${
                     resource === item.id
                       ? "bg-[#D8B87A]/15 text-[#D8B87A] ring-1 ring-[#D8B87A]/30"
                       : "text-white/60 hover:bg-white/5 hover:text-white/85"

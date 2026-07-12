@@ -127,7 +127,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
 
             <Link
               href={resolved.button.href}
-              className="mt-8 inline-flex items-center rounded-full border border-[#D8B87A]/35 px-7 py-3 text-sm font-medium text-[#D8B87A] transition duration-500 hover:-translate-y-0.5 hover:bg-[#D8B87A] hover:text-[#111]"
+              className="mt-8 inline-flex cursor-pointer items-center rounded-full border border-[#D8B87A]/35 px-7 py-3 text-sm font-medium text-[#D8B87A] transition duration-500 hover:-translate-y-0.5 hover:bg-[#D8B87A] hover:text-[#111]"
             >
               {resolved.button.label}
             </Link>

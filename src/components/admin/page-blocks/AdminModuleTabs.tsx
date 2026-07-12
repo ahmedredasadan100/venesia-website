@@ -12,9 +12,14 @@ type AdminModuleTabsProps = {
   tabs: AdminModuleTab[];
   /** Optional initial tab id; falls back to the first tab. */
   initialTabId?: string;
+  /**
+   * Keep tabs on one horizontal row (scroll instead of wrap).
+   * Safe default remains wrap for existing editors.
+   */
+  nowrap?: boolean;
 };
 
-export default function AdminModuleTabs({ tabs, initialTabId }: AdminModuleTabsProps) {
+export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false }: AdminModuleTabsProps) {
   const fallbackId = tabs[0]?.id ?? "";
   const resolvedInitial =
     initialTabId && tabs.some((tab) => tab.id === initialTabId) ? initialTabId : fallbackId;
@@ -25,7 +30,10 @@ export default function AdminModuleTabs({ tabs, initialTabId }: AdminModuleTabsP
   return (
     <div className="space-y-5">
       <div
-        className="flex flex-wrap gap-2 border-b border-white/10 pb-3"
+        className={[
+          "flex gap-2 border-b border-white/10 pb-3",
+          nowrap ? "flex-nowrap overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "flex-wrap",
+        ].join(" ")}
         role="tablist"
         aria-label="أقسام محرر الصفحة"
       >
@@ -40,6 +48,7 @@ export default function AdminModuleTabs({ tabs, initialTabId }: AdminModuleTabsP
               onClick={() => setActiveId(tab.id)}
               className={[
                 "cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition",
+                nowrap ? "shrink-0 whitespace-nowrap" : "",
                 isActive
                   ? "bg-[#D8B87A]/15 text-[#D8B87A] ring-1 ring-[#D8B87A]/35"
                   : "text-white/50 hover:bg-white/[0.04] hover:text-white",
