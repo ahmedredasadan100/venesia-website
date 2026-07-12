@@ -270,7 +270,23 @@ function buildProjectsHubFeaturedTypedConfig(formData: FormData): ProjectsHubFea
   const limitRaw = cleanText(formData.get("limit"));
   const limit = limitRaw ? assertPageSize(Number(limitRaw)) : null;
   const autoplayMs = assertAutoplayMs(Number(cleanText(formData.get("autoplay_ms")) || 6000));
-  return { selectionMode, title, subtitle, limit, autoplayMs };
+  return {
+    selectionMode,
+    title,
+    subtitle,
+    showTitle: parseFormBoolean(formData, "show_title", false),
+    showSubtitle: parseFormBoolean(formData, "show_subtitle", false),
+    showProjectImage: parseFormBoolean(formData, "show_project_image", false),
+    showProjectCode: parseFormBoolean(formData, "show_project_code", false),
+    showProjectName: parseFormBoolean(formData, "show_project_name", false),
+    showProjectDescription: parseFormBoolean(formData, "show_project_description", false),
+    showProjectType: parseFormBoolean(formData, "show_project_type", false),
+    showProjectLocation: parseFormBoolean(formData, "show_project_location", false),
+    showExploreButton: parseFormBoolean(formData, "show_explore_button", false),
+    showSliderDots: parseFormBoolean(formData, "show_slider_dots", false),
+    limit,
+    autoplayMs,
+  };
 }
 
 function buildProjectsHubListingTypedConfig(formData: FormData): ProjectsHubListingModuleConfig {

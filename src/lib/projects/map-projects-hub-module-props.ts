@@ -14,6 +14,16 @@ export type ProjectsHubHeroPresentationProps = {
 export type ProjectsHubFeaturedPresentationProps = {
   title: string;
   subtitle: string;
+  showTitle: boolean;
+  showSubtitle: boolean;
+  showProjectImage: boolean;
+  showProjectCode: boolean;
+  showProjectName: boolean;
+  showProjectDescription: boolean;
+  showProjectType: boolean;
+  showProjectLocation: boolean;
+  showExploreButton: boolean;
+  showSliderDots: boolean;
   autoplayMs: number;
   limit: number | null;
   selectionMode: "featured_flag";
@@ -58,6 +68,16 @@ export const PROJECTS_HUB_HERO_DEFAULTS: ProjectsHubHeroPresentationProps = {
 export const PROJECTS_HUB_FEATURED_DEFAULTS: ProjectsHubFeaturedPresentationProps = {
   title: "مشروع مميز",
   subtitle: "اختيار يعكس مسار التنفيذ على الأرض",
+  showTitle: true,
+  showSubtitle: true,
+  showProjectImage: true,
+  showProjectCode: true,
+  showProjectName: true,
+  showProjectDescription: true,
+  showProjectType: true,
+  showProjectLocation: true,
+  showExploreButton: true,
+  showSliderDots: true,
   autoplayMs: 6000,
   limit: null,
   selectionMode: "featured_flag",
@@ -121,6 +141,16 @@ export function mapProjectsHubFeaturedProps(
     selectionMode: module.config.selectionMode,
     title: module.config.title || PROJECTS_HUB_FEATURED_DEFAULTS.title,
     subtitle: module.config.subtitle || PROJECTS_HUB_FEATURED_DEFAULTS.subtitle,
+    showTitle: module.config.showTitle !== false,
+    showSubtitle: module.config.showSubtitle !== false,
+    showProjectImage: module.config.showProjectImage !== false,
+    showProjectCode: module.config.showProjectCode !== false,
+    showProjectName: module.config.showProjectName !== false,
+    showProjectDescription: module.config.showProjectDescription !== false,
+    showProjectType: module.config.showProjectType !== false,
+    showProjectLocation: module.config.showProjectLocation !== false,
+    showExploreButton: module.config.showExploreButton !== false,
+    showSliderDots: module.config.showSliderDots !== false,
     autoplayMs: module.config.autoplayMs || PROJECTS_HUB_FEATURED_DEFAULTS.autoplayMs,
     limit: module.config.limit,
   };

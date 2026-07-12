@@ -37,6 +37,16 @@ export type ProjectsHubFeaturedModuleConfig = {
   selectionMode: ProjectsHubFeaturedSelectionMode;
   title: string;
   subtitle: string;
+  showTitle: boolean;
+  showSubtitle: boolean;
+  showProjectImage: boolean;
+  showProjectCode: boolean;
+  showProjectName: boolean;
+  showProjectDescription: boolean;
+  showProjectType: boolean;
+  showProjectLocation: boolean;
+  showExploreButton: boolean;
+  showSliderDots: boolean;
   limit: number | null;
   autoplayMs: number;
 };
@@ -76,6 +86,16 @@ export const PROJECTS_HUB_FEATURED_KEYS = [
   "selectionMode",
   "title",
   "subtitle",
+  "showTitle",
+  "showSubtitle",
+  "showProjectImage",
+  "showProjectCode",
+  "showProjectName",
+  "showProjectDescription",
+  "showProjectType",
+  "showProjectLocation",
+  "showExploreButton",
+  "showSliderDots",
   "limit",
   "autoplayMs",
 ] as const;
@@ -189,6 +209,16 @@ export function asProjectsHubFeaturedConfig(raw: unknown): ProjectsHubFeaturedMo
       : "featured_flag",
     title: readText(config.title) || "مشروع مميز",
     subtitle: readText(config.subtitle) || "اختيار يعكس مسار التنفيذ على الأرض",
+    showTitle: readShowFlag(config.showTitle ?? config.show_title),
+    showSubtitle: readShowFlag(config.showSubtitle ?? config.show_subtitle),
+    showProjectImage: readShowFlag(config.showProjectImage ?? config.show_project_image),
+    showProjectCode: readShowFlag(config.showProjectCode ?? config.show_project_code),
+    showProjectName: readShowFlag(config.showProjectName ?? config.show_project_name),
+    showProjectDescription: readShowFlag(config.showProjectDescription ?? config.show_project_description),
+    showProjectType: readShowFlag(config.showProjectType ?? config.show_project_type),
+    showProjectLocation: readShowFlag(config.showProjectLocation ?? config.show_project_location),
+    showExploreButton: readShowFlag(config.showExploreButton ?? config.show_explore_button),
+    showSliderDots: readShowFlag(config.showSliderDots ?? config.show_slider_dots),
     limit: readNullablePositiveInt(config.limit),
     autoplayMs: readPositiveInt(config.autoplayMs, 6000),
   };

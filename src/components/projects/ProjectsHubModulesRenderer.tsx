@@ -60,6 +60,16 @@ export default function ProjectsHubModulesRenderer({
               title={props.title}
               subtitle={props.subtitle}
               autoplayMs={props.autoplayMs}
+              showTitle={props.showTitle}
+              showSubtitle={props.showSubtitle}
+              showProjectImage={props.showProjectImage}
+              showProjectCode={props.showProjectCode}
+              showProjectName={props.showProjectName}
+              showProjectDescription={props.showProjectDescription}
+              showProjectType={props.showProjectType}
+              showProjectLocation={props.showProjectLocation}
+              showExploreButton={props.showExploreButton}
+              showSliderDots={props.showSliderDots}
             />
           );
         }
