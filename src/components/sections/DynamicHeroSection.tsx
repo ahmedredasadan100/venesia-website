@@ -165,16 +165,11 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
         <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-6 pt-28 pb-20 max-md:pt-0 max-md:pb-24 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="min-w-0 text-right lg:min-w-auto">
             <div className="lg:translate-y-[5em]">
-              <div className="mb-5 flex flex-col items-start gap-2.5">
-                <div className="inline-flex max-w-full whitespace-nowrap rounded-full border border-[#D8B87A]/22 bg-[rgba(216,184,122,0.10)] px-3 py-3 text-xs tracking-normal text-[#E8D5A8] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
-                  في فينيسيا للتطوير العقاري
+              {config.eyebrow ? (
+                <div className="mb-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
+                  {config.eyebrow}
                 </div>
-                {config.eyebrow ? (
-                  <div className="inline-flex max-w-full whitespace-nowrap rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
-                    {config.eyebrow}
-                  </div>
-                ) : null}
-              </div>
+              ) : null}
 
               <h1 className="max-w-none md:max-w-[12ch] lg:max-w-none lg:w-max lg:pb-[1.06em] text-4xl font-bold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:text-6xl lg:text-7xl">
                 <span className="max-md:block max-md:whitespace-nowrap lg:block lg:whitespace-nowrap">{title}</span>
@@ -187,9 +182,9 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
             </div>
 
             {subtitle ? (
-              <p className="mt-5 max-w-2xl text-base leading-8 text-white/72 md:text-lg md:leading-9">
+              <div className="mt-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-[#D8B87A]/22 bg-[rgba(216,184,122,0.10)] px-3 py-3 text-xs tracking-normal text-[#E8D5A8] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide md:text-base">
                 {subtitle}
-              </p>
+              </div>
             ) : null}
 
             {description && description !== subtitle ? (
