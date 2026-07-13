@@ -97,6 +97,14 @@ export type AboutPrinciplesModuleConfig = {
   title?: string;
   /** Optional intro copy — used by home-trust; ignored by About Principles renderer. */
   description?: string;
+  /** Plain-text eyebrow weight (home-trust). Legacy default: false (was not bold). */
+  eyebrowBold?: boolean;
+  /** Physical text alignment for eyebrow (home-trust). Legacy default: right. */
+  eyebrowAlignment?: "right" | "center" | "left";
+  /** Plain-text title weight (home-trust). Legacy default: true (was font-bold). */
+  titleBold?: boolean;
+  /** Physical text alignment for title (home-trust). Legacy default: right. */
+  titleAlignment?: "right" | "center" | "left";
   items?: AboutPrinciplesItemConfig[];
 };
 
@@ -508,10 +516,27 @@ export function asAboutPrinciplesConfig(raw: unknown): AboutPrinciplesModuleConf
         .filter(Boolean) as AboutPrinciplesItemConfig[]
     : undefined;
 
+  const readOptionalBool = (camelKey: string, snakeKey: string) => {
+    const value = config[camelKey] ?? config[snakeKey];
+    if (typeof value === "boolean") return value;
+    if (value === "false" || value === "0") return false;
+    if (value === "true" || value === "1") return true;
+    return undefined;
+  };
+
+  const readOptionalAlign = (camelKey: string, snakeKey: string) => {
+    const value = config[camelKey] ?? config[snakeKey];
+    return value === "right" || value === "left" || value === "center" ? value : undefined;
+  };
+
   return {
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
     description: readText(config.description) || undefined,
+    eyebrowBold: readOptionalBool("eyebrowBold", "eyebrow_bold"),
+    eyebrowAlignment: readOptionalAlign("eyebrowAlignment", "eyebrow_alignment"),
+    titleBold: readOptionalBool("titleBold", "title_bold"),
+    titleAlignment: readOptionalAlign("titleAlignment", "title_alignment"),
     items,
   };
 }

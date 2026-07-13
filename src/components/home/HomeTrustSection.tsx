@@ -12,13 +12,19 @@
             · Gold reveal line sweeps in from right on hover — keep it
         */
 
-import type { HomeTrustContent } from "./home-trust-mappers";
+import RichTextContent from "../content/RichTextContent";
+import { isHtmlContent, stripHtml } from "../../lib/rich-text/html-utils";
+import type { HomeTrustContent, HomeTrustTextAlignment } from "./home-trust-mappers";
 
 const STATIC_DEFAULTS = {
   eyebrow: "لماذا يثق السوق العقارى في فينيسيا؟",
   title: "مش بنبيع كلام… التنفيذ بيتكلم.",
   description:
     "الموقع هنا لازم يشتغل كدليل ثقة بصري، مش بروشور. كل جزء فيه يقول إن الشركة موجودة، شغالة، وبتبني بجد.",
+  eyebrowBold: false,
+  eyebrowAlignment: "right" as const,
+  titleBold: true,
+  titleAlignment: "right" as const,
   items: [
     {
       title: "أراضي مملوكة",
@@ -39,6 +45,19 @@ const STATIC_DEFAULTS = {
   ],
 } satisfies HomeTrustContent;
 
+const TEXT_ALIGN_CLASS: Record<HomeTrustTextAlignment, string> = {
+  right: "text-right",
+  center: "text-center",
+  left: "text-left",
+};
+
+function hasRichTextValue(value?: string | null) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return false;
+  if (!isHtmlContent(trimmed)) return true;
+  return Boolean(stripHtml(trimmed));
+}
+
 function resolveHomeTrustContent(content?: HomeTrustContent | null) {
   if (!content) return STATIC_DEFAULTS;
 
@@ -48,7 +67,13 @@ function resolveHomeTrustContent(content?: HomeTrustContent | null) {
   return {
     eyebrow: content.eyebrow?.trim() || STATIC_DEFAULTS.eyebrow,
     title: content.title?.trim() || STATIC_DEFAULTS.title,
-    description: content.description?.trim() || STATIC_DEFAULTS.description,
+    description: hasRichTextValue(content.description)
+      ? content.description.trim()
+      : STATIC_DEFAULTS.description,
+    eyebrowBold: content.eyebrowBold ?? STATIC_DEFAULTS.eyebrowBold,
+    eyebrowAlignment: content.eyebrowAlignment ?? STATIC_DEFAULTS.eyebrowAlignment,
+    titleBold: content.titleBold ?? STATIC_DEFAULTS.titleBold,
+    titleAlignment: content.titleAlignment ?? STATIC_DEFAULTS.titleAlignment,
     items: resolvedItems.map((item, index) => ({
       title: item.title?.trim() || STATIC_DEFAULTS.items[index]?.title || "",
       text: item.text?.trim() || STATIC_DEFAULTS.items[index]?.text || "",
@@ -67,11 +92,25 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
     <section className="mx-auto max-w-7xl px-6 py-7">
       <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
         <div data-reveal>
-          <p className="text-sm text-[#D8B87A]">{resolved.eyebrow}</p>
+          <p
+            className={`text-sm text-[#D8B87A] ${TEXT_ALIGN_CLASS[resolved.eyebrowAlignment]}`}
+            style={{ fontWeight: resolved.eyebrowBold ? 700 : 400 }}
+          >
+            {resolved.eyebrow}
+          </p>
 
-          <h2 className="mt-3 text-4xl font-bold leading-tight">{resolved.title}</h2>
+          <h2
+            className={`mt-3 text-4xl leading-tight ${TEXT_ALIGN_CLASS[resolved.titleAlignment]}`}
+            style={{ fontWeight: resolved.titleBold ? 700 : 400 }}
+          >
+            {resolved.title}
+          </h2>
 
-          <p className="mt-5 leading-8 text-white/55">{resolved.description}</p>
+          {/*
+            Scoped Home Trust intro only via .home-trust-intro in globals.css:
+            muted body matching prior plain paragraph. Does not change other rich text.
+          */}
+          <RichTextContent value={resolved.description} mode="rich" className="home-trust-intro" />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

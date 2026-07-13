@@ -200,7 +200,8 @@ export default function ContentModuleEditClient({
   const isHomeStory = editorKey === "home-story";
   const isHomeContact = editorKey === "home-contact";
   const isHomeProjects = editorKey === "home-projects";
-  const usesHomeModuleChrome = isHomeStory || isHomeContact || isHomeProjects;
+  const isHomeTrust = editorKey === "home-trust";
+  const usesHomeModuleChrome = isHomeStory || isHomeContact || isHomeProjects || isHomeTrust;
   const hubStatus = statusMeta(block.status);
   const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
   const homeContactConfig = isHomeContact ? (config as ReturnType<typeof asAboutCtaConfig>) : null;
@@ -214,9 +215,11 @@ export default function ContentModuleEditClient({
           <span className="text-xs font-semibold text-white/55">الاسم</span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
         </label>
-        {isHomeContact || isHomeStory || isHomeProjects ? (
+        {isHomeContact || isHomeStory || isHomeProjects || isHomeTrust ? (
           <div className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">المعرّف التقني (Slug)</span>
+            <span className="text-xs font-semibold text-white/55">
+              {isHomeTrust ? "المعرّف — Slug" : "المعرّف التقني (Slug)"}
+            </span>
             <input type="hidden" name="slug" value={block.slug} />
             <div
               dir="ltr"
@@ -373,6 +376,23 @@ export default function ContentModuleEditClient({
             </>
           }
         />
+      ) : isHomeTrust ? (
+        <AdminPageContextHeader
+          eyebrow="HOME TRUST MODULE"
+          title={block.name}
+          description="تحكّم في نصوص وبطاقات قسم الثقة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
+          meta={hubStatus.label}
+          actions={
+            <>
+              <AdminActionButton href="/" variant="dark">
+                معاينة الصفحة الرئيسية
+              </AdminActionButton>
+              <AdminActionButton href="/admin/pages-blocks/blocks/content" variant="ghost">
+                الرجوع لبلوكات المحتوى
+              </AdminActionButton>
+            </>
+          }
+        />
       ) : projectsHubHeader ? (
         <AdminPageContextHeader
           eyebrow={projectsHubHeader.eyebrow}
@@ -416,6 +436,10 @@ export default function ContentModuleEditClient({
 
       {isHomeProjects && saved ? (
         <AdminNotice variant="success" message="تم حفظ موديول المشاريع وتحديث الصفحة الرئيسية بنجاح." />
+      ) : null}
+
+      {isHomeTrust && saved ? (
+        <AdminNotice variant="success" message="تم حفظ موديول الثقة وتحديث الصفحة الرئيسية بنجاح." />
       ) : null}
 
       {usesProjectsHubHeader && saved ? (
@@ -547,6 +571,11 @@ export default function ContentModuleEditClient({
         ) : isHomeProjects ? (
           <StickyModuleSaveDock
             title="حفظ موديول Home Projects"
+            description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
+          />
+        ) : isHomeTrust ? (
+          <StickyModuleSaveDock
+            title="حفظ موديول Home Trust"
             description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
           />
         ) : (

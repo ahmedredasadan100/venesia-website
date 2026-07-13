@@ -231,6 +231,25 @@ function buildAboutPrinciplesConfig(formData: FormData): AboutPrinciplesModuleCo
 
   if (cleanText(formData.get("include_home_trust_intro")) === "1") {
     config.description = cleanText(formData.get("principles_intro")) || undefined;
+
+    // Home-trust plain-text format keys (optional; legacy defaults applied at render).
+    const eyebrowBoldRaw = cleanText(formData.get("eyebrow_bold"));
+    config.eyebrowBold = eyebrowBoldRaw === "true";
+
+    const eyebrowAlignRaw = cleanText(formData.get("eyebrow_alignment"));
+    config.eyebrowAlignment =
+      eyebrowAlignRaw === "right" || eyebrowAlignRaw === "left" || eyebrowAlignRaw === "center"
+        ? eyebrowAlignRaw
+        : "right";
+
+    const titleBoldRaw = cleanText(formData.get("title_bold"));
+    config.titleBold = titleBoldRaw !== "false";
+
+    const titleAlignRaw = cleanText(formData.get("title_alignment"));
+    config.titleAlignment =
+      titleAlignRaw === "right" || titleAlignRaw === "left" || titleAlignRaw === "center"
+        ? titleAlignRaw
+        : "right";
   }
 
   return config;

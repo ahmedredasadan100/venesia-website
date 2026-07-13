@@ -702,3 +702,26 @@ select.admin-select option {
   display: none;
 }
 
+/* Home Trust intro — scoped; preserves prior muted paragraph look */
+.rich-text-content.home-trust-intro {
+  margin-top: 1.25rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 1rem;
+  line-height: 2rem;
+}
+
+.rich-text-content.home-trust-intro p {
+  margin: 0;
+  line-height: 2rem;
+}
+
+.rich-text-content.home-trust-intro p + p {
+  margin-top: 0.75rem;
+}
+
+.rich-text-content.home-trust-intro strong,
+.rich-text-content.home-trust-intro b {
+  color: inherit;
+  font-weight: 700;
+}
+
