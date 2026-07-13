@@ -233,7 +233,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
                 </p>
               </div>
 
-              <h2 className="text-[1.72rem] font-bold leading-[1.42] tracking-[-0.02em] text-white md:text-[1.88rem]">
+              <h2 className="text-[1.72rem] font-bold leading-[1.42] tracking-[-0.02em] text-white md:text-[1.8rem] lg:whitespace-nowrap lg:text-[1.68rem]">
                 {titleLines.map((line, index) => (
                   <Fragment key={index}>
                     {line}
