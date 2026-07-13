@@ -119,7 +119,7 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
               key={`${item.title}-${idx}`}
               data-reveal
               data-delay={String(idx * 80)}
-              className="home-trust-card group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 text-white backdrop-blur transition-all duration-500 hover:-translate-y-1 hover:border-white/[0.17] hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]"
+              className="home-trust-card group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] px-6 py-5 text-white backdrop-blur transition-all duration-500 hover:-translate-y-1 hover:border-white/[0.17] hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]"
             >
               <div
                 aria-hidden
