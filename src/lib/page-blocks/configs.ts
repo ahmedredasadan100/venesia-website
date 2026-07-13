@@ -53,6 +53,8 @@ export type VisionGoalsModuleConfig = {
 export type AboutCtaContactConfig = {
   label?: string;
   value?: string;
+  /** Optional second WhatsApp number (home-contact whatsapp row only). */
+  secondaryValue?: string;
   href?: string;
   icon?: string;
   link?: Record<string, unknown>;
@@ -459,15 +461,18 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
           const row = item as Record<string, unknown>;
           const label = readText(row.label);
           const value = readText(row.value);
+          const secondaryValue =
+            readText(row.secondaryValue ?? row.secondary_value) || undefined;
           const href = readText(row.href) || undefined;
           const icon = readText(row.icon) || undefined;
           const link =
             row.link && typeof row.link === "object" ? (row.link as Record<string, unknown>) : undefined;
           const target = readTarget(row.target);
-          if (!label && !value && !href && !link) return null;
+          if (!label && !value && !secondaryValue && !href && !link) return null;
           return {
             ...(label ? { label } : {}),
             ...(value ? { value } : {}),
+            ...(secondaryValue ? { secondaryValue } : {}),
             ...(href ? { href } : {}),
             ...(icon ? { icon } : {}),
             ...(link ? { link } : {}),

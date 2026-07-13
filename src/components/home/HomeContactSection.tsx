@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { HOME_IMAGES } from "../../config/home-images";
+import { buildWhatsAppHref } from "../../lib/contact/build-whatsapp-href";
 import type { HomeContactContent } from "./home-contact-mappers";
 import { renderContactIcon } from "../page-blocks/contact-icons";
 
@@ -57,6 +58,7 @@ function resolveHomeContactContent(content?: HomeContactContent | null) {
       contacts: STATIC_DEFAULTS.contacts.map((item) => ({
         icon: undefined as string | undefined,
         ...item,
+        secondaryValue: undefined as string | undefined,
         href: item.href ?? null,
       })),
     };
@@ -67,12 +69,14 @@ function resolveHomeContactContent(content?: HomeContactContent | null) {
     const fallback = STATIC_DEFAULTS.contacts[index];
     const label = cms?.label?.trim() || fallback?.label || "";
     const value = cms?.value?.trim() || fallback?.value || "";
+    const secondaryValue = cms?.secondaryValue?.trim() || undefined;
     const href = cms?.href?.trim() || fallback?.href || null;
 
     return {
       icon: cms?.icon?.trim() || undefined,
       label,
       value,
+      secondaryValue,
       href: href || null,
     };
   });
@@ -95,6 +99,77 @@ function resolveHomeContactContent(content?: HomeContactContent | null) {
 export type HomeContactSectionProps = {
   content?: HomeContactContent | null;
 };
+
+function ContactPhoneLink({
+  label,
+  href,
+}: {
+  label: string;
+  href: string | null;
+}) {
+  const className =
+    "cursor-pointer whitespace-nowrap text-[12.5px] text-white/70 transition-colors duration-300 hover:text-[#D8B87A]";
+
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+        {label}
+      </a>
+    );
+  }
+
+  return <span className="whitespace-nowrap text-[12.5px] text-white/70">{label}</span>;
+}
+
+function ContactValueRow({
+  icon,
+  value,
+  secondaryValue,
+  href,
+}: {
+  icon?: string;
+  value: string;
+  secondaryValue?: string;
+  href: string | null;
+}) {
+  if (icon === "whatsapp") {
+    const primaryHref = buildWhatsAppHref(value) ?? (href?.includes("wa.me") ? href : null);
+    const secondaryHref = buildWhatsAppHref(secondaryValue);
+    const hasSecondary = Boolean(secondaryValue?.trim());
+
+    return (
+      <div
+        dir="ltr"
+        className="mt-0.5 flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]"
+      >
+        {value.trim() ? <ContactPhoneLink label={value} href={primaryHref} /> : null}
+        {hasSecondary ? (
+          <>
+            <span aria-hidden className="select-none text-white/25">
+              |
+            </span>
+            <ContactPhoneLink label={secondaryValue!.trim()} href={secondaryHref} />
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target={href.startsWith("http") ? "_blank" : undefined}
+        rel={href.startsWith("http") ? "noreferrer" : undefined}
+        className="mt-0.5 block cursor-pointer break-all text-[12.5px] text-white/70 transition-colors duration-300 hover:text-[#D8B87A]"
+      >
+        {value}
+      </a>
+    );
+  }
+
+  return <p className="mt-0.5 text-[12.5px] text-white/70">{value}</p>;
+}
 
 const CTA_CLASS_NAME =
   "flex cursor-pointer items-center justify-center gap-2.5 rounded-xl bg-[#D8B87A] px-5 py-3 text-sm font-medium text-[#06101C] shadow-[0_8px_24px_rgba(216,184,122,0.20)] transition-[transform,box-shadow,background-color] duration-300 will-change-transform hover:-translate-y-0.5 hover:bg-[#c9a760] hover:shadow-[0_10px_30px_rgba(216,184,122,0.30)] active:scale-[0.97] max-md:w-full max-md:px-4";
@@ -257,7 +332,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
 
           {/* ══ CONTACT STACK (DOM second → physical LEFT in RTL) ══ */}
           <div className="flex flex-col justify-center divide-y divide-white/[0.05] border-t border-white/[0.05] lg:border-t-0 lg:border-r lg:border-r-white/[0.06]">
-            {resolved.contacts.map(({ icon, label, value, href }, idx) => (
+            {resolved.contacts.map(({ icon, label, value, secondaryValue, href }, idx) => (
               <div
                 key={label || idx}
                 data-reveal
@@ -269,18 +344,12 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-medium uppercase tracking-[0.11em] text-[#D8B87A]/48">{label}</p>
-                  {href ? (
-                    <a
-                      href={href}
-                      target={href.startsWith("http") ? "_blank" : undefined}
-                      rel={href.startsWith("http") ? "noreferrer" : undefined}
-                      className="mt-0.5 block cursor-pointer break-all text-[12.5px] text-white/70 transition-colors duration-300 hover:text-[#D8B87A]"
-                    >
-                      {value}
-                    </a>
-                  ) : (
-                    <p className="mt-0.5 text-[12.5px] text-white/70">{value}</p>
-                  )}
+                  <ContactValueRow
+                    icon={icon}
+                    value={value}
+                    secondaryValue={secondaryValue}
+                    href={href}
+                  />
                 </div>
               </div>
             ))}

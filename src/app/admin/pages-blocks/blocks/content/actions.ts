@@ -176,12 +176,14 @@ function readContacts(formData: FormData) {
   return Array.from({ length: 4 }, (_, index) => {
     const label = cleanText(formData.get(`contact_${index}_label`));
     const value = cleanText(formData.get(`contact_${index}_value`));
+    const secondaryValue = cleanText(formData.get(`contact_${index}_secondary_value`));
     const icon = cleanText(formData.get(`contact_${index}_icon`));
     const linkData = linkFieldFromFormData(formData, `contact_${index}`);
-    if (!label && !value && !hasSavedLinkField(linkData)) return null;
+    if (!label && !value && !secondaryValue && !hasSavedLinkField(linkData)) return null;
     return {
       label: label || undefined,
       value: value || undefined,
+      ...(secondaryValue ? { secondaryValue } : {}),
       icon: icon || undefined,
       ...(linkData ? { link: linkData.link, target: linkData.target } : {}),
     };

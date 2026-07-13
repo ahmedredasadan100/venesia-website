@@ -33,6 +33,7 @@ type ContactRow = {
   uid: string;
   label: string;
   value: string;
+  secondaryValue: string;
   icon: string;
   linkDefault: AdminLinkValue;
 };
@@ -44,6 +45,7 @@ function buildInitialRows(contacts: AboutCtaContactConfig[] | undefined): Contac
       uid: `contact-slot-${index}`,
       label: contact?.label ?? "",
       value: contact?.value ?? "",
+      secondaryValue: contact?.secondaryValue ?? "",
       icon: resolveContactIconKey(contact?.icon, index),
       linkDefault: linkDefaultFromContainer((contact ?? {}) as Record<string, unknown>),
     };
@@ -89,7 +91,10 @@ export default function AboutCtaModuleEditor({
   const showCta = section === "all" || section === "cta";
   const showContacts = section === "all" || section === "contacts";
 
-  function updateRow(uid: string, patch: Partial<Pick<ContactRow, "label" | "value" | "icon">>) {
+  function updateRow(
+    uid: string,
+    patch: Partial<Pick<ContactRow, "label" | "value" | "secondaryValue" | "icon">>,
+  ) {
     setContactRows((rows) => rows.map((row) => (row.uid === uid ? { ...row, ...patch } : row)));
   }
 
@@ -231,6 +236,18 @@ export default function AboutCtaModuleEditor({
               />
             </label>
 
+            {isHomeContact && row.icon === "whatsapp" ? (
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold text-white/55">رقم واتساب الثاني — اختياري</span>
+                <input
+                  name={`contact_${index}_secondary_value`}
+                  value={row.secondaryValue}
+                  onChange={(event) => updateRow(row.uid, { secondaryValue: event.target.value })}
+                  className={fieldClassName()}
+                />
+              </label>
+            ) : null}
+
             <label className="block space-y-2">
               <span className="text-xs font-semibold text-white/55">الأيقونة</span>
               <div className="flex items-center gap-3">
@@ -252,11 +269,13 @@ export default function AboutCtaModuleEditor({
               </div>
             </label>
 
-            <AdminLinkField
-              prefix={`contact_${index}`}
-              label="Href (اختياري)"
-              defaultValue={row.linkDefault}
-            />
+            {isHomeContact && row.icon === "whatsapp" ? null : (
+              <AdminLinkField
+                prefix={`contact_${index}`}
+                label="Href (اختياري)"
+                defaultValue={row.linkDefault}
+              />
+            )}
           </div>
         ))}
       </div>

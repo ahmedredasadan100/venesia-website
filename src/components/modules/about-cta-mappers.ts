@@ -5,6 +5,8 @@ import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 export type AboutCtaContact = {
   label: string;
   value: string;
+  /** Optional second WhatsApp number (home-contact). */
+  secondaryValue?: string;
   href?: string;
   icon?: string;
 };
@@ -38,10 +40,11 @@ function mapContacts(contacts?: AboutCtaModuleConfig["contacts"]): AboutCtaConta
     .map((item) => ({
       label: item.label ?? "",
       value: item.value ?? "",
+      ...(item.secondaryValue?.trim() ? { secondaryValue: item.secondaryValue.trim() } : {}),
       href: item.href?.trim() || undefined,
       icon: item.icon?.trim() || undefined,
     }))
-    .filter((item) => item.label.trim() || item.value.trim());
+    .filter((item) => item.label.trim() || item.value.trim() || Boolean(item.secondaryValue?.trim()));
 }
 
 export function mapAboutCtaBlock(block: ResolvedPageBlock): AboutCtaModuleContent {
