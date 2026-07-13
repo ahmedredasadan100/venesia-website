@@ -113,29 +113,25 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
           <RichTextContent value={resolved.description} mode="rich" className="home-trust-intro" />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid items-stretch gap-4 sm:grid-cols-2">
           {resolved.items.map((item, idx) => (
             <div
               key={`${item.title}-${idx}`}
               data-reveal
               data-delay={String(idx * 80)}
-              className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 text-white backdrop-blur transition-all duration-500 hover:-translate-y-1 hover:border-white/[0.17] hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]"
+              className="home-trust-card group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 text-white backdrop-blur transition-all duration-500 hover:-translate-y-1 hover:border-white/[0.17] hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]"
             >
               <div
                 aria-hidden
                 className="absolute inset-x-0 top-0 z-10 h-px origin-right scale-x-0 bg-gradient-to-l from-[#D8B87A]/60 via-[#D8B87A]/25 to-transparent transition-transform duration-500 ease-out group-hover:scale-x-100"
               />
 
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#D8B87A]/12 text-[#D8B87A] transition-all duration-500 group-hover:bg-[#D8B87A]/[0.22] group-hover:shadow-[0_0_20px_rgba(216,184,122,0.14)]">
+              <div className="home-trust-card__body" dir="rtl">
+                <div className="home-trust-card__icon" aria-hidden>
                   ◆
                 </div>
-
-                <div className="min-w-0">
-                  <h3 className="text-xl font-bold leading-none">{item.title}</h3>
-
-                  <p className="mt-3 leading-7 text-white/52">{item.text}</p>
-                </div>
+                <h3 className="home-trust-card__title">{item.title}</h3>
+                <p className="home-trust-card__text">{item.text}</p>
               </div>
             </div>
           ))}
