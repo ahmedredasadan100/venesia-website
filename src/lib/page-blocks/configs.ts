@@ -91,6 +91,10 @@ export type AboutPrinciplesItemConfig = {
   icon?: AboutPrinciplesIconKey | string;
   title?: string;
   description?: string;
+  /** Optional card background image (home-trust Layered Image Reveal). */
+  image?: string;
+  /** Optional alt text for the card image (home-trust). */
+  imageAlt?: string;
 };
 
 /** Structured config for the About Principles section. */
@@ -515,8 +519,16 @@ export function asAboutPrinciplesConfig(raw: unknown): AboutPrinciplesModuleConf
           const title = readText(row.title);
           const description = readText(row.description ?? row.text ?? row.body);
           const icon = normalizePrinciplesIcon(row.icon);
+          const image = readText(row.image);
+          const imageAlt = readText(row.imageAlt ?? row.image_alt);
           if (!title && !description) return null;
-          return { icon, title: title || undefined, description: description || undefined };
+          return {
+            icon,
+            title: title || undefined,
+            description: description || undefined,
+            image: image || undefined,
+            imageAlt: imageAlt || undefined,
+          };
         })
         .filter(Boolean) as AboutPrinciplesItemConfig[]
     : undefined;

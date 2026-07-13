@@ -209,18 +209,14 @@ function buildAboutCtaConfig(formData: FormData): AboutCtaModuleConfig {
 
 function readPrincipleItems(formData: FormData) {
   const count = Math.min(6, Math.max(0, parseNumber(formData.get("principle_count")) ?? 0));
-  if (!count) {
-    return Array.from({ length: 3 }, (_, index) => ({
-      icon: cleanText(formData.get(`principle_${index}_icon`)) || "land",
-      title: cleanText(formData.get(`principle_${index}_title`)),
-      description: cleanText(formData.get(`principle_${index}_description`)),
-    }));
-  }
+  const length = count || 3;
 
-  return Array.from({ length: count }, (_, index) => ({
+  return Array.from({ length }, (_, index) => ({
     icon: cleanText(formData.get(`principle_${index}_icon`)) || "land",
     title: cleanText(formData.get(`principle_${index}_title`)),
     description: cleanText(formData.get(`principle_${index}_description`)),
+    image: optionalImagePath(formData, `principle_${index}_image`),
+    imageAlt: cleanText(formData.get(`principle_${index}_image_alt`)) || undefined,
   }));
 }
 

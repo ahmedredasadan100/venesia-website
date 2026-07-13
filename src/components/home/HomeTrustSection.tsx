@@ -4,27 +4,31 @@
                    Converts premium aesthetics into concrete trust signals.
           MOTION:  Left column (heading + body) fades up first.
                    Four cards stagger in at 80 ms intervals.
-                   Icon container blooms on hover (gold bg + subtle glow).
+                   Cards with images flip on desktop hover (rotateY 180°).
+                   Mobile keeps calm layered image + icon (no flip).
           VISUAL RULES:
             · Preserve 2-column grid at lg breakpoint
-            · Card lift on hover is −1 (translateY(−4px)) — keep minimal
-            · Do not reduce proof card internal padding (p-6)
-            · Gold reveal line sweeps in from right on hover — keep it
+            · Card lift on hover is −1 — only for cards without image
+            · Do not reduce proof card internal padding
+            · Gold reveal line on front face — keep it
+            · Card height stays 230px; flip must not layout-shift
         */
+
+import Image from "next/image";
 
 import RichTextContent from "../content/RichTextContent";
 import { isHtmlContent, stripHtml } from "../../lib/rich-text/html-utils";
 import type { HomeTrustContent, HomeTrustTextAlignment } from "./home-trust-mappers";
 
-const STATIC_DEFAULTS = {
+const STATIC_DEFAULTS: HomeTrustContent = {
   eyebrow: "لماذا يثق السوق العقارى في فينيسيا؟",
   title: "مش بنبيع كلام… التنفيذ بيتكلم.",
   description:
     "الموقع هنا لازم يشتغل كدليل ثقة بصري، مش بروشور. كل جزء فيه يقول إن الشركة موجودة، شغالة، وبتبني بجد.",
   eyebrowBold: false,
-  eyebrowAlignment: "right" as const,
+  eyebrowAlignment: "right",
   titleBold: true,
-  titleAlignment: "right" as const,
+  titleAlignment: "right",
   items: [
     {
       title: "أراضي مملوكة",
@@ -43,7 +47,7 @@ const STATIC_DEFAULTS = {
       text: "العميل مش محتاج يسمع وعود كتير… محتاج يشوف تنفيذ حقيقي.",
     },
   ],
-} satisfies HomeTrustContent;
+};
 
 const TEXT_ALIGN_CLASS: Record<HomeTrustTextAlignment, string> = {
   right: "text-right",
@@ -77,8 +81,45 @@ function resolveHomeTrustContent(content?: HomeTrustContent | null) {
     items: resolvedItems.map((item, index) => ({
       title: item.title?.trim() || STATIC_DEFAULTS.items[index]?.title || "",
       text: item.text?.trim() || STATIC_DEFAULTS.items[index]?.text || "",
+      image: item.image?.trim() || undefined,
+      imageAlt: item.imageAlt?.trim() || undefined,
     })),
   };
+}
+
+function TrustCardFaceContent({
+  title,
+  text,
+  showIcon,
+  face,
+}: {
+  title: string;
+  text: string;
+  showIcon: boolean;
+  face: "front" | "back";
+}) {
+  const titleClass =
+    face === "front"
+      ? "home-trust-card__title home-trust-card__front-title"
+      : "home-trust-card__title home-trust-card__back-title";
+  const textClass =
+    face === "front"
+      ? "home-trust-card__text home-trust-card__front-description"
+      : "home-trust-card__text home-trust-card__back-description";
+
+  return (
+    <div className="home-trust-card__body" dir="rtl">
+      {showIcon ? (
+        <div className="home-trust-card__icon" aria-hidden>
+          ◆
+        </div>
+      ) : (
+        <div className="home-trust-card__icon home-trust-card__icon--spacer" aria-hidden />
+      )}
+      <h3 className={titleClass}>{title}</h3>
+      <p className={textClass}>{text}</p>
+    </div>
+  );
 }
 
 export type HomeTrustSectionProps = {
@@ -114,27 +155,56 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
         </div>
 
         <div className="grid items-stretch gap-4 sm:grid-cols-2">
-          {resolved.items.map((item, idx) => (
-            <div
-              key={`${item.title}-${idx}`}
-              data-reveal
-              data-delay={String(idx * 80)}
-              className="home-trust-card group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] px-6 py-5 text-white backdrop-blur transition-all duration-500 hover:-translate-y-1 hover:border-white/[0.17] hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]"
-            >
-              <div
-                aria-hidden
-                className="absolute inset-x-0 top-0 z-10 h-px origin-right scale-x-0 bg-gradient-to-l from-[#D8B87A]/60 via-[#D8B87A]/25 to-transparent transition-transform duration-500 ease-out group-hover:scale-x-100"
-              />
+          {resolved.items.map((item, idx) => {
+            const hasImage = Boolean(item.image);
 
-              <div className="home-trust-card__body" dir="rtl">
-                <div className="home-trust-card__icon" aria-hidden>
-                  ◆
+            return (
+              <div
+                key={`${item.title}-${idx}`}
+                data-reveal
+                data-delay={String(idx * 80)}
+                className={[
+                  "home-trust-card group relative text-white",
+                  hasImage
+                    ? "home-trust-card--has-image"
+                    : "overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] backdrop-blur transition-[transform,border-color,box-shadow] duration-500 hover:-translate-y-1 hover:border-white/[0.17] hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <div className="home-trust-card__inner">
+                  <div className="home-trust-card__front">
+                    <div
+                      aria-hidden
+                      className="absolute inset-x-0 top-0 z-10 h-px origin-right scale-x-0 bg-gradient-to-l from-[#D8B87A]/60 via-[#D8B87A]/25 to-transparent transition-transform duration-500 ease-out group-hover:scale-x-100"
+                    />
+                    <TrustCardFaceContent title={item.title} text={item.text} showIcon face="front" />
+                  </div>
+
+                  {hasImage ? (
+                    <div className="home-trust-card__back" aria-hidden="true">
+                      <div className="home-trust-card__media">
+                        <Image
+                          src={item.image!}
+                          alt=""
+                          fill
+                          className="home-trust-card__image home-trust-card__back-image"
+                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 280px"
+                        />
+                      </div>
+                      <div className="home-trust-card__overlay" />
+                      <TrustCardFaceContent
+                        title={item.title}
+                        text={item.text}
+                        showIcon={false}
+                        face="back"
+                      />
+                    </div>
+                  ) : null}
                 </div>
-                <h3 className="home-trust-card__title">{item.title}</h3>
-                <p className="home-trust-card__text">{item.text}</p>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

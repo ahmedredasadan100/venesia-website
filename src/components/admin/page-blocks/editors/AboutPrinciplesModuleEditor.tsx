@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
+import AdminMediaImageField from "../../media/AdminMediaImageField";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   ABOUT_PRINCIPLES_ICON_KEYS,
@@ -293,6 +294,29 @@ export default function AboutPrinciplesModuleEditor({
                   className={fieldClassName("resize-y leading-7")}
                 />
               </label>
+              {isHomeTrust ? (
+                <>
+                  <AdminMediaImageField
+                    name={`principle_${index}_image`}
+                    label="صورة الكارت — اختياري"
+                    defaultValue={item.image ?? ""}
+                    dimensionHint="content"
+                    browseFolder="images/home"
+                    onValueChange={(value) => updateItem(index, { image: value || undefined })}
+                  />
+                  <label className="block space-y-2">
+                    <span className="text-xs font-semibold text-white/55">
+                      النص البديل للصورة — اختياري
+                    </span>
+                    <input
+                      name={`principle_${index}_image_alt`}
+                      value={item.imageAlt ?? ""}
+                      onChange={(event) => updateItem(index, { imageAlt: event.target.value })}
+                      className={fieldClassName()}
+                    />
+                  </label>
+                </>
+              ) : null}
             </div>
           ))}
         </div>

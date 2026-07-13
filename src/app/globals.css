@@ -725,16 +725,102 @@ select.admin-select option {
   font-weight: 700;
 }
 
-/* Home Trust proof cards — centered icon/title/body on a shared horizontal ruler */
+/* Home Trust proof cards — front/back flip when an image is present */
 .home-trust-card {
+  display: block;
+  height: 100%;
+  min-height: 14.375rem;
+}
+
+.home-trust-card__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 14.375rem;
+}
+
+.home-trust-card:not(.home-trust-card--has-image) .home-trust-card__front {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 14.375rem;
   flex-direction: column;
   justify-content: center;
+  padding: 1.25rem 1.5rem;
+}
+
+.home-trust-card--has-image {
+  perspective: 1200px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.home-trust-card--has-image .home-trust-card__inner {
+  transform-style: preserve-3d;
+  transition: transform 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.home-trust-card--has-image .home-trust-card__front,
+.home-trust-card--has-image .home-trust-card__back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 2rem;
+  padding: 1.25rem 1.5rem;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.home-trust-card--has-image .home-trust-card__front {
+  z-index: 2;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(8px);
+  transition:
+    border-color 500ms ease,
+    box-shadow 500ms ease;
+}
+
+.home-trust-card--has-image .home-trust-card__back {
+  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  background: #080b10;
+  transform: rotateY(180deg);
+}
+
+.home-trust-card__media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.home-trust-card__image {
+  object-fit: cover;
+  object-position: center;
+}
+
+.home-trust-card__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 11, 16, 0.42) 0%,
+    rgba(8, 11, 16, 0.72) 48%,
+    rgba(8, 11, 16, 0.88) 100%
+  );
 }
 
 .home-trust-card__body {
+  position: relative;
+  z-index: 2;
   display: grid;
   width: 100%;
   grid-template-rows: 3rem 2.5rem 5.25rem;
@@ -753,10 +839,18 @@ select.admin-select option {
   border-radius: 1rem;
   background: rgba(216, 184, 122, 0.12);
   color: #d8b87a;
-  transition: all 500ms;
+  transition:
+    background 500ms ease,
+    box-shadow 500ms ease;
 }
 
-.home-trust-card:hover .home-trust-card__icon {
+.home-trust-card__icon--spacer {
+  visibility: hidden;
+  background: transparent;
+  box-shadow: none;
+}
+
+.home-trust-card:hover .home-trust-card__icon:not(.home-trust-card__icon--spacer) {
   background: rgba(216, 184, 122, 0.22);
   box-shadow: 0 0 20px rgba(216, 184, 122, 0.14);
 }
@@ -785,5 +879,237 @@ select.admin-select option {
   line-height: 1.75rem;
   color: rgba(255, 255, 255, 0.52);
   text-align: center;
+}
+
+.home-trust-card__back .home-trust-card__text {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* Desktop flip + staggered inner motion — image cards only */
+@media (hover: hover) and (pointer: fine) {
+  /* Return / idle: front settles quickly; back exits without long delay */
+  .home-trust-card--has-image .home-trust-card__icon:not(.home-trust-card__icon--spacer) {
+    transition:
+      transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      background 500ms ease,
+      box-shadow 500ms ease;
+  }
+
+  .home-trust-card--has-image .home-trust-card__front-title {
+    transition:
+      transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  .home-trust-card--has-image .home-trust-card__front-description {
+    transition:
+      transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1) 40ms,
+      opacity 220ms cubic-bezier(0.22, 0.61, 0.36, 1) 40ms;
+  }
+
+  .home-trust-card--has-image .home-trust-card__back-image {
+    transform: scale(1.04);
+    transition: transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  .home-trust-card--has-image .home-trust-card__back-title {
+    transform: translateY(10px);
+    opacity: 0;
+    transition:
+      transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  .home-trust-card--has-image .home-trust-card__back-description {
+    transform: translateY(12px);
+    opacity: 0;
+    transition:
+      transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  .home-trust-card--has-image:hover .home-trust-card__inner {
+    transform: rotateY(180deg);
+  }
+
+  .home-trust-card--has-image:hover .home-trust-card__front {
+    border-color: rgba(255, 255, 255, 0.17);
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.28);
+  }
+
+  /* Hover enter: staggered front exit → flip → staggered back enter */
+  .home-trust-card--has-image:hover .home-trust-card__icon:not(.home-trust-card__icon--spacer) {
+    transform: translateY(-8px);
+    opacity: 0;
+    background: rgba(216, 184, 122, 0.12);
+    box-shadow: none;
+    transition:
+      transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      background 500ms ease,
+      box-shadow 500ms ease;
+  }
+
+  .home-trust-card--has-image:hover .home-trust-card__front-title {
+    transform: translateY(-5px);
+    opacity: 0;
+    transition:
+      transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1) 40ms,
+      opacity 280ms cubic-bezier(0.22, 0.61, 0.36, 1) 40ms;
+  }
+
+  .home-trust-card--has-image:hover .home-trust-card__front-description {
+    transform: translateY(5px);
+    opacity: 0;
+    transition:
+      transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1) 90ms,
+      opacity 280ms cubic-bezier(0.22, 0.61, 0.36, 1) 90ms;
+  }
+
+  .home-trust-card--has-image:hover .home-trust-card__back-image {
+    transform: scale(1);
+    transition: transform 400ms cubic-bezier(0.22, 0.61, 0.36, 1) 360ms;
+  }
+
+  .home-trust-card--has-image:hover .home-trust-card__back-title {
+    transform: translateY(0);
+    opacity: 1;
+    transition:
+      transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1) 420ms,
+      opacity 320ms cubic-bezier(0.22, 0.61, 0.36, 1) 420ms;
+  }
+
+  .home-trust-card--has-image:hover .home-trust-card__back-description {
+    transform: translateY(0);
+    opacity: 1;
+    transition:
+      transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1) 500ms,
+      opacity 320ms cubic-bezier(0.22, 0.61, 0.36, 1) 500ms;
+  }
+}
+
+/*
+  Touch / coarse pointer — keep prior calm layered reveal:
+  image + overlay visible, icon + text on top, no flip, no duplicated copy.
+*/
+@media not ((hover: hover) and (pointer: fine)) {
+  .home-trust-card--has-image .home-trust-card__inner {
+    transform: none !important;
+    transform-style: flat;
+  }
+
+  .home-trust-card--has-image .home-trust-card__front,
+  .home-trust-card--has-image .home-trust-card__back {
+    position: absolute;
+    inset: 0;
+    transform: none !important;
+    backface-visibility: visible !important;
+    -webkit-backface-visibility: visible !important;
+  }
+
+  .home-trust-card--has-image .home-trust-card__back {
+    z-index: 1;
+    opacity: 1 !important;
+  }
+
+  .home-trust-card--has-image .home-trust-card__back .home-trust-card__body {
+    display: none;
+  }
+
+  .home-trust-card--has-image .home-trust-card__front {
+    z-index: 2;
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.14);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none;
+  }
+
+  .home-trust-card--has-image .home-trust-card__media,
+  .home-trust-card--has-image .home-trust-card__overlay {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .home-trust-card--has-image .home-trust-card__overlay {
+    background: linear-gradient(
+      180deg,
+      rgba(8, 11, 16, 0.55) 0%,
+      rgba(8, 11, 16, 0.78) 45%,
+      rgba(8, 11, 16, 0.92) 100%
+    );
+  }
+
+  .home-trust-card--has-image .home-trust-card__text {
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  .home-trust-card--has-image .home-trust-card__icon,
+  .home-trust-card--has-image .home-trust-card__front-title,
+  .home-trust-card--has-image .home-trust-card__front-description,
+  .home-trust-card--has-image .home-trust-card__back-image,
+  .home-trust-card--has-image .home-trust-card__back-title,
+  .home-trust-card--has-image .home-trust-card__back-description {
+    transform: none !important;
+    opacity: 1 !important;
+    transition: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-trust-card--has-image .home-trust-card__inner {
+    transition: none !important;
+  }
+
+  .home-trust-card--has-image:hover .home-trust-card__inner {
+    transform: none !important;
+  }
+
+  .home-trust-card--has-image .home-trust-card__icon,
+  .home-trust-card--has-image .home-trust-card__front-title,
+  .home-trust-card--has-image .home-trust-card__front-description,
+  .home-trust-card--has-image .home-trust-card__back-image,
+  .home-trust-card--has-image .home-trust-card__back-title,
+  .home-trust-card--has-image .home-trust-card__back-description {
+    transition: none !important;
+    transform: none !important;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .home-trust-card--has-image .home-trust-card__back {
+      transform: none;
+      opacity: 0;
+    }
+
+    .home-trust-card--has-image .home-trust-card__back .home-trust-card__body {
+      display: none;
+    }
+
+    .home-trust-card--has-image .home-trust-card__back-title,
+    .home-trust-card--has-image .home-trust-card__back-description {
+      opacity: 1 !important;
+    }
+
+    .home-trust-card--has-image:hover .home-trust-card__front {
+      background: transparent;
+      backdrop-filter: none;
+    }
+
+    .home-trust-card--has-image:hover .home-trust-card__front .home-trust-card__icon,
+    .home-trust-card--has-image:hover .home-trust-card__front-title,
+    .home-trust-card--has-image:hover .home-trust-card__front-description {
+      opacity: 1 !important;
+      transform: none !important;
+    }
+
+    .home-trust-card--has-image:hover .home-trust-card__back {
+      opacity: 1;
+    }
+
+    .home-trust-card--has-image:hover .home-trust-card__text {
+      color: rgba(255, 255, 255, 0.78);
+    }
+  }
 }
 

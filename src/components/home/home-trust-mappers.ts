@@ -4,6 +4,8 @@ import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 export type HomeTrustItem = {
   title: string;
   text: string;
+  image?: string;
+  imageAlt?: string;
 };
 
 export type HomeTrustTextAlignment = "right" | "center" | "left";
@@ -49,6 +51,8 @@ export function mapHomeTrustBlock(block: ResolvedPageBlock): HomeTrustContent {
       .map((item) => ({
         title: item.title ?? "",
         text: item.description ?? "",
+        image: item.image?.trim() || undefined,
+        imageAlt: item.imageAlt?.trim() || undefined,
       }))
       .filter((item) => item.title.trim() || item.text.trim()),
   };
