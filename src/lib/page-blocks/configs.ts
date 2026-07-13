@@ -121,6 +121,10 @@ export type HomeProjectsModuleConfig = {
    * Default for legacy content (missing key): right — matches prior RTL inline-flex start.
    */
   cardCtaAlignment?: "right" | "center" | "left";
+  /** Plain-text eyebrow weight. Legacy default: true (was rendered at 700). */
+  eyebrowBold?: boolean;
+  /** Physical text alignment within the heading column. Legacy default: right. */
+  eyebrowAlignment?: "right" | "center" | "left";
   footerCta?: {
     label?: string;
     href?: string;
@@ -554,6 +558,22 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
       ? cardAlignRaw
       : undefined;
 
+  const eyebrowBoldRaw = config.eyebrowBold ?? config.eyebrow_bold;
+  let eyebrowBold: boolean | undefined;
+  if (typeof eyebrowBoldRaw === "boolean") {
+    eyebrowBold = eyebrowBoldRaw;
+  } else if (eyebrowBoldRaw === "false" || eyebrowBoldRaw === "0") {
+    eyebrowBold = false;
+  } else if (eyebrowBoldRaw === "true" || eyebrowBoldRaw === "1") {
+    eyebrowBold = true;
+  }
+
+  const eyebrowAlignRaw = config.eyebrowAlignment ?? config.eyebrow_alignment;
+  const eyebrowAlignment =
+    eyebrowAlignRaw === "right" || eyebrowAlignRaw === "left" || eyebrowAlignRaw === "center"
+      ? eyebrowAlignRaw
+      : undefined;
+
   return {
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
@@ -564,6 +584,8 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
     showFooterCta: readShowFlag("showFooterCta", "show_footer_cta"),
     projectsLimit: parsedLimit,
     cardCtaAlignment,
+    eyebrowBold,
+    eyebrowAlignment,
     footerCta: footer
       ? {
           label: readText(footer.label) || undefined,

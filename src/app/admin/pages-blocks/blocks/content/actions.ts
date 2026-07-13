@@ -268,6 +268,15 @@ function buildHomeProjectsConfig(formData: FormData): HomeProjectsModuleConfig {
       ? cardAlignRaw
       : "right";
 
+  const eyebrowBoldRaw = cleanText(formData.get("eyebrow_bold"));
+  const eyebrowBold = eyebrowBoldRaw !== "false";
+
+  const eyebrowAlignRaw = cleanText(formData.get("eyebrow_alignment"));
+  const eyebrowAlignment: "right" | "center" | "left" =
+    eyebrowAlignRaw === "right" || eyebrowAlignRaw === "left" || eyebrowAlignRaw === "center"
+      ? eyebrowAlignRaw
+      : "right";
+
   const footerCta =
     label || hasSavedLinkField(footerLink)
       ? {
@@ -288,6 +297,8 @@ function buildHomeProjectsConfig(formData: FormData): HomeProjectsModuleConfig {
     showFooterCta: parseFormBoolean(formData, "show_footer_cta", false),
     projectsLimit,
     cardCtaAlignment,
+    eyebrowBold,
+    eyebrowAlignment,
     footerCta,
   };
 }

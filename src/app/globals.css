@@ -688,7 +688,8 @@ select.admin-select option {
 .rich-text-content.home-projects-intro strong,
 .rich-text-content.home-projects-intro b {
   display: block;
-  margin-bottom: 11px;
+  margin: 0 0 11px;
+  padding: 0;
   color: #d8b87a;
   font-size: 0.875rem;
   font-weight: 700;

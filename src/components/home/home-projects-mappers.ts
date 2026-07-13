@@ -14,6 +14,10 @@ export type HomeProjectsContent = {
   projectsLimit?: number;
   /** Physical alignment of in-card CTA. Legacy default: right. */
   cardCtaAlignment: HomeProjectsButtonAlignment;
+  /** Plain-text eyebrow weight. Legacy default: true. */
+  eyebrowBold: boolean;
+  /** Eyebrow text alignment inside the heading column. Legacy default: right. */
+  eyebrowAlignment: HomeProjectsButtonAlignment;
   footerCta: {
     label: string;
     href: string;
@@ -34,6 +38,12 @@ function mapCardCtaAlignment(value: unknown): HomeProjectsButtonAlignment {
   return "right";
 }
 
+function mapEyebrowAlignment(value: unknown): HomeProjectsButtonAlignment {
+  if (value === "right" || value === "left" || value === "center") return value;
+  // Legacy heading column used text-right.
+  return "right";
+}
+
 export function mapHomeProjectsBlock(block: ResolvedPageBlock): HomeProjectsContent {
   const config = asHomeProjectsConfig(block.template.config);
 
@@ -47,6 +57,8 @@ export function mapHomeProjectsBlock(block: ResolvedPageBlock): HomeProjectsCont
     showFooterCta: config.showFooterCta !== false,
     projectsLimit: config.projectsLimit,
     cardCtaAlignment: mapCardCtaAlignment(config.cardCtaAlignment),
+    eyebrowBold: config.eyebrowBold !== false,
+    eyebrowAlignment: mapEyebrowAlignment(config.eyebrowAlignment),
     footerCta: {
       label: config.footerCta?.label ?? "",
       href: config.footerCta?.href ?? "",

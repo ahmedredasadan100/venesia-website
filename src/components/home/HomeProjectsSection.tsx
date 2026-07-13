@@ -32,7 +32,12 @@ const STATIC_DEFAULTS = {
   showFooterCta: true,
   projectsLimit: undefined as number | undefined,
   cardCtaAlignment: "right" as const,
+  eyebrowBold: true,
+  eyebrowAlignment: "right" as const,
 } satisfies HomeProjectsContent;
+
+/** Shared gold→body rhythm for both header columns (matches intro strong margin). */
+const HEADER_STACK_GAP_PX = 11;
 
 const FOOTER_ALIGN_CLASS: Record<HomeProjectsButtonAlignment, string> = {
   // Section is RTL: flex-start = physical right, flex-end = physical left.
@@ -46,6 +51,12 @@ const CARD_CTA_ALIGN_CLASS: Record<HomeProjectsButtonAlignment, string> = {
   right: "justify-start",
   center: "justify-center",
   left: "justify-end",
+};
+
+const EYEBROW_TEXT_ALIGN_CLASS: Record<HomeProjectsButtonAlignment, string> = {
+  right: "text-right",
+  center: "text-center",
+  left: "text-left",
 };
 
 function hasIntroContent(value: string) {
@@ -74,6 +85,8 @@ function resolveHomeProjectsContent(content?: HomeProjectsContent | null) {
     showFooterCta: content.showFooterCta,
     projectsLimit: content.projectsLimit,
     cardCtaAlignment: content.cardCtaAlignment ?? STATIC_DEFAULTS.cardCtaAlignment,
+    eyebrowBold: content.eyebrowBold ?? STATIC_DEFAULTS.eyebrowBold,
+    eyebrowAlignment: content.eyebrowAlignment ?? STATIC_DEFAULTS.eyebrowAlignment,
   };
 }
 
@@ -162,29 +175,36 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
   const showTitle = sectionCopy.showTitle && Boolean(sectionCopy.title.trim());
 
   const introColumn = showIntro ? (
-    <div className="max-w-md text-right lg:max-w-sm xl:max-w-md">
+    <div className="flex max-w-md flex-col text-right lg:max-w-sm xl:max-w-md">
       {/*
         Scoped Home Projects intro only via .home-projects-intro in globals.css:
         muted body + gold <strong> lead line. Does not change Home Story rich text.
       */}
-      <RichTextContent
-        value={sectionCopy.intro}
-        mode="rich"
-        className="home-projects-intro"
-      />
+      <RichTextContent value={sectionCopy.intro} mode="rich" className="home-projects-intro" />
     </div>
   ) : null;
 
   const headingColumn =
     showEyebrow || showTitle ? (
-      <div className="text-right lg:max-w-xl">
+      <div
+        className="flex max-w-xl flex-col text-right"
+        style={{ gap: `${HEADER_STACK_GAP_PX}px` }}
+      >
         {showEyebrow ? (
-          <p className="mb-[11px] text-sm leading-snug tracking-[0.26em] text-[#D8B87A]" style={{ fontWeight: 700 }}>
+          <p
+            className={`m-0 text-sm leading-snug tracking-[0.26em] text-[#D8B87A] ${EYEBROW_TEXT_ALIGN_CLASS[sectionCopy.eyebrowAlignment]}`}
+            style={{ fontWeight: sectionCopy.eyebrowBold ? 700 : 400 }}
+          >
             {sectionCopy.eyebrow}
           </p>
         ) : null}
         {showTitle ? (
-          <h2 className="text-3xl font-bold leading-tight tracking-[-0.04em] md:text-5xl">{sectionCopy.title}</h2>
+          <h2
+            className="m-0 text-right text-3xl font-bold tracking-[-0.04em] md:text-5xl"
+            style={{ lineHeight: 1.08 }}
+          >
+            {sectionCopy.title}
+          </h2>
         ) : null}
       </div>
     ) : null;

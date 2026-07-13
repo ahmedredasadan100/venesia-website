@@ -80,6 +80,69 @@ function AlignmentChoice({
   );
 }
 
+function EyebrowFormatControls({
+  boldDefault,
+  alignmentDefault,
+}: {
+  boldDefault: boolean;
+  alignmentDefault: ButtonAlignment;
+}) {
+  const [bold, setBold] = useState(boldDefault);
+  const [alignment, setAlignment] = useState<ButtonAlignment>(alignmentDefault);
+  const alignOptions: Array<{ value: ButtonAlignment; label: string }> = [
+    { value: "right", label: "يمين" },
+    { value: "center", label: "وسط" },
+    { value: "left", label: "يسار" },
+  ];
+
+  const toolClass = (active: boolean) =>
+    [
+      "min-w-9 cursor-pointer rounded-xl border px-2.5 py-2 text-xs font-semibold transition sm:min-w-10 sm:px-3",
+      active
+        ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
+        : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
+    ].join(" ");
+
+  return (
+    <div className="space-y-2">
+      <span className="text-xs font-semibold text-white/55">تنسيق العنوان التمهيدي</span>
+      <input type="hidden" name="eyebrow_bold" value={bold ? "true" : "false"} />
+      <input type="hidden" name="eyebrow_alignment" value={alignment} />
+      <div className="flex flex-wrap gap-2" role="toolbar" aria-label="تنسيق العنوان التمهيدي الصغير">
+        <button
+          type="button"
+          title="عريض"
+          aria-label="عريض"
+          aria-pressed={bold}
+          onClick={() => setBold((current) => !current)}
+          className={toolClass(bold)}
+        >
+          عريض
+        </button>
+        {alignOptions.map((option) => {
+          const active = option.value === alignment;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              title={option.label}
+              aria-label={option.label}
+              aria-pressed={active}
+              onClick={() => setAlignment(option.value)}
+              className={toolClass(active)}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs leading-6 text-white/45">
+        يؤثر على العنوان التمهيدي الصغير فقط — لا يغيّر العنوان الكبير ولا النص التمهيدي في العمود الآخر.
+      </p>
+    </div>
+  );
+}
+
 /** Home projects section copy — project cards load from Supabase projects table. */
 export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlacementEditorProps) {
   const buttonAlignment =
@@ -89,6 +152,11 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
   const cardCtaAlignment =
     config.cardCtaAlignment === "center" || config.cardCtaAlignment === "left"
       ? config.cardCtaAlignment
+      : "right";
+  const eyebrowBold = config.eyebrowBold !== false;
+  const eyebrowAlignment =
+    config.eyebrowAlignment === "center" || config.eyebrowAlignment === "left"
+      ? config.eyebrowAlignment
       : "right";
 
   return (
@@ -155,6 +223,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
           <span className="text-xs font-semibold text-white/55">العنوان التمهيدي الصغير</span>
           <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
         </label>
+        <EyebrowFormatControls boldDefault={eyebrowBold} alignmentDefault={eyebrowAlignment} />
 
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">العنوان</span>
