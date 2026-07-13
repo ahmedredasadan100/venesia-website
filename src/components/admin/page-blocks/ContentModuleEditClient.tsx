@@ -231,10 +231,24 @@ export default function ContentModuleEditClient({
             <input name="slug" defaultValue={block.slug} required dir="ltr" className={fieldClassName()} />
           </label>
         )}
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
-          <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
-        </label>
+        {isHomeContact ? (
+          <label className="block space-y-2">
+            <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
+            <input
+              name="internal_description"
+              defaultValue={block.description ?? ""}
+              className={fieldClassName()}
+            />
+            <span className="block text-xs leading-6 text-white/45">
+              ملاحظة إدارية توضّح وظيفة الموديول، ولا تظهر لزوار الموقع.
+            </span>
+          </label>
+        ) : (
+          <label className="block space-y-2">
+            <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
+            <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
+          </label>
+        )}
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">الحالة</span>
           <select name="status" defaultValue={block.status} className={fieldClassName()}>

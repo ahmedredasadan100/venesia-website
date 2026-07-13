@@ -84,6 +84,14 @@ function optionalImagePath(formData: FormData, key: string) {
   return value || undefined;
 }
 
+/** Admin-only template metadata description — prefer dedicated field over public config.description. */
+function readTemplateInternalDescription(formData: FormData) {
+  if (formData.has("internal_description")) {
+    return cleanText(formData.get("internal_description")) || null;
+  }
+  return cleanText(formData.get("description")) || null;
+}
+
 function buildAboutIntroConfig(formData: FormData): AboutIntroModuleConfig {
   const beats = Array.from({ length: 3 }, (_, index) => ({
     num: cleanText(formData.get(`beat_${index}_num`)),
@@ -494,7 +502,7 @@ export async function createContentBlock(formData: FormData) {
     .insert({
       name,
       slug,
-      description: cleanText(formData.get("description")) || null,
+      description: readTemplateInternalDescription(formData),
       variant,
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
       status: getStatus(cleanText(formData.get("status")) || "draft"),
@@ -546,7 +554,7 @@ export async function updateContentBlock(formData: FormData) {
     .update({
       name,
       slug,
-      description: cleanText(formData.get("description")) || null,
+      description: readTemplateInternalDescription(formData),
       variant,
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
       status: getStatus(cleanText(formData.get("status")) || "draft"),
