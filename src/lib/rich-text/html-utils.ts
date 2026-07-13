@@ -72,6 +72,19 @@ function sanitizeHref(href: string) {
   return null;
 }
 
+function sanitizeTextAlignStyle(styleValue: string) {
+  const match = styleValue.match(/(?:^|;)\s*text-align\s*:\s*(right|center|left|justify)\s*(?:;|$)/i);
+  if (!match) return null;
+  return `text-align: ${match[1].toLowerCase()}`;
+}
+
+function readSafeTextAlignFromTag(tag: string) {
+  const styleMatch = tag.match(/\sstyle=("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  if (!styleMatch) return null;
+  const styleValue = styleMatch[2] ?? styleMatch[3] ?? styleMatch[4] ?? "";
+  return sanitizeTextAlignStyle(styleValue);
+}
+
 function sanitizeAnchorTag(tag: string) {
   const hrefMatch = tag.match(/href=("([^"]*)"|'([^']*)'|([^\s>]+))/i);
   const href = hrefMatch ? (hrefMatch[2] ?? hrefMatch[3] ?? hrefMatch[4] ?? "") : "";
@@ -91,7 +104,7 @@ export function sanitizeRichTextHtml(value: string) {
   let sanitized = normalized
     .replace(/<(script|style|iframe|object|embed|form|meta|link)[^>]*>[\s\S]*?<\/\1>/gi, "")
     .replace(/<(script|style|iframe|object|embed|form|meta|link)[^>]*\/>/gi, "")
-    .replace(/\s(on\w+|style)=(".*?"|'.*?'|[^\s>]+)/gi, "");
+    .replace(/\s(on\w+)=(".*?"|'.*?'|[^\s>]+)/gi, "");
 
   sanitized = sanitized.replace(/<a\b[^>]*>/gi, (tag) => sanitizeAnchorTag(tag));
 
@@ -101,6 +114,13 @@ export function sanitizeRichTextHtml(value: string) {
     if (match.startsWith("</")) return `</${tag}>`;
     if (tag === "br") return "<br />";
     if (tag === "a") return match;
+
+    // Preserve TipTap paragraph text-align only; drop every other inline style/attr.
+    if (tag === "p") {
+      const textAlign = readSafeTextAlignFromTag(match);
+      return textAlign ? `<p style="${textAlign}">` : "<p>";
+    }
+
     return `<${tag}>`;
   });
 

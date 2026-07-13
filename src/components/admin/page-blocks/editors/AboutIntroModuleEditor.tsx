@@ -223,6 +223,7 @@ export default function AboutIntroModuleEditor({
               label={fieldLabels.body}
               defaultValue={config.body ?? ""}
               toolbarMode="minimal"
+              enableTextAlign
               minHeight={180}
               helperText={fieldLabels.bodyHelper}
             />

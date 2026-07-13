@@ -2,6 +2,7 @@
 
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
+import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -17,10 +18,14 @@ type AdminRichTextEditorProps = {
   defaultValue?: string;
   placeholder?: string;
   minHeight?: number;
-  /** full = all tools; minimal = Bold only (backward-compatible default: full). */
+  /** full = all tools; minimal = Bold (+ optional text align). Backward-compatible default: full. */
   toolbarMode?: "full" | "minimal";
+  /** Home Story only — show paragraph alignment controls next to Bold. */
+  enableTextAlign?: boolean;
   helperText?: string;
 };
+
+type TextAlignValue = "right" | "center" | "left" | "justify";
 
 function ToolButton({
   label,
@@ -37,9 +42,11 @@ function ToolButton({
     <button
       type="button"
       title={title ?? label}
+      aria-label={title ?? label}
+      aria-pressed={Boolean(active)}
       onClick={onClick}
       className={[
-        "min-w-10 cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold transition",
+        "min-w-9 cursor-pointer rounded-xl border px-2.5 py-2 text-xs font-semibold transition sm:min-w-10 sm:px-3",
         active
           ? "border-[#D8B87A]/35 bg-[#D8B87A]/15 text-[#F2D99B]"
           : "border-white/10 bg-white/[0.035] text-white/72 hover:border-[#D8B87A]/35 hover:bg-[#D8B87A]/10 hover:text-[#F2D99B]",
@@ -57,12 +64,14 @@ export default function AdminRichTextEditor({
   placeholder = "اكتب المحتوى هنا...",
   minHeight = 220,
   toolbarMode = "full",
+  enableTextAlign = false,
   helperText,
 }: AdminRichTextEditorProps) {
   const initialContent = useMemo(() => normalizeRichTextContent(defaultValue), [defaultValue]);
   const [html, setHtml] = useState(initialContent);
   const [syncedContent, setSyncedContent] = useState(initialContent);
   const isMinimal = toolbarMode === "minimal";
+  const withTextAlign = enableTextAlign;
 
   if (initialContent !== syncedContent) {
     setSyncedContent(initialContent);
@@ -98,6 +107,15 @@ export default function AdminRichTextEditor({
               defaultProtocol: "https",
             }),
           ]),
+      ...(withTextAlign
+        ? [
+            TextAlign.configure({
+              types: ["paragraph"],
+              alignments: ["left", "center", "right", "justify"],
+              defaultAlignment: "right",
+            }),
+          ]
+        : []),
       Placeholder.configure({ placeholder }),
     ],
     content: initialContent,
@@ -110,7 +128,7 @@ export default function AdminRichTextEditor({
     onUpdate: ({ editor: currentEditor }) => {
       setHtml(currentEditor.getHTML());
     },
-  }, [initialContent, isMinimal]);
+  }, [initialContent, isMinimal, withTextAlign]);
 
   function toggleLink() {
     if (!editor) return;
@@ -132,6 +150,10 @@ export default function AdminRichTextEditor({
     editor.chain().focus().extendMarkRange("link").setLink({ href: normalized }).run();
   }
 
+  function setAlign(alignment: TextAlignValue) {
+    editor?.chain().focus().setTextAlign(alignment).run();
+  }
+
   return (
     <div className="space-y-3">
       <input type="hidden" name={name} value={html} />
@@ -146,6 +168,34 @@ export default function AdminRichTextEditor({
             active={editor?.isActive("bold")}
             onClick={() => editor?.chain().focus().toggleBold().run()}
           />
+          {withTextAlign ? (
+            <>
+              <ToolButton
+                label="يمين"
+                title="محاذاة يمين"
+                active={editor?.isActive({ textAlign: "right" })}
+                onClick={() => setAlign("right")}
+              />
+              <ToolButton
+                label="وسط"
+                title="توسيط"
+                active={editor?.isActive({ textAlign: "center" })}
+                onClick={() => setAlign("center")}
+              />
+              <ToolButton
+                label="يسار"
+                title="محاذاة يسار"
+                active={editor?.isActive({ textAlign: "left" })}
+                onClick={() => setAlign("left")}
+              />
+              <ToolButton
+                label="ضبط"
+                title="ضبط النص من الجانبين"
+                active={editor?.isActive({ textAlign: "justify" })}
+                onClick={() => setAlign("justify")}
+              />
+            </>
+          ) : null}
           {!isMinimal ? (
             <>
               <ToolButton
