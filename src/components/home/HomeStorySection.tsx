@@ -1,16 +1,17 @@
 import Link from "next/link";
 import Image from "next/image";
 
+import RichTextContent from "../content/RichTextContent";
 import type { HomeStoryContent } from "./home-cms-mappers";
 
 const STATIC_DEFAULTS = {
   eyebrow: "FROM VISION TO EXECUTION",
   title: "من المخطط إلى التنفيذ",
   subtitle: "",
-  description: [
+  body: [
     "كل مشروع يبدأ بفكرة، لكن القيمة الحقيقية تظهر عندما تتحول الفكرة إلى تنفيذ يمكن متابعته خطوة بخطوة.",
     "لهذا نوثق مراحل التنفيذ، ونشارك التقدم الفعلي على الأرض، لأن الثقة تُبنى بما يمكن رؤيته لا بما يمكن قوله.",
-  ],
+  ].join("\n\n"),
   images: {
     main: "/images/home/story-main.jpg",
     secondary: "/images/home/story-secondary.jpg",
@@ -29,14 +30,12 @@ const STATIC_DEFAULTS = {
 function resolveHomeStoryContent(content?: HomeStoryContent | null) {
   if (!content) return STATIC_DEFAULTS;
 
-  const description = content.description.some((paragraph) => paragraph.trim())
-    ? content.description
-    : STATIC_DEFAULTS.description;
+  const body = content.body?.trim() ? content.body : STATIC_DEFAULTS.body;
 
   return {
     eyebrow: content.eyebrow?.trim() || STATIC_DEFAULTS.eyebrow,
     title: content.title?.trim() || STATIC_DEFAULTS.title,
-    description,
+    body,
     images: {
       main: content.images?.main || STATIC_DEFAULTS.images.main,
       secondary: content.images?.secondary || STATIC_DEFAULTS.images.secondary,
@@ -116,14 +115,11 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
               {resolved.title}
             </h2>
 
-            {resolved.description.map((paragraph, index) => (
-              <p
-                key={index}
-                className={`max-w-xl text-base leading-8 text-white/60 ${index === 0 ? "mt-6" : "mt-4"}`}
-              >
-                {paragraph}
-              </p>
-            ))}
+            <RichTextContent
+              value={resolved.body}
+              mode="rich"
+              className="mt-6 max-w-xl text-base leading-8 text-white/60 [&_strong]:text-inherit [&_b]:text-inherit"
+            />
 
             <Link
               href={resolved.button.href}

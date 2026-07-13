@@ -1,13 +1,70 @@
-import type { AboutIntroContent } from "../about/about-cms-mappers";
-import { mapAboutIntroBlock } from "../about/about-cms-mappers";
+import type { AboutIntroImages } from "../about/about-cms-mappers";
+import { asAboutIntroConfig } from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
 /**
  * Home story CMS content — independent module identity (slug: home-story),
  * reuses About Intro config shape + optional button. Rendered only by HomeStorySection.
+ *
+ * `body` stays as the stored config key and may be legacy plain text or sanitized rich HTML.
  */
-export type HomeStoryContent = AboutIntroContent;
+export type HomeStoryContent = {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  body: string;
+  images?: AboutIntroImages;
+  button?: {
+    label: string;
+    href: string;
+  };
+};
+
+function normalizePublicImageSrc(path?: string | null) {
+  const value = (path ?? "").trim();
+  if (!value) return undefined;
+  if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) {
+    return value;
+  }
+  return `/${value.replace(/^\/+/, "")}`;
+}
+
+function mapImages(images?: ReturnType<typeof asAboutIntroConfig>["images"]): AboutIntroImages | undefined {
+  if (!images) return undefined;
+
+  const mapped: AboutIntroImages = {};
+  const main = normalizePublicImageSrc(images.main);
+  const secondary = normalizePublicImageSrc(images.secondary);
+
+  if (main) {
+    mapped.main = main;
+    if (images.mainAlt?.trim()) mapped.mainAlt = images.mainAlt.trim();
+  }
+  if (secondary) {
+    mapped.secondary = secondary;
+    if (images.secondaryAlt?.trim()) mapped.secondaryAlt = images.secondaryAlt.trim();
+  }
+
+  return mapped.main || mapped.secondary ? mapped : undefined;
+}
 
 export function mapHomeStoryBlock(block: ResolvedPageBlock): HomeStoryContent {
-  return mapAboutIntroBlock(block);
+  const config = asAboutIntroConfig(block.template.config);
+  const buttonLabel = config.button?.label?.trim() ?? "";
+  const buttonHref = config.button?.href?.trim() ?? "";
+
+  return {
+    eyebrow: config.eyebrow ?? "",
+    title: config.title ?? "",
+    subtitle: config.subtitle ?? "",
+    body: config.body ?? "",
+    images: mapImages(config.images),
+    button:
+      buttonLabel || buttonHref
+        ? {
+            label: buttonLabel,
+            href: buttonHref,
+          }
+        : undefined,
+  };
 }

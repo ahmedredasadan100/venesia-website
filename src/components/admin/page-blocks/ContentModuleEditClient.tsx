@@ -213,7 +213,7 @@ export default function ContentModuleEditClient({
           <span className="text-xs font-semibold text-white/55">الاسم</span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
         </label>
-        {isHomeContact ? (
+        {isHomeContact || isHomeStory ? (
           <div className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">المعرّف التقني (Slug)</span>
             <input type="hidden" name="slug" value={block.slug} />

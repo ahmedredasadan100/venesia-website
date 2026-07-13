@@ -17,6 +17,9 @@ type AdminRichTextEditorProps = {
   defaultValue?: string;
   placeholder?: string;
   minHeight?: number;
+  /** full = all tools; minimal = Bold only (backward-compatible default: full). */
+  toolbarMode?: "full" | "minimal";
+  helperText?: string;
 };
 
 function ToolButton({
@@ -53,10 +56,13 @@ export default function AdminRichTextEditor({
   defaultValue = "",
   placeholder = "اكتب المحتوى هنا...",
   minHeight = 220,
+  toolbarMode = "full",
+  helperText,
 }: AdminRichTextEditorProps) {
   const initialContent = useMemo(() => normalizeRichTextContent(defaultValue), [defaultValue]);
   const [html, setHtml] = useState(initialContent);
   const [syncedContent, setSyncedContent] = useState(initialContent);
+  const isMinimal = toolbarMode === "minimal";
 
   if (initialContent !== syncedContent) {
     setSyncedContent(initialContent);
@@ -73,13 +79,25 @@ export default function AdminRichTextEditor({
         horizontalRule: false,
         link: false,
         underline: false,
+        ...(isMinimal
+          ? {
+              italic: false,
+              bulletList: false,
+              orderedList: false,
+              listItem: false,
+            }
+          : {}),
       }),
-      Underline,
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        defaultProtocol: "https",
-      }),
+      ...(isMinimal
+        ? []
+        : [
+            Underline,
+            Link.configure({
+              openOnClick: false,
+              autolink: true,
+              defaultProtocol: "https",
+            }),
+          ]),
       Placeholder.configure({ placeholder }),
     ],
     content: initialContent,
@@ -92,7 +110,7 @@ export default function AdminRichTextEditor({
     onUpdate: ({ editor: currentEditor }) => {
       setHtml(currentEditor.getHTML());
     },
-  }, [initialContent]);
+  }, [initialContent, isMinimal]);
 
   function toggleLink() {
     if (!editor) return;
@@ -128,42 +146,48 @@ export default function AdminRichTextEditor({
             active={editor?.isActive("bold")}
             onClick={() => editor?.chain().focus().toggleBold().run()}
           />
-          <ToolButton
-            label="I"
-            title="مائل"
-            active={editor?.isActive("italic")}
-            onClick={() => editor?.chain().focus().toggleItalic().run()}
-          />
-          <ToolButton
-            label="U"
-            title="تحته خط"
-            active={editor?.isActive("underline")}
-            onClick={() => editor?.chain().focus().toggleUnderline().run()}
-          />
-          <ToolButton
-            label="•"
-            title="قائمة نقطية"
-            active={editor?.isActive("bulletList")}
-            onClick={() => editor?.chain().focus().toggleBulletList().run()}
-          />
-          <ToolButton
-            label="1."
-            title="قائمة مرقمة"
-            active={editor?.isActive("orderedList")}
-            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-          />
-          <ToolButton
-            label="🔗"
-            title="رابط"
-            active={editor?.isActive("link")}
-            onClick={toggleLink}
-          />
+          {!isMinimal ? (
+            <>
+              <ToolButton
+                label="I"
+                title="مائل"
+                active={editor?.isActive("italic")}
+                onClick={() => editor?.chain().focus().toggleItalic().run()}
+              />
+              <ToolButton
+                label="U"
+                title="تحته خط"
+                active={editor?.isActive("underline")}
+                onClick={() => editor?.chain().focus().toggleUnderline().run()}
+              />
+              <ToolButton
+                label="•"
+                title="قائمة نقطية"
+                active={editor?.isActive("bulletList")}
+                onClick={() => editor?.chain().focus().toggleBulletList().run()}
+              />
+              <ToolButton
+                label="1."
+                title="قائمة مرقمة"
+                active={editor?.isActive("orderedList")}
+                onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+              />
+              <ToolButton
+                label="🔗"
+                title="رابط"
+                active={editor?.isActive("link")}
+                onClick={toggleLink}
+              />
+            </>
+          ) : null}
         </div>
 
         <div className="admin-rich-text-editor px-4 py-4" style={{ minHeight }}>
           <EditorContent editor={editor} />
         </div>
       </div>
+
+      {helperText ? <p className="text-xs leading-6 text-white/45">{helperText}</p> : null}
 
       <style jsx global>{`
         .admin-rich-text-editor .ProseMirror {
