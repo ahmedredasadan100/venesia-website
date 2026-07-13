@@ -2,7 +2,12 @@ import Link from "next/link";
 import Image from "next/image";
 
 import RichTextContent from "../content/RichTextContent";
-import type { HomeStoryContent } from "./home-cms-mappers";
+import type {
+  HomeStoryButtonAlignment,
+  HomeStoryButtonIcon,
+  HomeStoryButtonIconPosition,
+  HomeStoryContent,
+} from "./home-cms-mappers";
 
 const STATIC_DEFAULTS = {
   eyebrow: "FROM VISION TO EXECUTION",
@@ -21,11 +26,50 @@ const STATIC_DEFAULTS = {
   button: {
     label: "شاهد مراحل التنفيذ",
     href: "/track-your-project",
+    target: "_self" as const,
+    alignment: "right" as const,
+    icon: "none" as const,
+    iconPosition: "right" as const,
   },
 } satisfies HomeStoryContent & {
   images: { main: string; secondary: string; mainAlt: string; secondaryAlt: string };
-  button: { label: string; href: string };
+  button: {
+    label: string;
+    href: string;
+    target: "_self" | "_blank";
+    alignment: HomeStoryButtonAlignment;
+    icon: HomeStoryButtonIcon;
+    iconPosition: HomeStoryButtonIconPosition;
+  };
 };
+
+const BUTTON_ALIGN_CLASS: Record<HomeStoryButtonAlignment, string> = {
+  // Section is RTL: flex-start = physical right, flex-end = physical left.
+  right: "justify-start",
+  center: "justify-center",
+  left: "justify-end",
+};
+
+function StoryCtaArrow({ pointLeft }: { pointLeft: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden="true"
+      className={`shrink-0 ${pointLeft ? "" : "scale-x-[-1]"}`}
+    >
+      <path
+        d="M11 7H3M6 4L3 7l3 3"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function resolveHomeStoryContent(content?: HomeStoryContent | null) {
   if (!content) return STATIC_DEFAULTS;
@@ -45,6 +89,10 @@ function resolveHomeStoryContent(content?: HomeStoryContent | null) {
     button: {
       label: content.button?.label?.trim() || STATIC_DEFAULTS.button.label,
       href: content.button?.href?.trim() || STATIC_DEFAULTS.button.href,
+      target: content.button?.target === "_blank" ? ("_blank" as const) : ("_self" as const),
+      alignment: content.button?.alignment ?? STATIC_DEFAULTS.button.alignment,
+      icon: content.button?.icon ?? STATIC_DEFAULTS.button.icon,
+      iconPosition: content.button?.iconPosition ?? STATIC_DEFAULTS.button.iconPosition,
     },
   };
 }
@@ -55,6 +103,8 @@ export type HomeStorySectionProps = {
 
 export default function HomeStorySection({ content }: HomeStorySectionProps) {
   const resolved = resolveHomeStoryContent(content);
+  const showArrow = resolved.button.icon === "arrow";
+  const iconOnRight = resolved.button.iconPosition === "right";
 
   return (
     <section className="relative overflow-hidden bg-[#05070B] py-24 text-white max-md:py-10 md:max-lg:py-16">
@@ -121,12 +171,18 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
               className="mt-6 max-w-xl text-base leading-8 text-white/60 [&_strong]:text-inherit [&_b]:text-inherit"
             />
 
-            <Link
-              href={resolved.button.href}
-              className="mt-8 inline-flex cursor-pointer items-center rounded-full border border-[#D8B87A]/35 px-7 py-3 text-sm font-medium text-[#D8B87A] transition duration-500 hover:-translate-y-0.5 hover:bg-[#D8B87A] hover:text-[#111]"
-            >
-              {resolved.button.label}
-            </Link>
+            <div className={`mt-8 flex max-w-xl ${BUTTON_ALIGN_CLASS[resolved.button.alignment]}`} dir="rtl">
+              <Link
+                href={resolved.button.href}
+                target={resolved.button.target === "_blank" ? "_blank" : undefined}
+                rel={resolved.button.target === "_blank" ? "noopener noreferrer" : undefined}
+                className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[#D8B87A]/35 px-7 py-3 text-sm font-medium text-[#D8B87A] transition duration-500 hover:-translate-y-0.5 hover:bg-[#D8B87A] hover:text-[#111]"
+              >
+                {showArrow && iconOnRight ? <StoryCtaArrow pointLeft /> : null}
+                <span>{resolved.button.label}</span>
+                {showArrow && !iconOnRight ? <StoryCtaArrow pointLeft={false} /> : null}
+              </Link>
+            </div>
           </div>
         </div>
       </div>

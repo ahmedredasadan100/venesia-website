@@ -114,9 +114,28 @@ function buildAboutIntroConfig(formData: FormData): AboutIntroModuleConfig {
 
   if (cleanText(formData.get("include_story_cta")) === "1") {
     const linkData = linkFieldFromFormData(formData, "button");
+    const openTargetRaw = cleanText(formData.get("button_open_target"));
+    const openTarget =
+      openTargetRaw === "_blank" || openTargetRaw === "_self"
+        ? openTargetRaw
+        : linkData?.target;
+    const alignmentRaw = cleanText(formData.get("button_alignment"));
+    const alignment =
+      alignmentRaw === "center" || alignmentRaw === "left" || alignmentRaw === "right"
+        ? alignmentRaw
+        : "right";
+    const iconRaw = cleanText(formData.get("button_icon"));
+    const icon = iconRaw === "arrow" ? "arrow" : "none";
+    const iconPositionRaw = cleanText(formData.get("button_icon_position"));
+    const iconPosition = iconPositionRaw === "left" ? "left" : "right";
+
     config.button = {
       label: cleanText(formData.get("button_label")) || undefined,
-      ...(linkData ? { link: linkData.link, target: linkData.target } : {}),
+      ...(linkData ? { link: linkData.link } : {}),
+      ...(openTarget ? { target: openTarget } : {}),
+      alignment,
+      icon,
+      iconPosition,
     };
   }
 

@@ -8,6 +8,10 @@ import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
  *
  * `body` stays as the stored config key and may be legacy plain text or sanitized rich HTML.
  */
+export type HomeStoryButtonAlignment = "right" | "center" | "left";
+export type HomeStoryButtonIcon = "none" | "arrow";
+export type HomeStoryButtonIconPosition = "right" | "left";
+
 export type HomeStoryContent = {
   eyebrow: string;
   title: string;
@@ -17,6 +21,10 @@ export type HomeStoryContent = {
   button?: {
     label: string;
     href: string;
+    target?: "_self" | "_blank";
+    alignment: HomeStoryButtonAlignment;
+    icon: HomeStoryButtonIcon;
+    iconPosition: HomeStoryButtonIconPosition;
   };
 };
 
@@ -48,6 +56,19 @@ function mapImages(images?: ReturnType<typeof asAboutIntroConfig>["images"]): Ab
   return mapped.main || mapped.secondary ? mapped : undefined;
 }
 
+function mapButtonAlignment(value: unknown): HomeStoryButtonAlignment {
+  if (value === "center" || value === "left" || value === "right") return value;
+  return "right";
+}
+
+function mapButtonIcon(value: unknown): HomeStoryButtonIcon {
+  return value === "arrow" ? "arrow" : "none";
+}
+
+function mapButtonIconPosition(value: unknown): HomeStoryButtonIconPosition {
+  return value === "left" ? "left" : "right";
+}
+
 export function mapHomeStoryBlock(block: ResolvedPageBlock): HomeStoryContent {
   const config = asAboutIntroConfig(block.template.config);
   const buttonLabel = config.button?.label?.trim() ?? "";
@@ -64,6 +85,10 @@ export function mapHomeStoryBlock(block: ResolvedPageBlock): HomeStoryContent {
         ? {
             label: buttonLabel,
             href: buttonHref,
+            ...(config.button?.target ? { target: config.button.target } : {}),
+            alignment: mapButtonAlignment(config.button?.alignment),
+            icon: mapButtonIcon(config.button?.icon),
+            iconPosition: mapButtonIconPosition(config.button?.iconPosition),
           }
         : undefined,
   };

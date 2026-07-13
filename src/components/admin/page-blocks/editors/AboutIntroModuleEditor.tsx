@@ -29,6 +29,109 @@ type HomeStoryImagePair = {
   secondaryAlt: string;
 };
 
+type HomeStoryButtonAlignment = "right" | "center" | "left";
+type HomeStoryButtonIcon = "none" | "arrow";
+type HomeStoryButtonIconPosition = "right" | "left";
+
+function SegmentedChoice<T extends string>({
+  label,
+  name,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  name: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (next: T) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <span className="text-xs font-semibold text-white/55">{label}</span>
+      <input type="hidden" name={name} value={value} />
+      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              title={option.label}
+              aria-label={option.label}
+              onClick={() => onChange(option.value)}
+              className={[
+                "cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold transition",
+                active
+                  ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
+                  : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
+              ].join(" ")}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HomeStoryButtonPresentationFields({
+  alignment: initialAlignment,
+  icon: initialIcon,
+  iconPosition: initialIconPosition,
+}: {
+  alignment: HomeStoryButtonAlignment;
+  icon: HomeStoryButtonIcon;
+  iconPosition: HomeStoryButtonIconPosition;
+}) {
+  const [alignment, setAlignment] = useState<HomeStoryButtonAlignment>(initialAlignment);
+  const [icon, setIcon] = useState<HomeStoryButtonIcon>(initialIcon);
+  const [iconPosition, setIconPosition] = useState<HomeStoryButtonIconPosition>(initialIconPosition);
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+      <SegmentedChoice
+        label="محاذاة الزر"
+        name="button_alignment"
+        value={alignment}
+        onChange={setAlignment}
+        options={[
+          { value: "right", label: "يمين" },
+          { value: "center", label: "وسط" },
+          { value: "left", label: "يسار" },
+        ]}
+      />
+      <SegmentedChoice
+        label="أيقونة الزر"
+        name="button_icon"
+        value={icon}
+        onChange={setIcon}
+        options={[
+          { value: "none", label: "بدون أيقونة" },
+          { value: "arrow", label: "سهم" },
+        ]}
+      />
+      {icon === "arrow" ? (
+        <SegmentedChoice
+          label="موضع الأيقونة"
+          name="button_icon_position"
+          value={iconPosition}
+          onChange={setIconPosition}
+          options={[
+            { value: "right", label: "يمين النص" },
+            { value: "left", label: "يسار النص" },
+          ]}
+        />
+      ) : (
+        <input type="hidden" name="button_icon_position" value={iconPosition} />
+      )}
+    </div>
+  );
+}
+
 function padBeats(beats: AboutIntroBeatConfig[] | undefined) {
   const rows = [...(beats ?? [])].slice(0, 3);
   while (rows.length < 3) rows.push({});
@@ -273,7 +376,7 @@ export default function AboutIntroModuleEditor({
       {showCta ? (
         <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
           {section === "all" ? <h2 className="text-sm font-semibold text-white">زر CTA</h2> : null}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-4">
             <label className="block space-y-2">
               <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
               <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
@@ -285,6 +388,22 @@ export default function AboutIntroModuleEditor({
               clearLinkLabel={fieldLabels.clearLink}
               defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
               showAnchor
+            />
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold text-white/55">فتح الرابط</span>
+              <select
+                name="button_open_target"
+                defaultValue={config.button?.target === "_blank" ? "_blank" : "_self"}
+                className={fieldClassName()}
+              >
+                <option value="_self">نفس النافذة</option>
+                <option value="_blank">نافذة جديدة</option>
+              </select>
+            </label>
+            <HomeStoryButtonPresentationFields
+              alignment={config.button?.alignment === "center" || config.button?.alignment === "left" ? config.button.alignment : "right"}
+              icon={config.button?.icon === "arrow" ? "arrow" : "none"}
+              iconPosition={config.button?.iconPosition === "left" ? "left" : "right"}
             />
           </div>
         </section>

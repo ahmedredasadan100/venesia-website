@@ -64,6 +64,10 @@ export type AboutCtaButtonConfig = {
   href?: string;
   link?: Record<string, unknown>;
   target?: "_self" | "_blank";
+  /** Home Story CTA layout — optional; ignored by other About CTA renderers. */
+  alignment?: "right" | "center" | "left";
+  icon?: "none" | "arrow";
+  iconPosition?: "right" | "left";
 };
 
 /** Structured config for the About CTA band (contacts + copy + image). */
@@ -300,6 +304,15 @@ export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
     buttonRaw?.target === "_blank" || buttonRaw?.target === "_self"
       ? (buttonRaw.target as "_blank" | "_self")
       : undefined;
+  const buttonAlignment =
+    buttonRaw?.alignment === "center" || buttonRaw?.alignment === "left" || buttonRaw?.alignment === "right"
+      ? (buttonRaw.alignment as "right" | "center" | "left")
+      : undefined;
+  const buttonIcon = buttonRaw?.icon === "arrow" || buttonRaw?.icon === "none" ? (buttonRaw.icon as "none" | "arrow") : undefined;
+  const buttonIconPosition =
+    buttonRaw?.iconPosition === "left" || buttonRaw?.iconPosition === "right"
+      ? (buttonRaw.iconPosition as "right" | "left")
+      : undefined;
   const button =
     buttonLabel || buttonHref || buttonLink
       ? {
@@ -307,6 +320,9 @@ export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
           ...(buttonHref ? { href: buttonHref } : {}),
           ...(buttonLink ? { link: buttonLink } : {}),
           ...(buttonTarget ? { target: buttonTarget } : {}),
+          ...(buttonAlignment ? { alignment: buttonAlignment } : {}),
+          ...(buttonIcon ? { icon: buttonIcon } : {}),
+          ...(buttonIconPosition ? { iconPosition: buttonIconPosition } : {}),
         }
       : undefined;
 
