@@ -121,6 +121,8 @@ export type HomeProjectsModuleConfig = {
     href?: string;
     link?: Record<string, unknown>;
     target?: "_self" | "_blank";
+    /** Physical section alignment for the footer CTA. Default for legacy content: center. */
+    alignment?: "right" | "center" | "left";
   };
 };
 
@@ -559,6 +561,10 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
               ? (footer.link as Record<string, unknown>)
               : undefined,
           target: footer.target === "_blank" ? "_blank" : footer.target === "_self" ? "_self" : undefined,
+          alignment:
+            footer.alignment === "right" || footer.alignment === "left" || footer.alignment === "center"
+              ? footer.alignment
+              : undefined,
         }
       : undefined,
   };

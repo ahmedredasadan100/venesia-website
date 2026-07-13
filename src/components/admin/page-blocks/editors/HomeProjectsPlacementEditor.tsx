@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import AdminNotice from "../../AdminNotice";
+import AdminRichTextEditor from "../../AdminRichTextEditor";
 import { AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
@@ -9,6 +12,8 @@ import type { HomeProjectsModuleConfig } from "../../../../lib/page-blocks/confi
 type HomeProjectsPlacementEditorProps = {
   config: HomeProjectsModuleConfig;
 };
+
+type ButtonAlignment = "right" | "center" | "left";
 
 function VisibilityToggle({
   name,
@@ -20,21 +25,70 @@ function VisibilityToggle({
   defaultChecked: boolean;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
+    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
       <span>{label}</span>
-      <input type="checkbox" name={name} value="true" defaultChecked={defaultChecked} />
+      <input type="checkbox" name={name} value="true" defaultChecked={defaultChecked} className="cursor-pointer" />
     </label>
+  );
+}
+
+function AlignmentChoice({
+  defaultValue,
+}: {
+  defaultValue: ButtonAlignment;
+}) {
+  const [alignment, setAlignment] = useState<ButtonAlignment>(defaultValue);
+  const options: Array<{ value: ButtonAlignment; label: string }> = [
+    { value: "right", label: "يمين" },
+    { value: "center", label: "وسط" },
+    { value: "left", label: "يسار" },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <span className="text-xs font-semibold text-white/55">محاذاة الزر</span>
+      <input type="hidden" name="footer_cta_alignment" value={alignment} />
+      <div role="radiogroup" aria-label="محاذاة الزر" className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const active = option.value === alignment;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              title={option.label}
+              aria-label={option.label}
+              onClick={() => setAlignment(option.value)}
+              className={[
+                "cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold transition",
+                active
+                  ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
+                  : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
+              ].join(" ")}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
 /** Home projects section copy — project cards load from Supabase projects table. */
 export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlacementEditorProps) {
+  const buttonAlignment =
+    config.footerCta?.alignment === "right" || config.footerCta?.alignment === "left"
+      ? config.footerCta.alignment
+      : "center";
+
   return (
     <div className="space-y-6">
       <AdminNotice
         variant="info"
         title="بيانات الكروت"
-        message="الصور، الأكواد، الأوصاف، والترتيب تُدار من لوحة المشاريع عبر show_on_homepage و homepage_order في جدول projects — وليس من هذا الموديول."
+        message="الصور والأكواد والأوصاف وترتيب الظهور تُدار من لوحة المشاريع عبر «الظهور في الصفحة الرئيسية» و«ترتيب الصفحة الرئيسية» — وليس من هذا الموديول."
       />
 
       <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
@@ -52,7 +106,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
           />
         </label>
         <p className="text-xs leading-6 text-white/45">
-          يُطبَّق على المشاريع حسب homepage_order. اترك الحقل فارغًا للسلوك الحالي (كل المشاريع مع pagination).
+          يُطبَّق على المشاريع حسب ترتيب الصفحة الرئيسية. اترك الحقل فارغًا لعرض كل المشاريع المؤهلة مع التقسيم الصفحي.
         </p>
       </section>
 
@@ -63,9 +117,17 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
         </p>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <VisibilityToggle name="show_eyebrow" label="إظهار Eyebrow" defaultChecked={config.showEyebrow !== false} />
-          <VisibilityToggle name="show_title" label="إظهار Title" defaultChecked={config.showTitle !== false} />
-          <VisibilityToggle name="show_intro" label="إظهار Intro" defaultChecked={config.showIntro !== false} />
+          <VisibilityToggle
+            name="show_eyebrow"
+            label="إظهار العنوان التمهيدي الصغير"
+            defaultChecked={config.showEyebrow !== false}
+          />
+          <VisibilityToggle name="show_title" label="إظهار العنوان" defaultChecked={config.showTitle !== false} />
+          <VisibilityToggle
+            name="show_intro"
+            label="إظهار النص التمهيدي"
+            defaultChecked={config.showIntro !== false}
+          />
           <VisibilityToggle
             name="show_footer_cta"
             label="إظهار زر أسفل السكشن"
@@ -74,31 +136,31 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
         </div>
 
         <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Eyebrow</span>
+          <span className="text-xs font-semibold text-white/55">العنوان التمهيدي الصغير</span>
           <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
         </label>
 
         <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Title</span>
+          <span className="text-xs font-semibold text-white/55">العنوان</span>
           <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
         </label>
 
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Intro text</span>
-          <textarea
-            name="intro"
-            defaultValue={config.intro ?? ""}
-            rows={4}
-            className={fieldClassName("resize-y leading-7")}
-          />
-        </label>
+        <AdminRichTextEditor
+          name="intro"
+          label="النص التمهيدي"
+          defaultValue={config.intro ?? ""}
+          toolbarMode="minimal"
+          enableTextAlign
+          minHeight={160}
+          helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
+        />
       </section>
 
       <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <h2 className="text-sm font-semibold text-white">زر أسفل السكشن</h2>
 
         <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Label</span>
+          <span className="text-xs font-semibold text-white/55">نص الزر</span>
           <input
             name="footer_cta_label"
             defaultValue={config.footerCta?.label ?? ""}
@@ -109,8 +171,24 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
         <AdminLinkField
           prefix="footer_cta"
           label="رابط الزر"
+          chooseLinkLabel="اختيار الرابط"
+          clearLinkLabel="مسح الرابط"
           defaultValue={linkDefaultFromContainer(config.footerCta as Record<string, unknown>)}
         />
+
+        <label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">فتح الرابط</span>
+          <select
+            name="footer_cta_open_target"
+            defaultValue={config.footerCta?.target === "_blank" ? "_blank" : "_self"}
+            className={fieldClassName()}
+          >
+            <option value="_self">نفس النافذة</option>
+            <option value="_blank">نافذة جديدة</option>
+          </select>
+        </label>
+
+        <AlignmentChoice defaultValue={buttonAlignment} />
       </section>
     </div>
   );

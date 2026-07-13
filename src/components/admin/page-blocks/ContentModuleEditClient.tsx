@@ -137,7 +137,7 @@ export default function ContentModuleEditClient({
     editorKey === "home-contact"
       ? "تحكّم في نصوص وصورة وزر ووسائل التواصل داخل قسم التواصل في الصفحة الرئيسية. كل التغييرات تنعكس على العرض العام بعد الحفظ."
       : editorKey === "home-projects"
-        ? "سكشن مشاريع فينيسيا — نصوص السكشن من هنا؛ بيانات الكروت من جدول projects."
+        ? "تحكّم في نصوص وعرض قسم مشروعات فينيسيا في الصفحة الرئيسية. بيانات المشروعات نفسها تُدار من إدارة المشروعات."
         : editorKey === "home-trust"
           ? "لماذا يثق السوق العقاري في فينيسيا؟ — للصفحة الرئيسية فقط."
           : editorKey === "home-story"
@@ -199,7 +199,8 @@ export default function ContentModuleEditClient({
   const usesProjectsHubHeader = Boolean(projectsHubHeader);
   const isHomeStory = editorKey === "home-story";
   const isHomeContact = editorKey === "home-contact";
-  const usesHomeModuleChrome = isHomeStory || isHomeContact;
+  const isHomeProjects = editorKey === "home-projects";
+  const usesHomeModuleChrome = isHomeStory || isHomeContact || isHomeProjects;
   const hubStatus = statusMeta(block.status);
   const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
   const homeContactConfig = isHomeContact ? (config as ReturnType<typeof asAboutCtaConfig>) : null;
@@ -213,7 +214,7 @@ export default function ContentModuleEditClient({
           <span className="text-xs font-semibold text-white/55">الاسم</span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
         </label>
-        {isHomeContact || isHomeStory ? (
+        {isHomeContact || isHomeStory || isHomeProjects ? (
           <div className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">المعرّف التقني (Slug)</span>
             <input type="hidden" name="slug" value={block.slug} />
@@ -355,6 +356,23 @@ export default function ContentModuleEditClient({
             </>
           }
         />
+      ) : isHomeProjects ? (
+        <AdminPageContextHeader
+          eyebrow="HOME PROJECTS MODULE"
+          title={block.name}
+          description="تحكّم في نصوص وعرض قسم مشروعات فينيسيا في الصفحة الرئيسية. بيانات المشروعات نفسها تُدار من إدارة المشروعات."
+          meta={hubStatus.label}
+          actions={
+            <>
+              <AdminActionButton href="/" variant="dark">
+                معاينة الصفحة الرئيسية
+              </AdminActionButton>
+              <AdminActionButton href="/admin/pages-blocks/blocks/content" variant="ghost">
+                الرجوع لبلوكات المحتوى
+              </AdminActionButton>
+            </>
+          }
+        />
       ) : projectsHubHeader ? (
         <AdminPageContextHeader
           eyebrow={projectsHubHeader.eyebrow}
@@ -394,6 +412,10 @@ export default function ContentModuleEditClient({
 
       {isHomeContact && saved ? (
         <AdminNotice variant="success" message="تم حفظ موديول التواصل وتحديث الصفحة الرئيسية بنجاح." />
+      ) : null}
+
+      {isHomeProjects && saved ? (
+        <AdminNotice variant="success" message="تم حفظ موديول المشاريع وتحديث الصفحة الرئيسية بنجاح." />
       ) : null}
 
       {usesProjectsHubHeader && saved ? (
@@ -520,6 +542,11 @@ export default function ContentModuleEditClient({
         ) : isHomeContact ? (
           <StickyModuleSaveDock
             title="حفظ موديول Home Contact"
+            description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
+          />
+        ) : isHomeProjects ? (
+          <StickyModuleSaveDock
+            title="حفظ موديول Home Projects"
             description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
           />
         ) : (

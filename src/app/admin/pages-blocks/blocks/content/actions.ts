@@ -251,11 +251,24 @@ function buildHomeProjectsConfig(formData: FormData): HomeProjectsModuleConfig {
   const projectsLimit =
     limitText && Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.floor(parsedLimit) : undefined;
 
+  const openTargetRaw = cleanText(formData.get("footer_cta_open_target"));
+  const openTarget =
+    openTargetRaw === "_blank" || openTargetRaw === "_self"
+      ? openTargetRaw
+      : footerLink?.target;
+  const alignmentRaw = cleanText(formData.get("footer_cta_alignment"));
+  const alignment: "right" | "center" | "left" =
+    alignmentRaw === "right" || alignmentRaw === "left" || alignmentRaw === "center"
+      ? alignmentRaw
+      : "center";
+
   const footerCta =
     label || hasSavedLinkField(footerLink)
       ? {
           label: label || undefined,
-          ...(footerLink ? { link: footerLink.link, target: footerLink.target } : {}),
+          ...(footerLink ? { link: footerLink.link } : {}),
+          ...(openTarget ? { target: openTarget } : {}),
+          alignment,
         }
       : undefined;
 

@@ -4,9 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { HomepageProjectCard } from "../../lib/projects/types";
-import type { HomeProjectsContent } from "./home-projects-mappers";
+import type { HomeProjectsButtonAlignment, HomeProjectsContent } from "./home-projects-mappers";
 import PlainTextContent from "../content/PlainTextContent";
+import RichTextContent from "../content/RichTextContent";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
+import { isHtmlContent, stripHtml } from "../../lib/rich-text/html-utils";
 
 export type HomeProjectsSectionProps = {
   projects: HomepageProjectCard[];
@@ -21,6 +23,8 @@ const STATIC_DEFAULTS = {
   footerCta: {
     label: "استعرض كل المشاريع",
     href: "/projects",
+    target: "_self" as const,
+    alignment: "center" as const,
   },
   showEyebrow: true,
   showTitle: true,
@@ -28,6 +32,20 @@ const STATIC_DEFAULTS = {
   showFooterCta: true,
   projectsLimit: undefined as number | undefined,
 } satisfies HomeProjectsContent;
+
+const FOOTER_ALIGN_CLASS: Record<HomeProjectsButtonAlignment, string> = {
+  // Section is RTL: flex-start = physical right, flex-end = physical left.
+  right: "justify-start",
+  center: "justify-center",
+  left: "justify-end",
+};
+
+function hasIntroContent(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (!isHtmlContent(trimmed)) return true;
+  return Boolean(stripHtml(trimmed));
+}
 
 function resolveHomeProjectsContent(content?: HomeProjectsContent | null) {
   if (!content) return STATIC_DEFAULTS;
@@ -39,6 +57,8 @@ function resolveHomeProjectsContent(content?: HomeProjectsContent | null) {
     footerCta: {
       label: content.footerCta.label.trim() || STATIC_DEFAULTS.footerCta.label,
       href: content.footerCta.href.trim() || STATIC_DEFAULTS.footerCta.href,
+      target: content.footerCta.target === "_blank" ? ("_blank" as const) : ("_self" as const),
+      alignment: content.footerCta.alignment ?? STATIC_DEFAULTS.footerCta.alignment,
     },
     showEyebrow: content.showEyebrow,
     showTitle: content.showTitle,
@@ -127,13 +147,17 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
   const hasMultiplePages = totalPages > 1;
   const safeActivePage = Math.min(activePage, Math.max(totalPages - 1, 0));
 
-  const showIntro = sectionCopy.showIntro && Boolean(sectionCopy.intro.trim());
+  const showIntro = sectionCopy.showIntro && hasIntroContent(sectionCopy.intro);
   const showEyebrow = sectionCopy.showEyebrow && Boolean(sectionCopy.eyebrow.trim());
   const showTitle = sectionCopy.showTitle && Boolean(sectionCopy.title.trim());
 
   const introColumn = showIntro ? (
     <div className="max-w-md">
-      <p className="text-lg leading-9 text-white/65">{sectionCopy.intro}</p>
+      <RichTextContent
+        value={sectionCopy.intro}
+        mode="rich"
+        className="text-lg leading-9 text-white/65 [&_strong]:text-inherit [&_b]:text-inherit"
+      />
     </div>
   ) : null;
 
@@ -327,10 +351,12 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
         ) : null}
 
         {showFooterCta ? (
-          <div className="mt-10 flex justify-center">
+          <div className={`mt-10 flex ${FOOTER_ALIGN_CLASS[sectionCopy.footerCta.alignment]}`} dir="rtl">
             <Link
               href={sectionCopy.footerCta.href}
-              className="rounded-full border border-white/10 bg-white/[0.045] px-7 py-3 text-sm font-medium text-white/80 transition duration-300 hover:border-[#D8B87A]/40 hover:bg-white/[0.08] hover:text-[#D8B87A]"
+              target={sectionCopy.footerCta.target === "_blank" ? "_blank" : undefined}
+              rel={sectionCopy.footerCta.target === "_blank" ? "noopener noreferrer" : undefined}
+              className="cursor-pointer rounded-full border border-white/10 bg-white/[0.045] px-7 py-3 text-sm font-medium text-white/80 transition duration-300 hover:border-[#D8B87A]/40 hover:bg-white/[0.08] hover:text-[#D8B87A]"
             >
               {sectionCopy.footerCta.label}
             </Link>

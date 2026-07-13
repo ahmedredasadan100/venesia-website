@@ -1,6 +1,8 @@
 import { asHomeProjectsConfig } from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
+export type HomeProjectsButtonAlignment = "right" | "center" | "left";
+
 export type HomeProjectsContent = {
   eyebrow: string;
   title: string;
@@ -13,8 +15,16 @@ export type HomeProjectsContent = {
   footerCta: {
     label: string;
     href: string;
+    target?: "_self" | "_blank";
+    alignment: HomeProjectsButtonAlignment;
   };
 };
+
+function mapFooterAlignment(value: unknown): HomeProjectsButtonAlignment {
+  if (value === "right" || value === "left" || value === "center") return value;
+  // Legacy public CTA was hard-centered.
+  return "center";
+}
 
 export function mapHomeProjectsBlock(block: ResolvedPageBlock): HomeProjectsContent {
   const config = asHomeProjectsConfig(block.template.config);
@@ -31,6 +41,8 @@ export function mapHomeProjectsBlock(block: ResolvedPageBlock): HomeProjectsCont
     footerCta: {
       label: config.footerCta?.label ?? "",
       href: config.footerCta?.href ?? "",
+      ...(config.footerCta?.target ? { target: config.footerCta.target } : {}),
+      alignment: mapFooterAlignment(config.footerCta?.alignment),
     },
   };
 }
