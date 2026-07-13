@@ -669,3 +669,35 @@ select.admin-select option {
   font-weight: 700;
 }
 
+/* Home Projects intro lead line — scoped; does not change Home Story / other rich text */
+.rich-text-content.home-projects-intro {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 1rem;
+  line-height: 1.75rem;
+}
+
+.rich-text-content.home-projects-intro p {
+  margin: 0;
+  line-height: 1.75rem;
+}
+
+.rich-text-content.home-projects-intro p + p {
+  margin-top: 11px;
+}
+
+.rich-text-content.home-projects-intro strong,
+.rich-text-content.home-projects-intro b {
+  display: block;
+  margin-bottom: 11px;
+  color: #d8b87a;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.375;
+  letter-spacing: 0.14em;
+}
+
+.rich-text-content.home-projects-intro strong + br,
+.rich-text-content.home-projects-intro b + br {
+  display: none;
+}
+

@@ -115,14 +115,15 @@ function buildProjectPages(projects: HomepageProjectCard[]) {
 }
 
 function getHeaderLayoutClass(hasIntroColumn: boolean, hasHeadingColumn: boolean) {
+  // RTL row: first DOM child sits on the physical right. Mobile stacks heading → intro.
   if (hasIntroColumn && hasHeadingColumn) {
-    return "mb-10 flex flex-col gap-8 lg:flex-row-reverse lg:items-end lg:justify-between";
+    return "mb-9 flex flex-col gap-6 lg:mb-10 lg:flex-row lg:items-start lg:justify-between lg:gap-10";
   }
   if (hasHeadingColumn) {
-    return "mb-10 flex flex-col gap-8 lg:items-end";
+    return "mb-9 flex flex-col gap-6 lg:mb-10 lg:items-start";
   }
   if (hasIntroColumn) {
-    return "mb-10 flex flex-col gap-8";
+    return "mb-9 flex flex-col gap-6 lg:mb-10";
   }
   return "";
 }
@@ -161,20 +162,26 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
   const showTitle = sectionCopy.showTitle && Boolean(sectionCopy.title.trim());
 
   const introColumn = showIntro ? (
-    <div className="max-w-md">
+    <div className="max-w-md text-right lg:max-w-sm xl:max-w-md">
+      {/*
+        Scoped Home Projects intro only via .home-projects-intro in globals.css:
+        muted body + gold <strong> lead line. Does not change Home Story rich text.
+      */}
       <RichTextContent
         value={sectionCopy.intro}
         mode="rich"
-        className="text-lg leading-9 text-white/65 [&_strong]:text-inherit [&_b]:text-inherit"
+        className="home-projects-intro"
       />
     </div>
   ) : null;
 
   const headingColumn =
     showEyebrow || showTitle ? (
-      <div className="text-right">
+      <div className="text-right lg:max-w-xl">
         {showEyebrow ? (
-          <p className="mb-3 text-sm font-medium tracking-[0.26em] text-[#D8B87A]">{sectionCopy.eyebrow}</p>
+          <p className="mb-[11px] text-sm leading-snug tracking-[0.26em] text-[#D8B87A]" style={{ fontWeight: 700 }}>
+            {sectionCopy.eyebrow}
+          </p>
         ) : null}
         {showTitle ? (
           <h2 className="text-3xl font-bold leading-tight tracking-[-0.04em] md:text-5xl">{sectionCopy.title}</h2>
@@ -215,17 +222,17 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
   if (limitedProjects.length === 0) return null;
 
   return (
-    <section className="relative overflow-hidden bg-[#05070B] px-6 py-20 text-white">
+    <section className="relative overflow-hidden bg-[#05070B] px-6 pb-16 pt-12 text-white max-md:pb-12 max-md:pt-8 md:pb-20 md:pt-14">
       <div
         aria-hidden
-        className="pointer-events-none absolute cursor-pointer inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(216,184,122,0.10),transparent_34%),radial-gradient(circle_at_88%_4%,rgba(255,255,255,0.055),transparent_30%)]"
+        className="pointer-events-none absolute inset-0 cursor-pointer bg-[radial-gradient(circle_at_18%_12%,rgba(216,184,122,0.10),transparent_34%),radial-gradient(circle_at_88%_4%,rgba(255,255,255,0.055),transparent_30%)]"
       />
 
       <div className="relative mx-auto max-w-7xl">
         {showHeader ? (
-          <div className={headerLayoutClass}>
-            {introColumn}
+          <div dir="rtl" className={headerLayoutClass}>
             {headingColumn}
+            {introColumn}
           </div>
         ) : null}
 
@@ -252,7 +259,7 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
             </>
           )}
 
-          <div dir="ltr" className="overflow-x-hidden overflow-y-visible py-3">
+          <div dir="ltr" className="overflow-x-hidden overflow-y-visible py-1">
             <div
               className="flex transition-transform duration-[850ms] ease-out"
               style={
