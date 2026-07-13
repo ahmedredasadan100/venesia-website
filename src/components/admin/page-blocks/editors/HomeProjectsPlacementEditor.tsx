@@ -33,8 +33,12 @@ function VisibilityToggle({
 }
 
 function AlignmentChoice({
+  name,
+  label,
   defaultValue,
 }: {
+  name: string;
+  label: string;
   defaultValue: ButtonAlignment;
 }) {
   const [alignment, setAlignment] = useState<ButtonAlignment>(defaultValue);
@@ -46,9 +50,9 @@ function AlignmentChoice({
 
   return (
     <div className="space-y-2">
-      <span className="text-xs font-semibold text-white/55">محاذاة الزر</span>
-      <input type="hidden" name="footer_cta_alignment" value={alignment} />
-      <div role="radiogroup" aria-label="محاذاة الزر" className="flex flex-wrap gap-2">
+      <span className="text-xs font-semibold text-white/55">{label}</span>
+      <input type="hidden" name={name} value={alignment} />
+      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
         {options.map((option) => {
           const active = option.value === alignment;
           return (
@@ -82,6 +86,10 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
     config.footerCta?.alignment === "right" || config.footerCta?.alignment === "left"
       ? config.footerCta.alignment
       : "center";
+  const cardCtaAlignment =
+    config.cardCtaAlignment === "center" || config.cardCtaAlignment === "left"
+      ? config.cardCtaAlignment
+      : "right";
 
   return (
     <div className="space-y-6">
@@ -107,6 +115,14 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
         </label>
         <p className="text-xs leading-6 text-white/45">
           يُطبَّق على المشاريع حسب ترتيب الصفحة الرئيسية. اترك الحقل فارغًا لعرض كل المشاريع المؤهلة مع التقسيم الصفحي.
+        </p>
+        <AlignmentChoice
+          name="card_cta_alignment"
+          label="محاذاة زر الكارت"
+          defaultValue={cardCtaAlignment}
+        />
+        <p className="text-xs leading-6 text-white/45">
+          موضع زر «استكشف المشروع» داخل كل كارت في الصفحة الرئيسية فقط — لا يؤثر على صفحة المشاريع أو المميز.
         </p>
       </section>
 
@@ -188,7 +204,11 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
           </select>
         </label>
 
-        <AlignmentChoice defaultValue={buttonAlignment} />
+        <AlignmentChoice
+          name="footer_cta_alignment"
+          label="محاذاة الزر"
+          defaultValue={buttonAlignment}
+        />
       </section>
     </div>
   );

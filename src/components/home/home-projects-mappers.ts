@@ -12,6 +12,8 @@ export type HomeProjectsContent = {
   showIntro: boolean;
   showFooterCta: boolean;
   projectsLimit?: number;
+  /** Physical alignment of in-card CTA. Legacy default: right. */
+  cardCtaAlignment: HomeProjectsButtonAlignment;
   footerCta: {
     label: string;
     href: string;
@@ -26,6 +28,12 @@ function mapFooterAlignment(value: unknown): HomeProjectsButtonAlignment {
   return "center";
 }
 
+function mapCardCtaAlignment(value: unknown): HomeProjectsButtonAlignment {
+  if (value === "right" || value === "left" || value === "center") return value;
+  // Legacy in-card CTA was inline-flex at RTL start (= physical right).
+  return "right";
+}
+
 export function mapHomeProjectsBlock(block: ResolvedPageBlock): HomeProjectsContent {
   const config = asHomeProjectsConfig(block.template.config);
 
@@ -38,6 +46,7 @@ export function mapHomeProjectsBlock(block: ResolvedPageBlock): HomeProjectsCont
     showIntro: config.showIntro !== false,
     showFooterCta: config.showFooterCta !== false,
     projectsLimit: config.projectsLimit,
+    cardCtaAlignment: mapCardCtaAlignment(config.cardCtaAlignment),
     footerCta: {
       label: config.footerCta?.label ?? "",
       href: config.footerCta?.href ?? "",

@@ -116,6 +116,11 @@ export type HomeProjectsModuleConfig = {
   showIntro?: boolean;
   showFooterCta?: boolean;
   projectsLimit?: number;
+  /**
+   * Physical alignment of the in-card «استكشف المشروع» CTA.
+   * Default for legacy content (missing key): right — matches prior RTL inline-flex start.
+   */
+  cardCtaAlignment?: "right" | "center" | "left";
   footerCta?: {
     label?: string;
     href?: string;
@@ -543,6 +548,12 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
           })()
         : undefined;
 
+  const cardAlignRaw = config.cardCtaAlignment ?? config.card_cta_alignment;
+  const cardCtaAlignment =
+    cardAlignRaw === "right" || cardAlignRaw === "left" || cardAlignRaw === "center"
+      ? cardAlignRaw
+      : undefined;
+
   return {
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
@@ -552,6 +563,7 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
     showIntro: readShowFlag("showIntro", "show_intro"),
     showFooterCta: readShowFlag("showFooterCta", "show_footer_cta"),
     projectsLimit: parsedLimit,
+    cardCtaAlignment,
     footerCta: footer
       ? {
           label: readText(footer.label) || undefined,

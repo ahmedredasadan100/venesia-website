@@ -31,10 +31,18 @@ const STATIC_DEFAULTS = {
   showIntro: true,
   showFooterCta: true,
   projectsLimit: undefined as number | undefined,
+  cardCtaAlignment: "right" as const,
 } satisfies HomeProjectsContent;
 
 const FOOTER_ALIGN_CLASS: Record<HomeProjectsButtonAlignment, string> = {
   // Section is RTL: flex-start = physical right, flex-end = physical left.
+  right: "justify-start",
+  center: "justify-center",
+  left: "justify-end",
+};
+
+const CARD_CTA_ALIGN_CLASS: Record<HomeProjectsButtonAlignment, string> = {
+  // Card overlay is RTL: flex-start = physical right, flex-end = physical left.
   right: "justify-start",
   center: "justify-center",
   left: "justify-end",
@@ -65,6 +73,7 @@ function resolveHomeProjectsContent(content?: HomeProjectsContent | null) {
     showIntro: content.showIntro,
     showFooterCta: content.showFooterCta,
     projectsLimit: content.projectsLimit,
+    cardCtaAlignment: content.cardCtaAlignment ?? STATIC_DEFAULTS.cardCtaAlignment,
   };
 }
 
@@ -316,11 +325,13 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
           className="mt-4 line-clamp-2 text-sm leading-7 text-white/72"
         />
 
-        <div className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-[#D8B87A]">
-          استكشف المشروع
-          <span className="transition-transform duration-300 group-hover:-translate-x-1">
-            ←
-          </span>
+        <div className={`mt-6 flex ${CARD_CTA_ALIGN_CLASS[sectionCopy.cardCtaAlignment]}`} dir="rtl">
+          <div className="inline-flex items-center gap-2 text-sm font-medium text-[#D8B87A]">
+            استكشف المشروع
+            <span className="transition-transform duration-300 group-hover:-translate-x-1">
+              ←
+            </span>
+          </div>
         </div>
       </div>
     </div>

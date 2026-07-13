@@ -262,6 +262,12 @@ function buildHomeProjectsConfig(formData: FormData): HomeProjectsModuleConfig {
       ? alignmentRaw
       : "center";
 
+  const cardAlignRaw = cleanText(formData.get("card_cta_alignment"));
+  const cardCtaAlignment: "right" | "center" | "left" =
+    cardAlignRaw === "right" || cardAlignRaw === "left" || cardAlignRaw === "center"
+      ? cardAlignRaw
+      : "right";
+
   const footerCta =
     label || hasSavedLinkField(footerLink)
       ? {
@@ -281,6 +287,7 @@ function buildHomeProjectsConfig(formData: FormData): HomeProjectsModuleConfig {
     showIntro: parseFormBoolean(formData, "show_intro", false),
     showFooterCta: parseFormBoolean(formData, "show_footer_cta", false),
     projectsLimit,
+    cardCtaAlignment,
     footerCta,
   };
 }
