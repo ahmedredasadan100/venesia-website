@@ -70,8 +70,29 @@ function readCapabilities(): DeviceCapabilities {
   };
 }
 
+function capabilitiesEqual(a: DeviceCapabilities, b: DeviceCapabilities) {
+  return (
+    a.coarsePointer === b.coarsePointer &&
+    a.finePointer === b.finePointer &&
+    a.canHover === b.canHover &&
+    a.hasTouch === b.hasTouch &&
+    a.needsPressFeedback === b.needsPressFeedback &&
+    a.needsInViewReveal === b.needsInViewReveal &&
+    a.needsTouchToggle === b.needsTouchToggle
+  );
+}
+
+/** Store a new snapshot only when real capability values change. */
+function commitCapabilities(next: DeviceCapabilities) {
+  if (capabilitiesEqual(cachedCapabilities, next)) {
+    return false;
+  }
+  cachedCapabilities = next;
+  return true;
+}
+
 function emitCapabilities() {
-  cachedCapabilities = readCapabilities();
+  if (!commitCapabilities(readCapabilities())) return;
   capabilityListeners.forEach((listener) => listener());
 }
 
@@ -86,7 +107,7 @@ function ensureMediaListeners() {
     mq.addEventListener("change", emitCapabilities);
     mediaMqs.push(mq);
   });
-  cachedCapabilities = readCapabilities();
+  commitCapabilities(readCapabilities());
 }
 
 function teardownMediaListeners() {
@@ -108,8 +129,9 @@ function subscribeCapabilities(listener: () => void) {
 }
 
 function getCapabilitiesSnapshot() {
+  // Cache a stable Object reference — never allocate a new snapshot when values match.
   if (!mediaInstalled && typeof window !== "undefined") {
-    cachedCapabilities = readCapabilities();
+    commitCapabilities(readCapabilities());
   }
   return cachedCapabilities;
 }

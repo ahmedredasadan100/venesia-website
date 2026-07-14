@@ -179,30 +179,31 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
     <section className="relative overflow-hidden bg-[#05070B] py-24 text-white max-md:py-10 md:max-lg:py-16">
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid items-center gap-14 max-md:gap-10 lg:grid-cols-[0.95fr_1.05fr]">
-          <div
-            ref={mediaRef}
-            {...inViewProps}
-            data-reveal="soft-scale"
-            className="home-story-media relative min-h-[500px] max-md:min-h-[280px] md:max-lg:mx-auto md:max-lg:min-h-[360px] md:max-lg:w-full md:max-lg:max-w-md"
-          >
-            <HomeStoryMediaFrame
-              className="home-story-frame--main absolute right-0 top-0 z-[1] h-[380px] w-[78%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40 max-md:h-[220px] max-md:w-[70%] md:max-lg:h-[265px] md:max-lg:w-[74%]"
-              imageSrc={resolved.images.main}
-              imageAlt={resolved.images.mainAlt}
-              sizes="(max-width: 768px) 70vw, 40vw"
-              overlayClassName="bg-gradient-to-t from-[#05070B]/65 via-transparent to-transparent"
-            />
+          <div data-reveal="fade-up" data-delay="0" className="home-story-reveal">
+            <div
+              ref={mediaRef}
+              {...inViewProps}
+              className="home-story-media relative min-h-[500px] max-md:min-h-[280px] md:max-lg:mx-auto md:max-lg:min-h-[360px] md:max-lg:w-full md:max-lg:max-w-md"
+            >
+              <HomeStoryMediaFrame
+                className="home-story-frame--main absolute right-0 top-0 z-[1] h-[380px] w-[78%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40 max-md:h-[220px] max-md:w-[70%] md:max-lg:h-[265px] md:max-lg:w-[74%]"
+                imageSrc={resolved.images.main}
+                imageAlt={resolved.images.mainAlt}
+                sizes="(max-width: 768px) 70vw, 40vw"
+                overlayClassName="bg-gradient-to-t from-[#05070B]/65 via-transparent to-transparent"
+              />
 
-            <HomeStoryMediaFrame
-              className="home-story-frame--secondary absolute bottom-0 left-0 z-[2] h-[320px] w-[65%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50 max-md:h-[185px] max-md:w-[58%] md:max-lg:h-[220px] md:max-lg:w-[60%]"
-              imageSrc={resolved.images.secondary}
-              imageAlt={resolved.images.secondaryAlt}
-              sizes="(max-width: 768px) 58vw, 35vw"
-              overlayClassName="bg-gradient-to-t from-[#05070B]/80 via-transparent to-transparent"
-            />
+              <HomeStoryMediaFrame
+                className="home-story-frame--secondary absolute bottom-0 left-0 z-[2] h-[320px] w-[65%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50 max-md:h-[185px] max-md:w-[58%] md:max-lg:h-[220px] md:max-lg:w-[60%]"
+                imageSrc={resolved.images.secondary}
+                imageAlt={resolved.images.secondaryAlt}
+                sizes="(max-width: 768px) 58vw, 35vw"
+                overlayClassName="bg-gradient-to-t from-[#05070B]/80 via-transparent to-transparent"
+              />
+            </div>
           </div>
 
-          <div data-reveal="fade-up">
+          <div data-reveal="fade-up" data-delay="120" className="home-story-reveal">
             <p className="font-en text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70">
               {resolved.eyebrow}
             </p>

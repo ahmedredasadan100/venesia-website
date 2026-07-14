@@ -59,38 +59,38 @@ export default function FooterSocialBar({ immediateReveal = false }: FooterSocia
   return (
     <>
       <div
-        data-reveal
-        data-delay="220"
-        className={`mt-6 flex items-center justify-center gap-2 ${
-          immediateReveal ? "is-revealed" : ""
-        }`}
+        data-reveal="fade-up"
+        data-delay="320"
+        className={immediateReveal ? "is-revealed" : undefined}
       >
-        {links.map(({ platform, label, href }) => (
-          <a
-            key={`${platform}-${href}`}
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={label}
-            className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[#D8B87A]/14 bg-[#05070B]/65 text-white/46 backdrop-blur-md transition-all duration-400 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-[#D8B87A]/38 hover:bg-[#05070B]/80 hover:text-white/78 hover:shadow-[0_0_18px_rgba(216,184,122,0.07),0_4px_20px_rgba(0,0,0,0.18)]"
-          >
-            {platformIcons[platform]}
-          </a>
-        ))}
-      </div>
+        <div className="mt-6 flex items-center justify-center gap-2">
+          {links.map(({ platform, label, href }) => (
+            <a
+              key={`${platform}-${href}`}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={label}
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[#D8B87A]/14 bg-[#05070B]/65 text-white/46 backdrop-blur-md transition-all duration-400 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-[#D8B87A]/38 hover:bg-[#05070B]/80 hover:text-white/78 hover:shadow-[0_0_18px_rgba(216,184,122,0.07),0_4px_20px_rgba(0,0,0,0.18)]"
+            >
+              {platformIcons[platform]}
+            </a>
+          ))}
+        </div>
 
-      <div className="mt-4 border-t border-white/[0.05] pt-4">
-        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-          <p className="text-[12px] text-white/25">
-            © {new Date().getFullYear()} {settings.legal.copyright}
-          </p>
-
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#D8B87A]/40">◆</span>
-
-            <p className="text-[12px] text-white/20">
-              {settings.legal.tagline}
+        <div className="mt-4 border-t border-white/[0.05] pt-4">
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+            <p className="text-[12px] text-white/25">
+              © {new Date().getFullYear()} {settings.legal.copyright}
             </p>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-[#D8B87A]/40">◆</span>
+
+              <p className="text-[12px] text-white/20">
+                {settings.legal.tagline}
+              </p>
+            </div>
           </div>
         </div>
       </div>

@@ -301,8 +301,21 @@ p {
 
 /* Reveal wrappers must not eat pointer events or block press during motion */
 .home-project-card-reveal,
-.home-trust-reveal {
+.home-trust-reveal,
+.home-story-reveal {
   pointer-events: auto;
+}
+
+/* Home Story only — slightly longer fade-up than the shared 550ms / 22px default */
+.home-story-reveal[data-reveal-pending="true"] {
+  transition:
+    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    translate 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    scale 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-story-reveal[data-reveal="fade-up"][data-reveal-pending="true"] {
+  translate: 0 24px;
 }
 
 /* ─── main section ambient canvas ───────────────────────────────────────────────

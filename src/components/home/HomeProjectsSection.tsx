@@ -162,20 +162,18 @@ function HomeProjectCard({
   project,
   cardCtaAlignment,
   slideClass,
-  revealVariant,
   revealDelay,
 }: {
   project: HomepageProjectCard;
   cardCtaAlignment: HomeProjectsButtonAlignment;
   slideClass: string;
-  revealVariant: "from-inline-start" | "from-inline-end";
   revealDelay: number;
 }) {
   const { pressProps } = usePressFeedback();
 
   return (
     <div
-      data-reveal={revealVariant}
+      data-reveal="fade-up"
       data-delay={String(revealDelay)}
       className={`home-project-card-reveal ${slideClass}`}
     >
@@ -423,10 +421,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
                         project={project}
                         cardCtaAlignment={sectionCopy.cardCtaAlignment}
                         slideClass={getProjectCardSlideClass(page.length)}
-                        revealVariant={
-                          cardIndex % 2 === 0 ? "from-inline-start" : "from-inline-end"
-                        }
-                        revealDelay={cardIndex * 70}
+                        revealDelay={cardIndex * 80}
                       />
                     ))}
                   </div>

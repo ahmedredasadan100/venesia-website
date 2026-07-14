@@ -273,7 +273,7 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
   return (
     <section className="mx-auto max-w-7xl px-6 py-7">
       <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
-        <div data-reveal="fade-up">
+        <div data-reveal="from-inline-start" data-delay="0">
           <p
             className={`text-sm text-[#D8B87A] ${TEXT_ALIGN_CLASS[resolved.eyebrowAlignment]}`}
             style={{ fontWeight: resolved.eyebrowBold ? 700 : 400 }}

@@ -31,7 +31,7 @@ export type FooterNavigationContext = {
 };
 
 function revealDelayForIndex(index: number) {
-  return (index - 1) * 60;
+  return (index - 1) * 80;
 }
 
 function limitItems<T>(items: T[], maxItems: number | null) {

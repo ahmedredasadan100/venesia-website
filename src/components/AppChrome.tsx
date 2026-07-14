@@ -13,7 +13,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
       {children}
 
-      <SiteFooter immediateReveal />
+      <SiteFooter />
       <BackToTopButton />
       <PwaShell />
 
