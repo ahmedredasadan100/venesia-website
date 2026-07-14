@@ -2,10 +2,18 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import type { HeroSectionData } from "../../lib/page-sections";
 import { getHeroConfig } from "../../lib/page-sections";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
+import { usePressFeedback } from "../../hooks/use-press-feedback";
 
 type DynamicHeroSectionProps = {
   hero: HeroSectionData;
@@ -61,6 +69,23 @@ function getHeroMobileServerSnapshot() {
 
 function useIsMobileViewport() {
   return useSyncExternalStore(subscribeHeroMobile, getHeroMobileSnapshot, getHeroMobileServerSnapshot);
+}
+
+function HeroPressableLink({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className: string;
+  children: ReactNode;
+}) {
+  const { pressProps } = usePressFeedback();
+  return (
+    <Link href={href} {...pressProps} className={`home-pressable ${className}`}>
+      {children}
+    </Link>
+  );
 }
 
 function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
@@ -198,21 +223,21 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
             {(config.showCta !== false && (config.primaryCtaLabel || config.secondaryCtaLabel)) ? (
               <div className="mt-8 flex flex-wrap gap-3 md:gap-4">
                 {config.primaryCtaLabel && config.primaryCtaHref ? (
-                  <Link
+                  <HeroPressableLink
                     href={config.primaryCtaHref}
-                    className="inline-flex h-11 items-center rounded-full bg-white px-6 font-medium text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7"
+                    className="home-pressable--hero-primary inline-flex h-11 items-center rounded-full bg-white px-6 font-medium text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7"
                   >
                     {config.primaryCtaLabel}
-                  </Link>
+                  </HeroPressableLink>
                 ) : null}
 
                 {config.secondaryCtaLabel && config.secondaryCtaHref ? (
-                  <Link
+                  <HeroPressableLink
                     href={config.secondaryCtaHref}
-                    className="inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 font-medium text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7"
+                    className="home-pressable--hero-secondary inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 font-medium text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7"
                   >
                     {config.secondaryCtaLabel}
-                  </Link>
+                  </HeroPressableLink>
                 ) : null}
               </div>
             ) : null}
@@ -296,21 +321,21 @@ function HeroCtaButtons({ config }: { config: ReturnType<typeof getHeroConfig> }
   return (
     <div className="mt-6 flex flex-wrap gap-3 md:mt-8 md:gap-4">
       {hasPrimary ? (
-        <Link
+        <HeroPressableLink
           href={config.primaryCtaHref!}
-          className="inline-flex h-11 items-center rounded-full bg-white px-6 font-medium text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7"
+          className="home-pressable--hero-primary inline-flex h-11 items-center rounded-full bg-white px-6 font-medium text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7"
         >
           {config.primaryCtaLabel}
-        </Link>
+        </HeroPressableLink>
       ) : null}
 
       {hasSecondary ? (
-        <Link
+        <HeroPressableLink
           href={config.secondaryCtaHref!}
-          className="inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 font-medium text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7"
+          className="home-pressable--hero-secondary inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 font-medium text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7"
         >
           {config.secondaryCtaLabel}
-        </Link>
+        </HeroPressableLink>
       ) : null}
     </div>
   );

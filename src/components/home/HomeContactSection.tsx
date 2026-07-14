@@ -1,10 +1,13 @@
 
+"use client";
+
 import { Fragment } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
 import { HOME_IMAGES } from "../../config/home-images";
 import { buildWhatsAppHref } from "../../lib/contact/build-whatsapp-href";
+import { usePressFeedback } from "../../hooks/use-press-feedback";
 import type { HomeContactContent } from "./home-contact-mappers";
 import { renderContactIcon } from "../page-blocks/contact-icons";
 
@@ -107,12 +110,19 @@ function ContactPhoneLink({
   label: string;
   href: string | null;
 }) {
+  const { pressProps } = usePressFeedback();
   const className =
-    "cursor-pointer whitespace-nowrap text-[12.5px] text-white/70 transition-colors duration-300 hover:text-[#D8B87A]";
+    "home-pressable home-pressable--text-link cursor-pointer whitespace-nowrap text-[12.5px] text-white/70 transition-colors duration-300 hover:text-[#D8B87A]";
 
   if (href) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        {...pressProps}
+        className={className}
+      >
         {label}
       </a>
     );
@@ -157,22 +167,30 @@ function ContactValueRow({
 
   if (href) {
     return (
-      <a
-        href={href}
-        target={href.startsWith("http") ? "_blank" : undefined}
-        rel={href.startsWith("http") ? "noreferrer" : undefined}
-        className="mt-0.5 block cursor-pointer break-all text-[12.5px] text-white/70 transition-colors duration-300 hover:text-[#D8B87A]"
-      >
-        {value}
-      </a>
+      <ContactTextAnchor href={href} value={value} />
     );
   }
 
   return <p className="mt-0.5 text-[12.5px] text-white/70">{value}</p>;
 }
 
+function ContactTextAnchor({ href, value }: { href: string; value: string }) {
+  const { pressProps } = usePressFeedback();
+  return (
+    <a
+      href={href}
+      target={href.startsWith("http") ? "_blank" : undefined}
+      rel={href.startsWith("http") ? "noreferrer" : undefined}
+      {...pressProps}
+      className="home-pressable home-pressable--text-link mt-0.5 block cursor-pointer break-all text-[12.5px] text-white/70 transition-colors duration-300 hover:text-[#D8B87A]"
+    >
+      {value}
+    </a>
+  );
+}
+
 const CTA_CLASS_NAME =
-  "flex cursor-pointer items-center justify-center gap-2.5 rounded-xl bg-[#D8B87A] px-5 py-3 text-sm font-medium text-[#06101C] shadow-[0_8px_24px_rgba(216,184,122,0.20)] transition-[transform,box-shadow,background-color] duration-300 will-change-transform hover:-translate-y-0.5 hover:bg-[#c9a760] hover:shadow-[0_10px_30px_rgba(216,184,122,0.30)] active:scale-[0.97] max-md:w-full max-md:px-4";
+  "home-pressable home-pressable--contact-cta flex cursor-pointer items-center justify-center gap-2.5 rounded-xl bg-[#D8B87A] px-5 py-3 text-sm font-medium text-[#06101C] shadow-[0_8px_24px_rgba(216,184,122,0.20)] transition-[transform,box-shadow,background-color] duration-300 will-change-transform hover:-translate-y-0.5 hover:bg-[#c9a760] hover:shadow-[0_10px_30px_rgba(216,184,122,0.30)] active:scale-[0.97] max-md:w-full max-md:px-4";
 
 function HomeContactCtaButton({
   href,
@@ -183,6 +201,7 @@ function HomeContactCtaButton({
   label: string;
   target?: "_self" | "_blank";
 }) {
+  const { pressProps } = usePressFeedback();
   const external = isExternalHref(href);
   const resolvedTarget = target ?? (external ? "_blank" : undefined);
   const content = (
@@ -212,6 +231,7 @@ function HomeContactCtaButton({
         href={href}
         target={resolvedTarget === "_blank" ? "_blank" : undefined}
         rel={resolvedTarget === "_blank" ? "noreferrer" : undefined}
+        {...pressProps}
         className={CTA_CLASS_NAME}
       >
         {content}
@@ -220,7 +240,7 @@ function HomeContactCtaButton({
   }
 
   return (
-    <Link href={href} className={CTA_CLASS_NAME}>
+    <Link href={href} {...pressProps} className={CTA_CLASS_NAME}>
       {content}
     </Link>
   );

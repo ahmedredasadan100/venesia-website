@@ -8,6 +8,7 @@ import type { HomeProjectsButtonAlignment, HomeProjectsContent } from "./home-pr
 import PlainTextContent from "../content/PlainTextContent";
 import RichTextContent from "../content/RichTextContent";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
+import { usePressFeedback } from "../../hooks/use-press-feedback";
 import { isHtmlContent, stripHtml } from "../../lib/rich-text/html-utils";
 
 export type HomeProjectsSectionProps = {
@@ -157,6 +158,105 @@ function getProjectCardSlideClass(cardCount: number) {
   return "w-full md:w-[calc((100%-2.5rem)/3)] md:max-w-none md:shrink-0";
 }
 
+function HomeProjectCard({
+  project,
+  cardCtaAlignment,
+  slideClass,
+}: {
+  project: HomepageProjectCard;
+  cardCtaAlignment: HomeProjectsButtonAlignment;
+  slideClass: string;
+}) {
+  const { pressProps } = usePressFeedback();
+
+  return (
+    <Link
+      href={getProjectHref(project)}
+      {...pressProps}
+      className={`home-project-card group relative block cursor-pointer overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] text-white shadow-2xl backdrop-blur transition-all duration-500 hover:-translate-y-2 hover:border-[#D8B87A]/20 hover:bg-white/[0.07] hover:shadow-[0_20px_56px_rgba(0,0,0,0.42),0_0_0_1px_rgba(216,184,122,0.06)] ${slideClass}`}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[2rem]"
+      >
+        <span className="home-project-card__edge home-project-card__edge--top absolute inset-x-8 top-0 h-[2px] origin-right scale-x-0 bg-gradient-to-l from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all duration-700 ease-out group-hover:scale-x-100 group-hover:opacity-100" />
+        <span className="home-project-card__edge home-project-card__edge--bottom absolute inset-x-8 bottom-0 h-[2px] origin-left scale-x-0 bg-gradient-to-r from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all delay-150 duration-700 ease-out group-hover:scale-x-100 group-hover:opacity-100" />
+        <span className="home-project-card__edge home-project-card__edge--right absolute inset-y-8 right-0 w-[2px] origin-top scale-y-0 bg-gradient-to-b from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all delay-75 duration-700 ease-out group-hover:scale-y-100 group-hover:opacity-100" />
+        <span className="home-project-card__edge home-project-card__edge--left absolute inset-y-8 left-0 w-[2px] origin-bottom scale-y-0 bg-gradient-to-t from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all delay-200 duration-700 ease-out group-hover:scale-y-100 group-hover:opacity-100" />
+      </div>
+
+      <div className="relative h-[360px] overflow-hidden">
+        <Image
+          src={project.image}
+          alt={`${project.code} - ${project.englishName}`}
+          fill
+          sizes="(max-width: 768px) 100vw, 33vw"
+          className="home-project-card__image transform-gpu object-cover opacity-80 transition-transform duration-[1400ms] ease-out will-change-transform group-hover:scale-[1.035]"
+          style={{
+            filter: "brightness(0.92) contrast(1.08) saturate(0.94)",
+          }}
+        />
+
+        <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/74 to-[#05070B]/18" />
+
+        <div
+          aria-hidden
+          className="home-project-card__shine pointer-events-none absolute inset-0 z-20 -translate-x-[130%] bg-[linear-gradient(115deg,transparent_0%,rgba(216,184,122,0.00)_36%,rgba(216,184,122,0.22)_48%,rgba(255,255,255,0.16)_52%,rgba(216,184,122,0.06)_58%,transparent_72%)] opacity-0 transition-all duration-[1200ms] ease-out group-hover:translate-x-[130%] group-hover:opacity-100"
+        />
+
+        <div className="absolute inset-x-0 bottom-0 z-30 p-6">
+          <p className="mb-2 text-xl font-semibold tracking-[0.16em] text-[#D8B87A]">
+            {project.code}
+          </p>
+
+          <span className="mt-1 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
+            {project.locationLabel}
+          </span>
+
+          <PlainTextContent
+            value={project.shortDescription}
+            as="p"
+            className="mt-4 line-clamp-2 text-sm leading-7 text-white/72"
+          />
+
+          <div className={`mt-6 flex ${CARD_CTA_ALIGN_CLASS[cardCtaAlignment]}`} dir="rtl">
+            <div className="home-project-card__cta inline-flex items-center gap-2 text-sm font-medium text-[#D8B87A] transition-colors duration-300">
+              استكشف المشروع
+              <span className="home-project-card__arrow transition-transform duration-300 group-hover:-translate-x-1">
+                ←
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function HomeProjectsFooterCta({
+  href,
+  label,
+  target,
+}: {
+  href: string;
+  label: string;
+  target: "_self" | "_blank";
+}) {
+  const { pressProps } = usePressFeedback();
+
+  return (
+    <Link
+      href={href}
+      target={target === "_blank" ? "_blank" : undefined}
+      rel={target === "_blank" ? "noopener noreferrer" : undefined}
+      {...pressProps}
+      className="home-pressable home-pressable--projects-footer cursor-pointer rounded-full border border-white/10 bg-white/[0.045] px-7 py-3 text-sm font-medium text-white/80 transition duration-300 hover:border-[#D8B87A]/40 hover:bg-white/[0.08] hover:text-[#D8B87A]"
+    >
+      {label}
+    </Link>
+  );
+}
+
 export default function HomeProjectsSection({ projects, content }: HomeProjectsSectionProps) {
   const [activePage, setActivePage] = useState(0);
   const sectionCopy = resolveHomeProjectsContent(content);
@@ -271,7 +371,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
               <button
                 type="button"
                 onClick={goToNextPage}
-className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#070A0F]/90 text-2xl text-white/80 shadow-[0_0_32px_rgba(216,184,122,0.12)] backdrop-blur-md transition-all duration-300 hover:border-[#D8B87A]/55 hover:bg-[#0B0E14]/95 hover:text-[#D8B87A] hover:shadow-[0_0_38px_rgba(216,184,122,0.20)] lg:flex"
+                className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#070A0F]/90 text-2xl text-white/80 shadow-[0_0_32px_rgba(216,184,122,0.12)] backdrop-blur-md transition-all duration-300 hover:border-[#D8B87A]/55 hover:bg-[#0B0E14]/95 hover:text-[#D8B87A] hover:shadow-[0_0_38px_rgba(216,184,122,0.20)] lg:flex"
                 aria-label="المشاريع التالية"
               >
                 ›
@@ -299,71 +399,13 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
                   style={totalPages > 1 ? { width: `${100 / totalPages}%` } : { width: "100%" }}
                 >
                   {page.map((project) => (
-<Link
-  key={project.id}
-  href={getProjectHref(project)}
-  className={`group relative block cursor-pointer overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] text-white shadow-2xl backdrop-blur transition-all duration-500 hover:-translate-y-2 hover:border-[#D8B87A]/20 hover:bg-white/[0.07] hover:shadow-[0_20px_56px_rgba(0,0,0,0.42),0_0_0_1px_rgba(216,184,122,0.06)] ${getProjectCardSlideClass(page.length)}`}
->
-  {/* Venesia Gold Edge Traces */}
-  <div
-    aria-hidden
-    className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[2rem]"
-  >
-    <span className="absolute inset-x-8 top-0 h-[2px] origin-right scale-x-0 bg-gradient-to-l from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all duration-700 ease-out group-hover:scale-x-100 group-hover:opacity-100" />
-
-    <span className="absolute inset-x-8 bottom-0 h-[2px] origin-left scale-x-0 bg-gradient-to-r from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all delay-150 duration-700 ease-out group-hover:scale-x-100 group-hover:opacity-100" />
-
-    <span className="absolute inset-y-8 right-0 w-[2px] origin-top scale-y-0 bg-gradient-to-b from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all delay-75 duration-700 ease-out group-hover:scale-y-100 group-hover:opacity-100" />
-
-    <span className="absolute inset-y-8 left-0 w-[2px] origin-bottom scale-y-0 bg-gradient-to-t from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all delay-200 duration-700 ease-out group-hover:scale-y-100 group-hover:opacity-100" />
-  </div>
-
-  <div className="relative h-[360px] overflow-hidden">
-      <Image
-        src={project.image}
-        alt={`${project.code} - ${project.englishName}`}
-        fill
-        sizes="(max-width: 768px) 100vw, 33vw"
-        className="transform-gpu object-cover opacity-80 transition-transform duration-[1400ms] ease-out will-change-transform group-hover:scale-[1.035]"
-        style={{
-          filter: "brightness(0.92) contrast(1.08) saturate(0.94)",
-        }}
-      />
-
-      <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/74 to-[#05070B]/18" />
-
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-20 -translate-x-[130%] bg-[linear-gradient(115deg,transparent_0%,rgba(216,184,122,0.00)_36%,rgba(216,184,122,0.22)_48%,rgba(255,255,255,0.16)_52%,rgba(216,184,122,0.06)_58%,transparent_72%)] opacity-0 transition-all duration-[1200ms] ease-out group-hover:translate-x-[130%] group-hover:opacity-100"
-      />
-
-      <div className="absolute inset-x-0 bottom-0 z-30 p-6">
-        <p className="mb-2 text-xl font-semibold tracking-[0.16em] text-[#D8B87A]">
-          {project.code}
-        </p>
-
-        <span className="mt-1 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
-          {project.locationLabel}
-        </span>
-
-        <PlainTextContent
-          value={project.shortDescription}
-          as="p"
-          className="mt-4 line-clamp-2 text-sm leading-7 text-white/72"
-        />
-
-        <div className={`mt-6 flex ${CARD_CTA_ALIGN_CLASS[sectionCopy.cardCtaAlignment]}`} dir="rtl">
-          <div className="inline-flex items-center gap-2 text-sm font-medium text-[#D8B87A]">
-            استكشف المشروع
-            <span className="transition-transform duration-300 group-hover:-translate-x-1">
-              ←
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </Link>
-))}
+                    <HomeProjectCard
+                      key={project.id}
+                      project={project}
+                      cardCtaAlignment={sectionCopy.cardCtaAlignment}
+                      slideClass={getProjectCardSlideClass(page.length)}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
@@ -390,14 +432,11 @@ className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2
 
         {showFooterCta ? (
           <div className={`mt-10 flex ${FOOTER_ALIGN_CLASS[sectionCopy.footerCta.alignment]}`} dir="rtl">
-            <Link
+            <HomeProjectsFooterCta
               href={sectionCopy.footerCta.href}
-              target={sectionCopy.footerCta.target === "_blank" ? "_blank" : undefined}
-              rel={sectionCopy.footerCta.target === "_blank" ? "noopener noreferrer" : undefined}
-              className="cursor-pointer rounded-full border border-white/10 bg-white/[0.045] px-7 py-3 text-sm font-medium text-white/80 transition duration-300 hover:border-[#D8B87A]/40 hover:bg-white/[0.08] hover:text-[#D8B87A]"
-            >
-              {sectionCopy.footerCta.label}
-            </Link>
+              label={sectionCopy.footerCta.label}
+              target={sectionCopy.footerCta.target}
+            />
           </div>
         ) : null}
       </div>
