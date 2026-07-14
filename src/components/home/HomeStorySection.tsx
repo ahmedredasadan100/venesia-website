@@ -207,7 +207,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
               {resolved.eyebrow}
             </p>
 
-            <h2 className="mt-4 max-w-xl text-4xl font-semibold leading-tight lg:text-5xl">
+            <h2 className="home-story-title mt-4 max-w-xl text-4xl font-semibold leading-tight lg:text-5xl">
               {resolved.title}
             </h2>
 

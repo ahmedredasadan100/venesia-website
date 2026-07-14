@@ -1509,6 +1509,25 @@ select.admin-select option {
   scale: 1 1;
 }
 
+/*
+  Home Story title — mobile only: constrains width + text-wrap:balance so the CMS
+  sentence wraps to exactly two lines without forced <br> / nowrap / CMS edits.
+  Desktop keeps text-4xl / lg:text-5xl and max-w-xl as-is.
+*/
+@media (max-width: 767px) {
+  .home-story-title {
+    max-width: min(100%, 21.5rem);
+    text-wrap: balance;
+  }
+}
+
+/* Slight size ease on narrower phones so balance stays at 2 lines (not 3). */
+@media (max-width: 379px) {
+  .home-story-title {
+    font-size: clamp(1.875rem, 7.8vw, 2.125rem);
+  }
+}
+
 /* Horizontal clip only — vertical room for card lift / shadows */
 .home-projects-slider-clip {
   overflow-x: hidden;
