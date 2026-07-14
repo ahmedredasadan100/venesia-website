@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect } from "react";
 
 import type { AboutDocumentaryBeat, AboutIntroContent } from "../about/about-cms-mappers";
 
@@ -57,24 +56,6 @@ function ImageFrame({
 }
 
 export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreModuleSectionProps) {
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const delay = parseInt(entry.target.getAttribute("data-delay") ?? "0", 10);
-            setTimeout(() => entry.target.classList.add("is-revealed"), delay);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.08, rootMargin: "0px 0px -48px 0px" },
-    );
-
-    document.querySelectorAll("[data-reveal]").forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, []);
-
   const intro = cmsIntro;
   const beats = (cmsBeats ?? []).filter(hasFilledBeat);
 
@@ -175,7 +156,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
             {showIntroCopy ? (
               <>
                 <p
-                  data-reveal
+                  data-reveal="fade-up"
                   data-delay="410"
                   className="mb-6 flex items-center gap-3 font-en text-[10px] font-medium uppercase tracking-[0.22em] text-[#D8B87A]/58"
                 >
@@ -183,23 +164,23 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                   {intro!.eyebrow}
                 </p>
 
-                <div data-reveal data-delay="430" className="group">
-                  <h2 className="max-w-[44rem] translate-y-3 text-[2rem] font-bold leading-[1.18] tracking-[-0.025em] text-white opacity-0 transition-all duration-700 ease-out group-[.is-revealed]:translate-y-0 group-[.is-revealed]:opacity-100 md:text-[2.2rem]">
+                <div data-reveal="fade-up" data-delay="430">
+                  <h2 className="max-w-[44rem] text-[2rem] font-bold leading-[1.18] tracking-[-0.025em] text-white md:text-[2.2rem]">
                     {intro!.title}
                   </h2>
                 </div>
 
                 {intro!.subtitle?.trim() ? (
-                  <div data-reveal data-delay="440" className="group">
-                    <p className="mt-2 translate-y-3 text-[1.02rem] font-medium leading-[1.5] text-[#D8B87A]/88 opacity-0 transition-all delay-150 duration-700 ease-out group-[.is-revealed]:translate-y-0 group-[.is-revealed]:opacity-100">
+                  <div data-reveal="fade-up" data-delay="440">
+                    <p className="mt-2 text-[1.02rem] font-medium leading-[1.5] text-[#D8B87A]/88">
                       {intro!.subtitle}
                     </p>
                   </div>
                 ) : null}
 
                 {intro!.description.length ? (
-                  <div data-reveal data-delay="450" className="group">
-                    <div className="mt-5 max-w-[56rem] translate-y-3 text-[15.5px] leading-8 text-white/72 opacity-0 transition-all delay-300 duration-700 ease-out group-[.is-revealed]:translate-y-0 group-[.is-revealed]:opacity-100 md:text-[16px]">
+                  <div data-reveal="fade-up" data-delay="450">
+                    <div className="mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 md:text-[16px]">
                       <div className="space-y-1">
                         {intro!.description.map((paragraph) => (
                           <p key={paragraph}>{paragraph}</p>
@@ -218,7 +199,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                 {beats.map(({ num, title, text }, index) => (
                   <li
                     key={`${num}-${title}-${index}`}
-                    data-reveal
+                    data-reveal="fade-up"
                     data-delay={String(200 + index * 80)}
                     className="group relative min-w-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.035] p-6 text-white backdrop-blur transition-all duration-500 hover:-translate-y-1 hover:border-[#D8B87A]/20 hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]"
                   >

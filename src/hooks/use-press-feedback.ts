@@ -5,90 +5,31 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+
+import {
+  registerPressReset,
+  useNeedsInViewReveal,
+  useNeedsPressFeedback,
+} from "./use-device-capabilities";
+
+export { useNeedsPressFeedback } from "./use-device-capabilities";
 
 /** Treat movement beyond this as scroll, not a press. */
 const PRESS_SCROLL_PX = 16;
 const PRESS_CLEAR_MS = 220;
 
-const TOUCH_MEDIA_QUERIES = [
-  "(hover: none)",
-  "(pointer: coarse)",
-  "(any-pointer: coarse)",
-] as const;
-
-function readDeviceFlags() {
-  const fineHover = Boolean(
-    typeof window !== "undefined" &&
-      window.matchMedia?.("(hover: hover) and (pointer: fine)").matches,
-  );
-  const touchPoints =
-    typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
-  const coarseTouch = Boolean(
-    typeof window !== "undefined" &&
-      window.matchMedia &&
-      TOUCH_MEDIA_QUERIES.some((query) => window.matchMedia(query).matches),
-  );
-  return { fineHover, touchPoints, coarseTouch };
-}
-
-/** Ephemeral press feedback: touch/coarse devices. Mouse desktop stays hover-only. */
-function readNeedsPressFeedback(): boolean {
-  if (typeof window === "undefined") return false;
-  const { fineHover, touchPoints, coarseTouch } = readDeviceFlags();
-  if (fineHover && !touchPoints && !coarseTouch) return false;
-  return touchPoints || coarseTouch;
-}
-
-/**
- * Story in-view latch: touch/coarse only.
- * Fine-pointer desktop (even hybrid trackpads) keeps :hover — no data-in-view.
- */
-function readNeedsInViewReveal(): boolean {
-  if (typeof window === "undefined") return false;
-  const { fineHover, touchPoints, coarseTouch } = readDeviceFlags();
-  if (fineHover && !coarseTouch) return false;
-  return touchPoints || coarseTouch;
-}
-
-function subscribeDeviceFlags(callback: () => void) {
-  if (typeof window === "undefined" || !window.matchMedia) return () => {};
-  const queries = ["(hover: hover) and (pointer: fine)", ...TOUCH_MEDIA_QUERIES];
-  const mqs = queries.map((query) => window.matchMedia(query));
-  mqs.forEach((mq) => mq.addEventListener("change", callback));
-  return () => mqs.forEach((mq) => mq.removeEventListener("change", callback));
-}
-
-function getFalseServerSnapshot() {
-  return false;
-}
-
-export function useNeedsPressFeedback() {
-  return useSyncExternalStore(
-    subscribeDeviceFlags,
-    readNeedsPressFeedback,
-    getFalseServerSnapshot,
-  );
-}
-
-function useNeedsInViewReveal() {
-  return useSyncExternalStore(
-    subscribeDeviceFlags,
-    readNeedsInViewReveal,
-    getFalseServerSnapshot,
-  );
-}
-
 /**
  * Ephemeral press visual for links/cards on touch.
- * Does not prevent navigation; clears on up/leave/scroll/visibility/bfcache.
+ * Does not prevent navigation; clears on up/leave/scroll/cancel/visibility/bfcache.
  */
 export function usePressFeedback() {
   const enabled = useNeedsPressFeedback();
   const [pressed, setPressed] = useState(false);
   const startRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+  const movedRef = useRef(false);
+  const activePointerRef = useRef<number | null>(null);
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clear = useCallback(() => {
@@ -97,6 +38,8 @@ export function usePressFeedback() {
       clearTimerRef.current = null;
     }
     startRef.current = null;
+    movedRef.current = false;
+    activePointerRef.current = null;
     setPressed(false);
   }, []);
 
@@ -107,21 +50,14 @@ export function usePressFeedback() {
 
   useEffect(() => {
     if (!enabled) return;
-    const onPageShow = () => clear();
-    const onPageHide = () => clear();
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") clear();
-    };
-    window.addEventListener("pageshow", onPageShow);
-    window.addEventListener("pagehide", onPageHide);
-    document.addEventListener("visibilitychange", onVisibility);
+    return registerPressReset(clear);
+  }, [clear, enabled]);
+
+  useEffect(() => {
     return () => {
-      window.removeEventListener("pageshow", onPageShow);
-      window.removeEventListener("pagehide", onPageHide);
-      document.removeEventListener("visibilitychange", onVisibility);
       if (clearTimerRef.current != null) clearTimeout(clearTimerRef.current);
     };
-  }, [clear, enabled]);
+  }, []);
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -131,6 +67,8 @@ export function usePressFeedback() {
         clearTimeout(clearTimerRef.current);
         clearTimerRef.current = null;
       }
+      movedRef.current = false;
+      activePointerRef.current = event.pointerId;
       startRef.current = {
         x: event.clientX,
         y: event.clientY,
@@ -148,6 +86,7 @@ export function usePressFeedback() {
       const dx = Math.abs(event.clientX - startRef.current.x);
       const dy = Math.abs(event.clientY - startRef.current.y);
       if (dx > PRESS_SCROLL_PX || dy > PRESS_SCROLL_PX) {
+        movedRef.current = true;
         clear();
       }
     },
@@ -159,11 +98,11 @@ export function usePressFeedback() {
     scheduleClear();
   }, [enabled, scheduleClear]);
 
-  /** Android may cancel still taps; keep press so the following click can navigate. */
+  /** Full reset — cancel must never leave a sticky pressed look. */
   const onPointerCancel = useCallback(() => {
     if (!enabled) return;
-    startRef.current = null;
-  }, [enabled]);
+    clear();
+  }, [clear, enabled]);
 
   const onPointerLeave = useCallback(() => {
     if (!enabled) return;

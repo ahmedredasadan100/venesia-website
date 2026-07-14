@@ -9,6 +9,7 @@
                    Cards with images flip directionally on desktop hover.
                    Touch devices toggle the same directional flip via click
                    (Android may cancel pointer before pointerup; click still fires).
+                   Keyboard (Enter/Space) toggles on all devices.
           VISUAL RULES:
             · Preserve 2-column grid at lg breakpoint
             · Card lift on hover is −1 — only for cards without image
@@ -23,7 +24,6 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -31,6 +31,10 @@ import {
 
 import RichTextContent from "../content/RichTextContent";
 import { isHtmlContent, stripHtml } from "../../lib/rich-text/html-utils";
+import {
+  registerPressReset,
+  useNeedsTouchToggle,
+} from "../../hooks/use-device-capabilities";
 import type { HomeTrustContent, HomeTrustTextAlignment } from "./home-trust-mappers";
 
 const STATIC_DEFAULTS: HomeTrustContent = {
@@ -78,49 +82,8 @@ type HomeTrustFlipVariant = (typeof HOME_TRUST_FLIP_VARIANTS)[number];
 /** Ignore tiny finger jitter; larger deltas = scroll gesture, not a tap. */
 const SCROLL_GESTURE_PX = 16;
 
-const TOUCH_MEDIA_QUERIES = [
-  "(hover: none)",
-  "(pointer: coarse)",
-  "(any-pointer: coarse)",
-] as const;
-
 function flipVariantForIndex(index: number): HomeTrustFlipVariant {
   return HOME_TRUST_FLIP_VARIANTS[index % HOME_TRUST_FLIP_VARIANTS.length]!;
-}
-
-/**
- * Touch devices that need click-to-toggle.
- * Fine-pointer + hover desktops stay hover-only (no sticky click open).
- */
-function readTouchCapability(): boolean {
-  if (typeof window === "undefined") return false;
-  if (window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) {
-    return false;
-  }
-  if (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0) return true;
-  if (!window.matchMedia) return false;
-  return TOUCH_MEDIA_QUERIES.some((query) => window.matchMedia(query).matches);
-}
-
-function subscribeTouchCapability(callback: () => void) {
-  if (typeof window === "undefined" || !window.matchMedia) return () => {};
-  const queries = ["(hover: hover) and (pointer: fine)", ...TOUCH_MEDIA_QUERIES];
-  const mqs = queries.map((query) => window.matchMedia(query));
-  mqs.forEach((mq) => mq.addEventListener("change", callback));
-  return () => mqs.forEach((mq) => mq.removeEventListener("change", callback));
-}
-
-/** SSR: assume no touch so desktop markup stays non-interactive (no role/tabIndex). */
-function getTouchCapabilityServerSnapshot() {
-  return false;
-}
-
-function useTouchInteraction() {
-  return useSyncExternalStore(
-    subscribeTouchCapability,
-    readTouchCapability,
-    getTouchCapabilityServerSnapshot,
-  );
 }
 
 function hasRichTextValue(value?: string | null) {
@@ -196,14 +159,25 @@ export type HomeTrustSectionProps = {
 
 export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
   const resolved = resolveHomeTrustContent(content);
-  const touchInteraction = useTouchInteraction();
+  const needsTouchToggle = useNeedsTouchToggle();
   const [openMobileCardIndex, setOpenMobileCardIndex] = useState<number | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
   const movedRef = useRef(false);
-  const pressedCardIndexRef = useRef<number | null>(null);
+  const touchArmedRef = useRef(false);
+
+  const closeOpenCard = useCallback(() => {
+    setOpenMobileCardIndex(null);
+    pointerStartRef.current = null;
+    movedRef.current = false;
+    touchArmedRef.current = false;
+  }, []);
 
   useEffect(() => {
-    if (!touchInteraction || openMobileCardIndex === null) return;
+    return registerPressReset(closeOpenCard);
+  }, [closeOpenCard]);
+
+  useEffect(() => {
+    if (openMobileCardIndex === null) return;
 
     const onPointerDownOutside = (event: PointerEvent) => {
       const target = event.target;
@@ -214,19 +188,15 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
 
     document.addEventListener("pointerdown", onPointerDownOutside);
     return () => document.removeEventListener("pointerdown", onPointerDownOutside);
-  }, [touchInteraction, openMobileCardIndex]);
+  }, [openMobileCardIndex]);
 
-  const toggleMobileCard = useCallback(
-    (index: number) => {
-      if (!touchInteraction) return;
-      setOpenMobileCardIndex((prev) => (prev === index ? null : index));
-    },
-    [touchInteraction],
-  );
+  const toggleCard = useCallback((index: number) => {
+    setOpenMobileCardIndex((prev) => (prev === index ? null : index));
+  }, []);
 
   const onCardPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>, index: number) => {
-      if (!touchInteraction) return;
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!needsTouchToggle) return;
       if (event.pointerType === "mouse") return;
       pointerStartRef.current = {
         x: event.clientX,
@@ -234,64 +204,76 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
         pointerId: event.pointerId,
       };
       movedRef.current = false;
-      pressedCardIndexRef.current = index;
+      touchArmedRef.current = true;
     },
-    [touchInteraction],
+    [needsTouchToggle],
   );
 
   const onCardPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!touchInteraction || !pointerStartRef.current) return;
+      if (!needsTouchToggle || !pointerStartRef.current) return;
       if (event.pointerType === "mouse") return;
       if (event.pointerId !== pointerStartRef.current.pointerId) return;
       const dx = Math.abs(event.clientX - pointerStartRef.current.x);
       const dy = Math.abs(event.clientY - pointerStartRef.current.y);
       if (dx > SCROLL_GESTURE_PX || dy > SCROLL_GESTURE_PX) {
         movedRef.current = true;
+        touchArmedRef.current = false;
+        pointerStartRef.current = null;
       }
     },
-    [touchInteraction],
+    [needsTouchToggle],
   );
 
-  /**
-   * Chrome Android often fires pointercancel before pointerup on a still tap.
-   * Clear tracking only — do NOT mark as moved, so the subsequent click can open.
-   */
+  /** Full reset on interrupt — click may still fire and is gated by moved/armed flags. */
   const onCardPointerCancel = useCallback(() => {
     pointerStartRef.current = null;
+    // Keep touchArmed if not moved so Android still-tap click can toggle.
+    if (movedRef.current) {
+      touchArmedRef.current = false;
+    }
   }, []);
 
   const onCardClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>, index: number) => {
-      if (!touchInteraction) return;
+      if (!needsTouchToggle) return;
+
+      // Mouse-only interaction must not sticky-open; desktop stays :hover.
+      if (!touchArmedRef.current) {
+        movedRef.current = false;
+        pointerStartRef.current = null;
+        return;
+      }
+
       if (movedRef.current) {
         event.preventDefault();
         movedRef.current = false;
         pointerStartRef.current = null;
-        pressedCardIndexRef.current = null;
+        touchArmedRef.current = false;
         return;
       }
+
       pointerStartRef.current = null;
-      pressedCardIndexRef.current = index;
-      toggleMobileCard(index);
+      touchArmedRef.current = false;
+      toggleCard(index);
     },
-    [touchInteraction, toggleMobileCard],
+    [needsTouchToggle, toggleCard],
   );
 
   const onCardKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>, index: number) => {
-      if (!touchInteraction) return;
       if (event.key !== "Enter" && event.key !== " ") return;
+      // Prevent Space from scrolling the page when activating the card.
       event.preventDefault();
-      toggleMobileCard(index);
+      toggleCard(index);
     },
-    [touchInteraction, toggleMobileCard],
+    [toggleCard],
   );
 
   return (
     <section className="mx-auto max-w-7xl px-6 py-7">
       <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
-        <div data-reveal>
+        <div data-reveal="fade-up">
           <p
             className={`text-sm text-[#D8B87A] ${TEXT_ALIGN_CLASS[resolved.eyebrowAlignment]}`}
             style={{ fontWeight: resolved.eyebrowBold ? 700 : 400 }}
@@ -315,75 +297,79 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
 
         <div
           className="grid items-stretch gap-4 sm:grid-cols-2"
-          data-home-trust-touch={touchInteraction ? "true" : undefined}
+          data-home-trust-touch={needsTouchToggle ? "true" : undefined}
         >
           {resolved.items.map((item, idx) => {
             const hasImage = Boolean(item.image);
             const flipVariant = hasImage ? flipVariantForIndex(idx) : null;
-            const isMobileOpen = touchInteraction && hasImage && openMobileCardIndex === idx;
+            const isExpanded = hasImage && openMobileCardIndex === idx;
 
             return (
               <div
                 key={`${item.title}-${idx}`}
-                data-reveal
+                data-reveal="fade-up"
                 data-delay={String(idx * 80)}
-                data-flip={flipVariant ?? undefined}
-                data-home-trust-flip-card={hasImage ? "true" : undefined}
-                data-mobile-open={isMobileOpen ? "true" : undefined}
-                role={touchInteraction && hasImage ? "button" : undefined}
-                tabIndex={touchInteraction && hasImage ? 0 : undefined}
-                aria-expanded={touchInteraction && hasImage ? isMobileOpen : undefined}
-                aria-label={
-                  touchInteraction && hasImage
-                    ? isMobileOpen
-                      ? `إخفاء تفاصيل: ${item.title}`
-                      : `عرض تفاصيل: ${item.title}`
-                    : undefined
-                }
-                onPointerDown={hasImage ? (event) => onCardPointerDown(event, idx) : undefined}
-                onPointerMove={hasImage ? onCardPointerMove : undefined}
-                onPointerCancel={hasImage ? onCardPointerCancel : undefined}
-                onClick={hasImage ? (event) => onCardClick(event, idx) : undefined}
-                onKeyDown={hasImage ? (event) => onCardKeyDown(event, idx) : undefined}
-                className={[
-                  "home-trust-card group relative text-white",
-                  hasImage
-                    ? `home-trust-card--has-image home-trust-card--flip-${flipVariant}`
-                    : "overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] backdrop-blur transition-[transform,border-color,box-shadow] duration-500 hover:-translate-y-1 hover:border-white/[0.17] hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]",
-                  touchInteraction && hasImage ? "cursor-pointer" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                className="home-trust-reveal"
               >
-                <div className="home-trust-card__inner">
-                  <div className="home-trust-card__front">
-                    <div
-                      aria-hidden
-                      className="home-trust-card__reveal-line absolute inset-x-0 top-0 z-10 h-px origin-right scale-x-0 bg-gradient-to-l from-[#D8B87A]/60 via-[#D8B87A]/25 to-transparent transition-transform duration-500 ease-out group-hover:scale-x-100"
-                    />
-                    <TrustCardFaceContent title={item.title} text={item.text} showIcon face="front" />
-                  </div>
+                <div
+                  data-flip={flipVariant ?? undefined}
+                  data-home-trust-flip-card={hasImage ? "true" : undefined}
+                  data-mobile-open={isExpanded ? "true" : undefined}
+                  role={hasImage ? "button" : undefined}
+                  tabIndex={hasImage ? 0 : undefined}
+                  aria-expanded={hasImage ? isExpanded : undefined}
+                  aria-label={
+                    hasImage
+                      ? isExpanded
+                        ? `إخفاء تفاصيل: ${item.title}`
+                        : `عرض تفاصيل: ${item.title}`
+                      : undefined
+                  }
+                  onPointerDown={hasImage ? onCardPointerDown : undefined}
+                  onPointerMove={hasImage ? onCardPointerMove : undefined}
+                  onPointerCancel={hasImage ? onCardPointerCancel : undefined}
+                  onClick={hasImage ? (event) => onCardClick(event, idx) : undefined}
+                  onKeyDown={hasImage ? (event) => onCardKeyDown(event, idx) : undefined}
+                  className={[
+                    "home-trust-card group relative text-white",
+                    hasImage
+                      ? `home-trust-card--has-image home-trust-card--flip-${flipVariant}`
+                      : "overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] backdrop-blur transition-[transform,border-color,box-shadow] duration-500 hover:-translate-y-1 hover:border-white/[0.17] hover:shadow-[0_8px_40px_rgba(0,0,0,0.28)]",
+                    hasImage ? "cursor-pointer" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <div className="home-trust-card__inner">
+                    <div className="home-trust-card__front">
+                      <div
+                        aria-hidden
+                        className="home-trust-card__reveal-line absolute inset-x-0 top-0 z-10 h-px origin-right bg-gradient-to-l from-[#D8B87A]/60 via-[#D8B87A]/25 to-transparent transition-[scale] duration-500 ease-out scale-x-0 group-hover:scale-x-100"
+                      />
+                      <TrustCardFaceContent title={item.title} text={item.text} showIcon face="front" />
+                    </div>
 
-                  {hasImage ? (
-                    <div className="home-trust-card__back" aria-hidden="true">
-                      <div className="home-trust-card__media">
-                        <Image
-                          src={item.image!}
-                          alt=""
-                          fill
-                          className="home-trust-card__image home-trust-card__back-image"
-                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 280px"
+                    {hasImage ? (
+                      <div className="home-trust-card__back" aria-hidden="true">
+                        <div className="home-trust-card__media">
+                          <Image
+                            src={item.image!}
+                            alt=""
+                            fill
+                            className="home-trust-card__image home-trust-card__back-image"
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 280px"
+                          />
+                        </div>
+                        <div className="home-trust-card__overlay" />
+                        <TrustCardFaceContent
+                          title={item.title}
+                          text={item.text}
+                          showIcon={false}
+                          face="back"
                         />
                       </div>
-                      <div className="home-trust-card__overlay" />
-                      <TrustCardFaceContent
-                        title={item.title}
-                        text={item.text}
-                        showIcon={false}
-                        face="back"
-                      />
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
               </div>
             );

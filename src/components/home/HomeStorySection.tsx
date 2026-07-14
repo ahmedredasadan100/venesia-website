@@ -131,10 +131,10 @@ function HomeStoryMediaFrame({
 
       <div
         aria-hidden
-        className="home-story-frame__shine pointer-events-none absolute inset-0 z-20 -translate-x-[130%] bg-[linear-gradient(115deg,transparent_0%,rgba(216,184,122,0.00)_36%,rgba(216,184,122,0.22)_48%,rgba(255,255,255,0.16)_52%,rgba(216,184,122,0.06)_58%,transparent_72%)] opacity-0 transition-all duration-[1200ms] ease-out group-hover:translate-x-[130%] group-hover:opacity-100"
+        className="home-story-frame__shine pointer-events-none absolute inset-0 z-20 -translate-x-[130%] bg-[linear-gradient(115deg,transparent_0%,rgba(216,184,122,0.00)_36%,rgba(216,184,122,0.22)_48%,rgba(255,255,255,0.16)_52%,rgba(216,184,122,0.06)_58%,transparent_72%)] opacity-0 transition-[translate,opacity] duration-[1200ms] ease-out group-hover:translate-x-[130%] group-hover:opacity-100"
       />
 
-      <div className="home-story-frame__line absolute inset-x-8 bottom-0 z-30 h-px origin-center scale-x-0 bg-gradient-to-l from-transparent via-[#D8B87A]/80 to-transparent transition-transform duration-700 group-hover:scale-x-100" />
+      <div className="home-story-frame__line absolute inset-x-8 bottom-0 z-30 h-px origin-center scale-x-0 bg-gradient-to-l from-transparent via-[#D8B87A]/80 to-transparent transition-[scale] duration-700 group-hover:scale-x-100" />
     </div>
   );
 }
@@ -182,6 +182,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
           <div
             ref={mediaRef}
             {...inViewProps}
+            data-reveal="soft-scale"
             className="home-story-media relative min-h-[500px] max-md:min-h-[280px] md:max-lg:mx-auto md:max-lg:min-h-[360px] md:max-lg:w-full md:max-lg:max-w-md"
           >
             <HomeStoryMediaFrame
@@ -201,7 +202,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
             />
           </div>
 
-          <div>
+          <div data-reveal="fade-up">
             <p className="font-en text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70">
               {resolved.eyebrow}
             </p>

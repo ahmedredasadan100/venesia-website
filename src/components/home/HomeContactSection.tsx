@@ -260,13 +260,13 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
 
       {/* ── CTA panel ── */}
       <div
-        data-reveal
+        data-reveal="fade-up"
         className="group relative overflow-hidden rounded-[2.5rem] border border-[#D8B87A]/[0.11] bg-[#05070B] shadow-[0_0_0_1px_rgba(216,184,122,0.05),0_32px_80px_rgba(0,0,0,0.45)]"
       >
         {/* premium moving gold frame — sweeps full width on hover */}
         <div
           aria-hidden
-          className="absolute inset-x-0 top-0 z-10 h-px origin-right scale-x-0 bg-gradient-to-l from-transparent via-[#D8B87A]/55 to-transparent transition-transform duration-700 ease-out group-hover:scale-x-100"
+          className="absolute inset-x-0 top-0 z-10 h-px origin-right scale-x-0 bg-gradient-to-l from-transparent via-[#D8B87A]/55 to-transparent transition-[scale] duration-700 ease-out group-hover:scale-x-100"
         />
 
         {/* panel ambient — warm gold bloom biased toward the building side */}
@@ -316,7 +316,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
 
             {/* content — headline, description, CTA */}
             <div
-              data-reveal
+              data-reveal="fade-up"
               data-delay="60"
               className="relative z-10 flex flex-col justify-center px-10 py-10 pr-[50%] max-md:px-6 max-md:pb-4 max-md:pr-6 max-md:pt-28 lg:px-12 lg:py-12 lg:pr-[52%]"
             >
@@ -355,7 +355,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
             {resolved.contacts.map(({ icon, label, value, secondaryValue, href }, idx) => (
               <div
                 key={label || idx}
-                data-reveal
+                data-reveal="fade-up"
                 data-delay={String(idx * 80)}
                 className="flex items-center gap-3.5 px-6 py-[1.1rem]"
               >

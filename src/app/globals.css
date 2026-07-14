@@ -239,23 +239,70 @@ p {
   animation: venesia-gold-sweep 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
-/* ─── scroll reveal ────────────────────────────────────────────────────────────
-   Cinematic "section gently wakes up" pattern.
-   Elements start invisible and 24px below their resting position, then ease
-   upward into place with a long, decelerated curve — unhurried and premium.
+/* ─── scroll reveal (safe-by-default) ─────────────────────────────────────────
+   Content is VISIBLE without JS. RevealAnimations arms [data-reveal-pending]
+   only after IntersectionObserver is confirmed and reduced-motion is off.
+   Variants use logical inline axes so RTL flips start/end correctly.
    Delay is injected via JS setTimeout (data-delay attr, milliseconds).        */
 [data-reveal] {
-  opacity: 0;
-  transform: translateY(24px);
-  transition:
-    opacity   0.95s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.95s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
+  /* visible by default — no FOUC / no blank content if JS fails */
+  opacity: 1;
+  translate: none;
+  scale: none;
 }
 
-[data-reveal].is-revealed {
+[data-reveal][data-reveal-pending="true"] {
+  opacity: 0;
+  transition:
+    opacity 550ms cubic-bezier(0.22, 1, 0.36, 1),
+    translate 550ms cubic-bezier(0.22, 1, 0.36, 1),
+    scale 550ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-reveal="fade-up"][data-reveal-pending="true"],
+[data-reveal][data-reveal-pending="true"]:not([data-reveal="from-inline-start"]):not([data-reveal="from-inline-end"]):not([data-reveal="soft-scale"]) {
+  translate: 0 22px;
+}
+
+[data-reveal="from-inline-start"][data-reveal-pending="true"] {
+  translate: 22px 0;
+}
+
+[data-reveal="from-inline-end"][data-reveal-pending="true"] {
+  translate: -22px 0;
+}
+
+/* Physical: inline-start = right in RTL, left in LTR */
+:dir(rtl) [data-reveal="from-inline-start"][data-reveal-pending="true"] {
+  translate: 22px 0;
+}
+:dir(rtl) [data-reveal="from-inline-end"][data-reveal-pending="true"] {
+  translate: -22px 0;
+}
+:dir(ltr) [data-reveal="from-inline-start"][data-reveal-pending="true"] {
+  translate: -22px 0;
+}
+:dir(ltr) [data-reveal="from-inline-end"][data-reveal-pending="true"] {
+  translate: 22px 0;
+}
+
+[data-reveal="soft-scale"][data-reveal-pending="true"] {
+  opacity: 0;
+  scale: 0.98;
+  translate: none;
+}
+
+[data-reveal].is-revealed,
+[data-reveal][data-reveal-pending="true"].is-revealed {
   opacity: 1;
-  transform: translateY(0);
+  translate: 0 0;
+  scale: 1;
+}
+
+/* Reveal wrappers must not eat pointer events or block press during motion */
+.home-project-card-reveal,
+.home-trust-reveal {
+  pointer-events: auto;
 }
 
 /* ─── main section ambient canvas ───────────────────────────────────────────────
@@ -1176,7 +1223,7 @@ select.admin-select option {
   Attribute-driven; higher specificity than translateZ(0) idle.
 */
 .home-trust-card--has-image[data-mobile-open="true"] .home-trust-card__reveal-line {
-  transform: scaleX(1);
+  scale: 1 1;
 }
 
 .home-trust-card--flip-right[data-mobile-open="true"] .home-trust-card__inner {
@@ -1314,7 +1361,7 @@ select.admin-select option {
 */
 @media (prefers-reduced-motion: reduce) {
   .home-trust-card--has-image .home-trust-card__inner {
-    transition: transform 280ms ease !important;
+    transition: transform 0.01ms ease !important;
   }
 
   .home-trust-card--has-image .home-trust-card__icon,
@@ -1358,7 +1405,7 @@ select.admin-select option {
 }
 
 .home-project-card[data-pressed="true"] {
-  transform: translateY(-0.5rem);
+  translate: 0 -0.5rem;
   border-color: rgba(216, 184, 122, 0.2);
   background-color: rgba(255, 255, 255, 0.07);
   box-shadow:
@@ -1366,26 +1413,29 @@ select.admin-select option {
     0 0 0 1px rgba(216, 184, 122, 0.06);
 }
 
-/* !important only where Tailwind opacity/transform utilities would win */
+/*
+  Tailwind v4 keeps scale / translate as independent longhands.
+  Overrides must set those same longhands (not only transform).
+*/
 .home-project-card[data-pressed="true"] .home-project-card__image {
-  transform: scale(1.035) !important;
+  scale: 1.035;
 }
 
 .home-project-card[data-pressed="true"] .home-project-card__edge--top,
 .home-project-card[data-pressed="true"] .home-project-card__edge--bottom {
-  transform: scaleX(1) !important;
-  opacity: 1 !important;
+  scale: 1 1;
+  opacity: 1;
 }
 
 .home-project-card[data-pressed="true"] .home-project-card__edge--right,
 .home-project-card[data-pressed="true"] .home-project-card__edge--left {
-  transform: scaleY(1) !important;
-  opacity: 1 !important;
+  scale: 1 1;
+  opacity: 1;
 }
 
 .home-project-card[data-pressed="true"] .home-project-card__shine {
-  opacity: 1 !important;
-  transform: translateX(40%) !important;
+  opacity: 1;
+  translate: 40% 0;
 }
 
 .home-project-card[data-pressed="true"] .home-project-card__cta {
@@ -1393,7 +1443,7 @@ select.admin-select option {
 }
 
 .home-project-card[data-pressed="true"] .home-project-card__arrow {
-  transform: translateX(-0.25rem) !important;
+  translate: -0.25rem 0;
 }
 
 .home-pressable--projects-footer[data-pressed="true"] {
@@ -1403,13 +1453,14 @@ select.admin-select option {
 }
 
 .home-pressable--story-cta[data-pressed="true"] {
-  transform: translateY(-0.125rem);
+  translate: 0 -0.125rem;
   background-color: #d8b87a;
   color: #111111;
 }
 
 .home-pressable--contact-cta[data-pressed="true"] {
-  transform: translateY(-0.125rem) scale(0.97);
+  translate: 0 -0.125rem;
+  scale: 0.97;
   background-color: #c9a760;
   box-shadow: 0 10px 30px rgba(216, 184, 122, 0.3);
 }
@@ -1419,18 +1470,22 @@ select.admin-select option {
 }
 
 .home-pressable--hero-primary[data-pressed="true"] {
-  transform: translateY(-0.125rem);
+  translate: 0 -0.125rem;
   background-color: rgba(255, 255, 255, 0.9);
 }
 
 .home-pressable--hero-secondary[data-pressed="true"] {
-  transform: translateY(-0.125rem);
+  translate: 0 -0.125rem;
   border-color: rgba(255, 255, 255, 0.25);
   background-color: rgba(255, 255, 255, 0.1);
 }
 
+/*
+  Story decorative latch — uses translate/scale longhands so it does not fight
+  the outer soft-scale reveal (which owns the media wrapper only).
+*/
 .home-story-media[data-in-view="true"] .home-story-frame {
-  transform: translateY(-0.25rem);
+  translate: 0 -0.25rem;
 }
 
 .home-story-media[data-in-view="true"] .home-story-frame--main {
@@ -1442,16 +1497,78 @@ select.admin-select option {
 }
 
 .home-story-media[data-in-view="true"] .home-story-frame__image {
-  transform: scale(1.05) !important;
+  scale: 1.05;
 }
 
 .home-story-media[data-in-view="true"] .home-story-frame__shine {
-  opacity: 1 !important;
-  transform: translateX(40%) !important;
+  opacity: 1;
+  translate: 40% 0;
 }
 
 .home-story-media[data-in-view="true"] .home-story-frame__line {
-  transform: scaleX(1) !important;
+  scale: 1 1;
+}
+
+/* Horizontal clip only — vertical room for card lift / shadows */
+.home-projects-slider-clip {
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+/* ─── home reduced motion (targeted; do not blanket-kill slider translateX) ─── */
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal],
+  [data-reveal][data-reveal-pending="true"],
+  [data-reveal].is-revealed {
+    opacity: 1 !important;
+    translate: none !important;
+    scale: none !important;
+    transition: none !important;
+  }
+
+  .hero-slide-ken-burns,
+  .hero-slide-ken-burns-alt,
+  .hero-card-ken-burns,
+  .hero-card-ken-burns-alt {
+    animation: none !important;
+  }
+
+  [data-hero-reduced-motion="true"] .hero-slide-ken-burns,
+  [data-hero-reduced-motion="true"] .hero-slide-ken-burns-image {
+    animation: none !important;
+  }
+
+  .home-projects-slider-track {
+    transition-duration: 0.01ms !important;
+  }
+
+  .home-project-card[data-pressed="true"],
+  .home-pressable--story-cta[data-pressed="true"],
+  .home-pressable--contact-cta[data-pressed="true"],
+  .home-pressable--hero-primary[data-pressed="true"],
+  .home-pressable--hero-secondary[data-pressed="true"] {
+    translate: none;
+    scale: none;
+  }
+
+  .home-project-card[data-pressed="true"] .home-project-card__image,
+  .home-project-card[data-pressed="true"] .home-project-card__shine,
+  .home-project-card[data-pressed="true"] .home-project-card__edge--top,
+  .home-project-card[data-pressed="true"] .home-project-card__edge--bottom,
+  .home-project-card[data-pressed="true"] .home-project-card__edge--right,
+  .home-project-card[data-pressed="true"] .home-project-card__edge--left,
+  .home-project-card[data-pressed="true"] .home-project-card__arrow {
+    transition: none !important;
+  }
+
+  .home-story-media[data-in-view="true"] .home-story-frame,
+  .home-story-media[data-in-view="true"] .home-story-frame__image,
+  .home-story-media[data-in-view="true"] .home-story-frame__shine,
+  .home-story-media[data-in-view="true"] .home-story-frame__line {
+    translate: none;
+    scale: none;
+    transition: none !important;
+  }
 }
 
 
