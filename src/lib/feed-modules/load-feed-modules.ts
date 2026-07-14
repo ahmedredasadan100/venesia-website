@@ -1,9 +1,11 @@
 import "server-only";
 
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
+import { getPublishedPageBySlug } from "../pages/get-published-page-by-slug";
 import { normalizeBoolean } from "../page-blocks/admin-utils";
 import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
 import type { PageLayoutSlot } from "../page-blocks/layout-slots";
@@ -24,28 +26,20 @@ export type LoadedFeedModule = ResolvedFeedModule & {
   slot: PageLayoutSlot;
 };
 
-export async function loadFeedModulesForPageSlug(pageSlug: string): Promise<LoadedFeedModule[]> {
+export const loadFeedModulesForPageSlug = cache(async function loadFeedModulesForPageSlug(
+  pageSlug: string,
+): Promise<LoadedFeedModule[]> {
   return unstable_cache(
     async () => queryFeedModulesForPageSlug(pageSlug),
     ["feed-modules", pageSlug],
     { revalidate: 300, tags: ["page-composition", "feed-modules"] },
   )();
-}
+});
 
 async function queryFeedModulesForPageSlug(pageSlug: string): Promise<LoadedFeedModule[]> {
   const supabase = getSupabaseAdmin();
 
-  const { data: page, error: pageError } = await supabase
-    .from("pages")
-    .select("id")
-    .eq("slug", pageSlug)
-    .eq("status", "published")
-    .maybeSingle();
-
-  if (pageError) {
-    logError("loadFeedModulesForPageSlug: page lookup failed", pageError, { pageSlug });
-  }
-
+  const page = await getPublishedPageBySlug(pageSlug);
   if (!page) return [];
 
   const { data: assignments, error: assignmentsError } = await supabase

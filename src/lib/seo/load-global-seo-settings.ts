@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -16,7 +17,7 @@ async function queryGlobalSeoSettings(): Promise<GlobalSeoSettings> {
     .maybeSingle();
 
   if (error) {
-    logError("loadGlobalSeoSettings failed", error);
+    logError("loadGlobalSeoSettings failed", error, { resource: "site_settings:seo" });
     return getGlobalSeoDefaults();
   }
 
@@ -27,10 +28,10 @@ async function queryGlobalSeoSettings(): Promise<GlobalSeoSettings> {
   return parseGlobalSeoValue(data.value);
 }
 
-export async function loadGlobalSeoSettings(): Promise<GlobalSeoSettings> {
+export const loadGlobalSeoSettings = cache(async function loadGlobalSeoSettings(): Promise<GlobalSeoSettings> {
   return unstable_cache(
     async () => queryGlobalSeoSettings(),
     ["global-seo-settings"],
     { revalidate: 300, tags: ["seo-global", "site-settings"] },
   )();
-}
+});

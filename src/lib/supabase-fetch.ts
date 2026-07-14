@@ -1,6 +1,9 @@
 /**
  * Fetch wrapper for Supabase clients with a hard timeout so builds/runtime
  * cannot hang indefinitely when the database is unreachable.
+ *
+ * Timeouts throw a typed TimeoutError (code SUPABASE_TIMEOUT) so callers/loggers
+ * can treat them as expected public fallbacks instead of raw AbortError noise.
  */
 export function createSupabaseFetch(defaultTimeoutMs = 8000): typeof fetch {
   const configured = Number.parseInt(
@@ -29,6 +32,29 @@ export function createSupabaseFetch(defaultTimeoutMs = 8000): typeof fetch {
         ...init,
         signal: controller.signal,
       });
+    } catch (error) {
+      const aborted =
+        (error instanceof Error && error.name === "AbortError") ||
+        (typeof DOMException !== "undefined" &&
+          error instanceof DOMException &&
+          error.name === "AbortError");
+
+      if (aborted) {
+        const timedOut = !upstreamSignal?.aborted;
+        const timeoutError = new Error(
+          timedOut
+            ? `Supabase request timed out after ${timeoutMs}ms`
+            : "Supabase request was aborted",
+        );
+        timeoutError.name = "TimeoutError";
+        Object.assign(timeoutError, {
+          code: "SUPABASE_TIMEOUT",
+          cause: error,
+        });
+        throw timeoutError;
+      }
+
+      throw error;
     } finally {
       clearTimeout(timeoutId);
       upstreamSignal?.removeEventListener("abort", onAbort);

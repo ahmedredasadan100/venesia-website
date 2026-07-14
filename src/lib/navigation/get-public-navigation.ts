@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -21,7 +22,7 @@ async function fetchSlugMap(table: "topics" | "topic_categories" | "projects", i
   const { data, error } = await getSupabaseAdmin().from(table).select("id, slug").in("id", ids);
 
   if (error) {
-    logError(`Failed to resolve ${table} slugs for navigation`, error, { ids });
+    logError(`Failed to resolve ${table} slugs for navigation`, error, { ids, table, resource: `nav-slugs:${table}` });
     return slugMap;
   }
 
@@ -41,7 +42,7 @@ async function getPublicNavigationItemsForMenuId(menuId: number): Promise<Public
     .order("sort_order", { ascending: true });
 
   if (itemsError) {
-    logError("Failed to load navigation menu items", itemsError, { menuId });
+    logError("Failed to load navigation menu items", itemsError, { menuId, resource: `menu-items:${menuId}` });
     return [];
   }
 
@@ -51,25 +52,33 @@ async function getPublicNavigationItemsForMenuId(menuId: number): Promise<Public
   return buildPublicMenuTree(cleanRows, maps);
 }
 
-export async function getPublicNavigationItemsByMenuId(menuId: number): Promise<PublicNavigationItem[]> {
+export const getPublicNavigationItemsByMenuId = cache(async function getPublicNavigationItemsByMenuId(
+  menuId: number,
+): Promise<PublicNavigationItem[]> {
   if (!Number.isFinite(menuId) || menuId < 1) return [];
 
-  const { data: menu, error: menuError } = await getSupabaseAdmin()
-    .from("menus")
-    .select("id, is_active")
-    .eq("id", menuId)
-    .eq("is_active", true)
-    .maybeSingle();
+  return unstable_cache(
+    async () => {
+      const { data: menu, error: menuError } = await getSupabaseAdmin()
+        .from("menus")
+        .select("id, is_active")
+        .eq("id", menuId)
+        .eq("is_active", true)
+        .maybeSingle();
 
-  if (menuError) {
-    logError("Failed to load navigation menu by id", menuError, { menuId });
-    return [];
-  }
+      if (menuError) {
+        logError("Failed to load navigation menu by id", menuError, { menuId, resource: `menu:${menuId}` });
+        return [];
+      }
 
-  if (!menu) return [];
+      if (!menu) return [];
 
-  return getPublicNavigationItemsForMenuId(menuId);
-}
+      return getPublicNavigationItemsForMenuId(menuId);
+    },
+    ["public-navigation-menu-id", String(menuId)],
+    { revalidate: 300, tags: ["navigation", "menus"] },
+  )();
+});
 
 async function queryPublicNavigationItems(location: string): Promise<PublicNavigationItem[]> {
   const { data: menu, error: menuError } = await getSupabaseAdmin()
@@ -82,7 +91,7 @@ async function queryPublicNavigationItems(location: string): Promise<PublicNavig
     .maybeSingle();
 
   if (menuError) {
-    logError("Failed to load navigation menu", menuError, { location });
+    logError("Failed to load navigation menu", menuError, { location, resource: `menu-location:${location}` });
     return [];
   }
 
@@ -91,10 +100,12 @@ async function queryPublicNavigationItems(location: string): Promise<PublicNavig
   return getPublicNavigationItemsForMenuId(menu.id);
 }
 
-export async function getPublicNavigationItems(location = "main"): Promise<PublicNavigationItem[]> {
+export const getPublicNavigationItems = cache(async function getPublicNavigationItems(
+  location = "main",
+): Promise<PublicNavigationItem[]> {
   return unstable_cache(
     async () => queryPublicNavigationItems(location),
     ["public-navigation", location],
     { revalidate: 300, tags: ["navigation", "menus"] },
   )();
-}
+});

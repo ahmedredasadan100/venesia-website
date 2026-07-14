@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { unstable_cache, unstable_noStore as noStore } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -71,7 +72,7 @@ async function queryFooterSettings(): Promise<FooterSettings> {
     .in("key", [...FOOTER_LOADER_SETTING_KEYS]);
 
   if (error) {
-    logError("loadFooterSettings failed", error);
+    logError("loadFooterSettings failed", error, { resource: "site_settings:footer" });
     return DEFAULT_FOOTER_SETTINGS;
   }
 
@@ -85,13 +86,13 @@ async function queryFooterSettings(): Promise<FooterSettings> {
   return resolveFooterSettingsLinks(settings);
 }
 
-export async function loadFooterSettings(): Promise<FooterSettings> {
+export const loadFooterSettings = cache(async function loadFooterSettings(): Promise<FooterSettings> {
   return unstable_cache(
     async () => queryFooterSettings(),
     ["public-footer-settings"],
     { revalidate: 300, tags: ["footer", "site-settings"] },
   )();
-}
+});
 
 export async function loadFooterSettingsForAdmin(): Promise<FooterSettings> {
   noStore();

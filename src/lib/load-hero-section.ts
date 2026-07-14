@@ -1,9 +1,11 @@
 import "server-only";
 
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
 import { resolveHeroConfigLinks } from "./admin/links/hero-config";
 import { getMediaHref, getMediaItems } from "./media-center";
+import { getPublishedPageBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { logError } from "./logging";
 import { supabase } from "./supabase";
@@ -30,20 +32,8 @@ type HeroTemplateRecord = {
 };
 
 async function getPageBySlug(slug: string): Promise<PageRecord | null> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("pages")
-    .select("id,title,slug,path,page_type,status")
-    .eq("slug", slug)
-    .eq("status", "published")
-    .maybeSingle();
-
-  if (error) {
-    logError("getPageBySlug failed", error, { slug });
-    return null;
-  }
-
-  if (!data) return null;
-  return data as PageRecord;
+  const page = await getPublishedPageBySlug(slug);
+  return page as PageRecord | null;
 }
 
 function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): HeroSectionData {
@@ -226,13 +216,15 @@ export type HeroSectionState = {
 /**
  * Resolves hero visibility for CMS pages — distinguishes missing assignment from admin-hidden.
  */
-export async function getHeroSectionState(pageSlug: string): Promise<HeroSectionState> {
+export const getHeroSectionState = cache(async function getHeroSectionState(
+  pageSlug: string,
+): Promise<HeroSectionState> {
   return unstable_cache(
     async () => queryHeroSectionState(pageSlug),
     ["hero-section-state", pageSlug],
     { revalidate: 300, tags: ["page-composition", "hero"] },
   )();
-}
+});
 
 async function queryHeroSectionState(pageSlug: string): Promise<HeroSectionState> {
   const page = await getPageBySlug(pageSlug);

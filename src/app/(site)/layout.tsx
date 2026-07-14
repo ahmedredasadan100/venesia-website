@@ -35,7 +35,10 @@ export default async function SiteLayout({
       getPublicNavigationItems("footer"),
     ]);
   } catch (error) {
-    logError("Failed to preload public navigation in site layout", error, { location: "main/footer" });
+    logError("Failed to preload public navigation in site layout", error, {
+      location: "main/footer",
+      resource: "layout:navigation",
+    });
   }
 
   if (!footerSettings) {

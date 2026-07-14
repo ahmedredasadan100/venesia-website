@@ -1,1 +1,1 @@
-export { logDebug, logError, logInfo, logWarn } from "./logger";
+export { logDebug, logError, logInfo, logWarn, resetFallbackWarningDedupe } from "./logger";

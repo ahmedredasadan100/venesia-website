@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -32,7 +33,7 @@ async function queryPageSeoByPath(path: string): Promise<PageSeoData | null> {
     .maybeSingle<DbPageSeoRow>();
 
   if (error) {
-    logError("loadPageSeoByPath failed", error, { path: normalizedPath });
+    logError("loadPageSeoByPath failed", error, { path: normalizedPath, resource: `page-seo:${normalizedPath}` });
     return null;
   }
 
@@ -41,7 +42,9 @@ async function queryPageSeoByPath(path: string): Promise<PageSeoData | null> {
   return mapPageSeoRow(data);
 }
 
-export async function loadPageSeoByPath(path: string): Promise<PageSeoData | null> {
+export const loadPageSeoByPath = cache(async function loadPageSeoByPath(
+  path: string,
+): Promise<PageSeoData | null> {
   const normalizedPath = normalizePath(path);
 
   return unstable_cache(
@@ -49,4 +52,4 @@ export async function loadPageSeoByPath(path: string): Promise<PageSeoData | nul
     ["page-seo", normalizedPath],
     { revalidate: 300, tags: ["page-seo", "pages", `page-seo:${normalizedPath}`] },
   )();
-}
+});

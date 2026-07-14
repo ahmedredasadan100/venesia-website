@@ -11,6 +11,7 @@
     "verify:migrations": "node scripts/verify-migrations-present.mjs",
     "verify:legacy-media-admin": "node scripts/verify-no-active-legacy-media-admin.mjs",
     "verify:audit-coverage": "node scripts/verify-admin-audit-coverage.mjs",
+    "verify:db-health": "node scripts/verify-database-health.mjs",
     "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:audit-coverage",
     "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:audit-coverage && npm run build"
   },
