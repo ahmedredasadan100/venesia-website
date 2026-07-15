@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  Fragment,
   type ReactNode,
 } from "react";
 import type { HeroSectionData } from "../../lib/page-sections";
@@ -428,7 +429,7 @@ function HeroReservedSlot({
       aria-hidden={visible ? undefined : true}
       data-hero-slot-visible={visible ? "true" : "false"}
       style={visible ? undefined : { visibility: "hidden" }}
-      {...(visible ? {} : { inert: "" as unknown as boolean })}
+      {...(!visible ? { inert: true } : {})}
     >
       {children}
     </div>
@@ -552,7 +553,7 @@ function InternalDynamicHero({
           aria-hidden="true"
           data-hero-slot-visible="false"
           style={{ visibility: "hidden" }}
-          {...{ inert: "" as unknown as boolean }}
+          {...{ inert: true }}
         >
           {title}
         </div>
@@ -620,7 +621,7 @@ function InternalDynamicHero({
           <RichTextContent
             value={description}
             mode="rich"
-            className="text-[15px] leading-8 text-white/60 md:text-base md:leading-9 [&_p]:mb-2 [&_p:last-child]:mb-0"
+            className="text-[15px] leading-8 text-white/60 md:text-base md:leading-9 [&_p]:mb-1.5 [&_p:last-child]:mb-0"
           />
         ) : (
           <p className="text-[15px] leading-8 whitespace-pre-line text-white/60 md:text-base md:leading-9">
@@ -676,11 +677,13 @@ function InternalDynamicHero({
       <div className="relative z-10 flex h-full min-h-0 flex-col">
         <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-end px-6 pb-10 pt-20 sm:pb-12 sm:pt-24 md:pb-14 md:pt-28 lg:px-6 lg:pb-16">
           <div className="grid w-full items-end gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
-            <div className="flex min-w-0 flex-col gap-4 text-right">
+            <div className="flex min-w-0 flex-col gap-3 text-right md:gap-3.5">
               {config.heroElementOrder.map((key) => {
                 const node = elements[key];
                 if (node == null) return null;
-                return <div key={key}>{node}</div>;
+                // Fragment avoids empty wrapper <div>s that still create flex gaps
+                // when a reserved slot returns null (e.g. empty subtitle).
+                return <Fragment key={key}>{node}</Fragment>;
               })}
             </div>
 

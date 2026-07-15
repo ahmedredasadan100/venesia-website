@@ -100,7 +100,7 @@ export default function HeroEditClient({
       </section>
 
       {!isHomeHero ? (
-        <section className="space-y-5 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
           <h2 className="text-base font-semibold text-white">عناصر الهيرو</h2>
 
           <HeroTextFieldRow
@@ -149,16 +149,15 @@ export default function HeroEditClient({
             showDefault={controls.showSubtitle}
           />
 
-          <HeroVisibilityAlignRow
-            label="الوصف"
-            alignmentName="description_alignment"
-            showName="show_description"
-            alignmentDefault={
-              controls.descriptionAlignment === "justify" ? "right" : controls.descriptionAlignment
-            }
-            showDefault={controls.showDescription}
-            enableAlignment={false}
-          >
+          <div className="max-w-[920px] space-y-1.5">
+            <span className="block text-xs font-semibold text-white/55">الوصف</span>
+            <input
+              type="hidden"
+              name="description_alignment"
+              value={
+                controls.descriptionAlignment === "justify" ? "right" : controls.descriptionAlignment
+              }
+            />
             <AdminRichTextEditor
               name="description"
               label=""
@@ -166,10 +165,12 @@ export default function HeroEditClient({
               toolbarMode="minimal"
               enableTextAlign
               toolbarPlacement="top"
+              visibilityName="show_description"
+              visibilityDefault={controls.showDescription}
               minHeight={160}
               placeholder="اكتب وصف الهيرو..."
             />
-          </HeroVisibilityAlignRow>
+          </div>
 
           <HeroTextFieldRow
             label="مسار التنقل — عنوان الصفحة الحالي"

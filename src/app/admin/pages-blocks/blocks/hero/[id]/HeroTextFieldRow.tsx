@@ -54,13 +54,13 @@ export default function HeroTextFieldRow({
   ];
 
   return (
-    <div className="max-w-[920px] space-y-2">
+    <div className="max-w-[920px] space-y-1.5">
       <span className="block text-xs font-semibold text-white/55">{label}</span>
       {enableBold ? <input type="hidden" name={boldName} value={bold ? "true" : "false"} /> : null}
       <input type="hidden" name={alignmentName} value={alignment} />
       <input type="hidden" name={showName} value={show ? "true" : "false"} />
 
-      <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:gap-3">
+      <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:gap-3">
         <input
           name={name}
           defaultValue={defaultValue}

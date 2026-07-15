@@ -27,6 +27,12 @@ type AdminRichTextEditorProps = {
    * side = toolbar beside editor on md+ (Hero editor compact layout only).
    */
   toolbarPlacement?: "top" | "side";
+  /**
+   * Optional visibility toggle appended to the toolbar (Hero description only).
+   * Writes a hidden input; does not change other editors.
+   */
+  visibilityName?: string;
+  visibilityDefault?: boolean;
   helperText?: string;
 };
 
@@ -71,14 +77,18 @@ export default function AdminRichTextEditor({
   toolbarMode = "full",
   enableTextAlign = false,
   toolbarPlacement = "top",
+  visibilityName,
+  visibilityDefault = true,
   helperText,
 }: AdminRichTextEditorProps) {
   const initialContent = useMemo(() => normalizeRichTextContent(defaultValue), [defaultValue]);
   const [html, setHtml] = useState(initialContent);
   const [syncedContent, setSyncedContent] = useState(initialContent);
+  const [contentVisible, setContentVisible] = useState(visibilityDefault);
   const isMinimal = toolbarMode === "minimal";
   const withTextAlign = enableTextAlign;
   const sideToolbar = toolbarPlacement === "side";
+  const withVisibility = Boolean(visibilityName);
 
   if (initialContent !== syncedContent) {
     setSyncedContent(initialContent);
@@ -182,19 +192,19 @@ export default function AdminRichTextEditor({
         <>
           <ToolButton
             label="يمين"
-            title="محاذاة يمين"
+            title="محاذاة لليمين"
             active={editor?.isActive({ textAlign: "right" })}
             onClick={() => setAlign("right")}
           />
           <ToolButton
             label="وسط"
-            title="توسيط"
+            title="محاذاة للوسط"
             active={editor?.isActive({ textAlign: "center" })}
             onClick={() => setAlign("center")}
           />
           <ToolButton
             label="يسار"
-            title="محاذاة يسار"
+            title="محاذاة لليسار"
             active={editor?.isActive({ textAlign: "left" })}
             onClick={() => setAlign("left")}
           />
@@ -203,6 +213,17 @@ export default function AdminRichTextEditor({
             title="ضبط النص من الجانبين"
             active={editor?.isActive({ textAlign: "justify" })}
             onClick={() => setAlign("justify")}
+          />
+        </>
+      ) : null}
+      {withVisibility ? (
+        <>
+          <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:inline-block" aria-hidden />
+          <ToolButton
+            label={contentVisible ? "إخفاء" : "إظهار"}
+            title={contentVisible ? "إخفاء العنصر" : "إظهار العنصر"}
+            active={contentVisible}
+            onClick={() => setContentVisible((current) => !current)}
           />
         </>
       ) : null}
@@ -244,7 +265,10 @@ export default function AdminRichTextEditor({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
+      {withVisibility && visibilityName ? (
+        <input type="hidden" name={visibilityName} value={contentVisible ? "true" : "false"} />
+      ) : null}
       <input type="hidden" name={name} value={html} />
 
       {label ? <span className="text-sm font-medium text-white/70">{label}</span> : null}

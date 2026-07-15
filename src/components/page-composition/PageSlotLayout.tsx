@@ -36,6 +36,8 @@ export function HeroSlotContent({ composition, fallbackHero }: HeroSlotContentPr
       alignment={heroConfig.breadcrumbAlignment}
       bold={heroConfig.breadcrumbBold}
       currentLabelOverride={heroConfig.breadcrumbCurrentLabel || undefined}
+      className=""
+      compact
     />
   ) : null;
 

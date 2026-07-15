@@ -159,12 +159,15 @@ assert(withCrumb.descriptionAlignment === "justify", "description justify alignm
 const heroSource = readFileSync(resolve("src/components/sections/DynamicHeroSection.tsx"), "utf8");
 assert(heroSource.includes("data-hero-slot-visible"), "reserved-space attribute present");
 assert(heroSource.includes('visibility: "hidden"') || heroSource.includes("visibility: 'hidden'"), "uses visibility hidden");
+assert(heroSource.includes("inert: true") || heroSource.includes("inert:true"), "uses boolean inert true");
+assert(!/inert:\s*""/.test(heroSource) && !/inert:\s*''/.test(heroSource), "does not pass empty-string inert");
+assert(heroSource.includes("Fragment"), "empty slots use Fragment to avoid flex gap wrappers");
 assert(!heroSource.includes("goldAccent"), "About goldAccent merge removed");
 assert(heroSource.includes("HomeDynamicHero"), "Home hero path still present");
 assert(
   /function HomeDynamicHero[\s\S]*function InternalDynamicHero/.test(heroSource) ||
     /function InternalDynamicHero[\s\S]*function HomeDynamicHero/.test(heroSource) ||
-    heroSource.includes("variant === \"home-cinematic\""),
+    heroSource.includes('variant === "home-cinematic"'),
   "Home hero router gate preserved",
 );
 
