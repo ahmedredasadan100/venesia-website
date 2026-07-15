@@ -22,6 +22,11 @@ type AdminRichTextEditorProps = {
   toolbarMode?: "full" | "minimal";
   /** Home Story only — show paragraph alignment controls next to Bold. */
   enableTextAlign?: boolean;
+  /**
+   * top = toolbar above editor (default for all existing editors).
+   * side = toolbar beside editor on md+ (Hero editor compact layout only).
+   */
+  toolbarPlacement?: "top" | "side";
   helperText?: string;
 };
 
@@ -65,6 +70,7 @@ export default function AdminRichTextEditor({
   minHeight = 220,
   toolbarMode = "full",
   enableTextAlign = false,
+  toolbarPlacement = "top",
   helperText,
 }: AdminRichTextEditorProps) {
   const initialContent = useMemo(() => normalizeRichTextContent(defaultValue), [defaultValue]);
@@ -72,6 +78,7 @@ export default function AdminRichTextEditor({
   const [syncedContent, setSyncedContent] = useState(initialContent);
   const isMinimal = toolbarMode === "minimal";
   const withTextAlign = enableTextAlign;
+  const sideToolbar = toolbarPlacement === "side";
 
   if (initialContent !== syncedContent) {
     setSyncedContent(initialContent);
@@ -154,85 +161,103 @@ export default function AdminRichTextEditor({
     editor?.chain().focus().setTextAlign(alignment).run();
   }
 
+  const toolbar = (
+    <div
+      className={[
+        "flex flex-wrap gap-2 bg-[#05070B] p-3",
+        sideToolbar
+          ? "border-b border-white/10 md:w-[7.5rem] md:shrink-0 md:flex-col md:border-b-0 md:border-l md:border-white/10"
+          : "border-b border-white/10",
+      ].join(" ")}
+      role="toolbar"
+      aria-label={`شريط أدوات ${label}`}
+    >
+      <ToolButton
+        label="B"
+        title="عريض"
+        active={editor?.isActive("bold")}
+        onClick={() => editor?.chain().focus().toggleBold().run()}
+      />
+      {withTextAlign ? (
+        <>
+          <ToolButton
+            label="يمين"
+            title="محاذاة يمين"
+            active={editor?.isActive({ textAlign: "right" })}
+            onClick={() => setAlign("right")}
+          />
+          <ToolButton
+            label="وسط"
+            title="توسيط"
+            active={editor?.isActive({ textAlign: "center" })}
+            onClick={() => setAlign("center")}
+          />
+          <ToolButton
+            label="يسار"
+            title="محاذاة يسار"
+            active={editor?.isActive({ textAlign: "left" })}
+            onClick={() => setAlign("left")}
+          />
+          <ToolButton
+            label="ضبط"
+            title="ضبط النص من الجانبين"
+            active={editor?.isActive({ textAlign: "justify" })}
+            onClick={() => setAlign("justify")}
+          />
+        </>
+      ) : null}
+      {!isMinimal ? (
+        <>
+          <ToolButton
+            label="I"
+            title="مائل"
+            active={editor?.isActive("italic")}
+            onClick={() => editor?.chain().focus().toggleItalic().run()}
+          />
+          <ToolButton
+            label="U"
+            title="تحته خط"
+            active={editor?.isActive("underline")}
+            onClick={() => editor?.chain().focus().toggleUnderline().run()}
+          />
+          <ToolButton
+            label="•"
+            title="قائمة نقطية"
+            active={editor?.isActive("bulletList")}
+            onClick={() => editor?.chain().focus().toggleBulletList().run()}
+          />
+          <ToolButton
+            label="1."
+            title="قائمة مرقمة"
+            active={editor?.isActive("orderedList")}
+            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+          />
+          <ToolButton
+            label="🔗"
+            title="رابط"
+            active={editor?.isActive("link")}
+            onClick={toggleLink}
+          />
+        </>
+      ) : null}
+    </div>
+  );
+
   return (
     <div className="space-y-3">
       <input type="hidden" name={name} value={html} />
 
-      <span className="text-sm font-medium text-white/70">{label}</span>
+      {label ? <span className="text-sm font-medium text-white/70">{label}</span> : null}
 
-      <div className="overflow-hidden rounded-[24px] border border-white/10 bg-black/25">
-        <div className="flex flex-wrap gap-2 border-b border-white/10 bg-[#05070B] p-3">
-          <ToolButton
-            label="B"
-            title="عريض"
-            active={editor?.isActive("bold")}
-            onClick={() => editor?.chain().focus().toggleBold().run()}
-          />
-          {withTextAlign ? (
-            <>
-              <ToolButton
-                label="يمين"
-                title="محاذاة يمين"
-                active={editor?.isActive({ textAlign: "right" })}
-                onClick={() => setAlign("right")}
-              />
-              <ToolButton
-                label="وسط"
-                title="توسيط"
-                active={editor?.isActive({ textAlign: "center" })}
-                onClick={() => setAlign("center")}
-              />
-              <ToolButton
-                label="يسار"
-                title="محاذاة يسار"
-                active={editor?.isActive({ textAlign: "left" })}
-                onClick={() => setAlign("left")}
-              />
-              <ToolButton
-                label="ضبط"
-                title="ضبط النص من الجانبين"
-                active={editor?.isActive({ textAlign: "justify" })}
-                onClick={() => setAlign("justify")}
-              />
-            </>
-          ) : null}
-          {!isMinimal ? (
-            <>
-              <ToolButton
-                label="I"
-                title="مائل"
-                active={editor?.isActive("italic")}
-                onClick={() => editor?.chain().focus().toggleItalic().run()}
-              />
-              <ToolButton
-                label="U"
-                title="تحته خط"
-                active={editor?.isActive("underline")}
-                onClick={() => editor?.chain().focus().toggleUnderline().run()}
-              />
-              <ToolButton
-                label="•"
-                title="قائمة نقطية"
-                active={editor?.isActive("bulletList")}
-                onClick={() => editor?.chain().focus().toggleBulletList().run()}
-              />
-              <ToolButton
-                label="1."
-                title="قائمة مرقمة"
-                active={editor?.isActive("orderedList")}
-                onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-              />
-              <ToolButton
-                label="🔗"
-                title="رابط"
-                active={editor?.isActive("link")}
-                onClick={toggleLink}
-              />
-            </>
-          ) : null}
-        </div>
+      <div
+        className={[
+          "overflow-hidden rounded-[24px] border border-white/10 bg-black/25",
+          sideToolbar ? "md:flex md:flex-row-reverse md:items-stretch" : "",
+        ].join(" ")}
+      >
+        {toolbar}
 
-        <div className="admin-rich-text-editor px-4 py-4" style={{ minHeight }}>
+        <div className="admin-rich-text-editor min-w-0 flex-1 px-4 py-4" style={{ minHeight }}>
           <EditorContent editor={editor} />
         </div>
       </div>

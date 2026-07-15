@@ -10,9 +10,20 @@ import { redirect } from "next/navigation";
 import { revalidateHeroCache } from "../../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
+import {
+  normalizeHeroElementOrder,
+  parseHeroDescriptionAlignment,
+  parseHeroTextAlignment,
+  parseOptionalBool,
+} from "../../../../../lib/hero/hero-content-controls";
+import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
 
 function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
+}
+
+function formBool(formData: FormData, key: string, fallback = true) {
+  return parseOptionalBool(formData.get(key)) ?? fallback;
 }
 
 function splitImages(value: FormDataEntryValue | null) {
@@ -44,20 +55,71 @@ function buildHeroConfig(formData: FormData) {
     Boolean(primaryCtaLabel && primaryCtaLink && !isAdminLinkEmpty(primaryCtaLink)) ||
     Boolean(secondaryCtaLabel && secondaryCtaLink && !isAdminLinkEmpty(secondaryCtaLink));
 
-  return {
+  const hasInternalContentControls =
+    formData.has("hero_element_order") || formData.has("show_eyebrow");
+
+  const showCtaFromContent = parseOptionalBool(formData.get("show_cta_element"));
+  const showCtaFromCheckbox = formData.get("show_cta") === "on";
+  const showCta = hasInternalContentControls
+    ? (showCtaFromContent ?? true)
+    : showCtaFromCheckbox || hasCtaContent;
+
+  const descriptionRaw = String(formData.get("description") ?? "").trim();
+  const description = hasInternalContentControls
+    ? descriptionRaw
+      ? normalizeRichTextContent(descriptionRaw)
+      : ""
+    : cleanText(formData.get("description"));
+
+  const base = {
     eyebrow: cleanText(formData.get("eyebrow")),
     title: cleanText(formData.get("title")),
     highlight: cleanText(formData.get("highlight")),
     subtitle: cleanText(formData.get("subtitle")),
-    description: cleanText(formData.get("description")),
+    description,
     images: splitImages(formData.get("images")),
     mobileImages: splitImages(formData.get("mobile_images")),
     primaryCtaLabel,
     primaryCtaLink,
     secondaryCtaLabel,
     secondaryCtaLink,
-    showCta: formData.get("show_cta") === "on" || hasCtaContent,
+    showCta,
     imagePositionClassName: cleanText(formData.get("image_position_class")),
+  };
+
+  if (!hasInternalContentControls) {
+    return base;
+  }
+
+  return {
+    ...base,
+    showEyebrow: formBool(formData, "show_eyebrow"),
+    eyebrowBold: formBool(formData, "eyebrow_bold", false),
+    eyebrowAlignment: parseHeroTextAlignment(formData.get("eyebrow_alignment"), "right"),
+
+    showTitle: formBool(formData, "show_title"),
+    titleBold: formBool(formData, "title_bold", true),
+    titleAlignment: parseHeroTextAlignment(formData.get("title_alignment"), "right"),
+
+    showHighlight: formBool(formData, "show_highlight"),
+    highlightBold: formBool(formData, "highlight_bold", false),
+    highlightAlignment: parseHeroTextAlignment(formData.get("highlight_alignment"), "right"),
+
+    showSubtitle: formBool(formData, "show_subtitle"),
+    subtitleBold: formBool(formData, "subtitle_bold", false),
+    subtitleAlignment: parseHeroTextAlignment(formData.get("subtitle_alignment"), "right"),
+
+    showDescription: formBool(formData, "show_description"),
+    descriptionAlignment: parseHeroDescriptionAlignment(formData.get("description_alignment"), "right"),
+
+    showBreadcrumb: formBool(formData, "show_breadcrumb"),
+    breadcrumbBold: formBool(formData, "breadcrumb_bold", false),
+    breadcrumbAlignment: parseHeroTextAlignment(formData.get("breadcrumb_alignment"), "right"),
+    breadcrumbCurrentLabel: cleanText(formData.get("breadcrumb_current_label")),
+
+    ctaAlignment: parseHeroTextAlignment(formData.get("cta_alignment"), "right"),
+
+    heroElementOrder: normalizeHeroElementOrder(formData.get("hero_element_order")),
   };
 }
 

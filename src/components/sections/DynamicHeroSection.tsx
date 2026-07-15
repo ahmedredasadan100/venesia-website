@@ -12,8 +12,16 @@ import {
 } from "react";
 import type { HeroSectionData } from "../../lib/page-sections";
 import { getHeroConfig } from "../../lib/page-sections";
+import {
+  heroFlexJustifyClass,
+  heroTextAlignClass,
+  type HeroElementKey,
+  type HeroTextAlignment,
+} from "../../lib/hero/hero-content-controls";
+import { isHtmlContent } from "../../lib/rich-text/html-utils";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
+import RichTextContent from "../content/RichTextContent";
 
 type DynamicHeroSectionProps = {
   hero: HeroSectionData;
@@ -401,33 +409,71 @@ function splitHeroDescription(description?: string) {
     .filter(Boolean);
 }
 
-function HeroCtaButtons({ config }: { config: ReturnType<typeof getHeroConfig> }) {
-  if (config.showCta === false) return null;
-
-  const hasPrimary = Boolean(config.primaryCtaLabel && config.primaryCtaHref);
-  const hasSecondary = Boolean(config.secondaryCtaLabel && config.secondaryCtaHref);
-  if (!hasPrimary && !hasSecondary) return null;
+function HeroReservedSlot({
+  hasContent,
+  visible,
+  className,
+  children,
+}: {
+  hasContent: boolean;
+  visible: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  if (!hasContent) return null;
 
   return (
-    <div className="mt-6 flex flex-wrap gap-3 md:mt-8 md:gap-4">
-      {hasPrimary ? (
-        <HeroPressableLink
-          href={config.primaryCtaHref!}
-          className="home-pressable--hero-primary inline-flex h-11 items-center rounded-full bg-white px-6 font-medium text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7"
-        >
-          {config.primaryCtaLabel}
-        </HeroPressableLink>
-      ) : null}
-
-      {hasSecondary ? (
-        <HeroPressableLink
-          href={config.secondaryCtaHref!}
-          className="home-pressable--hero-secondary inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 font-medium text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7"
-        >
-          {config.secondaryCtaLabel}
-        </HeroPressableLink>
-      ) : null}
+    <div
+      className={[className, visible ? "" : "pointer-events-none select-none"].filter(Boolean).join(" ")}
+      aria-hidden={visible ? undefined : true}
+      data-hero-slot-visible={visible ? "true" : "false"}
+      style={visible ? undefined : { visibility: "hidden" }}
+      {...(visible ? {} : { inert: "" as unknown as boolean })}
+    >
+      {children}
     </div>
+  );
+}
+
+function HeroCtaButtons({
+  config,
+  alignment = "right",
+  visible = true,
+  reserveWhenHidden = false,
+}: {
+  config: ReturnType<typeof getHeroConfig>;
+  alignment?: HeroTextAlignment;
+  visible?: boolean;
+  reserveWhenHidden?: boolean;
+}) {
+  const hasPrimary = Boolean(config.primaryCtaLabel && config.primaryCtaHref);
+  const hasSecondary = Boolean(config.secondaryCtaLabel && config.secondaryCtaHref);
+  const hasContent = hasPrimary || hasSecondary;
+  if (!hasContent) return null;
+  if (!visible && !reserveWhenHidden) return null;
+
+  return (
+    <HeroReservedSlot hasContent visible={visible}>
+      <div className={`flex flex-wrap gap-3 md:gap-4 ${heroFlexJustifyClass(alignment)}`}>
+        {hasPrimary ? (
+          <HeroPressableLink
+            href={config.primaryCtaHref!}
+            className="home-pressable--hero-primary inline-flex h-11 items-center rounded-full bg-white px-6 font-medium text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7"
+          >
+            {config.primaryCtaLabel}
+          </HeroPressableLink>
+        ) : null}
+
+        {hasSecondary ? (
+          <HeroPressableLink
+            href={config.secondaryCtaHref!}
+            className="home-pressable--hero-secondary inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 font-medium text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7"
+          >
+            {config.secondaryCtaLabel}
+          </HeroPressableLink>
+        ) : null}
+      </div>
+    </HeroReservedSlot>
   );
 }
 
@@ -451,15 +497,152 @@ function InternalDynamicHero({
   const mobileImage = supportsMobileImages ? config.mobileImages?.[0] : undefined;
   const title = config.title || fallbackTitle || hero.page?.title || "";
   const eyebrow = config.eyebrow || fallbackEyebrow || "Internal Page";
-  const subtitle = config.subtitle || fallbackSubtitle || "";
-  const description = config.description || "";
-  const descriptionLines = splitHeroDescription(description);
-  const goldAccent = config.highlight || (isAboutPage ? subtitle : "");
+  const highlight = (config.highlight || "").trim();
+  const subtitle = (config.subtitle || fallbackSubtitle || "").trim();
+  const description = (config.description || "").trim();
   const imagePosition =
     config.imagePositionClassName ?? (isCompactHero ? "object-[50%_42%]" : "object-center");
   const brightness = isCompactHero
     ? "brightness(1.05) contrast(1.04) saturate(1.02)"
     : "brightness(1.04) contrast(1.04) saturate(1.02)";
+
+  const titleSizeClass = isCompactHero
+    ? "text-[2rem] leading-[1.15] sm:text-4xl md:text-[2.5rem]"
+    : "max-w-[14ch] text-[2rem] leading-[1.2] sm:text-4xl md:text-[2.5rem]";
+
+  const hasBreadcrumb = Boolean(belowTitle);
+
+  const elements: Partial<Record<HeroElementKey, ReactNode>> = {
+    eyebrow: (
+      <HeroReservedSlot
+        hasContent={Boolean(eyebrow)}
+        visible={config.showEyebrow}
+        className={`${heroTextAlignClass(config.eyebrowAlignment)} ${
+          config.eyebrowAlignment === "center"
+            ? "flex justify-center"
+            : config.eyebrowAlignment === "left"
+              ? "flex justify-end"
+              : "flex justify-start"
+        }`}
+      >
+        <p
+          className={`flex items-center gap-3 font-en text-[10px] uppercase tracking-[0.2em] text-[#D8B87A]/55 ${
+            config.eyebrowBold ? "font-bold" : "font-normal"
+          }`}
+        >
+          <span className="h-px w-8 shrink-0 bg-gradient-to-r from-[#D8B87A]/60 to-transparent" />
+          {eyebrow}
+        </p>
+      </HeroReservedSlot>
+    ),
+    title: (() => {
+      if (!title) return null;
+      const titleClass = `tracking-[-0.02em] text-white ${titleSizeClass} ${
+        config.titleBold ? "font-bold" : "font-normal"
+      } ${heroTextAlignClass(config.titleAlignment)}`;
+
+      if (config.showTitle) {
+        return <h1 className={titleClass}>{title}</h1>;
+      }
+
+      // Hidden title: non-semantic spacer preserving typography (avoid hidden h1).
+      return (
+        <div
+          className={`${titleClass} pointer-events-none select-none`}
+          aria-hidden="true"
+          data-hero-slot-visible="false"
+          style={{ visibility: "hidden" }}
+          {...{ inert: "" as unknown as boolean }}
+        >
+          {title}
+        </div>
+      );
+    })(),
+    highlight: (
+      <HeroReservedSlot
+        hasContent={Boolean(highlight)}
+        visible={config.showHighlight}
+        className={heroTextAlignClass(config.highlightAlignment)}
+      >
+        {isAboutPage ? (
+          <p
+            className={`text-[1.44rem] tracking-[0.08em] text-[#D8B87A] sm:text-[1.8rem] ${
+              config.highlightBold ? "font-bold" : "font-medium"
+            }`}
+          >
+            {highlight}
+          </p>
+        ) : (
+          <p
+            className={`bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-[1.35rem] text-transparent sm:text-[1.65rem] ${
+              config.highlightBold ? "font-bold" : "font-medium"
+            }`}
+          >
+            {highlight}
+          </p>
+        )}
+      </HeroReservedSlot>
+    ),
+    subtitle: (
+      <HeroReservedSlot
+        hasContent={Boolean(subtitle)}
+        visible={config.showSubtitle}
+        className={`max-w-2xl ${heroTextAlignClass(config.subtitleAlignment)} ${
+          config.subtitleAlignment === "center"
+            ? "mx-auto"
+            : config.subtitleAlignment === "left"
+              ? "mr-auto"
+              : ""
+        }`}
+      >
+        <p
+          className={`text-[15px] leading-8 text-white/66 md:text-base md:leading-9 ${
+            config.subtitleBold ? "font-bold" : "font-normal"
+          }`}
+        >
+          {subtitle}
+        </p>
+      </HeroReservedSlot>
+    ),
+    description: (
+      <HeroReservedSlot
+        hasContent={Boolean(description)}
+        visible={config.showDescription}
+        className={`max-w-2xl ${heroTextAlignClass(config.descriptionAlignment)} ${
+          config.descriptionAlignment === "center"
+            ? "mx-auto"
+            : config.descriptionAlignment === "left"
+              ? "mr-auto"
+              : ""
+        }`}
+      >
+        {isHtmlContent(description) ? (
+          <RichTextContent
+            value={description}
+            mode="rich"
+            className="text-[15px] leading-8 text-white/60 md:text-base md:leading-9 [&_p]:mb-2 [&_p:last-child]:mb-0"
+          />
+        ) : (
+          <p className="text-[15px] leading-8 whitespace-pre-line text-white/60 md:text-base md:leading-9">
+            {splitHeroDescription(description).join("\n")}
+          </p>
+        )}
+      </HeroReservedSlot>
+    ),
+    breadcrumb: hasBreadcrumb ? (
+      <HeroReservedSlot hasContent visible={config.showBreadcrumb}>
+        {belowTitle}
+      </HeroReservedSlot>
+    ) : null,
+    cta: (
+      <HeroCtaButtons
+        config={config}
+        alignment={config.ctaAlignment}
+        visible={config.showCta !== false}
+        reserveWhenHidden
+      />
+    ),
+  };
 
   return (
     <section
@@ -493,57 +676,12 @@ function InternalDynamicHero({
       <div className="relative z-10 flex h-full min-h-0 flex-col">
         <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-end px-6 pb-10 pt-20 sm:pb-12 sm:pt-24 md:pb-14 md:pt-28 lg:px-6 lg:pb-16">
           <div className="grid w-full items-end gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
-            <div className="min-w-0 text-right">
-              <p className="mb-5 flex items-center gap-3 font-en text-[10px] uppercase tracking-[0.2em] text-[#D8B87A]/55">
-                <span className="h-px w-8 shrink-0 bg-gradient-to-r from-[#D8B87A]/60 to-transparent" />
-                {eyebrow}
-              </p>
-
-              <h1
-                className={`font-bold tracking-[-0.02em] text-white ${
-                  isCompactHero
-                    ? "text-[2rem] leading-[1.15] sm:text-4xl md:text-[2.5rem]"
-                    : "max-w-[14ch] text-[2rem] leading-[1.2] sm:text-4xl md:text-[2.5rem]"
-                }`}
-              >
-                <span className="block">{title}</span>
-                {isAboutPage && goldAccent ? (
-                  <span className="mt-2 block text-[0.72em] font-medium tracking-[0.08em] text-[#D8B87A]">
-                    {goldAccent}
-                  </span>
-                ) : null}
-                {!isAboutPage && config.highlight ? (
-                  <span className="mt-2 block bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-transparent">
-                    {config.highlight}
-                  </span>
-                ) : null}
-              </h1>
-
-              {!isAboutPage && subtitle ? (
-                <p className="mt-4 max-w-2xl text-[15px] leading-8 text-white/66 md:text-base md:leading-9">
-                  {subtitle}
-                </p>
-              ) : null}
-
-              {isAboutPage && descriptionLines.length ? (
-                <p className="mt-4 max-w-2xl text-[15px] leading-8 text-white/60 md:text-base md:leading-9">
-                  {descriptionLines.map((line) => (
-                    <span key={line} className="block">
-                      {line}
-                    </span>
-                  ))}
-                </p>
-              ) : null}
-
-              {!isAboutPage && description && description !== subtitle ? (
-                <p className="mt-3 max-w-2xl text-sm leading-8 text-white/52 md:text-[15px]">
-                  {description}
-                </p>
-              ) : null}
-
-              <HeroCtaButtons config={config} />
-
-              {belowTitle}
+            <div className="flex min-w-0 flex-col gap-4 text-right">
+              {config.heroElementOrder.map((key) => {
+                const node = elements[key];
+                if (node == null) return null;
+                return <div key={key}>{node}</div>;
+              })}
             </div>
 
             <div aria-hidden className="hidden min-w-0 lg:block" />

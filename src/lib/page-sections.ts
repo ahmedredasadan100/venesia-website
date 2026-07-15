@@ -1,3 +1,11 @@
+import type {
+  HeroContentControls,
+  HeroDescriptionAlignment,
+  HeroElementKey,
+  HeroTextAlignment,
+} from "./hero/hero-content-controls";
+import { resolveHeroContentControls } from "./hero/hero-content-controls";
+
 export type HeroSourceType =
   | "manual"
   | "latest_topics"
@@ -77,9 +85,15 @@ export type HeroConfig = {
   secondaryCtaLabel?: string;
   secondaryCtaHref?: string;
   secondaryCtaLink?: Record<string, unknown>;
-  showCta?: boolean;
   imagePositionClassName?: string;
   heroLayout?: HeroLayoutPreset;
+} & HeroContentControls;
+
+export type {
+  HeroContentControls,
+  HeroDescriptionAlignment,
+  HeroElementKey,
+  HeroTextAlignment,
 };
 
 export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
@@ -104,7 +118,10 @@ export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
       : [];
   const mobileImages = mobileImagesRaw.map((item) => String(item).trim()).filter(Boolean);
 
-  const showCta = readBool(raw.showCta) ?? readBool(raw.show_cta);
+  const controls = resolveHeroContentControls(raw);
+  const legacyShowCta = readBool(raw.showCta) ?? readBool(raw.show_cta);
+  const showCta = legacyShowCta === undefined ? controls.showCta : legacyShowCta;
+
   const heroLayoutRaw = readText(raw.heroLayout) || readText(raw.hero_layout);
   const heroLayout: HeroLayoutPreset | undefined =
     heroLayoutRaw === "compact" || heroLayoutRaw === "standard" ? heroLayoutRaw : undefined;
@@ -114,16 +131,18 @@ export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
     title: readText(raw.title) || undefined,
     highlight: readText(raw.highlight) || undefined,
     subtitle: readText(raw.subtitle) || undefined,
-    description: readText(raw.description) || undefined,
+    // Preserve HTML for rich description (do not strip tags).
+    description: typeof raw.description === "string" ? raw.description.trim() || undefined : undefined,
     images: images.length ? images : undefined,
     mobileImages: mobileImages.length ? mobileImages : undefined,
     primaryCtaLabel: readText(raw.primaryCtaLabel) || readText(raw.primary_cta_label) || undefined,
     primaryCtaHref: readText(raw.primaryCtaHref) || readText(raw.primary_cta_href) || undefined,
     secondaryCtaLabel: readText(raw.secondaryCtaLabel) || readText(raw.secondary_cta_label) || undefined,
     secondaryCtaHref: readText(raw.secondaryCtaHref) || readText(raw.secondary_cta_href) || undefined,
-    showCta,
     imagePositionClassName:
       readText(raw.imagePositionClassName) || readText(raw.image_position_class) || undefined,
     heroLayout,
+    ...controls,
+    showCta,
   };
 }
