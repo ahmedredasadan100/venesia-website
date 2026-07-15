@@ -111,7 +111,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                 ) : null}
 
                 {showSecondary ? (
-                  <div className="group absolute bottom-0 left-0 h-[56%] w-[72%] overflow-hidden rounded-[1.5rem] border border-[#D8B87A]/[0.13] bg-white/[0.035] shadow-[0_24px_70px_rgba(0,0,0,0.34)] relative">
+                  <div className="group absolute bottom-0 left-0 h-[56%] w-[72%] overflow-hidden rounded-[1.5rem] border border-[#D8B87A]/[0.13] bg-white/[0.035] shadow-[0_24px_70px_rgba(0,0,0,0.34)]">
                     <Image
                       src={secondarySrc!}
                       alt={secondaryAlt}
@@ -131,7 +131,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                 ) : null}
 
                 {showAccent ? (
-                  <div className="group absolute bottom-[10%] right-0 h-[34%] w-[34%] overflow-hidden rounded-[1.25rem] border border-[#D8B87A]/[0.15] bg-[#05070B] shadow-[0_18px_45px_rgba(0,0,0,0.34)] relative">
+                  <div className="group absolute bottom-[10%] right-0 h-[34%] w-[34%] overflow-hidden rounded-[1.25rem] border border-[#D8B87A]/[0.15] bg-[#05070B] shadow-[0_18px_45px_rgba(0,0,0,0.34)]">
                     <Image
                       src={accentSrc!}
                       alt={accentAlt}
