@@ -182,11 +182,11 @@ export function heroFlexJustifyClass(alignment: HeroTextAlignment): string {
 }
 
 export const HERO_ELEMENT_LABELS_AR: Record<HeroElementKey, string> = {
-  eyebrow: "Eyebrow",
-  title: "العنوان",
-  highlight: "Highlight",
-  subtitle: "Subtitle",
+  eyebrow: "العنوان التمهيدي",
+  title: "العنوان الرئيسي",
+  highlight: "النص المميز",
+  subtitle: "العنوان الفرعي",
   description: "الوصف",
-  breadcrumb: "Breadcrumb",
-  cta: "CTA",
+  breadcrumb: "مسار التنقل",
+  cta: "زر الإجراء",
 };

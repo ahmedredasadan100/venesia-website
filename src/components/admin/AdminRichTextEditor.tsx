@@ -174,7 +174,7 @@ export default function AdminRichTextEditor({
     >
       <ToolButton
         label="B"
-        title="عريض"
+        title="خط عريض"
         active={editor?.isActive("bold")}
         onClick={() => editor?.chain().focus().toggleBold().run()}
       />

@@ -30,12 +30,9 @@ export default function HeroElementOrderEditor({ defaultOrder }: HeroElementOrde
 
   return (
     <div className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-white">ترتيب عناصر الهيرو</h3>
-        <p className="mt-1 text-xs leading-6 text-white/45">
-          حرّك العناصر بالأسهم. العنصر المخفي يحتفظ بمكانه في الترتيب.
-        </p>
-      </div>
+      <p className="text-xs leading-6 text-white/45">
+        حرّك العناصر بالأسهم. العنصر المخفي يحتفظ بمكانه في الترتيب.
+      </p>
       <input type="hidden" name="hero_element_order" value={JSON.stringify(order)} />
       <ul className="space-y-2">
         {order.map((key, index) => (

@@ -64,6 +64,190 @@ export default function HeroEditClient({
   const controls = resolveHeroContentControls(config);
   const isHomeHero = hero.variant === "home-cinematic";
 
+  const contentTab = (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        <h2 className="text-base font-semibold text-white">بيانات الموديول</h2>
+        <div className="grid max-w-[920px] gap-4 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
+            <input name="name" defaultValue={hero.name} required className={fieldClassName("h-11")} />
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-semibold text-white/55">Slug</span>
+            <input
+              name="slug"
+              defaultValue={hero.slug}
+              required
+              readOnly
+              dir="ltr"
+              aria-readonly="true"
+              className={fieldClassName("h-11 cursor-default bg-white/[0.03] text-white/55")}
+            />
+            <span className="block text-xs leading-6 text-white/40">
+              المعرّف التقني للموديول — للقراءة فقط.
+            </span>
+          </label>
+          <label className="space-y-2 md:col-span-2">
+            <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
+            <input
+              name="template_description"
+              defaultValue={hero.description ?? ""}
+              className={fieldClassName("h-11")}
+            />
+          </label>
+        </div>
+      </section>
+
+      {!isHomeHero ? (
+        <section className="space-y-5 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+          <h2 className="text-base font-semibold text-white">عناصر الهيرو</h2>
+
+          <HeroTextFieldRow
+            label="العنوان التمهيدي"
+            name="eyebrow"
+            defaultValue={String(config.eyebrow ?? "")}
+            boldName="eyebrow_bold"
+            alignmentName="eyebrow_alignment"
+            showName="show_eyebrow"
+            boldDefault={controls.eyebrowBold}
+            alignmentDefault={controls.eyebrowAlignment}
+            showDefault={controls.showEyebrow}
+          />
+          <HeroTextFieldRow
+            label="العنوان الرئيسي"
+            name="title"
+            defaultValue={String(config.title ?? "")}
+            boldName="title_bold"
+            alignmentName="title_alignment"
+            showName="show_title"
+            boldDefault={controls.titleBold}
+            alignmentDefault={controls.titleAlignment}
+            showDefault={controls.showTitle}
+          />
+          <HeroTextFieldRow
+            label="النص المميز"
+            name="highlight"
+            defaultValue={String(config.highlight ?? "")}
+            boldName="highlight_bold"
+            alignmentName="highlight_alignment"
+            showName="show_highlight"
+            boldDefault={controls.highlightBold}
+            alignmentDefault={controls.highlightAlignment}
+            showDefault={controls.showHighlight}
+            helperText="عنصر مستقل عن العنوان الفرعي، ويمكن عرضهما معًا."
+          />
+          <HeroTextFieldRow
+            label="العنوان الفرعي"
+            name="subtitle"
+            defaultValue={String(config.subtitle ?? "")}
+            boldName="subtitle_bold"
+            alignmentName="subtitle_alignment"
+            showName="show_subtitle"
+            boldDefault={controls.subtitleBold}
+            alignmentDefault={controls.subtitleAlignment}
+            showDefault={controls.showSubtitle}
+          />
+
+          <HeroVisibilityAlignRow
+            label="الوصف"
+            alignmentName="description_alignment"
+            showName="show_description"
+            alignmentDefault={
+              controls.descriptionAlignment === "justify" ? "right" : controls.descriptionAlignment
+            }
+            showDefault={controls.showDescription}
+            enableAlignment={false}
+          >
+            <AdminRichTextEditor
+              name="description"
+              label=""
+              defaultValue={String(config.description ?? "")}
+              toolbarMode="minimal"
+              enableTextAlign
+              toolbarPlacement="top"
+              minHeight={160}
+              placeholder="اكتب وصف الهيرو..."
+            />
+          </HeroVisibilityAlignRow>
+
+          <HeroTextFieldRow
+            label="مسار التنقل — عنوان الصفحة الحالي"
+            name="breadcrumb_current_label"
+            defaultValue={controls.breadcrumbCurrentLabel}
+            boldName="breadcrumb_bold"
+            alignmentName="breadcrumb_alignment"
+            showName="show_breadcrumb"
+            boldDefault={controls.breadcrumbBold}
+            alignmentDefault={controls.breadcrumbAlignment}
+            showDefault={controls.showBreadcrumb}
+            placeholder="مثال: من نحن"
+            helperText="يستبدل آخر عنصر في مسار التنقل لهذا الهيرو فقط، دون تغيير عنوان الصفحة في النظام."
+          />
+
+          <HeroVisibilityAlignRow
+            label="زر الإجراء"
+            alignmentName="cta_alignment"
+            showName="show_cta_element"
+            alignmentDefault={controls.ctaAlignment}
+            showDefault={controls.showCta}
+            helperText="النصوص والروابط من تبويب «الأزرار». الإظهار والمحاذاة من هنا."
+          >
+            <p className="text-xs text-white/40">لا يظهر الزر علنًا إلا بعد تعبئة نص ورابط في تبويب الأزرار.</p>
+          </HeroVisibilityAlignRow>
+        </section>
+      ) : (
+        <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+          <AdminNotice
+            variant="info"
+            message="هيرو الصفحة الرئيسية محمي بقواعده الخاصة. استخدم الحقول الأساسية أدناه دون عناصر التحكم الداخلية."
+          />
+          <div className="grid max-w-[920px] gap-4 md:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-xs font-semibold text-white/55">العنوان التمهيدي</span>
+              <input name="eyebrow" defaultValue={String(config.eyebrow ?? "")} className={fieldClassName("h-11")} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-xs font-semibold text-white/55">العنوان الرئيسي</span>
+              <input name="title" defaultValue={String(config.title ?? "")} className={fieldClassName("h-11")} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-xs font-semibold text-white/55">النص المميز</span>
+              <input name="highlight" defaultValue={String(config.highlight ?? "")} className={fieldClassName("h-11")} />
+            </label>
+            <label className="space-y-2">
+              <span className="text-xs font-semibold text-white/55">العنوان الفرعي</span>
+              <input name="subtitle" defaultValue={String(config.subtitle ?? "")} className={fieldClassName("h-11")} />
+            </label>
+            <label className="space-y-2 md:col-span-2">
+              <span className="text-xs font-semibold text-white/55">الوصف</span>
+              <textarea
+                name="description"
+                defaultValue={String(config.description ?? "")}
+                rows={4}
+                className={fieldClassName("resize-y leading-7")}
+              />
+            </label>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+
+  const orderTab = !isHomeHero ? (
+    <div className="mx-auto max-w-5xl">
+      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        <h2 className="text-base font-semibold text-white">ترتيب عناصر الهيرو</h2>
+        <HeroElementOrderEditor defaultOrder={controls.heroElementOrder} />
+      </section>
+    </div>
+  ) : (
+    <div className="mx-auto max-w-5xl">
+      <AdminNotice variant="info" message="ترتيب العناصر متاح لهيرو الصفحات الداخلية فقط." />
+      <input type="hidden" name="hero_element_order" value={JSON.stringify(controls.heroElementOrder)} />
+    </div>
+  );
+
   return (
     <div className="space-y-6 pb-10" dir="rtl">
       <AdminPageContextHeader
@@ -88,295 +272,129 @@ export default function HeroEditClient({
         <input type="hidden" name="style_preset" value={hero.style_preset ?? "cinematic-gold"} />
 
         <AdminModuleTabs
+          nowrap
           tabs={[
             {
               id: "content",
               label: "المحتوى",
-              content: (
-                <div className="space-y-5">
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                    <h2 className="text-base font-semibold text-white">بيانات الموديول</h2>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <label className="space-y-2">
-                        <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
-                        <input name="name" defaultValue={hero.name} required className={fieldClassName()} />
-                      </label>
-                      <label className="space-y-2">
-                        <span className="text-xs font-semibold text-white/55">Slug</span>
-                        <input name="slug" defaultValue={hero.slug} required dir="ltr" className={fieldClassName()} />
-                      </label>
-                      <label className="space-y-2 md:col-span-2">
-                        <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
-                        <input
-                          name="template_description"
-                          defaultValue={hero.description ?? ""}
-                          className={fieldClassName()}
-                        />
-                      </label>
-                    </div>
-                  </section>
-
-                  {!isHomeHero ? (
-                    <>
-                      <section className="space-y-5 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                        <div>
-                          <h2 className="text-base font-semibold text-white">عناصر الهيرو</h2>
-                          <p className="mt-1 text-xs leading-6 text-white/45">
-                            كل عنصر مستقل: محتوى، Bold، محاذاة، وإظهار/إخفاء مع حجز المساحة عند الإخفاء.
-                          </p>
-                        </div>
-
-                        <HeroTextFieldRow
-                          label="Eyebrow"
-                          name="eyebrow"
-                          defaultValue={String(config.eyebrow ?? "")}
-                          boldName="eyebrow_bold"
-                          alignmentName="eyebrow_alignment"
-                          showName="show_eyebrow"
-                          boldDefault={controls.eyebrowBold}
-                          alignmentDefault={controls.eyebrowAlignment}
-                          showDefault={controls.showEyebrow}
-                        />
-                        <HeroTextFieldRow
-                          label="العنوان"
-                          name="title"
-                          defaultValue={String(config.title ?? "")}
-                          boldName="title_bold"
-                          alignmentName="title_alignment"
-                          showName="show_title"
-                          boldDefault={controls.titleBold}
-                          alignmentDefault={controls.titleAlignment}
-                          showDefault={controls.showTitle}
-                        />
-                        <HeroTextFieldRow
-                          label="Highlight"
-                          name="highlight"
-                          defaultValue={String(config.highlight ?? "")}
-                          boldName="highlight_bold"
-                          alignmentName="highlight_alignment"
-                          showName="show_highlight"
-                          boldDefault={controls.highlightBold}
-                          alignmentDefault={controls.highlightAlignment}
-                          showDefault={controls.showHighlight}
-                          helperText="عنصر مستقل عن Subtitle — يظهران معًا عند تعبئة كليهما."
-                        />
-                        <HeroTextFieldRow
-                          label="Subtitle"
-                          name="subtitle"
-                          defaultValue={String(config.subtitle ?? "")}
-                          boldName="subtitle_bold"
-                          alignmentName="subtitle_alignment"
-                          showName="show_subtitle"
-                          boldDefault={controls.subtitleBold}
-                          alignmentDefault={controls.subtitleAlignment}
-                          showDefault={controls.showSubtitle}
-                        />
-
-                        <HeroVisibilityAlignRow
-                          label="الوصف (Rich Text)"
-                          alignmentName="description_alignment"
-                          showName="show_description"
-                          alignmentDefault={
-                            controls.descriptionAlignment === "justify"
-                              ? "right"
-                              : controls.descriptionAlignment
-                          }
-                          showDefault={controls.showDescription}
-                          helperText="محاذاة الصف تضبط موضع كتلة الوصف. محاذاة الفقرات داخل المحرر مستقلة (يمين/وسط/يسار/ضبط)."
-                        >
-                          <AdminRichTextEditor
-                            name="description"
-                            label=""
-                            defaultValue={String(config.description ?? "")}
-                            toolbarMode="minimal"
-                            enableTextAlign
-                            toolbarPlacement="side"
-                            minHeight={160}
-                            placeholder="اكتب وصف الهيرو..."
-                          />
-                        </HeroVisibilityAlignRow>
-
-                        <HeroTextFieldRow
-                          label="عنوان الصفحة داخل الـBreadcrumb"
-                          name="breadcrumb_current_label"
-                          defaultValue={controls.breadcrumbCurrentLabel}
-                          boldName="breadcrumb_bold"
-                          alignmentName="breadcrumb_alignment"
-                          showName="show_breadcrumb"
-                          boldDefault={controls.breadcrumbBold}
-                          alignmentDefault={controls.breadcrumbAlignment}
-                          showDefault={controls.showBreadcrumb}
-                          placeholder="مثال: من نحن"
-                          helperText="Override لآخر عنصر في الـBreadcrumb لهذا الهيرو فقط. لا يغيّر عنوان الصفحة في جدول pages. عند تعدد الصفحات المرتبطة يظهر التحذير أعلاه."
-                        />
-
-                        <HeroVisibilityAlignRow
-                          label="CTA"
-                          alignmentName="cta_alignment"
-                          showName="show_cta_element"
-                          alignmentDefault={controls.ctaAlignment}
-                          showDefault={controls.showCta}
-                          helperText="عرض/إخفاء مجموعة الأزرار داخل ترتيب عناصر الهيرو. روابط الأزرار من تبويب الأزرار."
-                        >
-                          <p className="text-xs text-white/40">إدارة النصوص والروابط من تبويب «الأزرار».</p>
-                        </HeroVisibilityAlignRow>
-                      </section>
-
-                      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                        <HeroElementOrderEditor defaultOrder={controls.heroElementOrder} />
-                      </section>
-                    </>
-                  ) : (
-                    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                      <AdminNotice
-                        variant="info"
-                        message="هيرو الصفحة الرئيسية محمي بقواعده الخاصة. استخدم الحقول الأساسية أدناه دون عناصر التحكم الداخلية."
-                      />
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <label className="space-y-2">
-                          <span className="text-xs font-semibold text-white/55">Eyebrow</span>
-                          <input
-                            name="eyebrow"
-                            defaultValue={String(config.eyebrow ?? "")}
-                            className={fieldClassName()}
-                          />
-                        </label>
-                        <label className="space-y-2">
-                          <span className="text-xs font-semibold text-white/55">العنوان</span>
-                          <input name="title" defaultValue={String(config.title ?? "")} className={fieldClassName()} />
-                        </label>
-                        <label className="space-y-2">
-                          <span className="text-xs font-semibold text-white/55">Highlight</span>
-                          <input
-                            name="highlight"
-                            defaultValue={String(config.highlight ?? "")}
-                            className={fieldClassName()}
-                          />
-                        </label>
-                        <label className="space-y-2">
-                          <span className="text-xs font-semibold text-white/55">Subtitle</span>
-                          <input
-                            name="subtitle"
-                            defaultValue={String(config.subtitle ?? "")}
-                            className={fieldClassName()}
-                          />
-                        </label>
-                        <label className="space-y-2 md:col-span-2">
-                          <span className="text-xs font-semibold text-white/55">الوصف</span>
-                          <textarea
-                            name="description"
-                            defaultValue={String(config.description ?? "")}
-                            rows={4}
-                            className={fieldClassName("resize-y leading-7")}
-                          />
-                        </label>
-                      </div>
-                    </section>
-                  )}
-                </div>
-              ),
+              content: contentTab,
             },
+            ...(!isHomeHero
+              ? [
+                  {
+                    id: "order",
+                    label: "ترتيب العناصر",
+                    content: orderTab,
+                  },
+                ]
+              : []),
             {
               id: "media-desktop",
               label: "صور الديسكتوب",
               content: (
-                <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                  <AdminImagePathListField
-                    name="images"
-                    label="صور الهيرو (ديسكتوب)"
-                    defaultValue={imagesText}
-                    helperText="اختر أو ارفع الصور من المكتبة. استخدم الأسهم لترتيب الشرائح في العرض."
-                  />
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Image Position Class</span>
-                    <input
-                      name="image_position_class"
-                      defaultValue={String(config.imagePositionClassName ?? "")}
-                      placeholder="object-center"
-                      className={fieldClassName()}
+                <div className="mx-auto max-w-5xl">
+                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                    <AdminImagePathListField
+                      name="images"
+                      label="صور الهيرو (ديسكتوب)"
+                      defaultValue={imagesText}
+                      helperText="اختر أو ارفع الصور من المكتبة. استخدم الأسهم لترتيب الشرائح في العرض."
                     />
-                  </label>
-                </section>
+                    <label className="block max-w-[920px] space-y-2">
+                      <span className="text-xs font-semibold text-white/55">Image Position Class</span>
+                      <input
+                        name="image_position_class"
+                        defaultValue={String(config.imagePositionClassName ?? "")}
+                        placeholder="object-center"
+                        className={fieldClassName("h-11")}
+                      />
+                    </label>
+                  </section>
+                </div>
               ),
             },
             {
               id: "media-mobile",
               label: "صور الموبايل",
               content: (
-                <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                  <AdminImagePathListField
-                    name="mobile_images"
-                    label="صور الهيرو (موبايل)"
-                    defaultValue={mobileImagesText}
-                    helperText="اختياري. لو تُركت فارغة تُستخدم صور الديسكتوب تلقائيًا على الموبايل. رتّب صور الموبايل بنفس ترتيب الديسكتوب."
-                  />
-                </section>
+                <div className="mx-auto max-w-5xl">
+                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                    <AdminImagePathListField
+                      name="mobile_images"
+                      label="صور الهيرو (موبايل)"
+                      defaultValue={mobileImagesText}
+                      helperText="اختياري. لو تُركت فارغة تُستخدم صور الديسكتوب تلقائيًا على الموبايل. رتّب صور الموبايل بنفس ترتيب الديسكتوب."
+                    />
+                  </section>
+                </div>
               ),
             },
             {
               id: "buttons",
               label: "الأزرار",
               content: (
-                <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                  {isHomeHero ? (
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-                      <span>إظهار أزرار CTA في الهيرو</span>
-                      <input
-                        type="checkbox"
-                        name="show_cta"
-                        defaultChecked={
-                          config.showCta === true ||
-                          (config.showCta === undefined &&
-                            Boolean(config.primaryCtaLabel || config.secondaryCtaLabel))
-                        }
-                      />
-                    </label>
-                  ) : (
-                    <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-xs leading-6 text-white/50">
-                      إظهار/إخفاء CTA ومحاذاته تُداران من تبويب المحتوى. عدّل هنا النصوص والروابط فقط.
-                    </p>
-                  )}
+                <div className="mx-auto max-w-5xl">
+                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                    {isHomeHero ? (
+                      <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
+                        <span>إظهار أزرار الإجراء في الهيرو</span>
+                        <input
+                          type="checkbox"
+                          name="show_cta"
+                          defaultChecked={
+                            config.showCta === true ||
+                            (config.showCta === undefined &&
+                              Boolean(config.primaryCtaLabel || config.secondaryCtaLabel))
+                          }
+                        />
+                      </label>
+                    ) : (
+                      <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-xs leading-6 text-white/50">
+                        إظهار/إخفاء زر الإجراء ومحاذاته تُداران من تبويب المحتوى. عدّل هنا النصوص والروابط فقط.
+                      </p>
+                    )}
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Primary CTA — Label</span>
-                      <input
-                        name="primary_cta_label"
-                        defaultValue={String(config.primaryCtaLabel ?? "")}
-                        className={fieldClassName()}
+                    <div className="grid max-w-[920px] gap-4 md:grid-cols-2">
+                      <label className="space-y-2">
+                        <span className="text-xs font-semibold text-white/55">الزر الأساسي — النص</span>
+                        <input
+                          name="primary_cta_label"
+                          defaultValue={String(config.primaryCtaLabel ?? "")}
+                          className={fieldClassName("h-11")}
+                        />
+                      </label>
+                      <AdminLinkField
+                        prefix="primary_cta"
+                        label="الزر الأساسي — الرابط"
+                        defaultValue={primaryCtaLink}
+                        helperText="اختر رابطًا داخليًا من النظام أو أدخل رابطًا خارجيًا."
+                        showAnchor
                       />
-                    </label>
-                    <AdminLinkField
-                      prefix="primary_cta"
-                      label="Primary CTA — Link"
-                      defaultValue={primaryCtaLink}
-                      helperText="اختر رابطًا داخليًا من النظام أو أدخل رابطًا خارجيًا."
-                      showAnchor
-                    />
-                    <label className="space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Secondary CTA — Label</span>
-                      <input
-                        name="secondary_cta_label"
-                        defaultValue={String(config.secondaryCtaLabel ?? "")}
-                        className={fieldClassName()}
+                      <label className="space-y-2">
+                        <span className="text-xs font-semibold text-white/55">الزر الثانوي — النص</span>
+                        <input
+                          name="secondary_cta_label"
+                          defaultValue={String(config.secondaryCtaLabel ?? "")}
+                          className={fieldClassName("h-11")}
+                        />
+                      </label>
+                      <AdminLinkField
+                        prefix="secondary_cta"
+                        label="الزر الثانوي — الرابط"
+                        defaultValue={secondaryCtaLink}
+                        helperText="اختر رابطًا داخليًا من النظام أو أدخل رابطًا خارجيًا."
+                        showAnchor
                       />
-                    </label>
-                    <AdminLinkField
-                      prefix="secondary_cta"
-                      label="Secondary CTA — Link"
-                      defaultValue={secondaryCtaLink}
-                      helperText="اختر رابطًا داخليًا من النظام أو أدخل رابطًا خارجيًا."
-                      showAnchor
-                    />
-                  </div>
-                </section>
+                    </div>
+                  </section>
+                </div>
               ),
             },
             {
               id: "display",
               label: "العرض والربط",
               content: (
-                <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+                <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
                   <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                     <h2 className="text-lg font-semibold text-white">إعدادات العرض</h2>
 
@@ -387,7 +405,7 @@ export default function HeroEditClient({
 
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Variant</span>
-                      <select name="variant" defaultValue={hero.variant} className={fieldClassName()}>
+                      <select name="variant" defaultValue={hero.variant} className={fieldClassName("h-11")}>
                         {variantOptions.map(([value, label]) => (
                           <option key={value} value={value}>
                             {label}
@@ -398,7 +416,7 @@ export default function HeroEditClient({
 
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Source</span>
-                      <select name="source_type" defaultValue={hero.source_type} className={fieldClassName()}>
+                      <select name="source_type" defaultValue={hero.source_type} className={fieldClassName("h-11")}>
                         {sourceOptions.map(([value, label]) => (
                           <option key={value} value={value}>
                             {label}
@@ -413,7 +431,7 @@ export default function HeroEditClient({
                         name="source_slug"
                         defaultValue={hero.source_slug ?? ""}
                         placeholder="category-slug"
-                        className={fieldClassName()}
+                        className={fieldClassName("h-11")}
                       />
                     </label>
 
@@ -425,7 +443,7 @@ export default function HeroEditClient({
                         min={1}
                         max={12}
                         defaultValue={hero.limit_count ?? 1}
-                        className={fieldClassName()}
+                        className={fieldClassName("h-11")}
                       />
                     </label>
                   </section>
@@ -437,10 +455,10 @@ export default function HeroEditClient({
           ]}
         />
 
-        <div className="mt-6 flex justify-end">
+        <div className="sticky bottom-4 z-20 mt-6 flex justify-end">
           <button
             type="submit"
-            className="rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
+            className="rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition hover:bg-[#e5c98d]"
           >
             حفظ الهيرو
           </button>
