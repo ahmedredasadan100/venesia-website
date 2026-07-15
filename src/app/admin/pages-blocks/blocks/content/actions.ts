@@ -28,6 +28,7 @@ import type {
   HomeProjectsModuleConfig,
   VisionGoalsModuleConfig,
 } from "../../../../../lib/page-blocks/configs";
+import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
 import {
   isAboutApproachTemplate,
   isHomeProjectsTemplate,
@@ -99,8 +100,12 @@ function buildAboutIntroConfig(formData: FormData): AboutIntroModuleConfig {
     text: cleanText(formData.get(`beat_${index}_text`)),
   }));
 
+  const bodyRaw = String(formData.get("body") ?? "").trim();
+  const body = bodyRaw ? normalizeRichTextContent(bodyRaw) : "";
+
   const config: AboutIntroModuleConfig = {
     ...buildGenericContentConfig(formData),
+    body,
     images: {
       main: optionalImagePath(formData, "image_main"),
       secondary: optionalImagePath(formData, "image_secondary"),
@@ -596,10 +601,8 @@ export async function updateContentBlock(formData: FormData) {
   await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
-  const slug = slugify(cleanText(formData.get("slug")) || name);
 
-  if (!id || !name || !slug) throw new Error("بيانات البلوك غير مكتملة.");
-  if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
+  if (!id || !name) throw new Error("بيانات البلوك غير مكتملة.");
 
   const { data: existing, error: existingError } = await getSupabaseAdmin()
     .from("content_block_templates")
@@ -607,6 +610,15 @@ export async function updateContentBlock(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
   if (existingError || !existing) throw new Error(existingError?.message || "البلوك غير موجود.");
+
+  // About Intro slug is locked in admin UI — never overwrite from request.
+  const aboutIntroLocked =
+    existing.slug === "about-intro" || existing.variant === "about-intro";
+  const requestedSlug = slugify(cleanText(formData.get("slug")) || name);
+  const slug = aboutIntroLocked ? existing.slug : requestedSlug;
+
+  if (!slug) throw new Error("بيانات البلوك غير مكتملة.");
+  if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
 
   if (isProjectsHubTemplate(existing.slug, existing.variant) && !isProjectsHubTemplate(slug, cleanText(formData.get("variant")) || null)) {
     throw new Error("لا يمكن تحويل موديول صفحة المشروعات إلى نوع عام.");

@@ -39,7 +39,15 @@ import { getContentModuleEditorKey } from "../../../lib/page-blocks/module-edit-
 import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 
-function StickyModuleSaveDock({ title, description }: { title: string; description: string }) {
+function StickyModuleSaveDock({
+  title,
+  description,
+  saveLabel = "حفظ الموديول",
+}: {
+  title: string;
+  description: string;
+  saveLabel?: string;
+}) {
   const { pending } = useFormStatus();
 
   return (
@@ -51,7 +59,7 @@ function StickyModuleSaveDock({ title, description }: { title: string; descripti
           pending ? "cursor-not-allowed opacity-60" : "cursor-pointer"
         }`}
       >
-        {pending ? "جارٍ الحفظ..." : "حفظ الموديول"}
+        {pending ? "جارٍ الحفظ..." : saveLabel}
       </button>
     </AdminStickyFormBar>
   );
@@ -115,7 +123,7 @@ export default function ContentModuleEditClient({
           : editorKey === "home-story"
             ? "HOME STORY MODULE"
             : editorKey === "about-intro"
-              ? "WHO WE ARE MODULE"
+              ? "CONTENT MODULE"
               : editorKey === "vision-goals"
                 ? "VISION & GOALS MODULE"
                 : editorKey === "about-cta"
@@ -143,7 +151,7 @@ export default function ContentModuleEditClient({
           : editorKey === "home-story"
             ? "تحكّم في نصوص وصور وزر قسم القصة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
             : editorKey === "about-intro"
-              ? "موديول Who We Are — قابل لإعادة الاستخدام على أي صفحة."
+              ? "تحكّم في نصوص وصور وبطاقات قسم من نحن في صفحة من نحن. التغييرات تنعكس على العرض العام بعد الحفظ."
               : editorKey === "vision-goals"
                 ? "موديول الرؤية والأهداف — قابل لإعادة الاستخدام."
                 : editorKey === "about-cta"
@@ -201,7 +209,9 @@ export default function ContentModuleEditClient({
   const isHomeContact = editorKey === "home-contact";
   const isHomeProjects = editorKey === "home-projects";
   const isHomeTrust = editorKey === "home-trust";
+  const isAboutIntro = editorKey === "about-intro";
   const usesHomeModuleChrome = isHomeStory || isHomeContact || isHomeProjects || isHomeTrust;
+  const usesUnifiedModuleChrome = usesHomeModuleChrome || isAboutIntro;
   const hubStatus = statusMeta(block.status);
   const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
   const homeContactConfig = isHomeContact ? (config as ReturnType<typeof asAboutCtaConfig>) : null;
@@ -212,22 +222,28 @@ export default function ContentModuleEditClient({
     content: (
       <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">الاسم</span>
+          <span className="text-xs font-semibold text-white/55">
+            {isAboutIntro ? "اسم الموديول" : "الاسم"}
+          </span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
         </label>
-        {isHomeContact || isHomeStory || isHomeProjects || isHomeTrust ? (
+        {isHomeContact || isHomeStory || isHomeProjects || isHomeTrust || isAboutIntro ? (
           <div className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">
-              {isHomeTrust ? "المعرّف — Slug" : "المعرّف التقني (Slug)"}
+              {isHomeTrust ? "المعرّف — Slug" : "المعرّف التقني"}
             </span>
             <input type="hidden" name="slug" value={block.slug} />
             <div
               dir="ltr"
-              className="w-full select-text rounded-2xl border border-white/8 bg-[#05070B]/90 px-4 py-3 font-en text-sm text-white/80 cursor-text"
+              className="w-full cursor-default select-text rounded-2xl border border-white/8 bg-[#05070B]/90 px-4 py-3 font-en text-sm text-white/80"
             >
               {block.slug}
             </div>
-            <p className="text-xs leading-6 text-white/45">للقراءة فقط — يُستخدم داخليًا لتعريف الموديول.</p>
+            <p className="text-xs leading-6 text-white/45">
+              {isAboutIntro
+                ? "المعرّف التقني للموديول — للقراءة فقط."
+                : "للقراءة فقط — يُستخدم داخليًا لتعريف الموديول."}
+            </p>
           </div>
         ) : (
           <label className="block space-y-2">
@@ -235,7 +251,7 @@ export default function ContentModuleEditClient({
             <input name="slug" defaultValue={block.slug} required dir="ltr" className={fieldClassName()} />
           </label>
         )}
-        {isHomeContact ? (
+        {isHomeContact || isAboutIntro ? (
           <label className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
             <input
@@ -324,8 +340,25 @@ export default function ContentModuleEditClient({
     : [];
 
   return (
-    <div className={`space-y-6 ${usesHomeModuleChrome ? "pb-28" : "pb-10"}`} dir="rtl">
-      {isHomeStory ? (
+    <div className={`space-y-6 ${usesUnifiedModuleChrome ? "pb-28" : "pb-10"}`} dir="rtl">
+      {isAboutIntro ? (
+        <AdminPageContextHeader
+          eyebrow="CONTENT MODULE"
+          title="من نحن — المقدمة"
+          description="تحكّم في نصوص وصور وبطاقات قسم من نحن في صفحة من نحن. التغييرات تنعكس على العرض العام بعد الحفظ."
+          meta={hubStatus.label}
+          actions={
+            <>
+              <AdminActionButton href="/about" variant="dark">
+                معاينة صفحة من نحن
+              </AdminActionButton>
+              <AdminActionButton href="/admin/pages-blocks/blocks/content" variant="ghost">
+                الرجوع لإدارة الموديولات
+              </AdminActionButton>
+            </>
+          }
+        />
+      ) : isHomeStory ? (
         <AdminPageContextHeader
           eyebrow="HOME STORY MODULE"
           title={block.name}
@@ -426,6 +459,10 @@ export default function ContentModuleEditClient({
         />
       )}
 
+      {isAboutIntro && saved ? (
+        <AdminNotice variant="success" message="تم حفظ موديول من نحن — المقدمة بنجاح." />
+      ) : null}
+
       {isHomeStory && saved ? (
         <AdminNotice variant="success" message="تم حفظ الموديول وتحديث الصفحة الرئيسية بنجاح." />
       ) : null}
@@ -447,7 +484,7 @@ export default function ContentModuleEditClient({
       ) : null}
 
       <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      {usesProjectsHubHeader || usesHomeModuleChrome ? null : (
+      {usesProjectsHubHeader || usesHomeModuleChrome || isAboutIntro ? null : (
         <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
       )}
 
@@ -558,7 +595,13 @@ export default function ContentModuleEditClient({
           />
         )}
 
-        {isHomeStory ? (
+        {isAboutIntro ? (
+          <StickyModuleSaveDock
+            title="حفظ التعديلات"
+            description="يُحدَّث العرض العام لصفحة من نحن بعد اكتمال الحفظ."
+            saveLabel="حفظ التعديلات"
+          />
+        ) : isHomeStory ? (
           <StickyModuleSaveDock
             title="حفظ موديول Home Story"
             description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."

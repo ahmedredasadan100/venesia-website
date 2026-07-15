@@ -3,6 +3,7 @@
 import Image from "next/image";
 
 import type { AboutDocumentaryBeat, AboutIntroContent } from "../about/about-cms-mappers";
+import RichTextContent from "../content/RichTextContent";
 
 export type WhoWeAreModuleSectionProps = {
   cmsIntro: AboutIntroContent | null;
@@ -15,7 +16,7 @@ function hasIntroCopy(intro: AboutIntroContent | null | undefined) {
     intro.eyebrow?.trim() ||
       intro.title?.trim() ||
       intro.subtitle?.trim() ||
-      intro.description.some((paragraph) => paragraph.trim()),
+      intro.description?.trim(),
   );
 }
 
@@ -178,15 +179,13 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                   </div>
                 ) : null}
 
-                {intro!.description.length ? (
+                {intro!.description?.trim() ? (
                   <div data-reveal="fade-up" data-delay="450">
-                    <div className="mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 md:text-[16px]">
-                      <div className="space-y-1">
-                        {intro!.description.map((paragraph) => (
-                          <p key={paragraph}>{paragraph}</p>
-                        ))}
-                      </div>
-                    </div>
+                    <RichTextContent
+                      value={intro!.description}
+                      mode="rich"
+                      className="mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 md:text-[16px] [&_p+_p]:mt-1 [&_strong]:text-inherit [&_b]:text-inherit"
+                    />
                   </div>
                 ) : null}
               </>

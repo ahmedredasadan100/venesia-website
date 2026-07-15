@@ -22,7 +22,8 @@ export type AboutIntroContent = {
   eyebrow: string;
   title: string;
   subtitle: string;
-  description: string[];
+  /** Raw body — legacy plain text or sanitized rich HTML. */
+  description: string;
   images?: AboutIntroImages;
   button?: {
     label: string;
@@ -39,13 +40,6 @@ export type AboutDocumentaryBeat = {
 export type AboutApproachContent = AboutApproachModuleContent;
 
 export type AboutPrinciplesContent = AboutPrinciplesModuleContent;
-
-function splitParagraphs(body?: string) {
-  return (body ?? "")
-    .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
 
 function isFilledBeat(beat: { title?: string; text?: string }) {
   return Boolean(beat.title?.trim() || beat.text?.trim());
@@ -94,7 +88,7 @@ export function mapAboutIntroBlock(block: ResolvedPageBlock): AboutIntroContent 
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     subtitle: config.subtitle ?? "",
-    description: splitParagraphs(config.body),
+    description: config.body ?? "",
     images: mappedImages,
     button:
       buttonLabel || buttonHref

@@ -166,17 +166,18 @@ export default function AboutIntroModuleEditor({
         clearLink: "مسح الرابط",
       }
     : {
-        eyebrow: "Eyebrow",
-        title: "Title",
-        body: "Description — فقرات مفصولة بسطر فارغ",
-        bodyHelper: "",
+        eyebrow: "العنوان التمهيدي",
+        title: "العنوان",
+        subtitle: "العنوان الفرعي",
+        body: "الوصف",
+        bodyHelper: "Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة.",
         imageMain: "الصورة 1 — الرئيسية",
         imageSecondary: "الصورة 2 — الثانوية",
-        imageAlt: "Alt",
-        buttonLabel: "Label",
+        imageAlt: "وصف الصورة",
+        buttonLabel: "نص الزر",
         buttonLink: "رابط الزر",
-        chooseLink: "Choose Link",
-        clearLink: "Clear",
+        chooseLink: "اختيار الرابط",
+        clearLink: "مسح الرابط",
       };
 
   const [homeStoryImages, setHomeStoryImages] = useState<HomeStoryImagePair>(() => ({
@@ -196,48 +197,41 @@ export default function AboutIntroModuleEditor({
   }
 
   return (
-    <div className="space-y-6">
+    <div className={isHomeStory ? "space-y-6" : "mx-auto max-w-5xl space-y-4"}>
       {section === "all" ? <input type="hidden" name="config_schema" value="about-intro" /> : null}
       {isHomeStory && section === "all" ? <input type="hidden" name="include_story_cta" value="1" /> : null}
 
       {showText ? (
         <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-          {section === "all" ? <h2 className="text-sm font-semibold text-white">النص</h2> : null}
-          <label className="block space-y-2">
+          {section === "all" ? (
+            <h2 className="text-sm font-semibold text-white">{isHomeStory ? "النص" : "محتوى الموديول"}</h2>
+          ) : null}
+          <label className="block max-w-[920px] space-y-1.5">
             <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
-            <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+            <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
           </label>
-          <label className="block space-y-2">
+          <label className="block max-w-[920px] space-y-1.5">
             <span className="text-xs font-semibold text-white/55">{fieldLabels.title}</span>
-            <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
+            <input name="title" defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
           </label>
           {!isHomeStory ? (
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">Subtitle (السطر الذهبي)</span>
-              <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName()} />
+            <label className="block max-w-[920px] space-y-1.5">
+              <span className="text-xs font-semibold text-white/55">{fieldLabels.subtitle}</span>
+              <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
             </label>
           ) : null}
-          {isHomeStory ? (
+          <div className="max-w-[920px]">
             <AdminRichTextEditor
               name="body"
               label={fieldLabels.body}
               defaultValue={config.body ?? ""}
               toolbarMode="minimal"
               enableTextAlign
-              minHeight={180}
+              toolbarPlacement="top"
+              minHeight={160}
               helperText={fieldLabels.bodyHelper}
             />
-          ) : (
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">{fieldLabels.body}</span>
-              <textarea
-                name="body"
-                defaultValue={config.body ?? ""}
-                rows={8}
-                className={fieldClassName("resize-y leading-7")}
-              />
-            </label>
-          )}
+          </div>
         </section>
       ) : null}
 
@@ -352,21 +346,21 @@ export default function AboutIntroModuleEditor({
                 />
               </div>
               <div className="grid gap-4 md:grid-cols-3">
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Alt — الصورة 1</span>
-                  <input name="image_main_alt" defaultValue={images.mainAlt ?? ""} className={fieldClassName()} />
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold text-white/55">وصف الصورة 1</span>
+                  <input name="image_main_alt" defaultValue={images.mainAlt ?? ""} className={fieldClassName("h-11")} />
                 </label>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Alt — الصورة 2</span>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold text-white/55">وصف الصورة 2</span>
                   <input
                     name="image_secondary_alt"
                     defaultValue={images.secondaryAlt ?? ""}
-                    className={fieldClassName()}
+                    className={fieldClassName("h-11")}
                   />
                 </label>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Alt — الصورة 3</span>
-                  <input name="image_accent_alt" defaultValue={images.accentAlt ?? ""} className={fieldClassName()} />
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold text-white/55">وصف الصورة 3</span>
+                  <input name="image_accent_alt" defaultValue={images.accentAlt ?? ""} className={fieldClassName("h-11")} />
                 </label>
               </div>
             </>
@@ -417,21 +411,21 @@ export default function AboutIntroModuleEditor({
             {beats.map((beat, index) => (
               <div key={index} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
                 <p className="text-xs font-semibold text-[#D8B87A]/70">بطاقة {index + 1}</p>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Badge / Number</span>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold text-white/55">الرقم / الشارة</span>
                   <input
                     name={`beat_${index}_num`}
                     defaultValue={beat.num ?? ""}
                     placeholder={String(index + 1).padStart(2, "0")}
-                    className={fieldClassName()}
+                    className={fieldClassName("h-11")}
                   />
                 </label>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Title</span>
-                  <input name={`beat_${index}_title`} defaultValue={beat.title ?? ""} className={fieldClassName()} />
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold text-white/55">العنوان</span>
+                  <input name={`beat_${index}_title`} defaultValue={beat.title ?? ""} className={fieldClassName("h-11")} />
                 </label>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Description</span>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold text-white/55">الوصف</span>
                   <textarea
                     name={`beat_${index}_text`}
                     defaultValue={beat.text ?? ""}
