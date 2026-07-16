@@ -23,6 +23,8 @@
     "verify:composite-slot-behavior": "node scripts/verify-composite-slot-behavior.mjs",
     "verify:assignment-presence": "node scripts/verify-assignment-presence.mjs",
     "verify:assignment-presence-behavior": "node scripts/verify-assignment-presence-behavior.mjs",
+    "verify:route-slot-policy": "node scripts/verify-route-slot-policy.mjs",
+    "verify:project-child-fail-closed": "node scripts/verify-project-child-fail-closed.mjs",
     "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:audit-coverage",
     "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:audit-coverage && npm run build"
   },
