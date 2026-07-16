@@ -1,4 +1,5 @@
 import type { GalleryMediaPayload, MediaTopicPayload, VideoMediaPayload } from "../admin/media-topic-payload";
+import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
 import { toPublicMediaType } from "./content-type-map";
 import { formatDateLabel } from "./format-date-label";
 import type { MediaContentItem } from "./types";
@@ -52,11 +53,8 @@ function resolveGalleryPayload(payload: MediaTopicPayload | null): GalleryMediaP
 }
 
 function resolveTopicImage(image: string | null | undefined, fallback?: string | null) {
-  const trimmed = image?.trim();
-  if (trimmed) return trimmed;
-  const fallbackTrimmed = fallback?.trim();
-  if (fallbackTrimmed) return fallbackTrimmed;
-  return DEFAULT_IMAGE;
+  const primary = image?.trim() || fallback?.trim() || DEFAULT_IMAGE;
+  return resolveLocalPublicImage(primary, DEFAULT_IMAGE);
 }
 
 function resolveTopicContent(row: UnifiedMediaTopicRow, publicType: MediaContentItem["type"]) {

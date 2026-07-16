@@ -17,7 +17,8 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       <BackToTopButton />
       <PwaShell />
 
-      <SpeedInsights />
+      {/* Vercel injects VERCEL at build time; skip on local production builds to avoid /_vercel 404 noise. */}
+      {process.env.VERCEL ? <SpeedInsights /> : null}
     </>
   );
 }

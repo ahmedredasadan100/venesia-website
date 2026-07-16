@@ -56,7 +56,7 @@ export default function ContactFormSection({ cmsOffice, cmsForm }: ContactFormSe
       ) : null}
 
       {form ? (
-        <div className="rounded-[28px] border border-[#d2a75a]/20 bg-white/[0.035] p-7">
+        <div className="min-w-0 rounded-[28px] border border-[#d2a75a]/20 bg-white/[0.035] p-7">
           <div className="mb-7 text-center">
             {form.title.trim() ? (
               <h2 className="text-2xl font-semibold text-[#d2a75a]">
@@ -71,24 +71,24 @@ export default function ContactFormSection({ cmsOffice, cmsForm }: ContactFormSe
             ) : null}
           </div>
 
-          <form className="grid gap-5">
-            <div className="grid gap-5 md:grid-cols-2">
+          <form className="grid min-w-0 gap-5">
+            <div className="grid min-w-0 gap-5 md:grid-cols-2">
               <input
-                className="rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
+                className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
                 placeholder={FORM_FIELD_LABELS.name}
               />
 
               <input
-                className="rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
+                className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
                 placeholder={FORM_FIELD_LABELS.phone}
               />
 
               <input
-                className="rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
+                className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
                 placeholder={FORM_FIELD_LABELS.email}
               />
 
-              <select className="rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition focus:border-[#d2a75a]/60">
+              <select className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition focus:border-[#d2a75a]/60">
                 <option>{FORM_FIELD_LABELS.subject}</option>
                 {FORM_SUBJECT_OPTIONS.map((option) => (
                   <option key={option}>{option}</option>
@@ -97,7 +97,7 @@ export default function ContactFormSection({ cmsOffice, cmsForm }: ContactFormSe
             </div>
 
             <textarea
-              className="min-h-40 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
+              className="min-h-40 min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
               placeholder={FORM_FIELD_LABELS.message}
             />
 

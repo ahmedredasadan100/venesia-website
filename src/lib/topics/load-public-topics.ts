@@ -6,9 +6,12 @@ import { cache } from "react";
 import { filterPublicTopics, isTestTopicSlug } from "../admin/cms-test-data";
 import { formatArabicContentDate } from "../content-dates";
 import { logError } from "../logging";
+import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { estimateReadingTimeLabel } from "./reading-time";
 import type { Topic } from "./types";
+
+const DEFAULT_TOPIC_IMAGE = "/images/topics/default.jpg";
 
 type DbTopic = {
   id: number;
@@ -59,7 +62,7 @@ function mapDbTopicToListingTopic(topic: DbTopic): Topic {
     slug: topic.slug,
     title: topic.title ?? "",
     excerpt: topic.excerpt ?? "",
-    image: topic.image ?? "",
+    image: resolveLocalPublicImage(topic.image, DEFAULT_TOPIC_IMAGE),
     category: topic.category ?? "",
     categorySlug: topic.category_slug ?? "",
     date: topic.date_label || formatArabicContentDate(topic.published_at ?? ""),
@@ -84,7 +87,7 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
     title: topic.title ?? "",
     excerpt: topic.excerpt ?? "",
     content: topic.content ?? "",
-    image: topic.image ?? "",
+    image: resolveLocalPublicImage(topic.image, DEFAULT_TOPIC_IMAGE),
     category: topic.category ?? "",
     categorySlug: topic.category_slug ?? "",
     series: topic.series ?? "",

@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "../supabase-admin";
 import { filterPublicTopics } from "../admin/cms-test-data";
 import { logError } from "../logging";
 import { formatArabicContentDate } from "../content-dates";
+import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
 import type {
   FeedModuleConfig,
   FeedModulePayload,
@@ -11,7 +12,7 @@ import type {
   TopicsFeedType,
 } from "./types";
 
-const DEFAULT_IMAGE = "/images/venesia-5.png";
+const DEFAULT_IMAGE = "/images/topics/default.jpg";
 
 function getCategoryFilterHref(slug: string) {
   return `/topics?category=${slug}`;
@@ -64,7 +65,7 @@ async function resolveLatestOrPopular(
         title: row.title ?? "",
         excerpt: row.excerpt ?? "",
         date: row.date_label || formatArabicContentDate(row.published_at) || "",
-        image: row.image || DEFAULT_IMAGE,
+        image: resolveLocalPublicImage(row.image, DEFAULT_IMAGE),
         href: `/topics/${row.slug}`,
       })),
   };
@@ -190,7 +191,7 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
       return {
         title: row.name,
         subtitle: "",
-        image: firstInSeries?.image || DEFAULT_IMAGE,
+        image: resolveLocalPublicImage(firstInSeries?.image, DEFAULT_IMAGE),
         href: getSeriesFilterHref(row.slug),
         slug: row.slug,
       };

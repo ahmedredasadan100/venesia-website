@@ -34,7 +34,7 @@ export default function ContactCTASection({ cmsContent }: ContactCTASectionProps
 
         <div className="relative max-w-2xl">
           {cta.title.trim() ? (
-            <h2 className="text-3xl font-semibold md:text-5xl">
+            <h2 className="text-balance text-3xl font-semibold max-[359px]:text-2xl md:text-5xl">
               {cta.title}
             </h2>
           ) : null}
