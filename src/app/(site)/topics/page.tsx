@@ -47,7 +47,10 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
     getHeroSectionByPageSlug("topics"),
     loadPageCompositionBySlug("topics", "main-sidebar"),
   ]);
-  const useCmsLayout = composition.hasAssignments;
+  // Presence (any assignment rows) or load failure → CMS path; never resurrect static shell.
+  const useCmsLayout =
+    composition.hasAnyAssignmentRows || composition.hasCompositionError;
+  // Feeds are already in composition when CMS-managed; only reload for virgin static shell.
   const sidebarFeeds = useCmsLayout ? [] : await loadFeedModulesForPageSlug("topics");
   const heroEntry = findHeroInComposition(composition);
   const breadcrumbBlock = findBreadcrumbInComposition(composition);
@@ -92,6 +95,14 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
           skipSlots={["hero"]}
           mainAfter={(
             <div className="space-y-7 text-right">
+              {composition.hasCompositionError ? (
+                <p
+                  role="status"
+                  className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 py-4 text-sm text-white/55"
+                >
+                  تعذر تحميل بعض أقسام الصفحة حاليًا. المحتوى الأساسي متاح أدناه.
+                </p>
+              ) : null}
               <FeaturedTopic topic={featuredTopic} />
 
               {totalRegularTopics > 0 ? (

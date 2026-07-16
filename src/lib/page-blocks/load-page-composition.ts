@@ -1,6 +1,6 @@
 import "server-only";
 
-import { loadFeedModulesForPageSlug } from "../feed-modules/load-feed-modules";
+import { loadFeedModuleStateForPageSlug } from "../feed-modules/load-feed-modules";
 import { getHeroSectionByPageSlug } from "../load-hero-section";
 import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageComposition, PageLayoutMode, SlotEntry } from "./page-composition-types";
@@ -36,10 +36,10 @@ export async function loadPageCompositionBySlug(
   pageSlug: string,
   layoutMode: PageLayoutMode = "stack",
 ): Promise<PageComposition> {
-  const [hero, blockState, feedModules] = await Promise.all([
+  const [hero, blockState, feedState] = await Promise.all([
     getHeroSectionByPageSlug(pageSlug),
     loadPageBlockStateBySlug(pageSlug),
-    loadFeedModulesForPageSlug(pageSlug),
+    loadFeedModuleStateForPageSlug(pageSlug),
   ]);
 
   const slots = emptySlots();
@@ -48,7 +48,7 @@ export async function loadPageCompositionBySlug(
     pushBlock(slots, block);
   }
 
-  for (const feed of feedModules) {
+  for (const feed of feedState.modules) {
     slots[feed.slot].push({
       kind: "feed",
       assignmentId: feed.assignmentId,
@@ -70,10 +70,17 @@ export async function loadPageCompositionBySlug(
     slots[key] = sortEntries(slots[key]);
   }
 
+  const hasAnyAssignmentRows = blockState.hasAnyAssignmentRows || feedState.hasAnyAssignmentRows;
+  const hasRenderableModules = blockState.hasRenderableModules || feedState.modules.length > 0;
+  const hasCompositionError = blockState.hasCompositionError || feedState.hasCompositionError;
+
   return {
     layoutMode,
     slots,
-    hasAssignments: blockState.hasAssignments || feedModules.length > 0,
+    hasAnyAssignmentRows,
+    hasRenderableModules,
+    hasCompositionError,
+    hasAssignments: hasRenderableModules,
     hiddenHomeModuleSlugs:
       pageSlug === "home" ? blockState.hiddenHomeModuleSlugs : undefined,
   };

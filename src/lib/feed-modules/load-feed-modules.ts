@@ -26,21 +26,38 @@ export type LoadedFeedModule = ResolvedFeedModule & {
   slot: PageLayoutSlot;
 };
 
-export const loadFeedModulesForPageSlug = cache(async function loadFeedModulesForPageSlug(
+export type FeedModuleLoadResult = {
+  modules: LoadedFeedModule[];
+  /** Assignment rows exist before visibility / published filters. */
+  hasAnyAssignmentRows: boolean;
+  /** Query failed — do not treat as empty CMS. */
+  hasCompositionError: boolean;
+};
+
+export const loadFeedModuleStateForPageSlug = cache(async function loadFeedModuleStateForPageSlug(
   pageSlug: string,
-): Promise<LoadedFeedModule[]> {
+): Promise<FeedModuleLoadResult> {
   return unstable_cache(
-    async () => queryFeedModulesForPageSlug(pageSlug),
-    ["feed-modules", pageSlug],
+    async () => queryFeedModuleStateForPageSlug(pageSlug),
+    ["feed-module-state", pageSlug],
     { revalidate: 300, tags: ["page-composition", "feed-modules"] },
   )();
 });
 
-async function queryFeedModulesForPageSlug(pageSlug: string): Promise<LoadedFeedModule[]> {
+export const loadFeedModulesForPageSlug = cache(async function loadFeedModulesForPageSlug(
+  pageSlug: string,
+): Promise<LoadedFeedModule[]> {
+  const state = await loadFeedModuleStateForPageSlug(pageSlug);
+  return state.modules;
+});
+
+async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedModuleLoadResult> {
   const supabase = getSupabaseAdmin();
 
   const page = await getPublishedPageBySlug(pageSlug);
-  if (!page) return [];
+  if (!page) {
+    return { modules: [], hasAnyAssignmentRows: false, hasCompositionError: false };
+  }
 
   const { data: assignments, error: assignmentsError } = await supabase
     .from("page_feed_module_assignments")
@@ -51,10 +68,11 @@ async function queryFeedModulesForPageSlug(pageSlug: string): Promise<LoadedFeed
 
   if (assignmentsError) {
     logError("loadFeedModulesForPageSlug: assignments failed", assignmentsError, { pageSlug });
-    return [];
+    return { modules: [], hasAnyAssignmentRows: false, hasCompositionError: true };
   }
 
   const modules: LoadedFeedModule[] = [];
+  const hasAnyAssignmentRows = (assignments?.length ?? 0) > 0;
 
   for (const row of assignments ?? []) {
     if (!normalizeBoolean(row.is_visible, true)) continue;
@@ -76,5 +94,9 @@ async function queryFeedModulesForPageSlug(pageSlug: string): Promise<LoadedFeed
     });
   }
 
-  return modules;
+  return {
+    modules,
+    hasAnyAssignmentRows,
+    hasCompositionError: false,
+  };
 }

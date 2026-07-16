@@ -32,9 +32,39 @@ function joinedTemplate<T>(value: T | T[] | null | undefined): T | null {
 
 export type PageBlockLoadResult = {
   blocks: ResolvedPageBlock[];
+  /**
+   * True when at least one assignment row exists for the page (any kind),
+   * before visibility / published filters. Use this to decide CMS-managed layout
+   * vs virgin static fallback.
+   */
+  hasAnyAssignmentRows: boolean;
+  /**
+   * True when at least one visible + published block can be rendered.
+   * Prefer this name over hasAssignments for new call sites.
+   */
+  hasRenderableModules: boolean;
+  /**
+   * True when one or more assignment queries failed. Do not treat as "no data".
+   */
+  hasCompositionError: boolean;
+  /**
+   * @deprecated Alias of hasRenderableModules (post-filter). Prefer hasAnyAssignmentRows
+   * when gating CMS vs static layout.
+   */
   hasAssignments: boolean;
   hiddenHomeModuleSlugs: HomeModuleSlug[];
 };
+
+function emptyPageBlockLoadResult(): PageBlockLoadResult {
+  return {
+    blocks: [],
+    hasAnyAssignmentRows: false,
+    hasRenderableModules: false,
+    hasCompositionError: false,
+    hasAssignments: false,
+    hiddenHomeModuleSlugs: [],
+  };
+}
 
 /**
  * Loads Content / CTA / Cards blocks assigned to a page.
@@ -54,10 +84,11 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   const supabase = getSupabaseAdmin();
 
   const page = await getPublishedPageBySlug(pageSlug);
-  if (!page) return { blocks: [], hasAssignments: false, hiddenHomeModuleSlugs: [] };
+  if (!page) return emptyPageBlockLoadResult();
 
   const blocks: ResolvedPageBlock[] = [];
   const hiddenHomeModuleSlugs = new Set<HomeModuleSlug>();
+  let assignmentRowCount = 0;
 
   const [
     { data: contentAssignments, error: contentError },
@@ -83,10 +114,16 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
       .eq("page_id", page.id),
   ]);
 
+  const hasCompositionError = Boolean(contentError || ctaError || cardsError || breadcrumbError);
   if (contentError) logError("loadPageBlockStateBySlug: content assignments failed", contentError, { pageSlug });
   if (ctaError) logError("loadPageBlockStateBySlug: cta assignments failed", ctaError, { pageSlug });
   if (cardsError) logError("loadPageBlockStateBySlug: cards assignments failed", cardsError, { pageSlug });
   if (breadcrumbError) logError("loadPageBlockStateBySlug: breadcrumb assignments failed", breadcrumbError, { pageSlug });
+
+  assignmentRowCount += contentAssignments?.length ?? 0;
+  assignmentRowCount += ctaAssignments?.length ?? 0;
+  assignmentRowCount += cardsAssignments?.length ?? 0;
+  assignmentRowCount += breadcrumbAssignments?.length ?? 0;
 
   for (const row of contentAssignments ?? []) {
     const template = joinedTemplate(row.content_block_templates) as TemplateRow | null;
@@ -182,9 +219,15 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
     });
   }
 
+  const hasRenderableModules = blocks.length > 0;
+  const hasAnyAssignmentRows = assignmentRowCount > 0;
+
   return {
     blocks: sortPageBlocks(blocks),
-    hasAssignments: blocks.length > 0,
+    hasAnyAssignmentRows,
+    hasRenderableModules,
+    hasCompositionError,
+    hasAssignments: hasRenderableModules,
     hiddenHomeModuleSlugs: [...hiddenHomeModuleSlugs],
   };
 }

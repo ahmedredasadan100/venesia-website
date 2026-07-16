@@ -32,6 +32,20 @@ export type SlotEntry = HeroSlotEntry | BlockSlotEntry | FeedSlotEntry;
 export type PageComposition = {
   layoutMode: PageLayoutMode;
   slots: Record<PageLayoutSlot, SlotEntry[]>;
+  /**
+   * Assignment rows exist for the page (blocks and/or feeds), before
+   * visibility / published filters. Use to honor CMS-managed pages when
+   * everything is hidden or draft.
+   */
+  hasAnyAssignmentRows: boolean;
+  /** Visible + published modules that entered slots. */
+  hasRenderableModules: boolean;
+  /** Loader query failure — do not treat as virgin/empty CMS. */
+  hasCompositionError: boolean;
+  /**
+   * @deprecated Alias of hasRenderableModules. Prefer hasAnyAssignmentRows
+   * when choosing CMS layout vs static shell.
+   */
   hasAssignments: boolean;
   /** Home modules with an assignment row where is_visible=false — suppress fallback rendering. */
   hiddenHomeModuleSlugs?: HomeModuleSlug[];
