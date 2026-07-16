@@ -163,7 +163,7 @@ const baseComposition = {
   );
 }
 
-// 3. Hidden assignment omitted
+// 3. Hidden assignment => incomplete (all-or-nothing) => Static path
 {
   const withHidden = {
     ...baseComposition,
@@ -172,13 +172,13 @@ const baseComposition = {
     ),
   };
   const plan = buildProjectsHubRenderPlan(withHidden);
-  assert.equal(plan.ready, true);
-  assert.equal(plan.modules.length, 3);
-  assert.ok(!plan.modules.some((m) => m.slug === "projects-hub-featured"));
+  assert.equal(plan.ready, false);
+  assert.equal(plan.reason, "incomplete_hub_modules");
   assert.ok(plan.skipped.some((s) => s.reason === "hidden"));
+  assert.ok(plan.skipped.some((s) => s.reason === "required_module_missing" && s.slug === "projects-hub-featured"));
 }
 
-// 4. Unknown module skipped
+// 4. Unknown module skipped; four valid remain => ready
 {
   const withUnknown = {
     ...baseComposition,
@@ -198,7 +198,7 @@ const baseComposition = {
   assert.ok(plan.skipped.some((s) => s.reason === "unsupported_slug"));
 }
 
-// 5. Invalid config skipped; other modules remain
+// 5. Invalid config => incomplete (all-or-nothing)
 {
   const withInvalid = {
     ...baseComposition,
@@ -207,9 +207,33 @@ const baseComposition = {
     ),
   };
   const plan = buildProjectsHubRenderPlan(withInvalid);
-  assert.equal(plan.ready, true);
-  assert.equal(plan.modules.length, 3);
+  assert.equal(plan.ready, false);
+  assert.equal(plan.reason, "incomplete_hub_modules");
   assert.ok(plan.skipped.some((s) => s.reason === "config_not_object"));
+}
+
+// 5b. Single module only => incomplete
+{
+  const one = {
+    ...baseComposition,
+    assignments: [baseComposition.assignments[0]],
+  };
+  const plan = buildProjectsHubRenderPlan(one);
+  assert.equal(plan.ready, false);
+  assert.equal(plan.reason, "incomplete_hub_modules");
+}
+
+// 5c. Non-main slot ignored => incomplete if that drops a required module
+{
+  const nonMain = {
+    ...baseComposition,
+    assignments: baseComposition.assignments.map((row) =>
+      row.templateSlug === "projects-hub-map" ? { ...row, slot: "sidebar" } : row,
+    ),
+  };
+  const plan = buildProjectsHubRenderPlan(nonMain);
+  assert.equal(plan.ready, false);
+  assert.ok(plan.skipped.some((s) => s.reason === "unsupported_slot"));
 }
 
 // 6. Missing assignments => not ready
@@ -286,7 +310,7 @@ const baseComposition = {
   assert.equal(getProjectsByFilter(mixed, "commercial").length, 1);
 }
 
-// 10. Duplicate supported slug skipped
+// 10. Duplicate supported slug skipped — still ready if four unique remain
 {
   const withDup = {
     ...baseComposition,
@@ -301,6 +325,7 @@ const baseComposition = {
     ],
   };
   const plan = buildProjectsHubRenderPlan(withDup);
+  assert.equal(plan.ready, true);
   assert.equal(plan.modules.filter((m) => m.slug === "projects-hub-hero").length, 1);
   assert.ok(plan.skipped.some((s) => s.reason === "duplicate_supported_slug"));
 }
@@ -312,9 +337,11 @@ console.log(
       flagDefaultFalse: true,
       planOrder: true,
       reorder: true,
-      visibility: true,
+      visibilityIncomplete: true,
       unknownModule: true,
-      invalidConfig: true,
+      invalidConfigIncomplete: true,
+      singleModuleIncomplete: true,
+      nonMainSlotIncomplete: true,
       missingComposition: true,
       noVisible: true,
       featuredLimitNoMutate: true,
