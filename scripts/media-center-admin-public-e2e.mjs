@@ -1,9 +1,14 @@
 /**
  * Admin + Public E2E for Media Center listing CMS blocks.
  * Usage: node scripts/media-center-admin-public-e2e.mjs [port]
+ *
+ * Direct Supabase writes bypass Admin revalidateTag/revalidatePath, so this
+ * harness restarts the production server (and clears .next/cache) after each
+ * out-of-band composition mutation before asserting the public page.
  */
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
+import { spawn, execSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -57,6 +62,7 @@ let bottomAssignmentId = null;
 let firstAssignmentId = null;
 let secondAssignmentId = null;
 let newsPageId = null;
+let serverProc = null;
 
 const results = [];
 
@@ -76,6 +82,113 @@ function getBodyHtml(html) {
   return bodyMatch[0]
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<template[\s\S]*?<\/template>/gi, "");
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function killPort(targetPort) {
+  try {
+    if (process.platform === "win32") {
+      const out = execSync(
+        `powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${targetPort} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique"`,
+        { encoding: "utf8" },
+      );
+      for (const line of out.split(/\r?\n/)) {
+        const id = Number(line.trim());
+        if (Number.isFinite(id) && id > 0) {
+          try {
+            process.kill(id, "SIGKILL");
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    } else {
+      try {
+        const out = execSync(`lsof -tiTCP:${targetPort} -sTCP:LISTEN`, { encoding: "utf8" });
+        for (const line of out.split(/\r?\n/)) {
+          const id = Number(line.trim());
+          if (Number.isFinite(id) && id > 0) {
+            try {
+              process.kill(id, "SIGKILL");
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } catch {
+        /* nothing listening */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  await sleep(1500);
+}
+
+async function stopServer() {
+  if (serverProc && !serverProc.killed) {
+    try {
+      serverProc.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+    await sleep(1000);
+  }
+  serverProc = null;
+  await killPort(port);
+}
+
+async function startServer() {
+  const cacheDir = resolve(ROOT, ".next/cache");
+  if (existsSync(cacheDir)) rmSync(cacheDir, { recursive: true, force: true });
+  await killPort(port);
+
+  serverProc = spawn("npm", ["run", "start", "--", "-p", String(port)], {
+    cwd: ROOT,
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: true,
+    env: process.env,
+    detached: false,
+  });
+
+  let combined = "";
+  let ready = false;
+  await new Promise((resolvePromise, reject) => {
+    const timer = setTimeout(() => reject(new Error(`server start timeout\n${combined}`)), 90000);
+    const onData = (buf) => {
+      const text = buf.toString();
+      combined += text;
+      if (text.includes("Ready") || text.includes("started server") || text.includes("Local:")) {
+        ready = true;
+        clearTimeout(timer);
+        serverProc.stdout?.off("data", onData);
+        serverProc.stderr?.off("data", onData);
+        resolvePromise();
+      }
+    };
+    serverProc.stdout?.on("data", onData);
+    serverProc.stderr?.on("data", onData);
+    serverProc.on("exit", (code) => {
+      if (ready) return;
+      clearTimeout(timer);
+      reject(new Error(`server exited early: ${code}\n${combined}`));
+    });
+  });
+  await sleep(800);
+}
+
+/** Drop composition unstable_cache after out-of-band DB writes (test harness only). */
+async function refreshCompositionCache() {
+  await stopServer();
+  await startServer();
+}
+
+async function fetchBody(path) {
+  const html = await (await fetch(`${baseUrl}${path}`, { cache: "no-store" })).text();
+  return getBodyHtml(html);
 }
 
 async function cleanup() {
@@ -145,9 +258,8 @@ try {
   mainAssignmentId = mainAssign.id;
   pass("Assign block to media-center-news", "slot=main sort_order=10");
 
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-
-  const mainHtml = getBodyHtml(await (await fetch(`${baseUrl}/media-center/news`, { cache: "no-store" })).text());
+  await refreshCompositionCache();
+  const mainHtml = await fetchBody("/media-center/news");
   if (mainHtml.includes(MARKER_MAIN)) pass("Public /media-center/news shows main block", MARKER_MAIN);
   else fail("Public /media-center/news shows main block", "marker missing — restart server after build");
 
@@ -156,9 +268,8 @@ try {
     .update({ is_visible: false, updated_at: new Date().toISOString() })
     .eq("id", mainAssignmentId);
 
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-
-  const hiddenHtml = getBodyHtml(await (await fetch(`${baseUrl}/media-center/news`, { cache: "no-store" })).text());
+  await refreshCompositionCache();
+  const hiddenHtml = await fetchBody("/media-center/news");
   if (!hiddenHtml.includes(MARKER_MAIN)) pass("is_visible=false hides block on public page");
   else fail("is_visible=false hides block", "marker still visible");
 
@@ -182,9 +293,8 @@ try {
   bottomAssignmentId = bottomAssign.id;
   pass("Assign bottom block to media-center-news", "slot=bottom sort_order=20");
 
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-
-  const bothHtml = getBodyHtml(await (await fetch(`${baseUrl}/media-center/news`, { cache: "no-store" })).text());
+  await refreshCompositionCache();
+  const bothHtml = await fetchBody("/media-center/news");
   const mainIdx = bothHtml.indexOf(MARKER_MAIN);
   const bottomIdx = bothHtml.indexOf(MARKER_BOTTOM);
   if (mainIdx !== -1 && bottomIdx !== -1 && mainIdx < bottomIdx) {
@@ -211,9 +321,8 @@ try {
   secondAssignmentId = secondAssign.id;
   pass("Assign two main blocks for sort_order", "sort 5 then 15");
 
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-
-  const sortHtml = getBodyHtml(await (await fetch(`${baseUrl}/media-center/news`, { cache: "no-store" })).text());
+  await refreshCompositionCache();
+  const sortHtml = await fetchBody("/media-center/news");
   const firstIdx = sortHtml.indexOf(MARKER_FIRST);
   const secondIdx = sortHtml.indexOf(MARKER_SECOND);
   if (firstIdx !== -1 && secondIdx !== -1 && firstIdx < secondIdx) {
@@ -225,6 +334,7 @@ try {
   fail("Admin/public E2E", error instanceof Error ? error.message : String(error));
 } finally {
   await cleanup();
+  await stopServer();
 }
 
 const failed = results.filter((item) => !item.ok);
