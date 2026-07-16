@@ -643,12 +643,14 @@ export async function updateContentBlock(formData: FormData) {
   if (existingError || !existing) throw new Error(existingError?.message || "البلوك غير موجود.");
 
   // Structured about modules keep slug locked — never overwrite from request.
-  // About Intro (+ single-image) slug is locked in admin UI — never overwrite from request.
+  // Structured about modules keep slug locked — never overwrite from request.
   const slugLocked =
     existing.slug === "about-intro" ||
     existing.variant === "about-intro" ||
     existing.slug === "about-intro-single-image" ||
-    existing.variant === "about-intro-single-image";
+    existing.variant === "about-intro-single-image" ||
+    existing.slug === "vision-goals" ||
+    existing.variant === "vision-goals";
   const requestedSlug = slugify(cleanText(formData.get("slug")) || name);
   const slug = slugLocked ? existing.slug : requestedSlug;
 

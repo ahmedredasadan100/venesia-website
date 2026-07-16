@@ -39,10 +39,6 @@ assert(configs.includes("AboutIntroSingleImageModuleConfig"), "Config type missi
 assert(client.includes("isAboutIntroSingleImage"), "Single-image editor key wiring missing");
 assert(client.includes('title="من نحن — محتوى وصورة واحدة"'), "Single-image header title missing");
 assert(client.includes("AboutIntroSingleImageModuleEditor"), "Single-image editor mount missing");
-assert(
-  !client.includes("const isVisionGoals = editorKey === \"vision-goals\""),
-  "Commit1 must not include Vision Goals chrome flag",
-);
 assert(editor.includes('name="image_position"'), "imagePosition field missing");
 assert(!editor.includes("image_secondary"), "Single-image editor must not expose secondary image");
 assert(!editor.includes('name="config_schema"'), "config_schema must live in ContentModuleEditClient only");
