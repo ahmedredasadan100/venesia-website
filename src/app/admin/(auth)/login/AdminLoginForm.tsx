@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 
+import { resolveSafeInternalPath } from "../../../../lib/security/safe-internal-path";
+
 export default function AdminLoginForm() {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
@@ -41,8 +43,8 @@ export default function AdminLoginForm() {
         return;
       }
 
-      const nextPath = searchParams.get("next") || "/admin";
-      const destination = nextPath.startsWith("/admin") ? nextPath : "/admin";
+      const safePath = resolveSafeInternalPath(searchParams.get("next"), "/admin");
+      const destination = safePath.startsWith("/admin") ? safePath : "/admin";
       window.location.assign(destination);
     } catch {
       setError("تعذر الاتصال بالخادم.");

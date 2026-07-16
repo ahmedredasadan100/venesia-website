@@ -1,7 +1,10 @@
 import type { MetadataRoute } from "next";
-import { SEO_SITE } from "../config/seo/seo-site";
 
-export default function robots(): MetadataRoute.Robots {
+import { resolveCanonicalBaseUrl } from "../lib/seo/generate-sitemap-entries";
+
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const baseUrl = await resolveCanonicalBaseUrl();
+
   return {
     rules: [
       {
@@ -17,7 +20,7 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: `${SEO_SITE.defaultUrl}/sitemap.xml`,
-    host: SEO_SITE.defaultUrl,
+    sitemap: `${baseUrl}/sitemap.xml`,
+    host: baseUrl,
   };
 }

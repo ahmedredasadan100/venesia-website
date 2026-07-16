@@ -71,25 +71,42 @@ export default function ContactFormSection({ cmsOffice, cmsForm }: ContactFormSe
             ) : null}
           </div>
 
+          {/* Submission destination intentionally deferred — no backend yet, so the
+              button stays inert to avoid a reload that falsely implies the message was sent. */}
           <form className="grid min-w-0 gap-5">
             <div className="grid min-w-0 gap-5 md:grid-cols-2">
               <input
+                type="text"
+                autoComplete="name"
+                aria-label={FORM_FIELD_LABELS.name}
                 className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
                 placeholder={FORM_FIELD_LABELS.name}
               />
 
               <input
+                type="tel"
+                autoComplete="tel"
+                aria-label={FORM_FIELD_LABELS.phone}
                 className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
                 placeholder={FORM_FIELD_LABELS.phone}
               />
 
               <input
+                type="email"
+                autoComplete="email"
+                aria-label={FORM_FIELD_LABELS.email}
                 className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
                 placeholder={FORM_FIELD_LABELS.email}
               />
 
-              <select className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition focus:border-[#d2a75a]/60">
-                <option>{FORM_FIELD_LABELS.subject}</option>
+              <select
+                aria-label={FORM_FIELD_LABELS.subject}
+                defaultValue=""
+                className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition focus:border-[#d2a75a]/60"
+              >
+                <option value="" disabled>
+                  {FORM_FIELD_LABELS.subject}
+                </option>
                 {FORM_SUBJECT_OPTIONS.map((option) => (
                   <option key={option}>{option}</option>
                 ))}
@@ -97,6 +114,7 @@ export default function ContactFormSection({ cmsOffice, cmsForm }: ContactFormSe
             </div>
 
             <textarea
+              aria-label={FORM_FIELD_LABELS.message}
               className="min-h-40 min-w-0 rounded-xl border border-white/10 bg-black/20 px-5 py-4 text-white outline-none transition placeholder:text-white/40 focus:border-[#d2a75a]/60"
               placeholder={FORM_FIELD_LABELS.message}
             />
@@ -107,7 +125,10 @@ export default function ContactFormSection({ cmsOffice, cmsForm }: ContactFormSe
             </label>
 
             {form.submitLabel.trim() ? (
-              <button className="rounded-xl bg-gradient-to-l from-[#e7b66a] to-[#b98236] px-6 py-4 font-semibold text-black transition hover:brightness-110">
+              <button
+                type="button"
+                className="rounded-xl bg-gradient-to-l from-[#e7b66a] to-[#b98236] px-6 py-4 font-semibold text-black transition hover:brightness-110"
+              >
                 {form.submitLabel}
               </button>
             ) : null}

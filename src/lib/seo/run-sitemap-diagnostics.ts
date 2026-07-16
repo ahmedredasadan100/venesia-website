@@ -1,13 +1,11 @@
 import "server-only";
 
-import { SEO_SITE } from "../../config/seo/seo-site";
 import { getSupabaseAdmin } from "../supabase-admin";
-import { loadGlobalSeoSettings } from "./load-global-seo-settings";
-import { getGlobalSeoDefaults } from "./global-seo-defaults";
 import {
   buildSitemapAbsoluteUrl,
   countEntriesBySource,
   generateSitemapEntries,
+  resolveCanonicalBaseUrl,
 } from "./generate-sitemap-entries";
 import type {
   SitemapCheckItem,
@@ -15,11 +13,6 @@ import type {
   SitemapExcludedCounts,
   SitemapMonitorSnapshot,
 } from "./sitemap-monitor-types";
-
-function getCanonicalBaseUrl() {
-  const global = loadGlobalSeoSettings().catch(() => getGlobalSeoDefaults());
-  return global.then((settings) => settings.canonicalBaseUrl?.replace(/\/$/, "") || SEO_SITE.defaultUrl);
-}
 
 function isValidAbsoluteUrl(url: string) {
   try {
@@ -187,7 +180,7 @@ function resolveOverallStatus(checks: SitemapCheckItem[]): SitemapMonitorSnapsho
 export async function runSitemapDiagnostics(): Promise<SitemapMonitorSnapshot> {
   const checkedAt = new Date().toISOString();
   const generation = await generateSitemapEntries();
-  const canonicalBase = await getCanonicalBaseUrl();
+  const canonicalBase = await resolveCanonicalBaseUrl();
   const checks: SitemapCheckItem[] = [];
 
   if (generation.error) {
@@ -307,7 +300,7 @@ export async function runSitemapDiagnostics(): Promise<SitemapMonitorSnapshot> {
   }
 
   const canonicalMismatches = entries
-    .filter((entry) => entry.url !== buildSitemapAbsoluteUrl(entry.path))
+    .filter((entry) => entry.url !== buildSitemapAbsoluteUrl(entry.path, canonicalBase))
     .map((entry) => entry.url);
   if (canonicalMismatches.length > 0) {
     checks.push({

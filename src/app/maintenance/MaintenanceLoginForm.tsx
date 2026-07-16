@@ -3,6 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 
+import { resolveSafeInternalPath } from "../../lib/security/safe-internal-path";
+
 export default function MaintenanceLoginForm() {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
@@ -35,8 +37,7 @@ export default function MaintenanceLoginForm() {
         return;
       }
 
-      const nextPath = searchParams.get("next") || "/";
-      const destination = nextPath.startsWith("/") ? nextPath : "/";
+      const destination = resolveSafeInternalPath(searchParams.get("next"), "/");
       window.location.assign(destination);
     } catch {
       setError("تعذر الاتصال بالخادم.");
