@@ -103,9 +103,30 @@ const topicTitles = ["موضوع اختبار Feed 1", "موضوع اختبار 
 
 for (let i = 0; i < topicSlugs.length; i++) {
   const slug = topicSlugs[i];
-  const { data: existing } = await sb.from("topics").select("id,slug,title").eq("slug", slug).maybeSingle();
+  const { data: existing } = await sb
+    .from("topics")
+    .select("id,slug,title,content_type,status,deleted_at,category_slug,series_slug,category_id,series_id")
+    .eq("slug", slug)
+    .maybeSingle();
   if (existing) {
-    ok("Topic exists", existing.title);
+    const { error: reviveError } = await sb
+      .from("topics")
+      .update({
+        title: topicTitles[i],
+        content_type: "article",
+        status: "published",
+        deleted_at: null,
+        category: category.name,
+        category_slug: catSlug,
+        category_id: category.id,
+        series_id: series.id,
+        series: series.name,
+        series_slug: seriesSlug,
+        updated_at: now,
+      })
+      .eq("id", existing.id);
+    if (reviveError) fail("Revive topic for feed E2E", `${slug}: ${reviveError.message}`);
+    else ok("Topic exists", topicTitles[i]);
     continue;
   }
   const { error } = await sb.from("topics").insert({
@@ -122,6 +143,7 @@ for (let i = 0; i < topicSlugs.length; i++) {
     series: series.name,
     series_slug: seriesSlug,
     date_label: "2025-06-20",
+    content_type: "article",
     status: "published",
     is_featured: false,
     is_popular: false,
