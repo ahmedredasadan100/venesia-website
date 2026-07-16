@@ -168,7 +168,7 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
                   {topic.category}
                 </span>
                 <span>{topic.date}</span>
-                <span>{topic.readingTime}</span>
+                {topic.readingTime ? <span>{topic.readingTime}</span> : null}
               </div>
 
               <h1 className="text-3xl font-semibold leading-[1.4] text-white md:text-5xl">

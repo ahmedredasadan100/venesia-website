@@ -7,6 +7,7 @@ import { filterPublicTopics, isTestTopicSlug } from "../admin/cms-test-data";
 import { formatArabicContentDate } from "../content-dates";
 import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
+import { estimateReadingTimeLabel } from "./reading-time";
 import type { Topic } from "./types";
 
 type DbTopic = {
@@ -22,7 +23,6 @@ type DbTopic = {
   series_slug: string | null;
   date_label: string | null;
   published_at: string | null;
-  reading_time: string | null;
   is_featured: boolean;
   is_popular: boolean;
   seo_title: string | null;
@@ -64,7 +64,7 @@ function mapDbTopicToListingTopic(topic: DbTopic): Topic {
     categorySlug: topic.category_slug ?? "",
     date: topic.date_label || formatArabicContentDate(topic.published_at ?? ""),
     publishedAt: topic.published_at ?? "",
-    readingTime: topic.reading_time ?? "",
+    readingTime: estimateReadingTimeLabel(topic.content),
     isFeatured: topic.is_featured,
     isPopular: topic.is_popular,
     content: topic.content ?? undefined,
@@ -91,7 +91,7 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
     seriesSlug: topic.series_slug ?? "",
     date: topic.date_label || formatArabicContentDate(topic.published_at ?? ""),
     publishedAt: topic.published_at ?? "",
-    readingTime: topic.reading_time ?? "",
+    readingTime: estimateReadingTimeLabel(topic.content),
     isFeatured: topic.is_featured,
     isPopular: topic.is_popular,
     seoTitle: topic.seo_title ?? "",
@@ -102,7 +102,7 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
 }
 
 const LISTING_SELECT =
-  "id, slug, title, excerpt, image, category, category_slug, series, series_slug, date_label, published_at, reading_time, is_featured, is_popular";
+  "id, slug, title, excerpt, image, category, category_slug, series, series_slug, date_label, published_at, is_featured, is_popular";
 
 /** Public /topics routes only expose article topics; media lives under /media-center. */
 const PUBLIC_TOPIC_CONTENT_TYPE = "article";

@@ -134,7 +134,9 @@ export default function TopicArticle({
 
           <span className="text-sm text-white/45">{topic.date}</span>
 
-          <span className="text-sm text-white/45">{topic.readingTime}</span>
+          {topic.readingTime ? (
+            <span className="text-sm text-white/45">{topic.readingTime}</span>
+          ) : null}
         </div>
 
         <h1 className="mt-5 max-w-4xl text-3xl font-semibold leading-tight text-white md:text-4xl">

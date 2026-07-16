@@ -40,8 +40,12 @@ export default function TopicCard({
 
           <div className="flex flex-wrap items-center justify-end gap-3 text-sm text-white/45">
             <span>{date}</span>
-            <span>•</span>
-            <span>{readingTime}</span>
+            {readingTime ? (
+              <>
+                <span>•</span>
+                <span>{readingTime}</span>
+              </>
+            ) : null}
           </div>
         </div>
 
