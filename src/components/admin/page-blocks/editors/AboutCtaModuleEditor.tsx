@@ -58,33 +58,19 @@ export default function AboutCtaModuleEditor({
   section = "all",
 }: AboutCtaModuleEditorProps) {
   const isHomeContact = editorMode === "home-contact";
-  const fieldLabels = isHomeContact
-    ? {
-        eyebrow: "العنوان التمهيدي الصغير",
-        title: "العنوان",
-        description: "الوصف",
-        imageAlt: "وصف الصورة",
-        buttonLabel: "نص الزر",
-        buttonLink: "رابط الزر",
-        chooseLink: "اختيار الرابط",
-        clearLink: "مسح الرابط",
-        note: "ملاحظة أسفل الزر",
-        contactLabel: "اسم وسيلة التواصل",
-        contactValue: "بيانات التواصل",
-      }
-    : {
-        eyebrow: "Eyebrow",
-        title: "Title",
-        description: "Description",
-        imageAlt: "Alt",
-        buttonLabel: "Button label",
-        buttonLink: "Button Link",
-        chooseLink: "Choose Link",
-        clearLink: "Clear",
-        note: "Note تحت الزر",
-        contactLabel: "Label",
-        contactValue: "Value",
-      };
+  const fieldLabels = {
+    eyebrow: "العنوان التمهيدي الصغير",
+    title: "العنوان",
+    description: "الوصف",
+    imageAlt: "وصف الصورة",
+    buttonLabel: "نص الزر",
+    buttonLink: "رابط الزر",
+    chooseLink: "اختيار الرابط",
+    clearLink: "مسح الرابط",
+    note: "ملاحظة أسفل الزر",
+    contactLabel: "اسم وسيلة التواصل",
+    contactValue: "بيانات التواصل",
+  };
   const [contactRows, setContactRows] = useState<ContactRow[]>(() => buildInitialRows(config.contacts));
   const showText = section === "all" || section === "text";
   const showImage = section === "all" || section === "image";
@@ -186,8 +172,7 @@ export default function AboutCtaModuleEditor({
     <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
       {section === "all" ? <h2 className="text-sm font-semibold text-white">بيانات التواصل (4 كحد أقصى)</h2> : null}
       <p className="text-xs leading-6 text-white/45">
-        اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر. استخدم أسهم الترتيب لتغيير ترتيب
-        الصفوف كما يظهر في الصفحة العامة، واختر أيقونة كل صف.
+        اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر. استخدم الأسهم لتغيير ترتيب الظهور.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
         {contactRows.map((row, index) => (
@@ -272,7 +257,7 @@ export default function AboutCtaModuleEditor({
             {isHomeContact && row.icon === "whatsapp" ? null : (
               <AdminLinkField
                 prefix={`contact_${index}`}
-                label="Href (اختياري)"
+                label="الرابط — اختياري"
                 defaultValue={row.linkDefault}
               />
             )}
@@ -302,8 +287,6 @@ export default function AboutCtaModuleEditor({
 
   return (
     <div className="space-y-6">
-      <input type="hidden" name="config_schema" value="about-cta" />
-
       <AdminModuleTabs
         tabs={[
           { id: "content", label: "المحتوى الأساسي", content: contentTab },

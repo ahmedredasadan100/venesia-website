@@ -16,6 +16,30 @@ export type ContentModuleEditorKey =
   | "projects-hub-map"
   | "generic";
 
+/**
+ * Internal template identifiers used by editorKey / renderer mapping.
+ * Not public URL slugs — changing them breaks composition routing.
+ */
+export const STRUCTURAL_CONTENT_TEMPLATE_SLUGS = [
+  "about-intro",
+  "about-intro-single-image",
+  "vision-goals",
+  "about-cta",
+  "about-principles",
+  "about-approach",
+  "home-story",
+  "home-contact",
+  "home-trust",
+  "home-projects",
+] as const;
+
+export function isStructuralContentTemplateSlug(slug: string | null | undefined, variant?: string | null) {
+  const candidates = [slug, variant].filter(Boolean) as string[];
+  return candidates.some((value) =>
+    (STRUCTURAL_CONTENT_TEMPLATE_SLUGS as readonly string[]).includes(value),
+  );
+}
+
 export function getContentModuleEditorKey(slug: string, variant: string): ContentModuleEditorKey {
   if (slug === "projects-hub-hero" || variant === "projects-hub-hero") return "projects-hub-hero";
   if (slug === "projects-hub-featured" || variant === "projects-hub-featured") return "projects-hub-featured";

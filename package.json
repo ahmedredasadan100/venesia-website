@@ -16,6 +16,8 @@
     "verify:about-intro-admin": "node scripts/verify-about-intro-admin.mjs",
     "verify:about-intro-single-image": "node scripts/verify-about-intro-single-image.mjs",
     "verify:vision-goals-admin": "node scripts/verify-vision-goals-admin.mjs",
+    "verify:about-cta-formdata": "node scripts/verify-about-cta-formdata.mjs",
+    "verify:internal-slug-locks": "node scripts/verify-internal-slug-locks.mjs",
     "verify:page-builder-duplicate": "node scripts/verify-page-builder-duplicate.mjs",
     "verify:composite-slot-rendering": "node scripts/verify-composite-slot-rendering.mjs",
     "verify:composite-slot-behavior": "node scripts/verify-composite-slot-behavior.mjs",

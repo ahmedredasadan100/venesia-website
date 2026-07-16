@@ -30,6 +30,7 @@ import type {
   VisionGoalsModuleConfig,
 } from "../../../../../lib/page-blocks/configs";
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
+import { isStructuralContentTemplateSlug } from "../../../../../lib/page-blocks/module-edit-registry";
 import {
   isAboutApproachTemplate,
   isAboutIntroSingleImageTemplate,
@@ -87,11 +88,29 @@ function optionalImagePath(formData: FormData, key: string) {
   return value || undefined;
 }
 
-/** Admin-only template metadata description — prefer dedicated field over public config.description. */
+/**
+ * Admin-only template metadata description.
+ * Prefer `internal_description` so public config fields named `description`
+ * (e.g. about-cta body copy) never overwrite content_block_templates.description.
+ */
 function readTemplateInternalDescription(formData: FormData) {
   if (formData.has("internal_description")) {
     return cleanText(formData.get("internal_description")) || null;
   }
+
+  const schema = cleanText(formData.get("config_schema"));
+  // Schemas that also post a public config `description` must not fall back to it.
+  if (
+    schema === "about-cta" ||
+    schema === "about-principles" ||
+    schema === "about-intro" ||
+    schema === "about-intro-single-image" ||
+    schema === "vision-goals" ||
+    schema === "home-projects"
+  ) {
+    return null;
+  }
+
   return cleanText(formData.get("description")) || null;
 }
 
@@ -642,15 +661,8 @@ export async function updateContentBlock(formData: FormData) {
     .maybeSingle();
   if (existingError || !existing) throw new Error(existingError?.message || "البلوك غير موجود.");
 
-  // Structured about modules keep slug locked — never overwrite from request.
-  // Structured about modules keep slug locked — never overwrite from request.
-  const slugLocked =
-    existing.slug === "about-intro" ||
-    existing.variant === "about-intro" ||
-    existing.slug === "about-intro-single-image" ||
-    existing.variant === "about-intro-single-image" ||
-    existing.slug === "vision-goals" ||
-    existing.variant === "vision-goals";
+  // Structured content modules keep slug locked — never overwrite from request.
+  const slugLocked = isStructuralContentTemplateSlug(existing.slug, existing.variant);
   const requestedSlug = slugify(cleanText(formData.get("slug")) || name);
   const slug = slugLocked ? existing.slug : requestedSlug;
 
