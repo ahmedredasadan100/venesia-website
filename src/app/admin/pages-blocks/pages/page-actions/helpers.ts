@@ -11,6 +11,10 @@ import {
 } from "../../../../../lib/media-sidebar-modules/registry";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
 import type { PageBlockType, PageModuleKind } from "../../../../../lib/page-blocks/types";
+import {
+  getUnsupportedSlotAssignmentMessage,
+  isSlotAllowedForRoute,
+} from "../../../../../lib/page-composition/route-slot-policy";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type { ParsedAssignmentKey } from "./types";
 
@@ -96,6 +100,22 @@ export function isMediaSidebarKind(kind: string) {
 
 export function isMediaHubKind(kind: string) {
   return kind === "media-hub";
+}
+
+export async function resolvePageSlug(pageId: number): Promise<string | null> {
+  const { data, error } = await getSupabaseAdmin().from("pages").select("slug").eq("id", pageId).maybeSingle();
+  if (error || !data?.slug) return null;
+  return String(data.slug);
+}
+
+/** Returns Arabic failure result when slot is not allowed for this page + module kind. */
+export function slotPolicyFailure(
+  pageSlug: string | null,
+  moduleKind: string,
+  slot: string,
+): PageBlockActionResult | null {
+  if (isSlotAllowedForRoute(pageSlug, moduleKind, slot)) return null;
+  return failure(getUnsupportedSlotAssignmentMessage(pageSlug, moduleKind, slot));
 }
 
 export function assignmentTable(blockType: PageBlockType) {

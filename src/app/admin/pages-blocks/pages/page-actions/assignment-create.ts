@@ -22,6 +22,8 @@ import {
   nextMediaHubSortOrder,
   nextMediaSidebarSortOrder,
   nextSortOrder,
+  resolvePageSlug,
+  slotPolicyFailure,
   success,
   templateTable,
 } from "./helpers";
@@ -41,6 +43,12 @@ export async function assignPageBlock(
   if (!pageId || !templateId || !(blockType in BLOCK_MODULE_REGISTRY)) {
     return failure("بيانات الربط غير مكتملة.");
   }
+
+  const pageSlug = await resolvePageSlug(pageId);
+  if (!pageSlug) return failure("الصفحة غير موجودة.");
+
+  const slotRejection = slotPolicyFailure(pageSlug, blockType, slot);
+  if (slotRejection) return slotRejection;
 
   const { data: existingAssignment, error: existingError } = await getSupabaseAdmin()
     .from(assignmentTable(blockType))

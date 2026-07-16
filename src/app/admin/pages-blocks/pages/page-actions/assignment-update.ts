@@ -19,6 +19,8 @@ import {
   failure,
   isMediaHubKind,
   isMediaSidebarKind,
+  resolvePageSlug,
+  slotPolicyFailure,
   success,
 } from "./helpers";
 
@@ -38,7 +40,12 @@ export async function updatePageBlockAssignment(
     return failure("بيانات الربط غير مكتملة.");
   }
 
+  const pageSlug = await resolvePageSlug(pageId);
+  if (!pageSlug) return failure("الصفحة غير موجودة.");
+
   if (isMediaSidebarKind(blockType)) {
+    const slotRejection = slotPolicyFailure(pageSlug, "media-sidebar", slot);
+    if (slotRejection) return slotRejection;
     if (slot !== "sidebar") return failure("موديولات الشريط الجانبي تستخدم slot: sidebar فقط.");
 
     const { error } = await getSupabaseAdmin()
@@ -60,6 +67,8 @@ export async function updatePageBlockAssignment(
   }
 
   if (isMediaHubKind(blockType)) {
+    const slotRejection = slotPolicyFailure(pageSlug, "media-hub", slot);
+    if (slotRejection) return slotRejection;
     if (slot !== "main") return failure("موديولات Hub تستخدم slot: main فقط.");
 
     const { error } = await getSupabaseAdmin()
@@ -83,6 +92,9 @@ export async function updatePageBlockAssignment(
   if (!(blockType in BLOCK_MODULE_REGISTRY)) {
     return failure("بيانات الربط غير مكتملة.");
   }
+
+  const slotRejection = slotPolicyFailure(pageSlug, blockType, slot);
+  if (slotRejection) return slotRejection;
 
   const { error } = await getSupabaseAdmin()
     .from(assignmentTable(blockType))

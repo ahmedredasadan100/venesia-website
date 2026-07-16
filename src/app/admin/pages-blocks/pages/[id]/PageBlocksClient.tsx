@@ -102,6 +102,7 @@ export default function PageBlocksClient({
     assignMediaHubAction,
   } = usePageBlocksAssignModal({
     pageId: page.id,
+    pageSlug: page.slug,
     assignments,
     templates,
     setActionMessage,

@@ -1,5 +1,5 @@
-import { PAGE_LAYOUT_SLOTS, type PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
-import type { PageLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
+import { PAGE_LAYOUT_SLOTS, type PageLayoutSlot, type PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
+import { getAssignableSlotsForRoute } from "../../../../../../lib/page-composition/route-slot-policy";
 
 export function assignmentRowId(row: PageBlockAssignmentRow) {
   return `${row.module_kind}:${row.id}`;
@@ -17,8 +17,16 @@ export function compareAssignments(a: PageBlockAssignmentRow, b: PageBlockAssign
   return a.sort_order - b.sort_order || a.id - b.id;
 }
 
-/** Valid layout slots for a module kind — kinds with >1 option are inline-editable. */
-export function getSlotOptions(kind: string): PageLayoutSlot[] {
+/**
+ * Valid layout slots for a module kind on a page.
+ * Delegates to the shared route-slot policy (single source of truth).
+ */
+export function getSlotOptions(kind: string, pageSlug?: string | null): PageLayoutSlot[] {
+  return getAssignableSlotsForRoute(pageSlug, kind);
+}
+
+/** Kind-only fallback (no page context) — prefer getSlotOptions(kind, pageSlug). */
+export function getKindOnlySlotOptions(kind: string): PageLayoutSlot[] {
   if (kind === "hero" || kind === "breadcrumb") return ["hero"];
   if (kind === "feed" || kind === "media-sidebar") return ["sidebar"];
   if (kind === "media-hub") return ["main"];
