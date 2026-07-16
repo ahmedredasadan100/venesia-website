@@ -1,14 +1,14 @@
 import "server-only";
 
-import { getMediaHref, getMediaItems, type MediaContentItem, type MediaSidebarItem } from "../media-center";
+import {
+  getMediaHref,
+  getMediaSidebarLatest,
+  getMediaSidebarPopular,
+  type MediaContentItem,
+  type MediaSidebarItem,
+} from "../media-center";
 import { parseMediaSidebarModuleConfig, type MediaSidebarModuleConfig } from "./parse-config";
 import type { MediaSidebarModulesState, MediaSidebarWidgetKey } from "./types";
-
-function sortByNewest(items: MediaContentItem[]) {
-  return [...items].sort(
-    (left, right) => new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime(),
-  );
-}
 
 function mapMediaItemToSidebarItem(item: MediaContentItem, showLabel: boolean): MediaSidebarItem {
   return {
@@ -20,28 +20,39 @@ function mapMediaItemToSidebarItem(item: MediaContentItem, showLabel: boolean): 
   };
 }
 
-export function resolveLatestSidebarItems(items: MediaContentItem[], config: MediaSidebarModuleConfig): MediaSidebarItem[] {
+export function resolveLatestSidebarItems(
+  items: MediaContentItem[],
+  config: MediaSidebarModuleConfig,
+): MediaSidebarItem[] {
   const limit = config.limit ?? 3;
-  const newsItems = items.filter((item) => item.type === "news");
-  return sortByNewest(newsItems)
-    .slice(0, limit)
-    .map((item) => mapMediaItemToSidebarItem(item, false));
+  return items.slice(0, limit).map((item) => mapMediaItemToSidebarItem(item, false));
 }
 
-export function resolvePopularSidebarItems(items: MediaContentItem[], config: MediaSidebarModuleConfig): MediaSidebarItem[] {
+export function resolvePopularSidebarItems(
+  items: MediaContentItem[],
+  config: MediaSidebarModuleConfig,
+): MediaSidebarItem[] {
   const limit = config.limit ?? 4;
-  const popularItems = items.filter((item) => item.isPopular);
-  return sortByNewest(popularItems)
-    .slice(0, limit)
-    .map((item) => mapMediaItemToSidebarItem(item, true));
+  return items.slice(0, limit).map((item) => mapMediaItemToSidebarItem(item, true));
 }
 
-export async function enrichMediaSidebarModules(state: MediaSidebarModulesState): Promise<MediaSidebarModulesState> {
-  const needsMediaItems = state.widgets.some(
-    (widget) => widget.widgetKey === "latest" || widget.widgetKey === "popular",
-  );
+export async function enrichMediaSidebarModules(
+  state: MediaSidebarModulesState,
+): Promise<MediaSidebarModulesState> {
+  const latestWidget = state.widgets.find((widget) => widget.widgetKey === "latest");
+  const popularWidget = state.widgets.find((widget) => widget.widgetKey === "popular");
 
-  const allItems = needsMediaItems ? await getMediaItems() : [];
+  const latestLimit = latestWidget
+    ? parseMediaSidebarModuleConfig(latestWidget.config, "latest").limit ?? 3
+    : 0;
+  const popularLimit = popularWidget
+    ? parseMediaSidebarModuleConfig(popularWidget.config, "popular").limit ?? 4
+    : 0;
+
+  const [latestItems, popularItems] = await Promise.all([
+    latestWidget ? getMediaSidebarLatest(latestLimit) : Promise.resolve([] as MediaContentItem[]),
+    popularWidget ? getMediaSidebarPopular(popularLimit) : Promise.resolve([] as MediaContentItem[]),
+  ]);
 
   const widgets = state.widgets.map((widget) => {
     const config = parseMediaSidebarModuleConfig(widget.config, widget.widgetKey);
@@ -50,7 +61,7 @@ export async function enrichMediaSidebarModules(state: MediaSidebarModulesState)
       return {
         ...widget,
         config,
-        items: resolveLatestSidebarItems(allItems, config),
+        items: resolveLatestSidebarItems(latestItems, config),
       };
     }
 
@@ -58,7 +69,7 @@ export async function enrichMediaSidebarModules(state: MediaSidebarModulesState)
       return {
         ...widget,
         config,
-        items: resolvePopularSidebarItems(allItems, config),
+        items: resolvePopularSidebarItems(popularItems, config),
       };
     }
 

@@ -8,8 +8,13 @@ import { useMediaSearch } from "./MediaPageShell";
 import type { MediaContentItem } from "../../lib/media-center";
 
 type MediaListingContentProps = {
+  /** Current server-paginated page items (browse mode). */
   items: MediaContentItem[];
+  /** Lean full-type catalog for client search only (no body content). */
+  searchCatalog: MediaContentItem[];
   currentPage: number;
+  totalPages: number;
+  totalCount: number;
   sort: "newest" | "oldest";
   basePath: string;
   title: string;
@@ -21,8 +26,6 @@ type MediaListingContentProps = {
   itemsLabel?: string;
   children?: ReactNode;
 };
-
-const ITEMS_PER_PAGE = 2;
 
 function normalizeSearchValue(value: unknown) {
   return String(value ?? "")
@@ -54,7 +57,10 @@ function itemMatchesSearch(item: MediaContentItem, query: string) {
 
 export default function MediaListingContent({
   items,
+  searchCatalog,
   currentPage,
+  totalPages,
+  totalCount,
   sort,
   basePath,
   title,
@@ -70,28 +76,21 @@ export default function MediaListingContent({
   const normalizedSearchQuery = normalizeSearchValue(searchQuery);
   const isSearching = normalizedSearchQuery.length > 0;
 
-  const filteredItems = items.filter((item) =>
-    itemMatchesSearch(item, normalizedSearchQuery)
-  );
+  const searchResults = isSearching
+    ? [...searchCatalog]
+        .filter((item) => itemMatchesSearch(item, normalizedSearchQuery))
+        .sort((a, b) => {
+          const aTime = new Date(a.publishedAt).getTime();
+          const bTime = new Date(b.publishedAt).getTime();
+          return sort === "oldest" ? aTime - bTime : bTime - aTime;
+        })
+    : [];
 
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    const aTime = new Date(a.publishedAt).getTime();
-    const bTime = new Date(b.publishedAt).getTime();
-
-    return sort === "oldest" ? aTime - bTime : bTime - aTime;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(sortedItems.length / ITEMS_PER_PAGE));
-  const safePage = Math.min(Math.max(currentPage, 1), totalPages);
-
-  const paginatedItems = sortedItems.slice(
-    (safePage - 1) * ITEMS_PER_PAGE,
-    safePage * ITEMS_PER_PAGE
-  );
-
-  const visibleItems = isSearching ? sortedItems : paginatedItems;
+  const visibleItems = isSearching ? searchResults : items;
   const hasItems = visibleItems.length > 0;
   const countLabel = isSearching ? "نتائج البحث" : itemsLabel;
+  const displayTotal = isSearching ? searchResults.length : totalCount;
+  const safePage = Math.min(Math.max(currentPage, 1), Math.max(totalPages, 1));
 
   return (
     <div className="space-y-10">
@@ -113,7 +112,7 @@ export default function MediaListingContent({
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-5 py-4">
         <p className="text-sm text-white/55">
-          عرض {visibleItems.length} من {sortedItems.length} {countLabel}
+          عرض {visibleItems.length} من {displayTotal} {countLabel}
         </p>
 
         {isSearching ? (
@@ -166,7 +165,7 @@ export default function MediaListingContent({
           {!isSearching ? (
             <Pagination
               currentPage={safePage}
-              totalPages={totalPages}
+              totalPages={Math.max(totalPages, 1)}
               basePath={basePath}
               query={{ sort: sort === "oldest" ? "oldest" : undefined }}
             />

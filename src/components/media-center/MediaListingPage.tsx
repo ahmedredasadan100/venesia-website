@@ -2,7 +2,11 @@ import FeaturedNews from "./FeaturedNews";
 import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
-import { getMediaItems } from "../../lib/media-center";
+import {
+  getMediaItems,
+  getMediaListingPage,
+  MEDIA_LISTING_PAGE_SIZE,
+} from "../../lib/media-center";
 import {
   MEDIA_LISTING_PAGE_CONFIG,
   type MediaListingPageKey,
@@ -23,20 +27,26 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
 
   const sort = params?.sort === "oldest" ? "oldest" : "newest";
   const rawPage = Number(params?.page ?? "1");
-  const currentPage = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+  const requestedPage = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+  const pickFeatured = "showFeaturedNews" in config && Boolean(config.showFeaturedNews);
 
-  const [items, sidebarProps] = await Promise.all([
+  const [listing, searchIndex, sidebarProps] = await Promise.all([
+    getMediaListingPage({
+      type: config.mediaType,
+      page: requestedPage,
+      sort,
+      pageSize: MEDIA_LISTING_PAGE_SIZE,
+      pickFeatured,
+    }),
+    // Lean catalog for client-side sidebar search (no body content).
     getMediaItems(config.mediaType),
     loadMediaCenterSidebarProps(config.cmsPageSlug),
   ]);
 
-  const featuredNews =
-    "showFeaturedNews" in config && config.showFeaturedNews
-      ? items.find((item) => item.featured) ?? items[0] ?? null
-      : null;
-  const regularItems = featuredNews
-    ? items.filter((item) => item.slug !== featuredNews.slug)
-    : items;
+  const featuredNews = pickFeatured ? listing.featured : null;
+  const searchCatalog = featuredNews
+    ? searchIndex.filter((item) => item.slug !== featuredNews.slug)
+    : searchIndex;
 
   return (
     <MediaCenterShellLayout cmsPageSlug={config.cmsPageSlug}>
@@ -46,8 +56,11 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
         sidebarModules={sidebarProps.sidebarModules}
       >
         <MediaListingContent
-          items={regularItems}
-          currentPage={currentPage}
+          items={listing.items}
+          searchCatalog={searchCatalog}
+          currentPage={listing.currentPage}
+          totalPages={listing.totalPages}
+          totalCount={listing.totalRegular}
           sort={sort}
           basePath={config.basePath}
           title={config.title}

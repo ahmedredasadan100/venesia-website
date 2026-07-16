@@ -10,7 +10,7 @@ export type UnifiedMediaTopicRow = {
   slug: string | null;
   title: string | null;
   excerpt: string | null;
-  content: string | null;
+  content?: string | null;
   image: string | null;
   category: string | null;
   category_slug: string | null;
@@ -20,10 +20,10 @@ export type UnifiedMediaTopicRow = {
   is_featured: boolean | null;
   is_popular: boolean | null;
   media_payload: MediaTopicPayload | null;
-  seo_title: string | null;
-  seo_description: string | null;
-  seo_keywords: string[] | null;
-  focus_keyword: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_keywords?: string[] | null;
+  focus_keyword?: string | null;
   image_alt: string | null;
 };
 
