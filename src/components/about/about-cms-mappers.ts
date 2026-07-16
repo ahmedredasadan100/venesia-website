@@ -1,6 +1,6 @@
 import type { AboutIntroModuleConfig, CardsBlockConfig } from "../../lib/page-blocks";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
-import { asAboutIntroConfig } from "../../lib/page-blocks/configs";
+import { asAboutIntroConfig, asAboutIntroSingleImageConfig } from "../../lib/page-blocks/configs";
 import { mapAboutApproachBlock as mapAboutApproachModuleBlock } from "../modules/about-approach-mappers";
 import type { AboutApproachModuleContent } from "../modules/about-approach-mappers";
 import {
@@ -113,6 +113,28 @@ export function mapAboutIntroBeatsFromBlock(block: ResolvedPageBlock): AboutDocu
     .filter(isFilledBeat);
 
   return beats.length ? beats : null;
+}
+
+export function mapAboutIntroSingleImageBlock(block: ResolvedPageBlock) {
+  const config = asAboutIntroSingleImageConfig(block.template.config);
+  const main = normalizePublicImageSrc(config.images?.main);
+
+  return {
+    eyebrow: config.eyebrow ?? "",
+    title: config.title ?? "",
+    subtitle: config.subtitle ?? "",
+    description: config.body ?? "",
+    image: main,
+    imageAlt: config.images?.mainAlt?.trim() || undefined,
+    imagePosition: config.imagePosition === "right" ? ("right" as const) : ("left" as const),
+    beats: (config.beats ?? [])
+      .map((beat, index) => ({
+        num: beat.num?.trim() || String(index + 1).padStart(2, "0"),
+        title: beat.title?.trim() ?? "",
+        text: beat.text?.trim() ?? "",
+      }))
+      .filter(isFilledBeat),
+  };
 }
 
 export function mapAboutDocumentaryBeatsBlock(block: ResolvedPageBlock): AboutDocumentaryBeat[] {

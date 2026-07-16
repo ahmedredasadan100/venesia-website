@@ -23,6 +23,7 @@ export const SLOT_MODULE_SLUG_REGISTRY: Record<PageCompositionSlot, readonly str
     "projects-hub-listing",
     "projects-hub-map",
     "about-intro",
+    "about-intro-single-image",
     "about-documentary-beats",
     "about-vision",
     "about-approach",

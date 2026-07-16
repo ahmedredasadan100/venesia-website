@@ -164,6 +164,13 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     typicalSlot: "main",
     dependencyHints: ["صور رئيسية/ثانوية مع alt text."],
   },
+  "about-intro-single-image": {
+    slug: "about-intro-single-image",
+    labelAr: "من نحن — محتوى وصورة واحدة",
+    descriptionAr: "محتوى من نحن بصورة واحدة وموضع يمين/يسار.",
+    typicalSlot: "main",
+    dependencyHints: ["صورة واحدة فقط — موضع سطح المكتب يمين أو شمال."],
+  },
   "topics-intro": {
     slug: "topics-intro",
     labelAr: "مقدمة الموضوعات",

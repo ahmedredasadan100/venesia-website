@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 
+import AboutIntroSingleImageModuleSection from "../modules/AboutIntroSingleImageModuleSection";
 import AboutApproachModuleSection from "../modules/AboutApproachModuleSection";
 import AboutPrinciplesModuleSection from "../modules/AboutPrinciplesModuleSection";
 import AboutCtaModuleSection from "../modules/AboutCtaModuleSection";
@@ -15,6 +16,7 @@ import {
   mapAboutDocumentaryBeatsBlock,
   mapAboutIntroBeatsFromBlock,
   mapAboutIntroBlock,
+  mapAboutIntroSingleImageBlock,
   mapAboutPrinciplesBlock,
 } from "../about/about-cms-mappers";
 import { mapHomeContactBlock } from "../home/home-contact-mappers";
@@ -51,6 +53,7 @@ import {
   asBreadcrumbConfig,
   isAboutApproachTemplate,
   isAboutCtaTemplate,
+  isAboutIntroSingleImageTemplate,
   isAboutIntroTemplate,
   isAboutPrinciplesTemplate,
   isHomeContactTemplate,
@@ -63,6 +66,13 @@ import SectionRenderer from "../sections/SectionRenderer";
 
 function isWhoWeAreContentBlock(block: ResolvedPageBlock) {
   return block.blockType === "content" && isAboutIntroTemplate(block.template.slug, block.template.variant);
+}
+
+function isAboutIntroSingleImageContentBlock(block: ResolvedPageBlock) {
+  return (
+    block.blockType === "content" &&
+    isAboutIntroSingleImageTemplate(block.template.slug, block.template.variant)
+  );
 }
 
 function isHomeStoryContentBlock(block: ResolvedPageBlock) {
@@ -211,6 +221,16 @@ export function buildSlotModuleNodes(
           cmsIntro={cmsIntro}
           cmsBeats={embeddedBeats ?? (beatsBlock ? mapAboutDocumentaryBeatsBlock(beatsBlock) : null)}
         />,
+      );
+      continue;
+    }
+
+    if (isAboutIntroSingleImageContentBlock(block)) {
+      mark(block);
+      push(
+        `about-intro-single-image-${block.assignmentId}`,
+        block.sortOrder,
+        <AboutIntroSingleImageModuleSection content={mapAboutIntroSingleImageBlock(block)} />,
       );
       continue;
     }

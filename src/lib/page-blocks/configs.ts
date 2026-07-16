@@ -21,12 +21,20 @@ export type AboutIntroImagesConfig = {
   accentAlt?: string;
 };
 
-/** Structured config for the full About Intro visual section (text + images + beats). */
+/** Structured config for About Intro (text + up to 3 images + beats). */
 export type AboutIntroModuleConfig = ContentBlockConfig & {
   images?: AboutIntroImagesConfig;
   beats?: AboutIntroBeatConfig[];
   /** Optional CTA — used by home-story; ignored by About Who We Are renderer. */
   button?: AboutCtaButtonConfig;
+};
+
+/** Single-image About Intro variant — independent of about-intro (two/three frames). */
+export type AboutIntroSingleImageModuleConfig = ContentBlockConfig & {
+  images?: Pick<AboutIntroImagesConfig, "main" | "mainAlt">;
+  beats?: AboutIntroBeatConfig[];
+  /** Desktop image column: right | left. Default left. Mobile always stacks image above. */
+  imagePosition?: "left" | "right";
 };
 
 export type VisionGoalsItemConfig = {
@@ -205,6 +213,10 @@ export function isAboutIntroTemplate(slug: string, variant?: string | null) {
   return slug === "about-intro" || variant === "about-intro";
 }
 
+export function isAboutIntroSingleImageTemplate(slug: string, variant?: string | null) {
+  return slug === "about-intro-single-image" || variant === "about-intro-single-image";
+}
+
 export function isHomeStoryTemplate(slug: string, variant?: string | null) {
   return slug === "home-story" || variant === "home-story";
 }
@@ -265,6 +277,9 @@ export function resolveContentBlockConfig(template: {
   | AboutApproachModuleConfig {
   if (usesAboutIntroConfigSchema(template.slug, template.variant)) {
     return asAboutIntroConfig(template.config);
+  }
+  if (isAboutIntroSingleImageTemplate(template.slug, template.variant)) {
+    return asAboutIntroSingleImageConfig(template.config);
   }
   if (isVisionGoalsTemplate(template.slug, template.variant)) {
     return asVisionGoalsConfig(template.config);
@@ -360,6 +375,40 @@ export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
     images,
     beats,
     button,
+  };
+}
+
+export function asAboutIntroSingleImageConfig(raw: unknown): AboutIntroSingleImageModuleConfig {
+  const config = (raw ?? {}) as Record<string, unknown>;
+  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const imagesRaw = config.images as Record<string, unknown> | undefined;
+  const main =
+    readText(imagesRaw?.main) || readText(config.image_main) || readText(config.image) || undefined;
+  const mainAlt =
+    readText(imagesRaw?.mainAlt ?? imagesRaw?.main_alt ?? config.image_main_alt ?? config.imageAlt) ||
+    undefined;
+  const beatsRaw = config.beats;
+  const beats = Array.isArray(beatsRaw)
+    ? beatsRaw.slice(0, 3).map((beat, index) => {
+        const row = beat as Record<string, unknown>;
+        return {
+          num: readText(row.num) || String(index + 1).padStart(2, "0"),
+          title: readText(row.title) || undefined,
+          text: readText(row.text) || undefined,
+        };
+      })
+    : undefined;
+  const positionRaw = readText(config.imagePosition ?? config.image_position).toLowerCase();
+
+  return {
+    eyebrow: readText(config.eyebrow) || undefined,
+    title: readText(config.title) || undefined,
+    subtitle: readText(config.subtitle) || undefined,
+    body: readText(config.body) || undefined,
+    alignment: config.alignment === "center" ? "center" : "start",
+    images: main || mainAlt ? { main, mainAlt } : undefined,
+    beats,
+    imagePosition: positionRaw === "right" ? "right" : "left",
   };
 }
 

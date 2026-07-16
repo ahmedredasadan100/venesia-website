@@ -32,7 +32,10 @@ assert(client.includes('isAboutIntro = editorKey === "about-intro"'), "about-int
 assert(client.includes("AdminPageContextHeader"), "unified AdminPageContextHeader missing");
 assert(client.includes('title="من نحن — المقدمة"'), "Arabic about-intro header title missing");
 assert(
-  client.includes("usesProjectsHubHeader || usesHomeModuleChrome || isAboutIntro ? null"),
+  client.includes("usesProjectsHubHeader || usesHomeModuleChrome || isAboutIntro || isAboutIntroSingleImage ? null") ||
+    client.includes("usesHomeModuleChrome || isAboutIntro || isAboutIntroSingleImage ? null") ||
+    client.includes("usesProjectsHubHeader || usesHomeModuleChrome || isAboutIntro || isAboutIntroSingleImage || isVisionGoals ? null") ||
+    client.includes("usesHomeModuleChrome || isAboutIntro || isAboutIntroSingleImage || isVisionGoals ? null"),
   "ModuleDependencyHintsPanel must not render for about-intro",
 );
 assert(client.includes("المعرّف التقني للموديول — للقراءة فقط."), "about-intro slug helper missing");
@@ -51,10 +54,10 @@ assert(!/Badge \/ Number/.test(editor), "English Badge/Number label still presen
 assert(editor.includes('subtitle: "العنوان الفرعي"'), "Arabic subtitle label missing for about-intro");
 
 assert(actions.includes("normalizeRichTextContent"), "actions must normalize rich text body");
-assert(actions.includes("aboutIntroLocked"), "actions must lock about-intro slug");
+assert(actions.includes("slugLocked"), "actions must lock structured about module slugs");
 assert(
   actions.includes('existing.slug === "about-intro"') &&
-    actions.includes("aboutIntroLocked ? existing.slug : requestedSlug"),
+    actions.includes("slugLocked ? existing.slug : requestedSlug"),
   "about-intro slug must not be overwritten from request",
 );
 

@@ -2,6 +2,7 @@ export type {
   AboutApproachModuleConfig,
   AboutCtaModuleConfig,
   AboutIntroModuleConfig,
+  AboutIntroSingleImageModuleConfig,
   AboutPrinciplesModuleConfig,
   CardsBlockConfig,
   CardsBlockItem,
@@ -13,6 +14,8 @@ export type {
 export {
   asAboutApproachConfig,
   asAboutCtaConfig,
+  asAboutIntroConfig,
+  asAboutIntroSingleImageConfig,
   asAboutPrinciplesConfig,
   asCardsConfig,
   asContentConfig,
@@ -20,6 +23,8 @@ export {
   asVisionGoalsConfig,
   isAboutApproachTemplate,
   isAboutCtaTemplate,
+  isAboutIntroSingleImageTemplate,
+  isAboutIntroTemplate,
   isAboutPrinciplesTemplate,
   isVisionGoalsTemplate,
 } from "./configs";

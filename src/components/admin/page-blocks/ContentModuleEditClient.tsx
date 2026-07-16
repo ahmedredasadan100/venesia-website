@@ -9,6 +9,7 @@ import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
 import AboutIntroModuleEditor from "./editors/AboutIntroModuleEditor";
+import AboutIntroSingleImageModuleEditor from "./editors/AboutIntroSingleImageModuleEditor";
 import AboutApproachModuleEditor from "./editors/AboutApproachModuleEditor";
 import AboutCtaModuleEditor from "./editors/AboutCtaModuleEditor";
 import AboutPrinciplesModuleEditor from "./editors/AboutPrinciplesModuleEditor";
@@ -24,6 +25,7 @@ import {
   asAboutApproachConfig,
   asAboutCtaConfig,
   asAboutIntroConfig,
+  asAboutIntroSingleImageConfig,
   asAboutPrinciplesConfig,
   asContentConfig,
   asHomeProjectsConfig,
@@ -89,29 +91,32 @@ export default function ContentModuleEditClient({
 }: ContentModuleEditClientProps) {
   const editorKey = getContentModuleEditorKey(block.slug, block.variant);
   const usesAboutIntroConfig = editorKey === "about-intro" || editorKey === "home-story";
+  const isAboutIntroSingleImage = editorKey === "about-intro-single-image";
   const usesAboutPrinciplesConfig = editorKey === "about-principles" || editorKey === "home-trust";
   const usesAboutCtaConfig = editorKey === "about-cta" || editorKey === "home-contact";
   const config = usesAboutIntroConfig
     ? asAboutIntroConfig(block.config)
-    : editorKey === "vision-goals"
-      ? asVisionGoalsConfig(block.config)
-      : usesAboutCtaConfig
-        ? asAboutCtaConfig(block.config)
-        : usesAboutPrinciplesConfig
-          ? asAboutPrinciplesConfig(block.config)
-          : editorKey === "about-approach"
-            ? asAboutApproachConfig(block.config)
-            : editorKey === "home-projects"
-              ? asHomeProjectsConfig(block.config)
-              : editorKey === "projects-hub-hero"
-                ? asProjectsHubHeroConfig(block.config)
-                : editorKey === "projects-hub-featured"
-                  ? asProjectsHubFeaturedConfig(block.config)
-                  : editorKey === "projects-hub-listing"
-                    ? asProjectsHubListingConfig(block.config)
-                    : editorKey === "projects-hub-map"
-                      ? asProjectsHubMapConfig(block.config)
-                      : asContentConfig(block.config);
+    : isAboutIntroSingleImage
+      ? asAboutIntroSingleImageConfig(block.config)
+      : editorKey === "vision-goals"
+        ? asVisionGoalsConfig(block.config)
+        : usesAboutCtaConfig
+          ? asAboutCtaConfig(block.config)
+          : usesAboutPrinciplesConfig
+            ? asAboutPrinciplesConfig(block.config)
+            : editorKey === "about-approach"
+              ? asAboutApproachConfig(block.config)
+              : editorKey === "home-projects"
+                ? asHomeProjectsConfig(block.config)
+                : editorKey === "projects-hub-hero"
+                  ? asProjectsHubHeroConfig(block.config)
+                  : editorKey === "projects-hub-featured"
+                    ? asProjectsHubFeaturedConfig(block.config)
+                    : editorKey === "projects-hub-listing"
+                      ? asProjectsHubListingConfig(block.config)
+                      : editorKey === "projects-hub-map"
+                        ? asProjectsHubMapConfig(block.config)
+                        : asContentConfig(block.config);
   const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
   const eyebrow =
     editorKey === "home-contact"
@@ -124,9 +129,11 @@ export default function ContentModuleEditClient({
             ? "HOME STORY MODULE"
             : editorKey === "about-intro"
               ? "CONTENT MODULE"
-              : editorKey === "vision-goals"
-                ? "VISION & GOALS MODULE"
-                : editorKey === "about-cta"
+              : editorKey === "about-intro-single-image"
+                ? "CONTENT MODULE"
+                : editorKey === "vision-goals"
+                  ? "VISION & GOALS MODULE"
+                  : editorKey === "about-cta"
                   ? "ABOUT CTA MODULE"
                   : editorKey === "about-principles"
                     ? "ABOUT PRINCIPLES MODULE"
@@ -152,9 +159,11 @@ export default function ContentModuleEditClient({
             ? "تحكّم في نصوص وصور وزر قسم القصة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
             : editorKey === "about-intro"
               ? "تحكّم في نصوص وصور وبطاقات قسم من نحن في صفحة من نحن. التغييرات تنعكس على العرض العام بعد الحفظ."
-              : editorKey === "vision-goals"
-                ? "موديول الرؤية والأهداف — قابل لإعادة الاستخدام."
-                : editorKey === "about-cta"
+              : editorKey === "about-intro-single-image"
+                ? "تحكّم في نص ومحتوى وصورة واحدة لقسم من نحن، مع اختيار موضع الصورة يمين أو شمال على سطح المكتب."
+                : editorKey === "vision-goals"
+                  ? "موديول الرؤية والأهداف — قابل لإعادة الاستخدام."
+                  : editorKey === "about-cta"
                   ? "موديول CTA — قابل لإعادة الاستخدام."
                   : editorKey === "about-principles"
                     ? "موديول المبادئ — قابل لإعادة الاستخدام."
@@ -211,7 +220,8 @@ export default function ContentModuleEditClient({
   const isHomeTrust = editorKey === "home-trust";
   const isAboutIntro = editorKey === "about-intro";
   const usesHomeModuleChrome = isHomeStory || isHomeContact || isHomeProjects || isHomeTrust;
-  const usesUnifiedModuleChrome = usesHomeModuleChrome || isAboutIntro;
+  const usesUnifiedModuleChrome =
+    usesHomeModuleChrome || isAboutIntro || isAboutIntroSingleImage;
   const hubStatus = statusMeta(block.status);
   const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
   const homeContactConfig = isHomeContact ? (config as ReturnType<typeof asAboutCtaConfig>) : null;
@@ -223,11 +233,11 @@ export default function ContentModuleEditClient({
       <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">
-            {isAboutIntro ? "اسم الموديول" : "الاسم"}
+            {isAboutIntro || isAboutIntroSingleImage ? "اسم الموديول" : "الاسم"}
           </span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
         </label>
-        {isHomeContact || isHomeStory || isHomeProjects || isHomeTrust || isAboutIntro ? (
+        {isHomeContact || isHomeStory || isHomeProjects || isHomeTrust || isAboutIntro || isAboutIntroSingleImage ? (
           <div className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">
               {isHomeTrust ? "المعرّف — Slug" : "المعرّف التقني"}
@@ -240,7 +250,7 @@ export default function ContentModuleEditClient({
               {block.slug}
             </div>
             <p className="text-xs leading-6 text-white/45">
-              {isAboutIntro
+              {isAboutIntro || isAboutIntroSingleImage
                 ? "المعرّف التقني للموديول — للقراءة فقط."
                 : "للقراءة فقط — يُستخدم داخليًا لتعريف الموديول."}
             </p>
@@ -251,7 +261,7 @@ export default function ContentModuleEditClient({
             <input name="slug" defaultValue={block.slug} required dir="ltr" className={fieldClassName()} />
           </label>
         )}
-        {isHomeContact || isAboutIntro ? (
+        {isHomeContact || isAboutIntro || isAboutIntroSingleImage ? (
           <label className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
             <input
@@ -346,6 +356,23 @@ export default function ContentModuleEditClient({
           eyebrow="CONTENT MODULE"
           title="من نحن — المقدمة"
           description="تحكّم في نصوص وصور وبطاقات قسم من نحن في صفحة من نحن. التغييرات تنعكس على العرض العام بعد الحفظ."
+          meta={hubStatus.label}
+          actions={
+            <>
+              <AdminActionButton href="/about" variant="dark">
+                معاينة صفحة من نحن
+              </AdminActionButton>
+              <AdminActionButton href="/admin/pages-blocks/blocks/content" variant="ghost">
+                الرجوع لإدارة الموديولات
+              </AdminActionButton>
+            </>
+          }
+        />
+      ) : isAboutIntroSingleImage ? (
+        <AdminPageContextHeader
+          eyebrow="CONTENT MODULE"
+          title="من نحن — محتوى وصورة واحدة"
+          description="تحكّم في نص ومحتوى وصورة واحدة لقسم من نحن، مع اختيار موضع الصورة يمين أو شمال على سطح المكتب."
           meta={hubStatus.label}
           actions={
             <>
@@ -463,6 +490,10 @@ export default function ContentModuleEditClient({
         <AdminNotice variant="success" message="تم حفظ موديول من نحن — المقدمة بنجاح." />
       ) : null}
 
+      {isAboutIntroSingleImage && saved ? (
+        <AdminNotice variant="success" message="تم حفظ موديول المحتوى والصورة الواحدة بنجاح." />
+      ) : null}
+
       {isHomeStory && saved ? (
         <AdminNotice variant="success" message="تم حفظ الموديول وتحديث الصفحة الرئيسية بنجاح." />
       ) : null}
@@ -484,7 +515,7 @@ export default function ContentModuleEditClient({
       ) : null}
 
       <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      {usesProjectsHubHeader || usesHomeModuleChrome || isAboutIntro ? null : (
+      {usesProjectsHubHeader || usesHomeModuleChrome || isAboutIntro || isAboutIntroSingleImage ? null : (
         <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
       )}
 
@@ -496,29 +527,34 @@ export default function ContentModuleEditClient({
           value={
             usesAboutIntroConfig
               ? "about-intro"
-              : usesAboutPrinciplesConfig
-                ? "about-principles"
-                : usesAboutCtaConfig
-                  ? "about-cta"
-                  : editorKey === "home-projects"
-                    ? "home-projects"
-                    : editorKey === "vision-goals"
-                      ? "vision-goals"
-                      : editorKey === "about-approach"
-                        ? "about-approach"
-                        : editorKey === "projects-hub-hero"
-                          ? "projects-hub-hero"
-                          : editorKey === "projects-hub-featured"
-                            ? "projects-hub-featured"
-                            : editorKey === "projects-hub-listing"
-                              ? "projects-hub-listing"
-                              : editorKey === "projects-hub-map"
-                                ? "projects-hub-map"
-                                : block.variant ?? "default"
+              : isAboutIntroSingleImage
+                ? "about-intro-single-image"
+                : usesAboutPrinciplesConfig
+                  ? "about-principles"
+                  : usesAboutCtaConfig
+                    ? "about-cta"
+                    : editorKey === "home-projects"
+                      ? "home-projects"
+                      : editorKey === "vision-goals"
+                        ? "vision-goals"
+                        : editorKey === "about-approach"
+                          ? "about-approach"
+                          : editorKey === "projects-hub-hero"
+                            ? "projects-hub-hero"
+                            : editorKey === "projects-hub-featured"
+                              ? "projects-hub-featured"
+                              : editorKey === "projects-hub-listing"
+                                ? "projects-hub-listing"
+                                : editorKey === "projects-hub-map"
+                                  ? "projects-hub-map"
+                                  : block.variant ?? "default"
           }
         />
         <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
         {usesAboutIntroConfig ? <input type="hidden" name="config_schema" value="about-intro" /> : null}
+        {isAboutIntroSingleImage ? (
+          <input type="hidden" name="config_schema" value="about-intro-single-image" />
+        ) : null}
         {isHomeStory ? <input type="hidden" name="include_story_cta" value="1" /> : null}
         {editorKey === "vision-goals" ? <input type="hidden" name="config_schema" value="vision-goals" /> : null}
         {usesAboutCtaConfig ? <input type="hidden" name="config_schema" value="about-cta" /> : null}
@@ -551,6 +587,10 @@ export default function ContentModuleEditClient({
                     <AboutIntroModuleEditor
                       config={config as ReturnType<typeof asAboutIntroConfig>}
                       editorMode="about-intro"
+                    />
+                  ) : isAboutIntroSingleImage ? (
+                    <AboutIntroSingleImageModuleEditor
+                      config={config as ReturnType<typeof asAboutIntroSingleImageConfig>}
                     />
                   ) : editorKey === "vision-goals" ? (
                     <VisionGoalsModuleEditor config={config as ReturnType<typeof asVisionGoalsConfig>} />
@@ -596,6 +636,12 @@ export default function ContentModuleEditClient({
         )}
 
         {isAboutIntro ? (
+          <StickyModuleSaveDock
+            title="حفظ التعديلات"
+            description="يُحدَّث العرض العام لصفحة من نحن بعد اكتمال الحفظ."
+            saveLabel="حفظ التعديلات"
+          />
+        ) : isAboutIntroSingleImage ? (
           <StickyModuleSaveDock
             title="حفظ التعديلات"
             description="يُحدَّث العرض العام لصفحة من نحن بعد اكتمال الحفظ."

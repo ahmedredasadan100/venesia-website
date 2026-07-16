@@ -1,6 +1,7 @@
 /** Maps module slugs / variants to structured admin editor keys. */
 export type ContentModuleEditorKey =
   | "about-intro"
+  | "about-intro-single-image"
   | "home-story"
   | "home-trust"
   | "home-contact"
@@ -24,6 +25,9 @@ export function getContentModuleEditorKey(slug: string, variant: string): Conten
   if (slug === "home-trust" || variant === "home-trust") return "home-trust";
   if (slug === "home-contact" || variant === "home-contact") return "home-contact";
   if (slug === "home-projects" || variant === "home-projects") return "home-projects";
+  if (slug === "about-intro-single-image" || variant === "about-intro-single-image") {
+    return "about-intro-single-image";
+  }
   if (slug === "about-intro" || variant === "about-intro") return "about-intro";
   if (slug === "vision-goals" || variant === "vision-goals") return "vision-goals";
   if (slug === "about-cta" || variant === "about-cta") return "about-cta";

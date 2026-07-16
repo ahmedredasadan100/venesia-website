@@ -23,6 +23,7 @@ import type {
   AboutApproachModuleConfig,
   AboutCtaModuleConfig,
   AboutIntroModuleConfig,
+  AboutIntroSingleImageModuleConfig,
   AboutPrinciplesModuleConfig,
   ContentBlockConfig,
   HomeProjectsModuleConfig,
@@ -31,6 +32,7 @@ import type {
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
 import {
   isAboutApproachTemplate,
+  isAboutIntroSingleImageTemplate,
   isHomeProjectsTemplate,
   isVisionGoalsTemplate,
   usesAboutIntroConfigSchema,
@@ -145,6 +147,28 @@ function buildAboutIntroConfig(formData: FormData): AboutIntroModuleConfig {
   }
 
   return config;
+}
+
+function buildAboutIntroSingleImageConfig(formData: FormData): AboutIntroSingleImageModuleConfig {
+  const beats = Array.from({ length: 3 }, (_, index) => ({
+    num: cleanText(formData.get(`beat_${index}_num`)),
+    title: cleanText(formData.get(`beat_${index}_title`)),
+    text: cleanText(formData.get(`beat_${index}_text`)),
+  }));
+  const bodyRaw = String(formData.get("body") ?? "").trim();
+  const body = bodyRaw ? normalizeRichTextContent(bodyRaw) : "";
+  const positionRaw = cleanText(formData.get("image_position")).toLowerCase();
+
+  return {
+    ...buildGenericContentConfig(formData),
+    body,
+    images: {
+      main: optionalImagePath(formData, "image_main"),
+      mainAlt: cleanText(formData.get("image_main_alt")) || undefined,
+    },
+    beats,
+    imagePosition: positionRaw === "right" ? "right" : "left",
+  };
 }
 
 function readColumnItems(formData: FormData, prefix: string) {
@@ -455,6 +479,7 @@ async function buildProjectsHubMapTypedConfig(formData: FormData): Promise<Proje
 }
 
 function resolveStructuredVariant(slug: string, variantInput: string | null) {
+  if (isAboutIntroSingleImageTemplate(slug, variantInput)) return "about-intro-single-image";
   if (usesAboutIntroConfigSchema(slug, variantInput)) return "about-intro";
   if (isVisionGoalsTemplate(slug, variantInput)) return "vision-goals";
   if (usesAboutCtaConfigSchema(slug, variantInput)) return "about-cta";
@@ -532,6 +557,12 @@ async function buildContentConfig(
 
   if (schema === "about-intro" || usesAboutIntroConfigSchema(resolvedSlug, variantInput)) {
     return buildAboutIntroConfig(formData);
+  }
+  if (
+    schema === "about-intro-single-image" ||
+    isAboutIntroSingleImageTemplate(resolvedSlug, variantInput)
+  ) {
+    return buildAboutIntroSingleImageConfig(formData);
   }
   if (schema === "vision-goals" || isVisionGoalsTemplate(resolvedSlug, variantInput)) {
     return buildVisionGoalsConfig(formData);
@@ -611,11 +642,15 @@ export async function updateContentBlock(formData: FormData) {
     .maybeSingle();
   if (existingError || !existing) throw new Error(existingError?.message || "البلوك غير موجود.");
 
-  // About Intro slug is locked in admin UI — never overwrite from request.
-  const aboutIntroLocked =
-    existing.slug === "about-intro" || existing.variant === "about-intro";
+  // Structured about modules keep slug locked — never overwrite from request.
+  // About Intro (+ single-image) slug is locked in admin UI — never overwrite from request.
+  const slugLocked =
+    existing.slug === "about-intro" ||
+    existing.variant === "about-intro" ||
+    existing.slug === "about-intro-single-image" ||
+    existing.variant === "about-intro-single-image";
   const requestedSlug = slugify(cleanText(formData.get("slug")) || name);
-  const slug = aboutIntroLocked ? existing.slug : requestedSlug;
+  const slug = slugLocked ? existing.slug : requestedSlug;
 
   if (!slug) throw new Error("بيانات البلوك غير مكتملة.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
