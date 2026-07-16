@@ -1,9 +1,15 @@
 /**
- * About CMS stability pass — run with: node scripts/about-stability-test.mjs
- * Requires .env.local and dev server on PORT (default 3002).
+ * About CMS stability pass — run with: node scripts/about-stability-test.mjs [port]
+ * Requires .env.local and a production build (`npm run build`).
+ *
+ * Direct Supabase writes bypass Admin revalidateTag/revalidatePath, so this
+ * harness owns the production server lifecycle and restarts it (clearing
+ * .next/cache) after each out-of-band mutation before asserting /about.
+ * Production caching itself is untouched.
  */
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
+import { spawn, execSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,7 +31,7 @@ for (const line of envText.split(/\r?\n/)) {
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const port = process.env.PORT || "3000";
+const port = process.argv[2] || process.env.PORT || "3002";
 const baseUrl = `http://127.0.0.1:${port}`;
 
 if (!url || !key) {
@@ -40,6 +46,7 @@ const TEST_TITLE = "About Stability Test Block";
 let testTemplateId = null;
 let testAssignmentId = null;
 let aboutPageId = null;
+let serverProc = null;
 
 const results = [];
 
@@ -51,6 +58,116 @@ function pass(name) {
 function fail(name, detail) {
   results.push({ name, ok: false, detail });
   console.error(`FAIL ${name}: ${detail}`);
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function killPort(targetPort) {
+  try {
+    if (process.platform === "win32") {
+      const out = execSync(
+        `powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort ${targetPort} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique"`,
+        { encoding: "utf8" },
+      );
+      for (const line of out.split(/\r?\n/)) {
+        const id = Number(line.trim());
+        if (Number.isFinite(id) && id > 0) {
+          try {
+            process.kill(id, "SIGKILL");
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    } else {
+      try {
+        const out = execSync(`lsof -tiTCP:${targetPort} -sTCP:LISTEN`, { encoding: "utf8" });
+        for (const line of out.split(/\r?\n/)) {
+          const id = Number(line.trim());
+          if (Number.isFinite(id) && id > 0) {
+            try {
+              process.kill(id, "SIGKILL");
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } catch {
+        /* nothing listening */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  await sleep(1500);
+}
+
+async function stopServer() {
+  if (serverProc && !serverProc.killed) {
+    try {
+      serverProc.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+    await sleep(1000);
+  }
+  serverProc = null;
+  await killPort(port);
+}
+
+async function startServer() {
+  const cacheDir = resolve(ROOT, ".next/cache");
+  if (existsSync(cacheDir)) rmSync(cacheDir, { recursive: true, force: true });
+  // /about is a static ISR route: the build-time snapshot under .next/server/app
+  // is served until revalidate expires, so out-of-band DB writes stay invisible
+  // across restarts. Dropping the snapshot forces an on-demand render that Next
+  // immediately re-caches — production caching config itself is untouched.
+  for (const artifact of ["about.html", "about.rsc", "about.meta", "about.cache"]) {
+    const artifactPath = resolve(ROOT, ".next/server/app", artifact);
+    if (existsSync(artifactPath)) rmSync(artifactPath, { force: true });
+  }
+  await killPort(port);
+
+  serverProc = spawn("npm", ["run", "start", "--", "-p", String(port)], {
+    cwd: ROOT,
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: true,
+    env: process.env,
+    detached: false,
+  });
+
+  let combined = "";
+  let ready = false;
+  await new Promise((resolvePromise, reject) => {
+    const timer = setTimeout(() => reject(new Error(`server start timeout\n${combined}`)), 90000);
+    const onData = (buf) => {
+      const text = buf.toString();
+      combined += text;
+      if (text.includes("Ready") || text.includes("started server") || text.includes("Local:")) {
+        ready = true;
+        clearTimeout(timer);
+        serverProc.stdout?.off("data", onData);
+        serverProc.stderr?.off("data", onData);
+        resolvePromise();
+      }
+    };
+    serverProc.stdout?.on("data", onData);
+    serverProc.stderr?.on("data", onData);
+    serverProc.on("exit", (code) => {
+      if (ready) return;
+      clearTimeout(timer);
+      reject(new Error(`server exited early: ${code}\n${combined}`));
+    });
+  });
+  await sleep(800);
+}
+
+/** Drop composition unstable_cache after out-of-band DB writes (test harness only). */
+async function refreshCompositionCache() {
+  await stopServer();
+  await startServer();
 }
 
 async function fetchAboutHtml() {
@@ -81,6 +198,8 @@ async function cleanup() {
 }
 
 try {
+  await startServer();
+
   const { data: created, error: createError } = await supabase
     .from("content_block_templates")
     .insert({
@@ -149,6 +268,7 @@ try {
   }
 
   {
+    await refreshCompositionCache();
     const { status, html } = await fetchAboutHtml();
     if (status !== 200) fail("Fallback block on /about", `HTTP ${status}`);
     else if (html.includes("ABOUT_STABILITY_FALLBACK_MARKER")) pass("Fallback block appears on /about");
@@ -177,6 +297,7 @@ try {
       .update({ is_visible: false, updated_at: new Date().toISOString() })
       .eq("id", testAssignmentId);
 
+    await refreshCompositionCache();
     const { html } = await fetchAboutHtml();
     if (!html.includes("ABOUT_STABILITY_FALLBACK_MARKER")) pass("Hide assignment removes public block");
     else fail("Hide assignment removes public block", "marker still visible");
@@ -188,6 +309,7 @@ try {
       .update({ is_visible: true, updated_at: new Date().toISOString() })
       .eq("id", testAssignmentId);
 
+    await refreshCompositionCache();
     const { html } = await fetchAboutHtml();
     if (html.includes("ABOUT_STABILITY_FALLBACK_MARKER")) pass("Show assignment restores public block");
     else fail("Show assignment restores public block", "marker missing");
@@ -199,6 +321,7 @@ try {
       .update({ is_visible: false, updated_at: new Date().toISOString() })
       .in("id", [testAssignmentId]);
 
+    await refreshCompositionCache();
     const { html } = await fetchAboutHtml();
     if (!html.includes("ABOUT_STABILITY_FALLBACK_MARKER")) pass("Bulk hide works");
     else fail("Bulk hide works", "marker still visible");
@@ -211,16 +334,36 @@ try {
   }
 
   {
+    // Expected section titles come from the live CMS state (visible + published
+    // assignments), so real content edits don't turn into false failures while
+    // the test still proves existing sections survive the temp-block lifecycle.
+    await refreshCompositionCache();
     const { html } = await fetchAboutHtml();
-    const knownMarkers = [
-      "لسنا شركة عقارية تقليدية",
-      "رؤيتنا وأهدافنا",
-      "مبادئ تُحكى بهدوء",
-      "استكشف مشاريعنا",
-    ];
-    const missing = knownMarkers.filter((m) => !html.includes(m));
-    if (missing.length === 0) pass("Known About sections keep original content");
-    else fail("Known About sections keep original content", `missing: ${missing.join(", ")}`);
+    const { data: aboutAssignments } = await supabase
+      .from("page_content_block_assignments")
+      .select("is_visible,content_block_templates(slug,status,config)")
+      .eq("page_id", aboutPageId ?? (await loadAboutPageId()));
+
+    const knownMarkers = (aboutAssignments ?? [])
+      .filter((row) => row.is_visible)
+      .map((row) =>
+        Array.isArray(row.content_block_templates) ? row.content_block_templates[0] : row.content_block_templates,
+      )
+      .filter((template) => template && template.status === "published" && template.slug !== TEST_SLUG)
+      .map((template) => String(template.config?.title ?? "").split(/[&<>"']/)[0].trim())
+      .filter((title) => title.length >= 6);
+
+    if (knownMarkers.length === 0) {
+      fail("Known About sections keep original content", "no visible published CMS sections found");
+    } else {
+      // about-approach splits titles at " — " into separate spans, so assert
+      // each fragment instead of the contiguous string.
+      const missing = knownMarkers.filter(
+        (marker) => !marker.split(" — ").every((fragment) => fragment.trim() && html.includes(fragment.trim())),
+      );
+      if (missing.length === 0) pass("Known About sections keep original content");
+      else fail("Known About sections keep original content", `missing: ${missing.join(", ")}`);
+    }
   }
 
   {
@@ -256,6 +399,7 @@ try {
   if (testAssignmentId) {
     await supabase.from("page_content_block_assignments").delete().eq("id", testAssignmentId);
     testAssignmentId = null;
+    await refreshCompositionCache();
     const { html } = await fetchAboutHtml();
     if (!html.includes("ABOUT_STABILITY_FALLBACK_MARKER")) pass("Bulk delete removes assignment");
     else fail("Bulk delete removes assignment", "marker still visible");
@@ -265,6 +409,7 @@ try {
   fail("Test runner", error.message);
 } finally {
   await cleanup();
+  await stopServer();
 }
 
 const failed = results.filter((r) => !r.ok);

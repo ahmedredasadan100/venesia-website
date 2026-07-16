@@ -1,13 +1,19 @@
 /**
  * Footer CMS smoke test — site_settings, footer.slots, footer menu, public pages.
  * Usage: node scripts/footer-settings-test.mjs [port]
+ *
+ * Admin builder checks perform a real login with a temporary
+ * __E2E_FINAL_CLOSURE__ admin user (removed in finally) because
+ * /admin/pages-blocks/footer is auth-guarded.
  */
 import { createClient } from "@supabase/supabase-js";
+import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_FOOTER_SLOT_TYPES } from "./lib/footer-default-slots.mjs";
+import { DEFAULT_FOOTER_BRAND, DEFAULT_FOOTER_SLOT_TYPES } from "./lib/footer-default-slots.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const envPath = resolve(ROOT, ".env.local");
@@ -59,6 +65,13 @@ async function fetchWithTimeout(url, timeoutMs = 30_000) {
 const REQUIRED_KEYS = ["footer.brand", "footer.contact_items", "footer.social_links", "footer.legal"];
 const SLOTS_KEY = "footer.slots";
 
+/**
+ * Brand copy shown publicly comes from the footer.slots text slot body
+ * (falling back to footer.brand.tagline, then the code default).
+ * Take a marker fragment that survives React HTML escaping.
+ */
+let expectedBrandMarker = DEFAULT_FOOTER_BRAND.tagline;
+
 try {
   const { data: settings, error: settingsError } = await supabase
     .from("site_settings")
@@ -85,6 +98,21 @@ try {
   const slots = Array.isArray(slotsRow?.value?.slots) ? slotsRow.value.slots : [];
   if (slots.length === 4) pass("footer.slots has 4 columns", String(slots.length));
   else fail("footer.slots has 4 columns", String(slots.length));
+
+  const { data: brandRow } = await supabase
+    .from("site_settings")
+    .select("value")
+    .eq("key", "footer.brand")
+    .maybeSingle();
+
+  const textSlotBody = slots.find((slot) => slot.type === "text")?.config?.body;
+  const brandSource =
+    (typeof textSlotBody === "string" && textSlotBody.trim()) ||
+    (typeof brandRow?.value?.tagline === "string" && brandRow.value.tagline.trim()) ||
+    DEFAULT_FOOTER_BRAND.tagline;
+  expectedBrandMarker = brandSource.split(/[&<>"']/)[0].trim().slice(0, 40).trim();
+  if (expectedBrandMarker.length >= 8) pass("Brand content configured in CMS", `marker="${expectedBrandMarker}"`);
+  else fail("Brand content configured in CMS", `marker too short: "${expectedBrandMarker}"`);
 
   if (slotsRow?.value?.version === 1) pass("footer.slots version", "1");
   else fail("footer.slots version", String(slotsRow?.value?.version ?? "missing"));
@@ -138,8 +166,50 @@ try {
   fail("footer settings database checks", error instanceof Error ? error.message : String(error));
 }
 
+// /admin/pages-blocks/footer is auth-guarded — use a real login with a
+// temporary admin user (removed in finally) instead of an anonymous fetch.
+const E2E_ADMIN_USERNAME = "__E2E_FINAL_CLOSURE__footer";
+let e2eAdminId = null;
 try {
-  const adminRes = await fetchWithTimeout(`${baseUrl}/admin/pages-blocks/footer`, 15_000);
+  const e2ePassword = randomBytes(24).toString("base64url");
+  const passwordHash = await bcrypt.hash(e2ePassword, 12);
+
+  await supabase.from("admin_users").delete().eq("username", E2E_ADMIN_USERNAME);
+  const { data: e2eAdmin, error: adminInsertError } = await supabase
+    .from("admin_users")
+    .insert({
+      email: "e2e-final-closure-footer@venesia.local",
+      username: E2E_ADMIN_USERNAME,
+      password_hash: passwordHash,
+      full_name: "__E2E_FINAL_CLOSURE__ footer test",
+      role: "admin",
+      is_active: true,
+      session_version: 1,
+    })
+    .select("id")
+    .single();
+
+  if (adminInsertError || !e2eAdmin) {
+    throw new Error(`temp admin insert failed: ${adminInsertError?.message ?? "no data"}`);
+  }
+  e2eAdminId = e2eAdmin.id;
+
+  const loginRes = await fetch(`${baseUrl}/api/admin/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username: E2E_ADMIN_USERNAME, password: e2ePassword }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!loginRes.ok) throw new Error(`login failed: HTTP ${loginRes.status}`);
+  const sessionCookie = (loginRes.headers.get("set-cookie") ?? "").split(";")[0];
+  if (!sessionCookie) throw new Error("login did not return a session cookie");
+  pass("Admin real login for footer builder", "temporary __E2E_FINAL_CLOSURE__ user");
+
+  const adminRes = await fetch(`${baseUrl}/admin/pages-blocks/footer`, {
+    headers: { cookie: sessionCookie },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
   if (adminRes.ok) {
     const adminHtml = await adminRes.text();
     pass("Admin footer settings page loads");
@@ -161,10 +231,16 @@ try {
       pass("Legacy FooterSettingsClient removed");
     }
   } else {
-    fail("Admin footer settings page loads", `${adminRes.status} (is dev server running?)`);
+    fail("Admin footer settings page loads", `${adminRes.status} (is server running?)`);
   }
 } catch (error) {
   fail("Admin footer settings page loads", error instanceof Error ? error.message : String(error));
+} finally {
+  if (e2eAdminId) {
+    await supabase.from("admin_users").delete().eq("id", e2eAdminId);
+  } else {
+    await supabase.from("admin_users").delete().eq("username", E2E_ADMIN_USERNAME);
+  }
 }
 
 for (const path of ["/", "/about", "/contact"]) {
@@ -182,8 +258,8 @@ for (const path of ["/", "/about", "/contact"]) {
       if (html.includes("wa.me/201033766876")) pass(`WhatsApp link on ${path}`);
       else fail(`WhatsApp link on ${path}`, "link missing");
 
-      if (html.includes("Building trust before concrete")) pass(`Brand tagline on ${path}`);
-      else fail(`Brand tagline on ${path}`, "missing");
+      if (html.includes(expectedBrandMarker)) pass(`Brand content on ${path}`, expectedBrandMarker);
+      else fail(`Brand content on ${path}`, `missing CMS brand marker "${expectedBrandMarker}"`);
 
       if (html.includes("المركز الإعلامي") || html.includes("media-center")) {
         pass(`Footer media column markers on ${path}`);
