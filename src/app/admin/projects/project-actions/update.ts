@@ -64,26 +64,33 @@ export async function updateProject(formData: FormData) {
 
   const nextPublicationStatus = getPublicationStatus(getString(formData, "publication_status"));
   if (nextPublicationStatus === "published") {
-    const existingInput = await loadProjectPublishInput(numericId);
-    if (existingInput) {
-      const publishError = getProjectPublishValidationError({
-        ...existingInput,
-        arabicName,
-        slug,
-        locationLabel: getString(formData, "location_label"),
-        mapArea: getString(formData, "map_area"),
-        status: getProjectStatus(formData, (current.status as ProjectStatus) ?? "under-construction"),
-        statusLabel: getString(formData, "status_label") || existingInput.statusLabel,
-        image: preserveImage(getString(formData, "image"), String(current.image ?? "")),
-        heroImage: preserveImage(getString(formData, "hero_image"), String(current.hero_image ?? "")),
-        shortDescription: getString(formData, "short_description"),
-        seoTitle: getString(formData, "seo_title"),
-        seoDescription: getString(formData, "seo_description"),
-        progress: getProjectProgress(formData, Number(current.progress ?? 0)),
-        overviewTitle: getString(formData, "overview_title") || existingInput.overviewTitle,
-        deliverySpecsTitle: getString(formData, "delivery_specs_title") || existingInput.deliverySpecsTitle,
-      });
-      if (publishError) redirectEditWithError(numericId, publishError);
+    try {
+      const existingInput = await loadProjectPublishInput(numericId);
+      if (existingInput) {
+        const publishError = getProjectPublishValidationError({
+          ...existingInput,
+          arabicName,
+          slug,
+          locationLabel: getString(formData, "location_label"),
+          mapArea: getString(formData, "map_area"),
+          status: getProjectStatus(formData, (current.status as ProjectStatus) ?? "under-construction"),
+          statusLabel: getString(formData, "status_label") || existingInput.statusLabel,
+          image: preserveImage(getString(formData, "image"), String(current.image ?? "")),
+          heroImage: preserveImage(getString(formData, "hero_image"), String(current.hero_image ?? "")),
+          shortDescription: getString(formData, "short_description"),
+          seoTitle: getString(formData, "seo_title"),
+          seoDescription: getString(formData, "seo_description"),
+          progress: getProjectProgress(formData, Number(current.progress ?? 0)),
+          overviewTitle: getString(formData, "overview_title") || existingInput.overviewTitle,
+          deliverySpecsTitle: getString(formData, "delivery_specs_title") || existingInput.deliverySpecsTitle,
+        });
+        if (publishError) redirectEditWithError(numericId, publishError);
+      }
+    } catch (error) {
+      redirectEditWithError(
+        numericId,
+        error instanceof Error ? error.message : "تعذر التحقق من جاهزية النشر.",
+      );
     }
   }
 

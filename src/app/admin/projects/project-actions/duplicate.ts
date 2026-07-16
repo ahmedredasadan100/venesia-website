@@ -51,6 +51,23 @@ export async function duplicateProjectAjax(id: number) {
   const nextCode = await ensureUniqueProjectField("code", sourceCode);
   const nextSlug = await ensureUniqueProjectField("slug", sourceSlug);
 
+  const [
+    { data: floorPlans, error: floorPlansSelectError },
+    { data: deliveryItems, error: deliverySelectError },
+    { data: media, error: mediaSelectError },
+  ] = await Promise.all([
+    supabase.from("project_floor_plans").select("area, label, plan_image, specs, featured, sort_order").eq("project_id", id),
+    supabase.from("project_delivery_spec_items").select("body, sort_order").eq("project_id", id),
+    supabase.from("project_media").select("collection, image, label, sort_order").eq("project_id", id),
+  ]);
+
+  if (floorPlansSelectError || deliverySelectError || mediaSelectError) {
+    return {
+      ok: false as const,
+      message: "تعذر قراءة بيانات المشروع الفرعية قبل النسخ. لم يتم إنشاء نسخة.",
+    };
+  }
+
   const {
     id: sourceId,
     created_at: sourceCreatedAt,
@@ -82,12 +99,6 @@ export async function duplicateProjectAjax(id: number) {
   }
 
   const newProjectId = inserted.id;
-
-  const [{ data: floorPlans }, { data: deliveryItems }, { data: media }] = await Promise.all([
-    supabase.from("project_floor_plans").select("area, label, plan_image, specs, featured, sort_order").eq("project_id", id),
-    supabase.from("project_delivery_spec_items").select("body, sort_order").eq("project_id", id),
-    supabase.from("project_media").select("collection, image, label, sort_order").eq("project_id", id),
-  ]);
 
   if (floorPlans?.length) {
     const { error: floorPlansError } = await supabase.from("project_floor_plans").insert(

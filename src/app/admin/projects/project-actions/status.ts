@@ -28,10 +28,17 @@ export async function toggleProjectPublicationAjax(id: number, currentStatus: st
   const nextStatus: PublicationStatus = currentStatus === "published" ? "unpublished" : "published";
 
   if (nextStatus === "published") {
-    const input = await loadProjectPublishInput(id);
-    if (!input) return { ok: false as const, message: "المشروع غير موجود." };
-    const validationError = getProjectPublishValidationError(input);
-    if (validationError) return { ok: false as const, message: validationError };
+    try {
+      const input = await loadProjectPublishInput(id);
+      if (!input) return { ok: false as const, message: "المشروع غير موجود." };
+      const validationError = getProjectPublishValidationError(input);
+      if (validationError) return { ok: false as const, message: validationError };
+    } catch (error) {
+      return {
+        ok: false as const,
+        message: error instanceof Error ? error.message : "تعذر التحقق من جاهزية النشر.",
+      };
+    }
   }
 
   const { data, error } = await getSupabaseAdmin()

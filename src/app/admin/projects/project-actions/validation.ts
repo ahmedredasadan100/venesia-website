@@ -15,11 +15,19 @@ export async function loadProjectPublishInput(id: number): Promise<ProjectPublis
   const { data: project, error } = await getSupabaseAdmin().from("projects").select("*").eq("id", id).maybeSingle();
   if (error || !project) return null;
 
-  const [{ data: media }, { data: floorPlans }, { data: deliverySpecItems }] = await Promise.all([
+  const [
+    { data: media, error: mediaError },
+    { data: floorPlans, error: floorPlansError },
+    { data: deliverySpecItems, error: deliveryError },
+  ] = await Promise.all([
     getSupabaseAdmin().from("project_media").select("label, collection").eq("project_id", id),
     getSupabaseAdmin().from("project_floor_plans").select("id").eq("project_id", id),
     getSupabaseAdmin().from("project_delivery_spec_items").select("id").eq("project_id", id),
   ]);
+
+  if (mediaError || floorPlansError || deliveryError) {
+    throw new Error("تعذر تحميل بيانات المشروع الفرعية للتحقق من جاهزية النشر.");
+  }
 
   return projectPublishInputFromBundle({
     project: project as ProjectRow,
@@ -34,17 +42,24 @@ export async function validateProjectsCanPublish(ids: number[]) {
   const validIds: number[] = [];
 
   for (const id of ids) {
-    const input = await loadProjectPublishInput(id);
-    if (!input) {
-      failures.push({ id, message: "المشروع غير موجود." });
-      continue;
+    try {
+      const input = await loadProjectPublishInput(id);
+      if (!input) {
+        failures.push({ id, message: "المشروع غير موجود." });
+        continue;
+      }
+      const error = getProjectPublishValidationError(input);
+      if (error) {
+        failures.push({ id, message: error });
+        continue;
+      }
+      validIds.push(id);
+    } catch (error) {
+      failures.push({
+        id,
+        message: error instanceof Error ? error.message : "تعذر التحقق من جاهزية النشر.",
+      });
     }
-    const error = getProjectPublishValidationError(input);
-    if (error) {
-      failures.push({ id, message: error });
-      continue;
-    }
-    validIds.push(id);
   }
 
   return { validIds, failures };

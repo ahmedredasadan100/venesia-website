@@ -1,5 +1,6 @@
 import "server-only";
 
+import { logError } from "../../logging";
 import { parseFloorPlanSpecsFromForm } from "../../projects/floor-plan-specs";
 import { getSupabaseAdmin } from "../../supabase-admin";
 
@@ -102,7 +103,10 @@ function buildSyncProjectChildrenPayload(
 export async function syncProjectChildren(projectId: number, formData: FormData) {
   const supabase = getSupabaseAdmin();
 
-  const [{ data: existingPlans }, { data: existingMedia }] = await Promise.all([
+  const [
+    { data: existingPlans, error: plansError },
+    { data: existingMedia, error: mediaError },
+  ] = await Promise.all([
     supabase
       .from("project_floor_plans")
       .select("plan_image, featured")
@@ -115,6 +119,11 @@ export async function syncProjectChildren(projectId: number, formData: FormData)
       .order("collection", { ascending: true })
       .order("sort_order", { ascending: true }),
   ]);
+
+  if (plansError || mediaError) {
+    logError("syncProjectChildren: pre-read failed", plansError || mediaError, { projectId });
+    throw new Error("تعذر قراءة بيانات المشروع الحالية قبل الحفظ. لم يتم تطبيق أي تغيير على المخططات أو الوسائط.");
+  }
 
   const existingOverviewImages = (existingMedia ?? [])
     .filter((row) => row.collection === "overview")

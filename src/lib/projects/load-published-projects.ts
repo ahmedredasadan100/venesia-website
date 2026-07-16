@@ -100,7 +100,11 @@ async function queryProjectBySlug(slug: string): Promise<PublicProject | null> {
   const projectRow = parseProjectRow(project as Record<string, unknown>);
   const projectId = projectRow.id;
 
-  const [{ data: floorPlans }, { data: deliverySpecItems }, { data: media }] = await Promise.all([
+  const [
+    { data: floorPlans, error: floorPlansError },
+    { data: deliverySpecItems, error: deliveryError },
+    { data: media, error: mediaError },
+  ] = await Promise.all([
     supabase
       .from("project_floor_plans")
       .select("*")
@@ -118,6 +122,14 @@ async function queryProjectBySlug(slug: string): Promise<PublicProject | null> {
       .order("collection", { ascending: true })
       .order("sort_order", { ascending: true }),
   ]);
+
+  if (floorPlansError || deliveryError || mediaError) {
+    logError("loadProjectBySlug: child query failed", floorPlansError || deliveryError || mediaError, {
+      slug,
+      projectId,
+    });
+    throw new Error("تعذر تحميل تفاصيل المشروع. حاول مرة أخرى لاحقًا.");
+  }
 
   return mapProjectBundleToPublicProject({
     project: projectRow,

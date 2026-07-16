@@ -1,5 +1,6 @@
 import "server-only";
 
+import { logError } from "../../logging";
 import { getSupabaseAdmin } from "../../supabase-admin";
 
 export type ConstructionProjectRow = {
@@ -29,7 +30,10 @@ export type ConstructionUpdatesPlanningData = {
 };
 
 export async function getConstructionUpdatesPlanningData(): Promise<ConstructionUpdatesPlanningData> {
-  const [{ data: projects }, { data: siteUpdates }] = await Promise.all([
+  const [
+    { data: projects, error: projectsError },
+    { data: siteUpdates, error: siteUpdatesError },
+  ] = await Promise.all([
     getSupabaseAdmin()
       .from("projects")
       .select("id, code, slug, arabic_name, status, status_label, progress, publication_status, updated_at")
@@ -43,6 +47,14 @@ export async function getConstructionUpdatesPlanningData(): Promise<Construction
       .order("updated_at", { ascending: false })
       .limit(20),
   ]);
+
+  if (projectsError || siteUpdatesError) {
+    logError(
+      "getConstructionUpdatesPlanningData failed",
+      projectsError || siteUpdatesError,
+    );
+    throw new Error("تعذر تحميل بيانات تخطيط تحديثات التنفيذ. حاول مرة أخرى.");
+  }
 
   return {
     projects: (projects ?? []) as ConstructionProjectRow[],
