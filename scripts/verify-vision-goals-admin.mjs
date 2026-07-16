@@ -26,24 +26,22 @@ const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 assert(client.includes("const isVisionGoals = editorKey === \"vision-goals\""), "isVisionGoals flag missing");
 assert(client.includes('title="الرؤية والأهداف"'), "Vision goals header title missing");
 assert(
-  client.includes("usesHomeModuleChrome || isAboutIntro || isAboutIntroSingleImage || isVisionGoals"),
-  "Vision goals must use unified module chrome",
+  client.includes("usesAboutStructuredChrome") && client.includes("usesUnifiedModuleChrome"),
+  "Vision goals must use unified module chrome via about structured chrome",
 );
 assert(
-  client.includes("isAboutIntro || isAboutIntroSingleImage || isVisionGoals ? null") ||
-    client.includes("isVisionGoals ? null"),
+  client.includes("usesUnifiedModuleChrome || usesProjectsHubHeader ? null"),
   "Module hints must be gated for vision-goals",
 );
 assert(
-  client.includes("isAboutIntro || isAboutIntroSingleImage || isVisionGoals") &&
+  client.includes("usesLockedInternalSlug") &&
     client.includes("المعرّف التقني للموديول — للقراءة فقط."),
   "Vision goals internal slug must be read-only with helper text",
 );
 assert(client.includes("تم حفظ موديول الرؤية والأهداف بنجاح."), "Vision goals save notice missing");
 assert(
-  actions.includes('existing.slug === "vision-goals"') ||
-    actions.includes('existing.variant === "vision-goals"'),
-  "Vision goals slug must be locked on update",
+  actions.includes("isStructuralContentTemplateSlug(existing.slug, existing.variant)"),
+  "Vision goals slug must be locked on update via structural helper",
 );
 
 if (failures.length) {
