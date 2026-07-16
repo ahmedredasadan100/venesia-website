@@ -19,6 +19,7 @@ const TARGET_FILES = [
   "src/app/admin/pages-blocks/pages/page-actions/assignment-reorder.ts",
   "src/app/admin/pages-blocks/pages/page-actions/assignment-status.ts",
   "src/app/admin/pages-blocks/pages/page-actions/assignment-delete.ts",
+  "src/app/admin/pages-blocks/pages/page-actions/assignment-duplicate.ts",
   "src/app/admin/pages-blocks/pages/page-actions/bulk.ts",
   "src/app/admin/topics/topic-actions/create.ts",
   "src/app/admin/topics/topic-actions/update.ts",

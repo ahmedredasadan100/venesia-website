@@ -14,6 +14,7 @@ import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/type
 import {
   bulkPageBlockAssignments,
   deletePageBlockAssignment,
+  duplicateAssignedPageModule,
   togglePageBlockAssignment,
 } from "../actions";
 import PageSeoPanel from "./PageSeoPanel";
@@ -173,6 +174,30 @@ export default function PageBlocksClient({
     });
   }
 
+  function handleDuplicateAssignment(row: PageBlockAssignmentRow) {
+    if (!isManageableAssignment(row) && row.module_kind !== "hero") return;
+
+    const formData = new FormData();
+    formData.set("page_id", String(page.id));
+    formData.set("assignment_id", String(row.id));
+    formData.set("template_id", String(row.template_id));
+    formData.set("module_kind", row.module_kind);
+
+    startTransition(async () => {
+      const result = await duplicateAssignedPageModule(formData);
+      if (!result.ok) {
+        setActionMessage(result.message);
+        return;
+      }
+      setActionMessage(result.message);
+      if (result.redirectTo) {
+        router.push(result.redirectTo);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   function handleDeleteAssignment() {
     if (!deletingAssignment) return;
 
@@ -297,6 +322,7 @@ export default function PageBlocksClient({
                   reorderInfo={reorderInfo}
                   onReorder={handleReorder}
                   onToggleVisibility={handleToggleVisibility}
+                  onDuplicate={handleDuplicateAssignment}
                   onDelete={setDeletingAssignment}
                 />
               </section>

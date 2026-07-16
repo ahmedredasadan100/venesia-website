@@ -111,6 +111,8 @@ export const ADMIN_DATA_GRID_ACTION_COLUMNS = {
   three: adminDataGridActionsColumn(3, "default"),
   /** 5 compact actions — reorder + CRUD rows. */
   fiveCompact: adminDataGridActionsColumn(5, "compact"),
+  /** 6 compact actions — reorder + edit + visibility + duplicate + delete. */
+  sixCompact: adminDataGridActionsColumn(6, "compact"),
   /** 1 standard action. */
   one: adminDataGridActionsColumn(1, "default"),
 } as const;

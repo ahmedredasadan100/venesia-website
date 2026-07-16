@@ -13,4 +13,5 @@ export { updateHeroPageAssignment, updatePageBlockAssignment } from "./assignmen
 export { movePageBlockAssignment } from "./assignment-reorder";
 export { togglePageBlockAssignment } from "./assignment-status";
 export { deletePageBlockAssignment } from "./assignment-delete";
+export { duplicateAssignedPageModule } from "./assignment-duplicate";
 export { bulkPageBlockAssignments } from "./bulk";

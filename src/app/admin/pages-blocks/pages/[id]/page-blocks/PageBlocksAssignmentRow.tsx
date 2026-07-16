@@ -28,6 +28,7 @@ type PageBlocksAssignmentRowProps = {
   onToggleSelect: (checked: boolean) => void;
   onReorder: (direction: "up" | "down") => void;
   onToggleVisibility: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 };
 
@@ -44,6 +45,7 @@ export default function PageBlocksAssignmentRow({
   onToggleSelect,
   onReorder,
   onToggleVisibility,
+  onDuplicate,
   onDelete,
 }: PageBlocksAssignmentRowProps) {
   return (
@@ -125,6 +127,13 @@ export default function PageBlocksAssignmentRow({
               size="compact"
               disabled={isPending}
               onClick={onToggleVisibility}
+            />
+            <AdminDataGridActionButton
+              action="duplicate"
+              title="نسخ الموديول"
+              size="compact"
+              disabled={isPending}
+              onClick={onDuplicate}
             />
             <AdminDataGridActionButton action="delete" title="إزالة من الصفحة" size="compact" onClick={onDelete} />
           </>

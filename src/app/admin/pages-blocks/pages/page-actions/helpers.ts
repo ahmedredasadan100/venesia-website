@@ -23,7 +23,7 @@ export function pagesListPath(options?: { notice?: string; error?: string }) {
 }
 
 export async function auditPageBlockAssignment(
-  verb: "create" | "update" | "delete" | "reorder" | "publish" | "unpublish",
+  verb: "create" | "update" | "delete" | "reorder" | "publish" | "unpublish" | "duplicate",
   pageId: number,
   assignmentId?: number | null,
   metadata?: Record<string, unknown>,
@@ -141,11 +141,15 @@ export async function nextMediaHubSortOrder(pageId: number) {
 }
 
 export function failure(message: string): PageBlockActionResult {
-  return { ok: false, message };
+  return { ok: false, message, redirectTo: null };
 }
 
-export function success(): PageBlockActionResult {
-  return { ok: true, message: null };
+export function success(options?: { message?: string | null; redirectTo?: string | null }): PageBlockActionResult {
+  return {
+    ok: true,
+    message: options?.message ?? null,
+    redirectTo: options?.redirectTo ?? null,
+  };
 }
 
 export function parseAssignmentKeys(formData: FormData): ParsedAssignmentKey[] {

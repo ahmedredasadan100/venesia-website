@@ -9,6 +9,7 @@ export {
   bulkPageBlockAssignments,
   deletePage,
   deletePageBlockAssignment,
+  duplicateAssignedPageModule,
   duplicatePage,
   getPagesTableRows,
   movePageBlockAssignment,

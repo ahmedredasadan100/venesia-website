@@ -22,7 +22,7 @@ import { assignmentRowId, isManageableAssignment } from "./page-blocks-utils";
 type SortKey = "module_kind" | "template_name" | "visibility";
 
 // 150px = secondary module-type column (no dedicated preset).
-const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.statusCompact} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.statusCompact} ${ADMIN_DATA_GRID_ACTION_COLUMNS.sixCompact}`;
 
 type PageBlocksAssignmentsGridProps = {
   rows: PageBlockAssignmentRow[];
@@ -37,6 +37,7 @@ type PageBlocksAssignmentsGridProps = {
   reorderInfo: Map<string, ReorderAdjacency>;
   onReorder: (row: PageBlockAssignmentRow, direction: "up" | "down") => void;
   onToggleVisibility: (row: PageBlockAssignmentRow) => void;
+  onDuplicate: (row: PageBlockAssignmentRow) => void;
   onDelete: (row: PageBlockAssignmentRow) => void;
 };
 
@@ -53,6 +54,7 @@ export default function PageBlocksAssignmentsGrid({
   reorderInfo,
   onReorder,
   onToggleVisibility,
+  onDuplicate,
   onDelete,
 }: PageBlocksAssignmentsGridProps) {
   function sortProps(key: SortKey) {
@@ -106,6 +108,7 @@ export default function PageBlocksAssignmentsGrid({
             onToggleSelect={(checked) => onToggleSelect(rowId, checked)}
             onReorder={(direction) => onReorder(row, direction)}
             onToggleVisibility={() => onToggleVisibility(row)}
+            onDuplicate={() => onDuplicate(row)}
             onDelete={() => onDelete(row)}
           />
         );
