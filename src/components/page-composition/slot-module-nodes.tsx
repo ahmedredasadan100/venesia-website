@@ -237,7 +237,10 @@ export function buildSlotModuleNodes(
 
     if (slug === "about-documentary-beats") {
       const introBlock = findWhoWeAreContentBlock(sorted);
-      if (introBlock && mapAboutIntroBeatsFromBlock(introBlock)?.length) {
+      // Peer of about-intro: always defer to the intro composite when intro exists
+      // (embedded beats or peer lookup). Prevents a second WhoWeAre when beats
+      // sort before intro. Standalone beats-only section only when no intro.
+      if (introBlock) {
         mark(block);
         continue;
       }

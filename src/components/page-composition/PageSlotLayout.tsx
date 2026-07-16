@@ -9,7 +9,7 @@ import { PAGE_LAYOUT_SLOT_ORDER, type PageLayoutSlot } from "../../lib/page-bloc
 import { asBreadcrumbConfig } from "../../lib/page-blocks/configs";
 import { getHeroConfig } from "../../lib/page-sections";
 import type { HomepageProjectCard } from "../../lib/projects/types";
-import SlotModulesRenderer from "./SlotModulesRenderer";
+import { buildSlotRenderPlan } from "./build-slot-render-plan";
 
 type HeroSlotContentProps = {
   composition: PageComposition;
@@ -49,29 +49,24 @@ export function HeroSlotContent({ composition, fallbackHero }: HeroSlotContentPr
   );
 }
 
+/**
+ * Render slot entries via an explicit plan:
+ * blocks are batched so composite peer lookup works; feeds keep their sort_order.
+ */
 function renderOrderedSlotEntries(
   entries: SlotEntry[],
   homepageProjects?: HomepageProjectCard[],
 ) {
+  const plan = buildSlotRenderPlan(entries, { homepageProjects });
   const nodes: ReactNode[] = [];
 
-  for (const entry of entries) {
-    if (entry.kind === "feed") {
-      nodes.push(
-        <FeedModuleSection key={`feed-${entry.assignmentId}`} module={entry.module} />,
-      );
+  for (const item of plan) {
+    if (item.kind === "feed") {
+      nodes.push(<FeedModuleSection key={item.key} module={item.module} />);
       continue;
     }
 
-    if (entry.kind === "block") {
-      nodes.push(
-        <SlotModulesRenderer
-          key={`block-${entry.assignmentId}`}
-          blocks={[entry.block]}
-          homepageProjects={homepageProjects}
-        />,
-      );
-    }
+    nodes.push(<Fragment key={item.key}>{item.node}</Fragment>);
   }
 
   return nodes;
