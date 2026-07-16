@@ -63,7 +63,7 @@ export default function PageBlocksHeader({
 
   return (
     <AdminPageContextHeader
-      eyebrow="PAGE BUILDER"
+      eyebrow="منشئ الصفحات"
       title={resolveEditorTitle(page)}
       description="تحكّم في إعدادات الصفحة، هيكلها، والموديولات المعروضة داخلها."
       actions={(

@@ -286,14 +286,6 @@ export default function PageBlocksClient({
             label: "موديولات الصفحة",
             content: (
               <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <div className="border-b border-white/10 pb-5">
-                  <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">PAGE MODULES</p>
-                  <h2 className="mt-3 text-2xl font-semibold text-white">موديولات الصفحة</h2>
-                  <p className="mt-2 text-sm leading-7 text-white/50">
-                    إدارة الموديولات المرتبطة بالصفحة والتحكم في ترتيبها وظهورها.
-                  </p>
-                </div>
-
                 <PageModuleKindsBar page={page} usedModuleKinds={usedModuleKinds} />
 
                 <AdminBulkActionBar
