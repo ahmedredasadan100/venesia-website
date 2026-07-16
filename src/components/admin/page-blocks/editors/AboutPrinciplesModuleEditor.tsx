@@ -148,16 +148,13 @@ export default function AboutPrinciplesModuleEditor({
 
   return (
     <div className="space-y-6">
-      <input type="hidden" name="config_schema" value="about-principles" />
       {isHomeTrust ? <input type="hidden" name="include_home_trust_intro" value="1" /> : null}
       <input type="hidden" name="principle_count" value={String(items.length)} />
 
       <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <h2 className="text-sm font-semibold text-white">{isHomeTrust ? "نصوص القسم" : "العنوان"}</h2>
         <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">
-            {isHomeTrust ? "عنوان تمهيدي — Eyebrow" : "Eyebrow"}
-          </span>
+          <span className="text-xs font-semibold text-white/55">العنوان التمهيدي الصغير</span>
           <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
         </label>
         {isHomeTrust ? (
@@ -167,13 +164,11 @@ export default function AboutPrinciplesModuleEditor({
             alignmentName="eyebrow_alignment"
             boldDefault={eyebrowBold}
             alignmentDefault={eyebrowAlignment}
-            helperText="يؤثر على العنوان التمهيدي الصغير فقط — النص يبقى Plain Text."
+            helperText="يؤثر على العنوان التمهيدي الصغير فقط."
           />
         ) : null}
         <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">
-            {isHomeTrust ? "العنوان الرئيسي — Title" : "Title"}
-          </span>
+          <span className="text-xs font-semibold text-white/55">العنوان الرئيسي</span>
           <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
         </label>
         {isHomeTrust ? (
@@ -183,18 +178,18 @@ export default function AboutPrinciplesModuleEditor({
             alignmentName="title_alignment"
             boldDefault={titleBold}
             alignmentDefault={titleAlignment}
-            helperText="العنوان يبقى نصًا بسيطًا داخل عنصر العنوان الدلالي — بدون HTML داخلي."
+            helperText="العنوان يبقى نصًا بسيطًا — بدون HTML داخلي."
           />
         ) : null}
         {isHomeTrust ? (
           <AdminRichTextEditor
             name="principles_intro"
-            label="الفقرة التعريفية — Intro"
+            label="الفقرة التعريفية"
             defaultValue={config.description ?? ""}
             toolbarMode="minimal"
             enableTextAlign
             minHeight={160}
-            helperText="Bold على العبارة المطلوبة، وEnter لفقرة جديدة، وShift + Enter لسطر داخل الفقرة. محاذاة الفقرة من شريط الأدوات."
+            helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
           />
         ) : null}
       </section>
@@ -259,7 +254,7 @@ export default function AboutPrinciplesModuleEditor({
 
               {!isHomeTrust ? (
                 <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Icon</span>
+                  <span className="text-xs font-semibold text-white/55">الأيقونة</span>
                   <select
                     value={item.icon ?? "land"}
                     onChange={(event) => updateItem(index, { icon: event.target.value })}
@@ -275,7 +270,7 @@ export default function AboutPrinciplesModuleEditor({
               ) : null}
               <label className="block space-y-2">
                 <span className="text-xs font-semibold text-white/55">
-                  {isHomeTrust ? "عنوان البطاقة" : "Title"}
+                  {isHomeTrust ? "عنوان البطاقة" : "عنوان العنصر"}
                 </span>
                 <input
                   value={item.title ?? ""}
@@ -285,7 +280,7 @@ export default function AboutPrinciplesModuleEditor({
               </label>
               <label className="block space-y-2">
                 <span className="text-xs font-semibold text-white/55">
-                  {isHomeTrust ? "وصف البطاقة" : "Description"}
+                  {isHomeTrust ? "وصف البطاقة" : "وصف العنصر"}
                 </span>
                 <textarea
                   value={item.description ?? ""}

@@ -237,7 +237,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
           toolbarMode="minimal"
           enableTextAlign
           minHeight={160}
-          helperText="Bold على العبارة الذهبية الأولى، وEnter لفقرة جديدة، وShift + Enter لسطر داخل الفقرة. محاذاة الفقرة من شريط الأدوات."
+          helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
         />
       </section>
 
