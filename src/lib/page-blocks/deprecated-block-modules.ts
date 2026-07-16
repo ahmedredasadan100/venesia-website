@@ -14,10 +14,6 @@ export const DEPRECATED_BLOCK_MODULE_KEYS = ["slider"] as const;
 
 export type DeprecatedBlockModuleKey = (typeof DEPRECATED_BLOCK_MODULE_KEYS)[number];
 
-export function isDeprecatedBlockModuleKey(key: string): key is DeprecatedBlockModuleKey {
-  return (DEPRECATED_BLOCK_MODULE_KEYS as readonly string[]).includes(key);
-}
-
 export const DEPRECATED_BLOCK_MODULE_CATALOG: Array<{
   key: DeprecatedBlockModuleKey;
   title: string;

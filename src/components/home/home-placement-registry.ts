@@ -14,13 +14,6 @@ export const HOME_MAIN_PLACEMENTS = HOME_MODULE_SLUGS.map((slug, index) => ({
 
 export type { HomeModuleSlug };
 
-export const HOME_MODULE_MARKERS: Record<HomeModuleSlug, RegExp> = {
-  "home-story": /FROM VISION TO EXECUTION|من المخطط إلى التنفيذ/,
-  "home-projects": /مشاريع فينيسيا/,
-  "home-trust": /لماذا يثق/,
-  "home-contact": /تبحث عن وحدة/,
-};
-
 export function resolveHomeModuleSlug(block: ResolvedPageBlock): HomeModuleSlug | null {
   if (block.blockType !== "content") return null;
   return resolveHomeModuleSlugFromTemplate(block.template.slug, block.template.variant);

@@ -53,14 +53,3 @@ export const DEFAULT_MEDIA_HUB_MODULES_STATE: MediaHubModulesState = {
   modules: DEFAULT_MEDIA_HUB_MODULES,
   usesFallback: true,
 };
-
-export const MEDIA_HUB_SECTION_MARKERS: Record<
-  MediaHubModuleState["sectionKey"],
-  RegExp
-> = {
-  featured: /Latest News/,
-  "site-updates": /Site Updates/,
-  videos: /\bVideos\b/,
-  gallery: /\bGallery\b/,
-  press: /Press Releases/,
-};
