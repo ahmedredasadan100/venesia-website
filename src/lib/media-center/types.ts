@@ -7,6 +7,7 @@ export type MediaContentType =
 
 export type MediaContentItem = {
   id: string;
+  topicId?: number;
   slug: string;
   title: string;
   excerpt: string;

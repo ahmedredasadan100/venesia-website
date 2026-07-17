@@ -19,6 +19,7 @@ export default function AdminColumnVisibilityMenu({
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     function close(event: MouseEvent) {
@@ -40,7 +41,14 @@ export default function AdminColumnVisibilityMenu({
     onChange(next);
     setError("");
     startTransition(async () => {
-      const result = await saveContentTablePreferences(next);
+      const resultPromise = saveQueueRef.current.then(() =>
+        saveContentTablePreferences(next),
+      );
+      saveQueueRef.current = resultPromise.then(
+        () => undefined,
+        () => undefined,
+      );
+      const result = await resultPromise;
       if (!result.ok) setError("تعذر حفظ تفضيلات الأعمدة.");
     });
   }

@@ -41,6 +41,12 @@ export { default as AdminStatusPill } from "./AdminStatusPill";
 export { default as AdminToneBadge } from "./AdminToneBadge";
 export { default as AdminInfoBar } from "./AdminInfoBar";
 export { default as AdminBulkActionBar } from "./AdminBulkActionBar";
+export {
+  AdminSelectCore,
+  AdminFormSelect,
+  AdminBulkActionSelect,
+  ADMIN_SELECT_CORE_CLASSES,
+} from "./AdminSelect";
 
 export {
   ADMIN_DATA_GRID_RULES,

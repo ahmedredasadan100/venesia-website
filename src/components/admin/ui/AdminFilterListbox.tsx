@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ADMIN_FILTER_MENU_ATTR,
@@ -44,16 +44,21 @@ function ChevronDownIcon() {
 
 function ListboxItem({
   label,
+  id,
   selected,
+  active,
   onSelect,
 }: {
   label: string;
+  id: string;
   selected: boolean;
+  active: boolean;
   onSelect: () => void;
 }) {
   return (
     <button
       type="button"
+      id={id}
       role="option"
       aria-selected={selected}
       onMouseDown={(event) => event.preventDefault()}
@@ -61,7 +66,9 @@ function ListboxItem({
       className={`block w-full rounded-[8px] px-2.5 py-2 text-right text-sm transition ${
         selected
           ? "bg-[#D8B87A]/14 font-medium text-[#E6C882]"
-          : "text-white/78 hover:bg-white/[0.05]"
+          : active
+            ? "bg-white/[0.07] text-white"
+            : "text-white/78 hover:bg-white/[0.05]"
       }`}
     >
       {label}
@@ -84,8 +91,46 @@ export default function AdminFilterListbox({
   allValue = "all",
 }: AdminFilterListboxProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const [activeValue, setActiveValue] = useState(value);
   const menuPosition = useAdminFloatingMenuPosition(isOpen, triggerRef);
   const isPlaceholder = value === allValue;
+  const flatOptions = useMemo(
+    () => [
+      { value: allValue, label: placeholder },
+      ...(groups.length ? groups.flatMap((group) => group.options) : options),
+    ],
+    [allValue, groups, options, placeholder],
+  );
+  const activeIndex = Math.max(0, flatOptions.findIndex((option) => option.value === activeValue));
+
+  function handleToggle() {
+    if (!isOpen) setActiveValue(value);
+    onToggle();
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Escape" && isOpen) {
+      event.preventDefault();
+      onToggle();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!isOpen) {
+        setActiveValue(value);
+        onToggle();
+        return;
+      }
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      const nextIndex = (activeIndex + direction + flatOptions.length) % flatOptions.length;
+      setActiveValue(flatOptions[nextIndex].value);
+      return;
+    }
+    if ((event.key === "Enter" || event.key === " ") && isOpen) {
+      event.preventDefault();
+      onSelect(flatOptions[activeIndex].value);
+    }
+  }
 
   const menu =
     isMounted &&
@@ -107,7 +152,13 @@ export default function AdminFilterListbox({
         }}
         className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} ${ADMIN_FILTER_MENU_PANEL_CLASSES} p-1.5`}
       >
-        <ListboxItem label={placeholder} selected={value === allValue} onSelect={() => onSelect(allValue)} />
+        <ListboxItem
+          id={`${id}-option-${allValue}`}
+          label={placeholder}
+          selected={value === allValue}
+          active={activeValue === allValue}
+          onSelect={() => onSelect(allValue)}
+        />
 
         {groups.length > 0
           ? groups.map((group) => (
@@ -118,8 +169,10 @@ export default function AdminFilterListbox({
                 {group.options.map((option) => (
                   <ListboxItem
                     key={option.value}
+                    id={`${id}-option-${option.value}`}
                     label={option.label}
                     selected={value === option.value}
+                    active={activeValue === option.value}
                     onSelect={() => onSelect(option.value)}
                   />
                 ))}
@@ -128,8 +181,10 @@ export default function AdminFilterListbox({
           : options.map((option) => (
               <ListboxItem
                 key={option.value}
+                id={`${id}-option-${option.value}`}
                 label={option.label}
                 selected={value === option.value}
+                active={activeValue === option.value}
                 onSelect={() => onSelect(option.value)}
               />
             ))}
@@ -143,10 +198,13 @@ export default function AdminFilterListbox({
         ref={triggerRef}
         type="button"
         id={`${id}-trigger`}
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={`${id}-listbox`}
-        onClick={onToggle}
+        aria-activedescendant={isOpen ? `${id}-option-${activeValue}` : undefined}
+        onClick={handleToggle}
+        onKeyDown={handleKeyDown}
         className={`flex h-10 w-full items-center justify-between gap-2 rounded-[10px] border border-white/10 bg-black/25 px-3 text-sm transition hover:border-white/18 focus:border-[#4A8DFF]/35 focus:outline-none ${
           isPlaceholder ? "text-white/45" : "font-medium text-white"
         }`}

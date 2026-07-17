@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import InternalPageLayout from "../InternalPageLayout";
 import JsonLd from "../seo/JsonLd";
+import TopicViewTracker from "../content/TopicViewTracker";
 import { getMediaItemBySlug, getMediaItems } from "../../lib/media-center";
 import { MEDIA_DETAIL_PAGE_CONFIG, type MediaDetailPageKey } from "../../lib/media-center/detail-page-config";
 import { loadMediaCenterSidebarProps } from "../../lib/media-sidebar-modules/load-media-sidebar-modules";
@@ -63,6 +64,7 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
       heroImage={item.image}
       breadcrumbCurrentLabel={item.title}
     >
+      {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}
       <JsonLd data={pageJsonLd} />
 
       <MediaPageShell

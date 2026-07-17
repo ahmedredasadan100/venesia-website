@@ -85,10 +85,11 @@ export function adaptTopicRowToMediaItem(row: UnifiedMediaTopicRow): MediaConten
 
   return {
     id: String(row.id),
+    topicId: Number.isInteger(Number(row.id)) ? Number(row.id) : undefined,
     slug: row.slug ?? "",
     title: row.title ?? "",
     excerpt: row.excerpt ?? "",
-    category: row.category ?? "المركز الإعلامي",
+    category: row.category ?? "",
     categorySlug: row.category_slug ?? undefined,
     date: row.date_label || formatDateLabel(publishedAt),
     publishedAt,

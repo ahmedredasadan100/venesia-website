@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bulkUpdateUnifiedContent } from "../../../app/admin/content/topics/actions";
-import type { AdminContentCategory } from "../../../lib/admin/content/category-hierarchy";
+import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
 import type {
   ContentSortValue,
   UnifiedContentRow,
@@ -74,7 +74,7 @@ export default function UnifiedContentList({
   initialVisibleColumns,
 }: {
   rows: UnifiedContentRow[];
-  categories: AdminContentCategory[];
+  categories: AdminContentCategoryNode[];
   currentListPath: string;
   sort: ContentSortValue;
   initialVisibleColumns: string[];
@@ -138,7 +138,9 @@ export default function UnifiedContentList({
             <AdminBulkActionSelect name="category_id" defaultValue="" className="w-[210px]">
               <option value="">اختر تصنيف النقل</option>
               {categories.filter((category) => category.is_active !== false).map((category) => (
-                <option key={category.id} value={category.id}>{category.name}</option>
+                <option key={category.id} value={category.id}>
+                  {`${"— ".repeat(category.depth)}${category.name}`}
+                </option>
               ))}
             </AdminBulkActionSelect>
             <button type="submit" className="h-11 rounded-[10px] bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C]">

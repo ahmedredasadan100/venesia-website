@@ -274,10 +274,36 @@ export async function bulkUpdateUnifiedContent(formData: FormData) {
   let payload: Record<string, unknown> | null = null;
 
   if (action === "publish") {
-    const { data } = await getSupabaseAdmin().from("topics").select("*").in("id", ids).is("deleted_at", null);
+    const { data, error: readError } = await getSupabaseAdmin()
+      .from("topics")
+      .select("*")
+      .in("id", ids)
+      .is("deleted_at", null);
+    if (readError) redirect(withNotice(returnPath, "error", readError.message));
     const invalid = (data ?? []).map((topic) => ({ topic, error: getPublishError(topic) })).find((entry) => entry.error);
     if (invalid?.error) redirect(withNotice(returnPath, "error", invalid.error));
-    payload = { status: "published", published_by: actor.id, updated_by: actor.id, updated_at: now };
+    const results = await Promise.all(
+      (data ?? []).map((topic) =>
+        getSupabaseAdmin()
+          .from("topics")
+          .update({
+            status: "published",
+            published_at: topic.published_at || now,
+            published_by: actor.id,
+            updated_by: actor.id,
+            updated_at: now,
+          })
+          .eq("id", topic.id),
+      ),
+    );
+    const publishError = results.find((result) => result.error)?.error;
+    if (publishError) redirect(withNotice(returnPath, "error", publishError.message));
+    await finishMutation({
+      actor,
+      action: "publish",
+      metadata: { bulk_action: action, topic_ids: ids, count: ids.length },
+    });
+    redirect(withNotice(returnPath, "saved"));
   } else if (action === "unpublish") {
     payload = { status: "unpublished", updated_by: actor.id, updated_at: now };
   } else if (action === "archive") {

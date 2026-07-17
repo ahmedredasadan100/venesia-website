@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { MEDIA_LIST_CONTENT_TYPES } from "./content/media/media-content-config";
 import { getSupabaseAdmin } from "../../lib/supabase-admin";
+import { getContentTypeLabel } from "../../lib/admin/content/content-types";
 
 export const dynamic = "force-dynamic";
 
 type RecentTopic = {
   id: number;
   title: string | null;
+  content_type: string | null;
   slug: string | null;
   status: string | null;
   category: string | null;
@@ -21,9 +22,9 @@ type RecentProject = {
 };
 
 type DashboardStats = {
-  articles: number;
+  content: number;
   categories: number;
-  media: number;
+  featured: number;
   projects: number;
   published: number;
   drafts: number;
@@ -52,23 +53,16 @@ async function getCount(table: string, filter?: (query: FilterableCountQuery) =>
 }
 
 async function getDashboardStats(): Promise<DashboardStats> {
-  const [articles, categories, media, projects, published, drafts, recentResult, recentProjectsResult] = await Promise.all([
-    getCount("topics", (query) => query.eq("content_type", "article").is("deleted_at", null)),
+  const [content, categories, featured, projects, published, drafts, recentResult, recentProjectsResult] = await Promise.all([
+    getCount("topics", (query) => query.is("deleted_at", null)),
     getCount("topic_categories"),
-    getCount("topics", (query) =>
-      query.in("content_type", [...MEDIA_LIST_CONTENT_TYPES]).is("deleted_at", null),
-    ),
+    getCount("topics", (query) => query.eq("is_featured", "true").is("deleted_at", null)),
     getCount("projects"),
-    getCount("topics", (query) =>
-      query.eq("content_type", "article").eq("status", "published").is("deleted_at", null),
-    ),
-    getCount("topics", (query) =>
-      query.eq("content_type", "article").neq("status", "published").is("deleted_at", null),
-    ),
+    getCount("topics", (query) => query.eq("status", "published").is("deleted_at", null)),
+    getCount("topics", (query) => query.neq("status", "published").is("deleted_at", null)),
     getSupabaseAdmin()
       .from("topics")
-      .select("id,title,slug,status,category,updated_at,published_at")
-      .eq("content_type", "article")
+      .select("id,title,content_type,slug,status,category,updated_at,published_at")
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(6),
@@ -80,9 +74,9 @@ async function getDashboardStats(): Promise<DashboardStats> {
   ]);
 
   return {
-    articles,
+    content,
     categories,
-    media,
+    featured,
     projects,
     published,
     drafts,
@@ -181,12 +175,12 @@ export default async function AdminDashboardPage() {
   const stats = await getDashboardStats();
 
   const kpis = [
-    { label: "إجمالي المقالات", value: stats.articles, hint: "كل محتوى مواضيع تهمك", icon: "01", tone: "gold" as const },
+    { label: "إجمالي المحتوى", value: stats.content, hint: "كل عناصر المحتوى", icon: "01", tone: "gold" as const },
     { label: "التصنيفات", value: stats.categories, hint: "شجرة المحتوى الحالية", icon: "02", tone: "purple" as const },
     { label: "المشروعات", value: stats.projects, hint: "مسجّلة في النظام", icon: "03", tone: "green" as const },
     { label: "المنشور", value: stats.published, hint: "ظاهر على الموقع", icon: "04", tone: "blue" as const },
     { label: "المسودات", value: stats.drafts, hint: "تحتاج مراجعة", icon: "05", tone: "amber" as const },
-    { label: "الوسائط", value: stats.media, hint: "مركز إعلامي", icon: "06", tone: "cyan" as const },
+    { label: "المميز", value: stats.featured, hint: "عناصر محتوى مميزة", icon: "06", tone: "cyan" as const },
   ];
 
   const quickActions = [
@@ -265,7 +259,7 @@ export default async function AdminDashboardPage() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.35fr_.85fr]">
-        <Panel title="آخر المحتويات" subtitle="أحدث المقالات التي تم تعديلها">
+        <Panel title="آخر المحتويات" subtitle="أحدث عناصر المحتوى التي تم تعديلها">
           <div className="overflow-hidden rounded-[24px] border border-[#D8B87A]/10">
             <table className="w-full table-fixed border-collapse text-right text-xs md:text-sm">
               <thead className="bg-white/[0.045] text-white/42">
@@ -283,7 +277,7 @@ export default async function AdminDashboardPage() {
                   stats.recentTopics.map((topic) => (
                     <tr key={topic.id} className="transition hover:bg-[#D8B87A]/[0.035]">
                       <td className="max-w-[310px] px-4 py-4 text-white/78"><span className="line-clamp-1">{topic.title ?? "بدون عنوان"}</span></td>
-                      <td className="px-4 py-4 text-white/45">مقال</td>
+                      <td className="px-4 py-4 text-white/45">{getContentTypeLabel(topic.content_type)}</td>
                       <td className="px-4 py-4 text-white/45">{topic.category ?? "غير محدد"}</td>
                       <td className="px-4 py-4"><StatusPill status={topic.status} /></td>
                       <td className="px-4 py-4 text-white/45">{formatDate(topic.updated_at ?? topic.published_at)}</td>

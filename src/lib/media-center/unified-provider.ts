@@ -4,9 +4,7 @@ import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { adaptTopicRowToMediaItem, type UnifiedMediaTopicRow } from "./adapt-topic-row";
 import {
-  getUnifiedCategorySlugForType,
   toTopicsContentType,
-  UNIFIED_MEDIA_CATEGORY_SLUGS,
 } from "./content-type-map";
 import type { MediaContentItem, MediaContentType } from "./types";
 
@@ -33,9 +31,7 @@ function applyTypeFilter<T extends { eq: (column: string, value: string) => T }>
   type?: MediaContentType,
 ) {
   if (!type) return query;
-  return query
-    .eq("content_type", toTopicsContentType(type))
-    .eq("category_slug", getUnifiedCategorySlugForType(type));
+  return query.eq("content_type", toTopicsContentType(type));
 }
 
 function buildUnifiedMediaQuery(select: string, type?: MediaContentType, ascending = false) {
@@ -43,7 +39,6 @@ function buildUnifiedMediaQuery(select: string, type?: MediaContentType, ascendi
     .from("topics")
     .select(select)
     .in("content_type", [...UNIFIED_MEDIA_CONTENT_TYPES])
-    .in("category_slug", [...UNIFIED_MEDIA_CATEGORY_SLUGS])
     .eq("status", "published")
     .is("deleted_at", null)
     .order("published_at", { ascending })
@@ -68,7 +63,6 @@ export async function unifiedGetMediaItemBySlug(type: MediaContentType, slug: st
     .from("topics")
     .select(UNIFIED_DETAIL_SELECT)
     .eq("content_type", toTopicsContentType(type))
-    .eq("category_slug", getUnifiedCategorySlugForType(type))
     .eq("slug", slug)
     .eq("status", "published")
     .is("deleted_at", null)
@@ -87,7 +81,6 @@ export async function unifiedGetMediaStaticParams(type: MediaContentType) {
     .from("topics")
     .select("slug")
     .eq("content_type", toTopicsContentType(type))
-    .eq("category_slug", getUnifiedCategorySlugForType(type))
     .eq("status", "published")
     .is("deleted_at", null);
 
@@ -164,7 +157,6 @@ export async function unifiedGetMediaListingPage(
     .from("topics")
     .select("id", { count: "exact", head: true })
     .in("content_type", [...UNIFIED_MEDIA_CONTENT_TYPES])
-    .in("category_slug", [...UNIFIED_MEDIA_CATEGORY_SLUGS])
     .eq("status", "published")
     .is("deleted_at", null);
 

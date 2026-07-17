@@ -13,6 +13,7 @@ import {
   type AdminContentCategory,
 } from "../../../../lib/admin/content/category-hierarchy";
 import {
+  CONTENT_LIST_PAGE_SIZES,
   CONTENT_LIST_VIEW_KEY,
   loadUnifiedContentList,
   loadUnifiedContentMetrics,
@@ -75,7 +76,7 @@ export default async function UnifiedContentTopicsPage({
   const [
     { data: categoryRows, error: categoriesError },
     { data: seriesRows, error: seriesError },
-    { data: preference },
+    { data: preference, error: preferenceError },
     metrics,
   ] = await Promise.all([
     supabase
@@ -112,7 +113,13 @@ export default async function UnifiedContentTopicsPage({
   const loadError =
     categoriesError?.message ??
     seriesError?.message ??
+    preferenceError?.message ??
     metrics.error ??
+    list.error;
+  const listLoadError =
+    categoriesError?.message ??
+    seriesError?.message ??
+    preferenceError?.message ??
     list.error;
 
   return (
@@ -152,47 +159,52 @@ export default async function UnifiedContentTopicsPage({
 
       <AdminMetricCardsGrid
         items={[
-          { label: "إجمالي الموضوعات", value: metrics.total, tone: "gold", compact: true },
-          { label: "منشور", value: metrics.published, tone: "green", compact: true },
-          { label: "مسودات", value: metrics.draft, tone: "amber", compact: true },
-          { label: "مخفي", value: metrics.unpublished, tone: "violet", compact: true },
-          { label: "أرشيف", value: metrics.archived, tone: "cyan", compact: true },
-          { label: "متوسط SEO", value: metrics.seoAverage, suffix: "/100", tone: "blue", compact: true },
+          { label: "إجمالي الموضوعات", value: metrics.error ? "—" : metrics.total, tone: "gold", compact: true },
+          { label: "منشور", value: metrics.error ? "—" : metrics.published, tone: "green", compact: true },
+          { label: "مسودات", value: metrics.error ? "—" : metrics.draft, tone: "amber", compact: true },
+          { label: "مخفي", value: metrics.error ? "—" : metrics.unpublished, tone: "violet", compact: true },
+          { label: "أرشيف", value: metrics.error ? "—" : metrics.archived, tone: "cyan", compact: true },
+          { label: "متوسط SEO", value: metrics.error ? "—" : metrics.seoAverage, suffix: metrics.error ? undefined : "/100", tone: "blue", compact: true },
         ]}
       />
 
-      <UnifiedContentFilters
-        initial={{
-          q: filters.q,
-          contentType: filters.contentType,
-          category: filters.categoryId ? String(filters.categoryId) : "all",
-          series: filters.seriesId ? String(filters.seriesId) : "all",
-          status: filters.status,
-          featured: filters.featured,
-        }}
-        categories={flattenedCategories}
-        series={series}
-      />
+      {!listLoadError ? (
+        <>
+          <UnifiedContentFilters
+            initial={{
+              q: filters.q,
+              contentType: filters.contentType,
+              category: filters.categoryId ? String(filters.categoryId) : "all",
+              series: filters.seriesId ? String(filters.seriesId) : "all",
+              status: filters.status,
+              featured: filters.featured,
+            }}
+            categories={flattenedCategories}
+            series={series}
+          />
 
-      <UnifiedContentList
-        key={currentListPath}
-        rows={list.rows}
-        categories={flattenedCategories}
-        currentListPath={currentListPath}
-        sort={filters.sort}
-        initialVisibleColumns={visibleColumns}
-      />
+          <UnifiedContentList
+            key={currentListPath}
+            rows={list.rows}
+            categories={flattenedCategories}
+            currentListPath={currentListPath}
+            sort={filters.sort}
+            initialVisibleColumns={visibleColumns}
+          />
 
-      <AdminTablePagination
-        basePath={ADMIN_CONTENT_ROUTES.topics}
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
-        totalCount={list.totalCount}
-        pageSize={String(list.pageSize)}
-        currentPage={list.page}
-        totalPages={list.totalPages}
-        emptySummaryText="لا توجد موضوعات مطابقة"
-      />
+          <AdminTablePagination
+            basePath={ADMIN_CONTENT_ROUTES.topics}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            totalCount={list.totalCount}
+            pageSize={String(list.pageSize)}
+            pageSizeOptions={CONTENT_LIST_PAGE_SIZES.map(String)}
+            currentPage={list.page}
+            totalPages={list.totalPages}
+            emptySummaryText="لا توجد موضوعات مطابقة"
+          />
+        </>
+      ) : null}
     </main>
   );
 }

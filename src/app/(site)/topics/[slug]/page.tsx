@@ -7,6 +7,7 @@ import InternalPageLayout from "../../../../components/InternalPageLayout";
 import FeedModulesStack from "../../../../components/feed-modules/FeedModulesStack";
 import TopicsSidebarSearchPanel from "../../../../components/topics/TopicsSidebarSearchPanel";
 import TopicCard from "../../../../components/topics/TopicCard";
+import TopicViewTracker from "../../../../components/content/TopicViewTracker";
 import JsonLd from "../../../../components/seo/JsonLd";
 
 import { loadFeedModulesForPageSlug } from "../../../../lib/feed-modules/load-feed-modules";
@@ -145,6 +146,7 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
       subtitle={topic.excerpt}
       heroImage={topic.image}
     >
+      <TopicViewTracker topicId={topic.id} />
       <JsonLd data={pageJsonLd} />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:[direction:ltr]">
