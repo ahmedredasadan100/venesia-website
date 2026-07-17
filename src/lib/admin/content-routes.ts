@@ -7,8 +7,24 @@ export const ADMIN_CONTENT_ROUTES = {
   newSeries: "/admin/content/series/new",
 } as const;
 
-export function adminContentTopicPath(id: number | string) {
-  return `${ADMIN_CONTENT_ROUTES.topics}/${id}`;
+export function adminContentTopicPath(
+  id: number | string,
+  options: {
+    returnTo?: string;
+    focusTarget?: string;
+  } = {},
+) {
+  const path = `${ADMIN_CONTENT_ROUTES.topics}/${id}`;
+  const params = new URLSearchParams();
+  if (options.returnTo && isAdminContentReturnPath(options.returnTo)) {
+    params.set("return_to", options.returnTo);
+  }
+  const query = params.toString();
+  const focusTarget =
+    options.focusTarget && /^[a-z0-9-]+$/i.test(options.focusTarget)
+      ? `#${options.focusTarget}`
+      : "";
+  return `${path}${query ? `?${query}` : ""}${focusTarget}`;
 }
 
 export function adminContentTopicPreviewPath(id: number | string) {

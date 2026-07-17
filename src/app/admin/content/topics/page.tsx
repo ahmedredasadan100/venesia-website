@@ -7,6 +7,7 @@ import {
 } from "../../../../components/admin/ui";
 import UnifiedContentFilters from "../../../../components/admin/content/UnifiedContentFilters";
 import UnifiedContentList from "../../../../components/admin/content/UnifiedContentList";
+import { DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS } from "../../../../components/admin/content/unified-content-columns";
 import {
   buildAdminCategoryTree,
   flattenAdminCategoryTree,
@@ -107,7 +108,7 @@ export default async function UnifiedContentTopicsPage({
   const notice = noticeText(params?.notice, params?.message);
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
-    : ["title", "category", "actions"];
+    : [...DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS];
   const rangeStart = list.totalCount ? (list.page - 1) * list.pageSize + 1 : 0;
   const rangeEnd = list.totalCount ? Math.min(list.page * list.pageSize, list.totalCount) : 0;
   const loadError =

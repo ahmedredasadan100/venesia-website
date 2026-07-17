@@ -41,6 +41,9 @@ export { default as AdminStatusPill } from "./AdminStatusPill";
 export { default as AdminToneBadge } from "./AdminToneBadge";
 export { default as AdminInfoBar } from "./AdminInfoBar";
 export { default as AdminBulkActionBar } from "./AdminBulkActionBar";
+export { default as AdminCheckbox, ADMIN_CHECKBOX_CLASSES } from "./AdminCheckbox";
+export { default as AdminColumnVisibilityMenu } from "./AdminColumnVisibilityMenu";
+export type { AdminColumnVisibilityItem } from "./AdminColumnVisibilityMenu";
 export {
   AdminSelectCore,
   AdminFormSelect,
@@ -67,6 +70,8 @@ export {
   AdminDataGridStatusCell,
   AdminDataGridActions,
   AdminDataGridActionsCell,
+  AdminDataGridStickyActionsHeaderCell,
+  AdminDataGridStickyActionsCell,
   AdminDataGridActionButton,
   AdminDataGridEmpty,
 } from "./AdminDataGrid";

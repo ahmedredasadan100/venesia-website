@@ -25,8 +25,8 @@ export default function AdminActionButton({
   className = "",
   onClick,
 }: AdminActionButtonProps) {
-  const classes = `inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${variants[variant]} ${
-    disabled ? "pointer-events-none cursor-not-allowed opacity-45" : ""
+  const classes = `inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${variants[variant]} ${
+    disabled ? "cursor-not-allowed opacity-45" : ""
   } ${className}`;
 
   if (href && !disabled) {

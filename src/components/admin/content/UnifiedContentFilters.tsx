@@ -128,7 +128,10 @@ export default function UnifiedContentFilters({
         const payload = (await response.json()) as { results?: Suggestion[] };
         if (controller.signal.aborted) return;
         setSuggestions(payload.results ?? []);
-        setSuggestionsOpen(true);
+        setSuggestionsOpen(
+          searchAnchorRef.current?.querySelector("input") ===
+            document.activeElement,
+        );
         setActiveSuggestion(-1);
       } catch {
         if (!controller.signal.aborted) {

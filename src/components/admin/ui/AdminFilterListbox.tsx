@@ -63,7 +63,7 @@ function ListboxItem({
       aria-selected={selected}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onSelect}
-      className={`block w-full rounded-[8px] px-2.5 py-2 text-right text-sm transition ${
+      className={`block w-full cursor-pointer rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
         selected
           ? "bg-[#D8B87A]/14 font-medium text-[#E6C882]"
           : active
@@ -205,7 +205,7 @@ export default function AdminFilterListbox({
         aria-activedescendant={isOpen ? `${id}-option-${activeValue}` : undefined}
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
-        className={`flex h-10 w-full items-center justify-between gap-2 rounded-[10px] border border-white/10 bg-black/25 px-3 text-sm transition hover:border-white/18 focus:border-[#4A8DFF]/35 focus:outline-none ${
+        className={`flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-[10px] border border-white/10 bg-black/25 px-3 text-sm transition hover:border-white/18 focus:border-[#4A8DFF]/35 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
           isPlaceholder ? "text-white/45" : "font-medium text-white"
         }`}
       >

@@ -85,12 +85,14 @@ export default function ArticleEditor({
   series,
   notice,
   errorMessage,
+  returnPath = "/admin/content/topics",
 }: {
   topic: ArticleEditorTopic;
   categories: ArticleEditorCategory[];
   series: ArticleEditorSeries[];
   notice?: string;
   errorMessage?: string | null;
+  returnPath?: string;
 }) {
   const safeCategories = categories;
   const categoryGroups = buildArticleTopicCategoryFilterGroups(safeCategories);
@@ -109,10 +111,10 @@ export default function ArticleEditor({
         title={truncateWords(topic.title || "بدون عنوان")}
         actions={
           <>
-            <AdminActionButton href="/admin/content/topics" variant="dark">عرض الموضوعات</AdminActionButton>
+            <AdminActionButton href={returnPath} variant="dark">عرض الموضوعات</AdminActionButton>
             <AdminActionButton href="/admin/content/categories" variant="dark">عرض التصنيفات</AdminActionButton>
             <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
-            <Link href={`/admin/content/topics/${topic.id}/preview`} target="_blank" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18 hover:bg-white/[0.05]">معاينة داخلية</Link>
+            <Link href={`/admin/content/topics/${topic.id}/preview`} target="_blank" className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18 hover:bg-white/[0.05]">معاينة داخلية</Link>
           </>
         }
       />

@@ -18,18 +18,30 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
 import { isMediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
+import {
+  ADMIN_CONTENT_ROUTES,
+  isAdminContentReturnPath,
+} from "../../../../../lib/admin/content-routes";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ notice?: string; error?: string }>;
+  searchParams?: Promise<{
+    notice?: string;
+    error?: string;
+    return_to?: string;
+  }>;
 };
 
 export default async function UnifiedContentEditorPage(props: PageProps) {
   await requireAdminSession();
   const { id } = await props.params;
   const query = await props.searchParams;
+  const returnPath =
+    query?.return_to && isAdminContentReturnPath(query.return_to)
+      ? query.return_to
+      : ADMIN_CONTENT_ROUTES.topics;
   if (!/^\d+$/.test(id)) notFound();
 
   const supabase = getSupabaseAdmin();
@@ -92,6 +104,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
         series={selectableSeries as ArticleEditorSeries[]}
         notice={query?.notice}
         errorMessage={errorMessage}
+        returnPath={returnPath}
       />
     );
   }
@@ -110,14 +123,14 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
         description={`المحرر الحالي: ${getContentTypeLabel(topic.content_type)}. اختيار المحرر يعتمد على content_type فقط.`}
         actions={
           <>
-            <AdminActionButton href="/admin/content/topics" variant="dark">عرض الموضوعات</AdminActionButton>
+            <AdminActionButton href={returnPath} variant="dark">عرض الموضوعات</AdminActionButton>
             <AdminActionButton href="/admin/content/topics/new" variant="dark">إضافة محتوى</AdminActionButton>
             <AdminActionButton href="/admin/content/categories" variant="dark">إدارة التصنيفات</AdminActionButton>
             <Link
               href={`/admin/content/topics/${topic.id}/preview`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18"
+              className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18"
             >
               معاينة داخلية
             </Link>
@@ -131,6 +144,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
         contentType={topic.content_type}
         categories={flattenedCategories}
         series={allSeries}
+        returnPath={returnPath}
         values={{
           id: topic.id,
           title: topic.title,

@@ -24,10 +24,11 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "", fo
       <label className="block">
         <span className="text-sm font-medium text-white/70">وصف الصورة Alt Text</span>
         <input
+          id="topic-image-alt"
           name="image_alt"
           defaultValue={defaultAlt ?? ""}
           placeholder="وصف مختصر للصورة يساعد SEO وإتاحة الوصول"
-          className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+          className="mt-3 w-full scroll-mt-24 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
         />
       </label>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type { AdminGridId } from "./useAdminGridSelection";
 
 type BulkOption = {
@@ -21,6 +21,9 @@ type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
   idsFieldName?: string;
   hiddenFields?: Record<string, string>;
   formId?: string;
+  actionControl?: ReactNode;
+  additionalControls?: ReactNode;
+  actionValue?: string;
 };
 
 export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>({
@@ -35,13 +38,16 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   idsFieldName = "ids",
   hiddenFields,
   formId,
+  actionControl,
+  additionalControls,
+  actionValue,
 }: AdminBulkActionBarProps<T>) {
   const [selectedAction, setSelectedAction] = useState(options[0]?.value ?? "");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     if (!onExecute) return;
     event.preventDefault();
-    void onExecute(selectedAction, selectedIds);
+    void onExecute(actionValue ?? selectedAction, selectedIds);
   }
   if (!selectedIds.length) return null;
 
@@ -65,19 +71,23 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
           <input key={String(id)} type="hidden" name={idsFieldName} value={String(id)} />
         ))}
 
-        <select
-          name={actionFieldName}
-          value={selectedAction}
-          onChange={(event) => setSelectedAction(event.currentTarget.value)}
-          disabled={isBusy}
-          className="h-11 cursor-pointer rounded-2xl border border-white/10 bg-black/28 px-4 text-sm text-white outline-none focus:border-[#D8B87A]/45"
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        {actionControl ?? (
+          <select
+            name={actionFieldName}
+            value={selectedAction}
+            onChange={(event) => setSelectedAction(event.currentTarget.value)}
+            disabled={isBusy}
+            className="h-11 cursor-pointer rounded-2xl border border-white/10 bg-black/28 px-4 text-sm text-white outline-none focus:border-[#D8B87A]/45 disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {additionalControls}
 
         <button
           type="submit"
@@ -91,7 +101,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
           type="button"
           onClick={onClearSelection}
           disabled={isBusy}
-          className="h-11 cursor-pointer rounded-2xl border border-transparent px-4 text-sm font-semibold text-white/50 transition hover:text-white/80"
+          className="h-11 cursor-pointer rounded-2xl border border-transparent px-4 text-sm font-semibold text-white/50 transition hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-55"
         >
           إلغاء التحديد
         </button>

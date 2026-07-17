@@ -232,7 +232,7 @@ export default function AdminTablePagination({
               role="option"
               aria-selected={selected}
               onClick={() => applyLimit(option)}
-              className={`flex w-full items-center justify-between rounded-[8px] px-3 py-2 text-right text-sm transition ${
+              className={`flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                 selected
                   ? "bg-[#D8B87A]/14 font-semibold text-[#F4E7C5]"
                   : "text-white/72 hover:bg-white/[0.05] hover:text-[#F4E7C5]"
@@ -279,7 +279,7 @@ export default function AdminTablePagination({
                 aria-haspopup="listbox"
                 aria-expanded={isLimitOpen}
                 onClick={() => setIsLimitOpen((open) => !open)}
-                className={`flex h-9 min-w-[72px] items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition ${
+                className={`flex h-9 min-w-[72px] cursor-pointer items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                   isLimitOpen
                     ? "border-[#D8B87A]/35 bg-black/30 text-[#F4E7C5]"
                     : "border-[#D8B87A]/16 bg-black/22 text-[#F4E7C5]/90 hover:border-[#D8B87A]/28 hover:bg-black/28"
@@ -306,7 +306,7 @@ export default function AdminTablePagination({
               <Link
                 href={prevHref}
                 scroll={false}
-                className="inline-flex h-9 items-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-3 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5]"
+                className="inline-flex h-9 cursor-pointer items-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-3 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
               >
                 السابق
               </Link>
@@ -340,7 +340,7 @@ export default function AdminTablePagination({
                   href={href}
                   scroll={false}
                   aria-current={isActive ? "page" : undefined}
-                  className={`inline-flex h-9 min-w-9 items-center justify-center rounded-[10px] border px-2.5 text-sm font-semibold transition ${
+                  className={`inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-[10px] border px-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                     isActive
                       ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/65 hover:border-[#D8B87A]/24 hover:bg-black/24 hover:text-[#F4E7C5]"
@@ -355,7 +355,7 @@ export default function AdminTablePagination({
               <Link
                 href={nextHref}
                 scroll={false}
-                className="inline-flex h-9 items-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-3 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5]"
+                className="inline-flex h-9 cursor-pointer items-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-3 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
               >
                 التالي
               </Link>

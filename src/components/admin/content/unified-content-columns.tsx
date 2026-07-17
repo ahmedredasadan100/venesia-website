@@ -4,6 +4,8 @@ import { formatAdminListDate } from "../../../lib/content-dates";
 import { getContentTypeLabel } from "../../../lib/admin/content/content-types";
 import { adminContentTopicPath } from "../../../lib/admin/content-routes";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
+import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
+import { getAdminDataGridActionsColumnWidth } from "../ui/AdminDataGrid";
 import AdminCategoryBadge from "./AdminCategoryBadge";
 import UnifiedContentRowActions from "./UnifiedContentRowActions";
 
@@ -29,7 +31,8 @@ export type UnifiedContentSortKey =
   | "views"
   | "created_at"
   | "updated_at"
-  | "created_by";
+  | "created_by"
+  | "status";
 
 export type UnifiedContentColumn = {
   key: UnifiedContentColumnKey;
@@ -42,8 +45,15 @@ export type UnifiedContentColumn = {
   width?: number;
   sticky?: "start" | "end";
   responsiveBehavior: "always" | "scroll";
-  renderCell: (row: UnifiedContentRow, currentListPath: string) => ReactNode;
+  renderCell: (
+    row: UnifiedContentRow,
+    currentListPath: string,
+    onMutationResult?: (result: AdminActionResult) => void,
+  ) => ReactNode;
 };
+
+export const UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH =
+  getAdminDataGridActionsColumnWidth(7, "compact", 12);
 
 function singleLine(value?: string | null, fallback = "—") {
   const text = value?.trim() || fallback;
@@ -80,18 +90,18 @@ export const UNIFIED_CONTENT_COLUMNS: UnifiedContentColumn[] = [
     sortable: true,
     sortKey: "title",
     minWidth: 360,
-    width: 420,
+    width: 360,
     sticky: "start",
     responsiveBehavior: "always",
-    renderCell: (row) => (
+    renderCell: (row, currentListPath) => (
       <div className="flex min-w-0 flex-nowrap items-center gap-3">
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7">
           <path d="M7 3.75h6.2L18 8.55v11.7H7V3.75Z" stroke="#E7B94F" fill="rgba(216,184,122,0.08)" />
           <path d="M13.1 4.1v4.75h4.65M9.7 12.3h5.4M9.7 15.3h4.2" stroke="#F1C668" strokeLinecap="round" />
         </svg>
         <Link
-          href={adminContentTopicPath(row.id)}
-          className="block min-w-0 flex-1 truncate whitespace-nowrap text-right text-sm font-bold text-white transition hover:text-[#F4D99A]"
+          href={adminContentTopicPath(row.id, { returnTo: currentListPath })}
+          className="block min-w-0 flex-1 cursor-pointer truncate whitespace-nowrap text-right text-sm font-bold text-white transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
           title={row.title || "بدون عنوان"}
         >
           {row.title || "بدون عنوان"}
@@ -190,10 +200,11 @@ export const UNIFIED_CONTENT_COLUMNS: UnifiedContentColumn[] = [
   {
     key: "status",
     label: "الحالة",
-    defaultVisible: false,
+    defaultVisible: true,
     hideable: true,
-    sortable: false,
-    minWidth: 110,
+    sortable: true,
+    sortKey: "status",
+    minWidth: 104,
     responsiveBehavior: "scroll",
     renderCell: (row) => <StatusBadge status={row.status} />,
   },
@@ -223,12 +234,16 @@ export const UNIFIED_CONTENT_COLUMNS: UnifiedContentColumn[] = [
     defaultVisible: true,
     hideable: false,
     sortable: false,
-    minWidth: 344,
-    width: 344,
+    minWidth: UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH,
+    width: UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH,
     sticky: "end",
     responsiveBehavior: "always",
-    renderCell: (row, currentListPath) => (
-      <UnifiedContentRowActions row={row} currentListPath={currentListPath} />
+    renderCell: (row, currentListPath, onMutationResult) => (
+      <UnifiedContentRowActions
+        row={row}
+        currentListPath={currentListPath}
+        onMutationResult={onMutationResult}
+      />
     ),
   },
 ];

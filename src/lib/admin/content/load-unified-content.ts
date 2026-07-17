@@ -27,6 +27,8 @@ export const CONTENT_SORT_VALUES = [
   "updated_at_desc",
   "created_by_asc",
   "created_by_desc",
+  "status_asc",
+  "status_desc",
 ] as const;
 
 export type ContentSortValue = (typeof CONTENT_SORT_VALUES)[number];
@@ -65,6 +67,7 @@ export type UnifiedContentRow = {
   created_by_display: string | null;
   updated_by_display: string | null;
   published_by_display: string | null;
+  deleted_at: string | null;
 };
 
 export type UnifiedContentListResult = {
@@ -178,6 +181,8 @@ function applySort(query: any, sort: ContentSortValue) {
     updated_at_desc: { column: "updated_at", ascending: false },
     created_by_asc: { column: "created_by_display", ascending: true },
     created_by_desc: { column: "created_by_display", ascending: false },
+    status_asc: { column: "status", ascending: true },
+    status_desc: { column: "status", ascending: false },
   };
   const selected = sortMap[sort];
   return query.order(selected.column, {
@@ -187,7 +192,7 @@ function applySort(query: any, sort: ContentSortValue) {
 }
 
 const CONTENT_LIST_SELECT =
-  "id,title,content_type,category_id,category_name,category_color_token,series_id,series_name,status,is_featured,views_count,created_at,updated_at,published_at,created_by_display,updated_by_display,published_by_display";
+  "id,title,content_type,category_id,category_name,category_color_token,series_id,series_name,status,is_featured,views_count,created_at,updated_at,published_at,created_by_display,updated_by_display,published_by_display,deleted_at";
 
 export async function loadUnifiedContentList(
   filters: UnifiedContentFilters,

@@ -1,8 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import {
+  adminActionFailure,
+  adminActionSuccess,
+  type AdminActionResult,
+} from "../../../../lib/admin/admin-action-result";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import {
@@ -18,12 +22,11 @@ import { isContentType } from "../../../../lib/admin/content/content-types";
 import {
   ADMIN_CONTENT_ROUTES,
   adminContentTopicPath,
-  isAdminContentReturnPath,
 } from "../../../../lib/admin/content-routes";
+import { getContentPublicVisibilityState } from "../../../../lib/content-public-visibility";
 import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
-const VALID_STATUSES = new Set(["published", "draft", "unpublished", "archived"]);
 const PREFERENCE_COLUMN_KEYS = new Set([
   "category",
   "id",
@@ -48,18 +51,6 @@ function getIds(formData: FormData) {
     .filter((id) => Number.isInteger(id) && id > 0);
 }
 
-function getReturnPath(formData: FormData) {
-  const value = getString(formData, "redirect_to");
-  return isAdminContentReturnPath(value) ? value : ADMIN_CONTENT_ROUTES.topics;
-}
-
-function withNotice(path: string, notice: string, message?: string) {
-  const url = new URL(path, "https://admin.local");
-  url.searchParams.set("notice", notice);
-  if (message) url.searchParams.set("message", message);
-  return `${url.pathname}${url.search}#content-topics-table`;
-}
-
 async function loadTopic(id: number) {
   const { data } = await getSupabaseAdmin()
     .from("topics")
@@ -78,6 +69,20 @@ function getPublishError(topic: Record<string, unknown>) {
   }
   const input = mediaRowToPublishInput(topic);
   return input ? getMediaPublishValidationError(input) : "بيانات المحتوى غير صالحة للنشر.";
+}
+
+function getPublishFocusTarget(
+  topic: Record<string, unknown>,
+  message: string,
+) {
+  if (!message.includes("Alt Text")) return undefined;
+  return topic.content_type === "article"
+    ? "topic-image-alt"
+    : "media-image-alt";
+}
+
+function invalidMutation(message = "تعذر تنفيذ العملية."): AdminActionResult {
+  return adminActionFailure("تعذر تنفيذ العملية", message);
 }
 
 async function finishMutation(input: {
@@ -102,21 +107,47 @@ async function finishMutation(input: {
   );
 }
 
-export async function setUnifiedContentStatus(formData: FormData) {
+export async function setUnifiedContentStatus(
+  formData: FormData,
+): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
   const id = Number(getString(formData, "id"));
-  const nextStatus = getString(formData, "next_status");
-  const returnPath = getReturnPath(formData);
-  if (!Number.isInteger(id) || id <= 0 || !VALID_STATUSES.has(nextStatus)) {
-    redirect(withNotice(returnPath, "error"));
+  if (!Number.isInteger(id) || id <= 0) {
+    return invalidMutation();
   }
 
   const topic = await loadTopic(id);
-  if (!topic) redirect(withNotice(returnPath, "error"));
+  if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
+  const visibility = getContentPublicVisibilityState({
+    status: typeof topic.status === "string" ? topic.status : null,
+    deletedAt:
+      typeof topic.deleted_at === "string" ? topic.deleted_at : null,
+  });
+  if (!visibility.nextStatus) {
+    return adminActionFailure(
+      "تعذر نشر المحتوى",
+      visibility.tooltip,
+      { entityId: id },
+    );
+  }
+  const nextStatus = getString(formData, "next_status");
+  if (nextStatus !== visibility.nextStatus) {
+    return invalidMutation("تغيرت حالة المحتوى. حدّث الصفحة وحاول مرة أخرى.");
+  }
 
   if (nextStatus === "published") {
     const publishError = getPublishError(topic);
-    if (publishError) redirect(withNotice(returnPath, "error", publishError));
+    if (publishError) {
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        publishError,
+        {
+          code: "publish_validation",
+          entityId: id,
+          focusTarget: getPublishFocusTarget(topic, publishError),
+        },
+      );
+    }
   }
 
   const now = new Date().toISOString();
@@ -129,10 +160,10 @@ export async function setUnifiedContentStatus(formData: FormData) {
     payload.published_at = topic.published_at || now;
     payload.published_by = actor.id;
   }
-  if (nextStatus !== "archived") payload.deleted_at = null;
+  payload.deleted_at = null;
 
   const { error } = await getSupabaseAdmin().from("topics").update(payload).eq("id", id);
-  if (error) redirect(withNotice(returnPath, "error", error.message));
+  if (error) return invalidMutation(error.message);
 
   await finishMutation({
     actor,
@@ -141,17 +172,28 @@ export async function setUnifiedContentStatus(formData: FormData) {
     entityLabel: String(topic.title ?? ""),
     metadata: { status: nextStatus, content_type: topic.content_type },
   });
-  redirect(withNotice(returnPath, nextStatus === "published" ? "published" : "unpublished"));
+  return nextStatus === "published"
+    ? adminActionSuccess(
+        "تم نشر المحتوى",
+        "أصبح المحتوى ظاهرًا للعامة.",
+        { code: "published", entityId: id },
+      )
+    : adminActionSuccess(
+        "تم إخفاء المحتوى",
+        "لم يعد المحتوى ظاهرًا للعامة.",
+        { code: "unpublished", entityId: id },
+      );
 }
 
-export async function toggleUnifiedContentFeatured(formData: FormData) {
+export async function toggleUnifiedContentFeatured(
+  formData: FormData,
+): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
   const id = Number(getString(formData, "id"));
-  const returnPath = getReturnPath(formData);
-  if (!Number.isInteger(id) || id <= 0) redirect(withNotice(returnPath, "error"));
+  if (!Number.isInteger(id) || id <= 0) return invalidMutation();
 
   const topic = await loadTopic(id);
-  if (!topic) redirect(withNotice(returnPath, "error"));
+  if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
   const isFeatured = !Boolean(topic.is_featured);
   const { error } = await getSupabaseAdmin()
     .from("topics")
@@ -161,7 +203,7 @@ export async function toggleUnifiedContentFeatured(formData: FormData) {
       updated_by: actor.id,
     })
     .eq("id", id);
-  if (error) redirect(withNotice(returnPath, "error", error.message));
+  if (error) return invalidMutation(error.message);
 
   await finishMutation({
     actor,
@@ -170,7 +212,11 @@ export async function toggleUnifiedContentFeatured(formData: FormData) {
     entityLabel: String(topic.title ?? ""),
     metadata: { is_featured: isFeatured },
   });
-  redirect(withNotice(returnPath, "saved"));
+  return adminActionSuccess(
+    "تم تحديث التمييز",
+    isFeatured ? "تم تعيين المحتوى كمميز." : "تم إلغاء تمييز المحتوى.",
+    { code: "saved", entityId: id },
+  );
 }
 
 async function createUniqueCopySlug(baseSlug: string) {
@@ -187,13 +233,14 @@ async function createUniqueCopySlug(baseSlug: string) {
   }
 }
 
-export async function duplicateUnifiedContent(formData: FormData) {
+export async function duplicateUnifiedContent(
+  formData: FormData,
+): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
   const id = Number(getString(formData, "id"));
-  const returnPath = getReturnPath(formData);
-  if (!Number.isInteger(id) || id <= 0) redirect(withNotice(returnPath, "error"));
+  if (!Number.isInteger(id) || id <= 0) return invalidMutation();
   const topic = await loadTopic(id);
-  if (!topic) redirect(withNotice(returnPath, "error"));
+  if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
 
   const slug = await createUniqueCopySlug(String(topic.slug ?? "content"));
   const now = new Date().toISOString();
@@ -227,7 +274,7 @@ export async function duplicateUnifiedContent(formData: FormData) {
     })
     .select("id")
     .single<{ id: number }>();
-  if (error || !data) redirect(withNotice(returnPath, "error", error?.message));
+  if (error || !data) return invalidMutation(error?.message);
 
   await finishMutation({
     actor,
@@ -236,23 +283,28 @@ export async function duplicateUnifiedContent(formData: FormData) {
     entityLabel: `${String(topic.title ?? "بدون عنوان")} - نسخة`,
     metadata: { source_topic_id: id, content_type: topic.content_type },
   });
-  redirect(withNotice(returnPath, "created"));
+  return adminActionSuccess(
+    "تم نسخ المحتوى",
+    "أُنشئت نسخة جديدة كمسودة.",
+    { code: "created", entityId: data.id },
+  );
 }
 
-export async function softDeleteUnifiedContent(formData: FormData) {
+export async function softDeleteUnifiedContent(
+  formData: FormData,
+): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
   const id = Number(getString(formData, "id"));
-  const returnPath = getReturnPath(formData);
-  if (!Number.isInteger(id) || id <= 0) redirect(withNotice(returnPath, "error"));
+  if (!Number.isInteger(id) || id <= 0) return invalidMutation();
   const topic = await loadTopic(id);
-  if (!topic) redirect(withNotice(returnPath, "error"));
+  if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
 
   const now = new Date().toISOString();
   const { error } = await getSupabaseAdmin()
     .from("topics")
     .update({ status: "archived", deleted_at: now, updated_at: now, updated_by: actor.id })
     .eq("id", id);
-  if (error) redirect(withNotice(returnPath, "error", error.message));
+  if (error) return invalidMutation(error.message);
 
   await finishMutation({
     actor,
@@ -260,15 +312,20 @@ export async function softDeleteUnifiedContent(formData: FormData) {
     entityId: id,
     entityLabel: String(topic.title ?? ""),
   });
-  redirect(withNotice(returnPath, "deleted"));
+  return adminActionSuccess(
+    "تم حذف المحتوى",
+    "تم الحذف الآمن وإزالة المحتوى من القائمة.",
+    { code: "deleted", entityId: id },
+  );
 }
 
-export async function bulkUpdateUnifiedContent(formData: FormData) {
+export async function bulkUpdateUnifiedContent(
+  formData: FormData,
+): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
   const ids = getIds(formData);
   const action = getString(formData, "bulk_action");
-  const returnPath = getReturnPath(formData);
-  if (!ids.length) redirect(withNotice(returnPath, "error"));
+  if (!ids.length) return invalidMutation("حدد محتوى واحدًا على الأقل.");
 
   const now = new Date().toISOString();
   let payload: Record<string, unknown> | null = null;
@@ -279,9 +336,47 @@ export async function bulkUpdateUnifiedContent(formData: FormData) {
       .select("*")
       .in("id", ids)
       .is("deleted_at", null);
-    if (readError) redirect(withNotice(returnPath, "error", readError.message));
-    const invalid = (data ?? []).map((topic) => ({ topic, error: getPublishError(topic) })).find((entry) => entry.error);
-    if (invalid?.error) redirect(withNotice(returnPath, "error", invalid.error));
+    if (readError) return invalidMutation(readError.message);
+    if ((data ?? []).length !== ids.length) {
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        "بعض السجلات غير موجودة أو محذوفة. حدّث الصفحة وحاول مرة أخرى.",
+      );
+    }
+    const restoreRequired = (data ?? []).find(
+      (topic) =>
+        getContentPublicVisibilityState({
+          status: topic.status,
+          deletedAt: topic.deleted_at,
+        }).actionIntent === "restore_required",
+    );
+    if (restoreRequired) {
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        getContentPublicVisibilityState({
+          status: restoreRequired.status,
+          deletedAt: restoreRequired.deleted_at,
+        }).tooltip,
+        {
+          code: "publish_validation",
+          entityId: Number(restoreRequired.id),
+        },
+      );
+    }
+    const invalid = (data ?? [])
+      .map((topic) => ({ topic, error: getPublishError(topic) }))
+      .find((entry) => entry.error);
+    if (invalid?.error) {
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        invalid.error,
+        {
+          code: "publish_validation",
+          entityId: Number(invalid.topic.id),
+          focusTarget: getPublishFocusTarget(invalid.topic, invalid.error),
+        },
+      );
+    }
     const results = await Promise.all(
       (data ?? []).map((topic) =>
         getSupabaseAdmin()
@@ -297,13 +392,17 @@ export async function bulkUpdateUnifiedContent(formData: FormData) {
       ),
     );
     const publishError = results.find((result) => result.error)?.error;
-    if (publishError) redirect(withNotice(returnPath, "error", publishError.message));
+    if (publishError) return invalidMutation(publishError.message);
     await finishMutation({
       actor,
       action: "publish",
       metadata: { bulk_action: action, topic_ids: ids, count: ids.length },
     });
-    redirect(withNotice(returnPath, "saved"));
+    return adminActionSuccess(
+      "تم نشر المحتوى",
+      `تم نشر ${ids.length} من عناصر المحتوى بنجاح.`,
+      { code: "published" },
+    );
   } else if (action === "unpublish") {
     payload = { status: "unpublished", updated_by: actor.id, updated_at: now };
   } else if (action === "archive") {
@@ -320,7 +419,7 @@ export async function bulkUpdateUnifiedContent(formData: FormData) {
       .eq("id", categoryId)
       .eq("is_active", true)
       .maybeSingle<{ id: number; name: string; slug: string }>();
-    if (!category) redirect(withNotice(returnPath, "error", "التصنيف المختار غير متاح."));
+    if (!category) return invalidMutation("التصنيف المختار غير متاح.");
     payload = {
       category_id: category.id,
       category: category.name,
@@ -330,16 +429,22 @@ export async function bulkUpdateUnifiedContent(formData: FormData) {
     };
   }
 
-  if (!payload) redirect(withNotice(returnPath, "error"));
+  if (!payload) return invalidMutation("الإجراء الجماعي غير صالح.");
   const { error } = await getSupabaseAdmin().from("topics").update(payload).in("id", ids);
-  if (error) redirect(withNotice(returnPath, "error", error.message));
+  if (error) return invalidMutation(error.message);
 
   await finishMutation({
     actor,
     action: action === "publish" ? "publish" : action === "unpublish" ? "unpublish" : action === "delete" ? "delete" : "update",
     metadata: { bulk_action: action, topic_ids: ids, count: ids.length },
   });
-  redirect(withNotice(returnPath, "saved"));
+  return adminActionSuccess(
+    action === "delete" ? "تم حذف المحتوى" : "تم تحديث المحتوى",
+    action === "delete"
+      ? `تم الحذف الآمن لـ ${ids.length} من عناصر المحتوى.`
+      : `تم تحديث ${ids.length} من عناصر المحتوى بنجاح.`,
+    { code: action === "delete" ? "deleted" : "saved" },
+  );
 }
 
 export async function saveContentTablePreferences(visibleColumns: string[]) {

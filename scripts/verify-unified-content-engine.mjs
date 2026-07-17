@@ -194,17 +194,51 @@ check(
 );
 check(
   "The title must stay a single-line ellipsis link",
-  columns.includes("min-w-0 flex-1 truncate whitespace-nowrap") &&
-    columns.includes("adminContentTopicPath(row.id)"),
+  containsAll(columns, ["min-w-0", "flex-1", "truncate", "whitespace-nowrap"]) &&
+    columns.includes("adminContentTopicPath(row.id"),
 );
 check("The list must not render topic slugs", !columns.includes("row.slug"));
+check(
+  "Default columns must be title, category, status, and actions",
+  /key: "title"[\s\S]*?defaultVisible: true/.test(columns) &&
+    /key: "category"[\s\S]*?defaultVisible: true/.test(columns) &&
+    /key: "status"[\s\S]*?defaultVisible: true/.test(columns) &&
+    /key: "actions"[\s\S]*?defaultVisible: true/.test(columns),
+);
 
 const list = read("src/components/admin/content/UnifiedContentList.tsx");
-const preferences = read("src/components/admin/content/AdminColumnVisibilityMenu.tsx");
+const preferences = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx");
+const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const rowActions = read("src/components/admin/content/UnifiedContentRowActions.tsx");
+const activity = read("src/components/admin/content/AdminContentActivityPopover.tsx");
 const actions = read("src/app/admin/content/topics/actions.ts");
-check("Table overflow must remain inside its container", list.includes("max-w-full overflow-x-auto"));
+check(
+  "Table overflow must remain inside its shared container",
+  list.includes("<AdminDataGrid") && dataGrid.includes("overflow-x-auto"),
+);
 check("Bulk actions must use the shared select", list.includes("AdminBulkActionSelect"));
-check("Column preferences must persist to the server", preferences.includes("saveContentTablePreferences(next)"));
+check(
+  "Column preferences must persist through the shared menu contract",
+  list.includes("onPersist={saveContentTablePreferences}") &&
+    preferences.includes("onPersist(next)"),
+);
+check(
+  "Actions must use the shared row action shell and sticky grid capability",
+  rowActions.includes("<AdminDataGridActionsCell compact>") &&
+    list.includes("AdminDataGridStickyActionsCell"),
+);
+check(
+  "Activity must be click-only",
+  activity.includes("onClick={() => setIsOpen") &&
+    !activity.includes("onMouseEnter") &&
+    !activity.includes("onMouseLeave"),
+);
+check(
+  "Publish failures must use shared feedback with an editor action",
+  list.includes("<AdminNotice") &&
+    list.includes("فتح المحتوى واستكمال البيانات") &&
+    actions.includes('"تعذر نشر المحتوى"'),
+);
 check(
   "Preferences must be isolated to the authenticated admin",
   actions.includes("admin_user_id: actor.id") &&
@@ -212,7 +246,8 @@ check(
 );
 check(
   "Fixed columns must survive preference sanitization",
-  list.includes("UNIFIED_CONTENT_COLUMNS.filter((column) => !column.hideable)") &&
+  list.includes("UNIFIED_CONTENT_COLUMNS.filter(") &&
+    list.includes("!column.hideable") &&
     list.includes("visible.push(fixed.key)"),
 );
 

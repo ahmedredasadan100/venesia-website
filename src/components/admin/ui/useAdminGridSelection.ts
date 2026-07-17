@@ -41,6 +41,10 @@ export function useAdminGridSelection<T extends AdminGridId>(visibleIds: T[]) {
     setSelectedIds([]);
   }
 
+  function removeSelection(id: T) {
+    setSelectedIds((current) => current.filter((item) => item !== id));
+  }
+
   return {
     selectedIds,
     selectedSet,
@@ -53,5 +57,6 @@ export function useAdminGridSelection<T extends AdminGridId>(visibleIds: T[]) {
     toggleOne,
     toggleAll,
     clearSelection,
+    removeSelection,
   };
 }

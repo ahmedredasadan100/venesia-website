@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatAdminDateTime } from "../../../lib/content-dates";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import { AdminDataGridActionButton } from "../ui/AdminDataGrid";
 
 type ActivityProps = {
   publishedBy?: string | null;
@@ -15,15 +16,6 @@ type ActivityProps = {
 
 type Position = { top: number; left: number };
 
-function HistoryIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M4 12a8 8 0 1 0 2.35-5.65L4 8.7" />
-      <path d="M4 4v4.7h4.7M12 7.5V12l3 1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 export default function AdminContentActivityPopover({
   publishedBy,
   publishedAt,
@@ -34,7 +26,6 @@ export default function AdminContentActivityPopover({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [isPinned, setIsPinned] = useState(false);
   const [position, setPosition] = useState<Position | null>(null);
   const isMounted = useClientMounted();
 
@@ -74,13 +65,11 @@ export default function AdminContentActivityPopover({
       const target = event.target as Node;
       if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
       setIsOpen(false);
-      setIsPinned(false);
     }
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       setIsOpen(false);
-      setIsPinned(false);
       triggerRef.current?.focus();
     }
 
@@ -101,10 +90,6 @@ export default function AdminContentActivityPopover({
             aria-label="معلومات نشاط المحتوى"
             dir="rtl"
             style={{ position: "fixed", top: position.top, left: position.left, width: "min(320px, calc(100vw - 24px))", zIndex: 10000 }}
-            onMouseEnter={() => setIsOpen(true)}
-            onMouseLeave={() => {
-              if (!isPinned) setIsOpen(false);
-            }}
             className="rounded-[18px] border border-[#D8B87A]/22 bg-[#080B10]/98 p-4 text-right shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
           >
             <p className="mb-3 text-sm font-bold text-white">معلومات النشاط</p>
@@ -128,26 +113,16 @@ export default function AdminContentActivityPopover({
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label="معلومات النشاط"
-        aria-haspopup="dialog"
-        aria-expanded={isOpen}
+      <AdminDataGridActionButton
+        action="activity"
+        buttonRef={triggerRef}
+        size="compact"
         title="معلومات النشاط"
-        onFocus={() => setIsOpen(true)}
-        onMouseEnter={() => setIsOpen(true)}
-        onMouseLeave={() => {
-          if (!isPinned) setIsOpen(false);
-        }}
-        onClick={() => {
-          setIsPinned((current) => !current);
-          setIsOpen((current) => !current || !isPinned);
-        }}
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-white/10 bg-white/[0.055] text-white/62 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A] focus:border-[#D8B87A]/45 focus:outline-none"
-      >
-        <HistoryIcon />
-      </button>
+        ariaLabel="معلومات النشاط"
+        ariaHasPopup="dialog"
+        ariaExpanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+      />
       {panel}
     </>
   );

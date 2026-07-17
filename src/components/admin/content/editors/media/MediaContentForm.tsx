@@ -56,6 +56,7 @@ type MediaContentFormProps = {
     is_active: boolean | null;
   }>;
   series: Array<{ id: number; name: string; status: string; deleted_at: string | null }>;
+  returnPath?: string;
 };
 
 const DEFAULT_CONTENT = "# عنوان المحتوى\n\nابدأ كتابة المحتوى هنا...\n\n## عنوان فرعي\n\nاكتب الفقرة هنا...";
@@ -108,6 +109,7 @@ export default function MediaContentForm({
   contentType,
   categories,
   series,
+  returnPath = "/admin/content/topics",
 }: MediaContentFormProps) {
   const action = mode === "edit" ? updateMediaContent : createMediaContent;
   const content = values?.content?.trim() ? values.content : DEFAULT_CONTENT;
@@ -262,6 +264,7 @@ export default function MediaContentForm({
                   <label className="block">
                     <span className="text-sm font-medium text-white/70">وصف الصورة Alt Text</span>
                     <input
+                      id="media-image-alt"
                       name="image_alt"
                       defaultValue={values?.image_alt ?? ""}
                       placeholder="وصف مختصر للصورة يساعد SEO وإتاحة الوصول"
@@ -366,7 +369,7 @@ export default function MediaContentForm({
               name="seo_title"
               defaultValue={values?.seo_title ?? ""}
               placeholder="عنوان يظهر في نتائج البحث..."
-              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+                      className="w-full scroll-mt-24 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
             />
           </AdminFormField>
 
@@ -399,7 +402,7 @@ export default function MediaContentForm({
             : "يُنشأ المحتوى كمسودة ما لم تغيّر الحالة. تأكد من اختيار القسم الصحيح — الحقول تتغير حسب النوع."
         }
       >
-        <AdminActionButton href="/admin/content/topics" variant="dark">
+        <AdminActionButton href={returnPath} variant="dark">
           {mode === "edit" ? "رجوع للقائمة" : "إلغاء والعودة للقائمة"}
         </AdminActionButton>
         <button
