@@ -1,3 +1,1 @@
-export const dynamic = "force-dynamic";
-
-export { default } from "../../topics/categories/page";
+export { dynamic, default } from "../../topics/categories/page";

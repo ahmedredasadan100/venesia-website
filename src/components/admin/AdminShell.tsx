@@ -10,14 +10,13 @@ type MenuItem = { href: string; label: string; icon: string; children?: MenuChil
 const menuItems: MenuItem[] = [
   { href: "/admin", label: "الرئيسية", icon: "⌂" },
   {
-    href: "/admin/topics",
+    href: "/admin/content/topics",
     label: "المحتوى",
     icon: "✦",
     children: [
-      { href: "/admin/topics", label: "المقالات" },
-      { href: "/admin/content/series", label: "السلاسل" },
-      { href: "/admin/topics/categories", label: "التصنيفات" },
-      { href: "/admin/content/media", label: "المركز الإعلامي" },
+      { href: "/admin/content/topics", label: "الموضوعات" },
+      { href: "/admin/content/categories", label: "التصنيفات" },
+      { href: "/admin/content/series", label: "سلاسل المحتوى" },
     ],
   },
   {

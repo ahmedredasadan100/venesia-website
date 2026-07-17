@@ -15,8 +15,8 @@ export default async function Page() {
         description="أضف سلسلة جديدة تحت تصنيف محدد ليتم اختيارها لاحقًا من داخل الموضوعات."
         actions={
           <>
-            <AdminActionButton href="/admin/topics" variant="dark">عرض المقالات</AdminActionButton>
-            <AdminActionButton href="/admin/topics/categories" variant="dark">عرض التصنيفات</AdminActionButton>
+            <AdminActionButton href="/admin/content/topics" variant="dark">عرض الموضوعات</AdminActionButton>
+            <AdminActionButton href="/admin/content/categories" variant="dark">عرض التصنيفات</AdminActionButton>
             <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
           </>
         }

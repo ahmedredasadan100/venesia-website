@@ -190,9 +190,8 @@ export default async function AdminDashboardPage() {
   ];
 
   const quickActions = [
-    { href: "/admin/topics/new", label: "مقال جديد", hint: "إضافة محتوى", icon: "+" },
-    { href: "/admin/topics/categories", label: "تصنيف جديد", hint: "تنظيم الشجرة", icon: "▤" },
-    { href: "/admin/content/media/new", label: "عنصر إعلامي", hint: "خبر أو فيديو", icon: "◉" },
+    { href: "/admin/content/topics/new", label: "موضوع جديد", hint: "إضافة محتوى", icon: "+" },
+    { href: "/admin/content/categories/new", label: "تصنيف جديد", hint: "تنظيم الشجرة", icon: "▤" },
     { href: "/admin/settings/general", label: "الإعدادات", hint: "بيانات النظام", icon: "⚙" },
   ];
 
@@ -288,7 +287,7 @@ export default async function AdminDashboardPage() {
                       <td className="px-4 py-4 text-white/45">{topic.category ?? "غير محدد"}</td>
                       <td className="px-4 py-4"><StatusPill status={topic.status} /></td>
                       <td className="px-4 py-4 text-white/45">{formatDate(topic.updated_at ?? topic.published_at)}</td>
-                      <td className="px-3 py-4"><Link href={`/admin/topics/${topic.id}`} className="text-[#D8B87A] transition hover:text-[#F4D99A]">تعديل</Link></td>
+                      <td className="px-3 py-4"><Link href={`/admin/content/topics/${topic.id}`} className="text-[#D8B87A] transition hover:text-[#F4D99A]">تعديل</Link></td>
                     </tr>
                   ))
                 ) : (
