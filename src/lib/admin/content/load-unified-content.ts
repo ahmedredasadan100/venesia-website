@@ -8,7 +8,7 @@ import {
 } from "./category-hierarchy";
 import { isContentType, type ContentType } from "./content-types";
 
-export const CONTENT_LIST_VIEW_KEY = "content-topics";
+export { TOPICS_LIST_VIEW_KEY as CONTENT_LIST_VIEW_KEY } from "./topics-list-config";
 export const CONTENT_LIST_PAGE_SIZES = [10, 20, 30, 50] as const;
 export const DEFAULT_CONTENT_LIST_PAGE_SIZE = 10;
 

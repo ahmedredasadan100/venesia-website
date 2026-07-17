@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import {
   ADMIN_FORM,
@@ -26,21 +26,32 @@ type CategoryEditModalProps = {
     color_token: string | null;
   };
   parentOptions: Array<{ id: number; name: string; level: number }>;
+  /** Optional primary-cell trigger that opens the same edit destination. */
+  renderTrigger?: (open: () => void) => ReactNode;
+  showActionButton?: boolean;
 };
 
-export default function CategoryEditModal({ category, parentOptions }: CategoryEditModalProps) {
+export default function CategoryEditModal({
+  category,
+  parentOptions,
+  renderTrigger,
+  showActionButton = true,
+}: CategoryEditModalProps) {
   const [open, setOpen] = useState(false);
   const formId = useMemo(() => `edit-category-form-${category.id}`, [category.id]);
   const isActive = Boolean(category.is_active);
 
   return (
     <>
-      <AdminDataGridActionButton
-        action="edit"
-        size="compact"
-        title="تعديل التصنيف"
-        onClick={() => setOpen(true)}
-      />
+      {renderTrigger ? renderTrigger(() => setOpen(true)) : null}
+      {showActionButton ? (
+        <AdminDataGridActionButton
+          action="edit"
+          size="compact"
+          title="تعديل التصنيف"
+          onClick={() => setOpen(true)}
+        />
+      ) : null}
 
       <VenesiaModal
         open={open}

@@ -17,7 +17,6 @@ import {
   getTopicPublishValidationError,
   topicRowToPublishInput,
 } from "../../../../lib/admin/content-workflow/topic-publish-validation";
-import { CONTENT_LIST_VIEW_KEY } from "../../../../lib/admin/content/load-unified-content";
 import { isContentType } from "../../../../lib/admin/content/content-types";
 import {
   ADMIN_CONTENT_ROUTES,
@@ -25,21 +24,12 @@ import {
 } from "../../../../lib/admin/content-routes";
 import { getContentPublicVisibilityState } from "../../../../lib/content-public-visibility";
 import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
+import {
+  TOPICS_LIST_VIEW_KEY,
+  TOPICS_PREFERENCE_COLUMN_KEYS,
+} from "../../../../lib/admin/content/topics-list-config";
+import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
-
-const PREFERENCE_COLUMN_KEYS = new Set([
-  "category",
-  "id",
-  "views",
-  "created_at",
-  "updated_at",
-  "created_by",
-  "content_type",
-  "series",
-  "status",
-  "featured",
-  "published_at",
-]);
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -448,19 +438,9 @@ export async function bulkUpdateUnifiedContent(
 }
 
 export async function saveContentTablePreferences(visibleColumns: string[]) {
-  const actor = await requireAdminSession();
-  const safeColumns = [...new Set(visibleColumns)].filter((key) =>
-    PREFERENCE_COLUMN_KEYS.has(key),
-  );
-  const now = new Date().toISOString();
-  const { error } = await getSupabaseAdmin().from("admin_user_preferences").upsert(
-    {
-      admin_user_id: actor.id,
-      view_key: CONTENT_LIST_VIEW_KEY,
-      preferences: { visibleColumns: safeColumns },
-      updated_at: now,
-    },
-    { onConflict: "admin_user_id,view_key" },
-  );
-  return error ? { ok: false as const, message: error.message } : { ok: true as const };
+  return saveAdminColumnPreferences({
+    viewKey: TOPICS_LIST_VIEW_KEY,
+    visibleColumns,
+    allowedColumns: TOPICS_PREFERENCE_COLUMN_KEYS,
+  });
 }

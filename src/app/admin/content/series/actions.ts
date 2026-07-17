@@ -3,6 +3,11 @@
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
+import {
+  SERIES_LIST_VIEW_KEY,
+  SERIES_PREFERENCE_COLUMN_KEYS,
+} from "../../../../lib/admin/content/series-list-config";
+import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -541,4 +546,12 @@ export async function bulkSeriesActionAjax(action: string, ids: number[]): Promi
   }
 
   return failure("عملية غير معروفة.");
+}
+
+export async function saveSeriesTablePreferences(visibleColumns: string[]) {
+  return saveAdminColumnPreferences({
+    viewKey: SERIES_LIST_VIEW_KEY,
+    visibleColumns,
+    allowedColumns: SERIES_PREFERENCE_COLUMN_KEYS,
+  });
 }

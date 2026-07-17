@@ -51,6 +51,11 @@ export {
   AdminBulkActionSelect,
   ADMIN_SELECT_CORE_CLASSES,
 } from "./AdminSelect";
+export { default as AdminListboxSelect } from "./AdminListboxSelect";
+export type {
+  AdminListboxSelectOption,
+  AdminListboxSelectProps,
+} from "./AdminListboxSelect";
 
 export {
   ADMIN_DATA_GRID_RULES,

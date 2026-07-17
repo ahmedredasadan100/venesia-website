@@ -22,6 +22,8 @@ import {
   normalizeUnifiedContentFilters,
   type ContentListSearchParams,
 } from "../../../../lib/admin/content/load-unified-content";
+import { TOPICS_NOTICE_CODE_MAP } from "../../../../lib/admin/content/topics-list-config";
+import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { ADMIN_CONTENT_ROUTES } from "../../../../lib/admin/content-routes";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -53,17 +55,6 @@ function buildCurrentListPath(filters: ReturnType<typeof normalizeUnifiedContent
   if (filters.pageSize !== 10) params.set("limit", String(filters.pageSize));
   const query = params.toString();
   return query ? `${ADMIN_CONTENT_ROUTES.topics}?${query}` : ADMIN_CONTENT_ROUTES.topics;
-}
-
-function noticeText(notice?: string, message?: string) {
-  if (message) return message;
-  if (notice === "published") return "تم نشر المحتوى بنجاح.";
-  if (notice === "unpublished") return "تم إخفاء المحتوى مع الحفاظ على بيانات النشر.";
-  if (notice === "saved") return "تم حفظ التغيير بنجاح.";
-  if (notice === "created") return "تم إنشاء نسخة مسودة بنجاح.";
-  if (notice === "deleted") return "تم حذف المحتوى حذفًا آمنًا.";
-  if (notice === "error") return "تعذر تنفيذ العملية.";
-  return null;
 }
 
 export default async function UnifiedContentTopicsPage({
@@ -111,7 +102,11 @@ export default async function UnifiedContentTopicsPage({
     page: list.page,
     sort: DEFAULT_CONTENT_LIST_SORT,
   });
-  const notice = noticeText(params?.notice, params?.message);
+  const noticeFeedback = resolveAdminNoticeFeedback(
+    TOPICS_NOTICE_CODE_MAP,
+    params?.notice,
+    params?.message,
+  );
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
     : [...DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS];
@@ -150,10 +145,13 @@ export default async function UnifiedContentTopicsPage({
         }
       />
 
-      {notice ? (
+      {noticeFeedback ? (
         <AdminNotice
-          variant={params?.notice === "error" ? "danger" : "success"}
-          message={notice}
+          variant={noticeFeedback.variant}
+          title={noticeFeedback.title || undefined}
+          message={noticeFeedback.message}
+          layout={noticeFeedback.layout}
+          dismissible={noticeFeedback.dismissible}
         />
       ) : null}
       {loadError ? (

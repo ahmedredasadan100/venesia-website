@@ -1,6 +1,18 @@
 import AdminNotice from "../../../../components/admin/AdminNotice";
-import { AdminActionButton, AdminInfoBar, AdminPageContextHeader, AdminPageHeader } from "../../../../components/admin/ui";
+import {
+  AdminActionButton,
+  AdminMetricCardsGrid,
+  AdminPageContextHeader,
+  AdminPageHeader,
+} from "../../../../components/admin/ui";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import {
+  SERIES_DEFAULT_COLUMN_KEYS,
+  SERIES_LIST_VIEW_KEY,
+  SERIES_NOTICE_CODE_MAP,
+} from "../../../../lib/admin/content/series-list-config";
+import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import SeriesTableClient, { type SeriesListRow } from "./SeriesTableClient";
 
@@ -18,35 +30,50 @@ type TopicSeriesJoinRow = {
   series_id: number | null;
 };
 
-function getNoticeText(notice?: string) {
-  if (notice === "created") return "تم إنشاء السلسلة بنجاح.";
-  if (notice === "updated") return "تم تحديث السلسلة بنجاح.";
-  if (notice === "deleted") return "تم حذف السلسلة بنجاح.";
-  if (notice === "published") return "تم إظهار السلسلة بنجاح.";
-  if (notice === "unpublished") return "تم إخفاء السلسلة بنجاح.";
-  if (notice === "duplicated") return "تم نسخ السلسلة بنجاح.";
-  return null;
-}
-
-export default async function Page({ searchParams }: { searchParams?: Promise<{ notice?: string; error?: string }> }) {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: Promise<{ notice?: string; error?: string }>;
+}) {
+  const actor = await requireAdminSession();
   const params = await searchParams;
-  const notice = getNoticeText(params?.notice);
-  const errorMessage = params?.error ? decodeURIComponent(params.error) : null;
+  const noticeFeedback = resolveAdminNoticeFeedback(
+    SERIES_NOTICE_CODE_MAP,
+    params?.error ? "error" : params?.notice,
+    params?.error ? decodeURIComponent(params.error) : null,
+  );
 
-  const [{ data: seriesRows, error: seriesError }, { data: topicRows }] = await Promise.all([
+  const [
+    { data: seriesRows, error: seriesError },
+    { data: topicRows },
+    { data: preference, error: preferenceError },
+  ] = await Promise.all([
     getSupabaseAdmin()
       .from("topic_series")
       .select("id, name, slug, status, sort_order")
       .order("sort_order", { ascending: true })
       .order("id", { ascending: false }),
     getSupabaseAdmin().from("topics").select("series_id"),
+    getSupabaseAdmin()
+      .from("admin_user_preferences")
+      .select("preferences")
+      .eq("admin_user_id", actor.id)
+      .eq("view_key", SERIES_LIST_VIEW_KEY)
+      .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
   ]);
 
   if (seriesError) {
     return (
       <main className="space-y-7">
-        <AdminPageHeader title="إدارة السلاسل" description="قبل استخدام الصفحة، نفّذ ملف SQL الخاص بإنشاء جدول topic_series." />
-        <AdminNotice variant="danger" title="جدول السلاسل غير جاهز" message={seriesError.message} />
+        <AdminPageHeader
+          title="إدارة السلاسل"
+          description="قبل استخدام الصفحة، نفّذ ملف SQL الخاص بإنشاء جدول topic_series."
+        />
+        <AdminNotice
+          variant="danger"
+          title="جدول السلاسل غير جاهز"
+          message={seriesError.message}
+        />
       </main>
     );
   }
@@ -57,13 +84,21 @@ export default async function Page({ searchParams }: { searchParams?: Promise<{ 
     counts.set(row.series_id, (counts.get(row.series_id) ?? 0) + 1);
   });
 
-  const series: SeriesListRow[] = ((seriesRows ?? []) as SeriesRow[]).map((item) => ({
-    ...item,
-    topics_count: counts.get(item.id) ?? 0,
-  }));
+  const series: SeriesListRow[] = ((seriesRows ?? []) as SeriesRow[]).map(
+    (item) => ({
+      ...item,
+      topics_count: counts.get(item.id) ?? 0,
+    }),
+  );
 
   const activeCount = series.filter((item) => item.status === "published").length;
-  const linkedCount = series.reduce((total, item) => total + item.topics_count, 0);
+  const topicsTotal = series.reduce(
+    (total, item) => total + item.topics_count,
+    0,
+  );
+  const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
+    ? preference.preferences.visibleColumns
+    : [...SERIES_DEFAULT_COLUMN_KEYS];
 
   return (
     <main className="space-y-7">
@@ -77,22 +112,61 @@ export default async function Page({ searchParams }: { searchParams?: Promise<{ 
               <PlusIcon />
               إضافة سلسلة جديدة
             </AdminActionButton>
-            <AdminActionButton href="/admin/content/topics" variant="dark">عرض الموضوعات</AdminActionButton>
-            <AdminActionButton href="/admin/content/categories" variant="dark">عرض التصنيفات</AdminActionButton>
+            <AdminActionButton href="/admin/content/topics" variant="dark">
+              عرض الموضوعات
+            </AdminActionButton>
+            <AdminActionButton href="/admin/content/categories" variant="dark">
+              عرض التصنيفات
+            </AdminActionButton>
           </>
         }
       />
 
-      <AdminInfoBar
-        label="Content Series Layer"
-        description="كل سلسلة تابعة لتصنيف — التصنيف يُختار عند إنشاء السلسلة."
-        meta={`${series.length} Series / ${activeCount} Active / ${linkedCount} Linked Topics`}
+      <AdminMetricCardsGrid
+        items={[
+          {
+            label: "إجمالي السلاسل",
+            value: series.length,
+            tone: "gold",
+            compact: true,
+          },
+          {
+            label: "منشور",
+            value: activeCount,
+            tone: "green",
+            compact: true,
+          },
+          {
+            label: "الموضوعات",
+            value: topicsTotal,
+            tone: "cyan",
+            compact: true,
+          },
+        ]}
       />
 
-      {notice ? <AdminNotice variant="success" message={notice} /> : null}
-      {errorMessage ? <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={errorMessage} /> : null}
+      {noticeFeedback ? (
+        <AdminNotice
+          variant={noticeFeedback.variant}
+          title={noticeFeedback.title || undefined}
+          message={noticeFeedback.message}
+          layout={noticeFeedback.layout}
+          dismissible={noticeFeedback.dismissible}
+        />
+      ) : null}
+      {preferenceError ? (
+        <AdminNotice
+          variant="danger"
+          title="تعذر تحميل تفضيلات الأعمدة"
+          message={preferenceError.message}
+        />
+      ) : null}
 
-      <SeriesTableClient series={series} />
+      <SeriesTableClient
+        key={series.map((item) => `${item.id}:${item.status}:${item.topics_count}`).join("|")}
+        series={series}
+        initialVisibleColumns={visibleColumns}
+      />
     </main>
   );
 }

@@ -1,181 +1,128 @@
 "use client";
 
-import { useMemo } from "react";
-import {
-  AdminBulkActionBar,
-  AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
-  AdminDataGridCheckbox,
-  AdminDataGridEmpty,
-  AdminDataGridHeader,
-  AdminDataGridRow,
-  AdminDataGridSortLabel,
-} from "../../../../components/admin/ui";
-import { useAdminTable } from "../../../../components/admin/table-engine";
-import AdminStatusPill from "../../../../components/admin/ui/AdminStatusPill";
+import { useMemo, useState } from "react";
+import { AdminEntityList } from "../../../../components/admin/entity-list";
+import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
+import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import { SERIES_DEFAULT_COLUMN_KEYS } from "../../../../lib/admin/content/series-list-config";
 import {
   bulkSeriesActionAjax,
-  deleteSeriesAjax,
-  duplicateSeriesAjax,
-  getSeriesTableRows,
-  toggleSeriesStatusAjax,
+  saveSeriesTablePreferences,
 } from "./actions";
+import {
+  createSeriesColumns,
+  SERIES_ACTIONS_COLUMN_WIDTH,
+  type SeriesColumnKey,
+  type SeriesListRow,
+  type SeriesSortKey,
+} from "./series-columns";
 
-export type SeriesListRow = {
-  id: number;
-  name: string;
-  slug: string;
-  status: string | null;
-  sort_order: number | null;
-  topics_count: number;
-};
+const BULK_OPTIONS = [
+  { value: "publish", label: "إظهار المحدد" },
+  { value: "hide", label: "إخفاء المحدد" },
+  { value: "delete", label: "حذف المحدد" },
+] as const;
 
-type SeriesSortKey = "name" | "topics_count" | "status";
+export type { SeriesListRow };
 
-const columns = "44px minmax(420px,1.7fr) 120px 140px 220px";
+export default function SeriesTableClient({
+  series,
+  initialVisibleColumns,
+}: {
+  series: SeriesListRow[];
+  initialVisibleColumns?: string[];
+}) {
+  const [rows, setRows] = useState(series);
+  const [sort, setSort] = useState<{
+    key: SeriesSortKey;
+    direction: "asc" | "desc";
+  }>({ key: "name", direction: "asc" });
 
-function statusMeta(status?: string | null) {
-  if (status === "published") return { label: "منشور", tone: "green" as const };
-  if (status === "unpublished") return { label: "مخفي", tone: "gold" as const };
-  if (status === "archived") return { label: "أرشيف", tone: "muted" as const };
-  return { label: "مسودة", tone: "muted" as const };
-}
-
-function SeriesIcon() {
-  return (
-    <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#D8B87A]/16 bg-[#D8B87A]/8 text-[#D8B87A]">
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M6.5 5h11M6.5 12h11M6.5 19h11" strokeLinecap="round" />
-        <path d="M3.8 5h.01M3.8 12h.01M3.8 19h.01" strokeLinecap="round" />
-      </svg>
-    </span>
+  const columns = useMemo(
+    () => createSeriesColumns({ onRowsUpdated: setRows }),
+    [],
   );
-}
 
-export default function SeriesTableClient({ series }: { series: SeriesListRow[] }) {
-  const sortAccessors = useMemo(() => ({
-    name: (item: SeriesListRow) => item.name,
-    topics_count: (item: SeriesListRow) => item.topics_count,
-    status: (item: SeriesListRow) => statusMeta(item.status).label,
-  }), []);
+  const sortedRows = useMemo(() => {
+    const next = [...rows];
+    next.sort((a, b) => {
+      let result = 0;
+      if (sort.key === "topics_count") {
+        result = a.topics_count - b.topics_count;
+      } else if (sort.key === "status") {
+        result = String(a.status ?? "").localeCompare(String(b.status ?? ""), "ar");
+      } else {
+        result = a.name.localeCompare(b.name, "ar");
+      }
+      return sort.direction === "asc" ? result : -result;
+    });
+    return next;
+  }, [rows, sort]);
 
-  const table = useAdminTable<SeriesListRow, SeriesSortKey>({
-    initialRows: series,
-    getRowId: (item) => item.id,
-    sortAccessors,
-    refresh: getSeriesTableRows,
-  });
-
-  function sortProps(key: SeriesSortKey) {
+  function mapSeriesResult(result: {
+    ok: boolean;
+    message?: string;
+    rows?: SeriesListRow[];
+  }): AdminActionResult {
+    if (result.rows) setRows(result.rows);
     return {
-      active: table.sort.key === key,
-      direction: table.sort.direction,
-      onClick: () => table.toggleSort(key),
-    } as const;
+      ok: result.ok,
+      title: result.ok ? "تم بنجاح" : "تعذر تنفيذ العملية",
+      message: result.message ?? (result.ok ? "تم التحديث." : "فشلت العملية."),
+      code: result.ok ? "saved" : undefined,
+    };
   }
 
   return (
-    <div className="space-y-4">
-      {table.feedback ? (
-        <div
-          className={`rounded-[16px] border px-4 py-3 text-sm font-semibold ${
-            table.feedback.type === "success"
-              ? "border-emerald-400/18 bg-emerald-500/10 text-emerald-100"
-              : "border-red-400/18 bg-red-500/10 text-red-100"
-          }`}
-        >
-          {table.feedback.message}
-        </div>
-      ) : null}
-
-      <AdminBulkActionBar
-        selectedIds={table.selection.selectedIds}
-        entityLabel="سلسلة"
-        options={[
-          { value: "publish", label: "إظهار المحدد" },
-          { value: "hide", label: "إخفاء المحدد" },
-          { value: "delete", label: "حذف المحدد" },
-        ]}
-        onClearSelection={table.selection.clearSelection}
-        onExecute={(action, ids) => table.runAction(() => bulkSeriesActionAjax(action, ids.map(Number)))}
-        isBusy={table.isPending}
-      />
-
-      <AdminDataGrid>
-        <AdminDataGridHeader columns={columns}>
-          <div className="flex justify-center">
-            <AdminDataGridCheckbox
-              inputRef={table.selection.selectAllRef}
-              checked={table.selection.allSelected}
-              onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
-              label="تحديد الكل"
-            />
-          </div>
-<div className="flex w-full justify-start">
-  <AdminDataGridSortLabel {...sortProps("name")}>
-    السلسلة
-  </AdminDataGridSortLabel>
-</div>
-
-
-          <AdminDataGridSortLabel {...sortProps("topics_count")} className="mx-auto">الموضوعات</AdminDataGridSortLabel>
-          <AdminDataGridSortLabel {...sortProps("status")} className="mx-auto">الحالة</AdminDataGridSortLabel>
-          <span className="text-center">الإجراءات</span>
-        </AdminDataGridHeader>
-
-        {table.rows.length ? table.rows.map((item) => {
-          const status = statusMeta(item.status);
-          const isHidden = item.status === "unpublished";
-          return (
-            <AdminDataGridRow key={item.id} columns={columns} className="border-b border-white/[0.045] last:border-b-0">
-              <div className="flex justify-center">
-                <AdminDataGridCheckbox
-                  checked={table.selection.selectedSet.has(item.id)}
-                  onChange={(event) => table.selection.toggleOne(item.id, event.currentTarget.checked)}
-                  label={`تحديد ${item.name}`}
-                />
-              </div>
-
-              <div className="flex min-w-0 items-center justify-start gap-3 text-right">
-                <SeriesIcon />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-white">{item.name}</p>
-                </div>
-              </div>
-
-              <div className="text-center font-en text-sm font-semibold text-white/72">{item.topics_count}</div>
-              <div className="flex justify-center"><AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill></div>
-
-              <AdminDataGridActionsCell>
-                <AdminDataGridActionButton action="edit" href={`/admin/content/series/${item.id}`} />
-                <AdminDataGridActionButton
-                  action="visibility"
-                  title={isHidden ? "إظهار" : "إخفاء"}
-                  hidden={isHidden}
-                  disabled={table.isPending}
-                  onClick={() => table.runAction(() => toggleSeriesStatusAjax(item.id, item.status))}
-                />
-                <AdminDataGridActionButton
-                  action="duplicate"
-                  disabled={table.isPending}
-                  onClick={() => table.runAction(() => duplicateSeriesAjax(item.id))}
-                />
-                <AdminDataGridActionButton
-                  action="delete"
-                  disabled={table.isPending}
-                  onClick={() => table.runAction(() => deleteSeriesAjax(item.id))}
-                />
-              </AdminDataGridActionsCell>
-            </AdminDataGridRow>
+    <AdminEntityList<SeriesListRow, SeriesColumnKey, SeriesSortKey, number>
+      listId="content-series-table"
+      rows={sortedRows}
+      columns={columns}
+      getRowId={(row) => row.id}
+      getRowLabel={(row) => row.name}
+      initialVisibleColumns={
+        initialVisibleColumns?.length
+          ? initialVisibleColumns
+          : [...SERIES_DEFAULT_COLUMN_KEYS]
+      }
+      onPersistColumns={(visibleColumns) =>
+        saveSeriesTablePreferences(visibleColumns)
+      }
+      enableColumnManagement
+      enableSelection
+      selectionLabel="تحديد كل السلاسل"
+      bulkOptions={BULK_OPTIONS}
+      bulkEntityLabel="سلسلة"
+      mapResultToFeedback={(result) => mapAdminActionResultToFeedback(result)}
+      sort={sort}
+      sortMode={{
+        mode: "callback",
+        onToggle: (sortKey) => {
+          const key = sortKey as SeriesSortKey;
+          setSort((current) =>
+            current.key === key
+              ? {
+                  key,
+                  direction: current.direction === "asc" ? "desc" : "asc",
+                }
+              : { key, direction: "asc" },
           );
-        }) : (
-          <AdminDataGridEmpty>
-            <p className="text-base font-semibold text-white">لا توجد سلاسل حتى الآن</p>
-            <p className="mt-2 text-sm text-white/45">ابدأ بإضافة أول سلسلة من زر إضافة سلسلة.</p>
-          </AdminDataGridEmpty>
-        )}
-      </AdminDataGrid>
-    </div>
+        },
+      }}
+      actionsColumnWidth={SERIES_ACTIONS_COLUMN_WIDTH}
+      empty={
+        <>
+          <p className="text-base font-semibold text-white">
+            لا توجد سلاسل حتى الآن
+          </p>
+          <p className="mt-2 text-sm text-white/45">
+            ابدأ بإضافة أول سلسلة من زر إضافة سلسلة.
+          </p>
+        </>
+      }
+      onBulkExecute={async (action, ids) =>
+        mapSeriesResult(await bulkSeriesActionAjax(action, ids))
+      }
+    />
   );
 }

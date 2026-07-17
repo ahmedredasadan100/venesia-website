@@ -254,6 +254,11 @@ check(
   containsAll(columns, ["min-w-0", "flex-1", "truncate", "whitespace-nowrap"]) &&
     columns.includes("adminContentTopicPath(row.id"),
 );
+check(
+  "Topics columns must be produced by the entity-list column factory",
+  columns.includes("export function createUnifiedContentColumns") &&
+    columns.includes("AdminEntityColumnDef"),
+);
 check("The list must not render topic slugs", !columns.includes("row.slug"));
 check(
   "Default columns must be title, category, status, and actions",
@@ -277,20 +282,35 @@ const floatingMenuPosition = read(
   "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
 );
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
+const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
+const entityListTable = read("src/components/admin/entity-list/AdminEntityListTable.tsx");
+check(
+  "Topics list must consume the shared Admin Entity List System",
+  list.includes("AdminEntityList") &&
+    entityList.includes("AdminEntityListTable") &&
+    entityListTable.includes("<table") &&
+    entityListTable.includes("AdminDataGridStickyActionsCell"),
+);
 check(
   "Table overflow must remain inside its shared container",
-  list.includes("<AdminDataGrid") && dataGrid.includes("overflow-x-auto"),
+  entityListTable.includes("<AdminDataGrid") && dataGrid.includes("overflow-x-auto"),
 );
-check("Bulk actions must use the shared select", list.includes("AdminBulkActionSelect"));
+check(
+  "Bulk actions must use the shared Admin listbox select",
+  list.includes("AdminListboxSelect") &&
+    entityList.includes("AdminListboxSelect") &&
+    !list.includes("<select") &&
+    !entityList.includes("<select"),
+);
 check(
   "Column preferences must persist through the shared menu contract",
-  list.includes("onPersist={saveContentTablePreferences}") &&
+  list.includes("onPersistColumns={saveContentTablePreferences}") &&
     preferences.includes("onPersist(next)"),
 );
 check(
   "Actions must use the shared row action shell and sticky grid capability",
   rowActions.includes("<AdminDataGridActionsCell compact>") &&
-    list.includes("AdminDataGridStickyActionsCell"),
+    entityListTable.includes("AdminDataGridStickyActionsCell"),
 );
 check(
   "Activity must be click-only",
@@ -316,7 +336,7 @@ check(
 );
 check(
   "Publish failures must use shared feedback with an editor action",
-  list.includes("<AdminNotice") &&
+  entityList.includes("<AdminNotice") &&
     list.includes("mapTopicsActionResultToFeedback") &&
     !list.includes('feedback.code === "publish_validation"') &&
     topicsFeedback.includes("mapAdminActionResultToFeedback") &&
@@ -335,16 +355,22 @@ check(
     confirmDialog.includes('event.key === "Escape"') &&
     confirmDialog.includes("returnFocusRef"),
 );
+const prefsAdapter = read("src/lib/admin/preferences/admin-column-preferences.ts");
+const columnPrefs = read("src/lib/admin/entity-list/column-preferences.ts");
 check(
-  "Preferences must be isolated to the authenticated admin",
-  actions.includes("admin_user_id: actor.id") &&
-    actions.includes('view_key: CONTENT_LIST_VIEW_KEY'),
+  "Preferences must use the generic adapter with Topics view key config",
+  actions.includes("saveAdminColumnPreferences") &&
+    actions.includes("TOPICS_LIST_VIEW_KEY") &&
+    prefsAdapter.includes("admin_user_id: actor.id") &&
+    prefsAdapter.includes("view_key: input.viewKey") &&
+    !prefsAdapter.includes("content-topics") &&
+    !prefsAdapter.includes("Topics"),
 );
 check(
-  "Fixed columns must survive preference sanitization",
-  list.includes("UNIFIED_CONTENT_COLUMNS.filter(") &&
-    list.includes("!column.hideable") &&
-    list.includes("visible.push(fixed.key)"),
+  "Fixed columns must survive preference sanitization in shared core",
+  columnPrefs.includes("!column.hideable") &&
+    columnPrefs.includes("visible.push(fixed.key)") &&
+    columnPrefs.includes("sanitizeVisibleColumnKeys"),
 );
 
 const categoryActions = read("src/app/admin/content/categories/actions.ts");

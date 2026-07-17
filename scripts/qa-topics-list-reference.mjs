@@ -883,7 +883,11 @@ try {
 
   await rowByTitle(page, titles.archived).getByRole("checkbox").check();
   await rowByTitle(page, titles.validDraft).getByRole("checkbox").check();
-  await page.locator('select[name="bulk_action"]').selectOption("publish");
+  await page.locator("#content-topics-table-bulk-action-trigger").click();
+  await page
+    .locator("#content-topics-table-bulk-action-listbox")
+    .getByRole("option", { name: "نشر", exact: true })
+    .click();
   await page.getByRole("button", { name: "تنفيذ" }).click();
   check(
     "Bulk publish exposes only its execution pending state",
@@ -920,7 +924,11 @@ try {
 
   await rowByTitle(page, titles.published).getByRole("checkbox").check();
   await rowByTitle(page, titles.unpublished).getByRole("checkbox").check();
-  await page.locator('select[name="bulk_action"]').selectOption("feature");
+  await page.locator("#content-topics-table-bulk-action-trigger").click();
+  await page
+    .locator("#content-topics-table-bulk-action-listbox")
+    .getByRole("option", { name: "تعيين كمميز", exact: true })
+    .click();
   await page.evaluate(() => {
     window.__topicsBulkMarker = "preserved";
   });
@@ -951,7 +959,7 @@ try {
   );
 
   await smoke(page, "/admin/content/categories", "إدارة التصنيفات");
-  await smoke(page, "/admin/content/series", "سلاسل المحتوى");
+  await smoke(page, "/admin/content/series", "إدارة السلاسل");
   await smoke(page, "/admin/content/topics/new", null);
   await smoke(
     page,

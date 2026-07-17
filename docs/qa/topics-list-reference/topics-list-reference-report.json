@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-07-17T20:34:37.362Z",
+  "generatedAt": "2026-07-17T21:58:33.733Z",
   "baseUrl": "http://127.0.0.1:3000",
   "checks": [
     {
-      "name": "Topics route responds for q=mrpeajrq",
+      "name": "Topics route responds for q=mrphafbn",
       "ok": true,
       "detail": "200"
     },
@@ -30,7 +30,7 @@
     {
       "name": "Four status tones remain visually distinct",
       "ok": true,
-      "detail": "[{\"title\":\"01 منشور مرجعي mrpeajrq\",\"label\":\"منشور\",\"expectedClass\":\"text-emerald-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-400/15\",\"color\":\"lab(83.9203 -48.7124 13.8849)\",\"backgroundColor\":\"oklab(0.695996 -0.162107 0.0511875 / 0.1)\",\"borderColor\":\"oklab(0.764996 -0.16946 0.0511029 / 0.15)\"},{\"title\":\"02 مخفي مرجعي mrpeajrq\",\"label\":\"مخفي\",\"expectedClass\":\"text-[#D8B87A]\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84218 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84218 35.9349 / 0.2)\"},{\"title\":\"03 مسودة مرجعية mrpeajrq\",\"label\":\"مسودة\",\"expectedClass\":\"text-sky-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-sky-500/10 text-sky-300 border-sky-400/15\",\"color\":\"lab(80.3307 -20.2945 -31.385)\",\"backgroundColor\":\"oklab(0.684991 -0.0912492 -0.142231 / 0.1)\",\"borderColor\":\"oklab(0.745991 -0.0970495 -0.127188 / 0.15)\"},{\"title\":\"04 مؤرشف مرجعي mrpeajrq\",\"label\":\"مؤرشف\",\"expectedClass\":\"text-white/45\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-white/8 text-white/45 border-white/10\",\"color\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.45)\",\"backgroundColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.08)\",\"borderColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.1)\"}]"
+      "detail": "[{\"title\":\"01 منشور مرجعي mrphafbn\",\"label\":\"منشور\",\"expectedClass\":\"text-emerald-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-400/15\",\"color\":\"lab(83.9203 -48.7124 13.8849)\",\"backgroundColor\":\"oklab(0.695996 -0.162107 0.0511875 / 0.1)\",\"borderColor\":\"oklab(0.764996 -0.16946 0.0511029 / 0.15)\"},{\"title\":\"02 مخفي مرجعي mrphafbn\",\"label\":\"مخفي\",\"expectedClass\":\"text-[#D8B87A]\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84218 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84218 35.9349 / 0.2)\"},{\"title\":\"03 مسودة مرجعية mrphafbn\",\"label\":\"مسودة\",\"expectedClass\":\"text-sky-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-sky-500/10 text-sky-300 border-sky-400/15\",\"color\":\"lab(80.3307 -20.2945 -31.385)\",\"backgroundColor\":\"oklab(0.684991 -0.0912492 -0.142231 / 0.1)\",\"borderColor\":\"oklab(0.745991 -0.0970495 -0.127188 / 0.15)\"},{\"title\":\"04 مؤرشف مرجعي mrphafbn\",\"label\":\"مؤرشف\",\"expectedClass\":\"text-white/45\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-white/8 text-white/45 border-white/10\",\"color\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.45)\",\"backgroundColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.08)\",\"borderColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.1)\"}]"
     },
     {
       "name": "Featured star starts outlined from row.is_featured",
@@ -53,7 +53,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrpeajrq&featured=yes&sort=title_asc",
+      "name": "Topics route responds for q=mrphafbn&featured=yes&sort=title_asc",
       "ok": true,
       "detail": "200"
     },
@@ -63,7 +63,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrpeajrq&sort=id_asc&limit=10&page=2",
+      "name": "Topics route responds for q=mrphafbn&sort=id_asc&limit=10&page=2",
       "ok": true,
       "detail": "200"
     },
@@ -73,7 +73,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrpeajrq&sort=id_asc&limit=10&page=1",
+      "name": "Topics route responds for q=mrphafbn&sort=id_asc&limit=10&page=1",
       "ok": true,
       "detail": "200"
     },
@@ -108,17 +108,17 @@
       "detail": "{\"before\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1621,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1621,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":597,\"tableBox\":{\"x\":24,\"y\":55.28125,\"width\":922,\"height\":859}},\"after\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1621,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1621,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":597,\"tableBox\":{\"x\":24,\"y\":55.28125,\"width\":922,\"height\":859}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":24,\"right\":304,\"top\":103.28125,\"bottom\":550.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
-      "name": "Topics route responds for q=mrpeajrq&sort=category_asc&limit=10&page=2",
+      "name": "Topics route responds for q=mrphafbn&sort=category_asc&limit=10&page=2",
       "ok": true,
       "detail": "200"
     },
     {
       "name": "Hidden active sort resets once despite persistence failure",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/topics?q=mrpeajrq&page=2#content-topics-table"
+      "detail": "http://127.0.0.1:3000/admin/content/topics?q=mrphafbn&page=2#content-topics-table"
     },
     {
-      "name": "Topics route responds for q=mrpeajrq",
+      "name": "Topics route responds for q=mrphafbn",
       "ok": true,
       "detail": "200"
     },
@@ -218,14 +218,14 @@
       "detail": "200 http://127.0.0.1:3000/admin/content/topics/new"
     },
     {
-      "name": "Smoke /admin/content/topics/428",
+      "name": "Smoke /admin/content/topics/458",
       "ok": true,
-      "detail": "200 http://127.0.0.1:3000/admin/content/topics/428"
+      "detail": "200 http://127.0.0.1:3000/admin/content/topics/458"
     },
     {
-      "name": "Smoke /admin/content/topics/428/preview",
+      "name": "Smoke /admin/content/topics/458/preview",
       "ok": true,
-      "detail": "200 http://127.0.0.1:3000/admin/content/topics/428/preview"
+      "detail": "200 http://127.0.0.1:3000/admin/content/topics/458/preview"
     },
     {
       "name": "Console, hydration, RSC, chunk, and ARIA errors are zero",

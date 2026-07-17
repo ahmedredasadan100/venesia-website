@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import AdminListboxSelect from "./AdminListboxSelect";
 import type { AdminGridId } from "./useAdminGridSelection";
 
 type BulkOption = {
@@ -43,11 +44,12 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   actionValue,
 }: AdminBulkActionBarProps<T>) {
   const [selectedAction, setSelectedAction] = useState(options[0]?.value ?? "");
+  const resolvedAction = actionValue ?? selectedAction;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     if (!onExecute) return;
     event.preventDefault();
-    void onExecute(actionValue ?? selectedAction, selectedIds);
+    void onExecute(resolvedAction, selectedIds);
   }
   if (!selectedIds.length) return null;
 
@@ -61,6 +63,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
       {Object.entries(hiddenFields ?? {}).map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}
+      <input type="hidden" name={actionFieldName} value={resolvedAction} />
 
       <div className="text-sm font-bold text-white/72">
         تم تحديد <span className="font-en text-[#D8B87A]">{selectedIds.length}</span> {entityLabel}
@@ -72,19 +75,14 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
         ))}
 
         {actionControl ?? (
-          <select
-            name={actionFieldName}
+          <AdminListboxSelect
+            id={formId ? `${formId}-bulk-action` : undefined}
             value={selectedAction}
-            onChange={(event) => setSelectedAction(event.currentTarget.value)}
+            onChange={setSelectedAction}
             disabled={isBusy}
-            className="h-11 cursor-pointer rounded-2xl border border-white/10 bg-black/28 px-4 text-sm text-white outline-none focus:border-[#D8B87A]/45 disabled:cursor-not-allowed disabled:opacity-55"
-          >
-            {options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={options}
+            className="w-[180px]"
+          />
         )}
 
         {additionalControls}
