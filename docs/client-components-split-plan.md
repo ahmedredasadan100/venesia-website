@@ -1,234 +1,144 @@
-# Client Components Split Plan
+# Client Components Split Plan — Current Status
 
-**Created:** Batch 5  
-**Baseline:** Server-actions split workstream closed (Batches 1–4 on `origin/main` @ `157959f`)
+**Document status:** Rewritten to remove stale next-step guidance
+**Updated:** 2026-07-17
+**Active refactor status:** No client-component split is currently approved.
 
-Target files for future dedicated batches — **no refactor in Batch 5**.
+## Canonical project status — 2026-07-17
 
----
+This document was reviewed against the final project handoff and the final Cursor production verification.
 
-## 1. `PageBlocksClient.tsx`
+```text
+HEAD = origin/main = Production
+e40245c80f7997e1759efc2456a0bf4cedf2ce48
 
-**Path:** `src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx`  
-**Lines:** ~767 (~700 LOC excluding blanks)  
-**Risk:** **High**
-
-### Responsibilities
-
-| Area | Description |
-|------|-------------|
-| Page header | Title, path, slug, module count, back link |
-| Visual slot map | `PageVisualSlotMap` — read-only layout preview |
-| Assign modal | Module kind picker, template select, slot, visibility, four assign paths |
-| Data grid | Sortable table of assignments, row selection, bulk bar |
-| Row actions | Visibility toggle, up/down reorder, delete confirm |
-| Bulk actions | Show / hide / delete selected assignments |
-| Delete confirm | Modal for single assignment delete |
-
-### State hooks
-
-| Hook | Count / usage |
-|------|----------------|
-| `useState` | 12+ (modal, delete target, assign form, messages, assign session tracking) |
-| `useActionState` | **4** — `assignPageBlock`, `assignHeroModule`, `assignMediaSidebarModule`, `assignMediaHubModule` |
-| `useTransition` | 1 — wraps toggle, reorder, delete, bulk |
-| `useMemo` | 8+ (sort accessors, manageable rows, template options, reorder adjacency, slots) |
-| `useEffect` | 2 — sync rows from props; refresh after successful assign |
-| `useAdminTable` | Table sort + row state (includes optimistic row set) |
-| `useAdminGridSelection` | Checkbox selection for bulk |
-
-### useActionState / assign flow (must not move casually)
-
-Four parallel `useActionState` bindings share one modal. Session counters (`assignModalSession`, `assignDismissSession`, `assignSubmitSession`) coordinate:
-
-- Which modal open cycle completed assign
-- Dismiss on success vs show error on failure
-- `assignRefreshNonce` triggers `router.refresh()` after success
-
-**Do not split assign modal state machine without reproducing session semantics.**
-
-### Optimistic update areas
-
-| Feature | Location | Behavior |
-|---------|----------|----------|
-| **Reorder** | `handleReorder` | Swaps `sort_order` in `table.setRows` before server call; **rolls back** via `table.setRows(previousRows)` on failure |
-| Assign | No optimistic row insert — waits for refresh |
-| Toggle visibility | No optimistic — `router.refresh()` on success |
-| Delete | No optimistic — refresh on success |
-| Bulk | No optimistic — refresh after `bulkPageBlockAssignments` |
-
-### Rollback logic
-
-Only reorder implements client rollback today:
-
-```typescript
-const previousRows = table.rawRows;
-table.setRows(nextRows); // optimistic
-// ...
-if (!result.ok) table.setRows(previousRows);
+GitHub Quality Gate #83: success
+Production deployment 5483173237: success
+Production alias SHA match: yes
+ISR Cache HIT verification: pass
+Final hydration smoke: pass
+NON-PROJECT SCOPE: OFFICIALLY CLOSED
+PROJECTS / TRACK YOUR PROJECT: FROZEN
 ```
 
-Server counterpart: `movePageBlockAssignment` (swap sort_order / priority).
+This file is a **proposed documentation update only**. It does not represent a repository commit, code change, database change, environment change, deployment, or push.
 
-### Pure helpers (safe to extract later)
 
-| Function | Notes |
-|----------|-------|
-| `assignmentRowId` | `module_kind:id` key |
-| `isManageableAssignment` | Filters hero/breadcrumb read-only rows |
-| `compareAssignments` | Sort order — **must stay aligned** with server `getPageModuleAssignmentsForAdmin` |
-| `getSlotOptions` | Slot options per module kind |
-| `CloseButton` | Trivial UI |
+## 1. Why this document changed
 
-**Suggested file:** `page-blocks/page-blocks-utils.ts` (no React hooks)
+The earlier plan treated `PageBlocksClient.tsx` and `ProjectEditForm.tsx` as future split targets based on an older repository baseline and historical line counts.
 
-### Child UI sections (extract later)
+That guidance is no longer safe as an active roadmap:
 
-| Candidate component | Contents | Risk |
-|--------------------|----------|------|
-| `PageBlocksAssignModal` | Modal + 4 form actions + session state | **High** |
-| `PageBlocksDataGrid` | Grid, bulk bar, row actions, reorder buttons | **High** |
-| `PageBlocksDeleteConfirm` | Delete confirmation dialog | Low |
-| `PageBlocksHeader` | `AdminPageHeader` block | Low |
+- the PageBlocksClient workstream progressed through later dedicated phases and is treated as closed;
+- final Page Builder/Admin QA passed;
+- the Projects scope, including `ProjectEditForm.tsx`, is frozen;
+- the non-project release is officially closed;
+- no file should be split solely because of line count.
 
-### Hooks (extract later)
+Historical counts such as `~767` and `~533` are not current source-of-truth measurements.
 
-| Candidate hook | Responsibility | Risk |
-|----------------|----------------|------|
-| `usePageBlocksAssignModal` | Modal open/close, module kind, template, 4× useActionState, session machine | **High** |
+## 2. Current status by target
 
-### Recommended execution order
+| Target | Current status | Rule |
+|---|---|---|
+| `pages/[id]/PageBlocksClient.tsx` | Prior refactor workstream closed; final behavior passed Admin QA. | Do not resume from the old extraction plan. Perform a fresh audit only if a new defect or maintainability problem is proven. |
+| `projects/ProjectEditForm.tsx` | Deferred and frozen with Projects. | No refactor, field move, tab split, or action-contract change until Ahmed completes manual Projects review and explicitly reopens scope. |
 
-1. Extract pure utils (`compareAssignments`, `getSlotOptions`, `assignmentRowId`, `isManageableAssignment`)
-2. Extract delete confirm + header (low risk)
-3. Extract data grid shell (keep handlers passed as props)
-4. Extract assign modal + hook (last — highest regression risk)
+## 3. PageBlocksClient behavior contract
 
----
+Even though the old split sequence is not an active task, these behaviors remain protected:
 
-## 2. `ProjectEditForm.tsx`
+- assignment modal supports generic block, Hero, Media Hub, and Media Sidebar paths;
+- assign success/failure preserves the intended modal lifecycle;
+- duplicate/invalid assignment errors remain visible;
+- visibility mutation refreshes server state;
+- reorder remains consistent with server ordering and rollback behavior;
+- single delete and bulk show/hide/delete preserve assignment keys;
+- selection clears correctly;
+- page slots and module-kind restrictions remain enforced;
+- stable imports continue through the page actions barrel;
+- page composition cache invalidation remains correct.
 
-**Path:** `src/app/admin/projects/ProjectEditForm.tsx`  
-**Lines:** ~533  
-**Risk:** **Medium**
+Do not infer current hook count, file layout, or component boundaries from the historical document.
 
-### Responsibilities
+## 4. PageBlocksClient future gate
 
-| Area | Description |
-|------|-------------|
-| Single form | One `<form action={updateProject}>` wrapping all tabs |
-| Tabbed sections | `AdminModuleTabs` with multiple tab panels |
-| Basic tab | Identity, images, brochure, progress, visibility toggles |
-| Content tabs | Rich text sections (overview, amenities, location, etc.) |
-| Media tabs | Floor plans, gallery lists, video fields |
-| Side panels | Publish checklist, track readiness, intelligence card |
-| Hidden fields | Legacy `map_area`, section visibility booleans |
+A future change is justified only by a concrete claim such as:
 
-### State hooks
+- reproducible state-machine defect;
+- recurring regression caused by mixed responsibilities;
+- testability blocker;
+- measurable rendering/performance issue;
+- new product requirement that cannot be added safely.
 
-| Hook | Usage |
-|------|-------|
-| `useState` | 2 — slug editor in `CompactSlugField` only |
-| `useActionState` | **None** — classic form POST to `updateProject` |
-| `useTransition` | **None** |
+Required preflight:
 
-### Optimistic / rollback
+1. Record current `HEAD`, `origin/main`, branch, and worktree.
+2. Measure the current file and dependency graph.
+3. Map current child components and hooks.
+4. Identify current server action contracts.
+5. Capture current QA behavior before changing anything.
+6. Propose the smallest extraction.
+7. Keep behavior identical.
+8. Run dedicated Page Builder QA.
 
-**None.** Full page navigation / server response drives updates.
+## 5. Protected PageBlocksClient QA
 
-### Pure helpers (safe to extract)
-
-| Function | Notes |
-|----------|-------|
-| `HiddenBoolean` | Hidden input + checkbox sync |
-| `SectionIntro`, `BasicTabSection`, `BasicFieldLabel` | Layout primitives |
-| `VisibilityToggle` | Section visibility checkbox |
-| `PreservedLegacyFields` | Hidden legacy fields |
-| `CompactSlugField` | Slug display/edit mini-state |
-
-### Child UI sections (extract later)
-
-| Candidate | Tab / section |
-|-----------|---------------|
-| `ProjectBasicTab` | Already a function — move to `ProjectBasicTab.tsx` |
-| `ProjectOverviewTab`, etc. | One file per tab content block |
-| `ProjectVisibilitySection` | Visibility toggles group |
-| `ProjectMediaTab` | Floor plans + gallery |
-
-### Recommended execution order
-
-1. Extract shared field primitives (`BasicTabSection`, `VisibilityToggle`)
-2. Extract `ProjectBasicTab` to own file
-3. Extract remaining tab panels one at a time
-4. Keep single form wrapper + `updateProject` action until all tabs moved
-
----
-
-## Risk summary
-
-| File | Level | Primary risk |
-|------|-------|--------------|
-| `PageBlocksClient.tsx` | **High** | 4× useActionState, assign session machine, optimistic reorder rollback |
-| `ProjectEditForm.tsx` | **Medium** | Form field name contract with `updateProject` / child sync flags |
-
----
-
-## PageBlocksClient — Batch 6 preparation (documentation only)
-
-**Batch 5 did not edit `PageBlocksClient.tsx`.**
-
-### Must not touch (without dedicated batch + QA)
-
-- Four `useActionState` assign bindings and shared modal
-- `assignModalSession` / `assignDismissSession` / `assignSubmitSession` state machine
-- `handleReorder` optimistic swap + rollback
-- `compareAssignments` ordering (must match server)
-- Bulk action FormData shape (`ids` as `kind:id`)
-- Imports from `../actions` (stable barrel)
-
-### Safe future extractions (Batch 6+)
-
-1. `page-blocks-utils.ts` — pure functions only
-2. `PageBlocksDeleteConfirm.tsx` — presentational
-3. `PageBlocksHeader.tsx` — presentational
-
-### Manual QA checklist (before/after any PageBlocksClient split)
+If this scope is ever reopened, test at minimum:
 
 | # | Scenario | Expected |
-|---|----------|----------|
-| 1 | Assign content block | Modal closes, row appears after refresh, no error |
-| 2 | Assign hero (page without hero) | Success; second hero blocked by server message |
-| 3 | Assign media-sidebar / media-hub | Correct slot enforced |
-| 4 | Toggle row visibility | Status pill updates after refresh |
-| 5 | Reorder up/down | Order changes immediately; persists after refresh |
-| 6 | Reorder failure (simulate) | Order rolls back; error message shown |
-| 7 | Delete single assignment | Row removed after refresh |
-| 8 | Bulk show / hide / delete | Selection clears; grid matches server |
-| 9 | Assign failure (duplicate template) | Modal stays open; Arabic error in info bar |
-| 10 | Sort columns | Local sort only; no server mutation |
+|---:|---|---|
+| 1 | Assign content block | Modal completes correctly and row appears after refresh. |
+| 2 | Assign Hero | Valid assignment succeeds; duplicate/invalid assignment is blocked. |
+| 3 | Assign Media Hub/Sidebar | Correct module/slot rules apply. |
+| 4 | Toggle visibility | Server state and UI remain aligned. |
+| 5 | Reorder up/down | Immediate ordering remains consistent after refresh. |
+| 6 | Simulated reorder failure | Previous order is restored and error is shown. |
+| 7 | Delete one assignment | Correct row is removed. |
+| 8 | Bulk show/hide/delete | Keys, selection, and refresh behavior remain correct. |
+| 9 | Assign failure | Modal/error lifecycle remains correct. |
+| 10 | Sort table | Local display sort does not mutate server order unexpectedly. |
 
-### Tiny cleanup recommendation (not applied)
+## 6. ProjectEditForm freeze
 
-None required. Lint/typecheck clean; no unused imports detected in Batch 5.
+`ProjectEditForm.tsx` is not an active refactor candidate.
 
----
+The following are frozen:
 
-## Menus actions — deferred split note
+- form field names;
+- hidden legacy fields;
+- section visibility booleans;
+- floor-plan/delivery/media child sync flags;
+- project tabs;
+- slug/code behavior;
+- `updateProject` contract;
+- project publication logic;
+- project database/RPC behavior.
 
-**File:** `src/app/admin/pages-blocks/menus/actions.ts` (~583 lines, 15 exports)
+The earlier component extraction ideas are retained only as historical design possibilities. They are not approved work.
 
-**Deferred in Batch 5** because:
+## 7. Reopening ProjectEditForm
 
-- JSON import rebuilds parent/child tree with runtime id remapping
-- Menu duplicate copies nested items with `idMap`
-- Bulk delete cascades menu_items then menus
-- Shared `revalidateNavigation()` touches many public paths
-- 15 exports across menu + menu_item surfaces
+After the Projects review is completed, a fresh audit must answer:
 
-**When ready:** follow `menu-actions/` layout in oversized-actions-split-plan; treat reorder + import as high-care modules.
+- Is the current file still oversized?
+- Which tabs already moved?
+- Which fields are coupled to `updateProject`?
+- Which child sync flags are required?
+- What project tests exist now?
+- What is the smallest behavior-neutral extraction?
 
----
+No work starts before explicit scope approval.
 
-## Footer actions — Batch 5 split
+## 8. Current decision
 
-**Completed:** `footer-actions/` (2 mutations + 3 types). See commit in Batch 5 report.
+```text
+PageBlocksClient old split roadmap: RETIRED AS ACTIVE GUIDANCE
+PageBlocksClient current workstream: CLOSED
+Page Builder release QA: PASS
+ProjectEditForm refactor: FROZEN
+Projects scope: FROZEN
+New large-file refactor: REQUIRES FRESH EVIDENCE
+Current release blocker: NONE
+```

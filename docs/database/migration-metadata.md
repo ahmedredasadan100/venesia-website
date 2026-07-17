@@ -1,75 +1,161 @@
 # Migration Metadata Reference
 
-Documentation only. This file contains **no executable SQL**, no secrets, no
-environment values, and no database rows. It explains the state and intent of
-the SQL files under `sql/migrations/`.
+**Document status:** Updated documentation proposal
+**Updated:** 2026-07-17
+**Purpose:** Repository migration history and execution safety
 
-## 0. Current update (2026-07-08)
+## Canonical project status — 2026-07-17
 
-- **`sql/migrations/` is official in the repository** (commit `24731a7` — `build: stabilize production build and restore migrations`).
-- **Current migration count:** 35 `.sql` files under `sql/migrations/`.
-- **Verification command:** `npm run verify:migrations` (also included in `npm run verify` and CI).
-- Migrations are **version-controlled for history and fresh-environment rebuilds** — not an instruction to re-apply against the live production database.
+This document was reviewed against the final project handoff and the final Cursor production verification.
 
-## 1. Purpose
+```text
+HEAD = origin/main = Production
+e40245c80f7997e1759efc2456a0bf4cedf2ce48
 
-- The recovered migrations under `sql/migrations/` are committed for
-  **repository history and fresh-environment rebuilds only**.
-- All of these migrations are **already represented/applied in the current
-  Supabase database**.
-- They **must not be blindly run against the current production Supabase
-  database**, because the schema already exists there. Re-running seed-type
-  migrations in particular could overwrite or duplicate CMS content.
+GitHub Quality Gate #83: success
+Production deployment 5483173237: success
+Production alias SHA match: yes
+ISR Cache HIT verification: pass
+Final hydration smoke: pass
+NON-PROJECT SCOPE: OFFICIALLY CLOSED
+PROJECTS / TRACK YOUR PROJECT: FROZEN
+```
 
-## 2. Migration history summary
+This file is a **proposed documentation update only**. It does not represent a repository commit, code change, database change, environment change, deployment, or push.
 
-- **3 previously tracked migrations** (already in git history before this work):
-  - `sql/migrations/20250625500000_site_settings_maintenance_mode.sql`
-  - `sql/migrations/20250625600000_admin_users.sql`
-  - `sql/migrations/20250625700000_admin_audit_logs.sql`
-- **26 recovered historical migrations** committed in `d6853b7`
-  (`chore(sql): recover historical CMS migrations`). These cover page/block
-  tables, breadcrumb module, projects CMS core, `sync_project_children` RPC,
-  feed modules, media hub/sidebar modules, `site_settings` DDL, home module
-  seeds, media center seeds, track-your-project seed, and related data-fixes.
-- **Timestamp collision fix:** the track-your-project seed was renamed to avoid
-  sharing a timestamp prefix with the maintenance-mode migration:
-  - `20250625500000_track_your_project_cms_seed.sql`
-    →
-    `20250625510000_track_your_project_cms_seed.sql`
 
-## 3. Current safety status
+## 1. Canonical rule
 
-- No migrations were run.
-- No seeds were run.
-- No database writes were performed.
-- The current Supabase database is already working and **should not receive
-  these migrations again** unless rebuilding a brand-new (fresh) environment.
+Files under `sql/migrations/` are version-controlled migration history and fresh-environment rebuild inputs. They are **not** an instruction to replay all SQL against the live Production Supabase database.
 
-## 4. Baseline status
+```text
+Do not run migrations or seeds against Production
+without explicit approval, live schema evidence,
+a migration-specific plan, and rollback.
+```
 
-- `docs/database/foundational_schema_baseline_draft.sql` is a **draft only**.
-- It was **reconstructed from application code + foreign-key references**, and
-  was **not verified from live schema metadata** (the local environment could
-  not read `information_schema` / `pg_catalog` / `pg_policies` / `pg_proc`).
-- It **must not be used as a trusted executable migration** until it has been
-  reviewed against a real schema-only export (e.g. `pg_dump --schema-only`).
-- **RLS policies and Storage buckets/policies still require manual review** —
-  none exist in git history and none were verified from metadata.
+## 2. Current verified status
 
-## 5. Fresh environment warning
+- `sql/migrations/` is an official repository directory.
+- `npm run verify:migrations` is part of the validation/CI baseline.
+- GitHub Quality Gate #83 succeeded at `e40245c`.
+- No migration or seed was required for the final hydration fix or production closure.
+- No database write was performed by the final production smoke.
+- Projects SQL/migrations remain frozen with the Projects scope.
 
-- For a **brand-new Supabase project**, review migration **order** and the
-  **missing foundational baseline** (the foundational tables such as `pages`,
-  `hero_templates`, `hero_assignments`, `topics`, `topic_categories`,
-  `topic_series`, `media_items`, `media_categories`, `menus`, `menu_items`,
-  `page_sections`) **before applying anything**. Those foundational tables are
-  not represented by any executable migration yet — only by the unverified
-  draft referenced in section 4.
-- **Do not apply seeds to production without approval**, because some seeds may
-  overwrite or duplicate existing CMS content.
+## 3. Migration-count accuracy
 
-## Excluded by design
+The earlier documented count of **35 SQL files** was last verified on 2026-07-08.
 
-This document intentionally excludes secrets, environment values, customer
-data, admin passwords, production table rows, and data dumps.
+It is now a **historical snapshot**, not a permanent invariant. Before quoting a current count:
+
+```bash
+find sql/migrations -maxdepth 1 -type f -name '*.sql' | sort
+```
+
+or use the repository's existing verification script.
+
+Do not edit this document merely to preserve an old count if the repository has changed.
+
+## 4. Historical migration inventory
+
+The repository history includes:
+
+- previously tracked maintenance, admin-user, and audit-log migrations;
+- recovered CMS migration history;
+- page/block and module tables;
+- project CMS and child-sync history;
+- feed, media hub, and media sidebar history;
+- site settings and content seeds;
+- filename/timestamp collision corrections.
+
+These descriptions are historical. The actual repository tree and verification script are the source for the current file inventory.
+
+## 5. Production safety posture
+
+The current live database already contains the working schema used by Production. Therefore:
+
+- do not replay recovered migrations blindly;
+- do not replay seed migrations on populated environments;
+- do not assume idempotency;
+- do not infer live RLS, functions, triggers, policies, or Storage state only from repository SQL;
+- do not treat a green build as permission to mutate Production.
+
+Potential consequences of blind replay include duplicate CMS rows, overwritten content, conflicting constraints, broken foreign keys, or inconsistent seeds.
+
+## 6. Foundational baseline status
+
+`docs/database/foundational_schema_baseline_draft.sql` remains a **draft** unless a later repository audit proves otherwise.
+
+Current safe interpretation:
+
+- reconstructed from application references;
+- not a trusted live schema export;
+- not an executable Production migration;
+- incomplete as evidence for RLS, Storage policies, functions, triggers, and grants.
+
+Before it can become authoritative, compare it against a real schema-only export and document every difference.
+
+## 7. Fresh-environment rebuild warning
+
+A brand-new Supabase environment requires a dedicated rebuild plan because foundational tables may not be fully represented by an approved executable baseline.
+
+Before applying migrations to a fresh environment:
+
+1. Obtain or produce a reviewed schema-only baseline.
+2. Verify migration order and dependencies.
+3. Separate DDL from seeds.
+4. Classify environment-specific settings and policies.
+5. Verify RLS, grants, functions, triggers, and Storage.
+6. Apply against an isolated environment first.
+7. Run application validation and closure suites.
+8. Document rollback/rebuild behavior.
+
+## 8. Execution gate
+
+Any new SQL or migration task must include:
+
+| Gate | Requirement |
+|---|---|
+| Claim | Exact schema/data problem. |
+| Evidence | Current repository and live metadata evidence. |
+| Risk | Data loss, lock, compatibility, seed, and rollback risks. |
+| Minimal fix | Smallest scoped migration. |
+| Approval | Explicit approval before execution. |
+| QA | Fresh/local/staging validation plus repository verification. |
+| Production | Separate approval for live execution and deployment. |
+
+## 9. Frozen and protected areas
+
+- Project tables, RPCs, seeds, project child tables, and project migrations are frozen.
+- No Production data mutation.
+- No Supabase configuration change.
+- No Storage bucket/policy change.
+- No auth/session migration.
+- No environment change.
+- No seed execution.
+- No destructive cleanup.
+
+## 10. Required repository checks
+
+```bash
+npm run verify:migrations
+npm run lint
+npm run typecheck
+npm run build
+npm run ci:check
+```
+
+A documentation-only change should not alter migration output.
+
+## 11. Current decision
+
+```text
+Repository migration history: ACTIVE AND VERIFIED BY CI
+Historical count 35: SNAPSHOT ONLY
+Blind Production replay: FORBIDDEN
+Foundational baseline: UNVERIFIED DRAFT
+Fresh environment rebuild: REQUIRES DEDICATED PLAN
+Projects migrations: FROZEN
+Current release blocker: NONE
+```

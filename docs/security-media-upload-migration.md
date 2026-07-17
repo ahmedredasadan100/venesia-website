@@ -1,45 +1,169 @@
-# Media Upload — Current State & Supabase Storage Migration Plan
+# Media Upload — Current State and Supabase Storage Migration Plan
 
-## Current state (2026-07-08)
+**Document status:** Updated documentation proposal
+**Updated:** 2026-07-17
+**Operational status:** Storage hardening remains post-launch backlog; it is not a release blocker.
 
-| Area | Behavior |
+## Canonical project status — 2026-07-17
+
+This document was reviewed against the final project handoff and the final Cursor production verification.
+
+```text
+HEAD = origin/main = Production
+e40245c80f7997e1759efc2456a0bf4cedf2ce48
+
+GitHub Quality Gate #83: success
+Production deployment 5483173237: success
+Production alias SHA match: yes
+ISR Cache HIT verification: pass
+Final hydration smoke: pass
+NON-PROJECT SCOPE: OFFICIALLY CLOSED
+PROJECTS / TRACK YOUR PROJECT: FROZEN
+```
+
+This file is a **proposed documentation update only**. It does not represent a repository commit, code change, database change, environment change, deployment, or push.
+
+
+## 1. Current verified posture
+
+| Area | Current behavior / boundary |
 |---|---|
-| Admin media picker API | `POST /api/admin/media-library` — filesystem under `public/images` or `public/files` (or Supabase Storage when `CMS_STORAGE_UPLOADS=supabase` / production defaults enable it via `lib/storage/upload-cms-asset.ts`) |
-| Topics editor | `uploadTopicImage()` in `app/admin/topics/actions.ts` → `public/images/topics/` |
-| Unified Media Admin | `uploadMediaImage()` in `app/admin/content/media/actions.ts` → `public/images/topics/` |
-| Legacy Media Admin | **Removed** — `app/admin/media-center/actions.ts` and related CRUD/components no longer exist; `/admin/media-center` is redirect-only compatibility (commit `850534b`) |
-| Path validation | `normalizeMediaFolder()` blocks `..`; uploads scoped under `public/` or configured Storage buckets |
+| Admin media picker API | `POST /api/admin/media-library`; the storage adapter is `src/lib/storage/upload-cms-asset.ts`. |
+| Default upload mode | Filesystem-backed upload under `public/images/**` or `public/files/**` unless Storage is explicitly enabled. |
+| Supabase Storage mode | Opt-in only through `CMS_STORAGE_UPLOADS=supabase`; do not assume Production enables it automatically. |
+| Topics admin | Stable action surface remains `src/app/admin/topics/actions.ts`; implementation may be routed through `topic-actions/**`. |
+| Unified Media admin | Stable action surface remains `src/app/admin/content/media/actions.ts`; implementation may be routed through `media-actions/**`. |
+| Legacy Media admin | `/admin/media-center` is redirect-only compatibility; active CRUD and upload actions are removed. |
+| Path validation | Folder normalization must reject traversal such as `..`; uploaded assets stay within the configured filesystem or Storage boundary. |
+| Production verification | Final production smoke proved runtime stability, not persistent upload cutover. No claim is made that Storage migration is complete. |
 
-## Risks
+## 2. Confirmed storage decision
 
-1. **Writable filesystem on server** — works on Vercel only if using ephemeral disk; filesystem uploads do not persist across deploys on serverless.
-2. **No virus scanning / MIME hardening** beyond extension checks.
-3. **Public by default (filesystem path)** — files written under `public/` are immediately web-accessible.
-4. **Case sensitivity** — paths must match Linux disk casing (see `scripts/fix-project-image-paths.mjs`).
+The long-term production target is Supabase Storage, but the project is **not cut over yet**.
 
-## What is NOT completed yet
+Current rule:
 
-- **Supabase Storage migration is NOT completed.** Partial server-side upload support exists (`lib/storage/upload-cms-asset.ts`), but a full cutover from filesystem `public/images/**` and `public/files/**` to Storage-backed URLs across all CMS surfaces is **future work only**.
-- Do not treat filesystem uploads to `public/images` or `public/files` as a long-term production storage strategy.
+```text
+CMS_STORAGE_UPLOADS=supabase
+→ use the Storage adapter
 
-## What we did NOT change (this documentation pass)
+anything else / unset
+→ filesystem behavior remains the fallback
+```
 
-- No full Storage migration rollout.
-- Upload routes remain **admin-auth protected** via proxy + `requireAdminApi()`.
+Do not describe filesystem upload as a durable serverless production strategy. Vercel filesystem writes are not a reliable cross-deployment asset store.
 
-## Recommended migration (future — Phase 2+)
+## 3. Current risks
 
-1. Create Supabase Storage buckets: `cms-images`, `cms-documents` (private or public as needed).
-2. Extend `lib/storage/upload-cms-asset.ts` so **all** admin upload paths use Storage server-side only (service role).
-3. Update `media-library` API and topic/media form uploads to use Storage; return public URL or signed URL.
-4. Migration script: copy `public/images/**` → Storage; update DB URLs in `topics`, `media_items`, `projects`, templates JSON.
-5. Keep `public/` only for static brand assets (favicon, OG fallbacks).
-6. Add RLS policies on buckets; **never expose service role to client**.
+1. **Persistence risk:** filesystem writes can disappear across serverless instances or deployments.
+2. **Validation gap:** extension checks alone are not sufficient MIME/content hardening.
+3. **Public exposure:** assets written under `public/` become directly addressable.
+4. **Case sensitivity:** Linux deployment paths must match exact casing.
+5. **Mixed-source drift:** filesystem and Storage URLs can diverge if dual behavior is introduced without a controlled migration ledger.
+6. **Database URL drift:** templates and content JSON may contain asset references outside the main media tables.
+7. **Project scope risk:** project asset migration is frozen with the Projects scope and must not be included automatically.
 
-## Rollout order (future)
+## 4. Explicitly not completed
 
-1. Dual-write (local + Storage) in dev
-2. Backfill existing assets
-3. Switch readers to Storage URLs
-4. Remove filesystem writes
-5. Document env: `SUPABASE_STORAGE_BUCKET_IMAGES`, `SUPABASE_STORAGE_BUCKET_DOCUMENTS`, `CMS_STORAGE_UPLOADS`
+- No full Storage migration.
+- No verified backfill of `public/images/**` or `public/files/**`.
+- No verified rewrite of all database asset URLs.
+- No verified removal of filesystem writes.
+- No verified Storage bucket/RLS policy baseline in repository history.
+- No approved project-assets migration.
+- No approved environment change.
+- No approved Production rollout.
+
+The final non-project closure does **not** convert this backlog into completed work.
+
+## 5. Approved governance boundary
+
+Before any implementation, stop for explicit approval if work requires:
+
+- Supabase bucket creation or policy changes.
+- Environment-variable changes.
+- Database URL mutation.
+- Production data backfill.
+- Project asset migration.
+- Vercel configuration changes.
+- Production deployment or redeploy.
+- Push.
+
+Execution must follow:
+
+```text
+Claim → Evidence → Risk → Minimal fix → Approval
+```
+
+## 6. Recommended future migration
+
+### Phase A — inventory and proof
+
+1. Enumerate every upload entry point and every asset reader.
+2. Export a deduplicated inventory of filesystem assets and database references.
+3. Classify assets into:
+   - static brand assets that remain in `public/`;
+   - CMS images;
+   - CMS documents;
+   - project assets, which remain frozen.
+4. Verify current bucket and RLS state from live metadata without exposing secrets.
+5. Define canonical URL ownership and rollback rules.
+
+**Exit criterion:** no code or data change; approved inventory and mapping only.
+
+### Phase B — Storage foundation
+
+1. Create or verify `cms-images` and `cms-documents`.
+2. Keep service-role access server-side only.
+3. Add MIME, extension, size, filename, and path validation.
+4. Decide public URL versus signed URL by asset class.
+5. Add structured upload errors and audit-safe metadata.
+
+**Exit criterion:** isolated adapter tests pass; no reader cutover yet.
+
+### Phase C — controlled backfill
+
+1. Copy approved non-project assets to Storage.
+2. Record source path, destination key, checksum, and migration status.
+3. Do not overwrite database URLs until copy verification passes.
+4. Exclude frozen project tables and project JSON.
+5. Produce a rollback map.
+
+**Exit criterion:** copied assets are checksum-verified and reversible.
+
+### Phase D — database and reader cutover
+
+1. Update only approved non-project URL fields.
+2. Switch readers to Storage-backed URLs.
+3. Verify admin media picker, Topics, Unified Media, Page Builder, public pages, sitemap/OG images, and exports.
+4. Run cache invalidation only through existing approved helpers.
+5. Keep filesystem fallback temporarily until production verification succeeds.
+
+### Phase E — close filesystem writes
+
+1. Disable filesystem upload writes.
+2. Remove fallback only after a production observation window.
+3. Keep static brand assets in `public/`.
+4. Document the final environment contract and incident rollback.
+
+## 7. Required QA for any future rollout
+
+- Upload image and document through each approved admin surface.
+- Reject traversal, disguised MIME, oversized payload, unsupported extension, empty file, and duplicate-name collision.
+- Verify URLs after a fresh deployment.
+- Verify no service-role secret reaches client code.
+- Verify admin authorization remains enforced.
+- Verify existing public content does not show broken assets.
+- Verify cache invalidation and Next/Image host configuration.
+- Verify no project asset or project database row changed.
+- Verify rollback restores previous URLs.
+
+## 8. Current decision
+
+```text
+Storage migration: NOT COMPLETE
+Release blocker: NO
+Backlog owner: post-launch security/architecture workstream
+Projects assets: FROZEN
+Implementation approval: REQUIRED
+```
