@@ -1,8 +1,6 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "../../supabase-admin";
-import { MEDIA_LIST_CONTENT_TYPES } from "../../../app/admin/content/media/media-content-config";
-import { UNIFIED_MEDIA_ADMIN_PATH } from "../legacy-media-admin-routes";
 
 export type MediaUsageHit = {
   entityType: string;
@@ -103,13 +101,8 @@ export async function scanMediaAssetUsage(assetUrl: string): Promise<MediaUsageH
     ]);
 
   for (const topic of topics ?? []) {
-    const isUnifiedMedia = MEDIA_LIST_CONTENT_TYPES.includes(
-      topic.content_type as (typeof MEDIA_LIST_CONTENT_TYPES)[number],
-    );
-    const editHref = isUnifiedMedia
-      ? `/admin/content/media/${topic.id}`
-      : `/admin/topics/${topic.id}`;
-    const entityType = isUnifiedMedia ? "محتوى إعلامي موحد" : "موضوع";
+    const editHref = `/admin/content/topics/${topic.id}`;
+    const entityType = "موضوع";
 
     if (haystackContains(topic.image, needles)) {
       pushHit(hits, {
@@ -154,7 +147,7 @@ export async function scanMediaAssetUsage(assetUrl: string): Promise<MediaUsageH
         entityLabel: item.title || item.slug || `#${item.id}`,
         field: "image",
         // Legacy media_items rows are read-only here; send editors to Unified Media Admin.
-        editHref: UNIFIED_MEDIA_ADMIN_PATH,
+        editHref: "/admin/content/topics",
       });
     }
   }

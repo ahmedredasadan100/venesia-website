@@ -44,7 +44,7 @@ export default function ConstructionUpdatesClient({ projects, siteUpdates }: Con
             <AdminActionButton href="/admin/projects/residential" variant="dark">
               المشاريع السكنية
             </AdminActionButton>
-            <AdminActionButton href="/admin/content/media?content_type=site_update" variant="dark">
+            <AdminActionButton href="/admin/content/topics?content_type=site_update" variant="dark">
               محتوى من أرض التنفيذ
             </AdminActionButton>
           </>
@@ -126,7 +126,7 @@ export default function ConstructionUpdatesClient({ projects, siteUpdates }: Con
               >
                 <div className="min-w-0">
                   <Link
-                    href={`/admin/content/media/${item.id}`}
+                    href={`/admin/content/topics/${item.id}`}
                     className="font-semibold text-white hover:text-[#D8B87A]"
                   >
                     {item.title}
