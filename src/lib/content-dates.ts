@@ -72,3 +72,25 @@ export function formatAdminListDate(value?: string | null) {
     year: "numeric",
   }).format(new Date(value));
 }
+
+export const ADMIN_TIME_ZONE = "Africa/Cairo";
+
+export function formatAdminDateTime(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const day = new Intl.DateTimeFormat("ar-EG", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: ADMIN_TIME_ZONE,
+  }).format(date);
+  const time = new Intl.DateTimeFormat("ar-EG", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: ADMIN_TIME_ZONE,
+  }).format(date);
+
+  return `${day} — ${time}`;
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
+import type { KeyboardEventHandler } from "react";
 
 export type AdminSearchInputProps = {
   name?: string;
@@ -10,6 +11,7 @@ export type AdminSearchInputProps = {
   onEscape?: () => void;
   onFocus?: () => void;
   onClear?: () => void;
+  onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
   placeholder?: string;
   className?: string;
   inputClassName?: string;
@@ -26,6 +28,7 @@ const AdminSearchInput = forwardRef<HTMLDivElement, AdminSearchInputProps>(funct
     onEscape,
     onFocus,
     onClear,
+    onKeyDown,
     placeholder = "بحث...",
     className = "",
     inputClassName = "",
@@ -44,6 +47,8 @@ const AdminSearchInput = forwardRef<HTMLDivElement, AdminSearchInputProps>(funct
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
+          onKeyDown?.(event);
+          if (event.defaultPrevented) return;
           if (event.key === "Enter") {
             event.preventDefault();
             onEnter?.();
