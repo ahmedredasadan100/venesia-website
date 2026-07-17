@@ -42,6 +42,9 @@ jobs:
       - name: Verify legacy media admin closed
         run: npm run verify:legacy-media-admin
 
+      - name: Verify Unified Content Engine
+        run: npm run verify:unified-content
+
       - name: Verify audit coverage
         run: npm run verify:audit-coverage
 

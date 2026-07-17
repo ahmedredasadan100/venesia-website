@@ -1,6 +1,6 @@
 # Migration Metadata Reference
 
-**Document status:** Updated documentation proposal
+**Document status:** Current repository record
 **Updated:** 2026-07-17
 **Purpose:** Repository migration history and execution safety
 
@@ -21,7 +21,9 @@ NON-PROJECT SCOPE: OFFICIALLY CLOSED
 PROJECTS / TRACK YOUR PROJECT: FROZEN
 ```
 
-This file is a **proposed documentation update only**. It does not represent a repository commit, code change, database change, environment change, deployment, or push.
+The non-destructive Unified Content Engine migration was applied with explicit
+approval during the 2026-07-17 workstream. No Projects, Storage, environment,
+primary-key, drop, or truncate change was included.
 
 
 ## 1. Canonical rule
@@ -38,8 +40,14 @@ a migration-specific plan, and rollback.
 
 - `sql/migrations/` is an official repository directory.
 - `npm run verify:migrations` is part of the validation/CI baseline.
+- The current repository contains 39 SQL migration files.
+- `20260717070000_unified_content_engine_foundation.sql` is version controlled.
+- Supabase records applied migration
+  `20260717063702_unified_content_engine_foundation`.
+- Live read-only verification confirms the category tone, four topic metadata
+  columns, preferences table, admin read view, and atomic view RPC.
 - GitHub Quality Gate #83 succeeded at `e40245c`.
-- No migration or seed was required for the final hydration fix or production closure.
+- No seed, destructive migration, or historical actor inference was performed.
 - No database write was performed by the final production smoke.
 - Projects SQL/migrations remain frozen with the Projects scope.
 
@@ -140,6 +148,8 @@ Any new SQL or migration task must include:
 
 ```bash
 npm run verify:migrations
+npm run verify:unified-content
+npm run verify:unified-content-db
 npm run lint
 npm run typecheck
 npm run build

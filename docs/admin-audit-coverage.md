@@ -1,6 +1,6 @@
 # Admin Audit Log Coverage
 
-**Document status:** Updated documentation proposal
+**Document status:** Current repository record
 **Updated:** 2026-07-17
 **Coverage status:** Critical CMS mutation coverage is closed for the current non-project release.
 
@@ -20,9 +20,6 @@ Final hydration smoke: pass
 NON-PROJECT SCOPE: OFFICIALLY CLOSED
 PROJECTS / TRACK YOUR PROJECT: FROZEN
 ```
-
-This file is a **proposed documentation update only**. It does not represent a repository commit, code change, database change, environment change, deployment, or push.
-
 
 ## 1. Audit contract
 
@@ -113,10 +110,11 @@ Covered:
 Stable action surface:
 
 ```text
-src/app/admin/topics/actions.ts
+src/app/admin/content/topics/actions.ts
 ```
 
-Implementation may be split under `topic-actions/**`.
+Article mutations are split under `article-actions/**`; specialized media
+mutations are split under `media-actions/**`.
 
 Covered:
 
@@ -144,15 +142,15 @@ Covered:
 - duplicate;
 - delete and bulk flows.
 
-### Unified Media
+### Specialized content editors
 
 Stable action surface:
 
 ```text
-src/app/admin/content/media/actions.ts
+src/app/admin/content/topics/media-actions.ts
 ```
 
-Implementation may be split under `media-actions/**`.
+Implementation is split under `src/app/admin/content/topics/media-actions/**`.
 
 Covered:
 
@@ -199,7 +197,7 @@ Covered:
 |---|---|
 | Block template library CRUD | Intentional exclusion; page assignments are covered. Adding it is a product/behavior change. |
 | Activity log viewer reads | Read-only. |
-| Legacy Media Admin | Redirect-only compatibility; active CRUD is removed. |
+| Legacy Media Admin | Route tree and active CRUD are removed; the unified topics actions are canonical. |
 | Public routes and UI | Not admin mutation surfaces. |
 | Contact form submission | No submission backend exists; therefore there is no successful lead mutation to audit. |
 | New viewer/analytics enhancements | Future product work. |

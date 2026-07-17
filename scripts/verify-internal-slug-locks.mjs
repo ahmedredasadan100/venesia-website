@@ -59,7 +59,7 @@ assert(
 );
 
 // Public URL slug surfaces must remain editable — smoke check these files still accept slug edits.
-const topicHelpers = read("src/app/admin/topics/topic-actions/helpers.ts");
+const topicHelpers = read("src/app/admin/content/topics/article-actions/helpers.ts");
 assert(
   topicHelpers.includes("slug") && !topicHelpers.includes("isStructuralContentTemplateSlug"),
   "Topic slugs must stay outside content-template structural lock",

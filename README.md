@@ -47,6 +47,7 @@ Runs on pull requests and pushes to `main`:
 - `npm run typecheck`
 - `npm run verify:migrations`
 - `npm run verify:legacy-media-admin`
+- `npm run verify:unified-content`
 - `npm run verify:audit-coverage`
 - `npm run build`
 
@@ -66,11 +67,18 @@ Critical CMS write actions (pages, topics, media, projects, menus, footer, site 
 npm run verify:audit-coverage
 ```
 
-## Admin media
+## Unified content administration
 
-- Unified Media Admin (official): `/admin/content/media`
-- Legacy `/admin/media-center` routes are **redirect-only** compatibility stubs
-- Do **not** add new CRUD under `/admin/media-center`
+- Topics, news, press, site updates, video, and galleries share
+  `/admin/content/topics`.
+- Categories are managed at `/admin/content/categories`.
+- Content series are managed at `/admin/content/series`.
+- The former `/admin/topics`, `/admin/content/media`, and
+  `/admin/media-center` admin engines were removed; do not recreate parallel
+  CRUD surfaces.
+- Run `npm run verify:unified-content-db` locally when live schema credentials
+  are available. This is a read-only pre-deploy contract check and is not part
+  of secretless CI.
 
 ## Documentation
 

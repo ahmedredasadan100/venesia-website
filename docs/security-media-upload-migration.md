@@ -31,9 +31,9 @@ This file is a **proposed documentation update only**. It does not represent a r
 | Admin media picker API | `POST /api/admin/media-library`; the storage adapter is `src/lib/storage/upload-cms-asset.ts`. |
 | Default upload mode | Filesystem-backed upload under `public/images/**` or `public/files/**` unless Storage is explicitly enabled. |
 | Supabase Storage mode | Opt-in only through `CMS_STORAGE_UPLOADS=supabase`; do not assume Production enables it automatically. |
-| Topics admin | Stable action surface remains `src/app/admin/topics/actions.ts`; implementation may be routed through `topic-actions/**`. |
-| Unified Media admin | Stable action surface remains `src/app/admin/content/media/actions.ts`; implementation may be routed through `media-actions/**`. |
-| Legacy Media admin | `/admin/media-center` is redirect-only compatibility; active CRUD and upload actions are removed. |
+| Unified content admin | Stable action surface is `src/app/admin/content/topics/actions.ts`; specialized mutations live under `article-actions/**` and `media-actions/**`. |
+| Canonical routes | All article, news, press, site-update, video, and gallery administration uses `/admin/content/topics/**`. |
+| Legacy admin | The `/admin/topics`, `/admin/content/media`, and `/admin/media-center` route trees and active CRUD actions are removed. |
 | Path validation | Folder normalization must reject traversal such as `..`; uploaded assets stay within the configured filesystem or Storage boundary. |
 | Production verification | Final production smoke proved runtime stability, not persistent upload cutover. No claim is made that Storage migration is complete. |
 

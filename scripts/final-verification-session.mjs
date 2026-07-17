@@ -225,8 +225,9 @@ const ADMIN_PAGES = [
   "/admin/pages-blocks/blocks/hero",
   "/admin/pages-blocks/pages",
   "/admin/projects",
-  "/admin/topics",
-  "/admin/media-center",
+  "/admin/content/topics",
+  "/admin/content/categories",
+  "/admin/content/series",
   "/admin/pages-blocks/footer",
   "/admin/pages-blocks/menus",
 ];
