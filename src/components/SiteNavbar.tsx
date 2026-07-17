@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { isActivePath, normalizePathname } from "../lib/navigation/is-active-path";
 import { usePublicNavigation } from "./PublicNavigationProvider";
 import { usePublicBrand } from "./PublicBrandProvider";
 
@@ -26,13 +27,6 @@ function isExternalHref(href: string) {
 
 function getItemKey(item: DynamicNavItem) {
   return String(item.id ?? `${item.label}-${item.href}`);
-}
-
-function isActivePath(pathname: string, href: string) {
-  if (!href || href === "#") return false;
-  const cleanHref = href.split("#")[0] || "/";
-  if (cleanHref === "/") return pathname === "/";
-  return pathname === cleanHref || pathname.startsWith(`${cleanHref}/`);
 }
 
 function MenuLink({
@@ -72,7 +66,7 @@ function MenuLink({
 }
 
 export default function SiteNavbar() {
-  const pathname = usePathname();
+  const pathname = normalizePathname(usePathname());
   const navItems = usePublicNavigation() as DynamicNavItem[];
   const brand = usePublicBrand();
   const [navScrolled, setNavScrolled] = useState(false);
