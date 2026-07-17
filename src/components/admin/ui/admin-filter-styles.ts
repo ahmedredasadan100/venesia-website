@@ -1,9 +1,11 @@
 /** Shared Admin filter / dropdown surface tokens — reuse across listing filter bars. */
 
+import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
+
 export const ADMIN_FILTER_MENU_ATTR = "data-admin-filter-menu";
 
 export const ADMIN_FILTER_MENU_SCROLLBAR_CLASSES =
-  "max-h-[260px] overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.24)_rgba(255,255,255,0.06)] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-white/[0.04] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-white/30";
+  `max-h-[260px] overflow-y-auto overflow-x-hidden overscroll-contain ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`;
 
 export const ADMIN_FILTER_MENU_PANEL_CLASSES =
   "rounded-[14px] border border-white/10 bg-[#080B10]/95 shadow-[0_20px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl";

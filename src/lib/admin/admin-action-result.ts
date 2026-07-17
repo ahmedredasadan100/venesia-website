@@ -1,9 +1,11 @@
 export type AdminActionResultCode =
   | "created"
   | "deleted"
+  | "featured"
   | "publish_validation"
   | "published"
   | "saved"
+  | "unfeatured"
   | "unpublished";
 
 export type AdminActionResult = {

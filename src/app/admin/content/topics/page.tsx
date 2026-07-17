@@ -16,6 +16,7 @@ import {
 import {
   CONTENT_LIST_PAGE_SIZES,
   CONTENT_LIST_VIEW_KEY,
+  DEFAULT_CONTENT_LIST_SORT,
   loadUnifiedContentList,
   loadUnifiedContentMetrics,
   normalizeUnifiedContentFilters,
@@ -47,7 +48,7 @@ function buildCurrentListPath(filters: ReturnType<typeof normalizeUnifiedContent
   if (filters.seriesId) params.set("series", String(filters.seriesId));
   if (filters.status !== "all") params.set("status", filters.status);
   if (filters.featured !== "all") params.set("featured", filters.featured);
-  if (filters.sort !== "updated_at_desc") params.set("sort", filters.sort);
+  if (filters.sort !== DEFAULT_CONTENT_LIST_SORT) params.set("sort", filters.sort);
   if (filters.page > 1) params.set("page", String(filters.page));
   if (filters.pageSize !== 10) params.set("limit", String(filters.pageSize));
   const query = params.toString();
@@ -105,6 +106,11 @@ export default async function UnifiedContentTopicsPage({
   const series = (seriesRows ?? []) as SeriesRow[];
   const list = await loadUnifiedContentList(filters, categories);
   const currentListPath = buildCurrentListPath({ ...filters, page: list.page });
+  const listClientStateKey = buildCurrentListPath({
+    ...filters,
+    page: list.page,
+    sort: DEFAULT_CONTENT_LIST_SORT,
+  });
   const notice = noticeText(params?.notice, params?.message);
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
@@ -185,7 +191,7 @@ export default async function UnifiedContentTopicsPage({
           />
 
           <UnifiedContentList
-            key={currentListPath}
+            key={listClientStateKey}
             rows={list.rows}
             categories={flattenedCategories}
             currentListPath={currentListPath}

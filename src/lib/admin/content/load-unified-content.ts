@@ -33,6 +33,8 @@ export const CONTENT_SORT_VALUES = [
 
 export type ContentSortValue = (typeof CONTENT_SORT_VALUES)[number];
 
+export const DEFAULT_CONTENT_LIST_SORT: ContentSortValue = "title_asc";
+
 const CONTENT_SORT_SET = new Set<string>(CONTENT_SORT_VALUES);
 const STATUS_VALUES = new Set(["published", "draft", "unpublished", "archived"]);
 const FEATURED_VALUES = new Set(["yes", "no"]);
@@ -131,7 +133,7 @@ export function normalizeUnifiedContentFilters(
     sort:
       rawSort && CONTENT_SORT_SET.has(rawSort)
         ? (rawSort as ContentSortValue)
-        : "updated_at_desc",
+        : DEFAULT_CONTENT_LIST_SORT,
     page: getPositiveInteger(params?.page, 1),
     pageSize: CONTENT_LIST_PAGE_SIZES.includes(
       requestedPageSize as (typeof CONTENT_LIST_PAGE_SIZES)[number],

@@ -215,7 +215,7 @@ export async function toggleUnifiedContentFeatured(
   return adminActionSuccess(
     "تم تحديث التمييز",
     isFeatured ? "تم تعيين المحتوى كمميز." : "تم إلغاء تمييز المحتوى.",
-    { code: "saved", entityId: id },
+    { code: isFeatured ? "featured" : "unfeatured", entityId: id },
   );
 }
 

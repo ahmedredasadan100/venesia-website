@@ -34,6 +34,7 @@ export {
   ADMIN_FILTER_SHELL_GLOW_STYLE,
   isInsideAdminFilterMenu,
 } from "./admin-filter-styles";
+export { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 export { default as AdminCard } from "./AdminCard";
 export { default as AdminToolbar } from "./AdminToolbar";
 export { default as AdminActionButton } from "./AdminActionButton";
@@ -78,6 +79,13 @@ export {
 export { default as AdminDataGridRowActions } from "./AdminDataGridRowActions";
 export type { AdminDataGridRowActionsProps } from "./AdminDataGridRowActions";
 export { default as AdminDuplicateResourceModal } from "./AdminDuplicateResourceModal";
+export { default as AdminConfirmDialog } from "./AdminConfirmDialog";
+export type { AdminConfirmDialogProps } from "./AdminConfirmDialog";
+export { default as AdminActivityPopover } from "./AdminActivityPopover";
+export type {
+  AdminActivityItem,
+  AdminActivityPopoverProps,
+} from "./AdminActivityPopover";
 
 export {
   AdminFormLayout,

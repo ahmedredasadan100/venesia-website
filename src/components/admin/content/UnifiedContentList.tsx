@@ -1,23 +1,23 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   bulkUpdateUnifiedContent,
   saveContentTablePreferences,
 } from "../../../app/admin/content/topics/actions";
 import AdminNotice from "../AdminNotice";
+import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
-import {
-  adminContentTopicPath,
-} from "../../../lib/admin/content-routes";
+import { mapTopicsActionResultToFeedback } from "../../../lib/admin/content/topics-action-feedback";
 import type {
   ContentSortValue,
   UnifiedContentRow,
 } from "../../../lib/admin/content/load-unified-content";
 import AdminBulkActionBar from "../ui/AdminBulkActionBar";
 import AdminColumnVisibilityMenu from "../ui/AdminColumnVisibilityMenu";
+import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "../ui";
 import {
   AdminDataGrid,
   AdminDataGridCheckbox,
@@ -94,7 +94,6 @@ function sortHref(
 function defaultSortPath(currentListPath: string) {
   const url = new URL(currentListPath, "https://admin.local");
   url.searchParams.delete("sort");
-  url.searchParams.delete("page");
   return `${url.pathname}${url.search}#content-topics-table`;
 }
 
@@ -113,6 +112,7 @@ export default function UnifiedContentList({
 }) {
   const router = useRouter();
   const bulkPendingRef = useRef(false);
+  const sortCorrectionRef = useRef(false);
   const selection = useAdminGridSelection(rows.map((row) => row.id));
   const [visibleColumns, setVisibleColumns] = useState<
     UnifiedContentColumnKey[]
@@ -120,7 +120,8 @@ export default function UnifiedContentList({
   const [bulkAction, setBulkAction] = useState("publish");
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const [bulkPending, setBulkPending] = useState(false);
-  const [feedback, setFeedback] = useState<AdminActionResult | null>(null);
+  const [feedback, setFeedback] = useState<AdminActionFeedback | null>(null);
+  const [feedbackRevision, setFeedbackRevision] = useState(0);
   const columns = useMemo(
     () =>
       UNIFIED_CONTENT_COLUMNS.filter((column) =>
@@ -130,26 +131,38 @@ export default function UnifiedContentList({
   );
   const parsedSort = parseSort(sort);
 
+  useEffect(() => {
+    sortCorrectionRef.current = false;
+  }, [sort]);
+
   function handleVisibleColumnsChange(next: UnifiedContentColumnKey[]) {
     const sanitized = sanitizeVisibleColumns(next);
     setVisibleColumns(sanitized);
-  }
-
-  function handleVisibleColumnsPersisted(next: UnifiedContentColumnKey[]) {
-    const sanitized = sanitizeVisibleColumns(next);
     const activeColumn = UNIFIED_CONTENT_COLUMNS.find(
       (column) => column.sortKey === parsedSort.key,
     );
-    if (activeColumn && !sanitized.includes(activeColumn.key)) {
+    if (
+      activeColumn &&
+      !sanitized.includes(activeColumn.key) &&
+      !sortCorrectionRef.current
+    ) {
+      sortCorrectionRef.current = true;
       router.replace(defaultSortPath(currentListPath), { scroll: false });
     }
   }
 
   function handleMutationResult(result: AdminActionResult) {
-    setFeedback(result);
+    showFeedback(result);
     if (result.ok && result.code === "deleted" && result.entityId) {
       selection.removeSelection(result.entityId);
     }
+  }
+
+  function showFeedback(result: AdminActionResult) {
+    setFeedback(
+      mapTopicsActionResultToFeedback(result, { currentListPath }),
+    );
+    setFeedbackRevision((current) => current + 1);
   }
 
   async function executeBulkAction(action: string, ids: number[]) {
@@ -163,13 +176,13 @@ export default function UnifiedContentList({
 
     try {
       const result = await bulkUpdateUnifiedContent(formData);
-      setFeedback(result);
+      showFeedback(result);
       if (result.ok) {
         selection.clearSelection();
         router.refresh();
       }
     } catch {
-      setFeedback({
+      showFeedback({
         ok: false,
         title: "تعذر تنفيذ العملية",
         message: "حدث خطأ غير متوقع. حاول مرة أخرى.",
@@ -180,20 +193,6 @@ export default function UnifiedContentList({
     }
   }
 
-  const feedbackAction =
-    feedback &&
-    !feedback.ok &&
-    feedback.code === "publish_validation" &&
-    feedback.entityId
-      ? {
-          label: "فتح المحتوى واستكمال البيانات",
-          href: adminContentTopicPath(feedback.entityId, {
-            returnTo: currentListPath,
-            focusTarget: feedback.focusTarget,
-          }),
-        }
-      : undefined;
-
   return (
     <section id="content-topics-table" className="scroll-mt-6 space-y-3">
       <div className="flex justify-end">
@@ -203,16 +202,19 @@ export default function UnifiedContentList({
           defaultColumns={DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS}
           onChange={handleVisibleColumnsChange}
           onPersist={saveContentTablePreferences}
-          onPersisted={handleVisibleColumnsPersisted}
+          scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
         />
       </div>
 
       {feedback ? (
         <AdminNotice
-          variant={feedback.ok ? "success" : "danger"}
+          key={feedbackRevision}
+          variant={feedback.variant}
+          layout={feedback.layout}
+          dismissible={feedback.dismissible}
           title={feedback.title}
           message={feedback.message}
-          action={feedbackAction}
+          action={feedback.action}
         />
       ) : null}
 

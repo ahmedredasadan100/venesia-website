@@ -2,10 +2,14 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatAdminListDate } from "../../../lib/content-dates";
 import { getContentTypeLabel } from "../../../lib/admin/content/content-types";
+import { getContentStatusMetadata } from "../../../lib/admin/content/content-status-metadata";
 import { adminContentTopicPath } from "../../../lib/admin/content-routes";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
-import { getAdminDataGridActionsColumnWidth } from "../ui/AdminDataGrid";
+import {
+  AdminStatusPill,
+  getAdminDataGridActionsColumnWidth,
+} from "../ui";
 import AdminCategoryBadge from "./AdminCategoryBadge";
 import UnifiedContentRowActions from "./UnifiedContentRowActions";
 
@@ -60,23 +64,6 @@ function singleLine(value?: string | null, fallback = "—") {
   return (
     <span className="block min-w-0 truncate whitespace-nowrap" title={text}>
       {text}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status?: string | null }) {
-  const value = status || "draft";
-  const label =
-    value === "published"
-      ? "منشور"
-      : value === "unpublished"
-        ? "مخفي"
-        : value === "archived"
-          ? "أرشيف"
-          : "مسودة";
-  return (
-    <span className="inline-flex whitespace-nowrap rounded-full border border-white/10 bg-white/[0.055] px-2.5 py-1 text-xs font-semibold text-white/70">
-      {label}
     </span>
   );
 }
@@ -206,7 +193,12 @@ export const UNIFIED_CONTENT_COLUMNS: UnifiedContentColumn[] = [
     sortKey: "status",
     minWidth: 104,
     responsiveBehavior: "scroll",
-    renderCell: (row) => <StatusBadge status={row.status} />,
+    renderCell: (row) => {
+      const status = getContentStatusMetadata(row.status);
+      return (
+        <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+      );
+    },
   },
   {
     key: "featured",

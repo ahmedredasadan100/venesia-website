@@ -94,6 +94,63 @@ check("Video must resolve to the video editor", contentTypes.resolveContentEdito
 check("Gallery must resolve to the gallery editor", contentTypes.resolveContentEditor("gallery") === "gallery");
 check("Unknown content types must not fall back to an editor", contentTypes.resolveContentEditor("unknown") === null);
 
+const contentStatuses = loadPureTypeScriptModule(
+  "src/lib/admin/content/content-status-metadata.ts",
+);
+const expectedStatusMetadata = {
+  published: { label: "منشور", tone: "green" },
+  unpublished: { label: "مخفي", tone: "gold" },
+  draft: { label: "مسودة", tone: "blue" },
+  archived: { label: "مؤرشف", tone: "muted" },
+};
+for (const [status, expected] of Object.entries(expectedStatusMetadata)) {
+  check(
+    `Content status ${status} must retain its semantic label and tone`,
+    JSON.stringify(contentStatuses.getContentStatusMetadata(status)) ===
+      JSON.stringify(expected),
+  );
+}
+check(
+  "Unknown content statuses must fail safely to draft metadata",
+  JSON.stringify(contentStatuses.getContentStatusMetadata("unknown")) ===
+    JSON.stringify(expectedStatusMetadata.draft),
+);
+
+const actionFeedback = loadPureTypeScriptModule(
+  "src/lib/admin/admin-action-feedback.ts",
+);
+const transientSuccessFeedback = actionFeedback.mapAdminActionResultToFeedback({
+  ok: true,
+  title: "Saved",
+  message: "Done",
+});
+const validationFeedback = actionFeedback.mapAdminActionResultToFeedback(
+  { ok: false, title: "Invalid", message: "Fix it" },
+  { kind: "action_validation", action: { label: "Fix", href: "/admin/fix" } },
+);
+const criticalFeedback = actionFeedback.mapAdminActionResultToFeedback(
+  { ok: false, title: "Unavailable", message: "Try later" },
+  { kind: "critical_system" },
+);
+check(
+  "Transient action feedback must be inline and dismissible",
+  transientSuccessFeedback.variant === "success" &&
+    transientSuccessFeedback.layout === "inline" &&
+    transientSuccessFeedback.dismissible === true,
+);
+check(
+  "Action validation feedback must retain its repair action",
+  validationFeedback.variant === "danger" &&
+    validationFeedback.layout === "inline" &&
+    validationFeedback.dismissible === true &&
+    validationFeedback.action?.href === "/admin/fix",
+);
+check(
+  "Critical system feedback must remain stacked and persistent",
+  criticalFeedback.layout === "stacked" &&
+    criticalFeedback.dismissible === false,
+);
+
 const editorRoute = read("src/app/admin/content/topics/[id]/page.tsx");
 check(
   "Unified editor route must resolve by content_type",
@@ -211,7 +268,15 @@ const preferences = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx"
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const rowActions = read("src/components/admin/content/UnifiedContentRowActions.tsx");
 const activity = read("src/components/admin/content/AdminContentActivityPopover.tsx");
+const activityCore = read("src/components/admin/ui/AdminActivityPopover.tsx");
 const actions = read("src/app/admin/content/topics/actions.ts");
+const topicsFeedback = read("src/lib/admin/content/topics-action-feedback.ts");
+const confirmDialog = read("src/components/admin/ui/AdminConfirmDialog.tsx");
+const columnMenu = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx");
+const floatingMenuPosition = read(
+  "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
+);
+const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 check(
   "Table overflow must remain inside its shared container",
   list.includes("<AdminDataGrid") && dataGrid.includes("overflow-x-auto"),
@@ -229,15 +294,46 @@ check(
 );
 check(
   "Activity must be click-only",
-  activity.includes("onClick={() => setIsOpen") &&
-    !activity.includes("onMouseEnter") &&
-    !activity.includes("onMouseLeave"),
+  activity.includes("<AdminActivityPopover") &&
+    activityCore.includes("onClick={() => setIsOpen") &&
+    !activityCore.includes("onMouseEnter") &&
+    !activityCore.includes("onMouseLeave"),
+);
+check(
+  "Column management must use a viewport-colliding fixed portal",
+  columnMenu.includes("createPortal(") &&
+    columnMenu.includes('position: "fixed"') &&
+    columnMenu.includes("collisionPadding: 12") &&
+    columnMenu.includes("estimatedHeight: 458") &&
+    !columnMenu.includes("absolute left-0 top-full") &&
+    floatingMenuPosition.includes('placement?: "top" | "bottom"'),
+);
+check(
+  "Bounded admin surfaces must compose the shared scrollbar visuals",
+  columnMenu.includes("scrollAreaClassName") &&
+    activityCore.includes("ADMIN_SCROLLBAR_VISUAL_CLASSES") &&
+    pagination.includes("ADMIN_SCROLLBAR_VISUAL_CLASSES"),
 );
 check(
   "Publish failures must use shared feedback with an editor action",
   list.includes("<AdminNotice") &&
-    list.includes("فتح المحتوى واستكمال البيانات") &&
+    list.includes("mapTopicsActionResultToFeedback") &&
+    !list.includes('feedback.code === "publish_validation"') &&
+    topicsFeedback.includes("mapAdminActionResultToFeedback") &&
+    topicsFeedback.includes('result.code === "publish_validation"') &&
+    topicsFeedback.includes("adminContentTopicPath(result.entityId") &&
+    topicsFeedback.includes("returnTo: context.currentListPath") &&
     actions.includes('"تعذر نشر المحتوى"'),
+);
+check(
+  "Topics deletion must use the shared accessible confirmation dialog",
+  rowActions.includes("<AdminConfirmDialog") &&
+    !rowActions.includes("window.confirm") &&
+    confirmDialog.includes('role="dialog"') &&
+    confirmDialog.includes('aria-modal="true"') &&
+    confirmDialog.includes("FOCUSABLE_SELECTOR") &&
+    confirmDialog.includes('event.key === "Escape"') &&
+    confirmDialog.includes("returnFocusRef"),
 );
 check(
   "Preferences must be isolated to the authenticated admin",

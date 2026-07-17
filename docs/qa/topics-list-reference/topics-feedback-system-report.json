@@ -1,0 +1,195 @@
+{
+  "generatedAt": "2026-07-17T19:44:07.244Z",
+  "baseUrl": "http://127.0.0.1:3000",
+  "checks": [
+    {
+      "name": "Feature success uses one non-conflicting feedback representation",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "Feature success is inline and dismissible",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Feature success retains its existing title and message",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Feature success dismisses without reload or navigation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Unfeature success uses one non-conflicting feedback representation",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "Unfeature success is inline and dismissible",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Unfeature success retains its existing message",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Unfeature success dismisses without reload or navigation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Publish validation uses one non-conflicting feedback representation",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "Publish validation is inline and dismissible",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Publish validation exposes the real repair action and return URL",
+      "ok": true,
+      "detail": "/admin/content/topics/397?return_to=%2Fadmin%2Fcontent%2Ftopics%3Fq%3Dmrpciv9v#topic-image-alt"
+    },
+    {
+      "name": "Publish validation dismisses without reload or navigation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Delete opens the shared centered danger confirmation dialog",
+      "ok": true,
+      "detail": "{\"ariaModal\":\"true\",\"describedBy\":\"_R_f56mapbn5ritrl5rlbH1_\",\"tone\":\"danger\",\"centerDeltaX\":0,\"centerDeltaY\":0.0078125}"
+    },
+    {
+      "name": "Dialog keeps the requested title, description, and controls",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Initial dialog focus is on the safe cancel action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Focus trap wraps backward to the confirm action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Focus trap wraps forward to the cancel action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Cancel does not execute deletion and restores trigger focus",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Cancel preserves the database row",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Escape closes without deletion and restores trigger focus",
+      "ok": true,
+      "detail": "posts=0; focus=true"
+    },
+    {
+      "name": "Pending state disables repeat confirmation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Confirmed deletion executes exactly once",
+      "ok": true,
+      "detail": "posts=1"
+    },
+    {
+      "name": "Delete success uses one non-conflicting feedback representation",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "Delete success is inline and dismissible",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Successful deletion closes the dialog, removes the row, and reports success",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Delete success dismisses without reload or navigation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Delete failure uses one non-conflicting feedback representation",
+      "ok": true,
+      "detail": "count=1"
+    },
+    {
+      "name": "Delete failure is inline and dismissible",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Failed deletion never reports success",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Delete failure dismisses without reload or navigation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Feedback and dialog create no page-level horizontal overflow",
+      "ok": true,
+      "detail": "{\"pageWidth\":1280,\"viewportWidth\":1280}"
+    },
+    {
+      "name": "Critical stacked default remains unchanged and non-dismissible",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Console, hydration, RSC, chunk, focus, and ARIA issues are zero",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Page errors are zero",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Unexpected failed requests are zero",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "404 and 500 responses are zero",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "screenshots": {
+    "feature": "docs/qa/topics-list-reference/topics-feedback-feature-success.png",
+    "dialog": "docs/qa/topics-list-reference/topics-delete-confirm-dialog.png",
+    "delete": "docs/qa/topics-list-reference/topics-feedback-delete-success.png"
+  },
+  "consoleIssues": [],
+  "pageErrors": [],
+  "networkIssues": [],
+  "badResponses": []
+}

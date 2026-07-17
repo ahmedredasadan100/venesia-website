@@ -5,6 +5,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 
 export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE = "10";
 export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS = ["10", "20", "30"] as const;
@@ -15,7 +16,7 @@ const FOOTER_SURFACE_CLASSES =
   "border border-[#D8B87A]/14 bg-[linear-gradient(135deg,rgba(216,184,122,0.10),rgba(56,189,248,0.06),rgba(255,255,255,0.025))] text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl";
 
 const MENU_SCROLLBAR_CLASSES =
-  "max-h-[200px] overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.24)_rgba(255,255,255,0.06)] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-white/[0.04] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-white/30";
+  `max-h-[200px] overflow-y-auto overflow-x-hidden overscroll-contain ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`;
 
 type MenuPosition = {
   bottom: number;

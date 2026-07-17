@@ -42,6 +42,8 @@ type ActionButtonProps = {
   ariaLabel?: string;
   ariaExpanded?: boolean;
   ariaHasPopup?: "dialog" | "menu";
+  ariaPressed?: boolean;
+  ariaControls?: string;
   href?: string;
   target?: string;
   rel?: string;
@@ -453,6 +455,8 @@ export function AdminDataGridActionButton({
   ariaLabel,
   ariaExpanded,
   ariaHasPopup,
+  ariaPressed,
+  ariaControls,
   href,
   target,
   rel,
@@ -504,6 +508,8 @@ export function AdminDataGridActionButton({
       aria-label={resolvedAriaLabel}
       aria-expanded={ariaExpanded}
       aria-haspopup={ariaHasPopup}
+      aria-pressed={ariaPressed}
+      aria-controls={ariaControls}
       aria-busy={pending || undefined}
       onClick={onClick}
       disabled={disabled || pending}
