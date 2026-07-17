@@ -32,8 +32,8 @@ export function isContentType(value: unknown): value is ContentType {
   return typeof value === "string" && CONTENT_TYPE_SET.has(value);
 }
 
-export function resolveContentEditor(contentType: ContentType): ContentEditorKind {
-  return EDITOR_BY_CONTENT_TYPE.get(contentType) ?? "article";
+export function resolveContentEditor(contentType: ContentType): ContentEditorKind | null {
+  return EDITOR_BY_CONTENT_TYPE.get(contentType) ?? null;
 }
 
 export function getContentTypeLabel(contentType?: string | null) {

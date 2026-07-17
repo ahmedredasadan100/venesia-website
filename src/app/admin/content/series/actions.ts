@@ -86,8 +86,8 @@ function redirectWithError(message: string): never {
 function revalidateSeriesPaths() {
   revalidateTopicsCache();
   revalidatePath("/admin/content/series");
-  revalidatePath("/admin/topics");
-  revalidatePath("/admin/topics/new");
+  revalidatePath("/admin/content/topics");
+  revalidatePath("/admin/content/topics/new");
 }
 
 async function ensureUniqueSlug(slug: string, id?: string) {

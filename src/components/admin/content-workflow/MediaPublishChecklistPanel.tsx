@@ -69,17 +69,15 @@ export default function MediaPublishChecklistPanel({ formId, initial }: MediaPub
     if (!form) return;
 
     const sync = () => {
-      const section = readValue(form, "category_slug") || initial.categorySlug;
-      const contentType =
-        section === "media-videos"
-          ? "video"
-          : section === "media-gallery"
-            ? "gallery"
-            : section === "media-press"
-              ? "press"
-              : section === "media-site-updates"
-                ? "site_update"
-                : "news";
+      const categoryId = readValue(form, "category_id") || initial.categorySlug;
+      const rawContentType = readValue(form, "content_type") || initial.contentType;
+      const contentType: MediaEditableContentType =
+        rawContentType === "video" ||
+        rawContentType === "gallery" ||
+        rawContentType === "press" ||
+        rawContentType === "site_update"
+          ? rawContentType
+          : "news";
 
       setInput({
         title: readValue(form, "title"),
@@ -88,9 +86,9 @@ export default function MediaPublishChecklistPanel({ formId, initial }: MediaPub
         content: readValue(form, "content"),
         image: readValue(form, "image") || initial.image,
         imageAlt: readValue(form, "image_alt"),
-        categorySlug: section,
-        contentType: contentType as MediaEditableContentType,
-        mediaPayload: readMediaPayload(form, contentType as MediaEditableContentType),
+        categorySlug: categoryId,
+        contentType,
+        mediaPayload: readMediaPayload(form, contentType),
       });
     };
 

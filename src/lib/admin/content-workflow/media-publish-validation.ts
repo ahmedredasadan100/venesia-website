@@ -30,7 +30,7 @@ export function getMediaBaseValidationError(input: MediaPublishInput): string | 
   if (!validateSlugFormat(input.slug)) {
     return "الـ Slug لازم يكون إنجليزي صغير، أرقام، وشرطة بين الكلمات فقط.";
   }
-  if (!input.categorySlug.trim()) return "قسم المركز الإعلامي مطلوب.";
+  if (!input.categorySlug.trim()) return "التصنيف مطلوب.";
   return null;
 }
 
@@ -81,9 +81,9 @@ export function buildMediaPublishChecklist(input: MediaPublishInput): PublishChe
     },
     {
       id: "category",
-      label: "قسم المركز الإعلامي",
+      label: "التصنيف",
       status: input.categorySlug.trim() ? "pass" : "fail",
-      hint: input.categorySlug.trim() ? "تم اختيار القسم." : "اختر قسمًا فرعيًا تحت المركز الإعلامي.",
+      hint: input.categorySlug.trim() ? "تم اختيار التصنيف." : "اختر تصنيفًا نشطًا.",
     },
   ];
 

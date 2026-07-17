@@ -31,13 +31,6 @@ function applyPresetToForm(form: HTMLFormElement, preset: ContentTemplatePreset)
   setValue("seo_description", preset.defaults.seoDescription);
   setValue("focus_keyword", preset.defaults.focusKeyword);
 
-  if (preset.suggestedSectionSlug) {
-    const section = form.elements.namedItem("category_slug");
-    if (section instanceof HTMLSelectElement) {
-      section.value = preset.suggestedSectionSlug;
-      section.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  }
 }
 
 export default function ContentTemplatePicker({ target, formId }: ContentTemplatePickerProps) {

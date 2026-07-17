@@ -1,0 +1,36 @@
+export const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
+
+export type TopicStatus = (typeof VALID_STATUSES)[number];
+
+export type TopicRow = {
+  id: number;
+  title: string | null;
+  slug: string | null;
+  excerpt: string | null;
+  content: string | null;
+  image: string | null;
+  image_alt: string | null;
+  category_slug: string | null;
+  series_id?: number | null;
+  status: TopicStatus | string | null;
+  published_at: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  focus_keyword: string | null;
+  seo_keywords: string[] | null;
+  faq: { question: string; answer: string }[] | null;
+};
+
+export type CategoryRow = {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id?: number | null;
+  is_active?: boolean | null;
+};
+
+export type SeriesRow = {
+  id: number;
+  name: string;
+  slug: string;
+};

@@ -1,1 +1,112 @@
-export { dynamic, default } from "../../../topics/new/page";
+import AdminNotice from "../../../../../components/admin/AdminNotice";
+import ContentTypePicker from "../../../../../components/admin/content/ContentTypePicker";
+import ArticleCreateEditor from "../../../../../components/admin/content/editors/ArticleCreateEditor";
+import { AdminActionButton, AdminPageContextHeader } from "../../../../../components/admin/ui";
+import {
+  buildAdminCategoryTree,
+  flattenAdminCategoryTree,
+  type AdminContentCategory,
+} from "../../../../../lib/admin/content/category-hierarchy";
+import { isContentType } from "../../../../../lib/admin/content/content-types";
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
+import { isMediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
+
+export const dynamic = "force-dynamic";
+
+type SearchParams = { type?: string; error?: string };
+
+export default async function NewUnifiedContentPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  await requireAdminSession();
+  const query = await searchParams;
+  const contentType = isContentType(query?.type) ? query.type : null;
+
+  if (!contentType) {
+    return (
+      <main className="space-y-7">
+        <AdminPageContextHeader
+          eyebrow="UNIFIED CONTENT ENGINE"
+          title="إضافة موضوع جديد"
+          description="أنشئ كل أنواع المحتوى من مسار واحد، ثم استخدم المحرر المتخصص حسب النوع."
+          actions={
+            <AdminActionButton href="/admin/content/topics" variant="dark">
+              عرض الموضوعات
+            </AdminActionButton>
+          }
+        />
+        <ContentTypePicker />
+      </main>
+    );
+  }
+
+  const supabase = getSupabaseAdmin();
+  const [{ data: categoryRows, error: categoriesError }, { data: seriesRows, error: seriesError }] =
+    await Promise.all([
+      supabase
+        .from("topic_categories")
+        .select("id,name,slug,parent_id,sort_order,is_active,color_token")
+        .order("sort_order", { ascending: true })
+        .order("id", { ascending: true }),
+      supabase
+        .from("topic_series")
+        .select("id,name,slug,status,deleted_at")
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
+    ]);
+  const categories = flattenAdminCategoryTree(
+    buildAdminCategoryTree((categoryRows ?? []) as AdminContentCategory[]),
+  );
+  const series = (seriesRows ?? []) as Array<{
+    id: number;
+    name: string;
+    slug: string;
+    status: string;
+    deleted_at: string | null;
+  }>;
+  const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
+  const loadError = categoriesError?.message ?? seriesError?.message;
+
+  if (contentType === "article") {
+    return (
+      <ArticleCreateEditor
+        categories={categories.filter((category) => category.is_active !== false)}
+        series={series.filter((item) => item.status === "published" && !item.deleted_at)}
+        errorMessage={errorMessage ?? loadError}
+      />
+    );
+  }
+
+  if (!isMediaEditableContentType(contentType)) return null;
+
+  return (
+    <main className="space-y-7">
+      <AdminPageContextHeader
+        eyebrow="UNIFIED CONTENT ENGINE"
+        title={`إضافة ${contentType}`}
+        description="التصنيف والسلسلة مستقلان عن نوع المحتوى ويُحمّلان مباشرة من قاعدة البيانات."
+        actions={
+          <>
+            <AdminActionButton href="/admin/content/topics/new" variant="dark">تغيير النوع</AdminActionButton>
+            <AdminActionButton href="/admin/content/topics" variant="dark">عرض الموضوعات</AdminActionButton>
+            <AdminActionButton href="/admin/content/categories" variant="dark">إدارة التصنيفات</AdminActionButton>
+          </>
+        }
+      />
+      {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء المحتوى" message={errorMessage} /> : null}
+      {loadError ? <AdminNotice variant="danger" title="تعذر تحميل التصنيفات أو السلاسل" message={loadError} /> : null}
+      {!loadError ? (
+        <MediaContentForm
+          mode="create"
+          contentType={contentType}
+          categories={categories}
+          series={series}
+        />
+      ) : null}
+    </main>
+  );
+}

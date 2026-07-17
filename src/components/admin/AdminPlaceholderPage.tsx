@@ -23,7 +23,7 @@ export default function AdminPlaceholderPage({
             <Link href="/admin" className="rounded-2xl bg-[#D8B87A] px-5 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]">
               العودة للوحة التحكم
             </Link>
-            <Link href="/admin/topics" className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-white/72 transition hover:border-[#D8B87A]/30 hover:text-[#D8B87A]">
+            <Link href="/admin/content/topics" className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-white/72 transition hover:border-[#D8B87A]/30 hover:text-[#D8B87A]">
               إدارة المقالات
             </Link>
           </>

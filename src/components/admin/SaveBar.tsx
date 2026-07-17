@@ -51,7 +51,7 @@ export default function SaveBar({
           </button>
 
           <Link
-            href="/admin/topics"
+            href="/admin/content/topics"
             className="rounded-full border border-white/15 px-6 py-3 text-sm font-medium text-white/65 transition hover:border-white/30 hover:text-white"
           >
             إغلاق
@@ -84,7 +84,7 @@ export default function SaveBar({
           )}
 
           <Link
-            href={`/admin/topics/${topicId}/preview`}
+            href={`/admin/content/topics/${topicId}/preview`}
             target="_blank"
             className="rounded-full border border-white/15 px-6 py-3 text-sm font-medium text-white/70 transition hover:border-white/30 hover:text-white"
           >
