@@ -242,10 +242,11 @@ Repository guardrails:
 
 Production-mode browser QA is stored under
 `.tmp-qa/unified-content-system/`. It uses a temporary admin, taxonomy, series,
-and topics, then removes them in `finally`. The final run passed 58/58 checks,
+and topics, then removes them in `finally`. The final run passed 62/62 checks,
 including title-only search, descendant filtering, preferences, sorting,
-responsive overflow, actor writes, specialized editors, preview exclusion,
-session view deduplication, and concurrent atomic increments.
+global metrics, bulk mutations, responsive overflow, actor writes, specialized
+editors, preview exclusion, session view deduplication, and concurrent atomic
+increments.
 
 ## Legacy public data
 
