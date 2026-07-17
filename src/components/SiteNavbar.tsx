@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { isActivePath, normalizePathname } from "../lib/navigation/is-active-path";
 import { usePublicNavigation } from "./PublicNavigationProvider";
 import { usePublicBrand } from "./PublicBrandProvider";
@@ -29,16 +29,32 @@ function getItemKey(item: DynamicNavItem) {
   return String(item.id ?? `${item.label}-${item.href}`);
 }
 
+const emptySubscribe = () => () => {};
+
+/**
+ * Hydration-safe mounted flag: `false` on the server and during hydration,
+ * `true` right after. React re-renders post-hydration without a mismatch.
+ */
+function useMounted() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
+
 function MenuLink({
   item,
   children,
   className,
   onClick,
+  ariaCurrent,
 }: {
   item: DynamicNavItem;
   children: React.ReactNode;
   className: string;
   onClick?: () => void;
+  ariaCurrent?: "page";
 }) {
   const target = item.target === "_blank" ? "_blank" : undefined;
   const rel = target ? "noreferrer" : undefined;
@@ -52,6 +68,7 @@ function MenuLink({
         rel={rel}
         className={finalClassName}
         onClick={onClick}
+        aria-current={ariaCurrent}
       >
         {children}
       </a>
@@ -59,23 +76,34 @@ function MenuLink({
   }
 
   return (
-    <Link href={item.href} className={finalClassName} onClick={onClick}>
+    <Link
+      href={item.href}
+      className={finalClassName}
+      onClick={onClick}
+      aria-current={ariaCurrent}
+    >
       {children}
     </Link>
   );
 }
 
 export default function SiteNavbar() {
-  const pathname = normalizePathname(usePathname());
+  const routerPathname = usePathname();
   const navItems = usePublicNavigation() as DynamicNavItem[];
   const brand = usePublicBrand();
   const [navScrolled, setNavScrolled] = useState(false);
-  const [pathnameKey, setPathnameKey] = useState(pathname);
+  const [pathnameKey, setPathnameKey] = useState(routerPathname);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const mounted = useMounted();
 
-  if (pathname !== pathnameKey) {
-    setPathnameKey(pathname);
+  // usePathname() is unreliable during SSR/ISR revalidation (wrong value for "/"),
+  // which caused React #418. Server HTML and hydration render all links
+  // inactive; the real active state applies only after mount.
+  const pathname = mounted ? normalizePathname(routerPathname) : null;
+
+  if (routerPathname !== pathnameKey) {
+    setPathnameKey(routerPathname);
     setMobileOpen(false);
     setOpenSubmenu(null);
   }
@@ -146,6 +174,7 @@ export default function SiteNavbar() {
                   <MenuLink
                     key={getItemKey(item)}
                     item={item}
+                    ariaCurrent={active ? "page" : undefined}
                     className={`group/link relative cursor-pointer transition-colors duration-500 ease-out ${
                       active
                         ? "text-[#D8B87A]"
@@ -162,6 +191,7 @@ export default function SiteNavbar() {
                 <div key={getItemKey(item)} className="group/media relative">
                   <MenuLink
                     item={item}
+                    ariaCurrent={active ? "page" : undefined}
                     className={`group/link relative inline-flex items-center gap-1.5 transition-colors duration-500 ease-out hover:text-white/85 ${
                       active ? "text-[#D8B87A]" : ""
                     }`}
@@ -285,6 +315,7 @@ export default function SiteNavbar() {
                     <MenuLink
                       item={item}
                       onClick={() => setMobileOpen(false)}
+                      ariaCurrent={active ? "page" : undefined}
                       className={`flex items-center justify-between rounded-xl px-4 py-3 text-[14px] font-medium transition-colors duration-200 ${
                         active
                           ? "bg-[#D8B87A]/10 text-[#D8B87A]"
@@ -323,6 +354,7 @@ export default function SiteNavbar() {
                           <MenuLink
                             item={sub}
                             onClick={() => setMobileOpen(false)}
+                            ariaCurrent={isActivePath(pathname, sub.href) ? "page" : undefined}
                             className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-[13px] transition-colors duration-200 ${
                               isActivePath(pathname, sub.href)
                                 ? "text-[#D8B87A]"
