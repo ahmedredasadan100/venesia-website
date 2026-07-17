@@ -64,3 +64,48 @@ export type AdminEntityPersistResult = {
   ok: boolean;
   message?: string;
 };
+
+/** Portable search/filter contracts — no entity or project names. */
+export type AdminEntityFilterOption = {
+  value: string;
+  label: string;
+};
+
+export type AdminEntityFilterGroup = {
+  label: string;
+  options: AdminEntityFilterOption[];
+};
+
+export type AdminEntityFilterDef = {
+  id: string;
+  /** URL query param key for this filter. */
+  paramKey: string;
+  placeholder: string;
+  /** Sentinel value meaning "no filter" (default: "all"). */
+  allValue?: string;
+  options?: AdminEntityFilterOption[];
+  groups?: AdminEntityFilterGroup[];
+  className?: string;
+  disabled?: boolean;
+  /** Optional display override for the closed trigger. */
+  getDisplayValue?: (value: string) => string | undefined;
+};
+
+export type AdminEntitySearchConfig = {
+  /** URL query param key (default: "q"). */
+  paramKey?: string;
+  placeholder: string;
+  value: string;
+  /** Minimum trimmed length before committing search to URL (default: 0). */
+  minLength?: number;
+  debounceMs?: number;
+  className?: string;
+  disabled?: boolean;
+};
+
+export type AdminEntityFilterValues = Record<string, string>;
+
+export type AdminEntityFiltersChangePatch = {
+  search?: string;
+  filters?: AdminEntityFilterValues;
+};

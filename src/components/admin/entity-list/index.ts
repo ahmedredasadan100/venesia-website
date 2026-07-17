@@ -6,6 +6,9 @@ export type {
   AdminEntityListTableProps,
   AdminEntitySortState,
 } from "./AdminEntityListTable";
+export { default as AdminEntityListFilters } from "./AdminEntityListFilters";
+export type { AdminEntityListFiltersProps } from "./AdminEntityListFilters";
+export { default as AdminEntityListSurface } from "./AdminEntityListSurface";
 export {
   AdminFloatingLayerProvider,
   useAdminFloatingLayer,

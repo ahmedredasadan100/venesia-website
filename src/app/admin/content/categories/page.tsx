@@ -4,8 +4,13 @@ import {
   AdminPageContextHeader,
 } from "../../../../components/admin/ui";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
-import { CATEGORIES_NOTICE_CODE_MAP } from "../../../../lib/admin/content/categories-list-config";
+import {
+  CATEGORIES_DEFAULT_COLUMN_KEYS,
+  CATEGORIES_LIST_VIEW_KEY,
+  CATEGORIES_NOTICE_CODE_MAP,
+} from "../../../../lib/admin/content/categories-list-config";
 import { flattenCategoryTree } from "../../../../lib/admin/category-tree";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import CategoriesListClient from "./CategoriesListClient";
@@ -23,6 +28,8 @@ type CategoryRow = {
   parent_id: number | null;
   status: string | null;
   color_token: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   topics_count?: { count: number }[];
 };
 
@@ -86,6 +93,7 @@ function buildCategoryTree(categories: CategoryRow[]) {
 
 function flattenTreeRows(
   nodes: CategoryNode[],
+  nameById: Map<number, string>,
   depth = 0,
   acc: CategoryListRow[] = [],
 ): CategoryListRow[] {
@@ -98,15 +106,20 @@ function flattenTreeRows(
       sort_order: node.sort_order,
       is_active: node.is_active,
       parent_id: node.parent_id,
+      parent_name: node.parent_id
+        ? (nameById.get(node.parent_id) ?? null)
+        : null,
       status: node.status,
       color_token: node.color_token,
+      created_at: node.created_at,
+      updated_at: node.updated_at,
       ownCount: node.ownCount,
       totalCount: node.totalCount,
       depth,
       childCount: node.children.length,
     });
     if (node.children.length) {
-      flattenTreeRows(node.children, depth + 1, acc);
+      flattenTreeRows(node.children, nameById, depth + 1, acc);
     }
   }
   return acc;
@@ -117,6 +130,7 @@ export default async function TopicCategoriesPage({
 }: {
   searchParams?: Promise<CategoriesSearchParams>;
 }) {
+  const actor = await requireAdminSession();
   const query = await searchParams;
   const noticeFeedback = resolveAdminNoticeFeedback(
     CATEGORIES_NOTICE_CODE_MAP,
@@ -124,14 +138,25 @@ export default async function TopicCategoriesPage({
     query?.error ? decodeURIComponent(query.error) : null,
   );
 
-  const { data: categories, error } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .select(
-      "id, name, slug, description, sort_order, is_active, parent_id, status, color_token, topics_count:topics(count)",
-    )
-    .order("parent_id", { ascending: true, nullsFirst: true })
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
+  const [
+    { data: categories, error },
+    { data: preference, error: preferenceError },
+  ] = await Promise.all([
+    getSupabaseAdmin()
+      .from("topic_categories")
+      .select(
+        "id, name, slug, description, sort_order, is_active, parent_id, status, color_token, created_at, updated_at, topics_count:topics(count)",
+      )
+      .order("parent_id", { ascending: true, nullsFirst: true })
+      .order("sort_order", { ascending: true })
+      .order("id", { ascending: true }),
+    getSupabaseAdmin()
+      .from("admin_user_preferences")
+      .select("preferences")
+      .eq("admin_user_id", actor.id)
+      .eq("view_key", CATEGORIES_LIST_VIEW_KEY)
+      .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
+  ]);
 
   if (error) {
     return (
@@ -151,9 +176,15 @@ export default async function TopicCategoriesPage({
   }
 
   const safeCategories = (categories ?? []) as CategoryRow[];
+  const nameById = new Map(
+    safeCategories.map((category) => [category.id, category.name]),
+  );
   const tree = buildCategoryTree(safeCategories);
   const parentOptions = flattenCategoryTree(tree);
-  const rows = flattenTreeRows(tree);
+  const rows = flattenTreeRows(tree, nameById);
+  const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
+    ? preference.preferences.visibleColumns
+    : [...CATEGORIES_DEFAULT_COLUMN_KEYS];
 
   return (
     <main className="space-y-7" dir="rtl">
@@ -186,8 +217,19 @@ export default async function TopicCategoriesPage({
           dismissible={noticeFeedback.dismissible}
         />
       ) : null}
+      {preferenceError ? (
+        <AdminNotice
+          variant="danger"
+          title="تعذر تحميل تفضيلات الأعمدة"
+          message={preferenceError.message}
+        />
+      ) : null}
 
-      <CategoriesListClient rows={rows} parentOptions={parentOptions} />
+      <CategoriesListClient
+        rows={rows}
+        parentOptions={parentOptions}
+        initialVisibleColumns={visibleColumns}
+      />
     </main>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import AdminCheckbox from "./AdminCheckbox";
 import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
 
@@ -43,7 +44,21 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   const panelRef = useRef<HTMLDivElement>(null);
   const focusMenuOnOpenRef = useRef(false);
   const menuId = useId();
-  const [isOpen, setIsOpen] = useState(false);
+  const layerId = `entity-columns:${menuId}`;
+  const floating = useAdminFloatingLayer();
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isOpen = floating
+    ? floating.openLayerId === layerId
+    : uncontrolledOpen;
+
+  function setIsOpen(next: boolean) {
+    if (floating) {
+      floating.setOpenLayerId(next ? layerId : null);
+      return;
+    }
+    setUncontrolledOpen(next);
+  }
+
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const saveQueueRef = useRef<Promise<PersistResult>>(Promise.resolve({ ok: true }));
@@ -59,6 +74,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   });
 
   useEffect(() => {
+    if (!isOpen) return;
     function close(event: MouseEvent) {
       const target = event.target as Node;
       if (
@@ -80,7 +96,8 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, layerId, floating]);
 
   useEffect(() => {
     if (
@@ -212,7 +229,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-controls={menuId}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => setIsOpen(!isOpen)}
         onKeyDown={(event) => {
           if (
             event.key !== "ArrowDown" &&

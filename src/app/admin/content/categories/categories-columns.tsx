@@ -2,6 +2,7 @@
 
 import AdminCategoryBadge from "../../../../components/admin/content/AdminCategoryBadge";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
+import { formatAdminListDate } from "../../../../lib/content-dates";
 import {
   AdminStatusPill,
   getAdminDataGridActionsColumnWidth,
@@ -17,19 +18,40 @@ export type CategoryListRow = {
   sort_order: number | null;
   is_active: boolean | null;
   parent_id: number | null;
+  parent_name: string | null;
   status: string | null;
   color_token: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   ownCount: number;
   totalCount: number;
   depth: number;
   childCount: number;
 };
 
-export type CategoryColumnKey = "name" | "count" | "status" | "actions";
-export type CategorySortKey = "name" | "count" | "status";
+export type CategoryColumnKey =
+  | "name"
+  | "count"
+  | "status"
+  | "actions"
+  | "id"
+  | "parent"
+  | "sort_order"
+  | "created_at"
+  | "updated_at";
+
+export type CategorySortKey =
+  | "name"
+  | "count"
+  | "status"
+  | "id"
+  | "parent"
+  | "sort_order"
+  | "created_at"
+  | "updated_at";
 
 export const CATEGORIES_ACTIONS_COLUMN_WIDTH = getAdminDataGridActionsColumnWidth(
-  5,
+  6,
   "compact",
   12,
 );
@@ -57,6 +79,14 @@ function FolderIcon({ large = false }: { large?: boolean }) {
         strokeWidth=".8"
       />
     </svg>
+  );
+}
+
+function singleLine(value: string) {
+  return (
+    <span className="block truncate text-sm text-white/68" title={value}>
+      {value}
+    </span>
   );
 }
 
@@ -111,7 +141,7 @@ export function createCategoryColumns(
     },
     {
       key: "count",
-      label: "العدد",
+      label: "الموضوعات",
       defaultVisible: true,
       hideable: true,
       sortable: true,
@@ -138,6 +168,74 @@ export function createCategoryColumns(
           {Boolean(row.is_active) ? "منشور" : "مخفي"}
         </AdminStatusPill>
       ),
+    },
+    {
+      key: "id",
+      label: "ID",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "id",
+      minWidth: 72,
+      width: 72,
+      renderCell: ({ row }) => (
+        <span className="font-en tabular-nums text-sm text-white/55">{row.id}</span>
+      ),
+    },
+    {
+      key: "parent",
+      label: "التصنيف الأب",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "parent",
+      minWidth: 160,
+      width: 180,
+      renderCell: ({ row }) =>
+        singleLine(row.parent_name?.trim() ? row.parent_name : "—"),
+    },
+    {
+      key: "sort_order",
+      label: "الترتيب",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "sort_order",
+      minWidth: 88,
+      width: 88,
+      renderCell: ({ row }) => (
+        <span className="font-en tabular-nums text-sm text-white/68">
+          {row.sort_order ?? 0}
+        </span>
+      ),
+    },
+    {
+      key: "created_at",
+      label: "تاريخ الإنشاء",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "created_at",
+      minWidth: 140,
+      width: 150,
+      renderCell: ({ row }) =>
+        singleLine(
+          row.created_at ? formatAdminListDate(row.created_at) : "—",
+        ),
+    },
+    {
+      key: "updated_at",
+      label: "آخر تعديل",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "updated_at",
+      minWidth: 140,
+      width: 150,
+      renderCell: ({ row }) =>
+        singleLine(
+          row.updated_at ? formatAdminListDate(row.updated_at) : "—",
+        ),
     },
     {
       key: "actions",

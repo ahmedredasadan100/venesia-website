@@ -5,6 +5,7 @@ import {
   AdminPageContextHeader,
   AdminTablePagination,
 } from "../../../../components/admin/ui";
+import { AdminEntityListSurface } from "../../../../components/admin/entity-list";
 import UnifiedContentFilters from "../../../../components/admin/content/UnifiedContentFilters";
 import UnifiedContentList from "../../../../components/admin/content/UnifiedContentList";
 import { DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS } from "../../../../components/admin/content/unified-content-columns";
@@ -174,7 +175,7 @@ export default async function UnifiedContentTopicsPage({
       />
 
       {!listLoadError ? (
-        <>
+        <AdminEntityListSurface className="space-y-4" consumer="topics">
           <UnifiedContentFilters
             initial={{
               q: filters.q,
@@ -208,7 +209,7 @@ export default async function UnifiedContentTopicsPage({
             totalPages={list.totalPages}
             emptySummaryText="لا توجد موضوعات مطابقة"
           />
-        </>
+        </AdminEntityListSurface>
       ) : null}
     </main>
   );

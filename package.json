@@ -13,6 +13,8 @@
     "verify:unified-content": "node scripts/verify-unified-content-engine.mjs",
     "verify:unified-content-db": "node scripts/verify-unified-content-database.mjs",
     "verify:admin-entity-list": "node scripts/verify-admin-entity-list.mjs",
+    "qa:admin-entity-list-consumers": "node scripts/qa-admin-entity-list-consumers.mjs",
+    "qa:topics-list-reference": "node scripts/qa-topics-list-reference.mjs",
     "verify:audit-coverage": "node scripts/verify-admin-audit-coverage.mjs",
     "verify:db-health": "node scripts/verify-database-health.mjs",
     "verify:internal-hero-config": "node scripts/verify-internal-hero-config.mjs",

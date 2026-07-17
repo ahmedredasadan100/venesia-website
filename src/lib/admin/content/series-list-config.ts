@@ -11,6 +11,12 @@ export const SERIES_DEFAULT_COLUMN_KEYS = [
 export const SERIES_PREFERENCE_COLUMN_KEYS = [
   "topics_count",
   "status",
+  "id",
+  "slug",
+  "category",
+  "sort_order",
+  "created_at",
+  "updated_at",
 ] as const;
 
 export const SERIES_NOTICE_CODE_MAP = {

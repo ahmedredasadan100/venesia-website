@@ -11,6 +11,11 @@ import {
   getDeterministicAdminTone,
   isAdminToneToken,
 } from "../../../../lib/admin/content/admin-tone-palette";
+import {
+  CATEGORIES_LIST_VIEW_KEY,
+  CATEGORIES_PREFERENCE_COLUMN_KEYS,
+} from "../../../../lib/admin/content/categories-list-config";
+import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 function getString(formData: FormData, key: string) {
@@ -592,4 +597,12 @@ export async function deleteCategory(formData: FormData) {
   });
   revalidateCategories();
   redirect("/admin/content/categories?notice=deleted");
+}
+
+export async function saveCategoriesTablePreferences(visibleColumns: string[]) {
+  return saveAdminColumnPreferences({
+    viewKey: CATEGORIES_LIST_VIEW_KEY,
+    visibleColumns,
+    allowedColumns: CATEGORIES_PREFERENCE_COLUMN_KEYS,
+  });
 }

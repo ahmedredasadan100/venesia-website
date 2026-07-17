@@ -33,10 +33,16 @@ const coreFiles = [
   "src/lib/admin/entity-list/types.ts",
   "src/lib/admin/entity-list/column-preferences.ts",
   "src/lib/admin/entity-list/feedback-codes.ts",
+  "src/lib/admin/entity-list/pagination.ts",
+  "src/lib/admin/entity-list/url-state.ts",
   "src/lib/admin/preferences/admin-column-preferences.ts",
   "src/components/admin/entity-list/AdminEntityList.tsx",
   "src/components/admin/entity-list/AdminEntityListTable.tsx",
+  "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+  "src/components/admin/entity-list/AdminEntityListSurface.tsx",
+  "src/components/admin/entity-list/AdminFloatingLayerContext.tsx",
   "src/components/admin/ui/AdminListboxSelect.tsx",
+  "src/components/admin/ui/AdminFilterListbox.tsx",
 ];
 coreFiles.forEach((path) =>
   check(`Missing entity-list core file: ${path}`, existsSync(resolve(ROOT, path))),
@@ -44,23 +50,44 @@ coreFiles.forEach((path) =>
 
 const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
 const entityTable = read("src/components/admin/entity-list/AdminEntityListTable.tsx");
+const entityFilters = read("src/components/admin/entity-list/AdminEntityListFilters.tsx");
+const entitySurface = read("src/components/admin/entity-list/AdminEntityListSurface.tsx");
 const prefsCore = read("src/lib/admin/entity-list/column-preferences.ts");
+const paginationCore = read("src/lib/admin/entity-list/pagination.ts");
 const prefsAdapter = read("src/lib/admin/preferences/admin-column-preferences.ts");
 const listbox = read("src/components/admin/ui/AdminListboxSelect.tsx");
+const filterListbox = read("src/components/admin/ui/AdminFilterListbox.tsx");
 const bulkBar = read("src/components/admin/ui/AdminBulkActionBar.tsx");
 const feedbackCodes = read("src/lib/admin/entity-list/feedback-codes.ts");
 
 const topicsList = read("src/components/admin/content/UnifiedContentList.tsx");
+const topicsFilters = read("src/components/admin/content/UnifiedContentFilters.tsx");
+const topicsPage = read("src/app/admin/content/topics/page.tsx");
 const categoriesPage = read("src/app/admin/content/categories/page.tsx");
 const categoriesClient = read("src/app/admin/content/categories/CategoriesListClient.tsx");
+const categoriesColumns = read("src/app/admin/content/categories/categories-columns.tsx");
+const categoriesActions = read("src/app/admin/content/categories/CategoryRowActions.tsx");
 const seriesClient = read("src/app/admin/content/series/SeriesTableClient.tsx");
 const seriesPage = read("src/app/admin/content/series/page.tsx");
+const seriesColumns = read("src/app/admin/content/series/series-columns.tsx");
 
 check(
   "Topics/Categories/Series must consume AdminEntityList",
   topicsList.includes("AdminEntityList") &&
     categoriesClient.includes("AdminEntityList") &&
     seriesClient.includes("AdminEntityList"),
+);
+
+check(
+  "Consumers must use AdminEntityListSurface + AdminEntityListFilters",
+  topicsPage.includes("AdminEntityListSurface") &&
+    topicsFilters.includes("AdminEntityListFilters") &&
+    categoriesClient.includes("AdminEntityListSurface") &&
+    categoriesClient.includes("AdminEntityListFilters") &&
+    seriesClient.includes("AdminEntityListSurface") &&
+    seriesClient.includes("AdminEntityListFilters") &&
+    entitySurface.includes("AdminFloatingLayerProvider") &&
+    entityFilters.includes("AdminFilterListbox"),
 );
 
 check(
@@ -75,17 +102,44 @@ check(
     entityTable.includes("<tbody"),
 );
 
+const coreSources = [
+  entityList,
+  entityTable,
+  entityFilters,
+  entitySurface,
+  prefsCore,
+  paginationCore,
+  listbox,
+  filterListbox,
+  feedbackCodes,
+  read("src/lib/admin/entity-list/types.ts"),
+  read("src/lib/admin/entity-list/url-state.ts"),
+];
+
 check(
-  "Shared core must not import Topics/Categories/Series/Supabase",
-  !entityList.includes("topics/actions") &&
-    !entityList.includes("UnifiedContent") &&
-    !entityList.includes("from \"@supabase") &&
-    !entityList.includes("getSupabaseAdmin") &&
-    !entityTable.includes("getSupabaseAdmin") &&
-    !prefsCore.includes("getSupabaseAdmin") &&
-    !prefsCore.includes("content-topics") &&
-    !listbox.includes("topics") &&
-    !feedbackCodes.includes("topics"),
+  "Shared core must not import Topics/Categories/Series/Supabase/Venesia",
+  coreSources.every(
+    (source) =>
+      !source.includes("topics/actions") &&
+      !source.includes("UnifiedContent") &&
+      !source.includes('from "@supabase') &&
+      !source.includes("getSupabaseAdmin") &&
+      !source.includes("content-topics") &&
+      !source.includes("content-categories") &&
+      !source.includes("content-series") &&
+      !source.toLowerCase().includes("venesia") &&
+      !/\bTopics\b/.test(source) &&
+      !/\bCategories\b/.test(source) &&
+      !/\bSeries\b/.test(source) &&
+      !source.includes("topic_categories") &&
+      !source.includes("topic_series"),
+  ),
+);
+
+check(
+  "Filter listbox dedupes allValue options",
+  filterListbox.includes("withoutAllValue") &&
+    filterListbox.includes("option.value !== allValue"),
 );
 
 check(
@@ -120,33 +174,59 @@ check(
 check(
   "Feedback notices resolve through shared contract",
   feedbackCodes.includes("resolveAdminNoticeFeedback") &&
-    read("src/app/admin/content/topics/page.tsx").includes(
-      "resolveAdminNoticeFeedback",
-    ) &&
+    topicsPage.includes("resolveAdminNoticeFeedback") &&
     categoriesPage.includes("resolveAdminNoticeFeedback") &&
     seriesPage.includes("resolveAdminNoticeFeedback"),
 );
 
-const categoryColumns = read(
-  "src/app/admin/content/categories/categories-columns.tsx",
-);
 check(
   "Categories no longer expose slug/description columns or expand-all controls",
   !categoriesClient.includes("CategoryTreeControls") &&
     !categoriesPage.includes("CategoryTreeControls") &&
     !categoriesPage.includes("data-category-search") &&
-    !categoryColumns.includes("row.slug") &&
-    !categoryColumns.includes("category.description") &&
-    !categoryColumns.includes('key: "description"') &&
-    !categoryColumns.includes('key: "slug"'),
+    !categoriesColumns.includes("row.slug") &&
+    !categoriesColumns.includes("category.description") &&
+    !categoriesColumns.includes('key: "description"') &&
+    !categoriesColumns.includes('key: "slug"'),
 );
 
 check(
-  "Series uses الموضوعات terminology and column management",
-  read("src/app/admin/content/series/series-columns.tsx").includes(
-    'label: "الموضوعات"',
-  ),
+  "Categories enable column management + real pagination + activity",
+  categoriesClient.includes("enableColumnManagement") &&
+    !categoriesClient.includes("enableColumnManagement={false}") &&
+    categoriesClient.includes("resolveClientPagination") &&
+    !categoriesClient.includes("pageSizeSelectorMode=\"never\"") &&
+    !categoriesClient.includes("totalPages={1}") &&
+    categoriesColumns.includes('label: "الموضوعات"') &&
+    !categoriesColumns.includes('label: "العدد"') &&
+    categoriesActions.includes("AdminActivityPopover") &&
+    categoriesPage.includes("created_at") &&
+    categoriesPage.includes("updated_at") &&
+    read("src/lib/admin/content/categories-list-config.ts").includes(
+      "CATEGORIES_DEFAULT_COLUMN_KEYS",
+    ) &&
+    read("src/app/admin/content/categories/actions.ts").includes(
+      "saveCategoriesTablePreferences",
+    ),
 );
+
+check(
+  "Series uses الموضوعات terminology and expanded columns",
+  seriesColumns.includes('label: "الموضوعات"') &&
+    seriesColumns.includes('key: "id"') &&
+    seriesColumns.includes('key: "slug"') &&
+    seriesColumns.includes('key: "category"') &&
+    seriesColumns.includes('key: "created_at"') &&
+    seriesColumns.includes("AdminActivityPopover") &&
+    seriesColumns.includes("action=\"preview\"") &&
+    seriesColumns.includes("/admin/content/topics?series=") &&
+    seriesClient.includes("AdminEntityListFilters") &&
+    seriesClient.includes("resolveClientPagination") &&
+    seriesPage.includes("category_id") &&
+    seriesPage.includes("created_at") &&
+    seriesPage.includes("updated_at"),
+);
+
 check(
   "Series columns default contract",
   read("src/lib/admin/content/series-list-config.ts").includes(
@@ -156,9 +236,7 @@ check(
 
 check(
   "Series delete uses AdminConfirmDialog",
-  read("src/app/admin/content/series/series-columns.tsx").includes(
-    "AdminConfirmDialog",
-  ),
+  seriesColumns.includes("AdminConfirmDialog"),
 );
 
 const prefsModule = loadPureTypeScriptModule(
@@ -182,6 +260,28 @@ check(
     !sanitized.includes("bogus"),
 );
 
+const paginationModule = loadPureTypeScriptModule(
+  "src/lib/admin/entity-list/pagination.ts",
+);
+const pageState = paginationModule.resolveClientPagination(11, 2, 10);
+check(
+  "resolveClientPagination computes real pages for 11/10",
+  pageState.page === 2 &&
+    pageState.totalPages === 2 &&
+    pageState.rangeStart === 11 &&
+    pageState.rangeEnd === 11 &&
+    pageState.pageSize === 10,
+);
+const sliced = paginationModule.slicePageRows(
+  Array.from({ length: 11 }, (_, index) => index + 1),
+  1,
+  10,
+);
+check(
+  "slicePageRows returns current page only",
+  sliced.length === 10 && sliced[0] === 1 && sliced[9] === 10,
+);
+
 const noticeModule = loadPureTypeScriptModule(
   "src/lib/admin/entity-list/feedback-codes.ts",
 );
@@ -194,14 +294,15 @@ check(
   notice?.message === "ok" && notice?.variant === "success",
 );
 
-// Ensure no Venesia brand string inside portable contracts
 const types = read("src/lib/admin/entity-list/types.ts");
 check(
   "Portable contracts omit Venesia/entity brand copy",
   !types.toLowerCase().includes("venesia") &&
     !types.includes("Topics") &&
     !types.includes("Categories") &&
-    !types.includes("Series"),
+    !types.includes("Series") &&
+    types.includes("AdminEntitySearchConfig") &&
+    types.includes("AdminEntityFilterDef"),
 );
 
 if (failures.length) {

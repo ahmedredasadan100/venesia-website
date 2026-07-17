@@ -5,10 +5,11 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 
 export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE = "10";
-export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS = ["10", "20", "30"] as const;
+export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS = ["10", "20", "30", "50"] as const;
 
 const PAGINATION_MENU_ATTR = "data-admin-table-pagination-menu";
 
@@ -158,7 +159,21 @@ export default function AdminTablePagination({
   const searchParams = useSearchParams();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const limitTriggerId = useId();
-  const [isLimitOpen, setIsLimitOpen] = useState(false);
+  const layerId = `entity-page-size:${limitTriggerId}`;
+  const floating = useAdminFloatingLayer();
+  const [uncontrolledLimitOpen, setUncontrolledLimitOpen] = useState(false);
+  const isLimitOpen = floating
+    ? floating.openLayerId === layerId
+    : uncontrolledLimitOpen;
+
+  function setIsLimitOpen(next: boolean) {
+    if (floating) {
+      floating.setOpenLayerId(next ? layerId : null);
+      return;
+    }
+    setUncontrolledLimitOpen(next);
+  }
+
   const menuPosition = useFixedDropupPosition(isLimitOpen, triggerRef);
   const paginationItems = buildAdminPaginationItems(currentPage, totalPages);
   const minPageSize = getMinPageSize(pageSizeOptions);
@@ -172,6 +187,8 @@ export default function AdminTablePagination({
   const isMounted = useClientMounted();
 
   useEffect(() => {
+    if (!isLimitOpen) return;
+
     function handlePointerDown(event: MouseEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
@@ -181,9 +198,21 @@ export default function AdminTablePagination({
       setIsLimitOpen(false);
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setIsLimitOpen(false);
+      triggerRef.current?.focus();
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, []);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLimitOpen, layerId, floating]);
 
   function applyLimit(nextLimit: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -279,7 +308,7 @@ export default function AdminTablePagination({
                 id={limitTriggerId}
                 aria-haspopup="listbox"
                 aria-expanded={isLimitOpen}
-                onClick={() => setIsLimitOpen((open) => !open)}
+                onClick={() => setIsLimitOpen(!isLimitOpen)}
                 className={`flex h-9 min-w-[72px] cursor-pointer items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                   isLimitOpen
                     ? "border-[#D8B87A]/35 bg-black/30 text-[#F4E7C5]"

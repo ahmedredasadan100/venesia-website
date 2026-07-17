@@ -265,6 +265,10 @@ export default function AdminEntityList<
   TSortKey extends string,
   TId extends AdminGridId = AdminGridId,
 >(props: AdminEntityListProps<TRow, TKey, TSortKey, TId>) {
+  const existingLayer = useAdminFloatingLayer();
+  if (existingLayer) {
+    return <AdminEntityListInner {...props} />;
+  }
   return (
     <AdminFloatingLayerProvider>
       <AdminEntityListInner {...props} />
