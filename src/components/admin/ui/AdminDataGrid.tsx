@@ -360,6 +360,10 @@ export function AdminDataGridSortLink({ children, href, active = false, directio
   return (
     <Link
       href={href}
+      // Sort permutations are dynamic list URLs; prefetching every header
+      // combination floods the router queue on grid remounts (see row-action
+      // links above).
+      prefetch={false}
       className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-2 py-1 transition hover:bg-white/[0.055] hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${active ? "text-[#D8B87A]" : ""} ${className}`}
     >
       <span>{children}</span>
@@ -493,6 +497,11 @@ export function AdminDataGridActionButton({
     return (
       <Link
         href={href}
+        // Row-action links point at per-row dynamic routes. Prefetching all of
+        // them floods the router queue on every grid remount, and that churn
+        // can cancel an in-flight router.refresh() and strand pending
+        // transitions (stuck spinners).
+        prefetch={false}
         target={target}
         rel={rel ?? (target === "_blank" ? "noreferrer" : undefined)}
         title={resolvedTitle}

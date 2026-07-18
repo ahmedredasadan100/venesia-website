@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-07-18T13:49:14.055Z",
+  "generatedAt": "2026-07-18T18:50:56.626Z",
   "baseUrl": "http://127.0.0.1:3000",
   "checks": [
     {
-      "name": "Topics route responds for q=mrqf7qut",
+      "name": "Topics route responds for q=mrqq1dsr",
       "ok": true,
       "detail": "200"
     },
@@ -15,7 +15,7 @@
     {
       "name": "مخفي uses its semantic status tone",
       "ok": true,
-      "detail": "{\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84218 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84218 35.9349 / 0.2)\"}"
+      "detail": "{\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84215 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84215 35.9349 / 0.2)\"}"
     },
     {
       "name": "مسودة uses its semantic status tone",
@@ -30,7 +30,7 @@
     {
       "name": "Four status tones remain visually distinct",
       "ok": true,
-      "detail": "[{\"title\":\"01 منشور مرجعي mrqf7qut\",\"label\":\"منشور\",\"expectedClass\":\"text-emerald-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-400/15\",\"color\":\"lab(83.9203 -48.7124 13.8849)\",\"backgroundColor\":\"oklab(0.695996 -0.162107 0.0511875 / 0.1)\",\"borderColor\":\"oklab(0.764996 -0.16946 0.0511029 / 0.15)\"},{\"title\":\"02 مخفي مرجعي mrqf7qut\",\"label\":\"مخفي\",\"expectedClass\":\"text-[#D8B87A]\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84218 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84218 35.9349 / 0.2)\"},{\"title\":\"03 مسودة مرجعية mrqf7qut\",\"label\":\"مسودة\",\"expectedClass\":\"text-sky-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-sky-500/10 text-sky-300 border-sky-400/15\",\"color\":\"lab(80.3307 -20.2945 -31.385)\",\"backgroundColor\":\"oklab(0.684991 -0.0912492 -0.142231 / 0.1)\",\"borderColor\":\"oklab(0.745991 -0.0970495 -0.127188 / 0.15)\"},{\"title\":\"04 مؤرشف مرجعي mrqf7qut\",\"label\":\"مؤرشف\",\"expectedClass\":\"text-white/45\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-white/8 text-white/45 border-white/10\",\"color\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.45)\",\"backgroundColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.08)\",\"borderColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.1)\"}]"
+      "detail": "[{\"title\":\"01 منشور مرجعي mrqq1dsr\",\"label\":\"منشور\",\"expectedClass\":\"text-emerald-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-400/15\",\"color\":\"lab(83.9203 -48.7124 13.8849)\",\"backgroundColor\":\"oklab(0.695996 -0.162107 0.0511875 / 0.1)\",\"borderColor\":\"oklab(0.764996 -0.16946 0.0511029 / 0.15)\"},{\"title\":\"02 مخفي مرجعي mrqq1dsr\",\"label\":\"مخفي\",\"expectedClass\":\"text-[#D8B87A]\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84215 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84215 35.9349 / 0.2)\"},{\"title\":\"03 مسودة مرجعية mrqq1dsr\",\"label\":\"مسودة\",\"expectedClass\":\"text-sky-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-sky-500/10 text-sky-300 border-sky-400/15\",\"color\":\"lab(80.3307 -20.2945 -31.385)\",\"backgroundColor\":\"oklab(0.684991 -0.0912492 -0.142231 / 0.1)\",\"borderColor\":\"oklab(0.745991 -0.0970495 -0.127188 / 0.15)\"},{\"title\":\"04 مؤرشف مرجعي mrqq1dsr\",\"label\":\"مؤرشف\",\"expectedClass\":\"text-white/45\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-white/8 text-white/45 border-white/10\",\"color\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.45)\",\"backgroundColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.08)\",\"borderColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.1)\"}]"
     },
     {
       "name": "Featured star starts outlined from row.is_featured",
@@ -53,7 +53,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrqf7qut&featured=yes&sort=title_asc",
+      "name": "Topics route responds for q=mrqq1dsr&featured=yes&sort=title_asc",
       "ok": true,
       "detail": "200"
     },
@@ -63,7 +63,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrqf7qut&sort=id_asc&limit=10&page=2",
+      "name": "Topics route responds for q=mrqq1dsr&sort=id_asc&limit=10&page=2",
       "ok": true,
       "detail": "200"
     },
@@ -73,7 +73,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrqf7qut&sort=id_asc&limit=10&page=1",
+      "name": "Topics route responds for q=mrqq1dsr&sort=id_asc&limit=10&page=1",
       "ok": true,
       "detail": "200"
     },
@@ -90,7 +90,7 @@
     {
       "name": "1440x900 default columns: columns portal does not alter page geometry",
       "ok": true,
-      "detail": "{\"before\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1463,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1463,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":859}},\"after\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1463,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1463,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":859}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":150.28125,\"bottom\":597.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
+      "detail": "{\"before\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1393,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1393,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":789}},\"after\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1393,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1393,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":80.28125,\"bottom\":527.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
       "name": "Columns menu uses shared thin scrollbar without filter height",
@@ -100,25 +100,25 @@
     {
       "name": "1280x800 medium viewport: columns portal does not alter page geometry",
       "ok": true,
-      "detail": "{\"before\":{\"documentScrollWidth\":1280,\"documentScrollHeight\":1490,\"documentClientWidth\":1280,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1490,\"viewportWidth\":1280,\"viewportHeight\":800,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":58.875,\"width\":920,\"height\":859}},\"after\":{\"documentScrollWidth\":1280,\"documentScrollHeight\":1490,\"documentClientWidth\":1280,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1490,\"viewportWidth\":1280,\"viewportHeight\":800,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":58.875,\"width\":920,\"height\":859}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":176.875,\"bottom\":623.671875,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
+      "detail": "{\"before\":{\"documentScrollWidth\":1280,\"documentScrollHeight\":1420,\"documentClientWidth\":1280,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1420,\"viewportWidth\":1280,\"viewportHeight\":800,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":58.875,\"width\":920,\"height\":789}},\"after\":{\"documentScrollWidth\":1280,\"documentScrollHeight\":1420,\"documentClientWidth\":1280,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1420,\"viewportWidth\":1280,\"viewportHeight\":800,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":58.875,\"width\":920,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":106.875,\"bottom\":553.671875,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
       "name": "970x1024 reference viewport: columns portal does not alter page geometry",
       "ok": true,
-      "detail": "{\"before\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1597,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1597,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":24,\"y\":166.28125,\"width\":922,\"height\":859}},\"after\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1597,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1597,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":24,\"y\":166.28125,\"width\":922,\"height\":859}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":24,\"right\":304,\"top\":284.28125,\"bottom\":731.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
+      "detail": "{\"before\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1527,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1527,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":24,\"y\":166.28125,\"width\":922,\"height\":789}},\"after\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1527,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1527,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":24,\"y\":166.28125,\"width\":922,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":24,\"right\":304,\"top\":214.28125,\"bottom\":661.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
-      "name": "Topics route responds for q=mrqf7qut&sort=category_asc&limit=10&page=2",
+      "name": "Topics route responds for q=mrqq1dsr&sort=category_asc&limit=10&page=2",
       "ok": true,
       "detail": "200"
     },
     {
       "name": "Hidden active sort resets once despite persistence failure",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/topics?q=mrqf7qut&page=2#content-topics-table"
+      "detail": "http://127.0.0.1:3000/admin/content/topics?q=mrqq1dsr&page=2#content-topics-table"
     },
     {
-      "name": "Topics route responds for q=mrqf7qut",
+      "name": "Topics route responds for q=mrqq1dsr",
       "ok": true,
       "detail": "200"
     },
@@ -218,14 +218,14 @@
       "detail": "200 http://127.0.0.1:3000/admin/content/topics/new"
     },
     {
-      "name": "Smoke /admin/content/topics/578",
+      "name": "Smoke /admin/content/topics/657",
       "ok": true,
-      "detail": "200 http://127.0.0.1:3000/admin/content/topics/578"
+      "detail": "200 http://127.0.0.1:3000/admin/content/topics/657"
     },
     {
-      "name": "Smoke /admin/content/topics/578/preview",
+      "name": "Smoke /admin/content/topics/657/preview",
       "ok": true,
-      "detail": "200 http://127.0.0.1:3000/admin/content/topics/578/preview"
+      "detail": "200 http://127.0.0.1:3000/admin/content/topics/657/preview"
     },
     {
       "name": "Console, hydration, RSC, chunk, and ARIA errors are zero",

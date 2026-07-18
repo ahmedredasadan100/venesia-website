@@ -1,30 +1,30 @@
 {
-  "generatedAt": "2026-07-18T13:54:40.889Z",
+  "generatedAt": "2026-07-18T18:49:24.438Z",
   "baseUrl": "http://127.0.0.1:3000",
   "fixture": {
-    "runId": "mrqffri8",
-    "search": "QA mrqffri8",
-    "rootCategoryId": 468,
+    "runId": "mrqpynaq",
+    "search": "QA mrqpynaq",
+    "rootCategoryId": 508,
     "childCategoryIds": [
-      469,
-      470
+      509,
+      510
     ],
     "categoryIds": [
-      468,
-      469,
-      470,
-      471,
-      472,
-      473,
-      474,
-      475,
-      476,
-      477,
-      478
+      508,
+      509,
+      510,
+      511,
+      512,
+      513,
+      514,
+      515,
+      516,
+      517,
+      518
     ],
     "seriesIds": [
-      99,
-      100
+      105,
+      106
     ]
   },
   "cleanupProof": {
@@ -51,12 +51,12 @@
     {
       "name": "QA session is bound to isolated admin",
       "ok": true,
-      "detail": "expected=101 actual=101"
+      "detail": "expected=125 actual=125"
     },
     {
       "name": "Server-rendered admin identity matches isolated admin",
       "ok": true,
-      "detail": "__QA_ENTITY_LIST_mrqffri8__"
+      "detail": "__QA_ENTITY_LIST_mrqpynaq__"
     },
     {
       "name": "Categories entity list present",
@@ -376,37 +376,37 @@
     {
       "name": "Categories limit resets page and preserves search",
       "ok": true,
-      "detail": "?q=QA+mrqffri8&limit=20"
+      "detail": "?q=QA+mrqpynaq&limit=20"
     },
     {
       "name": "Categories page-size 30 applies and preserves search",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqffri8&limit=30"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq&limit=30"
     },
     {
       "name": "Categories page-size 50 applies and preserves search",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqffri8&limit=50"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq&limit=50"
     },
     {
       "name": "Categories page-size 10 applies and preserves search",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqffri8"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq"
     },
     {
       "name": "Categories search resets page to 1",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqffri8+Row"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq+Row"
     },
     {
       "name": "Categories status filter resets page to 1",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqffri8&status=hidden"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq&status=hidden"
     },
     {
       "name": "Categories sort preserves filter and limit URL state",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA%20mrqffri8&status=hidden&limit=20"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA%20mrqpynaq&status=hidden&limit=20"
     },
     {
       "name": "Opening columns closes filter",
@@ -431,12 +431,12 @@
     {
       "name": "Series category filter contains parent exactly once",
       "ok": true,
-      "detail": "[\"كل التصنيفات\",\"موضوعات تهمك\",\"— اعرف السوق\",\"— بيت الوطن\",\"المركز الإعلامي\",\"— الأخبار\",\"— من أرض التنفيذ\",\"— الفيديوهات\",\"— البيانات الصحفية\",\"— معرض الصور\",\"اختبار Feed Widget\",\"QA mrqffri8 Parent\",\"— QA mrqffri8 Child 1\",\"— QA mrqffri8 Child 2\",\"QA mrqffri8 Row 4\",\"QA mrqffri8 Row 5\",\"QA mrqffri8 Row 6\",\"QA mrqffri8 Row 7\",\"QA mrqffri8 Row 8\",\"QA mrqffri8 Row 9\",\"QA mrqffri8 Row 10\",\"QA mrqffri8 Row 11\"]"
+      "detail": "[\"كل التصنيفات\",\"موضوعات تهمك\",\"— اعرف السوق\",\"— بيت الوطن\",\"المركز الإعلامي\",\"— الأخبار\",\"— من أرض التنفيذ\",\"— الفيديوهات\",\"— البيانات الصحفية\",\"— معرض الصور\",\"اختبار Feed Widget\",\"QA mrqpynaq Parent\",\"— QA mrqpynaq Child 1\",\"— QA mrqpynaq Child 2\",\"QA mrqpynaq Row 4\",\"QA mrqpynaq Row 5\",\"QA mrqpynaq Row 6\",\"QA mrqpynaq Row 7\",\"QA mrqpynaq Row 8\",\"QA mrqpynaq Row 9\",\"QA mrqpynaq Row 10\",\"QA mrqpynaq Row 11\"]"
     },
     {
       "name": "Series category filter contains hierarchical children once",
       "ok": true,
-      "detail": "[\"كل التصنيفات\",\"موضوعات تهمك\",\"— اعرف السوق\",\"— بيت الوطن\",\"المركز الإعلامي\",\"— الأخبار\",\"— من أرض التنفيذ\",\"— الفيديوهات\",\"— البيانات الصحفية\",\"— معرض الصور\",\"اختبار Feed Widget\",\"QA mrqffri8 Parent\",\"— QA mrqffri8 Child 1\",\"— QA mrqffri8 Child 2\",\"QA mrqffri8 Row 4\",\"QA mrqffri8 Row 5\",\"QA mrqffri8 Row 6\",\"QA mrqffri8 Row 7\",\"QA mrqffri8 Row 8\",\"QA mrqffri8 Row 9\",\"QA mrqffri8 Row 10\",\"QA mrqffri8 Row 11\"]"
+      "detail": "[\"كل التصنيفات\",\"موضوعات تهمك\",\"— اعرف السوق\",\"— بيت الوطن\",\"المركز الإعلامي\",\"— الأخبار\",\"— من أرض التنفيذ\",\"— الفيديوهات\",\"— البيانات الصحفية\",\"— معرض الصور\",\"اختبار Feed Widget\",\"QA mrqpynaq Parent\",\"— QA mrqpynaq Child 1\",\"— QA mrqpynaq Child 2\",\"QA mrqpynaq Row 4\",\"QA mrqpynaq Row 5\",\"QA mrqpynaq Row 6\",\"QA mrqpynaq Row 7\",\"QA mrqpynaq Row 8\",\"QA mrqpynaq Row 9\",\"QA mrqpynaq Row 10\",\"QA mrqpynaq Row 11\"]"
     },
     {
       "name": "Series parent category includes directly assigned descendant series",
@@ -446,7 +446,7 @@
     {
       "name": "Series parent result includes both child series",
       "ok": true,
-      "detail": "▥الأعمدةالسلسلة↑الموضوعات↕الحالة↕الإجراءاتQA mrqffri8 Series Child 10منشورQA mrqffri8 Series Child 20مخفي"
+      "detail": "▥الأعمدةالسلسلة↑الموضوعات↕الحالة↕الإجراءاتQA mrqpynaq Series Child 10منشورQA mrqpynaq Series Child 20مخفي"
     },
     {
       "name": "Series clear filters appears with search and category filters",
@@ -457,6 +457,36 @@
       "name": "Series clear filters resets search, category, and page",
       "ok": true,
       "detail": "http://127.0.0.1:3000/admin/content/series"
+    },
+    {
+      "name": "Series category trigger updates immediately after user selection",
+      "ok": true,
+      "detail": "QA mrqpynaq Parent"
+    },
+    {
+      "name": "Series category listbox closes on selection",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Series category trigger never reverts during pending navigation",
+      "ok": true,
+      "detail": "{\"committed\":true,\"samples\":9,\"tail\":[\"QA mrqpynaq Parent\",\"QA mrqpynaq Parent\",\"QA mrqpynaq Parent\"]}"
+    },
+    {
+      "name": "Series category selection preserves q and limit while resetting page",
+      "ok": true,
+      "detail": "http://127.0.0.1:3000/admin/content/series?q=QA+mrqpynaq&limit=20&category=508"
+    },
+    {
+      "name": "Series category selection shows matching descendant series",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "name": "Series client sort direction survives category navigation",
+      "ok": true,
+      "detail": "{\"before\":\"السلسلة↓الموضوعات↕الحالة↕الإجراءات\",\"after\":\"السلسلة↓الموضوعات↕الحالة↕الإجراءات\"}"
     },
     {
       "name": "Series filtered-empty copy is mandatory",
@@ -611,7 +641,7 @@
     {
       "name": "Series preview links to topics?series= in a new tab",
       "ok": true,
-      "detail": "/admin/content/topics?series=99 target=_blank"
+      "detail": "/admin/content/topics?series=105 target=_blank"
     },
     {
       "name": "Series pagination summary present",
@@ -674,6 +704,46 @@
       "detail": ""
     },
     {
+      "name": "Critical notice renders via role=alert",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Critical notice uses the stacked non-dismissible layout",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Critical notice exposes no close control",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Critical notice persists beyond the transient auto-dismiss window",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics feedback slot exists inside the entity list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics redirect notice renders inside the shared slot",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics redirect notice appears exactly once on the page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics feedback slot sits after filters and before toolbar/table",
+      "ok": true,
+      "detail": "{\"afterFilters\":true,\"beforeToolbar\":true,\"beforeTable\":true}"
+    },
+    {
       "name": "Topics entity list present",
       "ok": true,
       "detail": ""
@@ -714,6 +784,46 @@
       "detail": "http://127.0.0.1:3000/admin/content/topics?sort=title_asc&limit=20#content-topics-table"
     },
     {
+      "name": "Topics QA column preference seed succeeds",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics seeded ID column renders before clearing",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics clear filters appears when series parameter is active",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics clear removes q/status/category/series/page and keeps sort/limit",
+      "ok": true,
+      "detail": "http://127.0.0.1:3000/admin/content/topics?sort=title_desc&limit=20#content-topics-table"
+    },
+    {
+      "name": "Topics series-param clear avoids a full reload",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics URL remains stable after series-param clear",
+      "ok": true,
+      "detail": "http://127.0.0.1:3000/admin/content/topics?sort=title_desc&limit=20#content-topics-table"
+    },
+    {
+      "name": "Topics ID column survives clear filters (column prefs untouched)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Topics saved column preferences remain intact after clear",
+      "ok": true,
+      "detail": "{\"visibleColumns\":[\"category\",\"id\",\"status\"]}"
+    },
+    {
       "name": "Topics opening columns closes filter",
       "ok": true,
       "detail": ""
@@ -750,7 +860,11 @@
     "series-filtered-empty-1440.png",
     "series-bulk-listbox-bottom-1440.png",
     "series-bulk-listbox-top-1440.png",
+    "series-optimistic-category-1440.png",
     "feedback-dismissible-1440.png",
+    "critical-persistent-notice-1440.png",
+    "topics-feedback-slot-1440.png",
+    "topics-series-clear-1440.png",
     "visibility-open-eye-1440.png",
     "visibility-eye-off-1440.png"
   ]

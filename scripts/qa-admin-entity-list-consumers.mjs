@@ -928,6 +928,93 @@ async function main() {
       page.url(),
     );
 
+    // ── Series category optimistic trigger (user-level) ─────────
+    await page.goto(
+      `${baseUrl}/admin/content/series?q=${encodeURIComponent(fixtureSearch)}&limit=20`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await page.waitForTimeout(400);
+    const seriesSortHeaderButton = page
+      .locator("#content-series-table thead")
+      .getByRole("button")
+      .first();
+    await seriesSortHeaderButton.click();
+    await page.waitForTimeout(200);
+    const seriesTheadBefore =
+      (await page.locator("#content-series-table thead").textContent())?.trim() ?? "";
+    const seriesCategoryTrigger = page.locator("#series-category-filter-trigger");
+    await seriesCategoryTrigger.click();
+    await page.waitForTimeout(120);
+    await page
+      .locator('[data-admin-filter-listbox] [role="option"]', {
+        hasText: `${fixtureSearch} Parent`,
+      })
+      .first()
+      .click();
+    const seriesImmediateCategoryLabel = await seriesCategoryTrigger.textContent();
+    check(
+      "Series category trigger updates immediately after user selection",
+      seriesImmediateCategoryLabel?.includes(`${fixtureSearch} Parent`),
+      seriesImmediateCategoryLabel ?? "",
+    );
+    check(
+      "Series category listbox closes on selection",
+      (await page.locator("[data-admin-filter-listbox]").count()) === 0,
+    );
+    const seriesTriggerSamples = [seriesImmediateCategoryLabel ?? ""];
+    const seriesCommitDeadline = Date.now() + 10_000;
+    let seriesCategoryCommitted = false;
+    while (Date.now() < seriesCommitDeadline) {
+      seriesTriggerSamples.push((await seriesCategoryTrigger.textContent()) ?? "");
+      if (
+        new URL(page.url()).searchParams.get("category") === String(rootCategoryId)
+      ) {
+        seriesCategoryCommitted = true;
+        break;
+      }
+      await page.waitForTimeout(50);
+    }
+    await page.waitForTimeout(400);
+    seriesTriggerSamples.push((await seriesCategoryTrigger.textContent()) ?? "");
+    check(
+      "Series category trigger never reverts during pending navigation",
+      seriesCategoryCommitted &&
+        seriesTriggerSamples.every((text) =>
+          text.includes(`${fixtureSearch} Parent`),
+        ),
+      JSON.stringify({
+        committed: seriesCategoryCommitted,
+        samples: seriesTriggerSamples.length,
+        tail: seriesTriggerSamples.slice(-3),
+      }),
+    );
+    const seriesOptimisticUrl = new URL(page.url());
+    check(
+      "Series category selection preserves q and limit while resetting page",
+      seriesOptimisticUrl.searchParams.get("category") === String(rootCategoryId) &&
+        seriesOptimisticUrl.searchParams.get("q") === fixtureSearch &&
+        seriesOptimisticUrl.searchParams.get("limit") === "20" &&
+        !seriesOptimisticUrl.searchParams.has("page"),
+      page.url(),
+    );
+    const seriesOptimisticRows = await page.locator("[data-entity-row-id]").count();
+    check(
+      "Series category selection shows matching descendant series",
+      seriesOptimisticRows === 2,
+      String(seriesOptimisticRows),
+    );
+    const seriesTheadAfter =
+      (await page.locator("#content-series-table thead").textContent())?.trim() ?? "";
+    check(
+      "Series client sort direction survives category navigation",
+      seriesTheadAfter === seriesTheadBefore,
+      JSON.stringify({ before: seriesTheadBefore, after: seriesTheadAfter }),
+    );
+    await page.screenshot({
+      path: resolve(OUT, "series-optimistic-category-1440.png"),
+      fullPage: true,
+    });
+
     await page.goto(
       `${baseUrl}/admin/content/series?q=${encodeURIComponent(`${fixtureSearch} missing`)}&category=${rootCategoryId}`,
       { waitUntil: "domcontentloaded" },
@@ -1275,6 +1362,102 @@ async function main() {
     );
     await page.getByRole("button", { name: "إغلاق الإشعار" }).click();
 
+    // ── Critical/system persistent feedback (non-dismissible path) ──
+    // Uses the production create-category failure redirect, which renders
+    // AdminNotice with the same policy contract as critical_system:
+    // stacked layout, dismissible=false, persistent lifecycle, no autoDismissMs.
+    const criticalMessage = `QA critical persistence ${runId}`;
+    await page.goto(
+      `${baseUrl}/admin/content/categories/new?error=${encodeURIComponent(criticalMessage)}`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await page.waitForTimeout(300);
+    const criticalNotice = page.locator('[role="alert"]', {
+      hasText: criticalMessage,
+    });
+    check(
+      "Critical notice renders via role=alert",
+      (await criticalNotice.count()) === 1,
+    );
+    check(
+      "Critical notice uses the stacked non-dismissible layout",
+      (await criticalNotice.getAttribute("data-admin-notice-layout")) === "stacked",
+    );
+    check(
+      "Critical notice exposes no close control",
+      (await page.getByRole("button", { name: "إغلاق الإشعار" }).count()) === 0,
+    );
+    await page.waitForTimeout(6_500);
+    check(
+      "Critical notice persists beyond the transient auto-dismiss window",
+      (await criticalNotice.count()) === 1 && (await criticalNotice.isVisible()),
+    );
+    await page.screenshot({
+      path: resolve(OUT, "critical-persistent-notice-1440.png"),
+      fullPage: true,
+    });
+
+    // ── Topics direct feedback slot proof ───────────────────────
+    await page.goto(`${baseUrl}/admin/content/topics?notice=published`, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await page.waitForTimeout(300);
+    const topicsNoticeMessage = "تم نشر المحتوى بنجاح.";
+    const topicsFeedbackSlot = page.locator(
+      "[data-admin-entity-list] [data-admin-entity-feedback-slot]",
+    );
+    await topicsFeedbackSlot
+      .first()
+      .waitFor({ state: "visible", timeout: 15_000 })
+      .catch(() => null);
+    check(
+      "Topics feedback slot exists inside the entity list",
+      (await topicsFeedbackSlot.count()) === 1,
+    );
+    check(
+      "Topics redirect notice renders inside the shared slot",
+      (await topicsFeedbackSlot.getByText(topicsNoticeMessage).count()) === 1,
+    );
+    check(
+      "Topics redirect notice appears exactly once on the page",
+      (await page.getByText(topicsNoticeMessage).count()) === 1,
+    );
+    const topicsSlotPosition = await page.evaluate(() => {
+      const slot = document.querySelector(
+        "[data-admin-entity-list] [data-admin-entity-feedback-slot]",
+      );
+      const searchInput = document.querySelector(
+        'input[placeholder="ابحث في الموضوعات"]',
+      );
+      const table = document.querySelector("#content-topics-table table");
+      const columnsButton = Array.from(
+        document.querySelectorAll("#content-topics-table button"),
+      ).find((button) => button.textContent?.includes("الأعمدة"));
+      if (!slot || !searchInput || !table || !columnsButton) return null;
+      const follows = (first, second) =>
+        Boolean(
+          first.compareDocumentPosition(second) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+      return {
+        afterFilters: follows(searchInput, slot),
+        beforeToolbar: follows(slot, columnsButton),
+        beforeTable: follows(slot, table),
+      };
+    });
+    check(
+      "Topics feedback slot sits after filters and before toolbar/table",
+      topicsSlotPosition?.afterFilters === true &&
+        topicsSlotPosition?.beforeToolbar === true &&
+        topicsSlotPosition?.beforeTable === true,
+      JSON.stringify(topicsSlotPosition),
+    );
+    await page.screenshot({
+      path: resolve(OUT, "topics-feedback-slot-1440.png"),
+      fullPage: true,
+    });
+
     // ── Topics surface + shared dropdown exclusivity ────────────
     await page.goto(`${baseUrl}/admin/content/topics`, {
       waitUntil: "domcontentloaded",
@@ -1351,6 +1534,106 @@ async function main() {
       page.url(),
     );
 
+    // ── Topics clear with series parameter + preserved preferences ──
+    const topicsSeededColumns = ["category", "id", "status"];
+    const { error: topicsPrefsSeedError } = await supabase
+      .from("admin_user_preferences")
+      .upsert(
+        {
+          admin_user_id: adminId,
+          view_key: "content-topics",
+          preferences: { visibleColumns: topicsSeededColumns },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "admin_user_id,view_key" },
+      );
+    check(
+      "Topics QA column preference seed succeeds",
+      !topicsPrefsSeedError,
+      topicsPrefsSeedError?.message ?? "",
+    );
+    const topicsSeriesUrl =
+      `${baseUrl}/admin/content/topics?q=${encodeURIComponent(fixtureSearch)}` +
+      `&status=published&category=${rootCategoryId}&series=${seriesIds[0]}` +
+      `&page=2&sort=title_desc&limit=20`;
+    await page.goto(topicsSeriesUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await page.waitForTimeout(400);
+    const topicsIdHeader = page
+      .locator("#content-topics-table thead th")
+      .filter({ hasText: /^ID/ });
+    await topicsIdHeader
+      .first()
+      .waitFor({ state: "visible", timeout: 15_000 })
+      .catch(() => null);
+    check(
+      "Topics seeded ID column renders before clearing",
+      (await topicsIdHeader.count()) === 1,
+    );
+    const topicsSeriesClear = page.locator("[data-admin-clear-filters]");
+    check(
+      "Topics clear filters appears when series parameter is active",
+      (await topicsSeriesClear.count()) === 1,
+    );
+    const topicsSeriesClearTimeOrigin = await page.evaluate(
+      () => performance.timeOrigin,
+    );
+    await topicsSeriesClear.click();
+    const topicsSeriesClearCommitted = await page.waitForFunction(
+      () => {
+        const params = new URL(window.location.href).searchParams;
+        return (
+          !params.has("q") &&
+          !params.has("status") &&
+          !params.has("category") &&
+          !params.has("series") &&
+          !params.has("page") &&
+          params.get("sort") === "title_desc" &&
+          params.get("limit") === "20"
+        );
+      },
+      { timeout: 10_000 },
+    ).then(() => true).catch(() => false);
+    check(
+      "Topics clear removes q/status/category/series/page and keeps sort/limit",
+      topicsSeriesClearCommitted,
+      page.url(),
+    );
+    check(
+      "Topics series-param clear avoids a full reload",
+      (await page.evaluate(() => performance.timeOrigin)) ===
+        topicsSeriesClearTimeOrigin,
+    );
+    const topicsUrlAfterSeriesClear = page.url();
+    await page.waitForTimeout(700);
+    check(
+      "Topics URL remains stable after series-param clear",
+      page.url() === topicsUrlAfterSeriesClear,
+      page.url(),
+    );
+    check(
+      "Topics ID column survives clear filters (column prefs untouched)",
+      (await topicsIdHeader.count()) === 1,
+    );
+    const { data: topicsPrefsAfterClear } = await supabase
+      .from("admin_user_preferences")
+      .select("preferences")
+      .eq("admin_user_id", adminId)
+      .eq("view_key", "content-topics")
+      .maybeSingle();
+    check(
+      "Topics saved column preferences remain intact after clear",
+      JSON.stringify(topicsPrefsAfterClear?.preferences?.visibleColumns) ===
+        JSON.stringify(topicsSeededColumns),
+      JSON.stringify(topicsPrefsAfterClear?.preferences ?? null),
+    );
+    await page.screenshot({
+      path: resolve(OUT, "topics-series-clear-1440.png"),
+      fullPage: true,
+    });
+
     await topicsStatus.click();
     await page.waitForTimeout(100);
     await page.getByRole("button", { name: /^الأعمدة$/ }).click();
@@ -1417,7 +1700,11 @@ async function main() {
       "series-filtered-empty-1440.png",
       "series-bulk-listbox-bottom-1440.png",
       "series-bulk-listbox-top-1440.png",
+      "series-optimistic-category-1440.png",
       "feedback-dismissible-1440.png",
+      "critical-persistent-notice-1440.png",
+      "topics-feedback-slot-1440.png",
+      "topics-series-clear-1440.png",
       "visibility-open-eye-1440.png",
       "visibility-eye-off-1440.png",
     ],

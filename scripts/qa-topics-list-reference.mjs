@@ -324,8 +324,15 @@ async function smoke(page, path, expectedText) {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
+  // force-dynamic pages stream their RSC payload after domcontentloaded,
+  // so wait for the expected text instead of sampling innerText once.
   const textFound = expectedText
-    ? (await page.locator("body").innerText()).includes(expectedText)
+    ? await page
+        .getByText(expectedText)
+        .first()
+        .waitFor({ state: "visible", timeout: 15_000 })
+        .then(() => true)
+        .catch(() => false)
     : true;
   check(
     `Smoke ${path}`,

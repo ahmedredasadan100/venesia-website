@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
 import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
@@ -62,7 +62,13 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   }
 
   const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
+  // Manual pending counter instead of useTransition: persist success triggers
+  // onPersisted (router.refresh). React entangles concurrently pending
+  // transitions, so if that refresh transition is superseded/aborted (e.g. by
+  // router prefetch churn) and never commits, a useTransition-based isPending
+  // would stay true forever and strand the trigger spinner.
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const isPending = pendingSaves > 0;
   const saveQueueRef = useRef<Promise<PersistResult>>(Promise.resolve({ ok: true }));
   const latestColumnsRef = useRef<Key[]>([...visibleColumns]);
   const isMounted = useClientMounted();
@@ -139,8 +145,9 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
       ? invokePersist()
       : saveQueueRef.current.then(invokePersist);
     saveQueueRef.current = resultPromise;
-    startTransition(async () => {
-      const result = await resultPromise;
+    setPendingSaves((count) => count + 1);
+    void resultPromise.then((result) => {
+      setPendingSaves((count) => count - 1);
       if (!result.ok) {
         setError(result.message || "تعذر حفظ تفضيلات الأعمدة.");
       } else if (
