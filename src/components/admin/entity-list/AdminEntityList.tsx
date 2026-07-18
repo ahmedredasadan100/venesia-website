@@ -124,10 +124,28 @@ function AdminEntityListInner<
   );
   const [bulkAction, setBulkAction] = useState(bulkOptions[0]?.value ?? "");
   const [bulkPending, setBulkPending] = useState(false);
-  const [feedback, setFeedback] = useState<AdminActionFeedback | null>(
-    initialFeedback,
-  );
-  const [feedbackRevision, setFeedbackRevision] = useState(0);
+  const initialFeedbackSignature = initialFeedback
+    ? `${initialFeedback.variant}|${initialFeedback.title}|${initialFeedback.message}`
+    : null;
+  const [feedbackState, setFeedbackState] = useState(() => ({
+    sourceSignature: initialFeedbackSignature,
+    feedback: initialFeedback,
+    revision: 0,
+  }));
+
+  if (feedbackState.sourceSignature !== initialFeedbackSignature) {
+    setFeedbackState({
+      sourceSignature: initialFeedbackSignature,
+      feedback: initialFeedback,
+      revision: feedbackState.revision + 1,
+    });
+  }
+
+  const feedback =
+    feedbackState.sourceSignature === initialFeedbackSignature
+      ? feedbackState.feedback
+      : initialFeedback;
+  const feedbackRevision = feedbackState.revision;
 
   const visibleColumnDefs = columns.filter((column) =>
     visibleColumns.includes(column.key),
@@ -138,8 +156,11 @@ function AdminEntityListInner<
   }, [sort?.key, sort?.direction]);
 
   function showFeedback(result: AdminActionResult) {
-    setFeedback(mapResultToFeedback(result));
-    setFeedbackRevision((current) => current + 1);
+    setFeedbackState((current) => ({
+      sourceSignature: initialFeedbackSignature,
+      feedback: mapResultToFeedback(result),
+      revision: current.revision + 1,
+    }));
   }
 
   function handleMutationResult(result: AdminActionResult) {
@@ -191,6 +212,23 @@ function AdminEntityListInner<
 
   return (
     <section id={listId} className="scroll-mt-6 space-y-3" data-admin-entity-list="">
+      {feedback ? (
+        <div data-admin-entity-feedback-slot="">
+          <AdminNotice
+            key={feedbackRevision}
+            variant={feedback.variant}
+            layout={feedback.layout}
+            dismissible={feedback.dismissible}
+            lifecycle={feedback.lifecycle}
+            autoDismissMs={feedback.autoDismissMs}
+            dismissSearchParams={feedback.dismissSearchParams}
+            title={feedback.title}
+            message={feedback.message}
+            action={feedback.action}
+          />
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">{toolbarStart}</div>
         {enableColumnManagement && onPersistColumns ? (
@@ -206,19 +244,6 @@ function AdminEntityListInner<
           />
         ) : null}
       </div>
-
-      {feedback ? (
-        <AdminNotice
-          key={feedbackRevision}
-          variant={feedback.variant}
-          layout={feedback.layout}
-          dismissible={feedback.dismissible}
-          dismissSearchParams={feedback.dismissSearchParams}
-          title={feedback.title}
-          message={feedback.message}
-          action={feedback.action}
-        />
-      ) : null}
 
       {enableSelection && bulkOptions.length && onBulkExecute ? (
         <AdminBulkActionBar

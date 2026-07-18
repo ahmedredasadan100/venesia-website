@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type {
   AdminActionFeedbackAction,
+  AdminFeedbackLifecycle,
   AdminFeedbackLayout,
   AdminFeedbackVariant,
 } from "../../lib/admin/admin-action-feedback";
@@ -15,6 +16,8 @@ export type AdminNoticeProps = {
   variant?: AdminNoticeVariant;
   layout?: AdminNoticeLayout;
   dismissible?: boolean;
+  lifecycle?: AdminFeedbackLifecycle;
+  autoDismissMs?: number;
   dismissSearchParams?: readonly string[];
   action?: AdminActionFeedbackAction;
 };
@@ -39,6 +42,8 @@ export default function AdminNotice({
   variant = "info",
   layout = "stacked",
   dismissible = false,
+  lifecycle = "persistent",
+  autoDismissMs,
   dismissSearchParams,
   action,
 }: AdminNoticeProps) {
@@ -100,6 +105,8 @@ export default function AdminNotice({
         layout={layout}
         className={className}
         dismissSearchParams={dismissSearchParams}
+        lifecycle={lifecycle}
+        autoDismissMs={autoDismissMs}
       >
         {content}
       </AdminNoticeDismissibleFrame>

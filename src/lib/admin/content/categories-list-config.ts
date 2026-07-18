@@ -22,7 +22,7 @@ export const CATEGORIES_NOTICE_CODE_MAP = {
   created: { message: "تم إنشاء التصنيف بنجاح." },
   updated: { message: "تم تحديث التصنيف بنجاح." },
   deleted: { message: "تم حذف التصنيف بنجاح." },
-  shown: { message: "تم إظهار التصنيف بنجاح." },
+  shown: { message: "تم نشر التصنيف بنجاح." },
   hidden: { message: "تم إخفاء التصنيف بنجاح." },
   error: {
     message: "تعذر تنفيذ العملية.",

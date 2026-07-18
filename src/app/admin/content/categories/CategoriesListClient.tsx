@@ -9,6 +9,7 @@ import {
 } from "../../../../components/admin/entity-list";
 import { AdminTablePagination } from "../../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
+import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
 import {
   CATEGORIES_DEFAULT_COLUMN_KEYS,
 } from "../../../../lib/admin/content/categories-list-config";
@@ -48,10 +49,12 @@ export default function CategoriesListClient({
   rows,
   parentOptions,
   initialVisibleColumns,
+  initialFeedback,
 }: {
   rows: CategoryListRow[];
   parentOptions: Array<{ id: number; name: string; level: number }>;
   initialVisibleColumns?: string[];
+  initialFeedback?: AdminActionFeedback | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -258,6 +261,7 @@ export default function CategoriesListClient({
         }}
         getRowDepth={(row) => row.depth}
         rowClassName={(row) => (row.depth === 0 ? "bg-white/[0.015]" : "")}
+        initialFeedback={initialFeedback}
       />
 
       <AdminTablePagination

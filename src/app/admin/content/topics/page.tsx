@@ -146,16 +146,6 @@ export default async function UnifiedContentTopicsPage({
         }
       />
 
-      {noticeFeedback ? (
-        <AdminNotice
-          variant={noticeFeedback.variant}
-          title={noticeFeedback.title || undefined}
-          message={noticeFeedback.message}
-          layout={noticeFeedback.layout}
-          dismissible={noticeFeedback.dismissible}
-          dismissSearchParams={noticeFeedback.dismissSearchParams}
-        />
-      ) : null}
       {loadError ? (
         <AdminNotice
           variant="danger"
@@ -197,6 +187,7 @@ export default async function UnifiedContentTopicsPage({
             currentListPath={currentListPath}
             sort={filters.sort}
             initialVisibleColumns={visibleColumns}
+            initialFeedback={noticeFeedback}
           />
 
           <AdminTablePagination

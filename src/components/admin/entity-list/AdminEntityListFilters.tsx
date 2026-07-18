@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
 import {
@@ -24,6 +31,10 @@ export type AdminEntityListFiltersProps = {
   hash?: string;
   /** Preserve these params when navigating (e.g. sort). */
   preserveParams?: readonly string[];
+  /** Query keys reset by the shared clear-filters control. */
+  clearableFilterKeys?: readonly string[];
+  /** Lets a custom search consumer reset its own transient UI. */
+  onClearFilters?: () => void;
   trailing?: ReactNode;
   searchSlot?: ReactNode;
   className?: string;
@@ -45,6 +56,8 @@ export default function AdminEntityListFilters({
   values,
   hash,
   preserveParams = [],
+  clearableFilterKeys,
+  onClearFilters,
   trailing,
   searchSlot,
   className = "",
@@ -63,22 +76,69 @@ export default function AdminEntityListFilters({
   const ownsSearch = !searchSlot;
   const [draftSearch, setDraftSearch] = useState(search.value);
   const [lastExternalSearch, setLastExternalSearch] = useState(search.value);
+  const [pendingFilterValues, setPendingFilterValues] = useState<
+    Record<string, { value: string; baseValue: string }>
+  >({});
+  const searchNavigationRevisionRef = useRef(0);
+  const [, startTransition] = useTransition();
 
   if (ownsSearch && search.value !== lastExternalSearch) {
     setLastExternalSearch(search.value);
     setDraftSearch(search.value);
   }
 
+  const effectiveValues = { ...values };
+  filters.forEach((filter) => {
+    const pending = pendingFilterValues[filter.paramKey];
+    const allValue = filter.allValue ?? "all";
+    const externalValue = values[filter.paramKey] ?? allValue;
+    if (pending && pending.baseValue === externalValue) {
+      effectiveValues[filter.paramKey] = pending.value;
+    }
+  });
+  const registeredClearableKeys = [
+    searchParamKey,
+    ...(clearableFilterKeys ?? filters.map((filter) => filter.paramKey)),
+  ];
+
   function navigate(patch: Record<string, string | null>) {
     const current = new URLSearchParams(searchParams.toString());
+    filters.forEach((filter) => {
+      const allValue = filter.allValue ?? "all";
+      const value = effectiveValues[filter.paramKey] ?? allValue;
+      if (value === allValue) current.delete(filter.paramKey);
+      else current.set(filter.paramKey, value);
+    });
     preserveParams.forEach((key) => {
       if (!(key in patch) && current.has(key)) {
         patch[key] = current.get(key);
       }
     });
     const href = buildAdminEntityListHref(basePath, current, patch, hash);
-    router.push(href, { scroll: false });
+    startTransition(() => router.push(href, { scroll: false }));
     setOpenLayerId(null);
+  }
+
+  function clearFilters() {
+    const patch: Record<string, string | null> = {};
+    const nextPending: Record<string, { value: string; baseValue: string }> = {};
+    filters.forEach((filter) => {
+      if (!registeredClearableKeys.includes(filter.paramKey)) return;
+      const allValue = filter.allValue ?? "all";
+      nextPending[filter.paramKey] = {
+        value: allValue,
+        baseValue: values[filter.paramKey] ?? allValue,
+      };
+      patch[filter.paramKey] = null;
+    });
+    registeredClearableKeys.forEach((key) => {
+      patch[key] = null;
+    });
+    setPendingFilterValues((current) => ({ ...current, ...nextPending }));
+    searchNavigationRevisionRef.current += 1;
+    if (ownsSearch) setDraftSearch("");
+    onClearFilters?.();
+    navigate(patch);
   }
 
   useEffect(() => {
@@ -89,8 +149,14 @@ export default function AdminEntityListFilters({
     if (trimmed.length > 0 && trimmed.length < minLength) return;
 
     const controller = new AbortController();
+    const revision = searchNavigationRevisionRef.current;
     const timer = window.setTimeout(() => {
-      if (controller.signal.aborted) return;
+      if (
+        controller.signal.aborted ||
+        revision !== searchNavigationRevisionRef.current
+      ) {
+        return;
+      }
       navigate({
         [searchParamKey]:
           trimmed.length === 0 || trimmed.length < minLength ? null : trimmed,
@@ -109,7 +175,7 @@ export default function AdminEntityListFilters({
     () =>
       filters.map((filter) => {
         const allValue = filter.allValue ?? "all";
-        const value = values[filter.paramKey] ?? allValue;
+        const value = effectiveValues[filter.paramKey] ?? allValue;
         const displayFromOptions =
           filter.options?.find((option) => option.value === value)?.label ??
           filter.groups
@@ -140,6 +206,14 @@ export default function AdminEntityListFilters({
               setOpenLayerId(openLayerId === layerId ? null : layerId)
             }
             onSelect={(next) => {
+              setPendingFilterValues((current) => ({
+                ...current,
+                [filter.paramKey]: {
+                  value: next,
+                  baseValue:
+                    values[filter.paramKey] ?? filter.allValue ?? "all",
+                },
+              }));
               navigate({
                 [filter.paramKey]: next === allValue ? null : next,
               });
@@ -151,10 +225,17 @@ export default function AdminEntityListFilters({
           />
         );
       }),
-    // values + openLayer drive display; navigate closes via setOpenLayerId
+    // Pending values keep the trigger stable until the URL catches up.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filters, values, openLayerId, mounted],
+    [filters, effectiveValues, openLayerId, mounted],
   );
+
+  const hasActiveFilters =
+    (ownsSearch ? draftSearch : search.value).trim().length > 0 ||
+    filters.some((filter) => {
+      const allValue = filter.allValue ?? "all";
+      return (effectiveValues[filter.paramKey] ?? allValue) !== allValue;
+    });
 
   return (
     <AdminFiltersShell className={className} rowClassName={rowClassName}>
@@ -181,6 +262,17 @@ export default function AdminEntityListFilters({
         />
       )}
       {filterNodes}
+      {hasActiveFilters ? (
+        <button
+          type="button"
+          data-admin-clear-filters=""
+          aria-label="مسح الفلاتر"
+          onClick={clearFilters}
+          className="h-10 cursor-pointer rounded-[10px] border border-white/10 px-4 text-sm font-semibold text-white/65 transition hover:border-[#D8B87A]/35 hover:bg-[#D8B87A]/10 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+        >
+          مسح الفلاتر
+        </button>
+      ) : null}
       {trailing}
     </AdminFiltersShell>
   );

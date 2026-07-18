@@ -208,16 +208,6 @@ export default async function TopicCategoriesPage({
         }
       />
 
-      {noticeFeedback ? (
-        <AdminNotice
-          variant={noticeFeedback.variant}
-          title={noticeFeedback.title || undefined}
-          message={noticeFeedback.message}
-          layout={noticeFeedback.layout}
-          dismissible={noticeFeedback.dismissible}
-          dismissSearchParams={noticeFeedback.dismissSearchParams}
-        />
-      ) : null}
       {preferenceError ? (
         <AdminNotice
           variant="danger"
@@ -230,6 +220,7 @@ export default async function TopicCategoriesPage({
         rows={rows}
         parentOptions={parentOptions}
         initialVisibleColumns={visibleColumns}
+        initialFeedback={noticeFeedback}
       />
     </main>
   );

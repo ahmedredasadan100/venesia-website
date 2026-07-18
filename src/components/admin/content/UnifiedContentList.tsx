@@ -11,6 +11,7 @@ import {
   type AdminContentCategoryNode,
 } from "../../../lib/admin/content/category-hierarchy";
 import { mapTopicsActionResultToFeedback } from "../../../lib/admin/content/topics-action-feedback";
+import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type {
   ContentSortValue,
   UnifiedContentRow,
@@ -71,12 +72,14 @@ export default function UnifiedContentList({
   currentListPath,
   sort,
   initialVisibleColumns,
+  initialFeedback,
 }: {
   rows: UnifiedContentRow[];
   categories: AdminContentCategoryNode[];
   currentListPath: string;
   sort: ContentSortValue;
   initialVisibleColumns: string[];
+  initialFeedback?: AdminActionFeedback | null;
 }) {
   const router = useRouter();
   const [bulkCategoryId, setBulkCategoryId] = useState("");
@@ -139,6 +142,7 @@ export default function UnifiedContentList({
         ids.forEach((id) => formData.append("topic_ids", String(id)));
         return bulkUpdateUnifiedContent(formData);
       }}
+      initialFeedback={initialFeedback}
       bulkAdditionalControls={({
         bulkAction,
         pending,

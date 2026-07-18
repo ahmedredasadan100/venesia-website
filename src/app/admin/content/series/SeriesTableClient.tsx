@@ -9,6 +9,7 @@ import {
 } from "../../../../components/admin/entity-list";
 import { AdminTablePagination } from "../../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
+import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import { SERIES_DEFAULT_COLUMN_KEYS } from "../../../../lib/admin/content/series-list-config";
 import {
@@ -59,11 +60,13 @@ export default function SeriesTableClient({
   categoryOptions,
   categoryDescendantIdsByValue,
   initialVisibleColumns,
+  initialFeedback,
 }: {
   series: SeriesListRow[];
   categoryOptions: AdminEntityFilterOption[];
   categoryDescendantIdsByValue: Record<string, number[]>;
   initialVisibleColumns?: string[];
+  initialFeedback?: AdminActionFeedback | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -263,6 +266,7 @@ export default function SeriesTableClient({
         onBulkExecute={async (action, ids) =>
           mapSeriesResult(await bulkSeriesActionAjax(action, ids))
         }
+        initialFeedback={initialFeedback}
       />
 
       <AdminTablePagination

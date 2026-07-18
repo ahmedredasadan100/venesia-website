@@ -411,6 +411,12 @@ async function main() {
       hasText: "منشور",
     });
     await option.click();
+    const optimisticStatusLabel = await statusTrigger.textContent();
+    check(
+      "Categories selected status is reflected immediately in its trigger",
+      optimisticStatusLabel?.includes("منشور"),
+      optimisticStatusLabel ?? "",
+    );
     await page.waitForTimeout(300);
     check(
       "Categories selecting option closes filter",
@@ -420,6 +426,34 @@ async function main() {
       "Categories filter resets page to 1",
       !new URL(page.url()).searchParams.has("page") ||
         new URL(page.url()).searchParams.get("page") === "1",
+    );
+
+    const clearFilters = page.locator("[data-admin-clear-filters]");
+    check(
+      "Categories clear filters appears with an active status filter",
+      (await clearFilters.count()) === 1,
+    );
+    const categoryClearTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+    await clearFilters.click();
+    await page.waitForFunction(
+      () => {
+        const params = new URL(window.location.href).searchParams;
+        return !params.has("q") && !params.has("status") && !params.has("page");
+      },
+      { timeout: 10_000 },
+    ).catch(() => null);
+    const categoryClearUrl = new URL(page.url());
+    check(
+      "Categories clear filters resets search, status, and page without reload",
+      !categoryClearUrl.searchParams.has("q") &&
+        !categoryClearUrl.searchParams.has("status") &&
+        !categoryClearUrl.searchParams.has("page") &&
+        (await page.evaluate(() => performance.timeOrigin)) === categoryClearTimeOrigin,
+      page.url(),
+    );
+    check(
+      "Categories clear filters hides when no filter remains",
+      (await page.locator("[data-admin-clear-filters]").count()) === 0,
     );
 
     // Wait for a stable Server Component payload before preference mutations.
@@ -872,6 +906,27 @@ async function main() {
       path: resolve(OUT, "series-parent-filter-1440.png"),
       fullPage: true,
     });
+    const seriesClearFilters = page.locator("[data-admin-clear-filters]");
+    check(
+      "Series clear filters appears with search and category filters",
+      (await seriesClearFilters.count()) === 1,
+    );
+    await seriesClearFilters.click();
+    await page.waitForFunction(
+      () => {
+        const params = new URL(window.location.href).searchParams;
+        return !params.has("q") && !params.has("category") && !params.has("page");
+      },
+      { timeout: 10_000 },
+    ).catch(() => null);
+    const seriesClearedUrl = new URL(page.url());
+    check(
+      "Series clear filters resets search, category, and page",
+      !seriesClearedUrl.searchParams.has("q") &&
+        !seriesClearedUrl.searchParams.has("category") &&
+        !seriesClearedUrl.searchParams.has("page"),
+      page.url(),
+    );
 
     await page.goto(
       `${baseUrl}/admin/content/series?q=${encodeURIComponent(`${fixtureSearch} missing`)}&category=${rootCategoryId}`,
@@ -1187,6 +1242,39 @@ async function main() {
     );
     check("Dismissed feedback does not immediately reappear", (await noticeClose.count()) === 0);
 
+    await page.goto(`${baseUrl}/admin/content/categories?notice=hidden`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForTimeout(200);
+    check(
+      "Categories redirect feedback uses the shared entity-list slot",
+      (await page.locator("[data-admin-entity-list] [data-admin-entity-feedback-slot]").count()) === 1,
+    );
+
+    await page.goto(`${baseUrl}/admin/content/series?notice=updated`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForTimeout(200);
+    check(
+      "Series redirect feedback uses the shared entity-list slot",
+      (await page.locator("[data-admin-entity-list] [data-admin-entity-feedback-slot]").count()) === 1,
+    );
+    await page.waitForTimeout(6_000);
+    check(
+      "Success feedback auto-dismisses after five seconds",
+      (await page.getByRole("button", { name: "إغلاق الإشعار" }).count()) === 0,
+    );
+
+    await page.goto(`${baseUrl}/admin/content/series?notice=error`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForTimeout(5_200);
+    check(
+      "Action error remains until manually dismissed",
+      (await page.getByRole("button", { name: "إغلاق الإشعار" }).count()) === 1,
+    );
+    await page.getByRole("button", { name: "إغلاق الإشعار" }).click();
+
     // ── Topics surface + shared dropdown exclusivity ────────────
     await page.goto(`${baseUrl}/admin/content/topics`, {
       waitUntil: "domcontentloaded",
@@ -1209,6 +1297,60 @@ async function main() {
 
     const topicsStatus = page.locator("#status-trigger");
     check("Topics status filter is mandatory", (await topicsStatus.count()) === 1);
+    await page.goto(`${baseUrl}/admin/content/topics?sort=title_asc&limit=20&page=2`, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await page.waitForTimeout(250);
+    await topicsStatus.click();
+    await page.waitForTimeout(100);
+    await page.getByRole("option", { name: "منشور", exact: true }).click();
+    const immediateTopicsStatus = await topicsStatus.textContent();
+    check(
+      "Topics selected status remains visible immediately during navigation",
+      immediateTopicsStatus?.includes("منشور"),
+      immediateTopicsStatus ?? "",
+    );
+    const topicsStatusCommitted = await page.waitForFunction(
+      () => new URL(window.location.href).searchParams.get("status") === "published",
+      { timeout: 10_000 },
+    ).then(() => true).catch(() => false);
+    const topicsFilteredUrl = new URL(page.url());
+    check(
+      "Topics filter preserves sort and limit while resetting page",
+      topicsStatusCommitted &&
+        topicsFilteredUrl.searchParams.get("status") === "published" &&
+        topicsFilteredUrl.searchParams.get("sort") === "title_asc" &&
+        topicsFilteredUrl.searchParams.get("limit") === "20" &&
+        !topicsFilteredUrl.searchParams.has("page"),
+      page.url(),
+    );
+    const topicsClearFilters = page.locator("[data-admin-clear-filters]");
+    check(
+      "Topics clear filters appears with an active status filter",
+      (await topicsClearFilters.count()) === 1,
+    );
+    const topicsClearTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+    await topicsClearFilters.click();
+    const topicsClearCommitted = await page.waitForFunction(
+      () => {
+        const params = new URL(window.location.href).searchParams;
+        return !params.has("status") && !params.has("page");
+      },
+      { timeout: 10_000 },
+    ).then(() => true).catch(() => false);
+    const topicsClearedUrl = new URL(page.url());
+    check(
+      "Topics clear filters keeps sort and limit without reloading",
+      topicsClearCommitted &&
+        !topicsClearedUrl.searchParams.has("status") &&
+        !topicsClearedUrl.searchParams.has("page") &&
+        topicsClearedUrl.searchParams.get("sort") === "title_asc" &&
+        topicsClearedUrl.searchParams.get("limit") === "20" &&
+        (await page.evaluate(() => performance.timeOrigin)) === topicsClearTimeOrigin,
+      page.url(),
+    );
+
     await topicsStatus.click();
     await page.waitForTimeout(100);
     await page.getByRole("button", { name: /^الأعمدة$/ }).click();

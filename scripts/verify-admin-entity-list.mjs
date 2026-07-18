@@ -69,6 +69,8 @@ const listbox = read("src/components/admin/ui/AdminListboxSelect.tsx");
 const filterListbox = read("src/components/admin/ui/AdminFilterListbox.tsx");
 const bulkBar = read("src/components/admin/ui/AdminBulkActionBar.tsx");
 const feedbackCodes = read("src/lib/admin/entity-list/feedback-codes.ts");
+const feedbackPolicy = read("src/lib/admin/admin-action-feedback.ts");
+const noticeFrame = read("src/components/admin/AdminNoticeDismissibleFrame.tsx");
 const floatingPosition = read("src/components/admin/ui/admin-floating-position.ts");
 const floatingHook = read("src/components/admin/ui/useAdminFloatingMenuPosition.ts");
 const columnMenu = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx");
@@ -206,16 +208,39 @@ check(
 );
 
 check(
-  "Action feedback is dismissible while system feedback stays persistent",
+  "Feedback lifecycle distinguishes auto success, manual action errors, and persistent system errors",
   feedbackCodes.includes("getAdminFeedbackPolicy") &&
     feedbackCodes.includes('"transient_action"') &&
     feedbackCodes.includes('"action_validation"') &&
-    read("src/lib/admin/admin-action-feedback.ts").includes(
-      'critical_system: { layout: "stacked", dismissible: false }',
-    ) &&
-    read("src/components/admin/AdminNoticeDismissibleFrame.tsx").includes(
-      'aria-label="إغلاق الإشعار"',
-    ),
+    feedbackPolicy.includes('lifecycle: "auto"') &&
+    feedbackPolicy.includes("autoDismissMs: 5_000") &&
+    feedbackPolicy.includes('lifecycle: "manual"') &&
+    feedbackPolicy.includes('lifecycle: "persistent"') &&
+    noticeFrame.includes("window.setTimeout(dismiss, autoDismissMs)") &&
+    noticeFrame.includes('aria-label="إغلاق الإشعار"'),
+);
+
+check(
+  "Feedback renders in one shared slot after filters for every entity consumer",
+  entityList.includes("data-admin-entity-feedback-slot") &&
+    entityList.indexOf("data-admin-entity-feedback-slot") <
+      entityList.lastIndexOf("AdminBulkActionBar") &&
+    categoriesClient.includes("initialFeedback={initialFeedback}") &&
+    seriesClient.includes("initialFeedback={initialFeedback}") &&
+    topicsList.includes("initialFeedback={initialFeedback}") &&
+    !categoriesPage.includes("{noticeFeedback ? (") &&
+    !seriesPage.includes("{noticeFeedback ? (") &&
+    !topicsPage.includes("{noticeFeedback ? ("),
+);
+
+check(
+  "Shared filters own clear-filter and optimistic pending selection contracts",
+  entityFilters.includes("clearableFilterKeys") &&
+    entityFilters.includes("data-admin-clear-filters") &&
+    entityFilters.includes("pendingFilterValues") &&
+    entityFilters.includes("effectiveValues") &&
+    entityFilters.includes("startTransition") &&
+    !topicsFilters.includes("function resetFilters"),
 );
 
 check(
@@ -366,6 +391,8 @@ check(
   notice?.message === "ok" &&
     notice?.variant === "success" &&
     notice?.dismissible === true &&
+    notice?.lifecycle === "auto" &&
+    notice?.autoDismissMs === 5_000 &&
     notice?.dismissSearchParams?.includes("notice"),
 );
 
@@ -382,6 +409,7 @@ const criticalNotice = noticeModule.resolveAdminNoticeFeedback(
 check(
   "Critical system notice remains persistent",
   criticalNotice?.dismissible === false &&
+    criticalNotice?.lifecycle === "persistent" &&
     criticalNotice?.dismissSearchParams === undefined,
 );
 

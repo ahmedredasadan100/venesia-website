@@ -28,8 +28,7 @@ export function resolveAdminNoticeFeedback(
       variant: entry?.variant ?? (notice === "error" ? "danger" : "success"),
       title: entry?.title ?? "",
       message,
-      layout: "stacked",
-      dismissible: policy.dismissible,
+      ...policy,
       dismissSearchParams,
     };
   }
@@ -41,8 +40,7 @@ export function resolveAdminNoticeFeedback(
     variant: entry.variant ?? (notice === "error" ? "danger" : "success"),
     title: entry.title ?? "",
     message: entry.message,
-    layout: "stacked",
-    dismissible: policy.dismissible,
+    ...policy,
     dismissSearchParams,
   };
 }

@@ -214,27 +214,6 @@ export default function UnifiedContentFilters({
     };
   }, [canSearch, trimmedSearch]);
 
-  function resetFilters() {
-    const params = new URLSearchParams(searchParams.toString());
-    ["q", "content_type", "category", "series", "status", "featured", "page"].forEach((key) =>
-      params.delete(key),
-    );
-    setValues({ q: "", contentType: "all", category: "all", series: "all", status: "all", featured: "all" });
-    setSuggestions([]);
-    setSuggestionsOpen(false);
-    floating?.setOpenLayerId(null);
-    const query = params.toString();
-    router.push(query ? `${BASE_PATH}?${query}#content-topics-table` : `${BASE_PATH}#content-topics-table`);
-  }
-
-  const hasFilters =
-    values.q.length > 0 ||
-    values.contentType !== "all" ||
-    values.category !== "all" ||
-    values.series !== "all" ||
-    values.status !== "all" ||
-    values.featured !== "all";
-
   const autocomplete =
     mounted && suggestionsOpen && suggestionPosition
       ? createPortal(
@@ -292,6 +271,27 @@ export default function UnifiedContentFilters({
         }}
         filters={filterDefs}
         values={filterValues}
+        clearableFilterKeys={[
+          "q",
+          "content_type",
+          "category",
+          "series",
+          "status",
+          "featured",
+        ]}
+        onClearFilters={() => {
+          setValues({
+            q: "",
+            contentType: "all",
+            category: "all",
+            series: "all",
+            status: "all",
+            featured: "all",
+          });
+          setSuggestions([]);
+          setSuggestionsOpen(false);
+          setActiveSuggestion(-1);
+        }}
         searchSlot={
           <>
             <AdminSearchInput
@@ -337,17 +337,6 @@ export default function UnifiedContentFilters({
             />
             {autocomplete}
           </>
-        }
-        trailing={
-          hasFilters ? (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="ms-auto h-10 rounded-full border border-white/10 px-4 text-sm text-white/58 transition hover:border-white/20 hover:text-white"
-            >
-              مسح الفلاتر
-            </button>
-          ) : null
         }
       />
     </>
