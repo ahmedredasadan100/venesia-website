@@ -1,3 +1,5 @@
+import type { AdminEntityFilterOption } from "../entity-list";
+
 export type AdminContentCategory = {
   id: number;
   name: string;
@@ -90,4 +92,37 @@ export function getSelectableAdminCategories(categories: AdminContentCategory[])
   return flattenAdminCategoryTree(buildAdminCategoryTree(categories)).filter(
     (category) => category.is_active !== false,
   );
+}
+
+/** Project adapter: category tree data -> portable hierarchical filter options. */
+export function toAdminCategoryFilterOptions(
+  categories: readonly AdminContentCategoryNode[],
+): AdminEntityFilterOption[] {
+  return categories.map((category) => ({
+    value: String(category.id),
+    label: category.name,
+    depth: category.depth,
+    parentValue: category.parent_id ? String(category.parent_id) : undefined,
+  }));
+}
+
+/**
+ * Project adapter for consumers whose selected parent includes its descendants.
+ * The portable filter primitive receives only the generic options.
+ */
+export function buildAdminCategoryFilterModel(
+  categories: AdminContentCategory[],
+) {
+  const flattened = flattenAdminCategoryTree(buildAdminCategoryTree(categories));
+  const descendantIdsByValue = Object.fromEntries(
+    flattened.map((category) => [
+      String(category.id),
+      getCategoryAndDescendantIds(categories, category.id),
+    ]),
+  ) as Record<string, number[]>;
+
+  return {
+    options: toAdminCategoryFilterOptions(flattened),
+    descendantIdsByValue,
+  };
 }

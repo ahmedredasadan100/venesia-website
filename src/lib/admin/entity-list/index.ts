@@ -24,6 +24,7 @@ export {
 } from "./column-preferences";
 
 export { resolveAdminNoticeFeedback } from "./feedback-codes";
+export { resolveAdminEntityListEmptyState } from "./empty-state";
 
 export {
   ADMIN_ENTITY_LIST_DEFAULT_PAGE_SIZE,

@@ -17,7 +17,7 @@ function check(label, condition) {
   if (!condition) failures.push(label);
 }
 
-function loadPureTypeScriptModule(path) {
+function loadPureTypeScriptModule(path, dependencies = {}) {
   const output = ts.transpileModule(read(path), {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -25,7 +25,14 @@ function loadPureTypeScriptModule(path) {
     },
   }).outputText;
   const commonJsModule = { exports: {} };
-  Function("exports", "module", output)(commonJsModule.exports, commonJsModule);
+  Function("exports", "module", "require", output)(
+    commonJsModule.exports,
+    commonJsModule,
+    (specifier) => {
+      if (specifier in dependencies) return dependencies[specifier];
+      throw new Error(`Unsupported dependency ${specifier} while loading ${path}`);
+    },
+  );
   return commonJsModule.exports;
 }
 
@@ -33,6 +40,7 @@ const coreFiles = [
   "src/lib/admin/entity-list/types.ts",
   "src/lib/admin/entity-list/column-preferences.ts",
   "src/lib/admin/entity-list/feedback-codes.ts",
+  "src/lib/admin/entity-list/empty-state.ts",
   "src/lib/admin/entity-list/pagination.ts",
   "src/lib/admin/entity-list/url-state.ts",
   "src/lib/admin/preferences/admin-column-preferences.ts",
@@ -43,6 +51,8 @@ const coreFiles = [
   "src/components/admin/entity-list/AdminFloatingLayerContext.tsx",
   "src/components/admin/ui/AdminListboxSelect.tsx",
   "src/components/admin/ui/AdminFilterListbox.tsx",
+  "src/components/admin/ui/admin-floating-position.ts",
+  "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
 ];
 coreFiles.forEach((path) =>
   check(`Missing entity-list core file: ${path}`, existsSync(resolve(ROOT, path))),
@@ -59,6 +69,13 @@ const listbox = read("src/components/admin/ui/AdminListboxSelect.tsx");
 const filterListbox = read("src/components/admin/ui/AdminFilterListbox.tsx");
 const bulkBar = read("src/components/admin/ui/AdminBulkActionBar.tsx");
 const feedbackCodes = read("src/lib/admin/entity-list/feedback-codes.ts");
+const floatingPosition = read("src/components/admin/ui/admin-floating-position.ts");
+const floatingHook = read("src/components/admin/ui/useAdminFloatingMenuPosition.ts");
+const columnMenu = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx");
+const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
+const activity = read("src/components/admin/ui/AdminActivityPopover.tsx");
+const emptyStateCore = read("src/lib/admin/entity-list/empty-state.ts");
+const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 
 const topicsList = read("src/components/admin/content/UnifiedContentList.tsx");
 const topicsFilters = read("src/components/admin/content/UnifiedContentFilters.tsx");
@@ -112,6 +129,9 @@ const coreSources = [
   listbox,
   filterListbox,
   feedbackCodes,
+  floatingPosition,
+  floatingHook,
+  emptyStateCore,
   read("src/lib/admin/entity-list/types.ts"),
   read("src/lib/admin/entity-list/url-state.ts"),
 ];
@@ -165,10 +185,16 @@ check(
 );
 
 check(
-  "Listbox uses portal + fixed positioning",
-  listbox.includes("createPortal") &&
-    listbox.includes('position: "fixed"') &&
-    listbox.includes("useAdminFloatingMenuPosition"),
+  "Floating consumers apply one complete shared style contract",
+  [listbox, filterListbox, columnMenu, pagination, activity].every(
+    (source) =>
+      source.includes("useAdminFloatingMenuPosition") &&
+      /style=\{\w+\.style\}/.test(source),
+  ) &&
+    floatingPosition.includes('position: "fixed"') &&
+    floatingPosition.includes('placement === "bottom" ? top : undefined') &&
+    floatingPosition.includes('placement === "top" ? bottom : undefined') &&
+    floatingPosition.includes("maxHeight"),
 );
 
 check(
@@ -177,6 +203,19 @@ check(
     topicsPage.includes("resolveAdminNoticeFeedback") &&
     categoriesPage.includes("resolveAdminNoticeFeedback") &&
     seriesPage.includes("resolveAdminNoticeFeedback"),
+);
+
+check(
+  "Action feedback is dismissible while system feedback stays persistent",
+  feedbackCodes.includes("getAdminFeedbackPolicy") &&
+    feedbackCodes.includes('"transient_action"') &&
+    feedbackCodes.includes('"action_validation"') &&
+    read("src/lib/admin/admin-action-feedback.ts").includes(
+      'critical_system: { layout: "stacked", dismissible: false }',
+    ) &&
+    read("src/components/admin/AdminNoticeDismissibleFrame.tsx").includes(
+      'aria-label="إغلاق الإشعار"',
+    ),
 );
 
 check(
@@ -211,6 +250,16 @@ check(
 );
 
 check(
+  "Categories split edit and folder interactions",
+  categoriesColumns.includes("data-category-folder-toggle") &&
+    categoriesColumns.includes("data-category-folder-static") &&
+    categoriesColumns.includes("data-category-edit-trigger") &&
+    categoriesColumns.includes("aria-expanded") &&
+    categoriesClient.includes("collapsedCategoryIds") &&
+    categoriesClient.includes("visibleIds.add(parentId)"),
+);
+
+check(
   "Series uses الموضوعات terminology and expanded columns",
   seriesColumns.includes('label: "الموضوعات"') &&
     seriesColumns.includes('key: "id"') &&
@@ -225,6 +274,25 @@ check(
     seriesPage.includes("category_id") &&
     seriesPage.includes("created_at") &&
     seriesPage.includes("updated_at"),
+);
+
+check(
+  "Series category adapter includes selected parent descendants",
+  read("src/lib/admin/content/category-hierarchy.ts").includes(
+    "buildAdminCategoryFilterModel",
+  ) &&
+    seriesPage.includes("categoryDescendantIdsByValue") &&
+    seriesClient.includes("selectedCategoryIds.has(row.category_id)") &&
+    !seriesClient.includes('String(row.category_id ?? "") === category'),
+);
+
+check(
+  "Visibility action uses one explicit current-state contract",
+  dataGrid.includes("isCurrentlyHidden?: boolean") &&
+    !dataGrid.includes("hidden?: boolean") &&
+    ![topicsList, categoriesActions, seriesColumns].some((source) =>
+      /\bhidden=\{/.test(source),
+    ),
 );
 
 check(
@@ -282,8 +350,12 @@ check(
   sliced.length === 10 && sliced[0] === 1 && sliced[9] === 10,
 );
 
+const feedbackPolicyModule = loadPureTypeScriptModule(
+  "src/lib/admin/admin-action-feedback.ts",
+);
 const noticeModule = loadPureTypeScriptModule(
   "src/lib/admin/entity-list/feedback-codes.ts",
+  { "../admin-action-feedback": feedbackPolicyModule },
 );
 const notice = noticeModule.resolveAdminNoticeFeedback(
   { created: { message: "ok" }, error: { message: "bad", variant: "danger" } },
@@ -291,7 +363,84 @@ const notice = noticeModule.resolveAdminNoticeFeedback(
 );
 check(
   "resolveAdminNoticeFeedback maps codes",
-  notice?.message === "ok" && notice?.variant === "success",
+  notice?.message === "ok" &&
+    notice?.variant === "success" &&
+    notice?.dismissible === true &&
+    notice?.dismissSearchParams?.includes("notice"),
+);
+
+const criticalNotice = noticeModule.resolveAdminNoticeFeedback(
+  {
+    unavailable: {
+      message: "down",
+      variant: "danger",
+      kind: "critical_system",
+    },
+  },
+  "unavailable",
+);
+check(
+  "Critical system notice remains persistent",
+  criticalNotice?.dismissible === false &&
+    criticalNotice?.dismissSearchParams === undefined,
+);
+
+const emptyStateModule = loadPureTypeScriptModule(
+  "src/lib/admin/entity-list/empty-state.ts",
+);
+check(
+  "Generic empty-state resolver distinguishes system and filtered copy",
+  emptyStateModule.resolveAdminEntityListEmptyState({
+    mode: "system",
+    systemEmpty: "system",
+    filteredEmpty: "filtered",
+  }) === "system" &&
+    emptyStateModule.resolveAdminEntityListEmptyState({
+      mode: "filtered",
+      systemEmpty: "system",
+      filteredEmpty: "filtered",
+    }) === "filtered",
+);
+
+const floatingPositionModule = loadPureTypeScriptModule(
+  "src/components/admin/ui/admin-floating-position.ts",
+);
+const topStyle = floatingPositionModule.createAdminFloatingMenuStyle({
+  placement: "top",
+  top: 100,
+  bottom: 40,
+  left: 20,
+  width: 240,
+  maxHeight: 300,
+  zIndex: 9999,
+});
+const bottomStyle = floatingPositionModule.createAdminFloatingMenuStyle({
+  placement: "bottom",
+  top: 100,
+  bottom: 40,
+  left: 20,
+  width: 240,
+  maxHeight: 300,
+  zIndex: 9999,
+});
+check(
+  "Floating style never emits conflicting top and bottom",
+  topStyle.top === undefined &&
+    topStyle.bottom === 40 &&
+    bottomStyle.top === 100 &&
+    bottomStyle.bottom === undefined &&
+    topStyle.maxHeight === 300 &&
+    bottomStyle.position === "fixed",
+);
+
+const qaConsumers = read("scripts/qa-admin-entity-list-consumers.mjs");
+check(
+  "Consumer QA uses an unconditional isolated 11-row fixture",
+  qaConsumers.includes("Fixture creates exactly 11 flattened category rows") &&
+    qaConsumers.includes("Categories fixture page 1 has exactly 10 rows") &&
+    qaConsumers.includes("Categories fixture page 2 has exactly 1 row") &&
+    !qaConsumers.includes("if (totalCount > 10)") &&
+    qaConsumers.includes("cleanupProof?.ok === true"),
 );
 
 const types = read("src/lib/admin/entity-list/types.ts");

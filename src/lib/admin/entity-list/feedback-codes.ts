@@ -1,4 +1,8 @@
-import type { AdminActionFeedback } from "../admin-action-feedback";
+import {
+  getAdminFeedbackPolicy,
+  type AdminActionFeedback,
+  type AdminActionFeedbackKind,
+} from "../admin-action-feedback";
 import type { AdminEntityNoticeCodeMap } from "./types";
 
 /**
@@ -10,19 +14,27 @@ export function resolveAdminNoticeFeedback(
   notice?: string | null,
   message?: string | null,
 ): AdminActionFeedback | null {
+  const entry = notice ? codeMap[notice] : undefined;
+  const kind: AdminActionFeedbackKind =
+    entry?.kind ??
+    (notice === "error" ? "action_validation" : "transient_action");
+  const policy = getAdminFeedbackPolicy(kind);
+  const dismissSearchParams = policy.dismissible
+    ? ["notice", "message", "error"]
+    : undefined;
+
   if (message) {
-    const fromCode = notice ? codeMap[notice] : undefined;
     return {
-      variant: fromCode?.variant ?? (notice === "error" ? "danger" : "success"),
-      title: fromCode?.title ?? "",
+      variant: entry?.variant ?? (notice === "error" ? "danger" : "success"),
+      title: entry?.title ?? "",
       message,
       layout: "stacked",
-      dismissible: false,
+      dismissible: policy.dismissible,
+      dismissSearchParams,
     };
   }
 
   if (!notice) return null;
-  const entry = codeMap[notice];
   if (!entry) return null;
 
   return {
@@ -30,6 +42,7 @@ export function resolveAdminNoticeFeedback(
     title: entry.title ?? "",
     message: entry.message,
     layout: "stacked",
-    dismissible: false,
+    dismissible: policy.dismissible,
+    dismissSearchParams,
   };
 }

@@ -50,7 +50,7 @@ type ActionButtonProps = {
   type?: "button" | "submit";
   tone?: "gold" | "green" | "blue" | "red" | "dark";
   action?: DataGridAction;
-  hidden?: boolean;
+  isCurrentlyHidden?: boolean;
   className?: string;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
@@ -168,11 +168,11 @@ export const ADMIN_DATA_GRID_COLUMNS = {
 
 function GridIcon({
   action,
-  hidden = false,
+  isCurrentlyHidden = false,
   active = false,
 }: {
   action: DataGridAction;
-  hidden?: boolean;
+  isCurrentlyHidden?: boolean;
   active?: boolean;
 }) {
   if (action === "edit") {
@@ -185,7 +185,7 @@ function GridIcon({
   }
 
   if (action === "visibility") {
-    return hidden ? (
+    return isCurrentlyHidden ? (
       <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M3 3l18 18" />
         <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
@@ -463,7 +463,7 @@ export function AdminDataGridActionButton({
   type = "button",
   tone,
   action,
-  hidden = false,
+  isCurrentlyHidden = false,
   className = "",
   onClick,
   disabled = false,
@@ -478,7 +478,11 @@ export function AdminDataGridActionButton({
   const content = pending ? (
     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
   ) : action ? (
-    <GridIcon action={action} hidden={hidden} active={active} />
+    <GridIcon
+      action={action}
+      isCurrentlyHidden={isCurrentlyHidden}
+      active={active}
+    />
   ) : (
     children
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AdminEntityList,
@@ -18,7 +18,10 @@ import {
   slicePageRows,
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
-import { saveCategoriesTablePreferences } from "./actions";
+import {
+  restoreCategoriesTablePreferences,
+  saveCategoriesTablePreferences,
+} from "./actions";
 import {
   createCategoryColumns,
   type CategoryColumnKey,
@@ -28,6 +31,7 @@ import {
 } from "./categories-columns";
 
 const BASE_PATH = "/admin/content/categories";
+const EMPTY_COLLAPSED_CATEGORY_IDS = new Set<number>();
 
 const STATUS_FILTER: AdminEntityFilterDef = {
   id: "categories-status-filter",
@@ -60,23 +64,70 @@ export default function CategoriesListClient({
     key: "tree",
     direction: "asc",
   });
+  const filterSignature = `${query}\u0000${status}`;
+  const [treeState, setTreeState] = useState<{
+    filterSignature: string;
+    collapsedCategoryIds: Set<number>;
+  }>(() => ({
+    filterSignature,
+    collapsedCategoryIds: new Set(),
+  }));
+  const collapsedCategoryIds =
+    treeState.filterSignature === filterSignature
+      ? treeState.collapsedCategoryIds
+      : EMPTY_COLLAPSED_CATEGORY_IDS;
+  const rowById = useMemo(
+    () => new Map(rows.map((row) => [row.id, row])),
+    [rows],
+  );
+
+  const toggleCategory = useCallback((categoryId: number) => {
+    setTreeState((current) => {
+      const currentCollapsed =
+        current.filterSignature === filterSignature
+          ? current.collapsedCategoryIds
+          : EMPTY_COLLAPSED_CATEGORY_IDS;
+      const next = new Set(currentCollapsed);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.add(categoryId);
+      return { filterSignature, collapsedCategoryIds: next };
+    });
+  }, [filterSignature]);
 
   const columns = useMemo(
-    () => createCategoryColumns(parentOptions),
-    [parentOptions],
+    () =>
+      createCategoryColumns(parentOptions, {
+        isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
+        onToggle: toggleCategory,
+      }),
+    [collapsedCategoryIds, parentOptions, toggleCategory],
   );
 
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    let next = rows.filter((row) => {
+    const matchingIds = new Set<number>();
+    rows.forEach((row) => {
       const statusOk =
         status === "all" ||
         (status === "published" && Boolean(row.is_active)) ||
         (status === "hidden" && !row.is_active);
-      if (!statusOk) return false;
-      if (!normalized) return true;
-      return row.name.toLowerCase().includes(normalized);
+      const searchOk =
+        !normalized || row.name.toLowerCase().includes(normalized);
+      if (statusOk && searchOk) matchingIds.add(row.id);
     });
+
+    const visibleIds = new Set(matchingIds);
+    matchingIds.forEach((id) => {
+      let parentId = rowById.get(id)?.parent_id ?? null;
+      const visited = new Set<number>();
+      while (parentId && !visited.has(parentId)) {
+        visited.add(parentId);
+        visibleIds.add(parentId);
+        parentId = rowById.get(parentId)?.parent_id ?? null;
+      }
+    });
+
+    let next = rows.filter((row) => visibleIds.has(row.id));
 
     if (sort.key !== "tree") {
       next = [...next].sort((a, b) => {
@@ -105,7 +156,7 @@ export default function CategoriesListClient({
     }
 
     return next;
-  }, [query, rows, sort, status]);
+  }, [query, rowById, rows, sort, status]);
 
   const pagination = resolveClientPagination(
     filteredRows.length,
@@ -116,7 +167,16 @@ export default function CategoriesListClient({
     filteredRows,
     pagination.page,
     pagination.pageSize,
-  );
+  ).filter((row) => {
+    let parentId = row.parent_id;
+    const visited = new Set<number>();
+    while (parentId && !visited.has(parentId)) {
+      if (collapsedCategoryIds.has(parentId)) return false;
+      visited.add(parentId);
+      parentId = rowById.get(parentId)?.parent_id ?? null;
+    }
+    return true;
+  });
 
   useEffect(() => {
     const rawPage = searchParams.get("page");
@@ -163,9 +223,11 @@ export default function CategoriesListClient({
             ? initialVisibleColumns
             : [...CATEGORIES_DEFAULT_COLUMN_KEYS]
         }
+        defaultVisibleColumns={[...CATEGORIES_DEFAULT_COLUMN_KEYS]}
         onPersistColumns={(visibleColumns) =>
           saveCategoriesTablePreferences(visibleColumns)
         }
+        onRestoreColumns={restoreCategoriesTablePreferences}
         enableColumnManagement
         enableSelection={false}
         mapResultToFeedback={(result) => mapAdminActionResultToFeedback(result)}
@@ -189,11 +251,11 @@ export default function CategoriesListClient({
           },
         }}
         actionsColumnWidth={CATEGORIES_ACTIONS_COLUMN_WIDTH}
-        empty={
-          rows.length
-            ? "لا توجد نتائج مطابقة للبحث أو الفلتر."
-            : "لا توجد تصنيفات بعد."
-        }
+        emptyState={{
+          mode: rows.length === 0 ? "system" : "filtered",
+          systemEmpty: "لا توجد تصنيفات بعد.",
+          filteredEmpty: "لا توجد نتائج مطابقة للبحث أو الفلتر.",
+        }}
         getRowDepth={(row) => row.depth}
         rowClassName={(row) => (row.depth === 0 ? "bg-white/[0.015]" : "")}
       />

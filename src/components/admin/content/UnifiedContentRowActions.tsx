@@ -126,7 +126,7 @@ export default function UnifiedContentRowActions({
       <AdminDataGridActionButton
         action="visibility"
         size="compact"
-        hidden={!visibility.isPubliclyVisible}
+        isCurrentlyHidden={!visibility.isPubliclyVisible}
         pending={pendingAction === "visibility"}
         disabled={mutationBusy || !visibility.nextStatus}
         title={visibility.tooltip}

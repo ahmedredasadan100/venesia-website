@@ -246,7 +246,7 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
                       action="visibility"
                       type="submit"
                       size="compact"
-                      hidden={!item.is_visible}
+                      isCurrentlyHidden={!item.is_visible}
                       title={item.is_visible ? "إخفاء" : "إظهار"}
                     />
                   </form>

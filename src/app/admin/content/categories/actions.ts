@@ -12,6 +12,7 @@ import {
   isAdminToneToken,
 } from "../../../../lib/admin/content/admin-tone-palette";
 import {
+  CATEGORIES_DEFAULT_COLUMN_KEYS,
   CATEGORIES_LIST_VIEW_KEY,
   CATEGORIES_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/categories-list-config";
@@ -605,4 +606,8 @@ export async function saveCategoriesTablePreferences(visibleColumns: string[]) {
     visibleColumns,
     allowedColumns: CATEGORIES_PREFERENCE_COLUMN_KEYS,
   });
+}
+
+export async function restoreCategoriesTablePreferences() {
+  return saveCategoriesTablePreferences([...CATEGORIES_DEFAULT_COLUMN_KEYS]);
 }

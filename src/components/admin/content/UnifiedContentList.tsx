@@ -6,7 +6,10 @@ import {
   bulkUpdateUnifiedContent,
   saveContentTablePreferences,
 } from "../../../app/admin/content/topics/actions";
-import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
+import {
+  toAdminCategoryFilterOptions,
+  type AdminContentCategoryNode,
+} from "../../../lib/admin/content/category-hierarchy";
 import { mapTopicsActionResultToFeedback } from "../../../lib/admin/content/topics-action-feedback";
 import type {
   ContentSortValue,
@@ -84,12 +87,9 @@ export default function UnifiedContentList({
   const parsedSort = parseSort(sort);
   const categoryOptions = useMemo(
     () =>
-      categories
-        .filter((category) => category.is_active !== false)
-        .map((category) => ({
-          value: String(category.id),
-          label: `${"— ".repeat(category.depth)}${category.name}`,
-        })),
+      toAdminCategoryFilterOptions(
+        categories.filter((category) => category.is_active !== false),
+      ),
     [categories],
   );
 
@@ -125,7 +125,11 @@ export default function UnifiedContentList({
         router.replace(defaultSortPath(currentListPath), { scroll: false });
       }}
       actionsColumnWidth={UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH}
-      empty="لا توجد موضوعات مطابقة للفلاتر الحالية."
+      emptyState={{
+        mode: "filtered",
+        systemEmpty: "لا توجد موضوعات حتى الآن.",
+        filteredEmpty: "لا توجد موضوعات مطابقة للفلاتر الحالية.",
+      }}
       onBulkExecute={async (action, ids) => {
         const formData = new FormData();
         formData.set("bulk_action", action);

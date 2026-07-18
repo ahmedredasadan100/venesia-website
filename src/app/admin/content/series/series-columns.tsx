@@ -164,7 +164,7 @@ function SeriesRowActions({
           action="visibility"
           size="compact"
           title={isHidden ? "إظهار" : "إخفاء"}
-          hidden={isHidden}
+          isCurrentlyHidden={isHidden}
           disabled={pending}
           onClick={() =>
             void run(
@@ -249,7 +249,7 @@ export function createSeriesColumns(handlers: {
       renderCell: ({ row }) => (
         <a
           href={`/admin/content/series/${row.id}`}
-          className="flex min-w-0 items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+          className="flex min-w-0 cursor-pointer items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
         >
           <SeriesIcon />
           <span className="min-w-0 truncate text-sm font-bold text-white">

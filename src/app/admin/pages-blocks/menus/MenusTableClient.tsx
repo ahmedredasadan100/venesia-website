@@ -260,7 +260,7 @@ export default function MenusTableClient({ menus, message }: MenusTableClientPro
                       type="submit"
                       action="visibility"
                       size="compact"
-                      hidden={menu.is_active}
+                      isCurrentlyHidden={!menu.is_active}
                       title={menu.is_active ? "إخفاء" : "إظهار"}
                     />
                   </form>

@@ -346,7 +346,7 @@ export default function UsersManagementClient({
                     <AdminDataGridActionButton action="edit" title="تعديل" onClick={() => openEditModal(user)} />
                     <AdminDataGridActionButton
                       action="visibility"
-                      hidden={!user.is_active}
+                      isCurrentlyHidden={!user.is_active}
                       title={user.is_active ? "تعطيل" : "تفعيل"}
                       disabled={isSelf && user.is_active}
                       onClick={() => {

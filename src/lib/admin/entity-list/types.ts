@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { AdminActionFeedback } from "../admin-action-feedback";
 import type { AdminActionResult } from "../admin-action-result";
 import type { AdminFeedbackVariant } from "../admin-action-feedback";
+import type { AdminActionFeedbackKind } from "../admin-action-feedback";
 
 /** Portable column contract — no entity or project names. */
 export type AdminEntityColumnSticky = "start" | "end";
@@ -37,8 +38,9 @@ export type AdminEntityBulkOption = {
 };
 
 export type AdminEntityListEmptyState = {
-  title?: string;
-  message: string;
+  mode: "system" | "filtered";
+  systemEmpty: ReactNode;
+  filteredEmpty: ReactNode;
 };
 
 export type AdminEntityNoticeCodeMap = Record<
@@ -47,6 +49,8 @@ export type AdminEntityNoticeCodeMap = Record<
     message: string;
     variant?: AdminFeedbackVariant;
     title?: string;
+    /** Defaults to transient action feedback. */
+    kind?: AdminActionFeedbackKind;
   }
 >;
 
@@ -69,6 +73,9 @@ export type AdminEntityPersistResult = {
 export type AdminEntityFilterOption = {
   value: string;
   label: string;
+  /** Generic tree presentation metadata. */
+  depth?: number;
+  parentValue?: string;
 };
 
 export type AdminEntityFilterGroup = {

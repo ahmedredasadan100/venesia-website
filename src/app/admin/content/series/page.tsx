@@ -12,6 +12,10 @@ import {
   SERIES_LIST_VIEW_KEY,
   SERIES_NOTICE_CODE_MAP,
 } from "../../../../lib/admin/content/series-list-config";
+import {
+  buildAdminCategoryFilterModel,
+  type AdminContentCategory,
+} from "../../../../lib/admin/content/category-hierarchy";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import SeriesTableClient, { type SeriesListRow } from "./SeriesTableClient";
@@ -31,11 +35,6 @@ type SeriesRow = {
 
 type TopicSeriesJoinRow = {
   series_id: number | null;
-};
-
-type CategoryNameRow = {
-  id: number;
-  name: string;
 };
 
 export default async function Page({
@@ -65,7 +64,11 @@ export default async function Page({
       .order("sort_order", { ascending: true })
       .order("id", { ascending: false }),
     getSupabaseAdmin().from("topics").select("series_id"),
-    getSupabaseAdmin().from("topic_categories").select("id, name").order("name"),
+    getSupabaseAdmin()
+      .from("topic_categories")
+      .select("id, name, slug, parent_id, sort_order, is_active")
+      .order("sort_order", { ascending: true })
+      .order("id", { ascending: true }),
     getSupabaseAdmin()
       .from("admin_user_preferences")
       .select("preferences")
@@ -90,8 +93,9 @@ export default async function Page({
     );
   }
 
+  const categories = (categoryRows ?? []) as AdminContentCategory[];
   const categoryNameById = new Map(
-    ((categoryRows ?? []) as CategoryNameRow[]).map((item) => [
+    categories.map((item) => [
       item.id,
       item.name,
     ]),
@@ -113,12 +117,7 @@ export default async function Page({
     }),
   );
 
-  const categoryOptions = ((categoryRows ?? []) as CategoryNameRow[]).map(
-    (item) => ({
-      value: String(item.id),
-      label: item.name,
-    }),
-  );
+  const categoryFilterModel = buildAdminCategoryFilterModel(categories);
 
   const activeCount = series.filter((item) => item.status === "published").length;
   const topicsTotal = series.reduce(
@@ -181,6 +180,7 @@ export default async function Page({
           message={noticeFeedback.message}
           layout={noticeFeedback.layout}
           dismissible={noticeFeedback.dismissible}
+          dismissSearchParams={noticeFeedback.dismissSearchParams}
         />
       ) : null}
       {preferenceError ? (
@@ -199,7 +199,10 @@ export default async function Page({
           )
           .join("|")}
         series={series}
-        categoryOptions={categoryOptions}
+        categoryOptions={categoryFilterModel.options}
+        categoryDescendantIdsByValue={
+          categoryFilterModel.descendantIdsByValue
+        }
         initialVisibleColumns={visibleColumns}
       />
     </main>

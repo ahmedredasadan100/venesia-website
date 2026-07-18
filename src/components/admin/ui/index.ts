@@ -23,8 +23,14 @@ export type {
   AdminFilterListboxOption,
   AdminFilterListboxProps,
 } from "./AdminFilterListbox";
-export { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
-export type { AdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
+export {
+  useAdminFloatingMenuPosition,
+} from "./useAdminFloatingMenuPosition";
+export { createAdminFloatingMenuStyle } from "./admin-floating-position";
+export type {
+  AdminFloatingMenuPlacement,
+  AdminFloatingMenuPosition,
+} from "./admin-floating-position";
 export {
   ADMIN_FILTER_MENU_ATTR,
   ADMIN_FILTER_MENU_PANEL_CLASSES,

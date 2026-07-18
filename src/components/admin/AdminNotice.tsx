@@ -15,6 +15,7 @@ export type AdminNoticeProps = {
   variant?: AdminNoticeVariant;
   layout?: AdminNoticeLayout;
   dismissible?: boolean;
+  dismissSearchParams?: readonly string[];
   action?: AdminActionFeedbackAction;
 };
 
@@ -38,6 +39,7 @@ export default function AdminNotice({
   variant = "info",
   layout = "stacked",
   dismissible = false,
+  dismissSearchParams,
   action,
 }: AdminNoticeProps) {
   const role = variant === "danger" ? "alert" : "status";
@@ -97,6 +99,7 @@ export default function AdminNotice({
         ariaLive={ariaLive}
         layout={layout}
         className={className}
+        dismissSearchParams={dismissSearchParams}
       >
         {content}
       </AdminNoticeDismissibleFrame>

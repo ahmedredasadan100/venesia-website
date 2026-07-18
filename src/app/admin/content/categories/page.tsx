@@ -215,6 +215,7 @@ export default async function TopicCategoriesPage({
           message={noticeFeedback.message}
           layout={noticeFeedback.layout}
           dismissible={noticeFeedback.dismissible}
+          dismissSearchParams={noticeFeedback.dismissSearchParams}
         />
       ) : null}
       {preferenceError ? (

@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type {
+  AdminEntityFilterGroup,
+  AdminEntityFilterOption,
+} from "../../../lib/admin/entity-list";
 import {
   ADMIN_FILTER_MENU_ATTR,
   ADMIN_FILTER_MENU_PANEL_CLASSES,
@@ -10,15 +14,8 @@ import {
 } from "./admin-filter-styles";
 import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
 
-export type AdminFilterListboxOption = {
-  value: string;
-  label: string;
-};
-
-export type AdminFilterListboxGroup = {
-  label: string;
-  options: AdminFilterListboxOption[];
-};
+export type AdminFilterListboxOption = AdminEntityFilterOption;
+export type AdminFilterListboxGroup = AdminEntityFilterGroup;
 
 export type AdminFilterListboxProps = {
   id: string;
@@ -53,12 +50,14 @@ function ListboxItem({
   id,
   selected,
   active,
+  depth = 0,
   onSelect,
 }: {
   label: string;
   id: string;
   selected: boolean;
   active: boolean;
+  depth?: number;
   onSelect: () => void;
 }) {
   return (
@@ -77,7 +76,14 @@ function ListboxItem({
             : "text-white/78 hover:bg-white/[0.05]"
       }`}
     >
-      {label}
+      <span className="flex min-w-0 items-center">
+        {depth ? (
+          <span aria-hidden="true" className="shrink-0 text-white/28">
+            {"— ".repeat(depth)}
+          </span>
+        ) : null}
+        <span className="truncate">{label}</span>
+      </span>
     </button>
   );
 }
@@ -108,7 +114,11 @@ export default function AdminFilterListbox({
 }: AdminFilterListboxProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [activeValue, setActiveValue] = useState(value);
-  const menuPosition = useAdminFloatingMenuPosition(isOpen, triggerRef);
+  const menuPosition = useAdminFloatingMenuPosition(isOpen, triggerRef, {
+    minWidth: 220,
+    collisionPadding: 12,
+    estimatedHeight: 340,
+  });
   const isPlaceholder = value === allValue;
 
   const safeOptions = useMemo(
@@ -228,13 +238,8 @@ export default function AdminFilterListbox({
         aria-labelledby={`${id}-trigger`}
         dir="rtl"
         data-admin-filter-listbox=""
-        style={{
-          position: "fixed",
-          top: menuPosition.top,
-          left: menuPosition.left,
-          width: menuPosition.width,
-          zIndex: 9999,
-        }}
+        data-placement={menuPosition.placement}
+        style={menuPosition.style}
         className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} ${ADMIN_FILTER_MENU_PANEL_CLASSES} p-1.5`}
       >
         <ListboxItem
@@ -258,6 +263,7 @@ export default function AdminFilterListbox({
                     label={option.label}
                     selected={value === option.value}
                     active={activeValue === option.value}
+                    depth={option.depth}
                     onSelect={() => handleSelect(option.value)}
                   />
                 ))}
@@ -270,6 +276,7 @@ export default function AdminFilterListbox({
                 label={option.label}
                 selected={value === option.value}
                 active={activeValue === option.value}
+                depth={option.depth}
                 onSelect={() => handleSelect(option.value)}
               />
             ))}

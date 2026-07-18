@@ -18,6 +18,8 @@ export type AdminActionFeedback = {
   message: string;
   layout: AdminFeedbackLayout;
   dismissible: boolean;
+  /** URL params to remove client-side when a redirect notice is dismissed. */
+  dismissSearchParams?: readonly string[];
   action?: AdminActionFeedbackAction;
 };
 
@@ -29,6 +31,10 @@ const feedbackKindDefaults: Record<
   action_validation: { layout: "inline", dismissible: true },
   critical_system: { layout: "stacked", dismissible: false },
 };
+
+export function getAdminFeedbackPolicy(kind: AdminActionFeedbackKind) {
+  return feedbackKindDefaults[kind];
+}
 
 export function mapAdminActionResultToFeedback(
   result: Pick<AdminActionResult, "ok" | "title" | "message">,

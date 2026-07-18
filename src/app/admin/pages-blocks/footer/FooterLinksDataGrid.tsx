@@ -202,7 +202,7 @@ export default function FooterLinksDataGrid({
                 <AdminDataGridActionButton
                   action="visibility"
                   size="compact"
-                  hidden={item.visible === false}
+                  isCurrentlyHidden={item.visible === false}
                   onClick={() => toggleVisible(index)}
                 />
                 <AdminDataGridActionButton action="delete" size="compact" onClick={() => deleteRow(index)} />

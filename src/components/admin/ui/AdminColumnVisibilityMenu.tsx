@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
 import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import AdminCheckbox from "./AdminCheckbox";
@@ -24,6 +24,7 @@ type AdminColumnVisibilityMenuProps<Key extends string> = {
   defaultColumns: readonly Key[];
   onChange: (columns: Key[]) => void;
   onPersist: (columns: Key[]) => Promise<PersistResult>;
+  onRestore?: () => Promise<PersistResult>;
   onPersisted?: (columns: Key[]) => void;
   label?: string;
   scrollAreaClassName?: string;
@@ -35,6 +36,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   defaultColumns,
   onChange,
   onPersist,
+  onRestore,
   onPersisted,
   label = "الأعمدة",
   scrollAreaClassName = "",
@@ -71,15 +73,19 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
     align: "left",
     collisionPadding: 12,
     estimatedHeight: 458,
+    zIndex: 10000,
   });
 
   useEffect(() => {
     if (!isOpen) return;
     function close(event: MouseEvent) {
       const target = event.target as Node;
+      const element =
+        target instanceof Element ? target : target.parentElement;
       if (
         rootRef.current?.contains(target) ||
-        panelRef.current?.contains(target)
+        panelRef.current?.contains(target) ||
+        element?.closest("[data-admin-column-menu]")
       ) {
         return;
       }
@@ -116,20 +122,25 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
     return () => window.cancelAnimationFrame(frame);
   }, [isOpen, menuPosition]);
 
-  function persist(next: Key[]) {
+  function persist(
+    next: Key[],
+    startImmediately = false,
+    persistOverride?: () => Promise<PersistResult>,
+  ) {
     latestColumnsRef.current = next;
-    onChange(next);
+    flushSync(() => onChange(next));
     setError("");
+    const invokePersist = () => (persistOverride ? persistOverride() : onPersist(next))
+      .catch(() => ({
+        ok: false,
+        message: "تعذر حفظ تفضيلات الأعمدة.",
+      }));
+    const resultPromise = startImmediately
+      ? invokePersist()
+      : saveQueueRef.current.then(invokePersist);
+    saveQueueRef.current = resultPromise;
     startTransition(async () => {
-      const resultPromise = saveQueueRef.current.then(() => onPersist(next));
-      saveQueueRef.current = resultPromise.catch(() => ({
-        ok: false,
-        message: "تعذر حفظ تفضيلات الأعمدة.",
-      }));
-      const result = await resultPromise.catch(() => ({
-        ok: false,
-        message: "تعذر حفظ تفضيلات الأعمدة.",
-      }));
+      const result = await resultPromise;
       if (!result.ok) {
         setError(result.message || "تعذر حفظ تفضيلات الأعمدة.");
       } else if (
@@ -139,6 +150,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         onPersisted?.(next);
       }
     });
+    return resultPromise;
   }
 
   function toggle(key: Key) {
@@ -161,17 +173,9 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         role="menu"
         dir="rtl"
         data-admin-column-menu=""
+        onMouseDown={(event) => event.stopPropagation()}
         data-placement={menuPosition.placement}
-        style={{
-          position: "fixed",
-          top:
-            menuPosition.bottom === undefined ? menuPosition.top : undefined,
-          bottom: menuPosition.bottom,
-          left: menuPosition.left,
-          width: menuPosition.width,
-          maxHeight: menuPosition.maxHeight,
-          zIndex: 10000,
-        }}
+        style={menuPosition.style}
         className="flex flex-col overflow-hidden rounded-[16px] border border-[#D8B87A]/20 bg-[#080B10]/98 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
       >
         <p className="shrink-0 px-2 py-2 text-xs font-semibold text-white/45">
@@ -207,7 +211,17 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         </div>
         <button
           type="button"
-          onClick={() => persist([...defaultColumns])}
+          data-default-columns={defaultColumns.join(",")}
+          onClick={async () => {
+            const result = await persist(
+              [...defaultColumns],
+              true,
+              onRestore,
+            );
+            if (!result.ok) return;
+            setIsOpen(false);
+            window.requestAnimationFrame(() => triggerRef.current?.focus());
+          }}
           className="mt-2 w-full shrink-0 cursor-pointer rounded-[9px] border border-white/10 px-3 py-2.5 text-sm font-semibold text-[#D8B87A] transition hover:border-[#D8B87A]/30 hover:bg-[#D8B87A]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
         >
           استعادة الأعمدة الافتراضية

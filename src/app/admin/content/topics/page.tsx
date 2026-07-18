@@ -153,6 +153,7 @@ export default async function UnifiedContentTopicsPage({
           message={noticeFeedback.message}
           layout={noticeFeedback.layout}
           dismissible={noticeFeedback.dismissible}
+          dismissSearchParams={noticeFeedback.dismissSearchParams}
         />
       ) : null}
       {loadError ? (

@@ -4,6 +4,7 @@ import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-se
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import {
+  SERIES_DEFAULT_COLUMN_KEYS,
   SERIES_LIST_VIEW_KEY,
   SERIES_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/series-list-config";
@@ -579,4 +580,8 @@ export async function saveSeriesTablePreferences(visibleColumns: string[]) {
     visibleColumns,
     allowedColumns: SERIES_PREFERENCE_COLUMN_KEYS,
   });
+}
+
+export async function restoreSeriesTablePreferences() {
+  return saveSeriesTablePreferences([...SERIES_DEFAULT_COLUMN_KEYS]);
 }

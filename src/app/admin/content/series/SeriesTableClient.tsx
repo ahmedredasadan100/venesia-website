@@ -16,9 +16,11 @@ import {
   resolveClientPagination,
   slicePageRows,
   type AdminEntityFilterDef,
+  type AdminEntityFilterOption,
 } from "../../../../lib/admin/entity-list";
 import {
   bulkSeriesActionAjax,
+  restoreSeriesTablePreferences,
   saveSeriesTablePreferences,
 } from "./actions";
 import {
@@ -55,10 +57,12 @@ export type { SeriesListRow };
 export default function SeriesTableClient({
   series,
   categoryOptions,
+  categoryDescendantIdsByValue,
   initialVisibleColumns,
 }: {
   series: SeriesListRow[];
-  categoryOptions: Array<{ value: string; label: string }>;
+  categoryOptions: AdminEntityFilterOption[];
+  categoryDescendantIdsByValue: Record<string, number[]>;
   initialVisibleColumns?: string[];
 }) {
   const router = useRouter();
@@ -71,6 +75,15 @@ export default function SeriesTableClient({
     key: SeriesSortKey;
     direction: "asc" | "desc";
   }>({ key: "name", direction: "asc" });
+  const selectedCategoryIds = useMemo(
+    () =>
+      new Set(
+        category === "all"
+          ? []
+          : (categoryDescendantIdsByValue[category] ?? [Number(category)]),
+      ),
+    [category, categoryDescendantIdsByValue],
+  );
 
   const columns = useMemo(
     () => createSeriesColumns({ onRowsUpdated: setRows }),
@@ -96,7 +109,8 @@ export default function SeriesTableClient({
     let next = rows.filter((row) => {
       const statusOk = status === "all" || row.status === status;
       const categoryOk =
-        category === "all" || String(row.category_id ?? "") === category;
+        category === "all" ||
+        (row.category_id != null && selectedCategoryIds.has(row.category_id));
       if (!statusOk || !categoryOk) return false;
       if (!normalized) return true;
       return (
@@ -137,7 +151,7 @@ export default function SeriesTableClient({
     });
 
     return next;
-  }, [category, query, rows, sort, status]);
+  }, [category, query, rows, selectedCategoryIds, sort, status]);
 
   const pagination = resolveClientPagination(
     filteredRows.length,
@@ -201,9 +215,11 @@ export default function SeriesTableClient({
             ? initialVisibleColumns
             : [...SERIES_DEFAULT_COLUMN_KEYS]
         }
+        defaultVisibleColumns={[...SERIES_DEFAULT_COLUMN_KEYS]}
         onPersistColumns={(visibleColumns) =>
           saveSeriesTablePreferences(visibleColumns)
         }
+        onRestoreColumns={restoreSeriesTablePreferences}
         enableColumnManagement
         enableSelection
         selectionLabel="تحديد كل السلاسل"
@@ -226,16 +242,24 @@ export default function SeriesTableClient({
           },
         }}
         actionsColumnWidth={SERIES_ACTIONS_COLUMN_WIDTH}
-        empty={
-          <>
+        emptyState={{
+          mode: rows.length === 0 ? "system" : "filtered",
+          systemEmpty: (
+            <>
+              <p className="text-base font-semibold text-white">
+                لا توجد سلاسل حتى الآن
+              </p>
+              <p className="mt-2 text-sm text-white/45">
+                ابدأ بإضافة أول سلسلة من زر إضافة سلسلة.
+              </p>
+            </>
+          ),
+          filteredEmpty: (
             <p className="text-base font-semibold text-white">
-              لا توجد سلاسل حتى الآن
+              لا توجد سلاسل مطابقة للبحث أو الفلاتر المحددة
             </p>
-            <p className="mt-2 text-sm text-white/45">
-              ابدأ بإضافة أول سلسلة من زر إضافة سلسلة.
-            </p>
-          </>
-        }
+          ),
+        }}
         onBulkExecute={async (action, ids) =>
           mapSeriesResult(await bulkSeriesActionAjax(action, ids))
         }

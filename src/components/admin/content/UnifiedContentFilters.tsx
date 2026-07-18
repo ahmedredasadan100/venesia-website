@@ -3,7 +3,10 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
+import {
+  toAdminCategoryFilterOptions,
+  type AdminContentCategoryNode,
+} from "../../../lib/admin/content/category-hierarchy";
 import { CONTENT_TYPE_OPTIONS } from "../../../lib/admin/content/content-types";
 import type { AdminEntityFilterDef } from "../../../lib/admin/entity-list";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
@@ -56,7 +59,12 @@ export default function UnifiedContentFilters({
   const suggestionPosition = useAdminFloatingMenuPosition(
     suggestionsOpen && canSearch,
     searchAnchorRef,
-    { minWidth: 280 },
+    {
+      minWidth: 280,
+      collisionPadding: 12,
+      estimatedHeight: 360,
+      zIndex: 10000,
+    },
   );
 
   const syncKey = `${initial.q}|${initial.contentType}|${initial.category}|${initial.series}|${initial.status}|${initial.featured}`;
@@ -67,11 +75,7 @@ export default function UnifiedContentFilters({
   }
 
   const categoryOptions = useMemo(
-    () =>
-      categories.map((category) => ({
-        value: String(category.id),
-        label: `${"— ".repeat(category.depth)}${category.name}`,
-      })),
+    () => toAdminCategoryFilterOptions(categories),
     [categories],
   );
   const seriesOptions = useMemo(
@@ -237,7 +241,8 @@ export default function UnifiedContentFilters({
           <div
             role="listbox"
             dir="rtl"
-            style={{ position: "fixed", top: suggestionPosition.top, left: suggestionPosition.left, width: suggestionPosition.width, zIndex: 10000 }}
+            data-placement={suggestionPosition.placement}
+            style={suggestionPosition.style}
             className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} ${ADMIN_FILTER_MENU_PANEL_CLASSES}`}
           >
             {suggestionsLoading ? <p className="px-3 py-3 text-sm text-white/45">جاري البحث...</p> : null}

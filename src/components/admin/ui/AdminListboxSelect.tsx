@@ -14,6 +14,7 @@ import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
 export type AdminListboxSelectOption = {
   value: string;
   label: string;
+  depth?: number;
 };
 
 export type AdminListboxSelectProps = {
@@ -170,13 +171,8 @@ export default function AdminListboxSelect({
         aria-labelledby={`${controlId}-trigger`}
         dir="rtl"
         data-admin-listbox-menu=""
-        style={{
-          position: "fixed",
-          top: menuPosition.top,
-          left: menuPosition.left,
-          width: menuPosition.width,
-          zIndex: 9999,
-        }}
+        data-placement={menuPosition.placement}
+        style={menuPosition.style}
         className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} ${ADMIN_FILTER_MENU_PANEL_CLASSES} p-1.5`}
       >
         {options.map((option) => {
@@ -199,7 +195,14 @@ export default function AdminListboxSelect({
                     : "text-white/78 hover:bg-white/[0.05]"
               }`}
             >
-              {option.label}
+              <span className="flex min-w-0 items-center">
+                {option.depth ? (
+                  <span aria-hidden="true" className="shrink-0 text-white/28">
+                    {"— ".repeat(option.depth)}
+                  </span>
+                ) : null}
+                <span className="truncate">{option.label}</span>
+              </span>
             </button>
           );
         })}

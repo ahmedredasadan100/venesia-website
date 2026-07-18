@@ -65,7 +65,7 @@ export default function CategoryRowActions({
           type="submit"
           action="visibility"
           size="compact"
-          hidden={isActive}
+          isCurrentlyHidden={!isActive}
           title={isActive ? "إخفاء التصنيف" : "إظهار التصنيف"}
         />
       </form>
