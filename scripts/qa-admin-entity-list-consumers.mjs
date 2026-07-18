@@ -601,6 +601,143 @@ async function main() {
     );
     await page.keyboard.press("Escape");
 
+    // ── Restore vs queued toggle writes (ordering race) ────────────
+    // Scenario: toggle X is in flight (its POST held at the network layer),
+    // toggle Y is queued behind it in the component save queue, then the user
+    // clicks Restore Defaults. If Restore bypasses the component queue, its
+    // dispatch order diverges from user-action order (X, Restore, Y) and the
+    // stale Y write lands in the database after Restore — UI shows defaults
+    // while the database keeps pre-restore columns. The serialized queue must
+    // commit X, Y, Restore so the database ends at shared defaults.
+    const raceDefaults = storedCategoryColumns;
+    async function readStoredCategoryColumns() {
+      const { data, error } = await supabase
+        .from("admin_user_preferences")
+        .select("preferences")
+        .eq("admin_user_id", adminId)
+        .eq("view_key", "content-categories")
+        .maybeSingle();
+      if (error) throw error;
+      return Array.isArray(data?.preferences?.visibleColumns)
+        ? data.preferences.visibleColumns
+        : null;
+    }
+    await openColumnsMenu(page);
+    const raceIdCheckbox = page
+      .locator('[data-admin-column-menu] input[type="checkbox"]')
+      .nth(3);
+    check(
+      "Race: ID column starts unchecked from restored defaults",
+      (await raceIdCheckbox.evaluate((input) => input.checked)) === false,
+    );
+    const racePostStatuses = [];
+    const onRacePostResponse = (response) => {
+      if (
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/admin/content/categories"
+      ) {
+        racePostStatuses.push(response.status());
+      }
+    };
+    page.on("response", onRacePostResponse);
+    let releaseHeldToggleWrite = () => {};
+    const heldToggleWrite = new Promise((resolveHold) => {
+      releaseHeldToggleWrite = resolveHold;
+    });
+    let racePostIndex = 0;
+    const raceRouteMatcher = (url) =>
+      url.pathname === "/admin/content/categories";
+    const raceRouteHandler = async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      racePostIndex += 1;
+      if (racePostIndex === 1) await heldToggleWrite;
+      return route.continue();
+    };
+    await page.route(raceRouteMatcher, raceRouteHandler);
+    await raceIdCheckbox.check();
+    check(
+      "Race: toggle applies optimistically while its write is held",
+      (await page.locator("thead th").filter({ hasText: /^ID/ }).count()) === 1,
+    );
+    // Second toggle queues behind the held write inside the component queue.
+    await page
+      .locator('[data-admin-column-menu] input[type="checkbox"]')
+      .nth(4)
+      .check();
+    await page
+      .getByRole("button", { name: /استعادة الأعمدة الافتراضية/ })
+      .click();
+    // Window in which a queue-bypassing restore (the old behavior) dispatches
+    // its server action ahead of the queued second toggle.
+    await page.waitForTimeout(800);
+    releaseHeldToggleWrite();
+    const raceResponsesDeadline = Date.now() + 20_000;
+    while (
+      racePostStatuses.length < 3 &&
+      Date.now() < raceResponsesDeadline
+    ) {
+      await page.waitForTimeout(100);
+    }
+    check(
+      "Race: all three persistence writes complete",
+      racePostStatuses.length === 3 &&
+        racePostStatuses.every((status) => status === 200),
+      JSON.stringify(racePostStatuses),
+    );
+    const raceSpinnerGone = await page
+      .getByRole("button", { name: /^الأعمدة$/ })
+      .locator(".animate-spin")
+      .waitFor({ state: "detached", timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    check("Race: columns trigger is not stuck pending", raceSpinnerGone);
+    await page
+      .waitForFunction(
+        () => document.activeElement?.textContent?.includes("الأعمدة") === true,
+        undefined,
+        { timeout: 5_000 },
+      )
+      .catch(() => null);
+    check(
+      "Race: restore closes the menu and returns focus",
+      (await page.locator("[data-admin-column-menu]").count()) === 0 &&
+        (await page.evaluate(
+          () => document.activeElement?.textContent?.includes("الأعمدة"),
+        )) === true,
+    );
+    check(
+      "Race: UI shows shared default columns after settle",
+      (await page.locator("thead th").filter({ hasText: /^ID/ }).count()) === 0,
+    );
+    const storedAfterRace = await readStoredCategoryColumns();
+    await page.waitForTimeout(1_200);
+    const storedAfterSettle = await readStoredCategoryColumns();
+    check(
+      "Race: database holds shared defaults and the stale write never lands",
+      JSON.stringify(storedAfterRace) === JSON.stringify(raceDefaults) &&
+        JSON.stringify(storedAfterSettle) === JSON.stringify(raceDefaults) &&
+        storedAfterSettle !== null &&
+        !storedAfterSettle.includes("id"),
+      JSON.stringify({ raceDefaults, storedAfterRace, storedAfterSettle }),
+    );
+    await page.unroute(raceRouteMatcher, raceRouteHandler);
+    page.off("response", onRacePostResponse);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(400);
+    check(
+      "Race: defaults survive reload after the race",
+      (await page.locator("thead th").filter({ hasText: /^ID/ }).count()) === 0,
+    );
+    await openColumnsMenu(page);
+    check(
+      "Race: ID checkbox is unchecked after reload",
+      (await page
+        .locator('[data-admin-column-menu] input[type="checkbox"]')
+        .nth(3)
+        .evaluate((input) => input.checked)) === false,
+    );
+    await page.keyboard.press("Escape");
+
     check(
       "Categories column title الموضوعات",
       (await page.getByRole("columnheader", { name: "الموضوعات" }).count()) > 0,

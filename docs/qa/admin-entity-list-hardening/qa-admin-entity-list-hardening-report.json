@@ -1,30 +1,30 @@
 {
-  "generatedAt": "2026-07-18T18:49:24.438Z",
+  "generatedAt": "2026-07-18T23:45:49.126Z",
   "baseUrl": "http://127.0.0.1:3000",
   "fixture": {
-    "runId": "mrqpynaq",
-    "search": "QA mrqpynaq",
-    "rootCategoryId": 508,
+    "runId": "mrr0jd72",
+    "search": "QA mrr0jd72",
+    "rootCategoryId": 587,
     "childCategoryIds": [
-      509,
-      510
+      588,
+      589
     ],
     "categoryIds": [
-      508,
-      509,
-      510,
-      511,
-      512,
-      513,
-      514,
-      515,
-      516,
-      517,
-      518
+      587,
+      588,
+      589,
+      590,
+      591,
+      592,
+      593,
+      594,
+      595,
+      596,
+      597
     ],
     "seriesIds": [
-      105,
-      106
+      119,
+      120
     ]
   },
   "cleanupProof": {
@@ -51,12 +51,12 @@
     {
       "name": "QA session is bound to isolated admin",
       "ok": true,
-      "detail": "expected=125 actual=125"
+      "detail": "expected=134 actual=134"
     },
     {
       "name": "Server-rendered admin identity matches isolated admin",
       "ok": true,
-      "detail": "__QA_ENTITY_LIST_mrqpynaq__"
+      "detail": "__QA_ENTITY_LIST_mrr0jd72__"
     },
     {
       "name": "Categories entity list present",
@@ -219,6 +219,61 @@
       "detail": "{\"storedCategoryColumns\":[\"count\",\"status\"],\"categoriesRestoreHeaders\":[\"التصنيف↕\",\"الموضوعات↕\",\"الحالة↕\",\"الإجراءات\"]}"
     },
     {
+      "name": "Columns button present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Race: ID column starts unchecked from restored defaults",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Race: toggle applies optimistically while its write is held",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Race: all three persistence writes complete",
+      "ok": true,
+      "detail": "[200,200,200]"
+    },
+    {
+      "name": "Race: columns trigger is not stuck pending",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Race: restore closes the menu and returns focus",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Race: UI shows shared default columns after settle",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Race: database holds shared defaults and the stale write never lands",
+      "ok": true,
+      "detail": "{\"raceDefaults\":[\"count\",\"status\"],\"storedAfterRace\":[\"count\",\"status\"],\"storedAfterSettle\":[\"count\",\"status\"]}"
+    },
+    {
+      "name": "Race: defaults survive reload after the race",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Columns button present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Race: ID checkbox is unchecked after reload",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "name": "Categories column title الموضوعات",
       "ok": true,
       "detail": ""
@@ -376,37 +431,37 @@
     {
       "name": "Categories limit resets page and preserves search",
       "ok": true,
-      "detail": "?q=QA+mrqpynaq&limit=20"
+      "detail": "?q=QA+mrr0jd72&limit=20"
     },
     {
       "name": "Categories page-size 30 applies and preserves search",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq&limit=30"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrr0jd72&limit=30"
     },
     {
       "name": "Categories page-size 50 applies and preserves search",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq&limit=50"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrr0jd72&limit=50"
     },
     {
       "name": "Categories page-size 10 applies and preserves search",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrr0jd72"
     },
     {
       "name": "Categories search resets page to 1",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq+Row"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrr0jd72+Row"
     },
     {
       "name": "Categories status filter resets page to 1",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrqpynaq&status=hidden"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA+mrr0jd72&status=hidden"
     },
     {
       "name": "Categories sort preserves filter and limit URL state",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA%20mrqpynaq&status=hidden&limit=20"
+      "detail": "http://127.0.0.1:3000/admin/content/categories?q=QA%20mrr0jd72&status=hidden&limit=20"
     },
     {
       "name": "Opening columns closes filter",
@@ -431,12 +486,12 @@
     {
       "name": "Series category filter contains parent exactly once",
       "ok": true,
-      "detail": "[\"كل التصنيفات\",\"موضوعات تهمك\",\"— اعرف السوق\",\"— بيت الوطن\",\"المركز الإعلامي\",\"— الأخبار\",\"— من أرض التنفيذ\",\"— الفيديوهات\",\"— البيانات الصحفية\",\"— معرض الصور\",\"اختبار Feed Widget\",\"QA mrqpynaq Parent\",\"— QA mrqpynaq Child 1\",\"— QA mrqpynaq Child 2\",\"QA mrqpynaq Row 4\",\"QA mrqpynaq Row 5\",\"QA mrqpynaq Row 6\",\"QA mrqpynaq Row 7\",\"QA mrqpynaq Row 8\",\"QA mrqpynaq Row 9\",\"QA mrqpynaq Row 10\",\"QA mrqpynaq Row 11\"]"
+      "detail": "[\"كل التصنيفات\",\"موضوعات تهمك\",\"— اعرف السوق\",\"— بيت الوطن\",\"المركز الإعلامي\",\"— الأخبار\",\"— من أرض التنفيذ\",\"— الفيديوهات\",\"— البيانات الصحفية\",\"— معرض الصور\",\"اختبار Feed Widget\",\"QA mrr0jd72 Parent\",\"— QA mrr0jd72 Child 1\",\"— QA mrr0jd72 Child 2\",\"QA mrr0jd72 Row 4\",\"QA mrr0jd72 Row 5\",\"QA mrr0jd72 Row 6\",\"QA mrr0jd72 Row 7\",\"QA mrr0jd72 Row 8\",\"QA mrr0jd72 Row 9\",\"QA mrr0jd72 Row 10\",\"QA mrr0jd72 Row 11\"]"
     },
     {
       "name": "Series category filter contains hierarchical children once",
       "ok": true,
-      "detail": "[\"كل التصنيفات\",\"موضوعات تهمك\",\"— اعرف السوق\",\"— بيت الوطن\",\"المركز الإعلامي\",\"— الأخبار\",\"— من أرض التنفيذ\",\"— الفيديوهات\",\"— البيانات الصحفية\",\"— معرض الصور\",\"اختبار Feed Widget\",\"QA mrqpynaq Parent\",\"— QA mrqpynaq Child 1\",\"— QA mrqpynaq Child 2\",\"QA mrqpynaq Row 4\",\"QA mrqpynaq Row 5\",\"QA mrqpynaq Row 6\",\"QA mrqpynaq Row 7\",\"QA mrqpynaq Row 8\",\"QA mrqpynaq Row 9\",\"QA mrqpynaq Row 10\",\"QA mrqpynaq Row 11\"]"
+      "detail": "[\"كل التصنيفات\",\"موضوعات تهمك\",\"— اعرف السوق\",\"— بيت الوطن\",\"المركز الإعلامي\",\"— الأخبار\",\"— من أرض التنفيذ\",\"— الفيديوهات\",\"— البيانات الصحفية\",\"— معرض الصور\",\"اختبار Feed Widget\",\"QA mrr0jd72 Parent\",\"— QA mrr0jd72 Child 1\",\"— QA mrr0jd72 Child 2\",\"QA mrr0jd72 Row 4\",\"QA mrr0jd72 Row 5\",\"QA mrr0jd72 Row 6\",\"QA mrr0jd72 Row 7\",\"QA mrr0jd72 Row 8\",\"QA mrr0jd72 Row 9\",\"QA mrr0jd72 Row 10\",\"QA mrr0jd72 Row 11\"]"
     },
     {
       "name": "Series parent category includes directly assigned descendant series",
@@ -446,7 +501,7 @@
     {
       "name": "Series parent result includes both child series",
       "ok": true,
-      "detail": "▥الأعمدةالسلسلة↑الموضوعات↕الحالة↕الإجراءاتQA mrqpynaq Series Child 10منشورQA mrqpynaq Series Child 20مخفي"
+      "detail": "▥الأعمدةالسلسلة↑الموضوعات↕الحالة↕الإجراءاتQA mrr0jd72 Series Child 10منشورQA mrr0jd72 Series Child 20مخفي"
     },
     {
       "name": "Series clear filters appears with search and category filters",
@@ -461,7 +516,7 @@
     {
       "name": "Series category trigger updates immediately after user selection",
       "ok": true,
-      "detail": "QA mrqpynaq Parent"
+      "detail": "QA mrr0jd72 Parent"
     },
     {
       "name": "Series category listbox closes on selection",
@@ -471,12 +526,12 @@
     {
       "name": "Series category trigger never reverts during pending navigation",
       "ok": true,
-      "detail": "{\"committed\":true,\"samples\":9,\"tail\":[\"QA mrqpynaq Parent\",\"QA mrqpynaq Parent\",\"QA mrqpynaq Parent\"]}"
+      "detail": "{\"committed\":true,\"samples\":12,\"tail\":[\"QA mrr0jd72 Parent\",\"QA mrr0jd72 Parent\",\"QA mrr0jd72 Parent\"]}"
     },
     {
       "name": "Series category selection preserves q and limit while resetting page",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/series?q=QA+mrqpynaq&limit=20&category=508"
+      "detail": "http://127.0.0.1:3000/admin/content/series?q=QA+mrr0jd72&limit=20&category=587"
     },
     {
       "name": "Series category selection shows matching descendant series",
@@ -641,7 +696,7 @@
     {
       "name": "Series preview links to topics?series= in a new tab",
       "ok": true,
-      "detail": "/admin/content/topics?series=105 target=_blank"
+      "detail": "/admin/content/topics?series=119 target=_blank"
     },
     {
       "name": "Series pagination summary present",

@@ -130,20 +130,26 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
 
   function persist(
     next: Key[],
-    startImmediately = false,
     persistOverride?: () => Promise<PersistResult>,
   ) {
     latestColumnsRef.current = next;
     flushSync(() => onChange(next));
     setError("");
-    const invokePersist = () => (persistOverride ? persistOverride() : onPersist(next))
-      .catch(() => ({
-        ok: false,
-        message: "تعذر حفظ تفضيلات الأعمدة.",
-      }));
-    const resultPromise = startImmediately
-      ? invokePersist()
-      : saveQueueRef.current.then(invokePersist);
+    // Promise.resolve() wrapping keeps a synchronous throw from the handler
+    // inside the promise lifecycle, so pendingSaves always unwinds and the
+    // queue chain keeps resolving.
+    const invokePersist = () =>
+      Promise.resolve()
+        .then(() => (persistOverride ? persistOverride() : onPersist(next)))
+        .catch(() => ({
+          ok: false,
+          message: "تعذر حفظ تفضيلات الأعمدة.",
+        }));
+    // Every save — including Restore Defaults — chains on the same serial
+    // queue. Writes therefore commit in user-action order and an older
+    // in-flight save can never land in the database after a newer one
+    // (latestColumnsRef only gates onPersisted, not the write itself).
+    const resultPromise = saveQueueRef.current.then(invokePersist);
     saveQueueRef.current = resultPromise;
     setPendingSaves((count) => count + 1);
     void resultPromise.then((result) => {
@@ -220,11 +226,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
           type="button"
           data-default-columns={defaultColumns.join(",")}
           onClick={async () => {
-            const result = await persist(
-              [...defaultColumns],
-              true,
-              onRestore,
-            );
+            const result = await persist([...defaultColumns], onRestore);
             if (!result.ok) return;
             setIsOpen(false);
             window.requestAnimationFrame(() => triggerRef.current?.focus());
