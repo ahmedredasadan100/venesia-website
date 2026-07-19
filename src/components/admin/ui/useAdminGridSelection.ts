@@ -7,6 +7,8 @@ export type AdminGridId = string | number;
 export function useAdminGridSelection<T extends AdminGridId>(visibleIds: T[]) {
   const [selectedIds, setSelectedIds] = useState<T[]>([]);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
+  const visibleSignature = JSON.stringify(visibleIds);
+  const previousVisibleSignature = useRef(visibleSignature);
 
   const selectedSet = useMemo(() => new Set<T>(selectedIds), [selectedIds]);
   const selectedVisibleCount = useMemo(
@@ -22,6 +24,12 @@ export function useAdminGridSelection<T extends AdminGridId>(visibleIds: T[]) {
       selectAllRef.current.indeterminate = isPartiallySelected;
     }
   }, [isPartiallySelected]);
+
+  useEffect(() => {
+    if (previousVisibleSignature.current === visibleSignature) return;
+    previousVisibleSignature.current = visibleSignature;
+    setSelectedIds([]);
+  }, [visibleSignature]);
 
   function toggleOne(id: T, checked: boolean) {
     setSelectedIds((current) => {

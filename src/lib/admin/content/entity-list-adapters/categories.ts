@@ -42,7 +42,12 @@ export const categoriesEntityListAdapter: AdminEntityListAdapter<
   CategoryFilters,
   CategorySortField,
   CategoryListRow,
-  { parentOptions: Array<{ id: number; name: string; level: number }> }
+  {
+    parentOptions: Array<{ id: number; name: string; level: number }>;
+    total: number;
+    published: number;
+    topics: number;
+  }
 > = {
   entity: "categories",
   queryContract: categoriesQueryContract,
@@ -56,6 +61,9 @@ export const categoriesEntityListAdapter: AdminEntityListAdapter<
           level: z.number().int().nonnegative(),
         }),
       ),
+      total: z.number().int().nonnegative(),
+      published: z.number().int().nonnegative(),
+      topics: z.number().int().nonnegative(),
     }),
   ),
   staleTimeMs: 30_000,
@@ -108,7 +116,12 @@ export const categoriesEntityListAdapter: AdminEntityListAdapter<
         totalRows,
         totalPages,
       },
-      metrics: { parentOptions: source.parentOptions },
+      metrics: {
+        parentOptions: source.parentOptions,
+        total: source.rows.length,
+        published: source.rows.filter((row) => Boolean(row.is_active)).length,
+        topics: source.rows.reduce((sum, row) => sum + row.ownCount, 0),
+      },
       meta: {
         generatedAt: new Date().toISOString(),
         mode: query.mode,

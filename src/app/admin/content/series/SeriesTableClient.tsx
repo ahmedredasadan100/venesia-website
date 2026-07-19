@@ -6,7 +6,10 @@ import {
   AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../../components/admin/entity-list";
-import { AdminTablePagination } from "../../../../components/admin/ui";
+import {
+  AdminMetricCardsGrid,
+  AdminTablePagination,
+} from "../../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
@@ -130,6 +133,14 @@ export default function SeriesTableClient({
 
   return (
     <AdminEntityListSurface className="space-y-4" consumer="series">
+      <AdminMetricCardsGrid
+        items={[
+          { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true },
+          { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true },
+          { label: "الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
+        ]}
+      />
+
       <AdminEntityListFilters
         basePath={BASE_PATH}
         search={{

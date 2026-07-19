@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 
 import { AdminEntityListSurface } from "../entity-list";
-import { AdminTablePagination } from "../ui";
+import { AdminMetricCardsGrid, AdminTablePagination } from "../ui";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
 import {
@@ -22,6 +22,7 @@ import type {
 } from "../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
 import { ADMIN_CONTENT_ROUTES } from "../../../lib/admin/content-routes";
+import type { TopicMetrics } from "../../../lib/admin/content/entity-list-adapters/topics";
 import UnifiedContentFilters from "./UnifiedContentFilters";
 import UnifiedContentList from "./UnifiedContentList";
 
@@ -82,7 +83,7 @@ export default function TopicsListClient({
   categories: AdminContentCategoryNode[];
   series: SeriesOption[];
   initialQuery: AdminEntityListQuery<TopicFilters, TopicSortField>;
-  initialResult: AdminEntityListResult<UnifiedContentRow>;
+  initialResult: AdminEntityListResult<UnifiedContentRow, TopicMetrics>;
   initialVisibleColumns: string[];
   initialFeedback?: AdminActionFeedback | null;
 }) {
@@ -142,6 +143,17 @@ export default function TopicsListClient({
 
   return (
     <AdminEntityListSurface className="space-y-4" consumer="topics">
+      <AdminMetricCardsGrid
+        items={[
+          { label: "إجمالي الموضوعات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", compact: true },
+          { label: "منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", compact: true },
+          { label: "مسودات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.draft ?? 0), tone: "amber", compact: true },
+          { label: "مخفي", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", compact: true },
+          { label: "أرشيف", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.archived ?? 0), tone: "cyan", compact: true },
+          { label: "متوسط SEO", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.seoAverage ?? 0), suffix: controller.result.metrics?.error ? undefined : "/100", tone: "blue", compact: true },
+        ]}
+      />
+
       <UnifiedContentFilters
         initial={{
           q: controller.query.search,

@@ -1,8 +1,8 @@
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   AdminActionButton,
-  AdminMetricCardsGrid,
   AdminPageContextHeader,
+  AdminPageExperience,
 } from "../../../../components/admin/ui";
 import TopicsListClient from "../../../../components/admin/content/TopicsListClient";
 import { DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS } from "../../../../components/admin/content/unified-content-columns";
@@ -13,7 +13,6 @@ import {
 } from "../../../../lib/admin/content/category-hierarchy";
 import {
   CONTENT_LIST_VIEW_KEY,
-  loadUnifiedContentMetrics,
   type ContentListSearchParams,
 } from "../../../../lib/admin/content/load-unified-content";
 import { loadTopicsEntityListResult } from "../../../../lib/admin/content/entity-list-adapters/topics";
@@ -69,7 +68,6 @@ export default async function UnifiedContentTopicsPage({
     { data: categoryRows, error: categoriesError },
     { data: seriesRows, error: seriesError },
     { data: preference, error: preferenceError },
-    metrics,
   ] = await Promise.all([
     supabase
       .from("topic_categories")
@@ -87,7 +85,6 @@ export default async function UnifiedContentTopicsPage({
       .eq("admin_user_id", actor.id)
       .eq("view_key", CONTENT_LIST_VIEW_KEY)
       .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
-    loadUnifiedContentMetrics(),
   ]);
 
   const categories = (categoryRows ?? []) as AdminContentCategory[];
@@ -114,7 +111,7 @@ export default async function UnifiedContentTopicsPage({
     categoriesError?.message ??
     seriesError?.message ??
     preferenceError?.message ??
-    metrics.error ??
+    initialResult?.metrics?.error ??
     listError;
   const listLoadError =
     categoriesError?.message ??
@@ -123,7 +120,7 @@ export default async function UnifiedContentTopicsPage({
     listError;
 
   return (
-    <main className="min-w-0 space-y-7">
+    <AdminPageExperience className="min-w-0">
       <AdminPageContextHeader
         eyebrow="UNIFIED CONTENT ENGINE"
         title="إدارة الموضوعات"
@@ -151,17 +148,6 @@ export default async function UnifiedContentTopicsPage({
         />
       ) : null}
 
-      <AdminMetricCardsGrid
-        items={[
-          { label: "إجمالي الموضوعات", value: metrics.error ? "—" : metrics.total, tone: "gold", compact: true },
-          { label: "منشور", value: metrics.error ? "—" : metrics.published, tone: "green", compact: true },
-          { label: "مسودات", value: metrics.error ? "—" : metrics.draft, tone: "amber", compact: true },
-          { label: "مخفي", value: metrics.error ? "—" : metrics.unpublished, tone: "violet", compact: true },
-          { label: "أرشيف", value: metrics.error ? "—" : metrics.archived, tone: "cyan", compact: true },
-          { label: "متوسط SEO", value: metrics.error ? "—" : metrics.seoAverage, suffix: metrics.error ? undefined : "/100", tone: "blue", compact: true },
-        ]}
-      />
-
       {!listLoadError && initialResult ? (
         <TopicsListClient
           categories={flattenedCategories}
@@ -172,6 +158,6 @@ export default async function UnifiedContentTopicsPage({
           initialFeedback={noticeFeedback}
         />
       ) : null}
-    </main>
+    </AdminPageExperience>
   );
 }

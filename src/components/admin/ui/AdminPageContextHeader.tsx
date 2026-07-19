@@ -12,6 +12,10 @@ export type AdminPageContextHeaderProps = {
   contextLine?: ReactNode;
   /** Optional status badge shown above the title (placeholder / draft screens). */
   badge?: ReactNode;
+  /** Semantic state used by loading, error and empty experiences. */
+  status?: "ready" | "loading" | "error" | "empty" | "under-construction";
+  /** A restrained header for utility states while preserving the contract. */
+  variant?: "default" | "minimal";
 };
 
 const SHELL_CLASSES =
@@ -36,23 +40,31 @@ export default function AdminPageContextHeader({
   className = "",
   contextLine,
   badge,
+  status = "ready",
+  variant = "default",
 }: AdminPageContextHeaderProps) {
   const hasActionsDock = Boolean(actions || meta);
 
   return (
-    <section className={`${SHELL_CLASSES} ${className}`.trim()} dir="rtl">
+    <section
+      className={`${SHELL_CLASSES} ${variant === "minimal" ? "md:p-4" : ""} ${className}`.trim()}
+      dir="rtl"
+      data-admin-page-header
+      data-admin-page-header-status={status}
+      data-admin-page-header-variant={variant}
+    >
       <div className={SHELL_GLOW_CLASSES} aria-hidden="true" />
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
         <div className="min-w-0 lg:flex-1">
           {badge ? (
-            <span className="inline-flex rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-4 py-2 text-xs font-semibold text-[#D8B87A]">
+            <span className="inline-flex rounded-full border border-[var(--admin-accent)]/25 bg-[var(--admin-accent)]/10 px-4 py-2 text-xs font-semibold text-[var(--admin-accent)]">
               {badge}
             </span>
           ) : null}
 
           {eyebrow ? (
-            <p className={`text-xs font-semibold uppercase tracking-[0.22em] text-[#D8B87A]/70${badge ? " mt-5" : ""}`}>
+            <p className={`text-xs font-semibold uppercase tracking-[0.22em] text-[var(--admin-accent)]/70${badge ? " mt-5" : ""}`}>
               {eyebrow}
             </p>
           ) : null}
@@ -81,7 +93,7 @@ export default function AdminPageContextHeader({
             <div className={ACTIONS_DOCK_CLASSES}>
               <div className={ACTIONS_DOCK_GLOW_CLASSES} aria-hidden="true" />
               {meta ? (
-                <div className="rounded-2xl border border-[#D8B87A]/20 bg-[#D8B87A]/10 px-4 py-3 text-sm font-semibold text-[#D8B87A]">
+                <div className="rounded-2xl border border-[var(--admin-accent)]/20 bg-[var(--admin-accent)]/10 px-4 py-3 text-sm font-semibold text-[var(--admin-accent)]">
                   {meta}
                 </div>
               ) : null}

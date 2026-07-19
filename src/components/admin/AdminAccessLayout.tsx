@@ -4,14 +4,24 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { isAdminAuthPagePath } from "../../lib/admin/auth/session-paths";
+import type {
+  AdminNavigationItem,
+  ResolvedAdminCompanyConfig,
+} from "../../lib/admin/shell/contracts";
 import AdminShell from "./AdminShell";
 import AdminEntityListQueryProvider from "./entity-list/AdminEntityListQueryProvider";
 
 type AdminAccessLayoutProps = {
   children: ReactNode;
+  company: ResolvedAdminCompanyConfig;
+  navigation: AdminNavigationItem[];
 };
 
-export default function AdminAccessLayout({ children }: AdminAccessLayoutProps) {
+export default function AdminAccessLayout({
+  children,
+  company,
+  navigation,
+}: AdminAccessLayoutProps) {
   const pathname = usePathname();
 
   if (isAdminAuthPagePath(pathname)) {
@@ -20,7 +30,9 @@ export default function AdminAccessLayout({ children }: AdminAccessLayoutProps) 
 
   return (
     <AdminEntityListQueryProvider>
-      <AdminShell>{children}</AdminShell>
+      <AdminShell company={company} navigation={navigation}>
+        {children}
+      </AdminShell>
     </AdminEntityListQueryProvider>
   );
 }

@@ -6,7 +6,10 @@ import {
   AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../../components/admin/entity-list";
-import { AdminTablePagination } from "../../../../components/admin/ui";
+import {
+  AdminMetricCardsGrid,
+  AdminTablePagination,
+} from "../../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
 import {
@@ -54,6 +57,9 @@ const STATUS_FILTER: AdminEntityFilterDef = {
 
 type CategoryMetrics = {
   parentOptions: Array<{ id: number; name: string; level: number }>;
+  total: number;
+  published: number;
+  topics: number;
 };
 
 export default function CategoriesListClient({
@@ -151,6 +157,14 @@ export default function CategoriesListClient({
 
   return (
     <AdminEntityListSurface className="space-y-4" consumer="categories">
+      <AdminMetricCardsGrid
+        items={[
+          { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true },
+          { label: "نشط", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true },
+          { label: "الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
+        ]}
+      />
+
       <AdminEntityListFilters
         basePath={BASE_PATH}
         search={{
