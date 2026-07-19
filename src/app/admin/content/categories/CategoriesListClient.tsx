@@ -74,6 +74,7 @@ export default function CategoriesListClient({
     initialResult,
     staleTimeMs: 30_000,
   });
+  const patchRows = controller.patchRows;
   const rows = controller.result.rows;
   const parentOptions = useMemo(
     () => controller.result.metrics?.parentOptions ?? [],
@@ -120,8 +121,13 @@ export default function CategoriesListClient({
       createCategoryColumns(parentOptions, {
         isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
         onToggle: toggleCategory,
+        onCategoryUpdated: (updated) => {
+          patchRows((row) =>
+            row.id === updated.id ? updated : row,
+          );
+        },
       }),
-    [collapsedCategoryIds, parentOptions, toggleCategory],
+    [collapsedCategoryIds, parentOptions, patchRows, toggleCategory],
   );
 
   const pageRows = rows.filter((row) => {

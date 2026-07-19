@@ -94,6 +94,7 @@ export function createCategoryColumns(
   tree: {
     isExpanded: (categoryId: number) => boolean;
     onToggle: (categoryId: number) => void;
+    onCategoryUpdated: (category: CategoryListRow) => void;
   },
 ): AdminEntityColumnDef<CategoryListRow, CategoryColumnKey, CategorySortKey>[] {
   return [
@@ -269,8 +270,13 @@ export function createCategoryColumns(
       minWidth: CATEGORIES_ACTIONS_COLUMN_WIDTH,
       width: CATEGORIES_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
-      renderCell: ({ row }) => (
-        <CategoryRowActions category={row} parentOptions={parentOptions} />
+      renderCell: ({ row, onMutationResult }) => (
+        <CategoryRowActions
+          category={row}
+          parentOptions={parentOptions}
+          onMutationResult={onMutationResult}
+          onCategoryUpdated={tree.onCategoryUpdated}
+        />
       ),
     },
   ];

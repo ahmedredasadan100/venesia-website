@@ -26,7 +26,7 @@ import ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = resolve(ROOT, ".tmp-qa/admin-soft-deleted-content-counts");
-const baseUrl = "http://127.0.0.1:3000";
+const baseUrl = "http://localhost:3000";
 const runId = `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
 const prefix = `qa-sdc-${runId}`;
 const fixtureSearch = `QA SDC ${runId}`;

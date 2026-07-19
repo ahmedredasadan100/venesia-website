@@ -59,27 +59,29 @@ export function buildAdminPaginationItems(currentPage: number, totalPages: numbe
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
   }
-
-  const pages: Array<number | "ellipsis"> = [1];
-  const start = Math.max(2, currentPage - 2);
-  const end = Math.min(totalPages - 1, currentPage + 2);
-
-  if (start > 2) {
-    pages.push("ellipsis");
-  } else {
-    for (let page = 2; page < start; page++) pages.push(page);
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "ellipsis", totalPages];
   }
-
-  for (let page = start; page <= end; page++) pages.push(page);
-
-  if (end < totalPages - 1) {
-    pages.push("ellipsis");
-  } else {
-    for (let page = end + 1; page < totalPages; page++) pages.push(page);
+  if (currentPage >= totalPages - 3) {
+    return [
+      1,
+      "ellipsis",
+      totalPages - 4,
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ];
   }
-
-  pages.push(totalPages);
-  return pages;
+  return [
+    1,
+    "ellipsis",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "ellipsis",
+    totalPages,
+  ];
 }
 
 export function buildAdminPaginationHref(
@@ -339,14 +341,15 @@ export default function AdminTablePagination({
 
         {totalPages > 1 ? (
           <nav
-            className="flex flex-wrap items-center justify-center gap-1.5 md:justify-self-center"
+            data-admin-pagination-nav=""
+            className="flex max-w-full flex-nowrap items-center justify-center gap-1.5 overflow-x-auto md:justify-self-center"
             aria-label="ترقيم الصفحات"
           >
             {currentPage > 1 && onPageChange ? (
               <button
                 type="button"
                 onClick={() => onPageChange(currentPage - 1)}
-                className="inline-flex h-9 cursor-pointer items-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-3 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
               >
                 السابق
               </button>
@@ -354,12 +357,12 @@ export default function AdminTablePagination({
               <Link
                 href={prevHref}
                 scroll={false}
-                className="inline-flex h-9 cursor-pointer items-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-3 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
               >
                 السابق
               </Link>
             ) : (
-              <span className="inline-flex h-9 cursor-not-allowed items-center rounded-[10px] border border-white/[0.06] bg-black/10 px-3 text-sm text-white/28">
+              <span className="inline-flex h-9 w-[76px] flex-none cursor-not-allowed items-center justify-center rounded-[10px] border border-white/[0.06] bg-black/10 px-2 text-sm text-white/28">
                 السابق
               </span>
             )}
@@ -370,7 +373,8 @@ export default function AdminTablePagination({
                   <span
                     key={`ellipsis-${index}`}
                     aria-hidden="true"
-                    className="inline-flex h-9 min-w-9 items-center justify-center px-1 text-sm text-[#F4E7C5]/38"
+                    data-admin-pagination-slot="ellipsis"
+                    className="inline-flex h-9 w-9 flex-none items-center justify-center p-0 text-sm tabular-nums text-[#F4E7C5]/38"
                   >
                     …
                   </span>
@@ -388,7 +392,8 @@ export default function AdminTablePagination({
                   type="button"
                   onClick={() => onPageChange(item)}
                   aria-current={isActive ? "page" : undefined}
-                  className={`inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-[10px] border px-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+                  data-admin-pagination-slot="page"
+                  className={`inline-flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                     isActive
                       ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/65 hover:border-[#D8B87A]/24 hover:bg-black/24 hover:text-[#F4E7C5]"
@@ -402,7 +407,8 @@ export default function AdminTablePagination({
                   href={href}
                   scroll={false}
                   aria-current={isActive ? "page" : undefined}
-                  className={`inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-[10px] border px-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+                  data-admin-pagination-slot="page"
+                  className={`inline-flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                     isActive
                       ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/65 hover:border-[#D8B87A]/24 hover:bg-black/24 hover:text-[#F4E7C5]"
@@ -417,7 +423,7 @@ export default function AdminTablePagination({
               <button
                 type="button"
                 onClick={() => onPageChange(currentPage + 1)}
-                className="inline-flex h-9 cursor-pointer items-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-3 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
               >
                 التالي
               </button>
@@ -425,12 +431,12 @@ export default function AdminTablePagination({
               <Link
                 href={nextHref}
                 scroll={false}
-                className="inline-flex h-9 cursor-pointer items-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-3 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
               >
                 التالي
               </Link>
             ) : (
-              <span className="inline-flex h-9 cursor-not-allowed items-center rounded-[10px] border border-white/[0.06] bg-black/10 px-3 text-sm text-white/28">
+              <span className="inline-flex h-9 w-[76px] flex-none cursor-not-allowed items-center justify-center rounded-[10px] border border-white/[0.06] bg-black/10 px-2 text-sm text-white/28">
                 التالي
               </span>
             )}

@@ -17,7 +17,7 @@ import { chromium } from "playwright";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = resolve(ROOT, "docs/qa/admin-entity-list-hardening");
-const baseUrl = "http://127.0.0.1:3000";
+const baseUrl = "http://localhost:3000";
 const runId = Date.now().toString(36);
 const prefix = `qa-entity-list-${runId}`;
 const adminUsername = `__QA_ENTITY_LIST_${runId}__`;

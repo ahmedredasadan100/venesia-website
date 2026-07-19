@@ -18,6 +18,15 @@ import {
 } from "../../../../lib/admin/content/categories-list-config";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import {
+  adminActionFailure,
+  adminActionSuccess,
+  type AdminActionResult,
+} from "../../../../lib/admin/admin-action-result";
+import {
+  getCategoryDeleteBlockMessage,
+  loadCategoryDeleteDependencies,
+} from "../../../../lib/admin/content/category-delete-guard";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -378,6 +387,80 @@ export async function toggleCategoryStatus(formData: FormData) {
   redirect(`/admin/content/categories?notice=${nextStatus ? "shown" : "hidden"}`);
 }
 
+export type CategoryStatusMutationResult = AdminActionResult & {
+  isActive?: boolean;
+  status?: string;
+  updatedAt?: string;
+};
+
+export async function toggleCategoryStatusAjax(
+  id: number,
+): Promise<CategoryStatusMutationResult> {
+  await requireAdminSession();
+  if (!Number.isInteger(id) || id <= 0) {
+    return adminActionFailure("تعذر تنفيذ العملية", "معرّف التصنيف غير صالح.");
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: current, error: readError } = await supabase
+    .from("topic_categories")
+    .select("id, is_active")
+    .eq("id", id)
+    .maybeSingle<{ id: number; is_active: boolean | null }>();
+  if (readError || !current) {
+    return adminActionFailure(
+      "تعذر تنفيذ العملية",
+      current ? "تعذر قراءة حالة التصنيف." : "التصنيف غير موجود.",
+      { entityId: id },
+    );
+  }
+
+  const isActive = !Boolean(current.is_active);
+  const status = isActive ? "published" : "draft";
+  const updatedAt = new Date().toISOString();
+  const { data: updated, error: updateError } = await supabase
+    .from("topic_categories")
+    .update({ is_active: isActive, status, updated_at: updatedAt })
+    .eq("id", id)
+    .select("id, is_active, status, updated_at")
+    .maybeSingle<{
+      id: number;
+      is_active: boolean | null;
+      status: string | null;
+      updated_at: string | null;
+    }>();
+  if (updateError || !updated || Boolean(updated.is_active) !== isActive) {
+    return adminActionFailure(
+      "تعذر تنفيذ العملية",
+      "لم يتم تحديث حالة التصنيف. حاول مرة أخرى.",
+      { entityId: id },
+    );
+  }
+
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "topic_category",
+      isActive ? "publish" : "unpublish",
+    ),
+    entityType: "topic_category",
+    entityId: id,
+    metadata: { is_active: isActive },
+  });
+  revalidateCategories();
+  return {
+    ...adminActionSuccess(
+      "تم بنجاح",
+      isActive
+        ? "تم إظهار التصنيف بنجاح."
+        : "تم إخفاء التصنيف بنجاح.",
+      { code: isActive ? "published" : "unpublished", entityId: id },
+    ),
+    isActive,
+    status: updated.status ?? status,
+    updatedAt: updated.updated_at ?? updatedAt,
+  };
+}
+
 export async function duplicateCategory(formData: FormData) {
   await requireAdminSession();
   const id = getString(formData, "id");
@@ -449,28 +532,28 @@ export async function getCategoryDeletePreviewAjax(id: number) {
     .eq("id", id)
     .maybeSingle<{ id: number; name: string }>();
 
-  if (categoryError) return { ok: false as const, message: categoryError.message };
+  if (categoryError) {
+    return { ok: false as const, message: "تعذر قراءة بيانات التصنيف." };
+  }
   if (!category) return { ok: false as const, message: "التصنيف غير موجود." };
 
-  const { count: topicCountRaw, error: topicError } = await getSupabaseAdmin()
-    .from("topics")
-    .select("id", { count: "exact", head: true })
-    .eq("category_id", id);
-  if (topicError) return { ok: false as const, message: topicError.message };
-
-  const { count: childrenCountRaw, error: childrenError } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .select("id", { count: "exact", head: true })
-    .eq("parent_id", id);
-  if (childrenError) return { ok: false as const, message: childrenError.message };
-
-  const topicCount = topicCountRaw ?? 0;
-  const childrenCount = childrenCountRaw ?? 0;
+  let dependencies;
+  try {
+    dependencies = await loadCategoryDeleteDependencies(id);
+  } catch {
+    return {
+      ok: false as const,
+      message: "تعذر التحقق من العناصر المرتبطة بالتصنيف.",
+    };
+  }
+  const { topicCount, seriesCount, childrenCount } = dependencies;
 
   const { data: categories, error: categoriesError } = await getSupabaseAdmin()
     .from("topic_categories")
     .select("id, parent_id, name");
-  if (categoriesError) return { ok: false as const, message: categoriesError.message };
+  if (categoriesError) {
+    return { ok: false as const, message: "تعذر قراءة التصنيفات البديلة." };
+  }
 
   const childrenByParent = buildChildrenByParent(categories ?? []);
   const blockedIds = collectDescendantIds(id, childrenByParent);
@@ -480,7 +563,12 @@ export async function getCategoryDeletePreviewAjax(id: number) {
     ok: true as const,
     categoryName: category.name,
     topicCount,
+    seriesCount,
     childrenCount,
+    blockMessage: getCategoryDeleteBlockMessage(dependencies, {
+      includeTopics:
+        dependencies.seriesCount > 0 || dependencies.childrenCount > 0,
+    }),
     validTransferTargets,
   };
 }
@@ -494,27 +582,21 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
 
   const supabase = getSupabaseAdmin();
 
-  const { count: topicCountRaw, error: topicError } = await supabase
-    .from("topics")
-    .select("id", { count: "exact", head: true })
-    .eq("category_id", id);
-  if (topicError) return { ok: false as const, message: topicError.message };
-
-  const { count: childrenCountRaw, error: childrenError } = await supabase
-    .from("topic_categories")
-    .select("id", { count: "exact", head: true })
-    .eq("parent_id", id);
-  if (childrenError) return { ok: false as const, message: childrenError.message };
-
-  const topicCount = topicCountRaw ?? 0;
-  const childrenCount = childrenCountRaw ?? 0;
-
-  if (childrenCount > 0) {
+  let dependencies;
+  try {
+    dependencies = await loadCategoryDeleteDependencies(id);
+  } catch {
     return {
       ok: false as const,
-      message: "لا يمكن حذف تصنيف يحتوي على تصنيفات فرعية. انقل التصنيفات الفرعية أولًا.",
+      message: "تعذر التحقق من العناصر المرتبطة بالتصنيف.",
     };
   }
+  const { topicCount } = dependencies;
+  const blockingMessage = getCategoryDeleteBlockMessage(dependencies, {
+    includeTopics:
+      dependencies.seriesCount > 0 || dependencies.childrenCount > 0,
+  });
+  if (blockingMessage) return { ok: false as const, message: blockingMessage };
 
   if (topicCount > 0) {
     if (!transferToId || !Number.isFinite(transferToId)) {
@@ -528,7 +610,9 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
     const { data: categories, error: categoriesError } = await getSupabaseAdmin()
       .from("topic_categories")
       .select("id, parent_id, name");
-    if (categoriesError) return { ok: false as const, message: categoriesError.message };
+    if (categoriesError) {
+      return { ok: false as const, message: "تعذر قراءة التصنيفات البديلة." };
+    }
 
     const childrenByParent = buildChildrenByParent(categories ?? []);
     const blockedIds = collectDescendantIds(id, childrenByParent);
@@ -546,7 +630,9 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
       .eq("id", transferToId)
       .maybeSingle<{ id: number; name: string; slug: string }>();
 
-    if (targetError) return { ok: false as const, message: targetError.message };
+    if (targetError) {
+      return { ok: false as const, message: "تعذر التحقق من التصنيف الهدف." };
+    }
     if (!target) return { ok: false as const, message: "التصنيف الهدف غير موجود." };
 
     const now = new Date().toISOString();
@@ -561,11 +647,15 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
       })
       .eq("category_id", id);
 
-    if (moveError) return { ok: false as const, message: moveError.message };
+    if (moveError) {
+      return { ok: false as const, message: "تعذر نقل الموضوعات إلى التصنيف الهدف." };
+    }
   }
 
   const { error: deleteError } = await supabase.from("topic_categories").delete().eq("id", id);
-  if (deleteError) return { ok: false as const, message: deleteError.message };
+  if (deleteError) {
+    return { ok: false as const, message: "تعذر حذف التصنيف. تحقق من العناصر المرتبطة به." };
+  }
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic_category", "delete"),
@@ -582,6 +672,17 @@ export async function deleteCategory(formData: FormData) {
   const id = getString(formData, "id");
   if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
 
+  let deleteDependencies;
+  try {
+    deleteDependencies = await loadCategoryDeleteDependencies(Number(id));
+  } catch {
+    redirectError("تعذر التحقق من العناصر المرتبطة بالتصنيف.");
+  }
+  const relationBlockMessage = getCategoryDeleteBlockMessage(
+    deleteDependencies,
+  );
+  if (relationBlockMessage) redirectError(relationBlockMessage);
+
   const usageCount = await getUsageCount(id);
   if (usageCount > 0) redirectError("لا يمكن حذف تصنيف مستخدم داخل موضوعات. عطّله بدل حذفه.");
 
@@ -589,7 +690,7 @@ export async function deleteCategory(formData: FormData) {
   if (childrenCount > 0) redirectError("لا يمكن حذف تصنيف يحتوي على تصنيفات فرعية. انقل التصنيفات الفرعية أولًا.");
 
   const { error } = await getSupabaseAdmin().from("topic_categories").delete().eq("id", id);
-  if (error) redirectError(error.message);
+  if (error) redirectError("تعذر حذف التصنيف. تحقق من العناصر المرتبطة به.");
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic_category", "delete"),

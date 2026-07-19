@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   normalizeAdminEntityListQuery,
@@ -69,6 +69,7 @@ export function useAdminEntityListController<
 >) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState(initialQuery);
+  const queryRef = useRef(initialQuery);
   const [initialKey] = useState(() =>
     adminEntityListQueryKeys.query(
       entity,
@@ -85,32 +86,32 @@ export function useAdminEntityListController<
           ) => AdminEntityListQuery<Filters, SortField>),
       behavior: HistoryBehavior,
     ) => {
-      setQuery((current) => {
-        const resolved = typeof next === "function" ? next(current) : next;
-        const params = writeAdminEntityListQuery(
-          contract,
-          resolved,
-          new URLSearchParams(window.location.search),
-        );
-        const search = params.toString();
-        const href = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
-        window.history[
-          behavior === "replace" ? "replaceState" : "pushState"
-        ](window.history.state, "", href);
-        return resolved;
-      });
+      const current = queryRef.current;
+      const resolved = typeof next === "function" ? next(current) : next;
+      const params = writeAdminEntityListQuery(
+        contract,
+        resolved,
+        new URLSearchParams(window.location.search),
+      );
+      const search = params.toString();
+      const href = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+      window.history[
+        behavior === "replace" ? "replaceState" : "pushState"
+      ](window.history.state, "", href);
+      queryRef.current = resolved;
+      setQuery(resolved);
     },
     [contract],
   );
 
   useEffect(() => {
     function handlePopState() {
-      setQuery(
-        normalizeAdminEntityListQuery(
-          contract,
-          new URLSearchParams(window.location.search),
-        ),
+      const restored = normalizeAdminEntityListQuery(
+        contract,
+        new URLSearchParams(window.location.search),
       );
+      queryRef.current = restored;
+      setQuery(restored);
     }
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);

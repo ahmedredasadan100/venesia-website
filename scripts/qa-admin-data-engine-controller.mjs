@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
+const baseUrl = process.env.QA_BASE_URL || "http://localhost:3000";
 const runId = `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
 const password = randomBytes(24).toString("base64url");
 const adminUsername = `__QA_AIDC_${runId}__`;
@@ -187,6 +187,13 @@ async function main() {
       if (await search.count()) {
         const beforeSearch = endpointCalls.length;
         const marker = `qa ${runId} ${entity}`;
+        const initialSearchResponse = page.waitForResponse(
+          (response) => {
+            const url = new URL(response.url());
+            return isListEndpoint(url.href) && url.searchParams.get("q") === marker;
+          },
+          { timeout: 30_000 },
+        );
         await search.fill(marker);
         await page.waitForFunction(
           (value) =>
@@ -194,7 +201,7 @@ async function main() {
           marker,
           { timeout: 10_000 },
         );
-        await page.waitForTimeout(200);
+        await initialSearchResponse;
         const afterSearch = endpointCalls.length - beforeSearch;
         check(
           `${path}: new search query issues exactly one endpoint request`,

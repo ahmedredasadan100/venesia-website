@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
@@ -12,6 +11,7 @@ import {
   adminFormLabelClassName,
 } from "../../../../components/admin/ui";
 import { deleteCategorySafelyAjax, getCategoryDeletePreviewAjax } from "./actions";
+import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 
 type TransferTarget = {
   id: number;
@@ -19,14 +19,17 @@ type TransferTarget = {
   level: number;
 };
 
-type ModalMode = "confirm" | "transfer" | "blocked-children" | "no-targets" | "error";
+type ModalMode = "confirm" | "transfer" | "blocked-relations" | "no-targets" | "error";
 
 type CategoryDeleteButtonProps = {
   categoryId: number;
+  onMutationResult?: (result: AdminActionResult) => void;
 };
 
-export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButtonProps) {
-  const router = useRouter();
+export default function CategoryDeleteButton({
+  categoryId,
+  onMutationResult,
+}: CategoryDeleteButtonProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
@@ -37,12 +40,14 @@ export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButto
   const [transferToId, setTransferToId] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [blockMessage, setBlockMessage] = useState<string | null>(null);
 
   function loadDeletePreview() {
     setLoading(true);
     setPending(false);
     setValidationError(null);
     setErrorMessage(null);
+    setBlockMessage(null);
     setTransferToId("");
 
     void getCategoryDeletePreviewAjax(categoryId)
@@ -56,9 +61,10 @@ export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButto
         setCategoryName(preview.categoryName);
         setTopicCount(preview.topicCount);
         setTransferTargets(preview.validTransferTargets);
+        setBlockMessage(preview.blockMessage);
 
-        if (preview.childrenCount > 0) {
-          setMode("blocked-children");
+        if (preview.blockMessage) {
+          setMode("blocked-relations");
           return;
         }
 
@@ -93,17 +99,37 @@ export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButto
   async function handleConfirmDelete() {
     setPending(true);
     setValidationError(null);
-
-    const result = await deleteCategorySafelyAjax(categoryId);
-    if (!result.ok) {
-      setValidationError(result.message ?? "تعذر حذف التصنيف.");
+    try {
+      const result = await deleteCategorySafelyAjax(categoryId);
+      if (!result.ok) {
+        setValidationError(result.message ?? "تعذر حذف التصنيف.");
+        onMutationResult?.({
+          ok: false,
+          title: "تعذر حذف التصنيف",
+          message: result.message ?? "تعذر حذف التصنيف.",
+          entityId: categoryId,
+        });
+        return;
+      }
+      setOpen(false);
+      onMutationResult?.({
+        ok: true,
+        title: "تم بنجاح",
+        message: result.message ?? "تم حذف التصنيف بنجاح.",
+        code: "deleted",
+        entityId: categoryId,
+      });
+    } catch {
+      setValidationError("تعذر حذف التصنيف.");
+      onMutationResult?.({
+        ok: false,
+        title: "تعذر حذف التصنيف",
+        message: "تعذر حذف التصنيف.",
+        entityId: categoryId,
+      });
+    } finally {
       setPending(false);
-      return;
     }
-
-    setOpen(false);
-    setPending(false);
-    router.refresh();
   }
 
   async function handleTransferAndDelete() {
@@ -115,23 +141,48 @@ export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButto
     }
 
     setPending(true);
-
-    const result = await deleteCategorySafelyAjax(categoryId, Number(transferToId));
-    if (!result.ok) {
-      setValidationError(result.message ?? "تعذر نقل الموضوعات وحذف التصنيف.");
+    try {
+      const result = await deleteCategorySafelyAjax(
+        categoryId,
+        Number(transferToId),
+      );
+      if (!result.ok) {
+        setValidationError(
+          result.message ?? "تعذر نقل الموضوعات وحذف التصنيف.",
+        );
+        onMutationResult?.({
+          ok: false,
+          title: "تعذر حذف التصنيف",
+          message: result.message ?? "تعذر نقل الموضوعات وحذف التصنيف.",
+          entityId: categoryId,
+        });
+        return;
+      }
+      setOpen(false);
+      onMutationResult?.({
+        ok: true,
+        title: "تم بنجاح",
+        message: result.message ?? "تم حذف التصنيف بنجاح.",
+        code: "deleted",
+        entityId: categoryId,
+      });
+    } catch {
+      setValidationError("تعذر نقل الموضوعات وحذف التصنيف.");
+      onMutationResult?.({
+        ok: false,
+        title: "تعذر حذف التصنيف",
+        message: "تعذر نقل الموضوعات وحذف التصنيف.",
+        entityId: categoryId,
+      });
+    } finally {
       setPending(false);
-      return;
     }
-
-    setOpen(false);
-    setPending(false);
-    router.refresh();
   }
 
   const modalTitle =
     mode === "transfer"
       ? "نقل الموضوعات قبل الحذف"
-      : mode === "blocked-children"
+      : mode === "blocked-relations"
         ? "لا يمكن حذف التصنيف"
         : mode === "no-targets"
           ? "لا توجد تصنيفات بديلة"
@@ -142,8 +193,8 @@ export default function CategoryDeleteButton({ categoryId }: CategoryDeleteButto
   const modalDescription =
     mode === "transfer"
       ? `لا يمكن حذف هذا التصنيف لأنه يحتوي على ${topicCount} موضوعات.`
-      : mode === "blocked-children"
-        ? "لا يمكن حذف تصنيف يحتوي على تصنيفات فرعية. انقل التصنيفات الفرعية أولًا."
+      : mode === "blocked-relations"
+        ? blockMessage ?? "لا يمكن حذف التصنيف لوجود عناصر مرتبطة به."
         : mode === "no-targets"
           ? "لا يمكن حذف هذا التصنيف لأنه يحتوي موضوعات ولا يوجد تصنيف آخر صالح لنقلها."
           : mode === "error"

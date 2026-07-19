@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
   ADMIN_DATA_GRID_RULES,
   AdminActivityPopover,
@@ -10,11 +12,14 @@ import { formatAdminDateTime } from "../../../../lib/content-dates";
 import CategoryDeleteButton from "./CategoryDeleteButton";
 import CategoryEditModal from "./CategoryEditModal";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
-import { duplicateCategory, toggleCategoryStatus } from "./actions";
+import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import { duplicateCategory, toggleCategoryStatusAjax } from "./actions";
 
 type CategoryRowActionsProps = {
   category: CategoryListRow;
   parentOptions: Array<{ id: number; name: string; level: number }>;
+  onMutationResult?: (result: AdminActionResult) => void;
+  onCategoryUpdated?: (category: CategoryListRow) => void;
 };
 
 function PublicPreviewIcon() {
@@ -37,11 +42,40 @@ function PublicPreviewIcon() {
 export default function CategoryRowActions({
   category,
   parentOptions,
+  onMutationResult,
+  onCategoryUpdated,
 }: CategoryRowActionsProps) {
+  const [pending, setPending] = useState(false);
   const isActive = Boolean(category.is_active);
   const previewHref = category.slug
     ? `/topics?category=${encodeURIComponent(category.slug)}`
     : "/topics";
+
+  async function toggleVisibility() {
+    if (pending) return;
+    setPending(true);
+    try {
+      const result = await toggleCategoryStatusAjax(category.id);
+      if (result.ok && typeof result.isActive === "boolean") {
+        onCategoryUpdated?.({
+          ...category,
+          is_active: result.isActive,
+          status: result.status ?? (result.isActive ? "published" : "draft"),
+          updated_at: result.updatedAt ?? category.updated_at,
+        });
+      }
+      onMutationResult?.(result);
+    } catch {
+      onMutationResult?.({
+        ok: false,
+        title: "تعذر تنفيذ العملية",
+        message: "حدث خطأ غير متوقع. حاول مرة أخرى.",
+        entityId: category.id,
+      });
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <AdminDataGridActionsCell compact>
@@ -59,16 +93,15 @@ export default function CategoryRowActions({
         <PublicPreviewIcon />
       </AdminDataGridActionButton>
 
-      <form action={toggleCategoryStatus} className="contents">
-        <input type="hidden" name="id" value={category.id} />
-        <AdminDataGridActionButton
-          type="submit"
-          action="visibility"
-          size="compact"
-          isCurrentlyHidden={!isActive}
-          title={isActive ? "إخفاء التصنيف" : "إظهار التصنيف"}
-        />
-      </form>
+      <AdminDataGridActionButton
+        action="visibility"
+        size="compact"
+        isCurrentlyHidden={!isActive}
+        title={isActive ? "إخفاء التصنيف" : "إظهار التصنيف"}
+        pending={pending}
+        disabled={pending}
+        onClick={() => void toggleVisibility()}
+      />
 
       <form action={duplicateCategory} className="contents">
         <input type="hidden" name="id" value={category.id} />
@@ -80,7 +113,10 @@ export default function CategoryRowActions({
         />
       </form>
 
-      <CategoryDeleteButton categoryId={category.id} />
+      <CategoryDeleteButton
+        categoryId={category.id}
+        onMutationResult={onMutationResult}
+      />
 
       <AdminActivityPopover
         title={`نشاط التصنيف: ${category.name}`}
