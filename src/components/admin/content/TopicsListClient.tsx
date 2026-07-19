@@ -11,10 +11,10 @@ import {
   type TopicFilters,
   type TopicSortField,
 } from "../../../lib/admin/content/entity-list-contracts/topics";
-import {
-  CONTENT_LIST_PAGE_SIZES,
-  type ContentSortValue,
-  type UnifiedContentRow,
+import { TOPICS_LIST_PAGE_SIZES } from "../../../lib/admin/content/topics-list-config";
+import type {
+  ContentSortValue,
+  UnifiedContentRow,
 } from "../../../lib/admin/content/load-unified-content";
 import type {
   AdminEntityListQuery,
@@ -219,7 +219,7 @@ export default function TopicsListClient({
         rangeEnd={rangeEnd}
         totalCount={controller.result.pagination.totalRows}
         pageSize={String(controller.result.pagination.pageSize)}
-        pageSizeOptions={CONTENT_LIST_PAGE_SIZES.map(String)}
+        pageSizeOptions={TOPICS_LIST_PAGE_SIZES.map(String)}
         currentPage={controller.result.pagination.page}
         totalPages={controller.result.pagination.totalPages}
         emptySummaryText="لا توجد موضوعات مطابقة"
