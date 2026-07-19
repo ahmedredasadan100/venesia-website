@@ -17,6 +17,7 @@
     "qa:topics-list-reference": "node scripts/qa-topics-list-reference.mjs",
     "qa:admin-content-soft-delete-counts": "node scripts/qa-admin-content-soft-delete-counts.mjs",
     "capture:admin-data-engine-baseline": "node scripts/capture-admin-data-engine-baseline.mjs",
+    "verify:admin-data-engine-contracts": "node --experimental-strip-types scripts/verify-admin-data-engine-contracts.mts",
     "verify:audit-coverage": "node scripts/verify-admin-audit-coverage.mjs",
     "verify:db-health": "node scripts/verify-database-health.mjs",
     "verify:internal-hero-config": "node scripts/verify-internal-hero-config.mjs",
