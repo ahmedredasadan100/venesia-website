@@ -2,7 +2,9 @@ import { strict as assert } from "node:assert";
 import { z } from "zod";
 
 import {
+  AdminEntityListQueryValidationError,
   normalizeAdminEntityListQuery,
+  parseAdminEntityListRequestQuery,
   serializeAdminEntityListQuery,
   writeAdminEntityListQuery,
   type AdminEntityListQueryContract,
@@ -24,6 +26,10 @@ const contract: AdminEntityListQueryContract<Filters, SortField> = {
   pageSizeOptions: [10, 20, 50],
   maxPageSize: 50,
   searchMinLength: 2,
+  rawFilterSchemas: {
+    status: z.enum(["all", "published"]),
+    category: z.string().regex(/^[1-9]\d{0,8}$/),
+  },
   parseFilters(params) {
     const category = Number(params.get("category"));
     return {
@@ -80,4 +86,43 @@ assert.equal(
 );
 assert.deepEqual(normalizeAdminEntityListQuery(contract, url), populated);
 
-console.log("verify-admin-data-engine-contracts passed (7 assertions).");
+// Strict request-boundary parsing: invalid raw input must be rejected,
+// never silently defaulted.
+function assertRejected(label: string, raw: string) {
+  assert.throws(
+    () => parseAdminEntityListRequestQuery(contract, raw),
+    AdminEntityListQueryValidationError,
+    `expected rejection for ${label}: ${raw}`,
+  );
+}
+
+assertRejected("invalid page", "page=abc");
+assertRejected("zero page", "page=0");
+assertRejected("negative page", "page=-2");
+assertRejected("invalid limit", "limit=abc");
+assertRejected("unsupported limit", "limit=15");
+assertRejected("oversized limit", "limit=9999");
+assertRejected("invalid sort field", "sort=unsafe_desc");
+assertRejected("invalid sort direction", "sort=title_up");
+assertRejected("invalid status", "status=bogus");
+assertRejected("malformed category id", "category=-1");
+assertRejected("non-numeric category id", "category=abc");
+assertRejected("unknown parameter", "table=admin_users");
+assertRejected("repeated parameter", "page=1&page=2");
+
+// Valid raw queries pass through to canonical normalization.
+assert.deepEqual(
+  parseAdminEntityListRequestQuery(contract, "page=2&limit=20&sort=created_at_desc&status=published&category=4&q=hello"),
+  normalizeAdminEntityListQuery(contract, "page=2&limit=20&sort=created_at_desc&status=published&category=4&q=hello"),
+);
+// Omitted params fall back to canonical defaults.
+assert.deepEqual(parseAdminEntityListRequestQuery(contract, ""), normalized);
+// Canonical URL writer emits only strict-parseable output (round trip).
+assert.deepEqual(
+  parseAdminEntityListRequestQuery(contract, writeAdminEntityListQuery(contract, populated)),
+  populated,
+);
+// Canonical defaults do not pollute the URL.
+assert.equal(writeAdminEntityListQuery(contract, normalized).toString(), "");
+
+console.log("verify-admin-data-engine-contracts passed (24 assertions).");

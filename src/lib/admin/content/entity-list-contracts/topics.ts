@@ -55,6 +55,21 @@ export const topicsQueryContract: AdminEntityListQueryContract<
   pageSizeOptions: TOPICS_LIST_PAGE_SIZES,
   maxPageSize: 50,
   searchMinLength: 2,
+  rawFilterSchemas: {
+    content_type: z.enum([
+      "all",
+      "article",
+      "news",
+      "press",
+      "site_update",
+      "video",
+      "gallery",
+    ]),
+    category: z.string().regex(/^[1-9]\d{0,8}$/),
+    series: z.string().regex(/^[1-9]\d{0,8}$/),
+    status: z.enum(["all", "published", "draft", "unpublished", "archived"]),
+    featured: z.enum(["all", "yes", "no"]),
+  },
   parseFilters(params) {
     const contentType = params.get("content_type");
     const status = params.get("status");

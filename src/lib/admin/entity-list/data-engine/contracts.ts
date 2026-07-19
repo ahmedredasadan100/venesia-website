@@ -52,6 +52,12 @@ export type AdminEntityListQueryContract<
   pageSizeOptions: readonly number[];
   maxPageSize: number;
   searchMinLength: number;
+  /**
+   * Raw request boundary: per URL param key, the values this contract accepts
+   * verbatim. Used by the strict endpoint parser before canonical
+   * normalization; lenient RSC normalization does not consult these.
+   */
+  rawFilterSchemas: Record<string, z.ZodType>;
   parseFilters: (params: URLSearchParams) => unknown;
   writeFilters: (filters: Filters, params: URLSearchParams) => void;
 };
@@ -87,6 +93,89 @@ function parseSort<SortField extends string>(
   if (!direction.success) return fallback;
   return { field: match[1] as SortField, direction: direction.data };
 }
+
+export class AdminEntityListQueryValidationError extends Error {
+  issues: readonly string[];
+
+  constructor(issues: readonly string[]) {
+    super(`Invalid entity list query: ${issues.join("; ")}`);
+    this.name = "AdminEntityListQueryValidationError";
+    this.issues = issues;
+  }
+}
+
+const RAW_POSITIVE_INT_PATTERN = /^[1-9]\d{0,8}$/;
+
+/**
+ * Strict request-boundary parser. Raw values are validated verbatim and any
+ * invalid input is rejected instead of being silently coerced to defaults.
+ * Canonical normalization runs only after raw validation succeeds.
+ */
+export function parseAdminEntityListRequestQuery<
+  Filters extends Record<string, unknown>,
+  SortField extends string,
+>(
+  contract: AdminEntityListQueryContract<Filters, SortField>,
+  source: URLSearchParams | string,
+): AdminEntityListQuery<Filters, SortField> {
+  const params =
+    typeof source === "string" ? new URLSearchParams(source) : source;
+  const issues: string[] = [];
+  const ownedKeys = new Set([
+    "q",
+    "sort",
+    "page",
+    "limit",
+    ...Object.keys(contract.rawFilterSchemas),
+  ]);
+
+  for (const key of new Set(params.keys())) {
+    if (!ownedKeys.has(key)) {
+      issues.push(`unknown parameter "${key}"`);
+    } else if (params.getAll(key).length > 1) {
+      issues.push(`parameter "${key}" is repeated`);
+    }
+  }
+
+  const rawPage = params.get("page");
+  if (rawPage !== null && !RAW_POSITIVE_INT_PATTERN.test(rawPage)) {
+    issues.push('parameter "page" must be a positive integer');
+  }
+
+  const rawLimit = params.get("limit");
+  if (
+    rawLimit !== null &&
+    !contract.pageSizeOptions.some((option) => String(option) === rawLimit)
+  ) {
+    issues.push(
+      `parameter "limit" must be one of ${contract.pageSizeOptions.join(", ")}`,
+    );
+  }
+
+  const rawSort = params.get("sort");
+  if (rawSort !== null) {
+    const match = /^(.+)_(asc|desc)$/.exec(rawSort);
+    if (!match || !contract.sortFields.includes(match[1] as SortField)) {
+      issues.push(`parameter "sort" value "${rawSort}" is not supported`);
+    }
+  }
+
+  for (const [key, schema] of Object.entries(contract.rawFilterSchemas)) {
+    const value = params.get(key);
+    if (value !== null && !schema.safeParse(value).success) {
+      issues.push(`parameter "${key}" value is invalid`);
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new AdminEntityListQueryValidationError(issues);
+  }
+  return normalizeAdminEntityListQuery(contract, params);
+}
+
+export const adminEntityListRawPositiveIntSchema = z
+  .string()
+  .regex(RAW_POSITIVE_INT_PATTERN);
 
 export function normalizeAdminEntityListQuery<
   Filters extends Record<string, unknown>,

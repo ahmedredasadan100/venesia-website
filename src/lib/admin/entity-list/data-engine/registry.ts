@@ -4,7 +4,7 @@ import { categoriesEntityListAdapter } from "../../content/entity-list-adapters/
 import { seriesEntityListAdapter } from "../../content/entity-list-adapters/series";
 import { topicsEntityListAdapter } from "../../content/entity-list-adapters/topics";
 import {
-  normalizeAdminEntityListQuery,
+  parseAdminEntityListRequestQuery,
   type AdminEntityListQuery,
   type AdminEntityListQueryContract,
   type AdminEntityListResult,
@@ -47,7 +47,8 @@ export async function executeAdminEntityListAdapter(
   params: URLSearchParams,
 ) {
   const adapter = adminEntityListAdapterRegistry[entity] as unknown as ErasedAdapter;
-  const query = normalizeAdminEntityListQuery(adapter.queryContract, params);
+  // Strict boundary: invalid raw input is rejected (400), never defaulted.
+  const query = parseAdminEntityListRequestQuery(adapter.queryContract, params);
   const result = await adapter.load(query);
   const validated = adapter.resultSchema.safeParse(result);
   if (!validated.success) {

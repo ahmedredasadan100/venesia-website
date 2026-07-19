@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { requireAdminApi } from "../../../../../lib/admin/auth/require-admin-api";
+import { AdminEntityListQueryValidationError } from "../../../../../lib/admin/entity-list/data-engine/contracts";
 import {
   executeAdminEntityListAdapter,
   isAdminEntityListEntityKey,
@@ -54,7 +55,10 @@ export async function GET(
       },
     });
   } catch (error) {
-    if (error instanceof ZodError) {
+    if (
+      error instanceof AdminEntityListQueryValidationError ||
+      error instanceof ZodError
+    ) {
       return errorResponse(400, "invalid_query", "Invalid list query.");
     }
     console.error(`[admin-entity-list:${entity}]`, error);

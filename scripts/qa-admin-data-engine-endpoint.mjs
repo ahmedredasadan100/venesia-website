@@ -142,20 +142,44 @@ async function main() {
     const unknownAuthed = await get("not-a-real-entity");
     check("Unknown entity after auth is 404", unknownAuthed.status === 404);
 
-    const invalidTopics = await get("topics", "limit=9999&sort=not_a_field");
-    const invalidBody = await invalidTopics.json().catch(() => null);
-    check(
-      "Invalid topics query does not 500",
-      invalidTopics.status === 200 || invalidTopics.status === 400,
-      String(invalidTopics.status),
-    );
-    if (invalidTopics.status === 200) {
+    // Strict raw-request boundary: invalid input is rejected with 400,
+    // never silently normalized into defaults.
+    const invalidQueries = [
+      ["invalid page", "topics", "page=abc"],
+      ["zero page", "topics", "page=0"],
+      ["negative page", "topics", "page=-2"],
+      ["invalid pageSize", "topics", "limit=abc"],
+      ["unsupported pageSize", "topics", "limit=15"],
+      ["oversized pageSize", "topics", "limit=9999"],
+      ["invalid sort field", "topics", "sort=not_a_field_asc"],
+      ["invalid sort direction", "topics", "sort=title_up"],
+      ["invalid status", "topics", "status=bogus"],
+      ["malformed category id", "topics", "category=-1"],
+      ["non-numeric category id", "topics", "category=abc"],
+      ["malformed series id", "topics", "series=1;DROP"],
+      ["unknown filter param", "topics", "table=admin_users"],
+      ["invalid categories status", "categories", "status=archived"],
+      ["invalid series category id", "series", "category=abc"],
+    ];
+    for (const [label, entity, queryString] of invalidQueries) {
+      const response = await get(entity, queryString);
+      const body = await response.json().catch(() => null);
       check(
-        "Normalized invalid topics page size stays within allow-list",
-        [10, 20, 30, 50].includes(invalidBody?.pagination?.pageSize),
-        String(invalidBody?.pagination?.pageSize),
+        `400 for ${label} (${entity}?${queryString})`,
+        response.status === 400 && body?.error?.code === "invalid_query",
+        `status=${response.status} code=${body?.error?.code ?? "none"}`,
       );
     }
+
+    const omitted = await get("topics");
+    const omittedBody = await omitted.json().catch(() => null);
+    check(
+      "Omitted params resolve to canonical defaults",
+      omitted.status === 200 &&
+        omittedBody?.pagination?.page === 1 &&
+        omittedBody?.pagination?.pageSize === 10,
+      `status=${omitted.status} page=${omittedBody?.pagination?.page} pageSize=${omittedBody?.pagination?.pageSize}`,
+    );
 
     for (const entity of ["topics", "categories", "series"]) {
       const response = await get(entity, "page=1&limit=10");

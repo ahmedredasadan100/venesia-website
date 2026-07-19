@@ -34,6 +34,10 @@ export const seriesQueryContract: AdminEntityListQueryContract<
   pageSizeOptions: [10, 20, 30, 50],
   maxPageSize: 50,
   searchMinLength: 0,
+  rawFilterSchemas: {
+    status: z.enum(["all", "published", "unpublished", "draft", "archived"]),
+    category: z.string().regex(/^[1-9]\d{0,8}$/),
+  },
   parseFilters(params) {
     const status = params.get("status");
     const categoryId = Number(params.get("category"));

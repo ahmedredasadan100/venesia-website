@@ -32,6 +32,9 @@ export const categoriesQueryContract: AdminEntityListQueryContract<
   pageSizeOptions: [10, 20, 30, 50],
   maxPageSize: 50,
   searchMinLength: 0,
+  rawFilterSchemas: {
+    status: z.enum(["all", "published", "hidden"]),
+  },
   parseFilters(params) {
     const status = params.get("status");
     return {
