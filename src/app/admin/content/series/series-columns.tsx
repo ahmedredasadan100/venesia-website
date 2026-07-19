@@ -2,6 +2,7 @@
 
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import {
+  AdminActivityPopover,
   AdminConfirmDialog,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -9,6 +10,10 @@ import {
   getAdminDataGridActionsColumnWidth,
 } from "../../../../components/admin/ui";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import {
+  formatAdminDateTime,
+  formatAdminListDate,
+} from "../../../../lib/content-dates";
 import { useRef, useState } from "react";
 import {
   deleteSeriesAjax,
@@ -22,14 +27,38 @@ export type SeriesListRow = {
   slug: string;
   status: string | null;
   sort_order: number | null;
+  category_id: number | null;
+  category_name: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   topics_count: number;
 };
 
-export type SeriesColumnKey = "name" | "topics_count" | "status" | "actions";
-export type SeriesSortKey = "name" | "topics_count" | "status";
+export type SeriesColumnKey =
+  | "name"
+  | "topics_count"
+  | "status"
+  | "actions"
+  | "id"
+  | "slug"
+  | "category"
+  | "sort_order"
+  | "created_at"
+  | "updated_at";
+
+export type SeriesSortKey =
+  | "name"
+  | "topics_count"
+  | "status"
+  | "id"
+  | "slug"
+  | "category"
+  | "sort_order"
+  | "created_at"
+  | "updated_at";
 
 export const SERIES_ACTIONS_COLUMN_WIDTH = getAdminDataGridActionsColumnWidth(
-  4,
+  6,
   "compact",
   12,
 );
@@ -59,6 +88,14 @@ function statusMeta(status?: string | null) {
   return { label: "مسودة", tone: "muted" as const };
 }
 
+function singleLine(value: string) {
+  return (
+    <span className="block truncate text-sm text-white/68" title={value}>
+      {value}
+    </span>
+  );
+}
+
 function SeriesRowActions({
   row,
   onMutationResult,
@@ -72,6 +109,7 @@ function SeriesRowActions({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const isHidden = row.status === "unpublished";
+  const topicsPreviewHref = `/admin/content/topics?series=${row.id}`;
 
   async function run(
     action: () => Promise<{
@@ -115,10 +153,18 @@ function SeriesRowActions({
           size="compact"
         />
         <AdminDataGridActionButton
+          action="preview"
+          href={topicsPreviewHref}
+          target="_blank"
+          rel="noreferrer"
+          size="compact"
+          title="عرض موضوعات السلسلة"
+        />
+        <AdminDataGridActionButton
           action="visibility"
           size="compact"
           title={isHidden ? "إظهار" : "إخفاء"}
-          hidden={isHidden}
+          isCurrentlyHidden={isHidden}
           disabled={pending}
           onClick={() =>
             void run(
@@ -139,6 +185,32 @@ function SeriesRowActions({
           size="compact"
           disabled={pending}
           onClick={() => setDeleteOpen(true)}
+        />
+        <AdminActivityPopover
+          title={`نشاط السلسلة: ${row.name}`}
+          triggerLabel="معلومات النشاط"
+          items={[
+            {
+              label: "تاريخ الإنشاء",
+              value: row.created_at
+                ? formatAdminDateTime(row.created_at)
+                : "—",
+            },
+            {
+              label: "آخر تعديل",
+              value: row.updated_at
+                ? formatAdminDateTime(row.updated_at)
+                : "—",
+            },
+            {
+              label: "التصنيف",
+              value: row.category_name?.trim() || "—",
+            },
+            {
+              label: "الموضوعات",
+              value: String(row.topics_count),
+            },
+          ]}
         />
       </AdminDataGridActionsCell>
 
@@ -177,7 +249,7 @@ export function createSeriesColumns(handlers: {
       renderCell: ({ row }) => (
         <a
           href={`/admin/content/series/${row.id}`}
-          className="flex min-w-0 items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+          className="flex min-w-0 cursor-pointer items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
         >
           <SeriesIcon />
           <span className="min-w-0 truncate text-sm font-bold text-white">
@@ -216,6 +288,81 @@ export function createSeriesColumns(handlers: {
           <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
         );
       },
+    },
+    {
+      key: "id",
+      label: "ID",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "id",
+      minWidth: 72,
+      width: 72,
+      renderCell: ({ row }) => (
+        <span className="font-en tabular-nums text-sm text-white/55">{row.id}</span>
+      ),
+    },
+    {
+      key: "slug",
+      label: "Slug",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "slug",
+      minWidth: 140,
+      width: 160,
+      renderCell: ({ row }) => singleLine(row.slug || "—"),
+    },
+    {
+      key: "category",
+      label: "التصنيف",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "category",
+      minWidth: 160,
+      width: 180,
+      renderCell: ({ row }) =>
+        singleLine(row.category_name?.trim() ? row.category_name : "—"),
+    },
+    {
+      key: "sort_order",
+      label: "الترتيب",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "sort_order",
+      minWidth: 88,
+      width: 88,
+      renderCell: ({ row }) => (
+        <span className="font-en tabular-nums text-sm text-white/68">
+          {row.sort_order ?? 0}
+        </span>
+      ),
+    },
+    {
+      key: "created_at",
+      label: "تاريخ الإنشاء",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "created_at",
+      minWidth: 140,
+      width: 150,
+      renderCell: ({ row }) =>
+        singleLine(row.created_at ? formatAdminListDate(row.created_at) : "—"),
+    },
+    {
+      key: "updated_at",
+      label: "آخر تعديل",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "updated_at",
+      minWidth: 140,
+      width: 150,
+      renderCell: ({ row }) =>
+        singleLine(row.updated_at ? formatAdminListDate(row.updated_at) : "—"),
     },
     {
       key: "actions",

@@ -150,7 +150,7 @@ export default function LegacyProjectsTable({
                   <AdminDataGridActionButton
                     action="visibility"
                     title={isHidden ? "نشر" : "إخفاء"}
-                    hidden={isHidden}
+                    isCurrentlyHidden={isHidden}
                     disabled={handlers.isPending}
                     onClick={() => handlers.onTogglePublication(item.id, item.publication_status)}
                   />

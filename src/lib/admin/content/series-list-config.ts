@@ -11,13 +11,19 @@ export const SERIES_DEFAULT_COLUMN_KEYS = [
 export const SERIES_PREFERENCE_COLUMN_KEYS = [
   "topics_count",
   "status",
+  "id",
+  "slug",
+  "category",
+  "sort_order",
+  "created_at",
+  "updated_at",
 ] as const;
 
 export const SERIES_NOTICE_CODE_MAP = {
   created: { message: "تم إنشاء السلسلة بنجاح." },
   updated: { message: "تم تحديث السلسلة بنجاح." },
   deleted: { message: "تم حذف السلسلة بنجاح." },
-  published: { message: "تم إظهار السلسلة بنجاح." },
+  published: { message: "تم نشر السلسلة بنجاح." },
   unpublished: { message: "تم إخفاء السلسلة بنجاح." },
   duplicated: { message: "تم نسخ السلسلة بنجاح." },
   error: {

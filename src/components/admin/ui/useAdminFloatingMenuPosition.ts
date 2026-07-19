@@ -1,15 +1,10 @@
 "use client";
 
 import { useLayoutEffect, useState } from "react";
-
-export type AdminFloatingMenuPosition = {
-  top: number;
-  left: number;
-  width: number;
-  bottom?: number;
-  maxHeight?: number;
-  placement?: "top" | "bottom";
-};
+import {
+  createAdminFloatingMenuStyle,
+  type AdminFloatingMenuPosition,
+} from "./admin-floating-position";
 
 type UseAdminFloatingMenuPositionOptions = {
   minWidth?: number;
@@ -18,6 +13,7 @@ type UseAdminFloatingMenuPositionOptions = {
   align?: "left" | "right";
   collisionPadding?: number;
   estimatedHeight?: number;
+  zIndex?: number;
 };
 
 export function useAdminFloatingMenuPosition(
@@ -30,6 +26,7 @@ export function useAdminFloatingMenuPosition(
     align = "left",
     collisionPadding,
     estimatedHeight,
+    zIndex = 9999,
   }: UseAdminFloatingMenuPositionOptions = {},
 ) {
   const [position, setPosition] = useState<AdminFloatingMenuPosition | null>(null);
@@ -86,25 +83,32 @@ export function useAdminFloatingMenuPosition(
         const maxHeight =
           placement === "bottom" ? availableBelow : availableAbove;
 
+        const top = rect.bottom + offset;
+        const bottom = window.innerHeight - rect.top + offset;
         setPosition({
-          top: placement === "bottom" ? rect.bottom + offset : viewportPadding,
-          bottom:
-            placement === "top"
-              ? window.innerHeight - rect.top + offset
-              : undefined,
-          left,
-          width,
-          maxHeight,
           placement,
+          style: createAdminFloatingMenuStyle({
+            placement,
+            top,
+            bottom,
+            left,
+            width,
+            maxHeight,
+            zIndex,
+          }),
         });
         return;
       }
 
       setPosition({
-        top: rect.bottom + offset,
-        left,
-        width,
         placement: "bottom",
+        style: createAdminFloatingMenuStyle({
+          placement: "bottom",
+          top: rect.bottom + offset,
+          left,
+          width,
+          zIndex,
+        }),
       });
     }
 
@@ -125,6 +129,7 @@ export function useAdminFloatingMenuPosition(
     minWidth,
     offset,
     preferredWidth,
+    zIndex,
   ]);
 
   return position;

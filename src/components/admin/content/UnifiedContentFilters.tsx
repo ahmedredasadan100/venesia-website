@@ -3,12 +3,18 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
+import {
+  toAdminCategoryFilterOptions,
+  type AdminContentCategoryNode,
+} from "../../../lib/admin/content/category-hierarchy";
 import { CONTENT_TYPE_OPTIONS } from "../../../lib/admin/content/content-types";
+import type { AdminEntityFilterDef } from "../../../lib/admin/entity-list";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
 import {
-  AdminFilterListbox,
-  AdminFiltersShell,
+  AdminEntityListFilters,
+  useAdminFloatingLayer,
+} from "../entity-list";
+import {
   AdminSearchInput,
   ADMIN_FILTER_MENU_PANEL_CLASSES,
   ADMIN_FILTER_MENU_SCROLLBAR_CLASSES,
@@ -40,9 +46,9 @@ export default function UnifiedContentFilters({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const floating = useAdminFloatingLayer();
   const searchAnchorRef = useRef<HTMLDivElement>(null);
   const [values, setValues] = useState(initial);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -53,7 +59,12 @@ export default function UnifiedContentFilters({
   const suggestionPosition = useAdminFloatingMenuPosition(
     suggestionsOpen && canSearch,
     searchAnchorRef,
-    { minWidth: 280 },
+    {
+      minWidth: 280,
+      collisionPadding: 12,
+      estimatedHeight: 360,
+      zIndex: 10000,
+    },
   );
 
   const syncKey = `${initial.q}|${initial.contentType}|${initial.category}|${initial.series}|${initial.status}|${initial.featured}`;
@@ -64,17 +75,72 @@ export default function UnifiedContentFilters({
   }
 
   const categoryOptions = useMemo(
-    () =>
-      categories.map((category) => ({
-        value: String(category.id),
-        label: `${"— ".repeat(category.depth)}${category.name}`,
-      })),
+    () => toAdminCategoryFilterOptions(categories),
     [categories],
   );
-  const categoryLabel = new Map(categoryOptions.map((option) => [option.value, option.label]));
-  const seriesOptions = series
-    .filter((item) => item.status === "published" && !item.deleted_at)
-    .map((item) => ({ value: String(item.id), label: item.name }));
+  const seriesOptions = useMemo(
+    () =>
+      series
+        .filter((item) => item.status === "published" && !item.deleted_at)
+        .map((item) => ({ value: String(item.id), label: item.name })),
+    [series],
+  );
+
+  const filterDefs = useMemo<AdminEntityFilterDef[]>(() => {
+    const categoryLabel = new Map(
+      categoryOptions.map((option) => [option.value, option.label]),
+    );
+    return [
+      {
+        id: "content-type",
+        paramKey: "content_type",
+        placeholder: "نوع المحتوى",
+        options: CONTENT_TYPE_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+        })),
+        className: "min-w-[132px] flex-1 lg:w-[150px] lg:flex-none",
+      },
+      {
+        id: "category",
+        paramKey: "category",
+        placeholder: "التصنيف",
+        options: categoryOptions,
+        className: "min-w-[132px] flex-1 lg:w-[150px] lg:flex-none",
+        getDisplayValue: (value) =>
+          value === "all" ? "التصنيف" : categoryLabel.get(value),
+      },
+      {
+        id: "series",
+        paramKey: "series",
+        placeholder: "السلسلة",
+        options: seriesOptions,
+        className: "min-w-[132px] flex-1 lg:w-[150px] lg:flex-none",
+      },
+      {
+        id: "status",
+        paramKey: "status",
+        placeholder: "الحالة",
+        options: [
+          { value: "published", label: "منشور" },
+          { value: "draft", label: "مسودة" },
+          { value: "unpublished", label: "مخفي" },
+          { value: "archived", label: "أرشيف" },
+        ],
+        className: "min-w-[132px] flex-1 lg:w-[150px] lg:flex-none",
+      },
+      {
+        id: "featured",
+        paramKey: "featured",
+        placeholder: "التمييز",
+        options: [
+          { value: "yes", label: "مميز" },
+          { value: "no", label: "غير مميز" },
+        ],
+        className: "min-w-[132px] flex-1 lg:w-[150px] lg:flex-none",
+      },
+    ];
+  }, [categoryOptions, seriesOptions]);
 
   function navigate(next: Partial<FilterState>, immediateQ?: string) {
     const merged = { ...values, ...next };
@@ -97,7 +163,7 @@ export default function UnifiedContentFilters({
     const query = params.toString();
     router.push(query ? `${BASE_PATH}?${query}#content-topics-table` : `${BASE_PATH}#content-topics-table`);
     setSuggestionsOpen(false);
-    setOpenDropdown(null);
+    floating?.setOpenLayerId(null);
   }
 
   useEffect(() => {
@@ -148,40 +214,14 @@ export default function UnifiedContentFilters({
     };
   }, [canSearch, trimmedSearch]);
 
-  function selectFilter(key: keyof FilterState, value: string) {
-    const next = { ...values, [key]: value };
-    setValues(next);
-    navigate({ [key]: value });
-  }
-
-  function resetFilters() {
-    const params = new URLSearchParams(searchParams.toString());
-    ["q", "content_type", "category", "series", "status", "featured", "page"].forEach((key) =>
-      params.delete(key),
-    );
-    setValues({ q: "", contentType: "all", category: "all", series: "all", status: "all", featured: "all" });
-    setSuggestions([]);
-    setSuggestionsOpen(false);
-    setOpenDropdown(null);
-    const query = params.toString();
-    router.push(query ? `${BASE_PATH}?${query}#content-topics-table` : `${BASE_PATH}#content-topics-table`);
-  }
-
-  const hasFilters =
-    values.q.length > 0 ||
-    values.contentType !== "all" ||
-    values.category !== "all" ||
-    values.series !== "all" ||
-    values.status !== "all" ||
-    values.featured !== "all";
-
   const autocomplete =
     mounted && suggestionsOpen && suggestionPosition
       ? createPortal(
           <div
             role="listbox"
             dir="rtl"
-            style={{ position: "fixed", top: suggestionPosition.top, left: suggestionPosition.left, width: suggestionPosition.width, zIndex: 10000 }}
+            data-placement={suggestionPosition.placement}
+            style={suggestionPosition.style}
             className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} ${ADMIN_FILTER_MENU_PANEL_CLASSES}`}
           >
             {suggestionsLoading ? <p className="px-3 py-3 text-sm text-white/45">جاري البحث...</p> : null}
@@ -208,151 +248,97 @@ export default function UnifiedContentFilters({
         )
       : null;
 
-  return (
-    <AdminFiltersShell>
-      <AdminSearchInput
-        ref={searchAnchorRef}
-        value={values.q}
-        placeholder="البحث في العنوان..."
-        onChange={(q) => {
-          setValues((current) => ({ ...current, q }));
-          if (q.trim().length < 2) {
-            setSuggestions([]);
-            setSuggestionsOpen(false);
-            setActiveSuggestion(-1);
-          }
-        }}
-        onEnter={() => navigate({}, values.q)}
-        onEscape={() => {
-          setSuggestionsOpen(false);
-          setOpenDropdown(null);
-        }}
-        onFocus={() => {
-          if (canSearch && suggestions.length) setSuggestionsOpen(true);
-        }}
-        onClear={() => {
-          setValues((current) => ({ ...current, q: "" }));
-          setSuggestions([]);
-          navigate({ q: "" }, "");
-        }}
-        onKeyDown={(event) => {
-          if (!suggestionsOpen || !suggestions.length) return;
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setActiveSuggestion((current) => (current + 1) % suggestions.length);
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setActiveSuggestion((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
-          } else if (event.key === "Enter" && activeSuggestion >= 0) {
-            event.preventDefault();
-            const item = suggestions[activeSuggestion];
-            setValues((current) => ({ ...current, q: item.title }));
-            navigate({ q: item.title }, item.title);
-          }
-        }}
-      />
-      {autocomplete}
-      <Filter
-        id="content-type"
-        label="نوع المحتوى"
-        value={values.contentType}
-        options={CONTENT_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-        open={openDropdown}
-        setOpen={setOpenDropdown}
-        onSelect={(value) => selectFilter("contentType", value)}
-        mounted={mounted}
-      />
-      <Filter
-        id="category"
-        label="التصنيف"
-        value={values.category}
-        options={categoryOptions}
-        open={openDropdown}
-        setOpen={setOpenDropdown}
-        onSelect={(value) => selectFilter("category", value)}
-        mounted={mounted}
-        displayValue={values.category === "all" ? "التصنيف" : categoryLabel.get(values.category)}
-      />
-      <Filter
-        id="series"
-        label="السلسلة"
-        value={values.series}
-        options={seriesOptions}
-        open={openDropdown}
-        setOpen={setOpenDropdown}
-        onSelect={(value) => selectFilter("series", value)}
-        mounted={mounted}
-      />
-      <Filter
-        id="status"
-        label="الحالة"
-        value={values.status}
-        options={[
-          { value: "published", label: "منشور" },
-          { value: "draft", label: "مسودة" },
-          { value: "unpublished", label: "مخفي" },
-          { value: "archived", label: "أرشيف" },
-        ]}
-        open={openDropdown}
-        setOpen={setOpenDropdown}
-        onSelect={(value) => selectFilter("status", value)}
-        mounted={mounted}
-      />
-      <Filter
-        id="featured"
-        label="التمييز"
-        value={values.featured}
-        options={[
-          { value: "yes", label: "مميز" },
-          { value: "no", label: "غير مميز" },
-        ]}
-        open={openDropdown}
-        setOpen={setOpenDropdown}
-        onSelect={(value) => selectFilter("featured", value)}
-        mounted={mounted}
-      />
-      {hasFilters ? (
-        <button type="button" onClick={resetFilters} className="ms-auto h-10 rounded-full border border-white/10 px-4 text-sm text-white/58 transition hover:border-white/20 hover:text-white">
-          مسح الفلاتر
-        </button>
-      ) : null}
-    </AdminFiltersShell>
-  );
-}
+  // AdminEntityListFilters navigates via paramKey names; Topics uses content_type etc.
+  // Map filter values from adapter state keys to URL param keys.
+  const filterValues = {
+    content_type: values.contentType,
+    category: values.category,
+    series: values.series,
+    status: values.status,
+    featured: values.featured,
+  };
 
-function Filter({
-  id,
-  label,
-  value,
-  options,
-  open,
-  setOpen,
-  onSelect,
-  mounted,
-  displayValue,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  open: string | null;
-  setOpen: (value: string | null) => void;
-  onSelect: (value: string) => void;
-  mounted: boolean;
-  displayValue?: string;
-}) {
   return (
-    <AdminFilterListbox
-      id={id}
-      isMounted={mounted}
-      placeholder={label}
-      value={value}
-      displayValue={displayValue ?? (value === "all" ? label : options.find((option) => option.value === value)?.label ?? label)}
-      isOpen={open === id}
-      onToggle={() => setOpen(open === id ? null : id)}
-      onSelect={onSelect}
-      options={options}
-      className="min-w-[132px] flex-1 lg:w-[150px] lg:flex-none"
-    />
+    <>
+      <AdminEntityListFilters
+        basePath={BASE_PATH}
+        hash="#content-topics-table"
+        preserveParams={["sort", "limit"]}
+        search={{
+          placeholder: "ابحث في الموضوعات",
+          value: values.q,
+          minLength: 2,
+        }}
+        filters={filterDefs}
+        values={filterValues}
+        clearableFilterKeys={[
+          "q",
+          "content_type",
+          "category",
+          "series",
+          "status",
+          "featured",
+        ]}
+        onClearFilters={() => {
+          setValues({
+            q: "",
+            contentType: "all",
+            category: "all",
+            series: "all",
+            status: "all",
+            featured: "all",
+          });
+          setSuggestions([]);
+          setSuggestionsOpen(false);
+          setActiveSuggestion(-1);
+        }}
+        searchSlot={
+          <>
+            <AdminSearchInput
+              ref={searchAnchorRef}
+              value={values.q}
+              placeholder="ابحث في الموضوعات"
+              onChange={(q) => {
+                setValues((current) => ({ ...current, q }));
+                if (q.trim().length < 2) {
+                  setSuggestions([]);
+                  setSuggestionsOpen(false);
+                  setActiveSuggestion(-1);
+                }
+              }}
+              onEnter={() => navigate({}, values.q)}
+              onEscape={() => {
+                setSuggestionsOpen(false);
+                floating?.setOpenLayerId(null);
+              }}
+              onFocus={() => {
+                if (canSearch && suggestions.length) setSuggestionsOpen(true);
+              }}
+              onClear={() => {
+                setValues((current) => ({ ...current, q: "" }));
+                setSuggestions([]);
+                navigate({ q: "" }, "");
+              }}
+              onKeyDown={(event) => {
+                if (!suggestionsOpen || !suggestions.length) return;
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActiveSuggestion((current) => (current + 1) % suggestions.length);
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveSuggestion((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
+                } else if (event.key === "Enter" && activeSuggestion >= 0) {
+                  event.preventDefault();
+                  const item = suggestions[activeSuggestion];
+                  setValues((current) => ({ ...current, q: item.title }));
+                  navigate({ q: item.title }, item.title);
+                }
+              }}
+            />
+            {autocomplete}
+          </>
+        }
+      />
+    </>
   );
 }

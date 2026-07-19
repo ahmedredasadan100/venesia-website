@@ -6,6 +6,7 @@ export type AdminActionFeedbackKind =
   | "transient_action"
   | "action_validation"
   | "critical_system";
+export type AdminFeedbackLifecycle = "auto" | "manual" | "persistent";
 
 export type AdminActionFeedbackAction = {
   href: string;
@@ -18,17 +19,41 @@ export type AdminActionFeedback = {
   message: string;
   layout: AdminFeedbackLayout;
   dismissible: boolean;
+  lifecycle: AdminFeedbackLifecycle;
+  autoDismissMs?: number;
+  /** URL params to remove client-side when a redirect notice is dismissed. */
+  dismissSearchParams?: readonly string[];
   action?: AdminActionFeedbackAction;
 };
 
 const feedbackKindDefaults: Record<
   AdminActionFeedbackKind,
-  Pick<AdminActionFeedback, "layout" | "dismissible">
+  Pick<
+    AdminActionFeedback,
+    "layout" | "dismissible" | "lifecycle" | "autoDismissMs"
+  >
 > = {
-  transient_action: { layout: "inline", dismissible: true },
-  action_validation: { layout: "inline", dismissible: true },
-  critical_system: { layout: "stacked", dismissible: false },
+  transient_action: {
+    layout: "inline",
+    dismissible: true,
+    lifecycle: "auto",
+    autoDismissMs: 5_000,
+  },
+  action_validation: {
+    layout: "inline",
+    dismissible: true,
+    lifecycle: "manual",
+  },
+  critical_system: {
+    layout: "stacked",
+    dismissible: false,
+    lifecycle: "persistent",
+  },
 };
+
+export function getAdminFeedbackPolicy(kind: AdminActionFeedbackKind) {
+  return feedbackKindDefaults[kind];
+}
 
 export function mapAdminActionResultToFeedback(
   result: Pick<AdminActionResult, "ok" | "title" | "message">,
@@ -38,7 +63,7 @@ export function mapAdminActionResultToFeedback(
     action?: AdminActionFeedbackAction;
   } = {},
 ): AdminActionFeedback {
-  const kind = options.kind ?? "transient_action";
+  const kind = options.kind ?? (result.ok ? "transient_action" : "action_validation");
   return {
     variant: options.variant ?? (result.ok ? "success" : "danger"),
     title: result.title,

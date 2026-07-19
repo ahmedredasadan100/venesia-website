@@ -281,6 +281,9 @@ const columnMenu = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx")
 const floatingMenuPosition = read(
   "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
 );
+const floatingMenuStyle = read(
+  "src/components/admin/ui/admin-floating-position.ts",
+);
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
 const entityListTable = read("src/components/admin/entity-list/AdminEntityListTable.tsx");
@@ -315,18 +318,21 @@ check(
 check(
   "Activity must be click-only",
   activity.includes("<AdminActivityPopover") &&
-    activityCore.includes("onClick={() => setIsOpen") &&
+    activityCore.includes("onClick={toggleOpen}") &&
     !activityCore.includes("onMouseEnter") &&
     !activityCore.includes("onMouseLeave"),
 );
 check(
   "Column management must use a viewport-colliding fixed portal",
   columnMenu.includes("createPortal(") &&
-    columnMenu.includes('position: "fixed"') &&
+    columnMenu.includes("style={menuPosition.style}") &&
     columnMenu.includes("collisionPadding: 12") &&
     columnMenu.includes("estimatedHeight: 458") &&
     !columnMenu.includes("absolute left-0 top-full") &&
-    floatingMenuPosition.includes('placement?: "top" | "bottom"'),
+    floatingMenuPosition.includes("createAdminFloatingMenuStyle") &&
+    floatingMenuStyle.includes('position: "fixed"') &&
+    floatingMenuStyle.includes('placement === "bottom" ? top : undefined') &&
+    floatingMenuStyle.includes('placement === "top" ? bottom : undefined'),
 );
 check(
   "Bounded admin surfaces must compose the shared scrollbar visuals",

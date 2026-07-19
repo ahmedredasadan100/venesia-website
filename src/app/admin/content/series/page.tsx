@@ -12,6 +12,10 @@ import {
   SERIES_LIST_VIEW_KEY,
   SERIES_NOTICE_CODE_MAP,
 } from "../../../../lib/admin/content/series-list-config";
+import {
+  buildAdminCategoryFilterModel,
+  type AdminContentCategory,
+} from "../../../../lib/admin/content/category-hierarchy";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import SeriesTableClient, { type SeriesListRow } from "./SeriesTableClient";
@@ -24,6 +28,9 @@ type SeriesRow = {
   slug: string;
   status: string | null;
   sort_order: number | null;
+  category_id: number | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 type TopicSeriesJoinRow = {
@@ -46,14 +53,22 @@ export default async function Page({
   const [
     { data: seriesRows, error: seriesError },
     { data: topicRows },
+    { data: categoryRows },
     { data: preference, error: preferenceError },
   ] = await Promise.all([
     getSupabaseAdmin()
       .from("topic_series")
-      .select("id, name, slug, status, sort_order")
+      .select(
+        "id, name, slug, status, sort_order, category_id, created_at, updated_at",
+      )
       .order("sort_order", { ascending: true })
       .order("id", { ascending: false }),
     getSupabaseAdmin().from("topics").select("series_id"),
+    getSupabaseAdmin()
+      .from("topic_categories")
+      .select("id, name, slug, parent_id, sort_order, is_active")
+      .order("sort_order", { ascending: true })
+      .order("id", { ascending: true }),
     getSupabaseAdmin()
       .from("admin_user_preferences")
       .select("preferences")
@@ -78,6 +93,14 @@ export default async function Page({
     );
   }
 
+  const categories = (categoryRows ?? []) as AdminContentCategory[];
+  const categoryNameById = new Map(
+    categories.map((item) => [
+      item.id,
+      item.name,
+    ]),
+  );
+
   const counts = new Map<number, number>();
   ((topicRows ?? []) as TopicSeriesJoinRow[]).forEach((row) => {
     if (!row.series_id) return;
@@ -87,9 +110,14 @@ export default async function Page({
   const series: SeriesListRow[] = ((seriesRows ?? []) as SeriesRow[]).map(
     (item) => ({
       ...item,
+      category_name: item.category_id
+        ? (categoryNameById.get(item.category_id) ?? null)
+        : null,
       topics_count: counts.get(item.id) ?? 0,
     }),
   );
+
+  const categoryFilterModel = buildAdminCategoryFilterModel(categories);
 
   const activeCount = series.filter((item) => item.status === "published").length;
   const topicsTotal = series.reduce(
@@ -145,15 +173,6 @@ export default async function Page({
         ]}
       />
 
-      {noticeFeedback ? (
-        <AdminNotice
-          variant={noticeFeedback.variant}
-          title={noticeFeedback.title || undefined}
-          message={noticeFeedback.message}
-          layout={noticeFeedback.layout}
-          dismissible={noticeFeedback.dismissible}
-        />
-      ) : null}
       {preferenceError ? (
         <AdminNotice
           variant="danger"
@@ -163,9 +182,19 @@ export default async function Page({
       ) : null}
 
       <SeriesTableClient
-        key={series.map((item) => `${item.id}:${item.status}:${item.topics_count}`).join("|")}
+        key={series
+          .map(
+            (item) =>
+              `${item.id}:${item.status}:${item.topics_count}:${item.updated_at ?? ""}`,
+          )
+          .join("|")}
         series={series}
+        categoryOptions={categoryFilterModel.options}
+        categoryDescendantIdsByValue={
+          categoryFilterModel.descendantIdsByValue
+        }
         initialVisibleColumns={visibleColumns}
+        initialFeedback={noticeFeedback}
       />
     </main>
   );

@@ -272,7 +272,7 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
                         type="submit"
                         action="visibility"
                         size="compact"
-                        hidden={isPublished}
+                        isCurrentlyHidden={!isPublished}
                         title={isPublished ? "إخفاء" : "نشر"}
                       />
                     </form>

@@ -295,7 +295,7 @@ export default function PagesTableClient({
                       type="submit"
                       action="visibility"
                       size="compact"
-                      hidden={isPublished}
+                      isCurrentlyHidden={!isPublished}
                       title={isPublished ? "إخفاء الصفحة" : "نشر / إظهار الصفحة"}
                     />
                   </form>

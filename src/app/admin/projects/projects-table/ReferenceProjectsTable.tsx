@@ -234,7 +234,7 @@ export default function ReferenceProjectsTable({
                   <AdminDataGridActionButton
                     action="visibility"
                     size="compact"
-                    hidden={isPublished}
+                    isCurrentlyHidden={!isPublished}
                     title={isPublished ? "إخفاء من الموقع" : "نشر في الموقع"}
                     disabled={handlers.isPending}
                     onClick={() => handlers.onTogglePublication(item.id, item.publication_status)}

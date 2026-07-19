@@ -20,7 +20,7 @@ export function mapTopicsActionResultToFeedback(
       : undefined;
 
   return mapAdminActionResultToFeedback(result, {
-    kind: isPublishValidation ? "action_validation" : "transient_action",
+    kind: isPublishValidation ? "action_validation" : undefined,
     action,
   });
 }

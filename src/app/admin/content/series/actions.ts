@@ -4,6 +4,7 @@ import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-se
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import {
+  SERIES_DEFAULT_COLUMN_KEYS,
   SERIES_LIST_VIEW_KEY,
   SERIES_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/series-list-config";
@@ -364,6 +365,10 @@ export type SeriesTableRow = {
   slug: string;
   status: string | null;
   sort_order: number | null;
+  category_id: number | null;
+  category_name: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   topics_count: number;
 };
 
@@ -375,17 +380,32 @@ export type SeriesTableResult = {
 
 export async function getSeriesTableRows(): Promise<SeriesTableRow[]> {
   await requireAdminSession();
-  const [{ data: seriesRows, error: seriesError }, { data: topicRows, error: topicError }] = await Promise.all([
+  const [
+    { data: seriesRows, error: seriesError },
+    { data: topicRows, error: topicError },
+    { data: categoryRows, error: categoryError },
+  ] = await Promise.all([
     getSupabaseAdmin()
       .from("topic_series")
-      .select("id, name, slug, status, sort_order")
+      .select(
+        "id, name, slug, status, sort_order, category_id, created_at, updated_at",
+      )
       .order("sort_order", { ascending: true })
       .order("id", { ascending: false }),
     getSupabaseAdmin().from("topics").select("series_id"),
+    getSupabaseAdmin().from("topic_categories").select("id, name"),
   ]);
 
   if (seriesError) throw new Error(seriesError.message);
   if (topicError) throw new Error(topicError.message);
+  if (categoryError) throw new Error(categoryError.message);
+
+  const categoryNameById = new Map(
+    ((categoryRows ?? []) as { id: number; name: string }[]).map((item) => [
+      item.id,
+      item.name,
+    ]),
+  );
 
   const counts = new Map<number, number>();
   ((topicRows ?? []) as { series_id: number | null }[]).forEach((row) => {
@@ -399,8 +419,14 @@ export async function getSeriesTableRows(): Promise<SeriesTableRow[]> {
     slug: string;
     status: string | null;
     sort_order: number | null;
+    category_id: number | null;
+    created_at: string | null;
+    updated_at: string | null;
   }[]).map((item) => ({
     ...item,
+    category_name: item.category_id
+      ? (categoryNameById.get(item.category_id) ?? null)
+      : null,
     topics_count: counts.get(item.id) ?? 0,
   }));
 }
@@ -554,4 +580,8 @@ export async function saveSeriesTablePreferences(visibleColumns: string[]) {
     visibleColumns,
     allowedColumns: SERIES_PREFERENCE_COLUMN_KEYS,
   });
+}
+
+export async function restoreSeriesTablePreferences() {
+  return saveSeriesTablePreferences([...SERIES_DEFAULT_COLUMN_KEYS]);
 }

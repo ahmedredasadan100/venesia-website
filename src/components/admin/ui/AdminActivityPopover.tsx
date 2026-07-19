@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 import { AdminDataGridActionButton } from "./AdminDataGrid";
 import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
@@ -34,7 +35,26 @@ export default function AdminActivityPopover({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
-  const [isOpen, setIsOpen] = useState(false);
+  const layerId = `entity-activity:${panelId}`;
+  const floating = useAdminFloatingLayer();
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isOpen = floating
+    ? floating.openLayerId === layerId
+    : uncontrolledOpen;
+  const setIsOpen = useCallback((next: boolean) => {
+    if (floating) {
+      floating.setOpenLayerId(next ? layerId : null);
+      return;
+    }
+    setUncontrolledOpen(next);
+  }, [floating, layerId]);
+  const toggleOpen = useCallback(() => {
+    if (floating) {
+      floating.toggleLayer(layerId);
+      return;
+    }
+    setUncontrolledOpen((current) => !current);
+  }, [floating, layerId]);
   const isMounted = useClientMounted();
   const position = useAdminFloatingMenuPosition(isOpen, triggerRef, {
     minWidth: 320,
@@ -43,9 +63,11 @@ export default function AdminActivityPopover({
     align: "right",
     collisionPadding: 12,
     estimatedHeight: 310,
+    zIndex: 10000,
   });
 
   useEffect(() => {
+    if (!isOpen) return;
     function close(event: MouseEvent) {
       const target = event.target as Node;
       if (
@@ -69,7 +91,7 @@ export default function AdminActivityPopover({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [isOpen, setIsOpen]);
 
   const panel =
     isMounted && isOpen && position
@@ -82,15 +104,7 @@ export default function AdminActivityPopover({
             dir="rtl"
             data-admin-activity-popover=""
             data-placement={position.placement}
-            style={{
-              position: "fixed",
-              top: position.bottom === undefined ? position.top : undefined,
-              bottom: position.bottom,
-              left: position.left,
-              width: position.width,
-              maxHeight: position.maxHeight,
-              zIndex: 10000,
-            }}
+            style={position.style}
             className={`overflow-y-auto overflow-x-hidden overscroll-contain rounded-[18px] border border-[#D8B87A]/22 bg-[#080B10]/98 p-4 text-right shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
           >
             <p className="mb-3 text-sm font-bold text-white">{title}</p>
@@ -138,7 +152,7 @@ export default function AdminActivityPopover({
         ariaHasPopup="dialog"
         ariaExpanded={isOpen}
         ariaControls={panelId}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={toggleOpen}
       />
       {panel}
     </>

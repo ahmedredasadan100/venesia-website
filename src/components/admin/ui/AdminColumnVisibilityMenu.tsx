@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal, flushSync } from "react-dom";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import AdminCheckbox from "./AdminCheckbox";
 import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
 
@@ -23,6 +24,7 @@ type AdminColumnVisibilityMenuProps<Key extends string> = {
   defaultColumns: readonly Key[];
   onChange: (columns: Key[]) => void;
   onPersist: (columns: Key[]) => Promise<PersistResult>;
+  onRestore?: () => Promise<PersistResult>;
   onPersisted?: (columns: Key[]) => void;
   label?: string;
   scrollAreaClassName?: string;
@@ -34,6 +36,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   defaultColumns,
   onChange,
   onPersist,
+  onRestore,
   onPersisted,
   label = "الأعمدة",
   scrollAreaClassName = "",
@@ -43,9 +46,29 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   const panelRef = useRef<HTMLDivElement>(null);
   const focusMenuOnOpenRef = useRef(false);
   const menuId = useId();
-  const [isOpen, setIsOpen] = useState(false);
+  const layerId = `entity-columns:${menuId}`;
+  const floating = useAdminFloatingLayer();
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isOpen = floating
+    ? floating.openLayerId === layerId
+    : uncontrolledOpen;
+
+  function setIsOpen(next: boolean) {
+    if (floating) {
+      floating.setOpenLayerId(next ? layerId : null);
+      return;
+    }
+    setUncontrolledOpen(next);
+  }
+
   const [error, setError] = useState("");
-  const [isPending, startTransition] = useTransition();
+  // Manual pending counter instead of useTransition: persist success triggers
+  // onPersisted (router.refresh). React entangles concurrently pending
+  // transitions, so if that refresh transition is superseded/aborted (e.g. by
+  // router prefetch churn) and never commits, a useTransition-based isPending
+  // would stay true forever and strand the trigger spinner.
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const isPending = pendingSaves > 0;
   const saveQueueRef = useRef<Promise<PersistResult>>(Promise.resolve({ ok: true }));
   const latestColumnsRef = useRef<Key[]>([...visibleColumns]);
   const isMounted = useClientMounted();
@@ -56,14 +79,19 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
     align: "left",
     collisionPadding: 12,
     estimatedHeight: 458,
+    zIndex: 10000,
   });
 
   useEffect(() => {
+    if (!isOpen) return;
     function close(event: MouseEvent) {
       const target = event.target as Node;
+      const element =
+        target instanceof Element ? target : target.parentElement;
       if (
         rootRef.current?.contains(target) ||
-        panelRef.current?.contains(target)
+        panelRef.current?.contains(target) ||
+        element?.closest("[data-admin-column-menu]")
       ) {
         return;
       }
@@ -80,7 +108,8 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, layerId, floating]);
 
   useEffect(() => {
     if (
@@ -99,20 +128,32 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
     return () => window.cancelAnimationFrame(frame);
   }, [isOpen, menuPosition]);
 
-  function persist(next: Key[]) {
+  function persist(
+    next: Key[],
+    persistOverride?: () => Promise<PersistResult>,
+  ) {
     latestColumnsRef.current = next;
-    onChange(next);
+    flushSync(() => onChange(next));
     setError("");
-    startTransition(async () => {
-      const resultPromise = saveQueueRef.current.then(() => onPersist(next));
-      saveQueueRef.current = resultPromise.catch(() => ({
-        ok: false,
-        message: "تعذر حفظ تفضيلات الأعمدة.",
-      }));
-      const result = await resultPromise.catch(() => ({
-        ok: false,
-        message: "تعذر حفظ تفضيلات الأعمدة.",
-      }));
+    // Promise.resolve() wrapping keeps a synchronous throw from the handler
+    // inside the promise lifecycle, so pendingSaves always unwinds and the
+    // queue chain keeps resolving.
+    const invokePersist = () =>
+      Promise.resolve()
+        .then(() => (persistOverride ? persistOverride() : onPersist(next)))
+        .catch(() => ({
+          ok: false,
+          message: "تعذر حفظ تفضيلات الأعمدة.",
+        }));
+    // Every save — including Restore Defaults — chains on the same serial
+    // queue. Writes therefore commit in user-action order and an older
+    // in-flight save can never land in the database after a newer one
+    // (latestColumnsRef only gates onPersisted, not the write itself).
+    const resultPromise = saveQueueRef.current.then(invokePersist);
+    saveQueueRef.current = resultPromise;
+    setPendingSaves((count) => count + 1);
+    void resultPromise.then((result) => {
+      setPendingSaves((count) => count - 1);
       if (!result.ok) {
         setError(result.message || "تعذر حفظ تفضيلات الأعمدة.");
       } else if (
@@ -122,6 +163,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         onPersisted?.(next);
       }
     });
+    return resultPromise;
   }
 
   function toggle(key: Key) {
@@ -144,17 +186,9 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         role="menu"
         dir="rtl"
         data-admin-column-menu=""
+        onMouseDown={(event) => event.stopPropagation()}
         data-placement={menuPosition.placement}
-        style={{
-          position: "fixed",
-          top:
-            menuPosition.bottom === undefined ? menuPosition.top : undefined,
-          bottom: menuPosition.bottom,
-          left: menuPosition.left,
-          width: menuPosition.width,
-          maxHeight: menuPosition.maxHeight,
-          zIndex: 10000,
-        }}
+        style={menuPosition.style}
         className="flex flex-col overflow-hidden rounded-[16px] border border-[#D8B87A]/20 bg-[#080B10]/98 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
       >
         <p className="shrink-0 px-2 py-2 text-xs font-semibold text-white/45">
@@ -190,7 +224,13 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         </div>
         <button
           type="button"
-          onClick={() => persist([...defaultColumns])}
+          data-default-columns={defaultColumns.join(",")}
+          onClick={async () => {
+            const result = await persist([...defaultColumns], onRestore);
+            if (!result.ok) return;
+            setIsOpen(false);
+            window.requestAnimationFrame(() => triggerRef.current?.focus());
+          }}
           className="mt-2 w-full shrink-0 cursor-pointer rounded-[9px] border border-white/10 px-3 py-2.5 text-sm font-semibold text-[#D8B87A] transition hover:border-[#D8B87A]/30 hover:bg-[#D8B87A]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
         >
           استعادة الأعمدة الافتراضية
@@ -212,7 +252,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-controls={menuId}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => setIsOpen(!isOpen)}
         onKeyDown={(event) => {
           if (
             event.key !== "ArrowDown" &&

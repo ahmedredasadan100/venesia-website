@@ -50,7 +50,7 @@ type ActionButtonProps = {
   type?: "button" | "submit";
   tone?: "gold" | "green" | "blue" | "red" | "dark";
   action?: DataGridAction;
-  hidden?: boolean;
+  isCurrentlyHidden?: boolean;
   className?: string;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
@@ -168,11 +168,11 @@ export const ADMIN_DATA_GRID_COLUMNS = {
 
 function GridIcon({
   action,
-  hidden = false,
+  isCurrentlyHidden = false,
   active = false,
 }: {
   action: DataGridAction;
-  hidden?: boolean;
+  isCurrentlyHidden?: boolean;
   active?: boolean;
 }) {
   if (action === "edit") {
@@ -185,7 +185,7 @@ function GridIcon({
   }
 
   if (action === "visibility") {
-    return hidden ? (
+    return isCurrentlyHidden ? (
       <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M3 3l18 18" />
         <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
@@ -360,6 +360,10 @@ export function AdminDataGridSortLink({ children, href, active = false, directio
   return (
     <Link
       href={href}
+      // Sort permutations are dynamic list URLs; prefetching every header
+      // combination floods the router queue on grid remounts (see row-action
+      // links above).
+      prefetch={false}
       className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-2 py-1 transition hover:bg-white/[0.055] hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${active ? "text-[#D8B87A]" : ""} ${className}`}
     >
       <span>{children}</span>
@@ -463,7 +467,7 @@ export function AdminDataGridActionButton({
   type = "button",
   tone,
   action,
-  hidden = false,
+  isCurrentlyHidden = false,
   className = "",
   onClick,
   disabled = false,
@@ -478,7 +482,11 @@ export function AdminDataGridActionButton({
   const content = pending ? (
     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
   ) : action ? (
-    <GridIcon action={action} hidden={hidden} active={active} />
+    <GridIcon
+      action={action}
+      isCurrentlyHidden={isCurrentlyHidden}
+      active={active}
+    />
   ) : (
     children
   );
@@ -489,6 +497,11 @@ export function AdminDataGridActionButton({
     return (
       <Link
         href={href}
+        // Row-action links point at per-row dynamic routes. Prefetching all of
+        // them floods the router queue on every grid remount, and that churn
+        // can cancel an in-flight router.refresh() and strand pending
+        // transitions (stuck spinners).
+        prefetch={false}
         target={target}
         rel={rel ?? (target === "_blank" ? "noreferrer" : undefined)}
         title={resolvedTitle}

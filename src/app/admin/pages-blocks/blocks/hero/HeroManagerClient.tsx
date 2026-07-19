@@ -208,7 +208,7 @@ export default function HeroManagerClient({ heroes }: HeroManagerClientProps) {
                       type="submit"
                       action="visibility"
                       size="compact"
-                      hidden={!hero.is_visible}
+                      isCurrentlyHidden={!hero.is_visible}
                       title={hero.is_visible ? "إخفاء" : "إظهار"}
                     />
                   </form>

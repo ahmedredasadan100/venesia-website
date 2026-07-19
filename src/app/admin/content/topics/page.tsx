@@ -5,6 +5,7 @@ import {
   AdminPageContextHeader,
   AdminTablePagination,
 } from "../../../../components/admin/ui";
+import { AdminEntityListSurface } from "../../../../components/admin/entity-list";
 import UnifiedContentFilters from "../../../../components/admin/content/UnifiedContentFilters";
 import UnifiedContentList from "../../../../components/admin/content/UnifiedContentList";
 import { DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS } from "../../../../components/admin/content/unified-content-columns";
@@ -145,15 +146,6 @@ export default async function UnifiedContentTopicsPage({
         }
       />
 
-      {noticeFeedback ? (
-        <AdminNotice
-          variant={noticeFeedback.variant}
-          title={noticeFeedback.title || undefined}
-          message={noticeFeedback.message}
-          layout={noticeFeedback.layout}
-          dismissible={noticeFeedback.dismissible}
-        />
-      ) : null}
       {loadError ? (
         <AdminNotice
           variant="danger"
@@ -174,7 +166,7 @@ export default async function UnifiedContentTopicsPage({
       />
 
       {!listLoadError ? (
-        <>
+        <AdminEntityListSurface className="space-y-4" consumer="topics">
           <UnifiedContentFilters
             initial={{
               q: filters.q,
@@ -195,6 +187,7 @@ export default async function UnifiedContentTopicsPage({
             currentListPath={currentListPath}
             sort={filters.sort}
             initialVisibleColumns={visibleColumns}
+            initialFeedback={noticeFeedback}
           />
 
           <AdminTablePagination
@@ -208,7 +201,7 @@ export default async function UnifiedContentTopicsPage({
             totalPages={list.totalPages}
             emptySummaryText="لا توجد موضوعات مطابقة"
           />
-        </>
+        </AdminEntityListSurface>
       ) : null}
     </main>
   );

@@ -2,23 +2,18 @@
 
 import {
   ADMIN_DATA_GRID_RULES,
+  AdminActivityPopover,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
 } from "../../../../components/admin/ui";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 import CategoryDeleteButton from "./CategoryDeleteButton";
 import CategoryEditModal from "./CategoryEditModal";
+import type { CategoryListRow } from "./categories-columns";
 import { duplicateCategory, toggleCategoryStatus } from "./actions";
 
 type CategoryRowActionsProps = {
-  category: {
-    id: number;
-    name: string;
-    slug: string;
-    parent_id: number | null;
-    sort_order: number | null;
-    is_active: boolean | null;
-    color_token: string | null;
-  };
+  category: CategoryListRow;
   parentOptions: Array<{ id: number; name: string; level: number }>;
 };
 
@@ -39,9 +34,14 @@ function PublicPreviewIcon() {
   );
 }
 
-export default function CategoryRowActions({ category, parentOptions }: CategoryRowActionsProps) {
+export default function CategoryRowActions({
+  category,
+  parentOptions,
+}: CategoryRowActionsProps) {
   const isActive = Boolean(category.is_active);
-  const previewHref = category.slug ? `/topics?category=${encodeURIComponent(category.slug)}` : "/topics";
+  const previewHref = category.slug
+    ? `/topics?category=${encodeURIComponent(category.slug)}`
+    : "/topics";
 
   return (
     <AdminDataGridActionsCell compact>
@@ -50,9 +50,11 @@ export default function CategoryRowActions({ category, parentOptions }: Category
       <AdminDataGridActionButton
         href={previewHref}
         target="_blank"
+        rel="noreferrer"
         tone="dark"
         size="compact"
         title="معاينة الموضوعات في الموقع"
+        action="preview"
       >
         <PublicPreviewIcon />
       </AdminDataGridActionButton>
@@ -63,17 +65,49 @@ export default function CategoryRowActions({ category, parentOptions }: Category
           type="submit"
           action="visibility"
           size="compact"
-          hidden={isActive}
+          isCurrentlyHidden={!isActive}
           title={isActive ? "إخفاء التصنيف" : "إظهار التصنيف"}
         />
       </form>
 
       <form action={duplicateCategory} className="contents">
         <input type="hidden" name="id" value={category.id} />
-        <AdminDataGridActionButton type="submit" action="duplicate" size="compact" title="نسخ التصنيف" />
+        <AdminDataGridActionButton
+          type="submit"
+          action="duplicate"
+          size="compact"
+          title="نسخ التصنيف"
+        />
       </form>
 
       <CategoryDeleteButton categoryId={category.id} />
+
+      <AdminActivityPopover
+        title={`نشاط التصنيف: ${category.name}`}
+        triggerLabel="معلومات النشاط"
+        items={[
+          {
+            label: "تاريخ الإنشاء",
+            value: category.created_at
+              ? formatAdminDateTime(category.created_at)
+              : "—",
+          },
+          {
+            label: "آخر تعديل",
+            value: category.updated_at
+              ? formatAdminDateTime(category.updated_at)
+              : "—",
+          },
+          {
+            label: "التصنيف الأب",
+            value: category.parent_name?.trim() || "—",
+          },
+          {
+            label: "الموضوعات",
+            value: String(category.totalCount),
+          },
+        ]}
+      />
     </AdminDataGridActionsCell>
   );
 }

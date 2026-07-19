@@ -77,7 +77,7 @@ export default function AdminDataGridRowActions({
             type="submit"
             action="visibility"
             size="compact"
-            hidden={visibility.isPublished}
+            isCurrentlyHidden={!visibility.isPublished}
             title={visibility.title ?? (visibility.isPublished ? "إخفاء" : "نشر")}
           />
         </RowActionForm>

@@ -2,6 +2,7 @@
 
 import AdminCategoryBadge from "../../../../components/admin/content/AdminCategoryBadge";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
+import { formatAdminListDate } from "../../../../lib/content-dates";
 import {
   AdminStatusPill,
   getAdminDataGridActionsColumnWidth,
@@ -17,24 +18,51 @@ export type CategoryListRow = {
   sort_order: number | null;
   is_active: boolean | null;
   parent_id: number | null;
+  parent_name: string | null;
   status: string | null;
   color_token: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   ownCount: number;
   totalCount: number;
   depth: number;
   childCount: number;
 };
 
-export type CategoryColumnKey = "name" | "count" | "status" | "actions";
-export type CategorySortKey = "name" | "count" | "status";
+export type CategoryColumnKey =
+  | "name"
+  | "count"
+  | "status"
+  | "actions"
+  | "id"
+  | "parent"
+  | "sort_order"
+  | "created_at"
+  | "updated_at";
+
+export type CategorySortKey =
+  | "name"
+  | "count"
+  | "status"
+  | "id"
+  | "parent"
+  | "sort_order"
+  | "created_at"
+  | "updated_at";
 
 export const CATEGORIES_ACTIONS_COLUMN_WIDTH = getAdminDataGridActionsColumnWidth(
-  5,
+  6,
   "compact",
   12,
 );
 
-function FolderIcon({ large = false }: { large?: boolean }) {
+function FolderIcon({
+  large = false,
+  open = false,
+}: {
+  large?: boolean;
+  open?: boolean;
+}) {
   return (
     <svg
       aria-hidden="true"
@@ -42,26 +70,49 @@ function FolderIcon({ large = false }: { large?: boolean }) {
       className={large ? "h-9 w-9" : "h-6 w-6"}
       fill="none"
     >
-      <path
-        d="M3.4 7.9A2.4 2.4 0 0 1 5.8 5.5h4.6c.5 0 .98.18 1.36.51l1.35 1.16c.38.33.86.51 1.36.51h3.73a2.4 2.4 0 0 1 2.4 2.4v.57H3.4V7.9Z"
-        fill="#F1C668"
-      />
-      <path
-        d="M3.4 9.9h17.2v6.35a2.55 2.55 0 0 1-2.55 2.55H5.95a2.55 2.55 0 0 1-2.55-2.55V9.9Z"
-        fill="#D9A93B"
-      />
-      <path
-        d="M4 10.35h16"
-        stroke="#FFE49A"
-        strokeOpacity=".45"
-        strokeWidth=".8"
-      />
+      {open ? (
+        <>
+          <path
+            d="M3.4 8A2.4 2.4 0 0 1 5.8 5.6h4.5c.55 0 1.08.2 1.48.58l1.13 1.02c.4.36.93.56 1.47.56h3.82a2.4 2.4 0 0 1 2.4 2.4v1.1H3.4V8Z"
+            fill="#F1C668"
+          />
+          <path
+            d="M4.2 10.2h16.7l-2.1 6.8a2.55 2.55 0 0 1-2.44 1.8H5.9a2.55 2.55 0 0 1-2.5-3.05l.8-5.55Z"
+            fill="#D9A93B"
+          />
+          <path d="M5 11h14.7" stroke="#FFE49A" strokeOpacity=".55" strokeWidth=".8" />
+        </>
+      ) : (
+        <>
+          <path
+            d="M3.4 7.9A2.4 2.4 0 0 1 5.8 5.5h4.6c.5 0 .98.18 1.36.51l1.35 1.16c.38.33.86.51 1.36.51h3.73a2.4 2.4 0 0 1 2.4 2.4v.57H3.4V7.9Z"
+            fill="#F1C668"
+          />
+          <path
+            d="M3.4 9.9h17.2v6.35a2.55 2.55 0 0 1-2.55 2.55H5.95a2.55 2.55 0 0 1-2.55-2.55V9.9Z"
+            fill="#D9A93B"
+          />
+          <path d="M4 10.35h16" stroke="#FFE49A" strokeOpacity=".45" strokeWidth=".8" />
+        </>
+      )}
     </svg>
+  );
+}
+
+function singleLine(value: string) {
+  return (
+    <span className="block truncate text-sm text-white/68" title={value}>
+      {value}
+    </span>
   );
 }
 
 export function createCategoryColumns(
   parentOptions: Array<{ id: number; name: string; level: number }>,
+  tree: {
+    isExpanded: (categoryId: number) => boolean;
+    onToggle: (categoryId: number) => void;
+  },
 ): AdminEntityColumnDef<CategoryListRow, CategoryColumnKey, CategorySortKey>[] {
   return [
     {
@@ -75,43 +126,63 @@ export function createCategoryColumns(
       width: 360,
       sticky: "start",
       primary: true,
-      renderCell: ({ row }) => (
-        <CategoryEditModal
-          category={row}
-          parentOptions={parentOptions}
-          showActionButton={false}
-          renderTrigger={(open) => (
-            <button
-              type="button"
-              onClick={open}
-              className="relative flex w-full min-w-0 items-center justify-start gap-3 rounded-[10px] py-1 text-right transition hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
-              style={{ paddingInlineStart: row.depth ? `${row.depth * 28}px` : 0 }}
-              title={`تعديل ${row.name}`}
-            >
-              {row.depth > 0 ? (
-                <span
-                  aria-hidden="true"
-                  className="hidden h-px w-7 shrink-0 border-t border-dashed border-white/25 xl:block"
-                />
-              ) : null}
-              <span data-category-folder>
+      renderCell: ({ row }) => {
+        const expanded = tree.isExpanded(row.id);
+        return (
+          <div
+            className="relative flex w-full min-w-0 items-center justify-start gap-3 py-1 text-right"
+            style={{ paddingInlineStart: row.depth ? `${row.depth * 28}px` : 0 }}
+          >
+            {row.depth > 0 ? (
+              <span
+                aria-hidden="true"
+                className="hidden h-px w-7 shrink-0 border-t border-dashed border-white/25 xl:block"
+              />
+            ) : null}
+            {row.childCount > 0 ? (
+              <button
+                type="button"
+                data-category-folder-toggle=""
+                data-category-folder-state={expanded ? "open" : "closed"}
+                aria-expanded={expanded}
+                aria-label={`${expanded ? "طي" : "فتح"} فروع التصنيف ${row.name}`}
+                onClick={() => tree.onToggle(row.id)}
+                className="shrink-0 cursor-pointer rounded-[8px] transition hover:bg-[#D8B87A]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+              >
+                <FolderIcon large={row.depth === 0} open={expanded} />
+              </button>
+            ) : (
+              <span data-category-folder-static="" className="shrink-0">
                 <FolderIcon large={row.depth === 0} />
               </span>
-              <span className="min-w-0">
-                <AdminCategoryBadge
-                  name={row.name}
-                  colorToken={row.color_token}
-                  className={row.depth === 0 ? "text-sm font-bold" : "font-semibold"}
-                />
-              </span>
-            </button>
-          )}
-        />
-      ),
+            )}
+            <CategoryEditModal
+              category={row}
+              parentOptions={parentOptions}
+              showActionButton={false}
+              renderTrigger={(open) => (
+                <button
+                  type="button"
+                  data-category-edit-trigger=""
+                  onClick={open}
+                  className="min-w-0 cursor-pointer rounded-[8px] px-1.5 py-1 text-right transition hover:bg-white/[0.04] hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                  title={`تعديل ${row.name}`}
+                >
+                  <AdminCategoryBadge
+                    name={row.name}
+                    colorToken={row.color_token}
+                    className={row.depth === 0 ? "text-sm font-bold" : "font-semibold"}
+                  />
+                </button>
+              )}
+            />
+          </div>
+        );
+      },
     },
     {
       key: "count",
-      label: "العدد",
+      label: "الموضوعات",
       defaultVisible: true,
       hideable: true,
       sortable: true,
@@ -138,6 +209,74 @@ export function createCategoryColumns(
           {Boolean(row.is_active) ? "منشور" : "مخفي"}
         </AdminStatusPill>
       ),
+    },
+    {
+      key: "id",
+      label: "ID",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "id",
+      minWidth: 72,
+      width: 72,
+      renderCell: ({ row }) => (
+        <span className="font-en tabular-nums text-sm text-white/55">{row.id}</span>
+      ),
+    },
+    {
+      key: "parent",
+      label: "التصنيف الأب",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "parent",
+      minWidth: 160,
+      width: 180,
+      renderCell: ({ row }) =>
+        singleLine(row.parent_name?.trim() ? row.parent_name : "—"),
+    },
+    {
+      key: "sort_order",
+      label: "الترتيب",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "sort_order",
+      minWidth: 88,
+      width: 88,
+      renderCell: ({ row }) => (
+        <span className="font-en tabular-nums text-sm text-white/68">
+          {row.sort_order ?? 0}
+        </span>
+      ),
+    },
+    {
+      key: "created_at",
+      label: "تاريخ الإنشاء",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "created_at",
+      minWidth: 140,
+      width: 150,
+      renderCell: ({ row }) =>
+        singleLine(
+          row.created_at ? formatAdminListDate(row.created_at) : "—",
+        ),
+    },
+    {
+      key: "updated_at",
+      label: "آخر تعديل",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "updated_at",
+      minWidth: 140,
+      width: 150,
+      renderCell: ({ row }) =>
+        singleLine(
+          row.updated_at ? formatAdminListDate(row.updated_at) : "—",
+        ),
     },
     {
       key: "actions",

@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
+import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
 
 export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE = "10";
-export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS = ["10", "20", "30"] as const;
+export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS = ["10", "20", "30", "50"] as const;
 
 const PAGINATION_MENU_ATTR = "data-admin-table-pagination-menu";
 
@@ -17,14 +19,6 @@ const FOOTER_SURFACE_CLASSES =
 
 const MENU_SCROLLBAR_CLASSES =
   `max-h-[200px] overflow-y-auto overflow-x-hidden overscroll-contain ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`;
-
-type MenuPosition = {
-  bottom: number;
-  left: number;
-  width: number;
-};
-
-const MENU_GAP = 6;
 
 export type PageSizeSelectorMode = "auto" | "always" | "never";
 
@@ -57,41 +51,6 @@ function ChevronDownIcon() {
       <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
     </svg>
   );
-}
-
-function useFixedDropupPosition(isOpen: boolean, anchorRef: React.RefObject<HTMLElement | null>) {
-  const [position, setPosition] = useState<MenuPosition | null>(null);
-
-  useLayoutEffect(() => {
-    if (!isOpen || !anchorRef.current) {
-      setPosition(null);
-      return;
-    }
-
-    function updatePosition() {
-      const anchor = anchorRef.current;
-      if (!anchor) return;
-
-      const rect = anchor.getBoundingClientRect();
-
-      setPosition({
-        bottom: window.innerHeight - rect.top + MENU_GAP,
-        left: rect.left,
-        width: Math.max(rect.width, 132),
-      });
-    }
-
-    updatePosition();
-    window.addEventListener("scroll", updatePosition, true);
-    window.addEventListener("resize", updatePosition);
-
-    return () => {
-      window.removeEventListener("scroll", updatePosition, true);
-      window.removeEventListener("resize", updatePosition);
-    };
-  }, [isOpen, anchorRef]);
-
-  return position;
 }
 
 export function buildAdminPaginationItems(currentPage: number, totalPages: number): Array<number | "ellipsis"> {
@@ -158,8 +117,29 @@ export default function AdminTablePagination({
   const searchParams = useSearchParams();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const limitTriggerId = useId();
-  const [isLimitOpen, setIsLimitOpen] = useState(false);
-  const menuPosition = useFixedDropupPosition(isLimitOpen, triggerRef);
+  const layerId = `entity-page-size:${limitTriggerId}`;
+  const floating = useAdminFloatingLayer();
+  const [uncontrolledLimitOpen, setUncontrolledLimitOpen] = useState(false);
+  const [activeLimit, setActiveLimit] = useState(pageSize);
+  const isLimitOpen = floating
+    ? floating.openLayerId === layerId
+    : uncontrolledLimitOpen;
+
+  function setIsLimitOpen(next: boolean) {
+    if (floating) {
+      floating.setOpenLayerId(next ? layerId : null);
+      return;
+    }
+    setUncontrolledLimitOpen(next);
+  }
+
+  const menuPosition = useAdminFloatingMenuPosition(isLimitOpen, triggerRef, {
+    minWidth: 132,
+    preferredWidth: 132,
+    offset: 6,
+    collisionPadding: 12,
+    estimatedHeight: 220,
+  });
   const paginationItems = buildAdminPaginationItems(currentPage, totalPages);
   const minPageSize = getMinPageSize(pageSizeOptions);
   const shouldShowPageSizeSelector =
@@ -172,6 +152,8 @@ export default function AdminTablePagination({
   const isMounted = useClientMounted();
 
   useEffect(() => {
+    if (!isLimitOpen) return;
+
     function handlePointerDown(event: MouseEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
@@ -181,9 +163,21 @@ export default function AdminTablePagination({
       setIsLimitOpen(false);
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setIsLimitOpen(false);
+      triggerRef.current?.focus();
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, []);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLimitOpen, layerId, floating]);
 
   function applyLimit(nextLimit: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -196,6 +190,36 @@ export default function AdminTablePagination({
     const query = params.toString();
     router.push(query ? `${basePath}?${query}` : basePath, { scroll: false });
     setIsLimitOpen(false);
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  }
+
+  const activeLimitIndex = Math.max(0, pageSizeOptions.indexOf(activeLimit));
+
+  function handleLimitKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Escape" && isLimitOpen) {
+      event.preventDefault();
+      setIsLimitOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!isLimitOpen) {
+        setActiveLimit(pageSize);
+        setIsLimitOpen(true);
+        return;
+      }
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      const nextIndex =
+        (activeLimitIndex + direction + pageSizeOptions.length) %
+        pageSizeOptions.length;
+      setActiveLimit(pageSizeOptions[nextIndex]);
+      return;
+    }
+    if ((event.key === "Enter" || event.key === " ") && isLimitOpen) {
+      event.preventDefault();
+      applyLimit(pageSizeOptions[activeLimitIndex]);
+    }
   }
 
   const summaryText =
@@ -211,20 +235,17 @@ export default function AdminTablePagination({
     createPortal(
       <div
         {...{ [PAGINATION_MENU_ATTR]: "" }}
+        id={`${limitTriggerId}-menu`}
         role="listbox"
         aria-labelledby={limitTriggerId}
         dir="rtl"
-        style={{
-          position: "fixed",
-          bottom: menuPosition.bottom,
-          left: menuPosition.left,
-          width: menuPosition.width,
-          zIndex: 9999,
-        }}
+        data-placement={menuPosition.placement}
+        style={menuPosition.style}
         className={`${MENU_SCROLLBAR_CLASSES} rounded-[12px] border border-[#D8B87A]/22 bg-[#080B10]/96 p-1 shadow-[0_-14px_45px_rgba(0,0,0,0.38),0_18px_55px_rgba(0,0,0,0.42)] backdrop-blur-xl`}
       >
         {pageSizeOptions.map((option) => {
           const selected = pageSize === option;
+          const active = activeLimit === option;
 
           return (
             <button
@@ -232,11 +253,14 @@ export default function AdminTablePagination({
               type="button"
               role="option"
               aria-selected={selected}
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyLimit(option)}
               className={`flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                 selected
                   ? "bg-[#D8B87A]/14 font-semibold text-[#F4E7C5]"
-                  : "text-white/72 hover:bg-white/[0.05] hover:text-[#F4E7C5]"
+                  : active
+                    ? "bg-white/[0.07] text-[#F4E7C5]"
+                    : "text-white/72 hover:bg-white/[0.05] hover:text-[#F4E7C5]"
               }`}
             >
               <span>{option}</span>
@@ -279,7 +303,12 @@ export default function AdminTablePagination({
                 id={limitTriggerId}
                 aria-haspopup="listbox"
                 aria-expanded={isLimitOpen}
-                onClick={() => setIsLimitOpen((open) => !open)}
+                aria-controls={`${limitTriggerId}-menu`}
+                onClick={() => {
+                  setActiveLimit(pageSize);
+                  setIsLimitOpen(!isLimitOpen);
+                }}
+                onKeyDown={handleLimitKeyDown}
                 className={`flex h-9 min-w-[72px] cursor-pointer items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                   isLimitOpen
                     ? "border-[#D8B87A]/35 bg-black/30 text-[#F4E7C5]"

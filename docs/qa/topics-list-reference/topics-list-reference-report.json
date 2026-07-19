@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-07-17T21:58:33.733Z",
+  "generatedAt": "2026-07-18T23:47:18.949Z",
   "baseUrl": "http://127.0.0.1:3000",
   "checks": [
     {
-      "name": "Topics route responds for q=mrphafbn",
+      "name": "Topics route responds for q=mrr0mfrf",
       "ok": true,
       "detail": "200"
     },
@@ -15,7 +15,7 @@
     {
       "name": "مخفي uses its semantic status tone",
       "ok": true,
-      "detail": "{\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84218 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84218 35.9349 / 0.2)\"}"
+      "detail": "{\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84215 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84215 35.9349 / 0.2)\"}"
     },
     {
       "name": "مسودة uses its semantic status tone",
@@ -30,7 +30,7 @@
     {
       "name": "Four status tones remain visually distinct",
       "ok": true,
-      "detail": "[{\"title\":\"01 منشور مرجعي mrphafbn\",\"label\":\"منشور\",\"expectedClass\":\"text-emerald-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-400/15\",\"color\":\"lab(83.9203 -48.7124 13.8849)\",\"backgroundColor\":\"oklab(0.695996 -0.162107 0.0511875 / 0.1)\",\"borderColor\":\"oklab(0.764996 -0.16946 0.0511029 / 0.15)\"},{\"title\":\"02 مخفي مرجعي mrphafbn\",\"label\":\"مخفي\",\"expectedClass\":\"text-[#D8B87A]\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84218 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84218 35.9349 / 0.2)\"},{\"title\":\"03 مسودة مرجعية mrphafbn\",\"label\":\"مسودة\",\"expectedClass\":\"text-sky-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-sky-500/10 text-sky-300 border-sky-400/15\",\"color\":\"lab(80.3307 -20.2945 -31.385)\",\"backgroundColor\":\"oklab(0.684991 -0.0912492 -0.142231 / 0.1)\",\"borderColor\":\"oklab(0.745991 -0.0970495 -0.127188 / 0.15)\"},{\"title\":\"04 مؤرشف مرجعي mrphafbn\",\"label\":\"مؤرشف\",\"expectedClass\":\"text-white/45\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-white/8 text-white/45 border-white/10\",\"color\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.45)\",\"backgroundColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.08)\",\"borderColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.1)\"}]"
+      "detail": "[{\"title\":\"01 منشور مرجعي mrr0mfrf\",\"label\":\"منشور\",\"expectedClass\":\"text-emerald-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-400/15\",\"color\":\"lab(83.9203 -48.7124 13.8849)\",\"backgroundColor\":\"oklab(0.695996 -0.162107 0.0511875 / 0.1)\",\"borderColor\":\"oklab(0.764996 -0.16946 0.0511029 / 0.15)\"},{\"title\":\"02 مخفي مرجعي mrr0mfrf\",\"label\":\"مخفي\",\"expectedClass\":\"text-[#D8B87A]\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-[#D8B87A]/10 text-[#D8B87A] border-[#D8B87A]/20\",\"color\":\"rgb(216, 184, 122)\",\"backgroundColor\":\"lab(76.5698 5.84215 35.9349 / 0.1)\",\"borderColor\":\"lab(76.5698 5.84215 35.9349 / 0.2)\"},{\"title\":\"03 مسودة مرجعية mrr0mfrf\",\"label\":\"مسودة\",\"expectedClass\":\"text-sky-300\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-sky-500/10 text-sky-300 border-sky-400/15\",\"color\":\"lab(80.3307 -20.2945 -31.385)\",\"backgroundColor\":\"oklab(0.684991 -0.0912492 -0.142231 / 0.1)\",\"borderColor\":\"oklab(0.745991 -0.0970495 -0.127188 / 0.15)\"},{\"title\":\"04 مؤرشف مرجعي mrr0mfrf\",\"label\":\"مؤرشف\",\"expectedClass\":\"text-white/45\",\"className\":\"inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold bg-white/8 text-white/45 border-white/10\",\"color\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.45)\",\"backgroundColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.08)\",\"borderColor\":\"oklab(0.999994 0.0000455678 0.0000200868 / 0.1)\"}]"
     },
     {
       "name": "Featured star starts outlined from row.is_featured",
@@ -53,7 +53,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrphafbn&featured=yes&sort=title_asc",
+      "name": "Topics route responds for q=mrr0mfrf&featured=yes&sort=title_asc",
       "ok": true,
       "detail": "200"
     },
@@ -63,7 +63,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrphafbn&sort=id_asc&limit=10&page=2",
+      "name": "Topics route responds for q=mrr0mfrf&sort=id_asc&limit=10&page=2",
       "ok": true,
       "detail": "200"
     },
@@ -73,7 +73,7 @@
       "detail": ""
     },
     {
-      "name": "Topics route responds for q=mrphafbn&sort=id_asc&limit=10&page=1",
+      "name": "Topics route responds for q=mrr0mfrf&sort=id_asc&limit=10&page=1",
       "ok": true,
       "detail": "200"
     },
@@ -90,7 +90,7 @@
     {
       "name": "1440x900 default columns: columns portal does not alter page geometry",
       "ok": true,
-      "detail": "{\"before\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1487,\"documentClientWidth\":1440,\"bodyScrollWidth\":1450,\"bodyScrollHeight\":1487,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":486,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":859}},\"after\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1487,\"documentClientWidth\":1440,\"bodyScrollWidth\":1450,\"bodyScrollHeight\":1487,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":486,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":859}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":80.28125,\"bottom\":527.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
+      "detail": "{\"before\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1393,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1393,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":789}},\"after\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1393,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1393,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":80.28125,\"bottom\":527.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
       "name": "Columns menu uses shared thin scrollbar without filter height",
@@ -100,37 +100,37 @@
     {
       "name": "1280x800 medium viewport: columns portal does not alter page geometry",
       "ok": true,
-      "detail": "{\"before\":{\"documentScrollWidth\":1280,\"documentScrollHeight\":1514,\"documentClientWidth\":1280,\"bodyScrollWidth\":1450,\"bodyScrollHeight\":1514,\"viewportWidth\":1280,\"viewportHeight\":800,\"scrollX\":0,\"scrollY\":486,\"tableBox\":{\"x\":28,\"y\":58.875,\"width\":920,\"height\":859}},\"after\":{\"documentScrollWidth\":1280,\"documentScrollHeight\":1514,\"documentClientWidth\":1280,\"bodyScrollWidth\":1450,\"bodyScrollHeight\":1514,\"viewportWidth\":1280,\"viewportHeight\":800,\"scrollX\":0,\"scrollY\":486,\"tableBox\":{\"x\":28,\"y\":58.875,\"width\":920,\"height\":859}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":106.875,\"bottom\":553.671875,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
+      "detail": "{\"before\":{\"documentScrollWidth\":1280,\"documentScrollHeight\":1420,\"documentClientWidth\":1280,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1420,\"viewportWidth\":1280,\"viewportHeight\":800,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":58.875,\"width\":920,\"height\":789}},\"after\":{\"documentScrollWidth\":1280,\"documentScrollHeight\":1420,\"documentClientWidth\":1280,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1420,\"viewportWidth\":1280,\"viewportHeight\":800,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":28,\"y\":58.875,\"width\":920,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":106.875,\"bottom\":553.671875,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
       "name": "970x1024 reference viewport: columns portal does not alter page geometry",
       "ok": true,
-      "detail": "{\"before\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1621,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1621,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":597,\"tableBox\":{\"x\":24,\"y\":55.28125,\"width\":922,\"height\":859}},\"after\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1621,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1621,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":597,\"tableBox\":{\"x\":24,\"y\":55.28125,\"width\":922,\"height\":859}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":24,\"right\":304,\"top\":103.28125,\"bottom\":550.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
+      "detail": "{\"before\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1527,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1527,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":24,\"y\":166.28125,\"width\":922,\"height\":789}},\"after\":{\"documentScrollWidth\":970,\"documentScrollHeight\":1527,\"documentClientWidth\":970,\"bodyScrollWidth\":970,\"bodyScrollHeight\":1527,\"viewportWidth\":970,\"viewportHeight\":1024,\"scrollX\":0,\"scrollY\":474,\"tableBox\":{\"x\":24,\"y\":166.28125,\"width\":922,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":24,\"right\":304,\"top\":214.28125,\"bottom\":661.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
-      "name": "Topics route responds for q=mrphafbn&sort=category_asc&limit=10&page=2",
+      "name": "Topics route responds for q=mrr0mfrf&sort=category_asc&limit=10&page=2",
       "ok": true,
       "detail": "200"
     },
     {
       "name": "Hidden active sort resets once despite persistence failure",
       "ok": true,
-      "detail": "http://127.0.0.1:3000/admin/content/topics?q=mrphafbn&page=2#content-topics-table"
+      "detail": "http://127.0.0.1:3000/admin/content/topics?q=mrr0mfrf&page=2#content-topics-table"
     },
     {
-      "name": "Topics route responds for q=mrphafbn",
+      "name": "Topics route responds for q=mrr0mfrf",
       "ok": true,
       "detail": "200"
     },
     {
       "name": "All columns keep actions fixed at visual far left",
       "ok": true,
-      "detail": "{\"containerBox\":{\"x\":41,\"y\":583.28125,\"width\":1054,\"height\":711},\"stickyBox\":{\"x\":42,\"y\":584.28125,\"width\":332,\"height\":60},\"pageOverflow\":{\"width\":1440,\"viewport\":1440}}"
+      "detail": "{\"containerBox\":{\"x\":41,\"y\":571.28125,\"width\":1054,\"height\":711},\"stickyBox\":{\"x\":42,\"y\":572.28125,\"width\":332,\"height\":60},\"pageOverflow\":{\"width\":1440,\"viewport\":1440}}"
     },
     {
       "name": "All columns: columns portal does not alter page geometry",
       "ok": true,
-      "detail": "{\"before\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1417,\"documentClientWidth\":1440,\"bodyScrollWidth\":1450,\"bodyScrollHeight\":1417,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":0,\"tableBox\":{\"x\":28,\"y\":518.28125,\"width\":1080,\"height\":789}},\"after\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1417,\"documentClientWidth\":1440,\"bodyScrollWidth\":1450,\"bodyScrollHeight\":1417,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":0,\"tableBox\":{\"x\":28,\"y\":518.28125,\"width\":1080,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"top\",\"left\":28,\"right\":308,\"top\":63.484375,\"bottom\":510.28125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
+      "detail": "{\"before\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1393,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1393,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":0,\"tableBox\":{\"x\":28,\"y\":506.28125,\"width\":1080,\"height\":789}},\"after\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1393,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1393,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":0,\"tableBox\":{\"x\":28,\"y\":506.28125,\"width\":1080,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"top\",\"left\":28,\"right\":308,\"top\":51.484375,\"bottom\":498.28125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
       "name": "Restore main columns returns the shared default configuration",
@@ -140,12 +140,12 @@
     {
       "name": "Minimum columns preserve fixed title and actions positions",
       "ok": true,
-      "detail": "{\"headers\":[\"العنوان\",\"الإجراءات\"],\"sticky\":{\"containerBox\":{\"x\":41,\"y\":97.28125,\"width\":1054,\"height\":711},\"stickyBox\":{\"x\":42,\"y\":98.28125,\"width\":473.28125,\"height\":60},\"pageOverflow\":{\"width\":1440,\"viewport\":1440}}}"
+      "detail": "{\"headers\":[\"العنوان\",\"الإجراءات\"],\"sticky\":{\"containerBox\":{\"x\":41,\"y\":571.28125,\"width\":1054,\"height\":711},\"stickyBox\":{\"x\":42,\"y\":572.28125,\"width\":473.28125,\"height\":60},\"pageOverflow\":{\"width\":1440,\"viewport\":1440}}}"
     },
     {
       "name": "Minimum columns: columns portal does not alter page geometry",
       "ok": true,
-      "detail": "{\"before\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1417,\"documentClientWidth\":1440,\"bodyScrollWidth\":1450,\"bodyScrollHeight\":1417,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":486,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":789}},\"after\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1417,\"documentClientWidth\":1440,\"bodyScrollWidth\":1450,\"bodyScrollHeight\":1417,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":486,\"tableBox\":{\"x\":28,\"y\":32.28125,\"width\":1080,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"bottom\",\"left\":28,\"right\":308,\"top\":80.28125,\"bottom\":527.078125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
+      "detail": "{\"before\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1393,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1393,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":0,\"tableBox\":{\"x\":28,\"y\":506.28125,\"width\":1080,\"height\":789}},\"after\":{\"documentScrollWidth\":1440,\"documentScrollHeight\":1393,\"documentClientWidth\":1440,\"bodyScrollWidth\":1452,\"bodyScrollHeight\":1393,\"viewportWidth\":1440,\"viewportHeight\":900,\"scrollX\":0,\"scrollY\":0,\"tableBox\":{\"x\":28,\"y\":506.28125,\"width\":1080,\"height\":789}},\"panel\":{\"parent\":\"BODY\",\"position\":\"fixed\",\"placement\":\"top\",\"left\":28,\"right\":308,\"top\":51.484375,\"bottom\":498.28125,\"width\":280,\"height\":446.796875},\"stableDocument\":true,\"stableTable\":true}"
     },
     {
       "name": "Publish validation pending is local to its row action",
@@ -165,7 +165,7 @@
     {
       "name": "Activity uses the shared bounded portal and scrollbar system",
       "ok": true,
-      "detail": "{\"parent\":\"BODY\",\"position\":\"fixed\",\"overflowY\":\"auto\",\"scrollbarWidth\":\"thin\",\"left\":12,\"right\":332,\"top\":288.28125,\"bottom\":721.375,\"viewportWidth\":1440,\"viewportHeight\":900}"
+      "detail": "{\"parent\":\"BODY\",\"position\":\"fixed\",\"overflowY\":\"auto\",\"scrollbarWidth\":\"thin\",\"left\":12,\"right\":332,\"top\":273.1875,\"bottom\":706.28125,\"viewportWidth\":1440,\"viewportHeight\":900}"
     },
     {
       "name": "Activity closes from its trigger",
@@ -218,14 +218,14 @@
       "detail": "200 http://127.0.0.1:3000/admin/content/topics/new"
     },
     {
-      "name": "Smoke /admin/content/topics/458",
+      "name": "Smoke /admin/content/topics/687",
       "ok": true,
-      "detail": "200 http://127.0.0.1:3000/admin/content/topics/458"
+      "detail": "200 http://127.0.0.1:3000/admin/content/topics/687"
     },
     {
-      "name": "Smoke /admin/content/topics/458/preview",
+      "name": "Smoke /admin/content/topics/687/preview",
       "ok": true,
-      "detail": "200 http://127.0.0.1:3000/admin/content/topics/458/preview"
+      "detail": "200 http://127.0.0.1:3000/admin/content/topics/687/preview"
     },
     {
       "name": "Console, hydration, RSC, chunk, and ARIA errors are zero",
