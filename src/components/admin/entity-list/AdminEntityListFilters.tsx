@@ -35,6 +35,8 @@ export type AdminEntityListFiltersProps = {
   clearableFilterKeys?: readonly string[];
   /** Lets a custom search consumer reset its own transient UI. */
   onClearFilters?: () => void;
+  /** Client data engines handle query patches without a Next navigation. */
+  onQueryPatch?: (patch: Record<string, string | null>) => void;
   trailing?: ReactNode;
   searchSlot?: ReactNode;
   className?: string;
@@ -58,6 +60,7 @@ export default function AdminEntityListFilters({
   preserveParams = [],
   clearableFilterKeys,
   onClearFilters,
+  onQueryPatch,
   trailing,
   searchSlot,
   className = "",
@@ -102,6 +105,11 @@ export default function AdminEntityListFilters({
   ];
 
   function navigate(patch: Record<string, string | null>) {
+    if (onQueryPatch) {
+      onQueryPatch(patch);
+      setOpenLayerId(null);
+      return;
+    }
     const current = new URLSearchParams(searchParams.toString());
     filters.forEach((filter) => {
       const allValue = filter.allValue ?? "all";
