@@ -76,6 +76,8 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
     .from("topic_categories")
     .select("id, name, slug, is_active, topics_count:topics(count)")
     .eq("is_active", true)
+    // Soft-deleted topics must never count toward a public category.
+    .is("topics.deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true })
     .limit(config.query.limit);

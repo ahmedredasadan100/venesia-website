@@ -1,12 +1,15 @@
 /**
- * Data-correctness acceptance for admin content topic counts (Categories / Series).
+ * Data-correctness acceptance for content topic counts
+ * (admin Categories / admin Series / public categories feed).
  *
  * Guards the soft-delete counting contract:
  *   - topics with deleted_at IS NOT NULL never count toward a category or a series;
  *   - archived-but-not-deleted topics keep counting;
  *   - topics without category/series never enter the respective count;
  *   - counts stay correct on repeat loads and through the series AJAX fresh-rows
- *     mutation refresh path.
+ *     mutation refresh path;
+ *   - the public categories feed (resolve-topics-feed.ts → SidebarCategoriesWidget)
+ *     excludes soft-deleted topics while keeping zero-count categories visible.
  *
  * Runs real integration assertions against Supabase with isolated fixtures
  * (unique prefix, deleted in finally with zero-count cleanup proof) plus a
@@ -24,7 +27,7 @@ import ts from "typescript";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = resolve(ROOT, ".tmp-qa/admin-soft-deleted-content-counts");
 const baseUrl = "http://127.0.0.1:3000";
-const runId = Date.now().toString(36);
+const runId = `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
 const prefix = `qa-sdc-${runId}`;
 const fixtureSearch = `QA SDC ${runId}`;
 const adminUsername = `__QA_SDC_COUNTS_${runId}__`;
@@ -93,6 +96,24 @@ const seriesCountsModule = loadPureTypeScriptModule(
   "src/lib/admin/content/series-topic-counts.ts",
   { "../../supabase-admin": { getSupabaseAdmin: () => supabase } },
 );
+
+const cmsTestDataModule = loadPureTypeScriptModule("src/lib/admin/cms-test-data.ts");
+
+/** Loads the real public feed resolver; getClient lets tests count issued queries. */
+function loadFeedResolverModule(getClient = () => supabase) {
+  return loadPureTypeScriptModule("src/lib/feed-modules/resolve-topics-feed.ts", {
+    "server-only": {},
+    "../supabase-admin": { getSupabaseAdmin: getClient },
+    "../admin/cms-test-data": cmsTestDataModule,
+    "../logging": {
+      logError: (message, error) => console.error("logError:", message, error?.message ?? error),
+    },
+    "../content-dates": { formatArabicContentDate: () => "" },
+    "../media/resolve-local-public-image": {
+      resolveLocalPublicImage: (image, fallback) => image || fallback,
+    },
+  });
+}
 
 async function must(label, promise) {
   const { data, error } = await promise;
@@ -184,37 +205,57 @@ async function cleanup() {
   }
   await del("admin", supabase.from("admin_users").delete().eq("username", adminUsername));
 
-  const [topicsRemaining, categoriesRemaining, seriesRemaining, adminsRemaining] =
-    await Promise.all([
-      countTopics((q) => q.like("slug", `${prefix}%`)),
-      supabase
-        .from("topic_categories")
-        .select("id", { count: "exact", head: true })
-        .like("slug", `${prefix}%`)
-        .then(({ count }) => count ?? -1),
-      supabase
-        .from("topic_series")
-        .select("id", { count: "exact", head: true })
-        .like("slug", `${prefix}%`)
-        .then(({ count }) => count ?? -1),
-      supabase
-        .from("admin_users")
-        .select("id", { count: "exact", head: true })
-        .eq("username", adminUsername)
-        .then(({ count }) => count ?? -1),
-    ]);
+  const [
+    topicsRemaining,
+    categoriesRemaining,
+    seriesRemaining,
+    adminsRemaining,
+    preferencesRemaining,
+    auditLogsRemaining,
+  ] = await Promise.all([
+    countTopics((q) => q.like("slug", `${prefix}%`)),
+    supabase
+      .from("topic_categories")
+      .select("id", { count: "exact", head: true })
+      .like("slug", `${prefix}%`)
+      .then(({ count }) => count ?? -1),
+    supabase
+      .from("topic_series")
+      .select("id", { count: "exact", head: true })
+      .like("slug", `${prefix}%`)
+      .then(({ count }) => count ?? -1),
+    supabase
+      .from("admin_users")
+      .select("id", { count: "exact", head: true })
+      .eq("username", adminUsername)
+      .then(({ count }) => count ?? -1),
+    supabase
+      .from("admin_user_preferences")
+      .select("admin_user_id", { count: "exact", head: true })
+      .eq("admin_user_id", fixtures.adminId ?? -1)
+      .then(({ count }) => count ?? -1),
+    supabase
+      .from("admin_audit_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("actor_admin_user_id", fixtures.adminId ?? -1)
+      .then(({ count }) => count ?? -1),
+  ]);
   cleanupProof = {
     errors,
     topicsRemaining,
     categoriesRemaining,
     seriesRemaining,
     adminsRemaining,
+    preferencesRemaining,
+    auditLogsRemaining,
     ok:
       errors.length === 0 &&
       topicsRemaining === 0 &&
       categoriesRemaining === 0 &&
       seriesRemaining === 0 &&
-      adminsRemaining === 0,
+      adminsRemaining === 0 &&
+      preferencesRemaining === 0 &&
+      auditLogsRemaining === 0,
   };
   return cleanupProof;
 }
@@ -324,6 +365,19 @@ async function createFixtures() {
       category_id: child.id,
       series_id: null,
     },
+    // The parent category's ONLY topic is soft-deleted: after the filter the
+    // category must stay visible (public feed + admin) with a count of 0.
+    {
+      ...common,
+      slug: `${prefix}-t-softdel-parent`,
+      title: `${fixtureSearch} soft-deleted parent-only`,
+      status: "draft",
+      category: `${fixtureSearch} Parent`,
+      category_slug: `${prefix}-parent`,
+      category_id: parent.id,
+      series_id: null,
+      deleted_at: now,
+    },
   ];
   const seeded = await must(
     "seed fixture topics",
@@ -396,6 +450,14 @@ async function dataPhase() {
     nested.own.get(parentCategoryId) === 0,
     `own=${nested.own.get(parentCategoryId)}`,
   );
+  // Second tripwire: the parent's only topic is soft-deleted, so unfiltered
+  // legacy semantics would report 1 while the fixed semantics report 0.
+  const legacyParent = await countTopics((q) => q.eq("category_id", parentCategoryId));
+  check(
+    "Tripwire: unfiltered parent category count includes its soft-deleted topic",
+    legacyParent === 1,
+    legacyParent,
+  );
   check(
     "Parent descendant total is 3 (soft-deleted child topic never rolls up)",
     nested.totalOf(parentCategoryId) === 3,
@@ -435,6 +497,113 @@ async function dataPhase() {
   return baseline;
 }
 
+// Public categories feed path (resolve-topics-feed.ts → resolveCategories →
+// SidebarCategoriesWidget). Runs the REAL production resolver module, so
+// removing the deleted_at filter from resolve-topics-feed.ts fails this phase.
+async function publicFeedPhase() {
+  const { parentCategoryId, childCategoryId } = fixtures;
+  const feedConfig = {
+    presentation: {},
+    query: { limit: 200, categorySlug: null, seriesSlug: null },
+  };
+
+  const issuedQueries = [];
+  const feedResolver = loadFeedResolverModule(() => ({
+    from: (table) => {
+      issuedQueries.push(table);
+      return supabase.from(table);
+    },
+  }));
+  const payload = await feedResolver.resolveTopicsFeedModule(
+    { feed_type: "categories" },
+    feedConfig,
+  );
+  check("Public feed resolves a categories payload", payload.kind === "categories");
+  check(
+    "Public categories feed issues exactly one query (no N+1, no extra query)",
+    issuedQueries.length === 1 && issuedQueries[0] === "topic_categories",
+    JSON.stringify(issuedQueries),
+  );
+
+  const itemByName = new Map(payload.items.map((item) => [item.name, item.count]));
+  check(
+    "Public feed: child category count excludes soft-deleted, keeps archived",
+    itemByName.get(`${fixtureSearch} Child`) === 3,
+    `count=${itemByName.get(`${fixtureSearch} Child`)}`,
+  );
+  check(
+    "Public feed: top-level category with only a soft-deleted topic stays visible with count 0",
+    itemByName.get(`${fixtureSearch} Parent`) === 0,
+    `count=${itemByName.get(`${fixtureSearch} Parent`)}`,
+  );
+  check(
+    "Public feed: parent/child stay separate direct counts (no rollup change)",
+    itemByName.get(`${fixtureSearch} Parent`) === 0 &&
+      itemByName.get(`${fixtureSearch} Child`) === 3,
+  );
+
+  // Every active category must remain present after the embedded filter.
+  const activeCategories = await must(
+    "active categories",
+    supabase
+      .from("topic_categories")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true })
+      .limit(feedConfig.query.limit),
+  );
+  const missing = activeCategories.filter((row) => !itemByName.has(row.name));
+  check(
+    "Public feed: every active category remains visible after the filter",
+    missing.length === 0,
+    missing.map((row) => row.name).join(", ") || `all ${activeCategories.length} present`,
+  );
+
+  // Full parity: each feed count equals the independent deleted_at IS NULL truth.
+  const activeIds = activeCategories.map((row) => row.id);
+  const grouped = await must(
+    "grouped active topic counts",
+    supabase
+      .from("topics")
+      .select("category_id")
+      .in("category_id", activeIds)
+      .is("deleted_at", null),
+  );
+  const truthById = new Map();
+  for (const row of grouped) {
+    truthById.set(row.category_id, (truthById.get(row.category_id) ?? 0) + 1);
+  }
+  const mismatches = activeCategories.filter(
+    (row) => itemByName.get(row.name) !== (truthById.get(row.id) ?? 0),
+  );
+  check(
+    "Public feed: every category count matches independent deleted_at IS NULL truth",
+    mismatches.length === 0,
+    mismatches
+      .map((row) => `${row.name}: feed=${itemByName.get(row.name)} truth=${truthById.get(row.id) ?? 0}`)
+      .join(" | ") || `${activeCategories.length} categories verified`,
+  );
+
+  // Tripwire: the unfiltered legacy query shape reports inflated values for the
+  // fixture categories, so the assertions above genuinely detect a regression.
+  const legacy = await must(
+    "legacy unfiltered nested counts",
+    supabase
+      .from("topic_categories")
+      .select("id, topics_count:topics(count)")
+      .in("id", [parentCategoryId, childCategoryId]),
+  );
+  const legacyById = new Map(
+    legacy.map((row) => [row.id, row.topics_count?.[0]?.count ?? 0]),
+  );
+  check(
+    "Tripwire: unfiltered public query shape would report 4/1 instead of 3/0",
+    legacyById.get(childCategoryId) === 4 && legacyById.get(parentCategoryId) === 1,
+    `child=${legacyById.get(childCategoryId)} parent=${legacyById.get(parentCategoryId)}`,
+  );
+}
+
 // Static wiring guard (supplementary to the integration assertions above):
 // both series consumers must use the single count owner and no unfiltered
 // topics fetch may reappear in the count paths.
@@ -465,6 +634,16 @@ function staticWiringPhase() {
     "Categories page filters the embedded topics count on deleted_at",
     categoriesPage.includes("topics_count:topics(count)") &&
       categoriesPage.includes('.is("topics.deleted_at", null)'),
+  );
+  const publicFeed = readFileSync(
+    resolve(ROOT, "src/lib/feed-modules/resolve-topics-feed.ts"),
+    "utf8",
+  );
+  check(
+    "Public categories feed filters the embedded topics count on deleted_at",
+    publicFeed.includes("topics_count:topics(count)") &&
+      publicFeed.includes('.is("topics.deleted_at", null)') &&
+      !publicFeed.includes("!inner"),
   );
 }
 
@@ -619,6 +798,122 @@ async function browserPhase() {
         (await readRowCount(page, fixtures.parentCategoryId)) === "3",
     );
 
+    // ── Public /topics sidebar (SidebarCategoriesWidget through the feed cache) ──
+    // The earlier series visibility toggle already called revalidateTopicsCache()
+    // (invalidates the "feed-modules" tag). Poll until the fixture categories
+    // appear so a stale unstable_cache entry from a prior QA run cannot flake.
+    const fixtureParentName = `${fixtureSearch} Parent`;
+    const fixtureChildName = `${fixtureSearch} Child`;
+    async function readSidebarCategories() {
+      return page.evaluate(() => {
+        const anchors = Array.from(
+          document.querySelectorAll('a[href^="/topics?category="]'),
+        );
+        return anchors
+          .map((anchor) => {
+            const spans = anchor.querySelectorAll(":scope > span");
+            if (spans.length !== 2) return null;
+            const count = Number(spans[1].textContent?.trim());
+            if (!Number.isInteger(count)) return null;
+            return { name: spans[0].textContent?.trim() ?? "", count };
+          })
+          .filter(Boolean);
+      });
+    }
+    let widgetItems = [];
+    const sidebarDeadline = Date.now() + 45_000;
+    while (Date.now() < sidebarDeadline) {
+      await page.goto(`${baseUrl}/topics`, {
+        waitUntil: "domcontentloaded",
+        timeout: 60_000,
+      });
+      await page
+        .waitForSelector('a[href^="/topics?category="]', { timeout: 15_000 })
+        .catch(() => null);
+      widgetItems = await readSidebarCategories();
+      if (
+        widgetItems.some((item) => item.name === fixtureParentName) &&
+        widgetItems.some((item) => item.name === fixtureChildName)
+      ) {
+        break;
+      }
+      // Force another feed-modules revalidation via a no-op visibility toggle.
+      await page.goto(
+        `${baseUrl}/admin/content/series?q=${encodeURIComponent(fixtureSearch)}`,
+        { waitUntil: "domcontentloaded", timeout: 60_000 },
+      );
+      const fixtureRow = page.locator(`[data-entity-row-id="${fixtures.seriesId}"]`);
+      await fixtureRow.waitFor({ state: "visible", timeout: 15_000 });
+      const hideBtn = fixtureRow.locator('button[title="إخفاء"]');
+      const showBtn = fixtureRow.locator('button[title="إظهار"]');
+      if ((await hideBtn.count()) === 1) {
+        await hideBtn.click();
+        await showBtn.waitFor({ state: "visible", timeout: 20_000 });
+      } else {
+        await showBtn.click();
+        await hideBtn.waitFor({ state: "visible", timeout: 20_000 });
+      }
+      await page.waitForTimeout(400);
+    }
+    const widgetByName = new Map(widgetItems.map((item) => [item.name, item.count]));
+    check(
+      "Public sidebar renders the categories widget",
+      widgetItems.length > 0,
+      `${widgetItems.length} items`,
+    );
+    check(
+      "Public sidebar: fixture child shows 3 (soft-deleted excluded)",
+      widgetByName.get(fixtureChildName) === 3,
+      `count=${widgetByName.get(fixtureChildName)}`,
+    );
+    check(
+      "Public sidebar: fixture parent with only a soft-deleted topic stays visible at 0",
+      widgetByName.get(fixtureParentName) === 0,
+      `count=${widgetByName.get(fixtureParentName)}`,
+    );
+    const activeNow = await must(
+      "active categories for sidebar parity",
+      supabase.from("topic_categories").select("id, name").eq("is_active", true),
+    );
+    const activeTopicRows = await must(
+      "active categorized topics for sidebar parity",
+      supabase
+        .from("topics")
+        .select("category_id")
+        .in("category_id", activeNow.map((rowItem) => rowItem.id))
+        .is("deleted_at", null),
+    );
+    const sidebarTruth = new Map();
+    for (const rowItem of activeTopicRows) {
+      sidebarTruth.set(rowItem.category_id, (sidebarTruth.get(rowItem.category_id) ?? 0) + 1);
+    }
+    const sidebarMissing = activeNow.filter((rowItem) => !widgetByName.has(rowItem.name));
+    const sidebarMismatches = activeNow.filter(
+      (rowItem) =>
+        widgetByName.has(rowItem.name) &&
+        widgetByName.get(rowItem.name) !== (sidebarTruth.get(rowItem.id) ?? 0),
+    );
+    check(
+      "Public sidebar keeps every active category visible",
+      sidebarMissing.length === 0,
+      sidebarMissing.map((rowItem) => rowItem.name).join(", ") ||
+        `all ${activeNow.length} present`,
+    );
+    check(
+      "Public sidebar counts match independent deleted_at IS NULL truth",
+      sidebarMismatches.length === 0,
+      sidebarMismatches
+        .map(
+          (rowItem) =>
+            `${rowItem.name}: widget=${widgetByName.get(rowItem.name)} truth=${sidebarTruth.get(rowItem.id) ?? 0}`,
+        )
+        .join(" | ") || `${activeNow.length} categories verified`,
+    );
+    await page.screenshot({
+      path: resolve(OUT, "topics-public-sidebar-1440.png"),
+      fullPage: true,
+    });
+
     check("No console errors", consoleIssues.length === 0, consoleIssues.join(" | "));
     check("No page errors", pageErrors.length === 0, pageErrors.join(" | "));
     check("No 404/500 responses", badResponses.length === 0, badResponses.join(" | "));
@@ -632,6 +927,7 @@ async function main() {
   try {
     staticWiringPhase();
     baseline = await dataPhase();
+    await publicFeedPhase();
     await browserPhase();
   } finally {
     await cleanup();
