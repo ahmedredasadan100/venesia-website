@@ -112,6 +112,9 @@ export default function CategoriesListClient({
     [filterSignature],
   );
 
+  // Stable identity so shared filter nodes don't remount on every render.
+  const filters = useMemo(() => [STATUS_FILTER], []);
+
   const columns = useMemo(
     () =>
       createCategoryColumns(parentOptions, {
@@ -149,13 +152,16 @@ export default function CategoriesListClient({
           value: controller.query.search,
           className: "max-w-[330px]",
         }}
-        filters={[STATUS_FILTER]}
+        filters={filters}
         values={{ status: controller.query.filters.status }}
         onQueryPatch={(patch) => {
           const search =
             "q" in patch
               ? (patch.q ?? "").trim()
               : controller.query.search;
+          // Engine path: only accepted status tokens reach the controller.
+          // Unknown/null status resets to the shared "all" sentinel so the
+          // trigger returns to "كل الحالات" without a duplicate option.
           const status =
             "status" in patch
               ? patch.status === "published" || patch.status === "hidden"
@@ -171,7 +177,6 @@ export default function CategoriesListClient({
       />
 
       <div
-        aria-busy={controller.isFetching}
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }

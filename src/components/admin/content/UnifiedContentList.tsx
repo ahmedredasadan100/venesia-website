@@ -12,6 +12,7 @@ import {
 } from "../../../lib/admin/content/category-hierarchy";
 import { mapTopicsActionResultToFeedback } from "../../../lib/admin/content/topics-action-feedback";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
+import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type {
   ContentSortValue,
   UnifiedContentRow,
@@ -89,7 +90,9 @@ export default function UnifiedContentList({
     },
     options?: { resetPage?: boolean },
   ) => void;
-  onSuccessfulMutation?: () => void | Promise<void>;
+  onSuccessfulMutation?: (
+    result?: AdminActionResult,
+  ) => void | Promise<void>;
 }) {
   const router = useRouter();
   const [bulkCategoryId, setBulkCategoryId] = useState("");

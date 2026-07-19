@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   duplicateUnifiedContent,
@@ -39,7 +39,6 @@ export default function UnifiedContentRowActions({
 }) {
   const router = useRouter();
   const pendingRef = useRef<RowMutationKey | null>(null);
-  const featureRefreshTargetRef = useRef<boolean | null>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [pendingAction, setPendingAction] = useState<RowMutationKey | null>(
     null,
@@ -51,14 +50,11 @@ export default function UnifiedContentRowActions({
     deletedAt: row.deleted_at,
   });
 
-  useEffect(() => {
-    const target = featureRefreshTargetRef.current;
-    if (target === null || Boolean(row.is_featured) !== target) return;
-    featureRefreshTargetRef.current = null;
-    if (pendingRef.current === "feature") pendingRef.current = null;
-    setPendingAction((current) => (current === "feature" ? null : current));
-  }, [row.is_featured]);
-
+  /**
+   * Mutation state is owned per {row, action} and settles deterministically:
+   * pending starts when the server action fires and always ends in `finally`,
+   * never by waiting for a refetched row value to arrive.
+   */
   function runMutation(
     key: RowMutationKey,
     action: RowMutation,
@@ -73,20 +69,12 @@ export default function UnifiedContentRowActions({
 
     return new Promise((resolve) => {
       startTransition(async () => {
-        let waitForFeatureRefresh = false;
         try {
           const result = await action(formData);
+          // Engine consumers patch/invalidate their query cache from this
+          // result before we settle, so the row reflects server truth.
           onMutationResult?.(result);
-          if (result.ok) {
-            if (
-              key === "feature" &&
-              (result.code === "featured" || result.code === "unfeatured")
-            ) {
-              featureRefreshTargetRef.current = result.code === "featured";
-              waitForFeatureRefresh = true;
-            }
-            if (!deferRefresh) router.refresh();
-          }
+          if (result.ok && !deferRefresh) router.refresh();
         } catch {
           onMutationResult?.({
             ok: false,
@@ -95,10 +83,8 @@ export default function UnifiedContentRowActions({
           });
         } finally {
           onSettled?.();
-          if (!waitForFeatureRefresh) {
-            pendingRef.current = null;
-            setPendingAction(null);
-          }
+          pendingRef.current = null;
+          setPendingAction(null);
           resolve();
         }
       });

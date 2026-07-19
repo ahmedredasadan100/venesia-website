@@ -60,8 +60,12 @@ export type AdminEntityListProps<
     openLayerId: string | null;
     setOpenLayerId: (id: string | null) => void;
   }) => ReactNode;
-  /** Prefer cache invalidation over a full RSC refresh when provided. */
-  onSuccessfulMutation?: () => void | Promise<void>;
+  /**
+   * Prefer cache invalidation over a full RSC refresh when provided.
+   * Receives the action result so engine consumers can apply targeted
+   * cache patches before revalidation.
+   */
+  onSuccessfulMutation?: (result?: AdminActionResult) => void | Promise<void>;
   mapResultToFeedback: AdminEntityFeedbackMapper;
   sort?: AdminEntitySortState<TSortKey> | null;
   sortMode?: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>["sortMode"];
@@ -172,7 +176,7 @@ function AdminEntityListInner<
       selection.removeSelection(result.entityId as TId);
     }
     if (result.ok && onSuccessfulMutation) {
-      void onSuccessfulMutation();
+      void onSuccessfulMutation(result);
     }
   }
 
@@ -199,7 +203,7 @@ function AdminEntityListInner<
       showFeedback(result);
       if (result.ok) {
         selection.clearSelection();
-        if (onSuccessfulMutation) await onSuccessfulMutation();
+        if (onSuccessfulMutation) await onSuccessfulMutation(result);
         else router.refresh();
       }
     } catch {

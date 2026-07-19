@@ -184,7 +184,6 @@ export default function SeriesTableClient({
       />
 
       <div
-        aria-busy={controller.isFetching}
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }

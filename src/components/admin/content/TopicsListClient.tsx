@@ -189,8 +189,9 @@ export default function TopicsListClient({
         </p>
       ) : null}
 
+      {/* Quiet pending indicator only; aria-busy is reserved for the row
+          action that owns the in-flight mutation. */}
       <div
-        aria-busy={controller.isFetching}
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }
@@ -212,7 +213,22 @@ export default function TopicsListClient({
               { resetPage: options?.resetPage !== false },
             )
           }
-          onSuccessfulMutation={() => controller.invalidate()}
+          onSuccessfulMutation={(result) => {
+            // Deterministic featured toggle: patch the cached row first so
+            // the star reflects server truth immediately, then reconcile.
+            if (
+              result?.entityId != null &&
+              (result.code === "featured" || result.code === "unfeatured")
+            ) {
+              const isFeatured = result.code === "featured";
+              controller.patchRows((row) =>
+                row.id === result.entityId
+                  ? { ...row, is_featured: isFeatured }
+                  : row,
+              );
+            }
+            return controller.invalidate();
+          }}
         />
       </div>
 
