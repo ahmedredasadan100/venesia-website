@@ -2,6 +2,7 @@ import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   AdminActionButton,
   AdminPageContextHeader,
+  AdminPageExperience,
 } from "../../../../components/admin/ui";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
@@ -78,7 +79,7 @@ export default async function TopicCategoriesPage({
 
   if (listResult.error) {
     return (
-      <main className="space-y-7" dir="rtl">
+      <AdminPageExperience state="error">
         <AdminPageContextHeader
           eyebrow="CATEGORIES CONTROL"
           title="إدارة التصنيفات"
@@ -89,7 +90,7 @@ export default async function TopicCategoriesPage({
           title="تعذر تحميل التصنيفات"
           message={listResult.error.message}
         />
-      </main>
+      </AdminPageExperience>
     );
   }
 
@@ -98,7 +99,7 @@ export default async function TopicCategoriesPage({
     : [...CATEGORIES_DEFAULT_COLUMN_KEYS];
 
   return (
-    <main className="space-y-7" dir="rtl">
+    <AdminPageExperience>
       <AdminPageContextHeader
         eyebrow="CATEGORIES CONTROL"
         title="إدارة التصنيفات"
@@ -135,6 +136,6 @@ export default async function TopicCategoriesPage({
           initialFeedback={noticeFeedback}
         />
       ) : null}
-    </main>
+    </AdminPageExperience>
   );
 }

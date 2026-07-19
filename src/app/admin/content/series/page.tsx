@@ -1,8 +1,8 @@
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   AdminActionButton,
-  AdminMetricCardsGrid,
   AdminPageContextHeader,
+  AdminPageExperience,
   AdminPageHeader,
 } from "../../../../components/admin/ui";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
@@ -80,7 +80,7 @@ export default async function Page({
 
   if (listResult.error) {
     return (
-      <main className="space-y-7">
+      <AdminPageExperience state="error">
         <AdminPageHeader
           title="إدارة السلاسل"
           description="قبل استخدام الصفحة، نفّذ ملف SQL الخاص بإنشاء جدول topic_series."
@@ -90,17 +90,16 @@ export default async function Page({
           title="جدول السلاسل غير جاهز"
           message={listResult.error.message}
         />
-      </main>
+      </AdminPageExperience>
     );
   }
 
-  const metrics = listResult.data?.metrics;
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
     : [...SERIES_DEFAULT_COLUMN_KEYS];
 
   return (
-    <main className="space-y-7">
+    <AdminPageExperience>
       <AdminPageContextHeader
         eyebrow="SERIES CONTROL"
         title="إدارة السلاسل"
@@ -121,29 +120,6 @@ export default async function Page({
         }
       />
 
-      <AdminMetricCardsGrid
-        items={[
-          {
-            label: "إجمالي السلاسل",
-            value: metrics?.total ?? 0,
-            tone: "gold",
-            compact: true,
-          },
-          {
-            label: "منشور",
-            value: metrics?.published ?? 0,
-            tone: "green",
-            compact: true,
-          },
-          {
-            label: "الموضوعات",
-            value: metrics?.topics ?? 0,
-            tone: "cyan",
-            compact: true,
-          },
-        ]}
-      />
-
       {preferenceError ? (
         <AdminNotice
           variant="danger"
@@ -160,6 +136,6 @@ export default async function Page({
           initialFeedback={noticeFeedback}
         />
       ) : null}
-    </main>
+    </AdminPageExperience>
   );
 }

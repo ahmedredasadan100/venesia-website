@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import {
   loadUnifiedContentList,
+  loadUnifiedContentMetrics,
   type UnifiedContentRow,
 } from "../load-unified-content";
 import {
@@ -47,6 +48,18 @@ const topicRowSchema = z.object({
   deleted_at: z.string().nullable(),
 });
 
+const topicMetricsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  published: z.number().int().nonnegative(),
+  draft: z.number().int().nonnegative(),
+  unpublished: z.number().int().nonnegative(),
+  archived: z.number().int().nonnegative(),
+  seoAverage: z.number().int().nonnegative(),
+  error: z.string().nullable(),
+});
+
+export type TopicMetrics = z.infer<typeof topicMetricsSchema>;
+
 export async function loadTopicsEntityListResult(
   query: AdminEntityListQuery<TopicFilters, TopicSortField>,
   providedCategories?: AdminContentCategory[],
@@ -62,20 +75,23 @@ export async function loadTopicsEntityListResult(
     categories = (data ?? []) as AdminContentCategory[];
   }
 
-  const list = await loadUnifiedContentList(
-    {
-      q: query.search,
-      contentType: query.filters.contentType,
-      categoryId: query.filters.categoryId,
-      seriesId: query.filters.seriesId,
-      status: query.filters.status,
-      featured: query.filters.featured,
-      sort: `${query.sort.field}_${query.sort.direction}`,
-      page: query.page,
-      pageSize: query.pageSize,
-    },
-    categories,
-  );
+  const [list, metrics] = await Promise.all([
+    loadUnifiedContentList(
+      {
+        q: query.search,
+        contentType: query.filters.contentType,
+        categoryId: query.filters.categoryId,
+        seriesId: query.filters.seriesId,
+        status: query.filters.status,
+        featured: query.filters.featured,
+        sort: `${query.sort.field}_${query.sort.direction}`,
+        page: query.page,
+        pageSize: query.pageSize,
+      },
+      categories,
+    ),
+    loadUnifiedContentMetrics(),
+  ]);
   if (list.error) throw new Error(list.error);
 
   return {
@@ -86,6 +102,7 @@ export async function loadTopicsEntityListResult(
       totalRows: list.totalCount,
       totalPages: list.totalPages,
     },
+    metrics,
     meta: {
       generatedAt: new Date().toISOString(),
       mode: query.mode,
@@ -97,11 +114,12 @@ export const topicsEntityListAdapter: AdminEntityListAdapter<
   "topics",
   TopicFilters,
   TopicSortField,
-  UnifiedContentRow
+  UnifiedContentRow,
+  TopicMetrics
 > = {
   entity: "topics",
   queryContract: topicsQueryContract,
-  resultSchema: createAdminEntityListResultSchema(topicRowSchema),
+  resultSchema: createAdminEntityListResultSchema(topicRowSchema, topicMetricsSchema),
   staleTimeMs: 30_000,
   mutationInvalidation: "entity",
   load: loadTopicsEntityListResult,

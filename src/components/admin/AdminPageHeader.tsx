@@ -11,6 +11,9 @@ type AdminPageHeaderProps = {
   className?: string;
   variant?: "default" | "context";
   contextLine?: ReactNode;
+  badge?: ReactNode;
+  status?: "ready" | "loading" | "error" | "empty" | "under-construction";
+  display?: "default" | "minimal";
 };
 
 /**
@@ -29,6 +32,9 @@ export default function AdminPageHeader({
   className,
   variant,
   contextLine,
+  badge,
+  status,
+  display,
 }: AdminPageHeaderProps) {
   return (
     <UnifiedAdminPageHeader
@@ -41,6 +47,9 @@ export default function AdminPageHeader({
       className={className}
       variant={variant}
       contextLine={contextLine}
+      badge={badge}
+      status={status}
+      display={display}
     />
   );
 }

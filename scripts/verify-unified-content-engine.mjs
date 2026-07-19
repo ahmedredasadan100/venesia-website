@@ -67,9 +67,10 @@ for (const legacyRoot of [
 }
 
 const adminShell = read("src/components/admin/AdminShell.tsx");
+const adminNavigationRegistry = read("src/config/admin/navigation.ts");
 check(
   "Admin navigation must expose the three canonical content links",
-  containsAll(adminShell, [
+  containsAll(adminNavigationRegistry, [
     'href: "/admin/content/topics"',
     'href: "/admin/content/categories"',
     'href: "/admin/content/series"',
@@ -77,7 +78,9 @@ check(
 );
 check(
   "Admin navigation must not expose an independent Media Center",
-  !adminShell.includes("/admin/media-center") && !adminShell.includes("/admin/content/media"),
+  !adminNavigationRegistry.includes("/admin/media-center") &&
+    !adminNavigationRegistry.includes("/admin/content/media") &&
+    !adminShell.includes("/admin/media-center"),
 );
 
 const contentTypes = loadPureTypeScriptModule("src/lib/admin/content/content-types.ts");

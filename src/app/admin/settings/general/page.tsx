@@ -1,19 +1,30 @@
-import MaintenanceModePanel from "./MaintenanceModePanel";
+import {
+  AdminPageContextHeader,
+  AdminPageExperience,
+} from "../../../../components/admin/ui";
+import { ADMIN_COMPANY_DEFAULT } from "../../../../config/admin/company";
+import { loadAdminCompanyConfig } from "../../../../lib/admin/shell/company-config";
 import { getMaintenanceModeSetting } from "../../../../lib/maintenance/site-settings";
+import CompanyIdentityPanel from "./CompanyIdentityPanel";
+import MaintenanceModePanel from "./MaintenanceModePanel";
 
 export const dynamic = "force-dynamic";
 
 export default async function GeneralSettingsPage() {
-  const maintenanceEnabled = await getMaintenanceModeSetting().catch(() => false);
+  const [maintenanceEnabled, company] = await Promise.all([
+    getMaintenanceModeSetting().catch(() => false),
+    loadAdminCompanyConfig(ADMIN_COMPANY_DEFAULT),
+  ]);
 
   return (
-    <div className="space-y-6 pb-10">
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-6">
-        <h1 className="text-2xl font-semibold text-white">الإعدادات العامة</h1>
-        <p className="mt-2 text-sm leading-7 text-white/55">إدارة إعدادات الموقع العامة من لوحة التحكم.</p>
-      </section>
-
+    <AdminPageExperience className="pb-10">
+      <AdminPageContextHeader
+        eyebrow="ADMIN SETTINGS"
+        title="الإعدادات العامة"
+        description="إدارة هوية لوحة الإدارة وإعدادات الموقع العامة من مصدر واضح وقابل للتحديث."
+      />
+      <CompanyIdentityPanel company={company} />
       <MaintenanceModePanel initialEnabled={maintenanceEnabled} />
-    </div>
+    </AdminPageExperience>
   );
 }

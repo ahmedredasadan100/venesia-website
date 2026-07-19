@@ -23,6 +23,8 @@
     "qa:admin-data-engine-supabase-counts": "node scripts/qa-admin-data-engine-supabase-counts.mjs",
     "qa:admin-data-engine-corrections": "node scripts/qa-admin-data-engine-corrections.mjs",
     "qa:admin-data-engine-browser-corrections": "node scripts/qa-admin-data-engine-browser-corrections.mjs",
+    "verify:admin-shell-system": "node scripts/verify-admin-shell-system.mjs",
+    "qa:admin-shell-navigation": "node scripts/qa-admin-shell-navigation.mjs",
     "verify:audit-coverage": "node scripts/verify-admin-audit-coverage.mjs",
     "verify:db-health": "node scripts/verify-database-health.mjs",
     "verify:internal-hero-config": "node scripts/verify-internal-hero-config.mjs",
@@ -39,8 +41,8 @@
     "verify:route-slot-policy": "node scripts/verify-route-slot-policy.mjs",
     "verify:project-child-fail-closed": "node scripts/verify-project-child-fail-closed.mjs",
     "verify:projects-hub-readiness": "node scripts/verify-projects-hub-readiness.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:unified-content && npm run verify:admin-entity-list && npm run verify:audit-coverage",
-    "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:unified-content && npm run verify:admin-entity-list && npm run verify:audit-coverage && npm run build"
+    "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:unified-content && npm run verify:admin-entity-list && npm run verify:admin-shell-system && npm run verify:audit-coverage",
+    "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:unified-content && npm run verify:admin-entity-list && npm run verify:admin-shell-system && npm run verify:audit-coverage && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
