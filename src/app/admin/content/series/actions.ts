@@ -8,7 +8,10 @@ import {
   SERIES_LIST_VIEW_KEY,
   SERIES_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/series-list-config";
-import { loadActiveSeriesTopicCounts } from "../../../../lib/admin/content/series-topic-counts";
+import {
+  loadSeriesListData,
+  type SeriesListRow,
+} from "../../../../lib/admin/content/load-series-list";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 
 import { revalidatePath } from "next/cache";
@@ -360,18 +363,7 @@ export async function bulkSeriesAction(formData: FormData) {
   redirectWithError("عملية غير معروفة.");
 }
 
-export type SeriesTableRow = {
-  id: number;
-  name: string;
-  slug: string;
-  status: string | null;
-  sort_order: number | null;
-  category_id: number | null;
-  category_name: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  topics_count: number;
-};
+export type SeriesTableRow = SeriesListRow;
 
 export type SeriesTableResult = {
   ok: boolean;
@@ -381,49 +373,7 @@ export type SeriesTableResult = {
 
 export async function getSeriesTableRows(): Promise<SeriesTableRow[]> {
   await requireAdminSession();
-  const [
-    { data: seriesRows, error: seriesError },
-    { counts, error: topicError },
-    { data: categoryRows, error: categoryError },
-  ] = await Promise.all([
-    getSupabaseAdmin()
-      .from("topic_series")
-      .select(
-        "id, name, slug, status, sort_order, category_id, created_at, updated_at",
-      )
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: false }),
-    loadActiveSeriesTopicCounts(),
-    getSupabaseAdmin().from("topic_categories").select("id, name"),
-  ]);
-
-  if (seriesError) throw new Error(seriesError.message);
-  if (topicError) throw new Error(topicError.message);
-  if (categoryError) throw new Error(categoryError.message);
-
-  const categoryNameById = new Map(
-    ((categoryRows ?? []) as { id: number; name: string }[]).map((item) => [
-      item.id,
-      item.name,
-    ]),
-  );
-
-  return ((seriesRows ?? []) as {
-    id: number;
-    name: string;
-    slug: string;
-    status: string | null;
-    sort_order: number | null;
-    category_id: number | null;
-    created_at: string | null;
-    updated_at: string | null;
-  }[]).map((item) => ({
-    ...item,
-    category_name: item.category_id
-      ? (categoryNameById.get(item.category_id) ?? null)
-      : null,
-    topics_count: counts.get(item.id) ?? 0,
-  }));
+  return (await loadSeriesListData()).rows;
 }
 
 async function successWithFreshRows(message: string): Promise<SeriesTableResult> {

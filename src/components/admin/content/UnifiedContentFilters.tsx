@@ -39,10 +39,12 @@ export default function UnifiedContentFilters({
   initial,
   categories,
   series,
+  onNavigate,
 }: {
   initial: FilterState;
   categories: AdminContentCategoryNode[];
   series: SeriesOption[];
+  onNavigate?: (state: FilterState) => void;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -161,7 +163,11 @@ export default function UnifiedContentFilters({
     });
     params.delete("page");
     const query = params.toString();
-    router.push(query ? `${BASE_PATH}?${query}#content-topics-table` : `${BASE_PATH}#content-topics-table`);
+    if (onNavigate) {
+      onNavigate({ ...merged, q });
+    } else {
+      router.push(query ? `${BASE_PATH}?${query}#content-topics-table` : `${BASE_PATH}#content-topics-table`);
+    }
     setSuggestionsOpen(false);
     floating?.setOpenLayerId(null);
   }
@@ -292,6 +298,38 @@ export default function UnifiedContentFilters({
           setSuggestionsOpen(false);
           setActiveSuggestion(-1);
         }}
+        onQueryPatch={
+          onNavigate
+            ? (patch) => {
+                const next = {
+                  ...values,
+                  q: "q" in patch ? (patch.q ?? "") : values.q,
+                  contentType:
+                    "content_type" in patch
+                      ? (patch.content_type ?? "all")
+                      : values.contentType,
+                  category:
+                    "category" in patch
+                      ? (patch.category ?? "all")
+                      : values.category,
+                  series:
+                    "series" in patch
+                      ? (patch.series ?? "all")
+                      : values.series,
+                  status:
+                    "status" in patch
+                      ? (patch.status ?? "all")
+                      : values.status,
+                  featured:
+                    "featured" in patch
+                      ? (patch.featured ?? "all")
+                      : values.featured,
+                };
+                setValues(next);
+                onNavigate(next);
+              }
+            : undefined
+        }
         searchSlot={
           <>
             <AdminSearchInput

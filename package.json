@@ -16,6 +16,13 @@
     "qa:admin-entity-list-consumers": "node scripts/qa-admin-entity-list-consumers.mjs",
     "qa:topics-list-reference": "node scripts/qa-topics-list-reference.mjs",
     "qa:admin-content-soft-delete-counts": "node scripts/qa-admin-content-soft-delete-counts.mjs",
+    "capture:admin-data-engine-baseline": "node scripts/capture-admin-data-engine-baseline.mjs",
+    "verify:admin-data-engine-contracts": "node --experimental-strip-types scripts/verify-admin-data-engine-contracts.mts",
+    "qa:admin-data-engine-endpoint": "node scripts/qa-admin-data-engine-endpoint.mjs",
+    "qa:admin-data-engine-controller": "node scripts/qa-admin-data-engine-controller.mjs",
+    "qa:admin-data-engine-supabase-counts": "node scripts/qa-admin-data-engine-supabase-counts.mjs",
+    "qa:admin-data-engine-corrections": "node scripts/qa-admin-data-engine-corrections.mjs",
+    "qa:admin-data-engine-browser-corrections": "node scripts/qa-admin-data-engine-browser-corrections.mjs",
     "verify:audit-coverage": "node scripts/verify-admin-audit-coverage.mjs",
     "verify:db-health": "node scripts/verify-database-health.mjs",
     "verify:internal-hero-config": "node scripts/verify-internal-hero-config.mjs",
@@ -37,6 +44,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
+    "@tanstack/react-query": "^5.101.2",
     "@tiptap/extension-link": "^3.27.1",
     "@tiptap/extension-placeholder": "^3.27.1",
     "@tiptap/extension-text-align": "^3.27.1",
@@ -47,7 +55,8 @@
     "bcryptjs": "^3.0.3",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

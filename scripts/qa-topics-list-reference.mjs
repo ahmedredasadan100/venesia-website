@@ -13,7 +13,7 @@ import { chromium } from "playwright";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = resolve(ROOT, "docs/qa/topics-list-reference");
-const baseUrl = "http://127.0.0.1:3000";
+const baseUrl = "http://localhost:3000";
 const runId = Date.now().toString(36);
 const prefix = `qa-topics-reference-${runId}`;
 const adminUsername = `__QA_TOPICS_REFERENCE_${runId}__`;

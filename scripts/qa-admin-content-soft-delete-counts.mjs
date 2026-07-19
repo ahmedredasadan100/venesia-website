@@ -26,7 +26,7 @@ import ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = resolve(ROOT, ".tmp-qa/admin-soft-deleted-content-counts");
-const baseUrl = "http://127.0.0.1:3000";
+const baseUrl = "http://localhost:3000";
 const runId = `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
 const prefix = `qa-sdc-${runId}`;
 const fixtureSearch = `QA SDC ${runId}`;
@@ -620,20 +620,44 @@ function staticWiringPhase() {
     resolve(ROOT, "src/app/admin/content/categories/page.tsx"),
     "utf8",
   );
+  const seriesListOwner = readFileSync(
+    resolve(ROOT, "src/lib/admin/content/load-series-list.ts"),
+    "utf8",
+  );
+  const categoriesListOwner = readFileSync(
+    resolve(ROOT, "src/lib/admin/content/load-categories-list.ts"),
+    "utf8",
+  );
   check(
-    "Series page and fresh-rows action both consume loadActiveSeriesTopicCounts",
-    seriesPage.includes("loadActiveSeriesTopicCounts") &&
-      seriesActions.includes("loadActiveSeriesTopicCounts"),
+    "Series page and fresh-rows action share the list owner backed by loadActiveSeriesTopicCounts",
+    (seriesPage.includes("loadSeriesListData") ||
+      seriesPage.includes("seriesEntityListAdapter")) &&
+      seriesActions.includes("loadSeriesListData") &&
+      seriesListOwner.includes("loadActiveSeriesTopicCounts") &&
+      readFileSync(
+        resolve(ROOT, "src/lib/admin/content/entity-list-adapters/series.ts"),
+        "utf8",
+      ).includes("loadSeriesListData"),
   );
   check(
     "No unfiltered topics->series_id fetch remains in series consumers",
     !seriesPage.includes('.from("topics").select("series_id")') &&
-      !seriesActions.includes('.from("topics").select("series_id")'),
+      !seriesActions.includes('.from("topics").select("series_id")') &&
+      !seriesListOwner.includes('.from("topics").select("series_id")'),
   );
   check(
-    "Categories page filters the embedded topics count on deleted_at",
-    categoriesPage.includes("topics_count:topics(count)") &&
-      categoriesPage.includes('.is("topics.deleted_at", null)'),
+    "Categories shared list owner filters the embedded topics count on deleted_at",
+    (categoriesPage.includes("loadCategoriesListData") ||
+      categoriesPage.includes("categoriesEntityListAdapter")) &&
+      categoriesListOwner.includes("topics_count:topics(count)") &&
+      categoriesListOwner.includes('.is("topics.deleted_at", null)') &&
+      readFileSync(
+        resolve(
+          ROOT,
+          "src/lib/admin/content/entity-list-adapters/categories.ts",
+        ),
+        "utf8",
+      ).includes("loadCategoriesListData"),
   );
   const publicFeed = readFileSync(
     resolve(ROOT, "src/lib/feed-modules/resolve-topics-feed.ts"),

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { isAdminAuthPagePath } from "../../lib/admin/auth/session-paths";
 import AdminShell from "./AdminShell";
+import AdminEntityListQueryProvider from "./entity-list/AdminEntityListQueryProvider";
 
 type AdminAccessLayoutProps = {
   children: ReactNode;
@@ -17,5 +18,9 @@ export default function AdminAccessLayout({ children }: AdminAccessLayoutProps) 
     return <>{children}</>;
   }
 
-  return <AdminShell>{children}</AdminShell>;
+  return (
+    <AdminEntityListQueryProvider>
+      <AdminShell>{children}</AdminShell>
+    </AdminEntityListQueryProvider>
+  );
 }

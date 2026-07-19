@@ -8,9 +8,15 @@ import {
 } from "./category-hierarchy";
 import { isContentType, type ContentType } from "./content-types";
 
-export { TOPICS_LIST_VIEW_KEY as CONTENT_LIST_VIEW_KEY } from "./topics-list-config";
-export const CONTENT_LIST_PAGE_SIZES = [10, 20, 30, 50] as const;
-export const DEFAULT_CONTENT_LIST_PAGE_SIZE = 10;
+export {
+  TOPICS_LIST_DEFAULT_PAGE_SIZE as DEFAULT_CONTENT_LIST_PAGE_SIZE,
+  TOPICS_LIST_PAGE_SIZES as CONTENT_LIST_PAGE_SIZES,
+  TOPICS_LIST_VIEW_KEY as CONTENT_LIST_VIEW_KEY,
+} from "./topics-list-config";
+import {
+  TOPICS_LIST_DEFAULT_PAGE_SIZE,
+  TOPICS_LIST_PAGE_SIZES,
+} from "./topics-list-config";
 
 export const CONTENT_SORT_VALUES = [
   "id_asc",
@@ -118,7 +124,7 @@ export function normalizeUnifiedContentFilters(
   const rawStatus = params?.status;
   const rawFeatured = params?.featured;
   const rawSort = params?.sort;
-  const requestedPageSize = getPositiveInteger(params?.limit, DEFAULT_CONTENT_LIST_PAGE_SIZE);
+  const requestedPageSize = getPositiveInteger(params?.limit, TOPICS_LIST_DEFAULT_PAGE_SIZE);
 
   return {
     q: cleanContentTitleSearch(params?.q),
@@ -135,11 +141,11 @@ export function normalizeUnifiedContentFilters(
         ? (rawSort as ContentSortValue)
         : DEFAULT_CONTENT_LIST_SORT,
     page: getPositiveInteger(params?.page, 1),
-    pageSize: CONTENT_LIST_PAGE_SIZES.includes(
-      requestedPageSize as (typeof CONTENT_LIST_PAGE_SIZES)[number],
+    pageSize: TOPICS_LIST_PAGE_SIZES.includes(
+      requestedPageSize as (typeof TOPICS_LIST_PAGE_SIZES)[number],
     )
       ? requestedPageSize
-      : DEFAULT_CONTENT_LIST_PAGE_SIZE,
+      : TOPICS_LIST_DEFAULT_PAGE_SIZE,
   };
 }
 

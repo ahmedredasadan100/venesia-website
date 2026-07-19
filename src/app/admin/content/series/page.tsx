@@ -12,32 +12,30 @@ import {
   SERIES_LIST_VIEW_KEY,
   SERIES_NOTICE_CODE_MAP,
 } from "../../../../lib/admin/content/series-list-config";
-import {
-  buildAdminCategoryFilterModel,
-  type AdminContentCategory,
-} from "../../../../lib/admin/content/category-hierarchy";
-import { loadActiveSeriesTopicCounts } from "../../../../lib/admin/content/series-topic-counts";
+import { seriesEntityListAdapter } from "../../../../lib/admin/content/entity-list-adapters/series";
+import { seriesQueryContract } from "../../../../lib/admin/content/entity-list-contracts/series";
+import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
-import SeriesTableClient, { type SeriesListRow } from "./SeriesTableClient";
+import SeriesTableClient from "./SeriesTableClient";
 
 export const dynamic = "force-dynamic";
 
-type SeriesRow = {
-  id: number;
-  name: string;
-  slug: string;
-  status: string | null;
-  sort_order: number | null;
-  category_id: number | null;
-  created_at: string | null;
-  updated_at: string | null;
+type SeriesSearchParams = {
+  q?: string;
+  status?: string;
+  category?: string;
+  sort?: string;
+  page?: string;
+  limit?: string;
+  notice?: string;
+  error?: string;
 };
 
 export default async function Page({
   searchParams,
 }: {
-  searchParams?: Promise<{ notice?: string; error?: string }>;
+  searchParams?: Promise<SeriesSearchParams>;
 }) {
   const actor = await requireAdminSession();
   const params = await searchParams;
@@ -46,35 +44,41 @@ export default async function Page({
     params?.error ? "error" : params?.notice,
     params?.error ? decodeURIComponent(params.error) : null,
   );
+  const query = normalizeAdminEntityListQuery(
+    seriesQueryContract,
+    new URLSearchParams(
+      Object.entries({
+        q: params?.q,
+        status: params?.status,
+        category: params?.category,
+        sort: params?.sort,
+        page: params?.page,
+        limit: params?.limit,
+      }).flatMap(([key, value]) =>
+        typeof value === "string" && value.length > 0 ? [[key, value]] : [],
+      ),
+    ),
+  );
 
-  const [
-    { data: seriesRows, error: seriesError },
-    { counts },
-    { data: categoryRows },
-    { data: preference, error: preferenceError },
-  ] = await Promise.all([
-    getSupabaseAdmin()
-      .from("topic_series")
-      .select(
-        "id, name, slug, status, sort_order, category_id, created_at, updated_at",
-      )
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: false }),
-    loadActiveSeriesTopicCounts(),
-    getSupabaseAdmin()
-      .from("topic_categories")
-      .select("id, name, slug, parent_id, sort_order, is_active")
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: true }),
-    getSupabaseAdmin()
-      .from("admin_user_preferences")
-      .select("preferences")
-      .eq("admin_user_id", actor.id)
-      .eq("view_key", SERIES_LIST_VIEW_KEY)
-      .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
-  ]);
+  const [{ data: preference, error: preferenceError }, listResult] =
+    await Promise.all([
+      getSupabaseAdmin()
+        .from("admin_user_preferences")
+        .select("preferences")
+        .eq("admin_user_id", actor.id)
+        .eq("view_key", SERIES_LIST_VIEW_KEY)
+        .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
+      seriesEntityListAdapter
+        .load(query)
+        .then((data) => ({ data, error: null as Error | null }))
+        .catch((error: unknown) => ({
+          data: null,
+          error:
+            error instanceof Error ? error : new Error("Unable to load series."),
+        })),
+    ]);
 
-  if (seriesError) {
+  if (listResult.error) {
     return (
       <main className="space-y-7">
         <AdminPageHeader
@@ -84,37 +88,13 @@ export default async function Page({
         <AdminNotice
           variant="danger"
           title="جدول السلاسل غير جاهز"
-          message={seriesError.message}
+          message={listResult.error.message}
         />
       </main>
     );
   }
 
-  const categories = (categoryRows ?? []) as AdminContentCategory[];
-  const categoryNameById = new Map(
-    categories.map((item) => [
-      item.id,
-      item.name,
-    ]),
-  );
-
-  const series: SeriesListRow[] = ((seriesRows ?? []) as SeriesRow[]).map(
-    (item) => ({
-      ...item,
-      category_name: item.category_id
-        ? (categoryNameById.get(item.category_id) ?? null)
-        : null,
-      topics_count: counts.get(item.id) ?? 0,
-    }),
-  );
-
-  const categoryFilterModel = buildAdminCategoryFilterModel(categories);
-
-  const activeCount = series.filter((item) => item.status === "published").length;
-  const topicsTotal = series.reduce(
-    (total, item) => total + item.topics_count,
-    0,
-  );
+  const metrics = listResult.data?.metrics;
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
     : [...SERIES_DEFAULT_COLUMN_KEYS];
@@ -145,19 +125,19 @@ export default async function Page({
         items={[
           {
             label: "إجمالي السلاسل",
-            value: series.length,
+            value: metrics?.total ?? 0,
             tone: "gold",
             compact: true,
           },
           {
             label: "منشور",
-            value: activeCount,
+            value: metrics?.published ?? 0,
             tone: "green",
             compact: true,
           },
           {
             label: "الموضوعات",
-            value: topicsTotal,
+            value: metrics?.topics ?? 0,
             tone: "cyan",
             compact: true,
           },
@@ -172,21 +152,14 @@ export default async function Page({
         />
       ) : null}
 
-      <SeriesTableClient
-        key={series
-          .map(
-            (item) =>
-              `${item.id}:${item.status}:${item.topics_count}:${item.updated_at ?? ""}`,
-          )
-          .join("|")}
-        series={series}
-        categoryOptions={categoryFilterModel.options}
-        categoryDescendantIdsByValue={
-          categoryFilterModel.descendantIdsByValue
-        }
-        initialVisibleColumns={visibleColumns}
-        initialFeedback={noticeFeedback}
-      />
+      {listResult.data ? (
+        <SeriesTableClient
+          initialQuery={query}
+          initialResult={listResult.data}
+          initialVisibleColumns={visibleColumns}
+          initialFeedback={noticeFeedback}
+        />
+      ) : null}
     </main>
   );
 }
