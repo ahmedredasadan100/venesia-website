@@ -106,7 +106,10 @@ export default function AdminEntityListFilters({
 
   function navigate(patch: Record<string, string | null>) {
     if (onQueryPatch) {
+      // Engine consumers update query state synchronously, so optimistic
+      // pending values are unnecessary and can leave a stale trigger label.
       onQueryPatch(patch);
+      setPendingFilterValues({});
       setOpenLayerId(null);
       return;
     }

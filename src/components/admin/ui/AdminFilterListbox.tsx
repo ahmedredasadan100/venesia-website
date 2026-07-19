@@ -291,6 +291,7 @@ export default function AdminFilterListbox({
         type="button"
         id={`${id}-trigger`}
         role="combobox"
+        aria-label={displayValue || placeholder}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={`${id}-listbox`}
