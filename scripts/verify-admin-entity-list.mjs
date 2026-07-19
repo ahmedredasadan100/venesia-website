@@ -262,7 +262,8 @@ check(
   "Categories enable column management + real pagination + activity",
   categoriesClient.includes("enableColumnManagement") &&
     !categoriesClient.includes("enableColumnManagement={false}") &&
-    categoriesClient.includes("resolveClientPagination") &&
+    categoriesClient.includes("useAdminEntityListController") &&
+    categoriesClient.includes("onPageChange") &&
     !categoriesClient.includes("pageSizeSelectorMode=\"never\"") &&
     !categoriesClient.includes("totalPages={1}") &&
     categoriesColumns.includes('label: "الموضوعات"') &&
@@ -285,7 +286,9 @@ check(
     categoriesColumns.includes("data-category-edit-trigger") &&
     categoriesColumns.includes("aria-expanded") &&
     categoriesClient.includes("collapsedCategoryIds") &&
-    categoriesClient.includes("visibleIds.add(parentId)"),
+    read("src/lib/admin/content/entity-list-adapters/categories.ts").includes(
+      "matchingIds.add(parentId)",
+    ),
 );
 
 check(
@@ -299,7 +302,8 @@ check(
     seriesColumns.includes("action=\"preview\"") &&
     seriesColumns.includes("/admin/content/topics?series=") &&
     seriesClient.includes("AdminEntityListFilters") &&
-    seriesClient.includes("resolveClientPagination") &&
+    seriesClient.includes("useAdminEntityListController") &&
+    seriesClient.includes("onPageChange") &&
     seriesListOwner.includes("category_id") &&
     seriesListOwner.includes("created_at") &&
     seriesListOwner.includes("updated_at"),
@@ -310,8 +314,13 @@ check(
   read("src/lib/admin/content/category-hierarchy.ts").includes(
     "buildAdminCategoryFilterModel",
   ) &&
-    seriesPage.includes("categoryDescendantIdsByValue") &&
-    seriesClient.includes("selectedCategoryIds.has(row.category_id)") &&
+    read("src/lib/admin/content/entity-list-adapters/series.ts").includes(
+      "categoryDescendantIdsByValue",
+    ) &&
+    read("src/lib/admin/content/load-series-list.ts").includes(
+      "buildAdminCategoryFilterModel",
+    ) &&
+    seriesClient.includes("onQueryPatch") &&
     !seriesClient.includes('String(row.category_id ?? "") === category'),
 );
 

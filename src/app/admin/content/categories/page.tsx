@@ -11,13 +11,20 @@ import {
   CATEGORIES_LIST_VIEW_KEY,
   CATEGORIES_NOTICE_CODE_MAP,
 } from "../../../../lib/admin/content/categories-list-config";
-import { loadCategoriesListData } from "../../../../lib/admin/content/load-categories-list";
+import { categoriesEntityListAdapter } from "../../../../lib/admin/content/entity-list-adapters/categories";
+import { categoriesQueryContract } from "../../../../lib/admin/content/entity-list-contracts/categories";
+import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import CategoriesListClient from "./CategoriesListClient";
 
 export const dynamic = "force-dynamic";
 
 type CategoriesSearchParams = {
+  q?: string;
+  status?: string;
+  sort?: string;
+  page?: string;
+  limit?: string;
   notice?: string;
   error?: string;
 };
@@ -28,36 +35,48 @@ export default async function TopicCategoriesPage({
   searchParams?: Promise<CategoriesSearchParams>;
 }) {
   const actor = await requireAdminSession();
-  const query = await searchParams;
+  const queryParams = await searchParams;
   const noticeFeedback = resolveAdminNoticeFeedback(
     CATEGORIES_NOTICE_CODE_MAP,
-    query?.error ? "error" : query?.notice,
-    query?.error ? decodeURIComponent(query.error) : null,
+    queryParams?.error ? "error" : queryParams?.notice,
+    queryParams?.error ? decodeURIComponent(queryParams.error) : null,
+  );
+  const query = normalizeAdminEntityListQuery(
+    categoriesQueryContract,
+    new URLSearchParams(
+      Object.entries({
+        q: queryParams?.q,
+        status: queryParams?.status,
+        sort: queryParams?.sort,
+        page: queryParams?.page,
+        limit: queryParams?.limit,
+      }).flatMap(([key, value]) =>
+        typeof value === "string" && value.length > 0 ? [[key, value]] : [],
+      ),
+    ),
   );
 
-  const [
-    categoryResult,
-    { data: preference, error: preferenceError },
-  ] = await Promise.all([
-    loadCategoriesListData()
-      .then((data) => ({ data, error: null }))
-      .catch((error: unknown) => ({
-        data: null,
-        error:
-          error instanceof Error
-            ? error
-            : new Error("Unable to load categories."),
-      })),
-    getSupabaseAdmin()
-      .from("admin_user_preferences")
-      .select("preferences")
-      .eq("admin_user_id", actor.id)
-      .eq("view_key", CATEGORIES_LIST_VIEW_KEY)
-      .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
-  ]);
-  const error = categoryResult.error;
+  const [{ data: preference, error: preferenceError }, listResult] =
+    await Promise.all([
+      getSupabaseAdmin()
+        .from("admin_user_preferences")
+        .select("preferences")
+        .eq("admin_user_id", actor.id)
+        .eq("view_key", CATEGORIES_LIST_VIEW_KEY)
+        .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
+      categoriesEntityListAdapter
+        .load(query)
+        .then((data) => ({ data, error: null as Error | null }))
+        .catch((error: unknown) => ({
+          data: null,
+          error:
+            error instanceof Error
+              ? error
+              : new Error("Unable to load categories."),
+        })),
+    ]);
 
-  if (error) {
+  if (listResult.error) {
     return (
       <main className="space-y-7" dir="rtl">
         <AdminPageContextHeader
@@ -68,14 +87,12 @@ export default async function TopicCategoriesPage({
         <AdminNotice
           variant="danger"
           title="تعذر تحميل التصنيفات"
-          message={error.message}
+          message={listResult.error.message}
         />
       </main>
     );
   }
 
-  const rows = categoryResult.data?.rows ?? [];
-  const parentOptions = categoryResult.data?.parentOptions ?? [];
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
     : [...CATEGORIES_DEFAULT_COLUMN_KEYS];
@@ -110,12 +127,14 @@ export default async function TopicCategoriesPage({
         />
       ) : null}
 
-      <CategoriesListClient
-        rows={rows}
-        parentOptions={parentOptions}
-        initialVisibleColumns={visibleColumns}
-        initialFeedback={noticeFeedback}
-      />
+      {listResult.data ? (
+        <CategoriesListClient
+          initialQuery={query}
+          initialResult={listResult.data}
+          initialVisibleColumns={visibleColumns}
+          initialFeedback={noticeFeedback}
+        />
+      ) : null}
     </main>
   );
 }

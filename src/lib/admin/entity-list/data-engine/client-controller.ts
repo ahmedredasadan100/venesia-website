@@ -230,6 +230,20 @@ export function useAdminEntityListController<
       "push",
     );
   }, [commitQuery, contract]);
+  const invalidate = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: adminEntityListQueryKeys.entity(entity),
+      }),
+    [entity, queryClient],
+  );
+  const cancel = useCallback(
+    () =>
+      queryClient.cancelQueries({
+        queryKey: adminEntityListQueryKeys.entity(entity),
+      }),
+    [entity, queryClient],
+  );
 
   return {
     query,
@@ -245,13 +259,7 @@ export function useAdminEntityListController<
     setPage,
     setPageSize,
     resetFilters,
-    invalidate: () =>
-      queryClient.invalidateQueries({
-        queryKey: adminEntityListQueryKeys.entity(entity),
-      }),
-    cancel: () =>
-      queryClient.cancelQueries({
-        queryKey: adminEntityListQueryKeys.entity(entity),
-      }),
+    invalidate,
+    cancel,
   };
 }
