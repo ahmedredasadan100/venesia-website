@@ -28,9 +28,9 @@ import {
   createSeriesColumns,
   SERIES_ACTIONS_COLUMN_WIDTH,
   type SeriesColumnKey,
-  type SeriesListRow,
   type SeriesSortKey,
 } from "./series-columns";
+import type { SeriesListRow } from "../../../../lib/admin/content/load-series-list";
 
 const BASE_PATH = "/admin/content/series";
 
@@ -52,8 +52,6 @@ const STATUS_FILTER: AdminEntityFilterDef = {
   ],
   className: "min-w-[150px]",
 };
-
-export type { SeriesListRow };
 
 export default function SeriesTableClient({
   series,

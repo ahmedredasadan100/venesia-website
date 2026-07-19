@@ -83,11 +83,13 @@ const topicsList = read("src/components/admin/content/UnifiedContentList.tsx");
 const topicsFilters = read("src/components/admin/content/UnifiedContentFilters.tsx");
 const topicsPage = read("src/app/admin/content/topics/page.tsx");
 const categoriesPage = read("src/app/admin/content/categories/page.tsx");
+const categoriesListOwner = read("src/lib/admin/content/load-categories-list.ts");
 const categoriesClient = read("src/app/admin/content/categories/CategoriesListClient.tsx");
 const categoriesColumns = read("src/app/admin/content/categories/categories-columns.tsx");
 const categoriesActions = read("src/app/admin/content/categories/CategoryRowActions.tsx");
 const seriesClient = read("src/app/admin/content/series/SeriesTableClient.tsx");
 const seriesPage = read("src/app/admin/content/series/page.tsx");
+const seriesListOwner = read("src/lib/admin/content/load-series-list.ts");
 const seriesColumns = read("src/app/admin/content/series/series-columns.tsx");
 
 check(
@@ -264,8 +266,8 @@ check(
     categoriesColumns.includes('label: "الموضوعات"') &&
     !categoriesColumns.includes('label: "العدد"') &&
     categoriesActions.includes("AdminActivityPopover") &&
-    categoriesPage.includes("created_at") &&
-    categoriesPage.includes("updated_at") &&
+    categoriesListOwner.includes("created_at") &&
+    categoriesListOwner.includes("updated_at") &&
     read("src/lib/admin/content/categories-list-config.ts").includes(
       "CATEGORIES_DEFAULT_COLUMN_KEYS",
     ) &&
@@ -296,9 +298,9 @@ check(
     seriesColumns.includes("/admin/content/topics?series=") &&
     seriesClient.includes("AdminEntityListFilters") &&
     seriesClient.includes("resolveClientPagination") &&
-    seriesPage.includes("category_id") &&
-    seriesPage.includes("created_at") &&
-    seriesPage.includes("updated_at"),
+    seriesListOwner.includes("category_id") &&
+    seriesListOwner.includes("created_at") &&
+    seriesListOwner.includes("updated_at"),
 );
 
 check(

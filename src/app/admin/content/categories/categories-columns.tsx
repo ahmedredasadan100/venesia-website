@@ -3,31 +3,13 @@
 import AdminCategoryBadge from "../../../../components/admin/content/AdminCategoryBadge";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import { formatAdminListDate } from "../../../../lib/content-dates";
+import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 import {
   AdminStatusPill,
   getAdminDataGridActionsColumnWidth,
 } from "../../../../components/admin/ui";
 import CategoryEditModal from "./CategoryEditModal";
 import CategoryRowActions from "./CategoryRowActions";
-
-export type CategoryListRow = {
-  id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  sort_order: number | null;
-  is_active: boolean | null;
-  parent_id: number | null;
-  parent_name: string | null;
-  status: string | null;
-  color_token: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  ownCount: number;
-  totalCount: number;
-  depth: number;
-  childCount: number;
-};
 
 export type CategoryColumnKey =
   | "name"

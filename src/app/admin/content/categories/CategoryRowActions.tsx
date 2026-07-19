@@ -9,7 +9,7 @@ import {
 import { formatAdminDateTime } from "../../../../lib/content-dates";
 import CategoryDeleteButton from "./CategoryDeleteButton";
 import CategoryEditModal from "./CategoryEditModal";
-import type { CategoryListRow } from "./categories-columns";
+import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 import { duplicateCategory, toggleCategoryStatus } from "./actions";
 
 type CategoryRowActionsProps = {

@@ -13,26 +13,13 @@ import {
   SERIES_NOTICE_CODE_MAP,
 } from "../../../../lib/admin/content/series-list-config";
 import {
-  buildAdminCategoryFilterModel,
-  type AdminContentCategory,
-} from "../../../../lib/admin/content/category-hierarchy";
-import { loadActiveSeriesTopicCounts } from "../../../../lib/admin/content/series-topic-counts";
+  loadSeriesListData,
+} from "../../../../lib/admin/content/load-series-list";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
-import SeriesTableClient, { type SeriesListRow } from "./SeriesTableClient";
+import SeriesTableClient from "./SeriesTableClient";
 
 export const dynamic = "force-dynamic";
-
-type SeriesRow = {
-  id: number;
-  name: string;
-  slug: string;
-  status: string | null;
-  sort_order: number | null;
-  category_id: number | null;
-  created_at: string | null;
-  updated_at: string | null;
-};
 
 export default async function Page({
   searchParams,
@@ -48,24 +35,16 @@ export default async function Page({
   );
 
   const [
-    { data: seriesRows, error: seriesError },
-    { counts },
-    { data: categoryRows },
+    seriesResult,
     { data: preference, error: preferenceError },
   ] = await Promise.all([
-    getSupabaseAdmin()
-      .from("topic_series")
-      .select(
-        "id, name, slug, status, sort_order, category_id, created_at, updated_at",
-      )
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: false }),
-    loadActiveSeriesTopicCounts(),
-    getSupabaseAdmin()
-      .from("topic_categories")
-      .select("id, name, slug, parent_id, sort_order, is_active")
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: true }),
+    loadSeriesListData()
+      .then((data) => ({ data, error: null }))
+      .catch((error: unknown) => ({
+        data: null,
+        error:
+          error instanceof Error ? error : new Error("Unable to load series."),
+      })),
     getSupabaseAdmin()
       .from("admin_user_preferences")
       .select("preferences")
@@ -73,6 +52,7 @@ export default async function Page({
       .eq("view_key", SERIES_LIST_VIEW_KEY)
       .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
   ]);
+  const seriesError = seriesResult.error;
 
   if (seriesError) {
     return (
@@ -90,31 +70,13 @@ export default async function Page({
     );
   }
 
-  const categories = (categoryRows ?? []) as AdminContentCategory[];
-  const categoryNameById = new Map(
-    categories.map((item) => [
-      item.id,
-      item.name,
-    ]),
-  );
-
-  const series: SeriesListRow[] = ((seriesRows ?? []) as SeriesRow[]).map(
-    (item) => ({
-      ...item,
-      category_name: item.category_id
-        ? (categoryNameById.get(item.category_id) ?? null)
-        : null,
-      topics_count: counts.get(item.id) ?? 0,
-    }),
-  );
-
-  const categoryFilterModel = buildAdminCategoryFilterModel(categories);
-
-  const activeCount = series.filter((item) => item.status === "published").length;
-  const topicsTotal = series.reduce(
-    (total, item) => total + item.topics_count,
-    0,
-  );
+  const series = seriesResult.data?.rows ?? [];
+  const categoryFilterModel = seriesResult.data?.categoryFilterModel ?? {
+    options: [],
+    descendantIdsByValue: {},
+  };
+  const activeCount = seriesResult.data?.metrics.published ?? 0;
+  const topicsTotal = seriesResult.data?.metrics.topics ?? 0;
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
     : [...SERIES_DEFAULT_COLUMN_KEYS];

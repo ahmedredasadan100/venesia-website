@@ -26,10 +26,10 @@ import {
 import {
   createCategoryColumns,
   type CategoryColumnKey,
-  type CategoryListRow,
   type CategorySortKey,
   CATEGORIES_ACTIONS_COLUMN_WIDTH,
 } from "./categories-columns";
+import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 
 const BASE_PATH = "/admin/content/categories";
 const EMPTY_COLLAPSED_CATEGORY_IDS = new Set<number>();

@@ -174,8 +174,16 @@ export function writeAdminEntityListQuery<
 export function createAdminEntityListResultSchema<
   RowSchema extends z.ZodType,
   MetricsSchema extends z.ZodType | undefined = undefined,
->(rowSchema: RowSchema, metricsSchema?: MetricsSchema) {
-  return z.object({
+>(
+  rowSchema: RowSchema,
+  metricsSchema?: MetricsSchema,
+): z.ZodType<
+  AdminEntityListResult<
+    z.output<RowSchema>,
+    MetricsSchema extends z.ZodType ? z.output<MetricsSchema> : unknown
+  >
+> {
+  const schema = z.object({
     rows: z.array(rowSchema),
     pagination: z.object({
       page: z.number().int().positive(),
@@ -183,10 +191,16 @@ export function createAdminEntityListResultSchema<
       totalRows: z.number().int().nonnegative(),
       totalPages: z.number().int().positive(),
     }),
-    metrics: metricsSchema?.optional(),
+    ...(metricsSchema ? { metrics: metricsSchema.optional() } : {}),
     meta: z.object({
       generatedAt: z.string(),
       mode: z.enum(ADMIN_ENTITY_LIST_DATA_MODES),
     }),
   });
+  return schema as unknown as z.ZodType<
+    AdminEntityListResult<
+      z.output<RowSchema>,
+      MetricsSchema extends z.ZodType ? z.output<MetricsSchema> : unknown
+    >
+  >;
 }

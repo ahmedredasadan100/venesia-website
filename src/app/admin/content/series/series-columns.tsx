@@ -14,25 +14,13 @@ import {
   formatAdminDateTime,
   formatAdminListDate,
 } from "../../../../lib/content-dates";
+import type { SeriesListRow } from "../../../../lib/admin/content/load-series-list";
 import { useRef, useState } from "react";
 import {
   deleteSeriesAjax,
   duplicateSeriesAjax,
   toggleSeriesStatusAjax,
 } from "./actions";
-
-export type SeriesListRow = {
-  id: number;
-  name: string;
-  slug: string;
-  status: string | null;
-  sort_order: number | null;
-  category_id: number | null;
-  category_name: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  topics_count: number;
-};
 
 export type SeriesColumnKey =
   | "name"
