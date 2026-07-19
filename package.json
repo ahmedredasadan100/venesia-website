@@ -20,6 +20,7 @@
     "verify:admin-data-engine-contracts": "node --experimental-strip-types scripts/verify-admin-data-engine-contracts.mts",
     "qa:admin-data-engine-endpoint": "node scripts/qa-admin-data-engine-endpoint.mjs",
     "qa:admin-data-engine-controller": "node scripts/qa-admin-data-engine-controller.mjs",
+    "qa:admin-data-engine-supabase-counts": "node scripts/qa-admin-data-engine-supabase-counts.mjs",
     "verify:audit-coverage": "node scripts/verify-admin-audit-coverage.mjs",
     "verify:db-health": "node scripts/verify-database-health.mjs",
     "verify:internal-hero-config": "node scripts/verify-internal-hero-config.mjs",

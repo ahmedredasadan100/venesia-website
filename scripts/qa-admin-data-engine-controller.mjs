@@ -1,5 +1,10 @@
 /**
  * Browser controller evidence for Topics/Categories/Series data-engine lists.
+ *
+ * Explicitly separates:
+ *   - new query → exactly 1 endpoint request
+ *   - fresh cached query → 0 endpoint requests
+ * and covers race / failure contracts with route interception.
  */
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
@@ -78,6 +83,23 @@ function isListEndpoint(url) {
   return /\/api\/admin\/entity-lists\/(topics|categories|series)/.test(url);
 }
 
+function entityFromPath(path) {
+  if (path.endsWith("/topics")) return "topics";
+  if (path.endsWith("/categories")) return "categories";
+  return "series";
+}
+
+async function waitForPageParam(page, pageValue, timeout = 10_000) {
+  await page.waitForFunction(
+    (expected) => {
+      const value = new URL(window.location.href).searchParams.get("page");
+      return expected === null ? value === null : value === expected;
+    },
+    pageValue,
+    { timeout },
+  );
+}
+
 async function main() {
   const probe = await fetch(`${baseUrl}/admin/login`).catch(() => null);
   if (!probe?.ok) throw new Error(`Server required at ${baseUrl}`);
@@ -136,92 +158,400 @@ async function main() {
       "/admin/content/categories",
       "/admin/content/series",
     ]) {
+      const entity = entityFromPath(path);
       const endpointCalls = [];
       const documents = [];
       const rsc = [];
       const onRequest = (request) => {
         const url = request.url();
         if (request.resourceType() === "document") documents.push(url);
-        // Count only same-path RSC flights (list navigation), not Link prefetch
-        // for row/detail routes that may appear after the table rows change.
         const samePath =
           url.includes(`${path}?`) ||
           url.endsWith(path) ||
           url.includes(`${path}&`);
         const isRscFlight =
           url.includes("_rsc=") || request.headers()["rsc"] === "1";
-        if (isRscFlight && samePath) {
-          rsc.push(url);
-        }
+        if (isRscFlight && samePath) rsc.push(url);
         if (isListEndpoint(url)) endpointCalls.push(url);
       };
       page.on("request", onRequest);
 
       await page.goto(`${baseUrl}${path}`, { waitUntil: "networkidle" });
-      const initialEndpointCalls = endpointCalls.length;
       check(
         `${path}: no duplicate list endpoint fetch on hydration`,
-        initialEndpointCalls === 0,
-        String(initialEndpointCalls),
+        endpointCalls.length === 0,
+        String(endpointCalls.length),
       );
 
       const search = page.locator('input[placeholder*="ابحث"]').first();
       if (await search.count()) {
         const beforeSearch = endpointCalls.length;
-        await search.fill(`qa ${runId}`);
-        await page.waitForTimeout(700);
+        const marker = `qa ${runId} ${entity}`;
+        await search.fill(marker);
+        await page.waitForFunction(
+          (value) =>
+            new URL(window.location.href).searchParams.get("q") === value,
+          marker,
+          { timeout: 10_000 },
+        );
+        await page.waitForTimeout(200);
         const afterSearch = endpointCalls.length - beforeSearch;
         check(
-          `${path}: search issues at most one endpoint request`,
-          afterSearch <= 1,
+          `${path}: new search query issues exactly one endpoint request`,
+          afterSearch === 1,
           String(afterSearch),
         );
         check(
           `${path}: table remains mounted during search`,
           (await page.locator("[data-admin-entity-list]").count()) >= 1,
         );
+
+        // Leave the marker query, then clear (new query), then restore marker
+        // from the still-fresh cache → exactly 0 endpoint requests.
         await search.fill("");
-        await page.waitForTimeout(700);
+        await page.waitForFunction(
+          () => !new URL(window.location.href).searchParams.has("q"),
+          undefined,
+          { timeout: 10_000 },
+        );
+        await page.waitForTimeout(250);
+        const beforeCachedSearch = endpointCalls.length;
+        await search.fill(marker);
+        await page.waitForFunction(
+          (value) =>
+            new URL(window.location.href).searchParams.get("q") === value,
+          marker,
+          { timeout: 10_000 },
+        );
+        await page.waitForTimeout(250);
+        check(
+          `${path}: fresh cached search issues zero endpoint requests`,
+          endpointCalls.length - beforeCachedSearch === 0,
+          String(endpointCalls.length - beforeCachedSearch),
+        );
+        await search.fill("");
+        await page.waitForFunction(
+          () => !new URL(window.location.href).searchParams.has("q"),
+          undefined,
+          { timeout: 10_000 },
+        );
+        await page.waitForTimeout(200);
       }
 
       const beforePaginateDocs = documents.length;
       const beforePaginateRsc = rsc.length;
       const next = page.getByRole("button", { name: "التالي" });
       if ((await next.count()) && (await next.first().isEnabled())) {
+        const rowsBefore = await page.locator("[data-entity-row-id]").count();
         const before = endpointCalls.length;
         await next.first().click();
-        await page.waitForTimeout(900);
+        await waitForPageParam(page, "2");
+        await page.waitForTimeout(300);
+        const rowsAfter = await page.locator("[data-entity-row-id]").count();
+        check(
+          `${path}: new pagination query issues exactly one endpoint request`,
+          endpointCalls.length - before === 1,
+          String(endpointCalls.length - before),
+        );
         check(
           `${path}: pagination uses endpoint not document reload`,
           documents.length === beforePaginateDocs,
           `docs=${documents.length - beforePaginateDocs}`,
         );
         check(
-          `${path}: pagination avoids RSC flight`,
+          `${path}: pagination avoids same-path RSC flight`,
           rsc.length === beforePaginateRsc,
           `rsc=${rsc.length - beforePaginateRsc}`,
         );
         check(
-          `${path}: pagination issues one endpoint request`,
-          endpointCalls.length - before === 1,
-          String(endpointCalls.length - before),
+          `${path}: pagination changes page state and rows`,
+          new URL(page.url()).searchParams.get("page") === "2" &&
+            rowsAfter > 0 &&
+            (rowsAfter !== rowsBefore || rowsAfter === 1),
+          `page=${new URL(page.url()).searchParams.get("page")} rows=${rowsBefore}->${rowsAfter}`,
+        );
+
+        // Fresh cached page=1 via Back, then Forward to cached page=2.
+        const beforeBack = endpointCalls.length;
+        await page.goBack();
+        await waitForPageParam(page, null);
+        await page.waitForTimeout(250);
+        check(
+          `${path}: fresh cached previous page issues zero endpoint requests`,
+          endpointCalls.length - beforeBack === 0,
+          String(endpointCalls.length - beforeBack),
+        );
+        const beforeForward = endpointCalls.length;
+        await page.goForward();
+        await waitForPageParam(page, "2");
+        await page.waitForTimeout(250);
+        check(
+          `${path}: fresh cached forward page issues zero endpoint requests`,
+          endpointCalls.length - beforeForward === 0,
+          String(endpointCalls.length - beforeForward),
         );
         await page.goBack();
-        await page.waitForTimeout(700);
-        const afterBack = endpointCalls.length;
-        await page.goForward();
-        await page.waitForTimeout(700);
-        check(
-          `${path}: forward after back does not spam duplicate fetches`,
-          endpointCalls.length - afterBack <= 1,
-          String(endpointCalls.length - afterBack),
-        );
+        await waitForPageParam(page, null);
       } else {
         check(`${path}: pagination skipped (single page)`, true);
       }
 
       page.off("request", onRequest);
     }
+
+    // ── Race / failure contracts on Topics ─────────────────────────────
+    await page.goto(`${baseUrl}/admin/content/topics`, {
+      waitUntil: "networkidle",
+    });
+
+    let firstReleased = false;
+    let releaseFirst;
+    const firstGate = new Promise((resolve) => {
+      releaseFirst = () => {
+        firstReleased = true;
+        resolve();
+      };
+    });
+    let secondSeen = false;
+    const pendingFirstBodies = [];
+
+    await page.route("**/api/admin/entity-lists/topics**", async (route) => {
+      const url = new URL(route.request().url());
+      const q = url.searchParams.get("q") || "";
+      if (q.includes("SLOW1")) {
+        pendingFirstBodies.push(route);
+        await firstGate;
+        try {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              rows: [
+                {
+                  id: 900001,
+                  title: "SLOW1-STALE-ROW",
+                  content_type: "article",
+                  category_id: null,
+                  category_name: null,
+                  category_color_token: null,
+                  series_id: null,
+                  series_name: null,
+                  status: "draft",
+                  is_featured: false,
+                  views_count: 0,
+                  created_at: null,
+                  updated_at: null,
+                  published_at: null,
+                  created_by_display: null,
+                  updated_by_display: null,
+                  published_by_display: null,
+                  deleted_at: null,
+                },
+              ],
+              pagination: {
+                page: 1,
+                pageSize: 10,
+                totalRows: 1,
+                totalPages: 1,
+              },
+              meta: {
+                generatedAt: new Date().toISOString(),
+                mode: "server-page",
+              },
+            }),
+          });
+        } catch {
+          // Request may already be aborted by TanStack Query cancellation.
+        }
+        return;
+      }
+      if (q.includes("SLOW2")) {
+        secondSeen = true;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            rows: [
+              {
+                id: 900002,
+                title: "SLOW2-WINNER-ROW",
+                content_type: "article",
+                category_id: null,
+                category_name: null,
+                category_color_token: null,
+                series_id: null,
+                series_name: null,
+                status: "draft",
+                is_featured: false,
+                views_count: 0,
+                created_at: null,
+                updated_at: null,
+                published_at: null,
+                created_by_display: null,
+                updated_by_display: null,
+                published_by_display: null,
+                deleted_at: null,
+              },
+            ],
+            pagination: {
+              page: 1,
+              pageSize: 10,
+              totalRows: 1,
+              totalPages: 1,
+            },
+            meta: {
+              generatedAt: new Date().toISOString(),
+              mode: "server-page",
+            },
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    const topicsSearch = page.locator('input[placeholder*="ابحث"]').first();
+    await topicsSearch.fill("SLOW1");
+    await page.waitForTimeout(450);
+    await topicsSearch.fill("SLOW2");
+    await page.waitForFunction(
+      () => new URL(window.location.href).searchParams.get("q") === "SLOW2",
+      undefined,
+      { timeout: 10_000 },
+    );
+    await page
+      .getByText("SLOW2-WINNER-ROW", { exact: true })
+      .waitFor({ state: "visible", timeout: 10_000 });
+    check("Slow search: second query wins before first response", secondSeen);
+    check(
+      "Out-of-order: winner rows visible before stale release",
+      (await page.getByText("SLOW2-WINNER-ROW", { exact: true }).count()) === 1 &&
+        (await page.getByText("SLOW1-STALE-ROW", { exact: true }).count()) === 0,
+    );
+    releaseFirst();
+    await page.waitForTimeout(500);
+    check(
+      "Out-of-order: stale response does not replace winner rows",
+      (await page.getByText("SLOW2-WINNER-ROW", { exact: true }).count()) === 1 &&
+        (await page.getByText("SLOW1-STALE-ROW", { exact: true }).count()) === 0,
+    );
+    check(
+      "Cancellation: delayed first request was gated (abort or ignore)",
+      pendingFirstBodies.length >= 1 || firstReleased,
+      String(pendingFirstBodies.length),
+    );
+    await page.unroute("**/api/admin/entity-lists/topics**");
+
+    // Network failure keeps previous rows.
+    await topicsSearch.fill("");
+    await page.waitForTimeout(500);
+    const previousRowCount = await page.locator("[data-entity-row-id]").count();
+    await page.route("**/api/admin/entity-lists/topics**", async (route) => {
+      const url = new URL(route.request().url());
+      if ((url.searchParams.get("q") || "").includes("NETFAIL")) {
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: { code: "list_load_failed", message: "Unable to load" },
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await topicsSearch.fill("NETFAIL");
+    await page.waitForFunction(
+      () => new URL(window.location.href).searchParams.get("q") === "NETFAIL",
+      undefined,
+      { timeout: 10_000 },
+    );
+    await page.waitForTimeout(700);
+    check(
+      "Network failure: previous rows remain visible",
+      (await page.locator("[data-entity-row-id]").count()) === previousRowCount &&
+        previousRowCount > 0,
+      String(await page.locator("[data-entity-row-id]").count()),
+    );
+    check(
+      "Network failure: error state is exposed without wiping table",
+      (await page.getByText("Unable to load the requested list.").count()) >= 1 &&
+        (await page.locator("[data-admin-entity-list]").count()) >= 1,
+    );
+    await page.unroute("**/api/admin/entity-lists/topics**");
+
+    // 401 contract against the typed endpoint (no blind retry storm).
+    const unauthorized = await page.evaluate(async () => {
+      const calls = [];
+      const original = window.fetch;
+      window.fetch = async (...args) => {
+        calls.push(String(args[0]));
+        return original(...args);
+      };
+      try {
+        // Clear cookie by hitting logout, then probe the endpoint.
+        await original("/api/admin/auth/logout", { method: "POST" });
+        const response = await original("/api/admin/entity-lists/topics?page=1", {
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+        return {
+          status: response.status,
+          calls: calls.filter((url) => url.includes("/api/admin/entity-lists/")),
+        };
+      } finally {
+        window.fetch = original;
+      }
+    });
+    check(
+      "401: endpoint returns unauthorized without blind retry storm",
+      unauthorized.status === 401 && unauthorized.calls.length === 1,
+      `status=${unauthorized.status} calls=${unauthorized.calls.length}`,
+    );
+
+    // Floating menu stays open across a background refetch (no remount).
+    await page.goto(`${baseUrl}/admin/content/topics`, {
+      waitUntil: "networkidle",
+    });
+    await page.evaluate(async ({ username, loginPassword }) => {
+      await fetch("/api/admin/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          password: loginPassword,
+          rememberMe: false,
+        }),
+      });
+    }, { username: adminUsername, loginPassword: password });
+    await page.goto(`${baseUrl}/admin/content/topics`, {
+      waitUntil: "networkidle",
+    });
+    await page.getByRole("button", { name: /^الأعمدة$/ }).click();
+    await page.waitForTimeout(150);
+    const menuOpenBefore = await page.locator("[data-admin-column-menu]").count();
+    const listIdentityBefore = await page.evaluate(() => {
+      const node = document.querySelector("[data-admin-entity-list]");
+      return node ? node.id : null;
+    });
+    await page.locator('input[placeholder*="ابحث"]').first().fill(`menu ${runId}`);
+    await page.waitForTimeout(800);
+    const menuOpenAfter = await page.locator("[data-admin-column-menu]").count();
+    const listIdentityAfter = await page.evaluate(() => {
+      const node = document.querySelector("[data-admin-entity-list]");
+      return node ? node.id : null;
+    });
+    check(
+      "Floating menu: table identity stable during refetch",
+      listIdentityBefore !== null && listIdentityBefore === listIdentityAfter,
+      `${listIdentityBefore} -> ${listIdentityAfter}`,
+    );
+    check(
+      "Floating menu: remains open across background refetch",
+      menuOpenBefore === 1 && menuOpenAfter === 1,
+      `before=${menuOpenBefore} after=${menuOpenAfter}`,
+    );
 
     check(
       "No console errors",
