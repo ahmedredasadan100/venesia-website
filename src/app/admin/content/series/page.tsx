@@ -16,6 +16,7 @@ import {
   buildAdminCategoryFilterModel,
   type AdminContentCategory,
 } from "../../../../lib/admin/content/category-hierarchy";
+import { loadActiveSeriesTopicCounts } from "../../../../lib/admin/content/series-topic-counts";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import SeriesTableClient, { type SeriesListRow } from "./SeriesTableClient";
@@ -33,10 +34,6 @@ type SeriesRow = {
   updated_at: string | null;
 };
 
-type TopicSeriesJoinRow = {
-  series_id: number | null;
-};
-
 export default async function Page({
   searchParams,
 }: {
@@ -52,7 +49,7 @@ export default async function Page({
 
   const [
     { data: seriesRows, error: seriesError },
-    { data: topicRows },
+    { counts },
     { data: categoryRows },
     { data: preference, error: preferenceError },
   ] = await Promise.all([
@@ -63,7 +60,7 @@ export default async function Page({
       )
       .order("sort_order", { ascending: true })
       .order("id", { ascending: false }),
-    getSupabaseAdmin().from("topics").select("series_id"),
+    loadActiveSeriesTopicCounts(),
     getSupabaseAdmin()
       .from("topic_categories")
       .select("id, name, slug, parent_id, sort_order, is_active")
@@ -100,12 +97,6 @@ export default async function Page({
       item.name,
     ]),
   );
-
-  const counts = new Map<number, number>();
-  ((topicRows ?? []) as TopicSeriesJoinRow[]).forEach((row) => {
-    if (!row.series_id) return;
-    counts.set(row.series_id, (counts.get(row.series_id) ?? 0) + 1);
-  });
 
   const series: SeriesListRow[] = ((seriesRows ?? []) as SeriesRow[]).map(
     (item) => ({

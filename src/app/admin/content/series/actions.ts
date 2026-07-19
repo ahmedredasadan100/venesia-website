@@ -8,6 +8,7 @@ import {
   SERIES_LIST_VIEW_KEY,
   SERIES_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/series-list-config";
+import { loadActiveSeriesTopicCounts } from "../../../../lib/admin/content/series-topic-counts";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 
 import { revalidatePath } from "next/cache";
@@ -382,7 +383,7 @@ export async function getSeriesTableRows(): Promise<SeriesTableRow[]> {
   await requireAdminSession();
   const [
     { data: seriesRows, error: seriesError },
-    { data: topicRows, error: topicError },
+    { counts, error: topicError },
     { data: categoryRows, error: categoryError },
   ] = await Promise.all([
     getSupabaseAdmin()
@@ -392,7 +393,7 @@ export async function getSeriesTableRows(): Promise<SeriesTableRow[]> {
       )
       .order("sort_order", { ascending: true })
       .order("id", { ascending: false }),
-    getSupabaseAdmin().from("topics").select("series_id"),
+    loadActiveSeriesTopicCounts(),
     getSupabaseAdmin().from("topic_categories").select("id, name"),
   ]);
 
@@ -406,12 +407,6 @@ export async function getSeriesTableRows(): Promise<SeriesTableRow[]> {
       item.name,
     ]),
   );
-
-  const counts = new Map<number, number>();
-  ((topicRows ?? []) as { series_id: number | null }[]).forEach((row) => {
-    if (!row.series_id) return;
-    counts.set(row.series_id, (counts.get(row.series_id) ?? 0) + 1);
-  });
 
   return ((seriesRows ?? []) as {
     id: number;

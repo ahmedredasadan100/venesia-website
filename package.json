@@ -15,6 +15,7 @@
     "verify:admin-entity-list": "node scripts/verify-admin-entity-list.mjs",
     "qa:admin-entity-list-consumers": "node scripts/qa-admin-entity-list-consumers.mjs",
     "qa:topics-list-reference": "node scripts/qa-topics-list-reference.mjs",
+    "qa:admin-content-soft-delete-counts": "node scripts/qa-admin-content-soft-delete-counts.mjs",
     "verify:audit-coverage": "node scripts/verify-admin-audit-coverage.mjs",
     "verify:db-health": "node scripts/verify-database-health.mjs",
     "verify:internal-hero-config": "node scripts/verify-internal-hero-config.mjs",

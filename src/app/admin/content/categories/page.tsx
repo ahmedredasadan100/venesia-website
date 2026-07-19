@@ -147,6 +147,8 @@ export default async function TopicCategoriesPage({
       .select(
         "id, name, slug, description, sort_order, is_active, parent_id, status, color_token, created_at, updated_at, topics_count:topics(count)",
       )
+      // Soft-deleted topics must never count toward a category.
+      .is("topics.deleted_at", null)
       .order("parent_id", { ascending: true, nullsFirst: true })
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
