@@ -73,6 +73,8 @@ export default function UnifiedContentList({
   sort,
   initialVisibleColumns,
   initialFeedback,
+  onSortChange,
+  onSuccessfulMutation,
 }: {
   rows: UnifiedContentRow[];
   categories: AdminContentCategoryNode[];
@@ -80,12 +82,20 @@ export default function UnifiedContentList({
   sort: ContentSortValue;
   initialVisibleColumns: string[];
   initialFeedback?: AdminActionFeedback | null;
+  onSortChange?: (sort: {
+    key: UnifiedContentSortKey;
+    direction: "asc" | "desc";
+  }) => void;
+  onSuccessfulMutation?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const columns = useMemo(
-    () => createUnifiedContentColumns(currentListPath),
-    [currentListPath],
+    () =>
+      createUnifiedContentColumns(currentListPath, {
+        deferRefresh: Boolean(onSuccessfulMutation),
+      }),
+    [currentListPath, onSuccessfulMutation],
   );
   const parsedSort = parseSort(sort);
   const categoryOptions = useMemo(
@@ -118,14 +128,35 @@ export default function UnifiedContentList({
       mapResultToFeedback={(result) =>
         mapTopicsActionResultToFeedback(result, { currentListPath })
       }
+      onSuccessfulMutation={onSuccessfulMutation}
       sort={parsedSort}
-      sortMode={{
-        mode: "href",
-        hrefFor: (_columnKey, sortKey) =>
-          sortHref(currentListPath, sortKey, sort),
-      }}
+      sortMode={
+        onSortChange
+          ? {
+              mode: "callback",
+              onToggle: (sortKey) => {
+                const key = sortKey as UnifiedContentSortKey;
+                onSortChange({
+                  key,
+                  direction:
+                    parsedSort.key === key && parsedSort.direction === "asc"
+                      ? "desc"
+                      : "asc",
+                });
+              },
+            }
+          : {
+              mode: "href",
+              hrefFor: (_columnKey, sortKey) =>
+                sortHref(currentListPath, sortKey, sort),
+            }
+      }
       onSortColumnHidden={() => {
-        router.replace(defaultSortPath(currentListPath), { scroll: false });
+        if (onSortChange) {
+          onSortChange({ key: "title", direction: "asc" });
+        } else {
+          router.replace(defaultSortPath(currentListPath), { scroll: false });
+        }
       }}
       actionsColumnWidth={UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH}
       emptyState={{

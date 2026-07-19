@@ -29,10 +29,13 @@ export default function UnifiedContentRowActions({
   row,
   currentListPath,
   onMutationResult,
+  deferRefresh = false,
 }: {
   row: UnifiedContentRow;
   currentListPath: string;
   onMutationResult?: (result: AdminActionResult) => void;
+  /** When true, the parent controller refreshes/invalidates instead of router.refresh(). */
+  deferRefresh?: boolean;
 }) {
   const router = useRouter();
   const pendingRef = useRef<RowMutationKey | null>(null);
@@ -82,7 +85,7 @@ export default function UnifiedContentRowActions({
               featureRefreshTargetRef.current = result.code === "featured";
               waitForFeatureRefresh = true;
             }
-            router.refresh();
+            if (!deferRefresh) router.refresh();
           }
         } catch {
           onMutationResult?.({

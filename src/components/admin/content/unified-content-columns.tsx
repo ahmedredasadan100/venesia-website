@@ -62,6 +62,7 @@ function singleLine(value?: string | null, fallback = "—") {
 
 export function createUnifiedContentColumns(
   currentListPath: string,
+  options?: { deferRefresh?: boolean },
 ): UnifiedContentColumn[] {
   return [
     {
@@ -248,6 +249,7 @@ export function createUnifiedContentColumns(
           row={row}
           currentListPath={currentListPath}
           onMutationResult={onMutationResult}
+          deferRefresh={options?.deferRefresh}
         />
       ),
     },

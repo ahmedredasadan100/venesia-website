@@ -60,6 +60,8 @@ export type AdminEntityListProps<
     openLayerId: string | null;
     setOpenLayerId: (id: string | null) => void;
   }) => ReactNode;
+  /** Prefer cache invalidation over a full RSC refresh when provided. */
+  onSuccessfulMutation?: () => void | Promise<void>;
   mapResultToFeedback: AdminEntityFeedbackMapper;
   sort?: AdminEntitySortState<TSortKey> | null;
   sortMode?: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>["sortMode"];
@@ -95,6 +97,7 @@ function AdminEntityListInner<
     bulkEntityLabel = "عنصر",
     onBulkExecute,
     bulkAdditionalControls,
+    onSuccessfulMutation,
     mapResultToFeedback,
     sort,
     sortMode,
@@ -168,6 +171,9 @@ function AdminEntityListInner<
     if (result.ok && result.code === "deleted" && result.entityId != null) {
       selection.removeSelection(result.entityId as TId);
     }
+    if (result.ok && onSuccessfulMutation) {
+      void onSuccessfulMutation();
+    }
   }
 
   function handleVisibleColumnsChange(next: TKey[]) {
@@ -193,7 +199,8 @@ function AdminEntityListInner<
       showFeedback(result);
       if (result.ok) {
         selection.clearSelection();
-        router.refresh();
+        if (onSuccessfulMutation) await onSuccessfulMutation();
+        else router.refresh();
       }
     } catch {
       showFeedback({
@@ -239,7 +246,10 @@ function AdminEntityListInner<
             onChange={handleVisibleColumnsChange}
             onPersist={onPersistColumns}
             onRestore={onRestoreColumns}
-            onPersisted={() => router.refresh()}
+            onPersisted={() => {
+              if (onSuccessfulMutation) void onSuccessfulMutation();
+              else router.refresh();
+            }}
             scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
           />
         ) : null}

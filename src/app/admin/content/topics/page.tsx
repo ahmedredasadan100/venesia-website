@@ -3,11 +3,8 @@ import {
   AdminActionButton,
   AdminMetricCardsGrid,
   AdminPageContextHeader,
-  AdminTablePagination,
 } from "../../../../components/admin/ui";
-import { AdminEntityListSurface } from "../../../../components/admin/entity-list";
-import UnifiedContentFilters from "../../../../components/admin/content/UnifiedContentFilters";
-import UnifiedContentList from "../../../../components/admin/content/UnifiedContentList";
+import TopicsListClient from "../../../../components/admin/content/TopicsListClient";
 import { DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS } from "../../../../components/admin/content/unified-content-columns";
 import {
   buildAdminCategoryTree,
@@ -15,16 +12,15 @@ import {
   type AdminContentCategory,
 } from "../../../../lib/admin/content/category-hierarchy";
 import {
-  CONTENT_LIST_PAGE_SIZES,
   CONTENT_LIST_VIEW_KEY,
-  DEFAULT_CONTENT_LIST_SORT,
-  loadUnifiedContentList,
   loadUnifiedContentMetrics,
-  normalizeUnifiedContentFilters,
   type ContentListSearchParams,
 } from "../../../../lib/admin/content/load-unified-content";
+import { loadTopicsEntityListResult } from "../../../../lib/admin/content/entity-list-adapters/topics";
+import { topicsQueryContract } from "../../../../lib/admin/content/entity-list-contracts/topics";
 import { TOPICS_NOTICE_CODE_MAP } from "../../../../lib/admin/content/topics-list-config";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
+import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { ADMIN_CONTENT_ROUTES } from "../../../../lib/admin/content-routes";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -43,21 +39,6 @@ type SeriesRow = {
   deleted_at: string | null;
 };
 
-function buildCurrentListPath(filters: ReturnType<typeof normalizeUnifiedContentFilters>) {
-  const params = new URLSearchParams();
-  if (filters.q) params.set("q", filters.q);
-  if (filters.contentType !== "all") params.set("content_type", filters.contentType);
-  if (filters.categoryId) params.set("category", String(filters.categoryId));
-  if (filters.seriesId) params.set("series", String(filters.seriesId));
-  if (filters.status !== "all") params.set("status", filters.status);
-  if (filters.featured !== "all") params.set("featured", filters.featured);
-  if (filters.sort !== DEFAULT_CONTENT_LIST_SORT) params.set("sort", filters.sort);
-  if (filters.page > 1) params.set("page", String(filters.page));
-  if (filters.pageSize !== 10) params.set("limit", String(filters.pageSize));
-  const query = params.toString();
-  return query ? `${ADMIN_CONTENT_ROUTES.topics}?${query}` : ADMIN_CONTENT_ROUTES.topics;
-}
-
 export default async function UnifiedContentTopicsPage({
   searchParams,
 }: {
@@ -65,7 +46,24 @@ export default async function UnifiedContentTopicsPage({
 }) {
   const actor = await requireAdminSession();
   const params = await searchParams;
-  const filters = normalizeUnifiedContentFilters(params);
+  const query = normalizeAdminEntityListQuery(
+    topicsQueryContract,
+    new URLSearchParams(
+      Object.entries({
+        q: params?.q,
+        content_type: params?.content_type,
+        category: params?.category,
+        series: params?.series,
+        status: params?.status,
+        featured: params?.featured,
+        sort: params?.sort,
+        page: params?.page,
+        limit: params?.limit,
+      }).flatMap(([key, value]) =>
+        typeof value === "string" && value.length > 0 ? [[key, value]] : [],
+      ),
+    ),
+  );
   const supabase = getSupabaseAdmin();
   const [
     { data: categoryRows, error: categoriesError },
@@ -96,13 +94,14 @@ export default async function UnifiedContentTopicsPage({
   const categoryTree = buildAdminCategoryTree(categories);
   const flattenedCategories = flattenAdminCategoryTree(categoryTree);
   const series = (seriesRows ?? []) as SeriesRow[];
-  const list = await loadUnifiedContentList(filters, categories);
-  const currentListPath = buildCurrentListPath({ ...filters, page: list.page });
-  const listClientStateKey = buildCurrentListPath({
-    ...filters,
-    page: list.page,
-    sort: DEFAULT_CONTENT_LIST_SORT,
-  });
+  let listError: string | null = null;
+  let initialResult = null;
+  try {
+    initialResult = await loadTopicsEntityListResult(query, categories);
+  } catch (error) {
+    listError =
+      error instanceof Error ? error.message : "Unable to load topics.";
+  }
   const noticeFeedback = resolveAdminNoticeFeedback(
     TOPICS_NOTICE_CODE_MAP,
     params?.notice,
@@ -111,19 +110,17 @@ export default async function UnifiedContentTopicsPage({
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
     : [...DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS];
-  const rangeStart = list.totalCount ? (list.page - 1) * list.pageSize + 1 : 0;
-  const rangeEnd = list.totalCount ? Math.min(list.page * list.pageSize, list.totalCount) : 0;
   const loadError =
     categoriesError?.message ??
     seriesError?.message ??
     preferenceError?.message ??
     metrics.error ??
-    list.error;
+    listError;
   const listLoadError =
     categoriesError?.message ??
     seriesError?.message ??
     preferenceError?.message ??
-    list.error;
+    listError;
 
   return (
     <main className="min-w-0 space-y-7">
@@ -165,43 +162,15 @@ export default async function UnifiedContentTopicsPage({
         ]}
       />
 
-      {!listLoadError ? (
-        <AdminEntityListSurface className="space-y-4" consumer="topics">
-          <UnifiedContentFilters
-            initial={{
-              q: filters.q,
-              contentType: filters.contentType,
-              category: filters.categoryId ? String(filters.categoryId) : "all",
-              series: filters.seriesId ? String(filters.seriesId) : "all",
-              status: filters.status,
-              featured: filters.featured,
-            }}
-            categories={flattenedCategories}
-            series={series}
-          />
-
-          <UnifiedContentList
-            key={listClientStateKey}
-            rows={list.rows}
-            categories={flattenedCategories}
-            currentListPath={currentListPath}
-            sort={filters.sort}
-            initialVisibleColumns={visibleColumns}
-            initialFeedback={noticeFeedback}
-          />
-
-          <AdminTablePagination
-            basePath={ADMIN_CONTENT_ROUTES.topics}
-            rangeStart={rangeStart}
-            rangeEnd={rangeEnd}
-            totalCount={list.totalCount}
-            pageSize={String(list.pageSize)}
-            pageSizeOptions={CONTENT_LIST_PAGE_SIZES.map(String)}
-            currentPage={list.page}
-            totalPages={list.totalPages}
-            emptySummaryText="لا توجد موضوعات مطابقة"
-          />
-        </AdminEntityListSurface>
+      {!listLoadError && initialResult ? (
+        <TopicsListClient
+          categories={flattenedCategories}
+          series={series}
+          initialQuery={query}
+          initialResult={initialResult}
+          initialVisibleColumns={visibleColumns}
+          initialFeedback={noticeFeedback}
+        />
       ) : null}
     </main>
   );

@@ -142,7 +142,19 @@ export function useAdminEntityListController<
           payload?.error?.code ?? null,
         );
       }
-      return (await response.json()) as AdminEntityListResult<Row, Metrics>;
+      const result = (await response.json()) as AdminEntityListResult<
+        Row,
+        Metrics
+      >;
+      if (result.pagination.page !== query.page) {
+        queueMicrotask(() => {
+          commitQuery(
+            (current) => ({ ...current, page: result.pagination.page }),
+            "replace",
+          );
+        });
+      }
+      return result;
     },
     initialData:
       JSON.stringify(queryKey) === JSON.stringify(initialKey)
@@ -158,6 +170,18 @@ export function useAdminEntityListController<
       commitQuery(
         (current) => ({ ...current, search, page: 1 }),
         "replace",
+      ),
+    [commitQuery],
+  );
+  const setSearchAndFilters = useCallback(
+    (
+      search: string,
+      filters: Filters,
+      behavior: HistoryBehavior = "push",
+    ) =>
+      commitQuery(
+        (current) => ({ ...current, search, filters, page: 1 }),
+        behavior,
       ),
     [commitQuery],
   );
@@ -215,6 +239,7 @@ export function useAdminEntityListController<
     isFetching: request.isFetching,
     isPlaceholderData: request.isPlaceholderData,
     setSearch,
+    setSearchAndFilters,
     setFilter,
     setSort,
     setPage,

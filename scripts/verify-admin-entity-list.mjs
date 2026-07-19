@@ -81,6 +81,7 @@ const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 
 const topicsList = read("src/components/admin/content/UnifiedContentList.tsx");
 const topicsFilters = read("src/components/admin/content/UnifiedContentFilters.tsx");
+const topicsClient = read("src/components/admin/content/TopicsListClient.tsx");
 const topicsPage = read("src/app/admin/content/topics/page.tsx");
 const categoriesPage = read("src/app/admin/content/categories/page.tsx");
 const categoriesListOwner = read("src/lib/admin/content/load-categories-list.ts");
@@ -101,7 +102,8 @@ check(
 
 check(
   "Consumers must use AdminEntityListSurface + AdminEntityListFilters",
-  topicsPage.includes("AdminEntityListSurface") &&
+  topicsClient.includes("AdminEntityListSurface") &&
+    topicsPage.includes("TopicsListClient") &&
     topicsFilters.includes("AdminEntityListFilters") &&
     categoriesClient.includes("AdminEntityListSurface") &&
     categoriesClient.includes("AdminEntityListFilters") &&

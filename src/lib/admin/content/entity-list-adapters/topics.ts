@@ -11,8 +11,12 @@ import {
   type TopicFilters,
   type TopicSortField,
 } from "../entity-list-contracts/topics";
+import type { AdminContentCategory } from "../category-hierarchy";
 import { getSupabaseAdmin } from "../../../supabase-admin";
-import { createAdminEntityListResultSchema } from "../../entity-list/data-engine/contracts";
+import {
+  createAdminEntityListResultSchema,
+  type AdminEntityListQuery,
+} from "../../entity-list/data-engine/contracts";
 import type { AdminEntityListAdapter } from "../../entity-list/data-engine/adapter";
 
 const topicRowSchema = z.object({
@@ -43,6 +47,52 @@ const topicRowSchema = z.object({
   deleted_at: z.string().nullable(),
 });
 
+export async function loadTopicsEntityListResult(
+  query: AdminEntityListQuery<TopicFilters, TopicSortField>,
+  providedCategories?: AdminContentCategory[],
+) {
+  let categories = providedCategories;
+  if (!categories) {
+    const { data, error: categoriesError } = await getSupabaseAdmin()
+      .from("topic_categories")
+      .select("id,name,slug,parent_id,sort_order,is_active,color_token")
+      .order("sort_order", { ascending: true })
+      .order("id", { ascending: true });
+    if (categoriesError) throw new Error(categoriesError.message);
+    categories = (data ?? []) as AdminContentCategory[];
+  }
+
+  const list = await loadUnifiedContentList(
+    {
+      q: query.search,
+      contentType: query.filters.contentType,
+      categoryId: query.filters.categoryId,
+      seriesId: query.filters.seriesId,
+      status: query.filters.status,
+      featured: query.filters.featured,
+      sort: `${query.sort.field}_${query.sort.direction}`,
+      page: query.page,
+      pageSize: query.pageSize,
+    },
+    categories,
+  );
+  if (list.error) throw new Error(list.error);
+
+  return {
+    rows: list.rows,
+    pagination: {
+      page: list.page,
+      pageSize: list.pageSize,
+      totalRows: list.totalCount,
+      totalPages: list.totalPages,
+    },
+    meta: {
+      generatedAt: new Date().toISOString(),
+      mode: query.mode,
+    },
+  };
+}
+
 export const topicsEntityListAdapter: AdminEntityListAdapter<
   "topics",
   TopicFilters,
@@ -54,42 +104,5 @@ export const topicsEntityListAdapter: AdminEntityListAdapter<
   resultSchema: createAdminEntityListResultSchema(topicRowSchema),
   staleTimeMs: 30_000,
   mutationInvalidation: "entity",
-  async load(query) {
-    const { data: categories, error: categoriesError } = await getSupabaseAdmin()
-      .from("topic_categories")
-      .select("id,name,slug,parent_id,sort_order,is_active,color_token")
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: true });
-    if (categoriesError) throw new Error(categoriesError.message);
-
-    const list = await loadUnifiedContentList(
-      {
-        q: query.search,
-        contentType: query.filters.contentType,
-        categoryId: query.filters.categoryId,
-        seriesId: query.filters.seriesId,
-        status: query.filters.status,
-        featured: query.filters.featured,
-        sort: `${query.sort.field}_${query.sort.direction}`,
-        page: query.page,
-        pageSize: query.pageSize,
-      },
-      categories ?? [],
-    );
-    if (list.error) throw new Error(list.error);
-
-    return {
-      rows: list.rows,
-      pagination: {
-        page: list.page,
-        pageSize: list.pageSize,
-        totalRows: list.totalCount,
-        totalPages: list.totalPages,
-      },
-      meta: {
-        generatedAt: new Date().toISOString(),
-        mode: query.mode,
-      },
-    };
-  },
+  load: loadTopicsEntityListResult,
 };
