@@ -814,17 +814,18 @@ async function main() {
     const previousOnPage1 = categoriesPagination.getByText("السابق", {
       exact: true,
     });
-    const nextOnPage1 = categoriesPagination.getByRole("link", {
-      name: "التالي",
-      exact: true,
-    });
+    const nextOnPage1 = categoriesPagination
+      .getByRole("button", { name: "التالي", exact: true })
+      .or(categoriesPagination.getByRole("link", { name: "التالي", exact: true }));
     check(
       "Categories previous disabled on page 1",
       (await previousOnPage1.evaluate((element) => element.tagName)) === "SPAN",
     );
-    check("Categories next link is enabled on page 1", (await nextOnPage1.count()) === 1);
-    const page2 = page.getByRole("link", { name: "2", exact: true });
-    check("Categories page 2 link is mandatory", (await page2.count()) === 1);
+    check("Categories next control is enabled on page 1", (await nextOnPage1.count()) === 1);
+    const page2 = categoriesPagination
+      .getByRole("button", { name: "2", exact: true })
+      .or(categoriesPagination.getByRole("link", { name: "2", exact: true }));
+    check("Categories page 2 control is mandatory", (await page2.count()) === 1);
     await page.screenshot({
       path: resolve(OUT, "categories-page-1-1440.png"),
       fullPage: true,
@@ -849,15 +850,14 @@ async function main() {
       (await categoriesPagination.locator('[aria-current="page"]').filter({ hasText: /^2$/ }).count()) === 1,
     );
     const nextOnPage2 = categoriesPagination.getByText("التالي", { exact: true });
-    const previousOnPage2 = categoriesPagination.getByRole("link", {
-      name: "السابق",
-      exact: true,
-    });
+    const previousOnPage2 = categoriesPagination
+      .getByRole("button", { name: "السابق", exact: true })
+      .or(categoriesPagination.getByRole("link", { name: "السابق", exact: true }));
     check(
       "Categories next disabled on page 2",
       (await nextOnPage2.evaluate((element) => element.tagName)) === "SPAN",
     );
-    check("Categories previous link is enabled on page 2", (await previousOnPage2.count()) === 1);
+    check("Categories previous control is enabled on page 2", (await previousOnPage2.count()) === 1);
     check(
       "Categories pagination uses client navigation",
       (await page.evaluate(() => performance.timeOrigin)) === timeOriginBeforePageChange,
@@ -873,7 +873,7 @@ async function main() {
       .locator("text=/عرض 1 إلى 10 من إجمالي 11/")
       .waitFor({ state: "visible", timeout: 15_000 });
     check("Categories previous returns to page 1", (await page.locator("[data-entity-row-id]").count()) === 10);
-    await page.getByRole("link", { name: "2", exact: true }).click();
+    await page2.click();
     await waitForQuery(page, { page: "2" });
 
     const hiddenCategoryId = categoryIds.at(-1);
@@ -958,13 +958,29 @@ async function main() {
       `${fixtureCategoriesUrl}&status=hidden&limit=20`,
       { waitUntil: "domcontentloaded" },
     );
-    const categorySortUrl = page.url();
     const sortTimeOrigin = await page.evaluate(() => performance.timeOrigin);
     await page.getByRole("button", { name: /التصنيف/ }).first().click();
-    await page.waitForTimeout(150);
+    await page.waitForFunction(
+      () => {
+        const params = new URL(window.location.href).searchParams;
+        return (
+          params.get("status") === "hidden" &&
+          params.get("limit") === "20" &&
+          params.has("q") &&
+          typeof params.get("sort") === "string" &&
+          params.get("sort")?.startsWith("name_")
+        );
+      },
+      { timeout: 10_000 },
+    ).catch(() => null);
+    const categorySortedUrl = new URL(page.url());
     check(
       "Categories sort preserves filter and limit URL state",
-      page.url() === categorySortUrl &&
+      categorySortedUrl.searchParams.get("status") === "hidden" &&
+        categorySortedUrl.searchParams.get("limit") === "20" &&
+        categorySortedUrl.searchParams.has("q") &&
+        (categorySortedUrl.searchParams.get("sort")?.startsWith("name_") ??
+          false) &&
         (await page.evaluate(() => performance.timeOrigin)) === sortTimeOrigin,
       page.url(),
     );
@@ -1636,11 +1652,13 @@ async function main() {
       { timeout: 10_000 },
     ).then(() => true).catch(() => false);
     const topicsFilteredUrl = new URL(page.url());
+    const topicsFilteredSort = topicsFilteredUrl.searchParams.get("sort");
     check(
       "Topics filter preserves sort and limit while resetting page",
       topicsStatusCommitted &&
         topicsFilteredUrl.searchParams.get("status") === "published" &&
-        topicsFilteredUrl.searchParams.get("sort") === "title_asc" &&
+        // Default title_asc is omitted from the URL by the data-engine contract.
+        (topicsFilteredSort === null || topicsFilteredSort === "title_asc") &&
         topicsFilteredUrl.searchParams.get("limit") === "20" &&
         !topicsFilteredUrl.searchParams.has("page"),
       page.url(),
@@ -1660,12 +1678,14 @@ async function main() {
       { timeout: 10_000 },
     ).then(() => true).catch(() => false);
     const topicsClearedUrl = new URL(page.url());
+    const topicsClearedSort = topicsClearedUrl.searchParams.get("sort");
     check(
       "Topics clear filters keeps sort and limit without reloading",
       topicsClearCommitted &&
         !topicsClearedUrl.searchParams.has("status") &&
         !topicsClearedUrl.searchParams.has("page") &&
-        topicsClearedUrl.searchParams.get("sort") === "title_asc" &&
+        // Default title_asc is omitted from the URL by the data-engine contract.
+        (topicsClearedSort === null || topicsClearedSort === "title_asc") &&
         topicsClearedUrl.searchParams.get("limit") === "20" &&
         (await page.evaluate(() => performance.timeOrigin)) === topicsClearTimeOrigin,
       page.url(),

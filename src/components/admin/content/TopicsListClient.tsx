@@ -203,11 +203,14 @@ export default function TopicsListClient({
           sort={sort}
           initialVisibleColumns={initialVisibleColumns}
           initialFeedback={initialFeedback}
-          onSortChange={(next) =>
-            controller.setSort({
-              field: next.key,
-              direction: next.direction,
-            })
+          onSortChange={(next, options) =>
+            controller.setSort(
+              {
+                field: next.key,
+                direction: next.direction,
+              },
+              { resetPage: options?.resetPage !== false },
+            )
           }
           onSuccessfulMutation={() => controller.invalidate()}
         />

@@ -198,8 +198,18 @@ export function useAdminEntityListController<
     [commitQuery],
   );
   const setSort = useCallback(
-    (sort: AdminEntityListQuery<Filters, SortField>["sort"]) =>
-      commitQuery((current) => ({ ...current, sort, page: 1 }), "push"),
+    (
+      sort: AdminEntityListQuery<Filters, SortField>["sort"],
+      options?: { resetPage?: boolean },
+    ) =>
+      commitQuery(
+        (current) => ({
+          ...current,
+          sort,
+          page: options?.resetPage === false ? current.page : 1,
+        }),
+        "push",
+      ),
     [commitQuery],
   );
   const setPage = useCallback(

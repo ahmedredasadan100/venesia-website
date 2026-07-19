@@ -142,7 +142,15 @@ async function main() {
       const onRequest = (request) => {
         const url = request.url();
         if (request.resourceType() === "document") documents.push(url);
-        if (url.includes("_rsc=") || request.headers()["rsc"] === "1") {
+        // Count only same-path RSC flights (list navigation), not Link prefetch
+        // for row/detail routes that may appear after the table rows change.
+        const samePath =
+          url.includes(`${path}?`) ||
+          url.endsWith(path) ||
+          url.includes(`${path}&`);
+        const isRscFlight =
+          url.includes("_rsc=") || request.headers()["rsc"] === "1";
+        if (isRscFlight && samePath) {
           rsc.push(url);
         }
         if (isListEndpoint(url)) endpointCalls.push(url);

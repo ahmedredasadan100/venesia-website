@@ -630,9 +630,14 @@ function staticWiringPhase() {
   );
   check(
     "Series page and fresh-rows action share the list owner backed by loadActiveSeriesTopicCounts",
-    seriesPage.includes("loadSeriesListData") &&
+    (seriesPage.includes("loadSeriesListData") ||
+      seriesPage.includes("seriesEntityListAdapter")) &&
       seriesActions.includes("loadSeriesListData") &&
-      seriesListOwner.includes("loadActiveSeriesTopicCounts"),
+      seriesListOwner.includes("loadActiveSeriesTopicCounts") &&
+      readFileSync(
+        resolve(ROOT, "src/lib/admin/content/entity-list-adapters/series.ts"),
+        "utf8",
+      ).includes("loadSeriesListData"),
   );
   check(
     "No unfiltered topics->series_id fetch remains in series consumers",
@@ -642,9 +647,17 @@ function staticWiringPhase() {
   );
   check(
     "Categories shared list owner filters the embedded topics count on deleted_at",
-    categoriesPage.includes("loadCategoriesListData") &&
+    (categoriesPage.includes("loadCategoriesListData") ||
+      categoriesPage.includes("categoriesEntityListAdapter")) &&
       categoriesListOwner.includes("topics_count:topics(count)") &&
-      categoriesListOwner.includes('.is("topics.deleted_at", null)'),
+      categoriesListOwner.includes('.is("topics.deleted_at", null)') &&
+      readFileSync(
+        resolve(
+          ROOT,
+          "src/lib/admin/content/entity-list-adapters/categories.ts",
+        ),
+        "utf8",
+      ).includes("loadCategoriesListData"),
   );
   const publicFeed = readFileSync(
     resolve(ROOT, "src/lib/feed-modules/resolve-topics-feed.ts"),

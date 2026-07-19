@@ -82,10 +82,13 @@ export default function UnifiedContentList({
   sort: ContentSortValue;
   initialVisibleColumns: string[];
   initialFeedback?: AdminActionFeedback | null;
-  onSortChange?: (sort: {
-    key: UnifiedContentSortKey;
-    direction: "asc" | "desc";
-  }) => void;
+  onSortChange?: (
+    sort: {
+      key: UnifiedContentSortKey;
+      direction: "asc" | "desc";
+    },
+    options?: { resetPage?: boolean },
+  ) => void;
   onSuccessfulMutation?: () => void | Promise<void>;
 }) {
   const router = useRouter();
@@ -153,7 +156,10 @@ export default function UnifiedContentList({
       }
       onSortColumnHidden={() => {
         if (onSortChange) {
-          onSortChange({ key: "title", direction: "asc" });
+          onSortChange(
+            { key: "title", direction: "asc" },
+            { resetPage: false },
+          );
         } else {
           router.replace(defaultSortPath(currentListPath), { scroll: false });
         }
