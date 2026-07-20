@@ -229,16 +229,19 @@ export function serializeAdminEntityListQuery(
 }
 
 /**
- * Same list dataset for optimistic cache patches: search/filters/sort/pageSize/mode.
- * Page differs across cached pages of one dataset and must not split the scope.
+ * Dataset membership for optimistic total/row removal patches.
+ * search/filters/mode define membership; page/sort/pageSize are view params only.
+ * Empty search may be omitted from serialized query keys, so normalize before compare.
  */
 export function isSameAdminEntityListScope(
   left: AdminEntityListQuery<Record<string, unknown>, string>,
   right: AdminEntityListQuery<Record<string, unknown>, string>,
 ) {
   return (
-    serializeAdminEntityListQuery({ ...left, page: 1 }) ===
-    serializeAdminEntityListQuery({ ...right, page: 1 })
+    (left.search ?? "") === (right.search ?? "") &&
+    left.mode === right.mode &&
+    JSON.stringify(stableValue(left.filters ?? {})) ===
+      JSON.stringify(stableValue(right.filters ?? {}))
   );
 }
 
