@@ -1,4 +1,11 @@
-import type { AdminEntityListResult } from "./contracts";
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
+
+import type { AdminEntityListQuery, AdminEntityListResult } from "./contracts.ts";
+import {
+  isSameAdminEntityListScope,
+  parseAdminEntityListQueryFromKey,
+} from "./contracts.ts";
+import { adminEntityListQueryKeys } from "./query-keys.ts";
 
 export function removeAdminEntityRows<
   Row extends { id: number | string },
@@ -35,4 +42,30 @@ export function replaceExistingAdminEntityRows<Row, Metrics>(
     ...data,
     rows: data.rows.map((row) => replacements.get(getId(row)) ?? row),
   };
+}
+
+export function matchesAdminEntityListScope(
+  queryKey: QueryKey,
+  scope: AdminEntityListQuery<Record<string, unknown>, string>,
+) {
+  const cached = parseAdminEntityListQueryFromKey(queryKey);
+  return cached != null && isSameAdminEntityListScope(cached, scope);
+}
+
+/** Patch only caches that share the active list scope (not every entity query). */
+export function setAdminEntityListCachesInScope<Row, Metrics>(
+  queryClient: Pick<QueryClient, "setQueriesData">,
+  entity: string,
+  scope: AdminEntityListQuery<Record<string, unknown>, string>,
+  updater: (
+    value: AdminEntityListResult<Row, Metrics>,
+  ) => AdminEntityListResult<Row, Metrics>,
+) {
+  queryClient.setQueriesData<AdminEntityListResult<Row, Metrics>>(
+    {
+      queryKey: adminEntityListQueryKeys.queries(entity),
+      predicate: (query) => matchesAdminEntityListScope(query.queryKey, scope),
+    },
+    (data) => (data ? updater(data) : data),
+  );
 }

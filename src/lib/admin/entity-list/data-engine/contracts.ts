@@ -228,6 +228,46 @@ export function serializeAdminEntityListQuery(
   return JSON.stringify(stableValue(query));
 }
 
+/**
+ * Dataset membership for optimistic total/row removal patches.
+ * search/filters/mode define membership; page/sort/pageSize are view params only.
+ * Empty search may be omitted from serialized query keys, so normalize before compare.
+ */
+export function isSameAdminEntityListScope(
+  left: AdminEntityListQuery<Record<string, unknown>, string>,
+  right: AdminEntityListQuery<Record<string, unknown>, string>,
+) {
+  return (
+    (left.search ?? "") === (right.search ?? "") &&
+    left.mode === right.mode &&
+    JSON.stringify(stableValue(left.filters ?? {})) ===
+      JSON.stringify(stableValue(right.filters ?? {}))
+  );
+}
+
+export function parseAdminEntityListQueryFromKey(
+  queryKey: readonly unknown[],
+): AdminEntityListQuery<Record<string, unknown>, string> | null {
+  if (queryKey.length < 4 || typeof queryKey[3] !== "string") return null;
+  try {
+    const parsed = JSON.parse(queryKey[3]) as AdminEntityListQuery<
+      Record<string, unknown>,
+      string
+    >;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.page !== "number" ||
+      typeof parsed.pageSize !== "number"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function writeAdminEntityListQuery<
   Filters extends Record<string, unknown>,
   SortField extends string,

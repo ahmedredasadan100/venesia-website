@@ -4,16 +4,19 @@ import { z } from "zod";
 
 import {
   AdminEntityListQueryValidationError,
+  isSameAdminEntityListScope,
   normalizeAdminEntityListQuery,
   parseAdminEntityListRequestQuery,
   serializeAdminEntityListQuery,
   writeAdminEntityListQuery,
   type AdminEntityListQueryContract,
+  type AdminEntityListResult,
 } from "../src/lib/admin/entity-list/data-engine/contracts.ts";
 import { adminEntityListQueryKeys } from "../src/lib/admin/entity-list/data-engine/query-keys.ts";
 import {
   removeAdminEntityRows,
   replaceExistingAdminEntityRows,
+  setAdminEntityListCachesInScope,
 } from "../src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts";
 import { cacheNormalizedAdminEntityListResult } from "../src/lib/admin/entity-list/data-engine/normalized-result-cache.ts";
 
@@ -178,6 +181,174 @@ assert.deepEqual(
   [1, 1],
 );
 
+const pageOneQuery = { ...normalized, page: 1, pageSize: 3 };
+const pageTwoQuery = { ...normalized, page: 2, pageSize: 3 };
+const differentSortQuery = {
+  ...normalized,
+  page: 1,
+  pageSize: 3,
+  sort: { field: "created_at" as const, direction: "desc" as const },
+};
+const differentPageSizeQuery = {
+  ...normalized,
+  page: 1,
+  pageSize: 2,
+};
+const unrelatedSearchQuery = {
+  ...normalized,
+  search: "other",
+  page: 1,
+  pageSize: 3,
+};
+const unrelatedFilterQuery = {
+  ...normalized,
+  page: 1,
+  pageSize: 3,
+  filters: { status: "published" as const, category: null },
+};
+const unrelatedModeQuery = {
+  ...normalized,
+  page: 1,
+  pageSize: 3,
+  mode: "bounded-client" as const,
+};
+assert.equal(isSameAdminEntityListScope(pageOneQuery, pageTwoQuery), true);
+assert.equal(isSameAdminEntityListScope(pageOneQuery, differentSortQuery), true);
+assert.equal(isSameAdminEntityListScope(pageOneQuery, differentPageSizeQuery), true);
+assert.equal(isSameAdminEntityListScope(pageOneQuery, unrelatedSearchQuery), false);
+assert.equal(isSameAdminEntityListScope(pageOneQuery, unrelatedFilterQuery), false);
+assert.equal(isSameAdminEntityListScope(pageOneQuery, unrelatedModeQuery), false);
+
+type ScopeRow = { id: number; title: string };
+const scopeMeta = {
+  generatedAt: "2026-07-20T00:00:00.000Z",
+  mode: "server-page" as const,
+};
+const scopeClient = new QueryClient({
+  defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+});
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", pageOneQuery),
+  {
+    rows: [
+      { id: 1, title: "One" },
+      { id: 2, title: "Two" },
+      { id: 3, title: "Three" },
+    ],
+    pagination: { page: 1, pageSize: 3, totalRows: 4, totalPages: 2 },
+    meta: scopeMeta,
+  } satisfies AdminEntityListResult<ScopeRow>,
+);
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", pageTwoQuery),
+  {
+    rows: [{ id: 4, title: "Four" }],
+    pagination: { page: 2, pageSize: 3, totalRows: 4, totalPages: 2 },
+    meta: scopeMeta,
+  } satisfies AdminEntityListResult<ScopeRow>,
+);
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", differentSortQuery),
+  {
+    rows: [
+      { id: 4, title: "Four" },
+      { id: 3, title: "Three" },
+      { id: 2, title: "Two" },
+    ],
+    pagination: { page: 1, pageSize: 3, totalRows: 4, totalPages: 2 },
+    meta: scopeMeta,
+  } satisfies AdminEntityListResult<ScopeRow>,
+);
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", differentPageSizeQuery),
+  {
+    rows: [
+      { id: 1, title: "One" },
+      { id: 2, title: "Two" },
+    ],
+    pagination: { page: 1, pageSize: 2, totalRows: 4, totalPages: 2 },
+    meta: scopeMeta,
+  } satisfies AdminEntityListResult<ScopeRow>,
+);
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", unrelatedSearchQuery),
+  {
+    rows: [{ id: 4, title: "Four" }],
+    pagination: { page: 1, pageSize: 3, totalRows: 1, totalPages: 1 },
+    meta: scopeMeta,
+  } satisfies AdminEntityListResult<ScopeRow>,
+);
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", unrelatedFilterQuery),
+  {
+    rows: [{ id: 4, title: "Four" }],
+    pagination: { page: 1, pageSize: 3, totalRows: 2, totalPages: 1 },
+    meta: scopeMeta,
+  } satisfies AdminEntityListResult<ScopeRow>,
+);
+const relatedSnapshot = scopeClient.getQueriesData<AdminEntityListResult<ScopeRow>>({
+  queryKey: adminEntityListQueryKeys.queries("pages"),
+  predicate: (query) =>
+    isSameAdminEntityListScope(
+      JSON.parse(String(query.queryKey[3])) as typeof pageOneQuery,
+      pageOneQuery,
+    ),
+});
+assert.equal(relatedSnapshot.length, 4);
+setAdminEntityListCachesInScope<ScopeRow, unknown>(
+  scopeClient,
+  "pages",
+  pageOneQuery,
+  (data) => removeAdminEntityRows(data, new Set([4])),
+);
+const readScoped = (query: typeof pageOneQuery) =>
+  scopeClient.getQueryData<AdminEntityListResult<ScopeRow>>(
+    adminEntityListQueryKeys.query("pages", query),
+  )?.pagination;
+assert.deepEqual(
+  [
+    readScoped(pageOneQuery)?.totalRows,
+    readScoped(pageTwoQuery)?.totalRows,
+    readScoped(differentSortQuery)?.totalRows,
+    readScoped(differentPageSizeQuery)?.totalRows,
+  ],
+  [3, 3, 3, 3],
+);
+assert.deepEqual(
+  [
+    readScoped(pageOneQuery)?.totalPages,
+    readScoped(pageTwoQuery)?.totalPages,
+    readScoped(differentSortQuery)?.totalPages,
+    readScoped(differentPageSizeQuery)?.totalPages,
+  ],
+  // pageSize 3 → ceil(3/3)=1; pageSize 2 → ceil(3/2)=2
+  [1, 1, 1, 2],
+);
+assert.equal(readScoped(unrelatedSearchQuery)?.totalRows, 1);
+assert.equal(readScoped(unrelatedFilterQuery)?.totalRows, 2);
+relatedSnapshot.forEach(([key, value]) => scopeClient.setQueryData(key, value));
+assert.deepEqual(
+  [
+    readScoped(pageOneQuery)?.totalRows,
+    readScoped(pageTwoQuery)?.totalRows,
+    readScoped(differentSortQuery)?.totalRows,
+    readScoped(differentPageSizeQuery)?.totalRows,
+  ],
+  [4, 4, 4, 4],
+);
+assert.deepEqual(
+  [
+    readScoped(pageOneQuery)?.totalPages,
+    readScoped(pageTwoQuery)?.totalPages,
+    readScoped(differentSortQuery)?.totalPages,
+    readScoped(differentPageSizeQuery)?.totalPages,
+  ],
+  [2, 2, 2, 2],
+);
+assert.equal(readScoped(unrelatedSearchQuery)?.totalRows, 1);
+assert.equal(readScoped(unrelatedFilterQuery)?.totalRows, 2);
+scopeClient.clear();
+
 const controllerQueryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
 });
@@ -218,5 +389,5 @@ assert.equal(clientEndpointRequests, 1);
 assert.deepEqual(normalizedCacheResult, normalizedResult);
 controllerQueryClient.clear();
 
-console.log("verify-admin-data-engine-contracts passed (35 assertions).");
+console.log("verify-admin-data-engine-contracts passed (52 assertions).");
 console.log(`out-of-range client endpoint request count: ${clientEndpointRequests}`);

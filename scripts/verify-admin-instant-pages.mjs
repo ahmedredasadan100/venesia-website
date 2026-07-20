@@ -2,7 +2,22 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
-const [registry, client, page, actions, mutation, mutationCache, controller, normalizedCache, adapter, migration, company, settings] = await Promise.all([
+const [
+  registry,
+  client,
+  page,
+  actions,
+  mutation,
+  mutationCache,
+  controller,
+  normalizedCache,
+  adapter,
+  migration,
+  correctiveMigration,
+  company,
+  settings,
+  contracts,
+] = await Promise.all([
   read("src/lib/admin/entity-list/data-engine/registry.ts"),
   read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx"),
   read("src/app/admin/pages-blocks/pages/page.tsx"),
@@ -13,12 +28,15 @@ const [registry, client, page, actions, mutation, mutationCache, controller, nor
   read("src/lib/admin/entity-list/data-engine/normalized-result-cache.ts"),
   read("src/lib/admin/pages/entity-list-adapter.ts"),
   read("sql/migrations/20260720060000_admin_pages_list_read_model.sql"),
+  read("sql/migrations/20260720100000_admin_pages_list_read_model_page_normalization.sql"),
   read("src/lib/admin/shell/company-config.ts"),
   read("src/app/admin/settings/general/actions.ts"),
+  read("src/lib/admin/entity-list/data-engine/contracts.ts"),
 ]);
 assert.match(registry, /pages:\s*pagesEntityListAdapter/);
 assert.match(client, /useAdminEntityListController/);
 assert.match(client, /useAdminEntityInstantMutation/);
+assert.match(client, /controller\.query/);
 assert.match(client, /import AdminNotice/);
 assert.match(client, /<AdminNotice/);
 assert.doesNotMatch(client, /feedback \? <div role="status"/);
@@ -28,8 +46,12 @@ assert.doesNotMatch(actions, /rows\s*:/);
 assert.match(mutation, /cancelQueries/);
 assert.match(mutation, /getQueriesData/);
 assert.match(mutation, /snapshot\.forEach/);
+assert.match(mutation, /setAdminEntityListCachesInScope/);
+assert.match(mutation, /matchesAdminEntityListScope/);
 assert.match(mutation, /replaceExistingAdminEntityRows/);
 assert.match(mutationCache, /totalRows - ids\.size/);
+assert.match(mutationCache, /setAdminEntityListCachesInScope/);
+assert.match(mutationCache, /matchesAdminEntityListScope/);
 assert.doesNotMatch(mutationCache, /rows:\s*\[\.\.\.inserted/);
 assert.match(controller, /cacheNormalizedAdminEntityListResult/);
 assert.match(normalizedCache, /setQueryData\(normalizedKey, result\)/);
@@ -39,10 +61,14 @@ assert.doesNotMatch(adapter, /return loadPagesEntityListResult/);
 assert.match(adapter, /z\.coerce\.number\(\)\.int\(\)\.nonnegative\(\)\.finite\(\)/);
 assert.doesNotMatch(adapter, /Number\(readModel\.total_count\)/);
 assert.match(adapter, /PagesEntityListDatabaseError/);
+assert.match(adapter, /page:\s*z\.number\(\)\.int\(\)\.positive\(\)/);
 for (const table of ["page_content_block_assignments", "page_cta_block_assignments", "page_cards_block_assignments", "page_breadcrumb_block_assignments", "page_feed_module_assignments", "page_media_sidebar_module_assignments", "page_media_hub_module_assignments", "hero_assignments"]) assert.ok(migration.includes(table), table);
+assert.match(correctiveMigration, /normalized_state/);
+assert.match(correctiveMigration, /'page', \(select page from normalized_state\)/);
+assert.match(contracts, /isSameAdminEntityListScope/);
 assert.match(company, /unstable_cache/);
 assert.match(company, /ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.match(company, /revalidateTag\(ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.equal((settings.match(/revalidatePath\("\/admin"/g) ?? []).length, 1);
 assert.match(page, /loadPagesEntityListResult/);
-console.log("verify:admin-instant-pages passed (25 structural assertions)");
+console.log("verify:admin-instant-pages passed (32 structural assertions)");
