@@ -228,6 +228,43 @@ export function serializeAdminEntityListQuery(
   return JSON.stringify(stableValue(query));
 }
 
+/**
+ * Same list dataset for optimistic cache patches: search/filters/sort/pageSize/mode.
+ * Page differs across cached pages of one dataset and must not split the scope.
+ */
+export function isSameAdminEntityListScope(
+  left: AdminEntityListQuery<Record<string, unknown>, string>,
+  right: AdminEntityListQuery<Record<string, unknown>, string>,
+) {
+  return (
+    serializeAdminEntityListQuery({ ...left, page: 1 }) ===
+    serializeAdminEntityListQuery({ ...right, page: 1 })
+  );
+}
+
+export function parseAdminEntityListQueryFromKey(
+  queryKey: readonly unknown[],
+): AdminEntityListQuery<Record<string, unknown>, string> | null {
+  if (queryKey.length < 4 || typeof queryKey[3] !== "string") return null;
+  try {
+    const parsed = JSON.parse(queryKey[3]) as AdminEntityListQuery<
+      Record<string, unknown>,
+      string
+    >;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.page !== "number" ||
+      typeof parsed.pageSize !== "number"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function writeAdminEntityListQuery<
   Filters extends Record<string, unknown>,
   SortField extends string,

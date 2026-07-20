@@ -1,12 +1,17 @@
 "use client";
 
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 
-import type { AdminEntityListResult } from "./contracts";
+import type {
+  AdminEntityListQuery,
+  AdminEntityListResult,
+} from "./contracts";
 import {
+  matchesAdminEntityListScope,
   removeAdminEntityRows,
   replaceExistingAdminEntityRows,
+  setAdminEntityListCachesInScope,
 } from "./instant-mutation-cache";
 import { adminEntityListQueryKeys } from "./query-keys";
 
@@ -34,28 +39,36 @@ export type AdminInstantMutationPatch<Row> = {
 
 export function useAdminEntityInstantMutation<
   Row extends { id: number | string }, Metrics = unknown,
->(entity: string) {
+>(
+  entity: string,
+  scopeQuery: AdminEntityListQuery<Record<string, unknown>, string>,
+) {
   const queryClient = useQueryClient();
   const [rowPending, setRowPending] = useState<PendingAction>(null);
   const [bulkPending, setBulkPending] = useState<string | null>(null);
 
-  const setAll = useCallback((updater: (
-    value: AdminEntityListResult<Row, Metrics>,
-  ) => AdminEntityListResult<Row, Metrics>) => {
-    queryClient.setQueriesData<AdminEntityListResult<Row, Metrics>>(
-      { queryKey: adminEntityListQueryKeys.queries(entity) },
-      (data) => data ? updater(data) : data,
-    );
-  }, [entity, queryClient]);
-
   const helpers: AdminInstantMutationPatch<Row> = {
-    patchRows: (updater) => setAll((data) => ({ ...data, rows: data.rows.map(updater) })),
-    removeRows: (ids) => setAll((data) => removeAdminEntityRows(data, ids)),
+    patchRows: (updater) => setAdminEntityListCachesInScope<Row, Metrics>(
+      queryClient,
+      entity,
+      scopeQuery,
+      (data) => ({ ...data, rows: data.rows.map(updater) }),
+    ),
+    removeRows: (ids) => setAdminEntityListCachesInScope<Row, Metrics>(
+      queryClient,
+      entity,
+      scopeQuery,
+      (data) => removeAdminEntityRows(data, ids),
+    ),
     // Safe for paginated/sorted caches: replace rows only where they already
     // exist. Inserts require targeted invalidation because their destination
     // page cannot be inferred generically.
-    upsertRows: (incoming, getId) => setAll((data) =>
-      replaceExistingAdminEntityRows(data, incoming, getId)),
+    upsertRows: (incoming, getId) => setAdminEntityListCachesInScope<Row, Metrics>(
+      queryClient,
+      entity,
+      scopeQuery,
+      (data) => replaceExistingAdminEntityRows(data, incoming, getId),
+    ),
   };
 
   const mutation = useMutation({
@@ -76,6 +89,7 @@ export function useAdminEntityInstantMutation<
       await queryClient.cancelQueries({ queryKey: adminEntityListQueryKeys.entity(entity) });
       const snapshot = queryClient.getQueriesData<AdminEntityListResult<Row, Metrics>>({
         queryKey: adminEntityListQueryKeys.queries(entity),
+        predicate: (query) => matchesAdminEntityListScope(query.queryKey, scopeQuery),
       });
       request.optimistic(helpers);
       return { snapshot } as { snapshot: CacheSnapshot<Row, Metrics> };

@@ -4,16 +4,19 @@ import { z } from "zod";
 
 import {
   AdminEntityListQueryValidationError,
+  isSameAdminEntityListScope,
   normalizeAdminEntityListQuery,
   parseAdminEntityListRequestQuery,
   serializeAdminEntityListQuery,
   writeAdminEntityListQuery,
   type AdminEntityListQueryContract,
+  type AdminEntityListResult,
 } from "../src/lib/admin/entity-list/data-engine/contracts.ts";
 import { adminEntityListQueryKeys } from "../src/lib/admin/entity-list/data-engine/query-keys.ts";
 import {
   removeAdminEntityRows,
   replaceExistingAdminEntityRows,
+  setAdminEntityListCachesInScope,
 } from "../src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts";
 import { cacheNormalizedAdminEntityListResult } from "../src/lib/admin/entity-list/data-engine/normalized-result-cache.ts";
 
@@ -178,6 +181,69 @@ assert.deepEqual(
   [1, 1],
 );
 
+const pageOneQuery = { ...normalized, page: 1, pageSize: 3 };
+const pageTwoQuery = { ...normalized, page: 2, pageSize: 3 };
+const unrelatedSearchQuery = {
+  ...normalized,
+  search: "other",
+  page: 1,
+  pageSize: 3,
+};
+assert.equal(isSameAdminEntityListScope(pageOneQuery, pageTwoQuery), true);
+assert.equal(isSameAdminEntityListScope(pageOneQuery, unrelatedSearchQuery), false);
+
+const scopeClient = new QueryClient({
+  defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+});
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", pageOneQuery),
+  cachedPages[0],
+);
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", pageTwoQuery),
+  cachedPages[1],
+);
+scopeClient.setQueryData(
+  adminEntityListQueryKeys.query("pages", unrelatedSearchQuery),
+  {
+    rows: [{ id: 4, title: "Four" }],
+    pagination: { page: 1, pageSize: 3, totalRows: 1, totalPages: 1 },
+    meta: { generatedAt: "2026-07-20T00:00:00.000Z", mode: "server-page" as const },
+  },
+);
+const relatedSnapshot = scopeClient.getQueriesData({
+  queryKey: adminEntityListQueryKeys.queries("pages"),
+  predicate: (query) => {
+    const key = query.queryKey[3];
+    return (
+      key === serializeAdminEntityListQuery(pageOneQuery) ||
+      key === serializeAdminEntityListQuery(pageTwoQuery)
+    );
+  },
+});
+setAdminEntityListCachesInScope<{ id: number; title: string }, unknown>(
+  scopeClient,
+  "pages",
+  pageOneQuery,
+  (data) => removeAdminEntityRows(data, new Set([4])),
+);
+const readScopedTotal = (query: typeof pageOneQuery) =>
+  scopeClient.getQueryData<AdminEntityListResult<{ id: number; title: string }>>(
+    adminEntityListQueryKeys.query("pages", query),
+  )?.pagination.totalRows;
+assert.deepEqual(
+  [readScopedTotal(pageOneQuery), readScopedTotal(pageTwoQuery)],
+  [3, 3],
+);
+assert.equal(readScopedTotal(unrelatedSearchQuery), 1);
+relatedSnapshot.forEach(([key, value]) => scopeClient.setQueryData(key, value));
+assert.deepEqual(
+  [readScopedTotal(pageOneQuery), readScopedTotal(pageTwoQuery)],
+  [4, 4],
+);
+assert.equal(readScopedTotal(unrelatedSearchQuery), 1);
+scopeClient.clear();
+
 const controllerQueryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
 });
@@ -218,5 +284,5 @@ assert.equal(clientEndpointRequests, 1);
 assert.deepEqual(normalizedCacheResult, normalizedResult);
 controllerQueryClient.clear();
 
-console.log("verify-admin-data-engine-contracts passed (35 assertions).");
+console.log("verify-admin-data-engine-contracts passed (42 assertions).");
 console.log(`out-of-range client endpoint request count: ${clientEndpointRequests}`);

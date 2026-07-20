@@ -41,7 +41,7 @@ export default function PagesTableClient({ initialQuery, initialResult }: {
   initialResult: AdminEntityListResult<AdminPageListRow>;
 }) {
   const controller = useAdminEntityListController({ entity: "pages", contract: pagesQueryContract, initialQuery, initialResult, staleTimeMs: 30_000 });
-  const instant = useAdminEntityInstantMutation<AdminPageListRow>("pages");
+  const instant = useAdminEntityInstantMutation<AdminPageListRow>("pages", controller.query);
   const pages = controller.result.rows;
   const sort = `${controller.query.sort.field}_${controller.query.sort.direction}`;
   const selection = useAdminGridSelection(useMemo(() => pages.map((page) => page.id), [pages]));
