@@ -18,6 +18,8 @@
     "qa:admin-content-soft-delete-counts": "node scripts/qa-admin-content-soft-delete-counts.mjs",
     "capture:admin-data-engine-baseline": "node scripts/capture-admin-data-engine-baseline.mjs",
     "verify:admin-data-engine-contracts": "node --experimental-strip-types scripts/verify-admin-data-engine-contracts.mts",
+    "verify:admin-instant-pages": "node scripts/verify-admin-instant-pages.mjs",
+    "qa:admin-instant-pages": "node scripts/qa-admin-instant-pages.mjs",
     "qa:admin-data-engine-endpoint": "node scripts/qa-admin-data-engine-endpoint.mjs",
     "qa:admin-data-engine-controller": "node scripts/qa-admin-data-engine-controller.mjs",
     "qa:admin-data-engine-supabase-counts": "node scripts/qa-admin-data-engine-supabase-counts.mjs",

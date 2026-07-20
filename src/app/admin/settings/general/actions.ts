@@ -60,7 +60,6 @@ export async function updateAdminCompanyAction(
       metadata: { companyKey: parsed.data.key },
     });
     revalidatePath("/admin", "layout");
-    revalidatePath("/admin/settings/general");
     return { status: "success", message: "تم حفظ هوية لوحة الإدارة." };
   } catch (error) {
     return {
