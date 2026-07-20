@@ -48,5 +48,8 @@ jobs:
       - name: Verify audit coverage
         run: npm run verify:audit-coverage
 
+      - name: Verify Admin Runtime
+        run: npm run verify:admin-runtime
+
       - name: Production build
         run: npm run build
