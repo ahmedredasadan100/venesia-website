@@ -4,6 +4,10 @@ import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-quer
 import { useCallback, useState } from "react";
 
 import type { AdminEntityListResult } from "./contracts";
+import {
+  removeAdminEntityRows,
+  replaceExistingAdminEntityRows,
+} from "./instant-mutation-cache";
 import { adminEntityListQueryKeys } from "./query-keys";
 
 export type AdminEntityMutationError = {
@@ -46,25 +50,12 @@ export function useAdminEntityInstantMutation<
 
   const helpers: AdminInstantMutationPatch<Row> = {
     patchRows: (updater) => setAll((data) => ({ ...data, rows: data.rows.map(updater) })),
-    removeRows: (ids) => setAll((data) => {
-      const rows = data.rows.filter((row) => !ids.has(row.id));
-      // The deleted entity count is global for this entity list, not local to
-      // whichever cached page happens to contain a row. Every cached query
-      // therefore receives the same total adjustment while row removal stays
-      // scoped to pages where the row is actually present.
-      const totalRows = Math.max(0, data.pagination.totalRows - ids.size);
-      return { ...data, rows, pagination: { ...data.pagination, totalRows,
-        totalPages: Math.max(1, Math.ceil(totalRows / data.pagination.pageSize)) } };
-    }),
-    upsertRows: (incoming, getId) => setAll((data) => {
-      const replacements = new Map(incoming.map((row) => [getId(row), row]));
-      const rows = data.rows.map((row) => replacements.get(getId(row)) ?? row);
-      const existing = new Set(rows.map(getId));
-      const inserted = incoming.filter((row) => !existing.has(getId(row)));
-      const totalRows = data.pagination.totalRows + inserted.length;
-      return { ...data, rows: [...inserted, ...rows], pagination: { ...data.pagination,
-        totalRows, totalPages: Math.max(1, Math.ceil(totalRows / data.pagination.pageSize)) } };
-    }),
+    removeRows: (ids) => setAll((data) => removeAdminEntityRows(data, ids)),
+    // Safe for paginated/sorted caches: replace rows only where they already
+    // exist. Inserts require targeted invalidation because their destination
+    // page cannot be inferred generically.
+    upsertRows: (incoming, getId) => setAll((data) =>
+      replaceExistingAdminEntityRows(data, incoming, getId)),
   };
 
   const mutation = useMutation({

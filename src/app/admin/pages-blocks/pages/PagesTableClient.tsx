@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS, ADMIN_DATA_GRID_COLUMNS, ADMIN_DATA_GRID_RULES,
   AdminBulkActionBar, AdminDataGrid, AdminDataGridActionButton, AdminDataGridActionsCell,
@@ -73,7 +74,7 @@ export default function PagesTableClient({ initialQuery, initialResult }: {
 
   return <div className={ADMIN_LIST_PAGE.wrapper} dir="rtl">
     <AdminPageContextHeader eyebrow="PAGES CONTROL" title="إدارة الصفحات" description="إدارة صفحات الموقع ومكوناتها، مع التحكم في الترتيب، الربط، وحالة النشر." actions={<CreatePageModal/>}/>
-    {feedback ? <div role="status" className={`rounded-[16px] border px-4 py-3 text-sm font-semibold ${feedback.type === "success" ? "border-emerald-400/18 bg-emerald-500/10 text-emerald-100" : "border-red-400/18 bg-red-500/10 text-red-100"}`}>{feedback.message}</div> : null}
+    {feedback ? <AdminNotice variant={feedback.type === "success" ? "success" : "danger"} message={feedback.message} /> : null}
     <div className="space-y-4" data-admin-entity-list-consumer="pages" data-admin-entity-list-pending={controller.isFetching ? "true" : "false"}>
       <AdminBulkActionBar selectedIds={selection.selectedIds} entityLabel="صفحة" options={[{ value: "delete", label: "حذف المحدد" }]} onClearSelection={selection.clearSelection} onExecute={(action, ids) => { if (action === "delete") setConfirm({ ids: ids.map(Number), bulk: true }); }} isBusy={instant.bulkPending !== null}/>
       <AdminDataGrid><AdminDataGridHeader columns={columns}>

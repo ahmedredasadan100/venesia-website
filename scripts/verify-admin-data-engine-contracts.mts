@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
 import {
@@ -10,6 +11,11 @@ import {
   type AdminEntityListQueryContract,
 } from "../src/lib/admin/entity-list/data-engine/contracts.ts";
 import { adminEntityListQueryKeys } from "../src/lib/admin/entity-list/data-engine/query-keys.ts";
+import {
+  removeAdminEntityRows,
+  replaceExistingAdminEntityRows,
+} from "../src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts";
+import { cacheNormalizedAdminEntityListResult } from "../src/lib/admin/entity-list/data-engine/normalized-result-cache.ts";
 
 type Filters = { status: "all" | "published"; category: number | null };
 type SortField = "title" | "created_at";
@@ -125,4 +131,92 @@ assert.deepEqual(
 // Canonical defaults do not pollute the URL.
 assert.equal(writeAdminEntityListQuery(contract, normalized).toString(), "");
 
-console.log("verify-admin-data-engine-contracts passed (24 assertions).");
+const cachedPages = [
+  {
+    rows: [
+      { id: 1, title: "One" },
+      { id: 2, title: "Two" },
+      { id: 3, title: "Three" },
+    ],
+    pagination: { page: 1, pageSize: 3, totalRows: 4, totalPages: 2 },
+    meta: { generatedAt: "2026-07-20T00:00:00.000Z", mode: "server-page" as const },
+  },
+  {
+    rows: [{ id: 4, title: "Four" }],
+    pagination: { page: 2, pageSize: 3, totalRows: 4, totalPages: 2 },
+    meta: { generatedAt: "2026-07-20T00:00:00.000Z", mode: "server-page" as const },
+  },
+];
+
+const replacedPages = cachedPages.map((page) =>
+  replaceExistingAdminEntityRows(
+    page,
+    [
+      { id: 4, title: "Four updated" },
+      { id: 99, title: "Must not be inserted" },
+    ],
+    (row) => row.id,
+  ));
+assert.deepEqual(replacedPages[0].rows, cachedPages[0].rows);
+assert.deepEqual(replacedPages[1].rows, [{ id: 4, title: "Four updated" }]);
+assert.ok(replacedPages.every((page) => !page.rows.some((row) => row.id === 99)));
+assert.deepEqual(
+  replacedPages.map((page) => page.pagination.totalRows),
+  [4, 4],
+);
+
+const afterLastPageRowDelete = cachedPages.map((page) =>
+  removeAdminEntityRows(page, new Set([4])));
+assert.deepEqual(afterLastPageRowDelete[0].rows, cachedPages[0].rows);
+assert.deepEqual(afterLastPageRowDelete[1].rows, []);
+assert.deepEqual(
+  afterLastPageRowDelete.map((page) => page.pagination.totalRows),
+  [3, 3],
+);
+assert.deepEqual(
+  afterLastPageRowDelete.map((page) => page.pagination.totalPages),
+  [1, 1],
+);
+
+const controllerQueryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+});
+const requestedOutOfRangeQuery = { ...normalized, page: 999 };
+const normalizedResult = {
+  rows: [{ id: 4, title: "Last page row" }],
+  pagination: { page: 2, pageSize: 10, totalRows: 11, totalPages: 2 },
+  meta: { generatedAt: "2026-07-20T00:00:00.000Z", mode: "server-page" as const },
+};
+let clientEndpointRequests = 0;
+let reconciledPage: number | null = null;
+await controllerQueryClient.fetchQuery({
+  queryKey: adminEntityListQueryKeys.query("pages", requestedOutOfRangeQuery),
+  queryFn: async () => {
+    clientEndpointRequests += 1;
+    const reconciledQuery = cacheNormalizedAdminEntityListResult(
+      controllerQueryClient,
+      "pages",
+      requestedOutOfRangeQuery,
+      normalizedResult,
+    );
+    reconciledPage = reconciledQuery?.page ?? null;
+    return normalizedResult;
+  },
+});
+assert.equal(reconciledPage, 2);
+const normalizedCacheResult = await controllerQueryClient.fetchQuery({
+  queryKey: adminEntityListQueryKeys.query("pages", {
+    ...requestedOutOfRangeQuery,
+    page: 2,
+  }),
+  queryFn: async () => {
+    clientEndpointRequests += 1;
+    throw new Error("Normalized query must reuse the transferred result.");
+  },
+});
+assert.equal(clientEndpointRequests, 1);
+assert.deepEqual(normalizedCacheResult, normalizedResult);
+controllerQueryClient.clear();
+
+console.log("verify-admin-data-engine-contracts passed (35 assertions).");
+console.log(`out-of-range client endpoint request count: ${clientEndpointRequests}`);

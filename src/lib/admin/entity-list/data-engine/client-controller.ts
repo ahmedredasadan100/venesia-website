@@ -14,6 +14,7 @@ import {
   type AdminEntityListQueryContract,
   type AdminEntityListResult,
 } from "./contracts";
+import { cacheNormalizedAdminEntityListResult } from "./normalized-result-cache";
 import { adminEntityListQueryKeys } from "./query-keys";
 
 export class AdminEntityListRequestError extends Error {
@@ -167,12 +168,15 @@ export function useAdminEntityListController<
         Row,
         Metrics
       >;
-      if (result.pagination.page !== query.page) {
+      const normalizedQuery = cacheNormalizedAdminEntityListResult(
+        queryClient,
+        entity,
+        query,
+        result,
+      );
+      if (normalizedQuery) {
         queueMicrotask(() => {
-          commitQuery(
-            (current) => ({ ...current, page: result.pagination.page }),
-            "replace",
-          );
+          commitQuery(normalizedQuery, "replace");
         });
       }
       return result;
