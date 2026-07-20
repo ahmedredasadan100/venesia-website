@@ -3,6 +3,7 @@ import "server-only";
 import { categoriesEntityListAdapter } from "../../content/entity-list-adapters/categories";
 import { seriesEntityListAdapter } from "../../content/entity-list-adapters/series";
 import { topicsEntityListAdapter } from "../../content/entity-list-adapters/topics";
+import { pagesEntityListAdapter } from "../../pages/entity-list-adapter";
 import {
   parseAdminEntityListRequestQuery,
   type AdminEntityListQuery,
@@ -14,6 +15,7 @@ export const adminEntityListAdapterRegistry = {
   topics: topicsEntityListAdapter,
   categories: categoriesEntityListAdapter,
   series: seriesEntityListAdapter,
+  pages: pagesEntityListAdapter,
 } as const;
 
 export type AdminEntityListEntityKey =

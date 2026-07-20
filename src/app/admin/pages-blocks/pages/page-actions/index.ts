@@ -1,7 +1,7 @@
 export type { PagesTableRow, PagesTableResult } from "./types";
 export { checkPagePathAvailable, createPage } from "./create-page";
 export { togglePageStatus } from "./page-status";
-export { bulkDeletePagesAjax, deletePage, getPagesTableRows } from "./page-delete";
+export { bulkDeletePagesAjax, deletePage, deletePages } from "./page-delete";
 export { duplicatePage } from "./page-duplicate";
 export {
   assignHeroModule,

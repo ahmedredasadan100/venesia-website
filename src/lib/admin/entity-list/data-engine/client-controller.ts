@@ -14,6 +14,7 @@ import {
   type AdminEntityListQueryContract,
   type AdminEntityListResult,
 } from "./contracts";
+import { cacheNormalizedAdminEntityListResult } from "./normalized-result-cache";
 import { adminEntityListQueryKeys } from "./query-keys";
 
 export class AdminEntityListRequestError extends Error {
@@ -68,14 +69,22 @@ export function useAdminEntityListController<
   Metrics
 >) {
   const queryClient = useQueryClient();
-  const [query, setQuery] = useState(initialQuery);
-  const queryRef = useRef(initialQuery);
-  const [initialKey] = useState(() =>
-    adminEntityListQueryKeys.query(
-      entity,
-      initialQuery as AdminEntityListQuery<Record<string, unknown>, string>,
-    ),
-  );
+  const [bootstrap] = useState(() => {
+    const query =
+      initialResult.pagination.page === initialQuery.page
+        ? initialQuery
+        : { ...initialQuery, page: initialResult.pagination.page };
+    return {
+      query,
+      key: adminEntityListQueryKeys.query(
+        entity,
+        query as AdminEntityListQuery<Record<string, unknown>, string>,
+      ),
+    };
+  });
+  const [query, setQuery] = useState(bootstrap.query);
+  const queryRef = useRef(bootstrap.query);
+  const initialKey = bootstrap.key;
 
   const commitQuery = useCallback(
     (
@@ -103,6 +112,18 @@ export function useAdminEntityListController<
     },
     [contract],
   );
+
+  useEffect(() => {
+    if (initialQuery.page === bootstrap.query.page) return;
+    const params = writeAdminEntityListQuery(
+      contract,
+      bootstrap.query,
+      new URLSearchParams(window.location.search),
+    );
+    const search = params.toString();
+    const href = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+    window.history.replaceState(window.history.state, "", href);
+  }, [bootstrap.query, contract, initialQuery.page]);
 
   useEffect(() => {
     function handlePopState() {
@@ -147,12 +168,15 @@ export function useAdminEntityListController<
         Row,
         Metrics
       >;
-      if (result.pagination.page !== query.page) {
+      const normalizedQuery = cacheNormalizedAdminEntityListResult(
+        queryClient,
+        entity,
+        query,
+        result,
+      );
+      if (normalizedQuery) {
         queueMicrotask(() => {
-          commitQuery(
-            (current) => ({ ...current, page: result.pagination.page }),
-            "replace",
-          );
+          commitQuery(normalizedQuery, "replace");
         });
       }
       return result;

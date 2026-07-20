@@ -1,6 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
+import { unstable_cache, revalidateTag } from "next/cache";
 
 import type {
   AdminCompanyIdentity,
@@ -9,6 +10,7 @@ import type {
 import { getSupabaseAdmin } from "../../supabase-admin";
 
 export const ADMIN_COMPANY_SETTING_KEY = "admin.company";
+export const ADMIN_COMPANY_CONFIG_CACHE_TAG = "admin-company-config";
 
 const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i);
 const companyIdentitySchema = z.object({
@@ -41,7 +43,7 @@ export function parseAdminCompanyIdentity(value: unknown) {
   return companyIdentitySchema.safeParse(value);
 }
 
-export async function loadAdminCompanyConfig(
+async function loadAdminCompanyConfigUncached(
   companyDefault: AdminCompanyIdentity,
 ): Promise<ResolvedAdminCompanyConfig> {
   const parsedDefault = companyIdentitySchema.safeParse(companyDefault);
@@ -66,6 +68,16 @@ export async function loadAdminCompanyConfig(
   };
 }
 
+const loadCachedAdminCompanyConfig = unstable_cache(
+  loadAdminCompanyConfigUncached,
+  ["admin-company-config-owner-v1"],
+  { tags: [ADMIN_COMPANY_CONFIG_CACHE_TAG] },
+);
+
+export async function loadAdminCompanyConfig(companyDefault: AdminCompanyIdentity) {
+  return loadCachedAdminCompanyConfig(companyDefault);
+}
+
 export async function saveAdminCompanyConfig(value: AdminCompanyIdentity) {
   const parsed = companyIdentitySchema.parse(value);
   const { error } = await getSupabaseAdmin().from("site_settings").upsert(
@@ -77,5 +89,6 @@ export async function saveAdminCompanyConfig(value: AdminCompanyIdentity) {
     { onConflict: "key" },
   );
   if (error) throw new Error(error.message);
+  revalidateTag(ADMIN_COMPANY_CONFIG_CACHE_TAG, { expire: 0 });
   return parsed;
 }

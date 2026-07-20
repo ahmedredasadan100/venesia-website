@@ -6,57 +6,15 @@
  *   - fresh cached query → 0 endpoint requests
  * and covers race / failure contracts with route interception.
  */
-import { createClient } from "@supabase/supabase-js";
-import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const baseUrl = process.env.QA_BASE_URL || "http://localhost:3000";
+const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
+const cdpUrl = process.env.QA_CDP_URL || "http://127.0.0.1:9333";
 const runId = `${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
-const password = randomBytes(24).toString("base64url");
-const adminUsername = `__QA_AIDC_${runId}__`;
-const adminEmail = `qa-aidc-${runId}@venesia.local`;
-
-function loadEnv(path) {
-  if (!existsSync(path)) return;
-  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const separator = trimmed.indexOf("=");
-    if (separator < 1) continue;
-    const key = trimmed.slice(0, separator).trim();
-    let value = trimmed.slice(separator + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (!(key in process.env)) process.env[key] = value;
-  }
-}
-
-loadEnv(resolve(ROOT, ".env.local"));
-
-function requireEnv(name) {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing ${name}`);
-  return value;
-}
-
-const supabase = createClient(
-  requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-  requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-  { auth: { persistSession: false, autoRefreshToken: false } },
-);
 
 let passed = 0;
 let failed = 0;
-let adminId = null;
 
 function check(label, condition, detail = "") {
   if (condition) {
@@ -66,17 +24,6 @@ function check(label, condition, detail = "") {
     failed += 1;
     console.error(`FAIL ${label}${detail ? `: ${detail}` : ""}`);
   }
-}
-
-async function must(label, promise) {
-  const { data, error } = await promise;
-  if (error) throw new Error(`${label}: ${error.message}`);
-  return data;
-}
-
-async function cleanup() {
-  if (!adminId) return;
-  await supabase.from("admin_users").delete().eq("id", adminId);
 }
 
 function isListEndpoint(url) {
@@ -104,54 +51,22 @@ async function main() {
   const probe = await fetch(`${baseUrl}/admin/login`).catch(() => null);
   if (!probe?.ok) throw new Error(`Server required at ${baseUrl}`);
 
-  const admin = await must(
-    "create admin",
-    supabase
-      .from("admin_users")
-      .insert({
-        username: adminUsername,
-        email: adminEmail,
-        password_hash: await bcrypt.hash(password, 10),
-        role: "super_admin",
-        is_active: true,
-      })
-      .select("id")
-      .single(),
-  );
-  adminId = admin.id;
-
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.connectOverCDP(cdpUrl);
   const consoleIssues = [];
   const pageErrors = [];
+  let page;
   try {
-    const page = await browser.newPage({
-      viewport: { width: 1440, height: 900 },
-    });
+    const context = browser.contexts()[0];
+    if (!context) throw new Error("Authenticated Chromium context is unavailable.");
+    page = context.pages().find((candidate) =>
+      candidate.url().startsWith(`${baseUrl}/admin/`),
+    ) ?? context.pages().find((candidate) => candidate.url().startsWith(baseUrl));
+    if (!page) throw new Error("Authenticated Chromium page is unavailable.");
+    await page.setViewportSize({ width: 1440, height: 900 });
     page.on("console", (msg) => {
       if (msg.type() === "error") consoleIssues.push(msg.text());
     });
     page.on("pageerror", (error) => pageErrors.push(String(error)));
-
-    await page.goto(`${baseUrl}/admin/login`, {
-      waitUntil: "domcontentloaded",
-      timeout: 60_000,
-    });
-    const login = await page.evaluate(
-      async ({ username, loginPassword }) => {
-        const response = await fetch("/api/admin/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username,
-            password: loginPassword,
-            rememberMe: false,
-          }),
-        });
-        return { ok: response.ok, status: response.status };
-      },
-      { username: adminUsername, loginPassword: password },
-    );
-    if (!login.ok) throw new Error(`QA login failed: ${login.status}`);
 
     for (const path of [
       "/admin/content/topics",
@@ -330,110 +245,41 @@ async function main() {
       waitUntil: "networkidle",
     });
 
-    let firstReleased = false;
-    let releaseFirst;
-    const firstGate = new Promise((resolve) => {
-      releaseFirst = () => {
-        firstReleased = true;
-        resolve();
-      };
-    });
-    let secondSeen = false;
-    const pendingFirstBodies = [];
-
-    await page.route("**/api/admin/entity-lists/topics**", async (route) => {
-      const url = new URL(route.request().url());
-      const q = url.searchParams.get("q") || "";
-      if (q.includes("SLOW1")) {
-        pendingFirstBodies.push(route);
-        await firstGate;
-        try {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify({
-              rows: [
-                {
-                  id: 900001,
-                  title: "SLOW1-STALE-ROW",
-                  content_type: "article",
-                  category_id: null,
-                  category_name: null,
-                  category_color_token: null,
-                  series_id: null,
-                  series_name: null,
-                  status: "draft",
-                  is_featured: false,
-                  views_count: 0,
-                  created_at: null,
-                  updated_at: null,
-                  published_at: null,
-                  created_by_display: null,
-                  updated_by_display: null,
-                  published_by_display: null,
-                  deleted_at: null,
-                },
-              ],
-              pagination: {
-                page: 1,
-                pageSize: 10,
-                totalRows: 1,
-                totalPages: 1,
-              },
-              meta: {
-                generatedAt: new Date().toISOString(),
-                mode: "server-page",
-              },
-            }),
-          });
-        } catch {
-          // Request may already be aborted by TanStack Query cancellation.
+    await page.evaluate(() => {
+      const original = window.fetch.bind(window);
+      const state = { original, firstSeen: 0, secondSeen: 0 };
+      window.__qaControllerRace = state;
+      const payload = (id, title) => ({
+        rows: [{
+          id, title, content_type: "article", category_id: null,
+          category_name: null, category_color_token: null, series_id: null,
+          series_name: null, status: "draft", is_featured: false,
+          views_count: 0, created_at: null, updated_at: null,
+          published_at: null, created_by_display: null,
+          updated_by_display: null, published_by_display: null,
+          deleted_at: null,
+        }],
+        pagination: { page: 1, pageSize: 10, totalRows: 1, totalPages: 1 },
+        meta: { generatedAt: new Date().toISOString(), mode: "server-page" },
+      });
+      window.fetch = async (...args) => {
+        const url = new URL(String(args[0]?.url ?? args[0]), window.location.origin);
+        if (!url.pathname.includes("/api/admin/entity-lists/topics")) {
+          return original(...args);
         }
-        return;
-      }
-      if (q.includes("SLOW2")) {
-        secondSeen = true;
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            rows: [
-              {
-                id: 900002,
-                title: "SLOW2-WINNER-ROW",
-                content_type: "article",
-                category_id: null,
-                category_name: null,
-                category_color_token: null,
-                series_id: null,
-                series_name: null,
-                status: "draft",
-                is_featured: false,
-                views_count: 0,
-                created_at: null,
-                updated_at: null,
-                published_at: null,
-                created_by_display: null,
-                updated_by_display: null,
-                published_by_display: null,
-                deleted_at: null,
-              },
-            ],
-            pagination: {
-              page: 1,
-              pageSize: 10,
-              totalRows: 1,
-              totalPages: 1,
-            },
-            meta: {
-              generatedAt: new Date().toISOString(),
-              mode: "server-page",
-            },
-          }),
-        });
-        return;
-      }
-      await route.continue();
+        const q = url.searchParams.get("q") || "";
+        if (q.includes("SLOW1")) {
+          state.firstSeen += 1;
+          await new Promise((resolve) => setTimeout(resolve, 1_400));
+          return Response.json(payload(900001, "SLOW1-STALE-ROW"));
+        }
+        if (q.includes("SLOW2")) {
+          state.secondSeen += 1;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return Response.json(payload(900002, "SLOW2-WINNER-ROW"));
+        }
+        return original(...args);
+      };
     });
 
     const topicsSearch = page.locator('input[placeholder*="ابحث"]').first();
@@ -448,14 +294,20 @@ async function main() {
     await page
       .getByText("SLOW2-WINNER-ROW", { exact: true })
       .waitFor({ state: "visible", timeout: 10_000 });
-    check("Slow search: second query wins before first response", secondSeen);
+    const raceBeforeRelease = await page.evaluate(() => ({
+      firstSeen: window.__qaControllerRace.firstSeen,
+      secondSeen: window.__qaControllerRace.secondSeen,
+    }));
+    check(
+      "Slow search: second query wins before first response",
+      raceBeforeRelease.firstSeen >= 1 && raceBeforeRelease.secondSeen >= 1,
+    );
     check(
       "Out-of-order: winner rows visible before stale release",
       (await page.getByText("SLOW2-WINNER-ROW", { exact: true }).count()) === 1 &&
         (await page.getByText("SLOW1-STALE-ROW", { exact: true }).count()) === 0,
     );
-    releaseFirst();
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1_500);
     check(
       "Out-of-order: stale response does not replace winner rows",
       (await page.getByText("SLOW2-WINNER-ROW", { exact: true }).count()) === 1 &&
@@ -463,28 +315,34 @@ async function main() {
     );
     check(
       "Cancellation: delayed first request was gated (abort or ignore)",
-      pendingFirstBodies.length >= 1 || firstReleased,
-      String(pendingFirstBodies.length),
+      raceBeforeRelease.firstSeen >= 1,
+      String(raceBeforeRelease.firstSeen),
     );
-    await page.unroute("**/api/admin/entity-lists/topics**");
+    await page.evaluate(() => {
+      window.fetch = window.__qaControllerRace.original;
+      delete window.__qaControllerRace;
+    });
 
     // Network failure keeps previous rows.
     await topicsSearch.fill("");
     await page.waitForTimeout(500);
     const previousRowCount = await page.locator("[data-entity-row-id]").count();
-    await page.route("**/api/admin/entity-lists/topics**", async (route) => {
-      const url = new URL(route.request().url());
-      if ((url.searchParams.get("q") || "").includes("NETFAIL")) {
-        await route.fulfill({
-          status: 500,
-          contentType: "application/json",
-          body: JSON.stringify({
-            error: { code: "list_load_failed", message: "Unable to load" },
-          }),
-        });
-        return;
-      }
-      await route.continue();
+    await page.evaluate(() => {
+      const original = window.fetch.bind(window);
+      window.__qaControllerFailureOriginal = original;
+      window.fetch = async (...args) => {
+        const url = new URL(String(args[0]?.url ?? args[0]), window.location.origin);
+        if (
+          url.pathname.includes("/api/admin/entity-lists/topics") &&
+          (url.searchParams.get("q") || "").includes("NETFAIL")
+        ) {
+          return Response.json(
+            { error: { code: "list_load_failed", message: "Unable to load" } },
+            { status: 500 },
+          );
+        }
+        return original(...args);
+      };
     });
     await topicsSearch.fill("NETFAIL");
     await page.waitForFunction(
@@ -509,22 +367,31 @@ async function main() {
         (await page.locator("[data-admin-entity-list]").count()) >= 1 &&
         (await page.locator("[data-entity-row-id]").count()) === previousRowCount,
     );
-    await page.unroute("**/api/admin/entity-lists/topics**");
+    await page.evaluate(() => {
+      window.fetch = window.__qaControllerFailureOriginal;
+      delete window.__qaControllerFailureOriginal;
+    });
     // Expected infrastructure noise from the intentional 500 probe.
     consoleIssues.length = 0;
 
-    // 401 contract against the typed endpoint (no blind retry storm).
+    // 401 contract against the typed endpoint (no blind retry storm). The
+    // page-local fetch harness preserves the authenticated session.
     const unauthorized = await page.evaluate(async () => {
       const calls = [];
       const original = window.fetch.bind(window);
       window.fetch = async (...args) => {
         const url = String(args[0]?.url ?? args[0]);
-        if (url.includes("/api/admin/entity-lists/")) calls.push(url);
+        if (url.includes("q=__QA_401__")) {
+          calls.push(url);
+          return Response.json(
+            { error: { code: "unauthorized", message: "Unauthorized" } },
+            { status: 401 },
+          );
+        }
         return original(...args);
       };
       try {
-        await fetch("/api/admin/auth/logout", { method: "POST" });
-        const response = await fetch("/api/admin/entity-lists/topics?page=1", {
+        const response = await fetch("/api/admin/entity-lists/topics?page=1&q=__QA_401__", {
           credentials: "same-origin",
           headers: { Accept: "application/json" },
           cache: "no-store",
@@ -545,20 +412,6 @@ async function main() {
     // Floating menu stays open across pagination refetch (shared layer is not
     // closed by setPage). Search debounce intentionally closes layers per the
     // existing mutual-exclusion contract, so it is not used here.
-    await page.goto(`${baseUrl}/admin/content/topics`, {
-      waitUntil: "networkidle",
-    });
-    await page.evaluate(async ({ username, loginPassword }) => {
-      await fetch("/api/admin/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username,
-          password: loginPassword,
-          rememberMe: false,
-        }),
-      });
-    }, { username: adminUsername, loginPassword: password });
     await page.goto(`${baseUrl}/admin/content/topics`, {
       waitUntil: "networkidle",
     });
@@ -614,18 +467,21 @@ async function main() {
       pageErrors.join(" | "),
     );
   } finally {
+    if (page) {
+      await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
+      page.removeAllListeners();
+      await page.close().catch(() => {});
+    }
     await browser.close();
-    await cleanup();
   }
 
   console.log(
     `qa-admin-data-engine-controller: ${passed}/${passed + failed} passed`,
   );
-  if (failed) process.exit(1);
+  if (failed) process.exitCode = 1;
 }
 
-main().catch(async (error) => {
+main().catch((error) => {
   console.error(error);
-  await cleanup();
-  process.exit(1);
+  process.exitCode = 1;
 });
