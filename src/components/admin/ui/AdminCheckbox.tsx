@@ -25,6 +25,7 @@ export default function AdminCheckbox({
   label,
   inputRef,
   className = "",
+  style,
   ...props
 }: AdminCheckboxProps) {
   return (
@@ -36,6 +37,7 @@ export default function AdminCheckbox({
       onChange={onChange}
       aria-label={label}
       className={`${ADMIN_CHECKBOX_CLASSES} ${className}`.trim()}
+      style={{ ...style, caretColor: "transparent" }}
     />
   );
 }

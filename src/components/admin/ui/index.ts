@@ -83,6 +83,7 @@ export {
   AdminDataGridStatusCell,
   AdminDataGridActions,
   AdminDataGridActionsCell,
+  AdminDataGridActionsHeaderCell,
   AdminDataGridStickyActionsHeaderCell,
   AdminDataGridStickyActionsCell,
   AdminDataGridActionButton,

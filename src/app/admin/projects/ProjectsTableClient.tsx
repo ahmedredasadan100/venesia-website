@@ -343,15 +343,15 @@ export default function ProjectsTableClient({
       <AdminInfoBar
         label={
           type === "residential"
-            ? "Residential Projects Manager"
-            : "Commercial Projects Manager"
+            ? "إدارة المشاريع السكنية"
+            : "إدارة المشاريع التجارية"
         }
         description={
           type === "residential"
-            ? "الحالة = حالة التنفيذ. Published = حالة النشر في CMS."
+            ? "الحالة تعني حالة التنفيذ، وحالة النشر توضّح ظهور المشروع في نظام إدارة المحتوى."
             : "المشاريع التجارية لا تحتوي تفاصيل سكنية كاملة — بعض التبويبات تظهر بشكل مبسّط."
         }
-        meta={`${controller.result.pagination.totalRows} Projects / ${publishedCount} Published / ${featuredCount} Featured`}
+        meta={`${controller.result.pagination.totalRows} مشروع / ${publishedCount} منشور / ${featuredCount} مميز`}
       />
 
       {notice ? <AdminNotice variant="success" message={notice} /> : null}
@@ -630,7 +630,7 @@ export default function ProjectsTableClient({
         open={Boolean(pendingPermanentDelete)}
         title="حذف نهائي للمشروع"
         subtitle="هذا الإجراء لا يمكن التراجع عنه — سيتم حذف المشروع وجميع المخططات والوسائط المرتبطة."
-        eyebrow="EMERGENCY DELETE"
+        eyebrow="حذف طارئ"
         onClose={() => setPendingPermanentDelete(null)}
       >
         {pendingPermanentDelete ? (

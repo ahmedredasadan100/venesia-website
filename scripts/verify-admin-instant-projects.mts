@@ -73,6 +73,8 @@ const [
   deleteActions,
   actionsFacade,
   auditActions,
+  dataGrid,
+  adminCheckbox,
 ] = await Promise.all([
   read("src/lib/admin/entity-list/data-engine/registry.ts"),
   read("src/app/admin/projects/residential/page.tsx"),
@@ -95,6 +97,8 @@ const [
   read("src/app/admin/projects/project-actions/delete.ts"),
   read("src/app/admin/projects/actions.ts"),
   read("src/lib/admin/audit/cms-audit-actions.ts"),
+  read("src/components/admin/ui/AdminDataGrid.tsx"),
+  read("src/components/admin/ui/AdminCheckbox.tsx"),
 ]);
 check(registry.includes("projects: projectsEntityListAdapter"), "registry registers projects");
 check(residentialPage.includes("loadProjectsEntityListResult"), "residential RSC hydrates");
@@ -260,6 +264,43 @@ check(
     tableUtils.includes("getDefaultVisibleColumnKeys"),
   "projects column utils reuse shared sanitize/default helpers",
 );
+check(
+  tableUtils.includes("initialVisibleColumns == null"),
+  "projects distinguish an empty saved preference from no preference",
+);
+check(
+  referenceTable.includes("horizontalScroll") &&
+    legacyTable.includes("horizontalScroll") &&
+    referenceTable.includes("sticky") &&
+    legacyTable.includes("sticky"),
+  "projects opt into reachable RTL scrolling with sticky actions",
+);
+check(
+  dataGrid.includes("data-admin-data-grid-scroll") &&
+    dataGrid.includes("w-max min-w-full"),
+  "shared grid contract exposes intentional horizontal scrolling",
+);
+check(
+  adminCheckbox.includes('caretColor: "transparent"'),
+  "admin checkbox renders deterministic caret style during hydration",
+);
+for (const englishCopy of [
+  "Residential Projects Manager",
+  "Commercial Projects Manager",
+  "Location / Area",
+  "Last Updated",
+  ">Code<",
+  ">Actions<",
+  ">DEL<",
+]) {
+  check(
+    !client.includes(englishCopy) &&
+      !referenceTable.includes(englishCopy) &&
+      !legacyTable.includes(englishCopy) &&
+      !listConfig.includes(englishCopy),
+    `projects list UI removes English copy: ${englishCopy}`,
+  );
+}
 
 // Critical-path readiness: no preflight projects count before list RPC.
 check(

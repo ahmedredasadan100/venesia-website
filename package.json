@@ -20,6 +20,7 @@
     "verify:admin-data-engine-contracts": "node --experimental-strip-types scripts/verify-admin-data-engine-contracts.mts",
     "verify:admin-instant-pages": "node scripts/verify-admin-instant-pages.mjs",
     "verify:admin-instant-projects": "node --experimental-strip-types scripts/verify-admin-instant-projects.mts",
+    "qa:admin-instant-projects": "node scripts/qa-admin-instant-projects.mjs",
     "qa:admin-instant-pages": "node scripts/qa-admin-instant-pages.mjs",
     "qa:admin-data-engine-endpoint": "node scripts/qa-admin-data-engine-endpoint.mjs",
     "qa:admin-data-engine-controller": "node scripts/qa-admin-data-engine-controller.mjs",

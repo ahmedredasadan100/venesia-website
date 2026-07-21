@@ -4,7 +4,9 @@ import {
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  AdminDataGridActionsHeaderCell,
   AdminDataGridCheckbox,
+  AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
@@ -142,18 +144,19 @@ export default function ReferenceProjectsTable({
 
   return (
     <AdminDataGrid
+      scrollLabel="جدول المشاريع السكنية"
       summary={`${rows.length} مشروع${publishedCount ? ` — ${publishedCount} منشور` : ""}`}
     >
-      <AdminDataGridHeader columns={columns}>
+      <AdminDataGridHeader columns={columns} horizontalScroll>
         {show("selection") ? (
-          <div className="flex justify-center">
+          <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
               inputRef={selection.selectAllRef}
               checked={selection.allSelected}
               onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
               label="تحديد الكل"
             />
-          </div>
+          </AdminDataGridCheckboxCell>
         ) : null}
         {show("project") ? (
           <div className="min-w-0 text-right">
@@ -190,7 +193,9 @@ export default function ReferenceProjectsTable({
             </AdminDataGridSortLabel>
           </div>
         ) : null}
-        {show("actions") ? <div className="text-center">الإجراءات</div> : null}
+        {show("actions") ? (
+          <AdminDataGridActionsHeaderCell sticky>الإجراءات</AdminDataGridActionsHeaderCell>
+        ) : null}
       </AdminDataGridHeader>
 
       {rows.length ? (
@@ -205,10 +210,11 @@ export default function ReferenceProjectsTable({
             <AdminDataGridRow
               key={item.id}
               columns={columns}
+              horizontalScroll
               divided
             >
               {show("selection") ? (
-                <div className="flex justify-center">
+                <AdminDataGridCheckboxCell>
                   <AdminDataGridCheckbox
                     checked={selection.selectedSet.has(item.id)}
                     onChange={(event) =>
@@ -216,7 +222,7 @@ export default function ReferenceProjectsTable({
                     }
                     label={`تحديد ${item.arabic_name}`}
                   />
-                </div>
+                </AdminDataGridCheckboxCell>
               ) : null}
 
               {show("project") ? (
@@ -266,7 +272,7 @@ export default function ReferenceProjectsTable({
               ) : null}
 
               {show("actions") ? (
-                <AdminDataGridActionsCell compact>
+                <AdminDataGridActionsCell compact sticky>
                   <AdminDataGridActionButton
                     action="edit"
                     href={`/admin/projects/${item.id}`}
@@ -288,7 +294,7 @@ export default function ReferenceProjectsTable({
                     <AdminDataGridActionButton
                       tone="dark"
                       disabled
-                      title="لا يوجد slug للمعاينة"
+                      title="لا يوجد معرّف رابط للمعاينة"
                       size="compact"
                     >
                       <PublicPreviewIcon />

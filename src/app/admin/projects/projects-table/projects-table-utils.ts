@@ -21,9 +21,11 @@ function resolveActionsTrack(
     // Reference rows expose 6 compact actions (edit, preview, publish, duplicate, archive, delete).
     return adminDataGridActionsColumn(6, "compact");
   }
+  // Legacy rows expose edit, publish/restore, archive, and delete; duplication
+  // adds a fifth default-size action.
   return withDuplicateAction
-    ? ADMIN_DATA_GRID_ACTION_COLUMNS.four
-    : ADMIN_DATA_GRID_ACTION_COLUMNS.three;
+    ? adminDataGridActionsColumn(5, "default")
+    : ADMIN_DATA_GRID_ACTION_COLUMNS.four;
 }
 
 /**
@@ -50,9 +52,9 @@ export function resolveProjectsVisibleColumns(
   const columns = getProjectsColumnDefs(type);
   return sanitizeVisibleColumnKeys(
     columns,
-    initialVisibleColumns?.length
-      ? initialVisibleColumns
-      : getDefaultVisibleColumnKeys(columns),
+    initialVisibleColumns == null
+      ? getDefaultVisibleColumnKeys(columns)
+      : initialVisibleColumns,
   );
 }
 

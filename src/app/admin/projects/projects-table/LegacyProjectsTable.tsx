@@ -3,7 +3,9 @@ import {
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  AdminDataGridActionsHeaderCell,
   AdminDataGridCheckbox,
+  AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
@@ -106,36 +108,38 @@ export default function LegacyProjectsTable({
   const actionsDisabled = handlers.isMutationBusy;
 
   return (
-    <AdminDataGrid>
-      <AdminDataGridHeader columns={columns}>
+    <AdminDataGrid scrollLabel="جدول المشاريع التجارية">
+      <AdminDataGridHeader columns={columns} horizontalScroll>
         {show("selection") ? (
-          <div className="flex justify-center">
+          <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
               inputRef={selection.selectAllRef}
               checked={selection.allSelected}
               onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
               label="تحديد الكل"
             />
-          </div>
+          </AdminDataGridCheckboxCell>
         ) : null}
         {show("code") ? (
-          <AdminDataGridSortLabel {...sortProps("code")}>Code</AdminDataGridSortLabel>
+          <AdminDataGridSortLabel {...sortProps("code")}>الكود</AdminDataGridSortLabel>
         ) : null}
         {show("location") ? (
           <AdminDataGridSortLabel {...sortProps("location")}>
-            Location / Area
+            الموقع / المنطقة
           </AdminDataGridSortLabel>
         ) : null}
-        {show("featured") ? <span className="text-center">Featured</span> : null}
+        {show("featured") ? <span className="text-center">مميز</span> : null}
         {show("publication_status") ? (
-          <span className="text-center">Published</span>
+          <span className="text-center">حالة النشر</span>
         ) : null}
         {show("updated_at") ? (
           <AdminDataGridSortLabel {...sortProps("updated_at")} className="mx-auto">
-            Last Updated
+            آخر تحديث
           </AdminDataGridSortLabel>
         ) : null}
-        {show("actions") ? <span className="text-center">Actions</span> : null}
+        {show("actions") ? (
+          <AdminDataGridActionsHeaderCell sticky>الإجراءات</AdminDataGridActionsHeaderCell>
+        ) : null}
       </AdminDataGridHeader>
 
       {rows.length ? (
@@ -149,10 +153,11 @@ export default function LegacyProjectsTable({
             <AdminDataGridRow
               key={item.id}
               columns={columns}
+              horizontalScroll
               className="border-b border-white/[0.045] last:border-b-0"
             >
               {show("selection") ? (
-                <div className="flex justify-center">
+                <AdminDataGridCheckboxCell>
                   <AdminDataGridCheckbox
                     checked={selection.selectedSet.has(item.id)}
                     onChange={(event) =>
@@ -160,7 +165,7 @@ export default function LegacyProjectsTable({
                     }
                     label={`تحديد ${item.code}`}
                   />
-                </div>
+                </AdminDataGridCheckboxCell>
               ) : null}
 
               {show("code") ? (
@@ -197,7 +202,7 @@ export default function LegacyProjectsTable({
               ) : null}
 
               {show("actions") ? (
-                <AdminDataGridActionsCell>
+                <AdminDataGridActionsCell sticky>
                   <AdminDataGridActionButton
                     action="edit"
                     href={`/admin/projects/${item.id}`}
@@ -245,14 +250,13 @@ export default function LegacyProjectsTable({
                     </AdminDataGridActionButton>
                   ) : null}
                   <AdminDataGridActionButton
+                    action="delete"
                     tone="dark"
                     title="حذف نهائي"
                     disabled={actionsDisabled}
                     pending={pendingAction === "delete"}
                     onClick={() => handlers.onRequestPermanentDelete(item)}
-                  >
-                    <span className="text-[10px] font-bold text-red-300">DEL</span>
-                  </AdminDataGridActionButton>
+                  />
                 </AdminDataGridActionsCell>
               ) : null}
             </AdminDataGridRow>
