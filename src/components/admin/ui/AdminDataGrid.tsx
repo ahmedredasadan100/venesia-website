@@ -21,19 +21,24 @@ type SortLabelProps = BaseProps & {
 
 type GridProps = BaseProps & {
   summary?: ReactNode;
+  scrollLabel?: string;
 };
 
 type GridLineProps = BaseProps & {
   columns: string;
+  flushInlineEnd?: boolean;
+  horizontalScroll?: boolean;
 };
 
 type DataGridAction =
   | "activity"
+  | "archive"
   | "delete"
   | "duplicate"
   | "edit"
   | "feature"
   | "preview"
+  | "restore"
   | "visibility";
 
 type ActionButtonProps = {
@@ -81,6 +86,8 @@ const actionDefaults: Record<DataGridAction, { tone: NonNullable<ActionButtonPro
   visibility: { tone: "green", title: "إظهار / إخفاء" },
   feature: { tone: "gold", title: "تمييز" },
   duplicate: { tone: "blue", title: "نسخ" },
+  archive: { tone: "dark", title: "أرشفة" },
+  restore: { tone: "dark", title: "استعادة" },
   delete: { tone: "red", title: "حذف" },
   activity: { tone: "dark", title: "معلومات النشاط" },
 };
@@ -257,6 +264,27 @@ function GridIcon({
     );
   }
 
+  if (action === "archive") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M3 7h18" />
+        <path d="M5 7l1 12h12l1-12" />
+        <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+      </svg>
+    );
+  }
+
+  if (action === "restore") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M3 12a9 9 0 0 1 15-6.7" />
+        <path d="M18 3v4h-4" />
+        <path d="M21 12a9 9 0 0 1-15 6.7" />
+        <path d="M6 21v-4H2" />
+      </svg>
+    );
+  }
+
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M4 7h16" />
@@ -267,12 +295,19 @@ function GridIcon({
   );
 }
 
-export function AdminDataGrid({ children, summary, className = "" }: GridProps) {
+export function AdminDataGrid({ children, summary, scrollLabel, className = "" }: GridProps) {
   return (
     <section
       className={`rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl ${className}`}
     >
-      <div className="overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/8 bg-black/14">
+      <div
+        dir={scrollLabel ? "rtl" : undefined}
+        role={scrollLabel ? "region" : undefined}
+        aria-label={scrollLabel}
+        tabIndex={scrollLabel ? 0 : undefined}
+        data-admin-data-grid-scroll={scrollLabel ? "" : undefined}
+        className={`overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/8 bg-black/14 ${scrollLabel ? "overscroll-x-contain [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.24)_rgba(255,255,255,0.06)] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-white/[0.04] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70" : ""}`}
+      >
         {children}
       </div>
       {summary ? (
@@ -284,10 +319,10 @@ export function AdminDataGrid({ children, summary, className = "" }: GridProps) 
   );
 }
 
-export function AdminDataGridHeader({ children, columns, className = "" }: GridLineProps) {
+export function AdminDataGridHeader({ children, columns, flushInlineEnd = false, horizontalScroll = false, className = "" }: GridLineProps) {
   return (
     <div
-      className={`grid items-center gap-4 px-5 py-4 max-xl:hidden ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
+      className={`grid items-center gap-4 px-5 py-4 ${flushInlineEnd ? "pe-0" : ""} ${horizontalScroll ? "w-max min-w-full" : "max-xl:hidden"} ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
       style={{ gridTemplateColumns: columns }}
     >
       {children}
@@ -295,10 +330,10 @@ export function AdminDataGridHeader({ children, columns, className = "" }: GridL
   );
 }
 
-export function AdminDataGridRow({ children, columns, className = "", divided = false }: GridLineProps & { divided?: boolean }) {
+export function AdminDataGridRow({ children, columns, flushInlineEnd = false, horizontalScroll = false, className = "", divided = false }: GridLineProps & { divided?: boolean }) {
   return (
     <article
-      className={`grid gap-4 px-5 py-4 transition hover:bg-white/[0.035] xl:items-center ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
+      className={`grid gap-4 px-5 py-4 transition hover:bg-white/[0.035] ${flushInlineEnd ? "pe-0" : ""} ${horizontalScroll ? "w-max min-w-full items-center" : "xl:items-center"} ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
       style={{ gridTemplateColumns: columns }}
     >
       {children}
@@ -386,6 +421,8 @@ export function AdminDataGridCheckbox({ checked, onChange, label, inputRef }: Ch
 type AdminDataGridActionsProps = BaseProps & {
   /** Use compact buttons (40px) when a row has 5+ actions. */
   compact?: boolean;
+  /** Keep the actions track visible at logical inline-end while horizontally scrolling. */
+  sticky?: boolean;
 };
 
 export function AdminDataGridActions({ children, className = "", compact = false }: AdminDataGridActionsProps) {
@@ -400,10 +437,24 @@ export function AdminDataGridActions({ children, className = "", compact = false
 }
 
 /** Grid cell wrapper — keeps action buttons inside the table/card bounds. */
-export function AdminDataGridActionsCell({ children, className = "", compact = false }: AdminDataGridActionsProps) {
+export function AdminDataGridActionsCell({ children, className = "", compact = false, sticky = false }: AdminDataGridActionsProps) {
   return (
-    <div className={`min-w-0 w-full overflow-hidden ${className}`}>
+    <div
+      data-admin-grid-actions={sticky ? "sticky" : undefined}
+      className={`min-w-0 w-full overflow-hidden ${sticky ? "sticky end-0 z-20 bg-[#080B10]" : ""} ${className}`}
+    >
       <AdminDataGridActions compact={compact}>{children}</AdminDataGridActions>
+    </div>
+  );
+}
+
+export function AdminDataGridActionsHeaderCell({ children, className = "", sticky = false }: BaseProps & { sticky?: boolean }) {
+  return (
+    <div
+      data-admin-grid-actions-header={sticky ? "sticky" : undefined}
+      className={`min-w-0 text-center ${sticky ? "sticky end-0 z-30 bg-[#10151C]" : ""} ${className}`}
+    >
+      {children}
     </div>
   );
 }

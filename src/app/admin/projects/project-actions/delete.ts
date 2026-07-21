@@ -12,6 +12,7 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
   if (!confirmPermanent) {
     return {
       ok: false as const,
+      code: "confirm_required",
       message: "الحذف النهائي يتطلب تأكيدًا صريحًا — استخدم الأرشفة للإخفاء الآمن.",
     };
   }
@@ -23,11 +24,17 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     .maybeSingle<{ type: ProjectCategory; slug: string | null }>();
 
   if (lookupError || !existing) {
-    return { ok: false as const, message: lookupError?.message ?? "المشروع غير موجود." };
+    return {
+      ok: false as const,
+      code: lookupError ? "lookup_failed" : "project_not_found",
+      message: lookupError?.message ?? "المشروع غير موجود.",
+    };
   }
 
   const { error } = await getSupabaseAdmin().from("projects").delete().eq("id", id);
-  if (error) return { ok: false as const, message: error.message };
+  if (error) {
+    return { ok: false as const, code: "delete_failed", message: error.message };
+  }
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("project", "delete"),
@@ -36,5 +43,5 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     metadata: { permanent: true, slug: existing.slug },
   });
   revalidateProjectPaths(existing.type, undefined, existing.slug);
-  return { ok: true as const, message: "تم حذف المشروع." };
+  return { ok: true as const, message: "تم الحذف النهائي وإزالة المشروع من القائمة." };
 }

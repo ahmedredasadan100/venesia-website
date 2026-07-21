@@ -58,6 +58,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
       id={formId}
       action={action}
       onSubmit={handleSubmit}
+      data-admin-bulk-action-bar=""
       className="flex flex-col gap-4 rounded-[18px] border border-[#D8B87A]/14 bg-[#080B10]/92 px-4 py-4 shadow-[0_18px_70px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.035)] md:flex-row md:items-center md:justify-between"
     >
       {Object.entries(hiddenFields ?? {}).map(([name, value]) => (

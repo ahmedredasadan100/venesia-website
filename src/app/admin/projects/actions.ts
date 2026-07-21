@@ -5,8 +5,9 @@ export {
   createProject,
   deleteProjectAjax,
   duplicateProjectAjax,
-  getProjectsTableRows,
   restoreProjectAjax,
+  restoreProjectsTablePreferences,
+  saveProjectsTablePreferences,
   toggleProjectPublicationAjax,
   updateProject,
 } from "./project-actions/index";

@@ -23,7 +23,7 @@ async function ensureUniqueProjectField(field: "code" | "slug", base: string) {
 export async function duplicateProjectAjax(id: number) {
   await requireAdminSession();
   if (!Number.isFinite(id) || id <= 0) {
-    return { ok: false as const, message: "معرف المشروع غير صالح." };
+    return { ok: false as const, code: "invalid_id", message: "معرف المشروع غير صالح." };
   }
 
   const supabase = getSupabaseAdmin();
@@ -33,18 +33,18 @@ export async function duplicateProjectAjax(id: number) {
     .eq("id", id)
     .maybeSingle<Record<string, unknown>>();
 
-  if (error) return { ok: false as const, message: error.message };
-  if (!source) return { ok: false as const, message: "المشروع غير موجود." };
+  if (error) return { ok: false as const, code: "lookup_failed", message: error.message };
+  if (!source) return { ok: false as const, code: "project_not_found", message: "المشروع غير موجود." };
 
   const type = source.type as ProjectCategory;
   if (type !== "residential") {
-    return { ok: false as const, message: "النسخ متاح للمشاريع السكنية فقط." };
+    return { ok: false as const, code: "duplicate_type_forbidden", message: "النسخ متاح للمشاريع السكنية فقط." };
   }
 
   const sourceCode = String(source.code ?? "").trim();
   const sourceSlug = String(source.slug ?? "").trim();
   if (!sourceCode || !sourceSlug) {
-    return { ok: false as const, message: "لا يمكن نسخ مشروع بدون code أو slug." };
+    return { ok: false as const, code: "duplicate_missing_identity", message: "لا يمكن نسخ مشروع بدون code أو slug." };
   }
 
   const now = new Date().toISOString();
@@ -64,6 +64,7 @@ export async function duplicateProjectAjax(id: number) {
   if (floorPlansSelectError || deliverySelectError || mediaSelectError) {
     return {
       ok: false as const,
+      code: "child_read_failed",
       message: "تعذر قراءة بيانات المشروع الفرعية قبل النسخ. لم يتم إنشاء نسخة.",
     };
   }
@@ -95,7 +96,11 @@ export async function duplicateProjectAjax(id: number) {
     .maybeSingle<{ id: number }>();
 
   if (insertError || !inserted) {
-    return { ok: false as const, message: insertError?.message ?? "تعذر نسخ المشروع." };
+    return {
+      ok: false as const,
+      code: "duplicate_insert_failed",
+      message: insertError?.message ?? "تعذر نسخ المشروع.",
+    };
   }
 
   const newProjectId = inserted.id;
@@ -104,21 +109,27 @@ export async function duplicateProjectAjax(id: number) {
     const { error: floorPlansError } = await supabase.from("project_floor_plans").insert(
       floorPlans.map((row) => ({ ...row, project_id: newProjectId })),
     );
-    if (floorPlansError) return { ok: false as const, message: floorPlansError.message };
+    if (floorPlansError) {
+      return { ok: false as const, code: "duplicate_children_failed", message: floorPlansError.message };
+    }
   }
 
   if (deliveryItems?.length) {
     const { error: deliveryError } = await supabase.from("project_delivery_spec_items").insert(
       deliveryItems.map((row) => ({ ...row, project_id: newProjectId })),
     );
-    if (deliveryError) return { ok: false as const, message: deliveryError.message };
+    if (deliveryError) {
+      return { ok: false as const, code: "duplicate_children_failed", message: deliveryError.message };
+    }
   }
 
   if (media?.length) {
     const { error: mediaError } = await supabase.from("project_media").insert(
       media.map((row) => ({ ...row, project_id: newProjectId })),
     );
-    if (mediaError) return { ok: false as const, message: mediaError.message };
+    if (mediaError) {
+      return { ok: false as const, code: "duplicate_children_failed", message: mediaError.message };
+    }
   }
 
   revalidateProjectPaths(type, newProjectId, nextSlug);
@@ -128,5 +139,5 @@ export async function duplicateProjectAjax(id: number) {
     entityId: newProjectId,
     metadata: { source_project_id: id, slug: nextSlug, code: nextCode },
   });
-  return { ok: true as const, message: "تم نسخ المشروع كمسودة." };
+  return { ok: true as const, message: "أُنشئت نسخة جديدة كمسودة." };
 }

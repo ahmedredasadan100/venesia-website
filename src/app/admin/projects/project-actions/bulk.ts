@@ -14,11 +14,14 @@ export async function bulkProjectsActionAjax(
   type: ProjectCategory,
 ) {
   await requireAdminSession();
-  if (!ids.length) return { ok: false as const, message: "لم يتم تحديد أي مشروع." };
+  if (!ids.length) {
+    return { ok: false as const, code: "empty_selection", message: "لم يتم تحديد أي مشروع." };
+  }
 
   const now = new Date().toISOString();
   let payload: Record<string, unknown> | null = null;
   let message = "تم تنفيذ الإجراء.";
+  let publicationStatus: string | null = null;
 
   if (action === "publish") {
     const validation = await validateProjectsCanPublish(ids);
@@ -26,6 +29,7 @@ export async function bulkProjectsActionAjax(
       const first = validation.failures[0];
       return {
         ok: false as const,
+        code: "publish_validation",
         message: first ? `تعذر النشر: ${first.message}` : "لا يمكن نشر المشاريع المحددة.",
       };
     }
@@ -33,8 +37,11 @@ export async function bulkProjectsActionAjax(
     const { error } = await getSupabaseAdmin()
       .from("projects")
       .update({ publication_status: "published", updated_at: now })
+      .eq("type", type)
       .in("id", validation.validIds);
-    if (error) return { ok: false as const, message: error.message };
+    if (error) {
+      return { ok: false as const, code: "bulk_update_failed", message: error.message };
+    }
 
     await recordCmsAdminAudit({
       action: buildCmsAuditAction("project", "publish"),
@@ -45,32 +52,48 @@ export async function bulkProjectsActionAjax(
     if (validation.failures.length) {
       return {
         ok: true as const,
-        message: `تم نشر ${validation.validIds.length} مشروعًا. تم تخطي ${validation.failures.length} لعدم اكتمال البيانات.`,
+        publication_status: "published" as const,
+        affectedIds: validation.validIds,
+        message: `أصبح ${validation.validIds.length} مشروعًا ظاهرًا للعامة، وتخطينا ${validation.failures.length} لعدم اكتمال البيانات.`,
       };
     }
-    return { ok: true as const, message: "تم نشر المشاريع المحددة." };
+    return {
+      ok: true as const,
+      publication_status: "published" as const,
+      affectedIds: validation.validIds,
+      message: "أصبحت المشاريع المحددة ظاهرة للعامة.",
+    };
   } else if (action === "hide") {
     payload = { publication_status: "unpublished", updated_at: now };
-    message = "تم إخفاء المشاريع المحددة.";
+    publicationStatus = "unpublished";
+    message = "لم تعد المشاريع المحددة ظاهرة للعامة.";
   } else if (action === "archive") {
     payload = { publication_status: "archived", updated_at: now };
-    message = "تم أرشفة المشاريع المحددة.";
+    publicationStatus = "archived";
+    message = "أُزيلت المشاريع المحددة من القائمة النشطة.";
   } else if (action === "delete") {
     return {
       ok: false as const,
+      code: "bulk_delete_forbidden",
       message: "الحذف النهائي غير متاح من الإجراءات الجماعية — استخدم أرشفة المشروع أو الحذف النهائي لكل مشروع على حدة.",
     };
   } else {
-    return { ok: false as const, message: "إجراء غير معروف." };
+    return { ok: false as const, code: "unknown_action", message: "إجراء غير معروف." };
   }
 
-  const { error } = await getSupabaseAdmin().from("projects").update(payload).in("id", ids);
-  if (error) return { ok: false as const, message: error.message };
+  const { error } = await getSupabaseAdmin()
+    .from("projects")
+    .update(payload)
+    .eq("type", type)
+    .in("id", ids);
+  if (error) {
+    return { ok: false as const, code: "bulk_update_failed", message: error.message };
+  }
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction(
       "project",
-      action === "hide" ? "unpublish" : action === "archive" ? "delete" : "update",
+      action === "hide" ? "unpublish" : action === "archive" ? "archive" : "update",
     ),
     entityType: "project",
     metadata: {
@@ -81,5 +104,10 @@ export async function bulkProjectsActionAjax(
     },
   });
   revalidateProjectPaths(type);
-  return { ok: true as const, message };
+  return {
+    ok: true as const,
+    publication_status: publicationStatus,
+    affectedIds: ids,
+    message,
+  };
 }
