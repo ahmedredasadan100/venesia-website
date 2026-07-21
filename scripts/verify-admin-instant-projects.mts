@@ -24,6 +24,11 @@ import {
   type ProjectFilters,
   type ProjectSortField,
 } from "../src/lib/admin/projects/entity-list-contract.ts";
+import type { ProjectEntityListRow } from "../src/lib/admin/projects/entity-list-types.ts";
+import {
+  applyProjectPublicationMutation,
+  projectRowMatchesDataset,
+} from "../src/lib/admin/projects/instant-mutation-membership.ts";
 
 const read = (path: string) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
@@ -102,10 +107,71 @@ check(migration.includes("p_publication_status"), "migration supports publicatio
 check(migration.includes("p_implementation_status"), "migration supports implementation filter");
 check(migration.includes("p_featured"), "migration supports featured filter");
 check(migration.includes("p_list_mode"), "migration supports active/archive mode");
+for (const input of [
+  "p_page",
+  "p_page_size",
+  "p_sort_field",
+  "p_sort_direction",
+  "p_project_type",
+  "p_publication_status",
+  "p_implementation_status",
+  "p_featured",
+  "p_list_mode",
+]) {
+  check(
+    migration.includes(`if ${input} is null`) &&
+      migration.includes(`message = '${input}`),
+    `database validates ${input}`,
+  );
+}
+for (const sortField of [
+  "homepage_order",
+  "arabic_name",
+  "code",
+  "featured",
+  "publication_status",
+  "location",
+  "updated_at",
+]) {
+  check(migration.includes(`'${sortField}'`), `database allows sort ${sortField}`);
+}
+for (const value of ["residential", "commercial"]) {
+  check(migration.includes(`'${value}'`), `database allows project type ${value}`);
+}
+for (const value of ["all", "draft", "published", "unpublished", "archived"]) {
+  check(migration.includes(`'${value}'`), `database allows publication ${value}`);
+}
+for (const value of [
+  "all",
+  "under-construction",
+  "excavation",
+  "near-delivery",
+  "delivered",
+]) {
+  check(migration.includes(`'${value}'`), `database allows implementation ${value}`);
+}
+check(
+  migration.includes("p_page_size not in (10, 20, 30)"),
+  "database page-size allowlist is explicit",
+);
+check(
+  migration.includes("p_sort_direction not in ('asc', 'desc')"),
+  "database sort-direction allowlist is explicit",
+);
+check(
+  migration.includes("p_featured not in ('all', 'yes', 'no')"),
+  "database featured allowlist is explicit",
+);
+check(
+  migration.includes("p_list_mode not in ('all', 'active', 'archived')"),
+  "database list-mode allowlist is explicit",
+);
 check(migration.includes("grant execute") && migration.includes("service_role"), "migration grants service_role only");
 check(!migration.includes("drop table"), "migration is non-destructive");
 check(mutation.includes("cancelQueries"), "mutation cancels in-flight queries");
 check(mutation.includes("snapshot.forEach"), "mutation restores snapshots");
+check(mutation.includes("reconcileSuccess"), "mutation core supports deterministic success reconciliation");
+check(mutation.includes("restoreSnapshot"), "mutation core exposes exact snapshot restoration");
 check(mutationCache.includes("matchesAdminEntityListScope"), "cache patches by dataset scope");
 check(controller.includes("cacheNormalizedAdminEntityListResult"), "controller out-of-range one-request");
 check(normalizedCache.includes("setQueryData(normalizedKey, result)"), "normalized cache transfer");
@@ -114,6 +180,20 @@ check(bulkActions.includes(".eq(\"type\", type)"), "bulk actions scoped by proje
 check(deleteActions.includes('code: "confirm_required"'), "delete returns typed codes");
 check(!actionsFacade.includes("getProjectsTableRows"), "actions facade no longer exports full-list loader");
 check(!statusActions.includes("getProjectsTableRows"), "status module no longer full-list reloads");
+check(client.includes("isBulkPending"), "client separates bulk pending");
+check(client.includes("rowPendingAction"), "client exposes row-local pending action");
+check(!client.includes("const isBusy ="), "client has no global row busy state");
+check(client.includes("mutationLockRef"), "client retains single-flight mutation safety");
+check(
+  referenceTable.includes('pending={pendingAction === "status"}') &&
+    legacyTable.includes('pending={pendingAction === "status"}'),
+  "row pending presentation is action-local",
+);
+check(
+  referenceTable.includes("pending || handlers.isBulkPending") &&
+    legacyTable.includes("pending || handlers.isBulkPending"),
+  "bulk pending disables all row actions",
+);
 
 const residential = normalizeAdminEntityListQuery(
   projectsQueryContract,
@@ -179,6 +259,230 @@ check(adapter.includes("projectsEntityListResultSchema"), "adapter defines resul
 check(adapter.includes("createAdminEntityListResultSchema"), "adapter uses shared result schema factory");
 check(types.includes("export type ProjectEntityListRow"), "shared client-safe row type exists");
 check(types.includes("export type ProjectEntityListMetrics"), "shared client-safe metrics type exists");
+
+const membershipRow = (
+  publication_status: string,
+  overrides: Partial<ProjectEntityListRow> = {},
+): ProjectEntityListRow => ({
+  id: 1,
+  code: "R-1",
+  slug: "r-1",
+  arabic_name: "برج القاهرة",
+  location_label: "القاهرة",
+  map_area: "وسط البلد",
+  featured: false,
+  publication_status,
+  status: "under-construction",
+  updated_at: "2026-07-21T00:00:00.000Z",
+  ...overrides,
+});
+
+function membershipHarness(rows: ProjectEntityListRow[]) {
+  let current = rows.map((row) => ({ ...row }));
+  let removed = new Set<number | string>();
+  return {
+    cache: {
+      patchRows(updater: (row: ProjectEntityListRow) => ProjectEntityListRow) {
+        current = current.map(updater);
+      },
+      removeRows(ids: ReadonlySet<number | string>) {
+        removed = new Set([...removed, ...ids]);
+        current = current.filter((row) => !ids.has(row.id));
+      },
+      upsertRows() {},
+    },
+    rows: () => current,
+    removed: () => removed,
+    restore(rowsToRestore: ProjectEntityListRow[]) {
+      current = rowsToRestore.map((row) => ({ ...row }));
+      removed = new Set();
+    },
+  };
+}
+
+const filters = (
+  overrides: Partial<ProjectFilters> = {},
+): ProjectFilters => ({
+  projectType: "residential",
+  publicationStatus: "all",
+  implementationStatus: "all",
+  featured: "all",
+  listMode: "all",
+  ...overrides,
+});
+
+check(
+  projectRowMatchesDataset(
+    membershipRow("published"),
+    "برج القاهرة",
+    filters({
+      publicationStatus: "published",
+      implementationStatus: "under-construction",
+      featured: "no",
+      listMode: "active",
+    }),
+  ),
+  "complete matching dataset membership keeps row",
+);
+
+function verifyPublicationTransition(
+  label: string,
+  sourceStatus: string,
+  nextStatus: string,
+  activeFilters: ProjectFilters,
+  expectedRemoval: boolean,
+) {
+  const source = membershipRow(sourceStatus);
+  const harness = membershipHarness([source]);
+  applyProjectPublicationMutation(
+    harness.cache,
+    [source],
+    new Set([source.id]),
+    nextStatus,
+    "",
+    activeFilters,
+  );
+  check(
+    harness.removed().has(source.id) === expectedRemoval,
+    `${label}: removal matches membership`,
+  );
+  check(
+    expectedRemoval ||
+      harness.rows()[0]?.publication_status === nextStatus,
+    `${label}: matching row is patched`,
+  );
+}
+
+verifyPublicationTransition(
+  "published to unpublished in published filter",
+  "published",
+  "unpublished",
+  filters({ publicationStatus: "published" }),
+  true,
+);
+verifyPublicationTransition(
+  "unpublished to published in unpublished filter",
+  "unpublished",
+  "published",
+  filters({ publicationStatus: "unpublished" }),
+  true,
+);
+verifyPublicationTransition(
+  "draft to published in draft filter",
+  "draft",
+  "published",
+  filters({ publicationStatus: "draft" }),
+  true,
+);
+verifyPublicationTransition(
+  "archive in active mode",
+  "published",
+  "archived",
+  filters({ listMode: "active" }),
+  true,
+);
+verifyPublicationTransition(
+  "archive in non-all publication filter",
+  "published",
+  "archived",
+  filters({ publicationStatus: "published" }),
+  true,
+);
+verifyPublicationTransition(
+  "restore in archived mode",
+  "archived",
+  "draft",
+  filters({ listMode: "archived" }),
+  true,
+);
+verifyPublicationTransition(
+  "restore in archived publication filter",
+  "archived",
+  "draft",
+  filters({ publicationStatus: "archived" }),
+  true,
+);
+verifyPublicationTransition(
+  "publication change in unfiltered dataset",
+  "draft",
+  "published",
+  filters(),
+  false,
+);
+
+const bulkHideRows = [
+  membershipRow("published", { id: 21 }),
+  membershipRow("published", { id: 22 }),
+];
+const bulkHideHarness = membershipHarness(bulkHideRows);
+applyProjectPublicationMutation(
+  bulkHideHarness.cache,
+  bulkHideRows,
+  new Set([21, 22]),
+  "unpublished",
+  "",
+  filters({ publicationStatus: "published" }),
+);
+check(
+  bulkHideHarness.removed().size === 2,
+  "bulk hide removes every row leaving publication dataset",
+);
+
+const bulkArchiveRows = [
+  membershipRow("published", { id: 31 }),
+  membershipRow("draft", { id: 32 }),
+];
+const bulkArchiveHarness = membershipHarness(bulkArchiveRows);
+applyProjectPublicationMutation(
+  bulkArchiveHarness.cache,
+  bulkArchiveRows,
+  new Set([31, 32]),
+  "archived",
+  "",
+  filters({ listMode: "active" }),
+);
+check(
+  bulkArchiveHarness.removed().size === 2,
+  "bulk archive removes every row leaving active dataset",
+);
+
+const mixedRows = [
+  membershipRow("draft", { id: 11, code: "VALID" }),
+  membershipRow("draft", { id: 12, code: "SKIPPED" }),
+];
+const mixedHarness = membershipHarness(mixedRows);
+applyProjectPublicationMutation(
+  mixedHarness.cache,
+  mixedRows,
+  new Set([11, 12]),
+  "published",
+  "",
+  filters(),
+);
+check(
+  mixedHarness.rows().every((row) => row.publication_status === "published"),
+  "bulk publish applies optimistic state to selected rows",
+);
+// Mirrors reconcileSuccess: exact snapshot first, then only authoritative IDs.
+mixedHarness.restore(mixedRows);
+applyProjectPublicationMutation(
+  mixedHarness.cache,
+  mixedRows,
+  new Set([11]),
+  "published",
+  "",
+  filters(),
+);
+check(
+  mixedHarness.rows().find((row) => row.id === 11)?.publication_status ===
+    "published",
+  "partial bulk publish keeps affected ID published",
+);
+check(
+  mixedHarness.rows().find((row) => row.id === 12)?.publication_status ===
+    "draft",
+  "partial bulk publish restores skipped ID exactly",
+);
 
 const baseQuery = normalizeAdminEntityListQuery(
   projectsQueryContract,
@@ -346,6 +650,12 @@ const readScoped = (
   scopeClient.getQueryData<AdminEntityListResult<ScopeRow, ScopeMetrics>>(
     adminEntityListQueryKeys.query("projects", query),
   )?.pagination;
+const readScopedRows = (
+  query: AdminEntityListQuery<ProjectFilters, ProjectSortField>,
+) =>
+  scopeClient.getQueryData<AdminEntityListResult<ScopeRow, ScopeMetrics>>(
+    adminEntityListQueryKeys.query("projects", query),
+  )?.rows;
 check(readScoped(pageOneQuery)?.totalRows === 3, "cross-page totalRows patched");
 check(readScoped(pageTwoQuery)?.totalRows === 3, "page-two totalRows patched");
 check(readScoped(differentSortQuery)?.totalRows === 3, "cross-sort totalRows patched");
@@ -360,6 +670,11 @@ check(readScoped(pageOneQuery)?.totalRows === 4, "deterministic rollback restore
 check(readScoped(pageTwoQuery)?.totalRows === 4, "deterministic rollback restores page two");
 check(readScoped(differentSortQuery)?.totalRows === 4, "deterministic rollback restores sort view");
 check(readScoped(differentPageSizeQuery)?.totalRows === 4, "deterministic rollback restores page-size view");
+check(
+  JSON.stringify(readScopedRows(pageTwoQuery)) ===
+    JSON.stringify([sample(4, "D")]),
+  "deterministic rollback restores exact row values",
+);
 scopeClient.clear();
 
 const controllerQueryClient = new QueryClient({

@@ -31,6 +31,10 @@ type CacheSnapshot<Row, Metrics> = Array<[
   AdminEntityListResult<Row, Metrics> | undefined,
 ]>;
 
+type AdminEntityMutationResult =
+  | AdminEntityMutationSuccess<Record<string, unknown>>
+  | AdminEntityMutationError;
+
 export type AdminInstantMutationPatch<Row> = {
   patchRows: (updater: (row: Row) => Row) => void;
   removeRows: (ids: ReadonlySet<number | string>) => void;
@@ -71,13 +75,24 @@ export function useAdminEntityInstantMutation<
     ),
   };
 
+  function restoreSnapshot(snapshot: CacheSnapshot<Row, Metrics>) {
+    snapshot.forEach(([key, value]) => queryClient.setQueryData(key, value));
+  }
+
   const mutation = useMutation({
     mutationFn: async (request: {
       rowId?: number | string;
       action: string;
       bulk?: boolean;
       optimistic: (cache: AdminInstantMutationPatch<Row>) => void;
-      execute: () => Promise<AdminEntityMutationSuccess<Record<string, unknown>> | AdminEntityMutationError>;
+      execute: () => Promise<AdminEntityMutationResult>;
+      reconcileSuccess?: (
+        result: AdminEntityMutationSuccess<Record<string, unknown>>,
+        tools: {
+          cache: AdminInstantMutationPatch<Row>;
+          restoreSnapshot: () => void;
+        },
+      ) => void;
     }) => {
       const result = await request.execute();
       if (!result.ok) throw Object.assign(new Error(result.message), result);
@@ -95,11 +110,20 @@ export function useAdminEntityInstantMutation<
       return { snapshot } as { snapshot: CacheSnapshot<Row, Metrics> };
     },
     onError: (_error, _request, context) => {
-      context?.snapshot.forEach(([key, value]) => queryClient.setQueryData(key, value));
+      if (context) restoreSnapshot(context.snapshot);
     },
-    onSuccess: () => queryClient.invalidateQueries({
-      queryKey: adminEntityListQueryKeys.entity(entity), refetchType: "active",
-    }),
+    onSuccess: (result, request, context) => {
+      if (request.reconcileSuccess && context) {
+        request.reconcileSuccess(result, {
+          cache: helpers,
+          restoreSnapshot: () => restoreSnapshot(context.snapshot),
+        });
+      }
+      return queryClient.invalidateQueries({
+        queryKey: adminEntityListQueryKeys.entity(entity),
+        refetchType: "active",
+      });
+    },
     onSettled: () => { setRowPending(null); setBulkPending(null); },
   });
 

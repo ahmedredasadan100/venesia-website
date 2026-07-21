@@ -20,7 +20,8 @@ export type ProjectRowActionHandlers = {
   onRequestPermanentDelete: (item: ProjectGridRow) => void;
   onDuplicate?: (id: number) => void;
   isRowPending: (id: number) => boolean;
-  isBusy: boolean;
+  rowPendingAction: (id: number) => string | null;
+  isBulkPending: boolean;
 };
 
 export type ProjectTableSortState = {

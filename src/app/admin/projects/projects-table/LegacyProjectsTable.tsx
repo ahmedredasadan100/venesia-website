@@ -126,6 +126,7 @@ export default function LegacyProjectsTable({
           const isHidden = item.publication_status !== "published";
           const isArchived = item.publication_status === "archived";
           const pending = handlers.isRowPending(item.id);
+          const pendingAction = handlers.rowPendingAction(item.id);
 
           return (
             <AdminDataGridRow
@@ -176,7 +177,8 @@ export default function LegacyProjectsTable({
                     action="visibility"
                     title={isHidden ? "نشر" : "إخفاء"}
                     isCurrentlyHidden={isHidden}
-                    disabled={pending || handlers.isBusy}
+                    disabled={pending || handlers.isBulkPending}
+                    pending={pendingAction === "status"}
                     onClick={() =>
                       handlers.onTogglePublication(item.id, item.publication_status)
                     }
@@ -185,7 +187,8 @@ export default function LegacyProjectsTable({
                   <AdminDataGridActionButton
                     tone="dark"
                     title="استعادة كمسودة"
-                    disabled={pending || handlers.isBusy}
+                    disabled={pending || handlers.isBulkPending}
+                    pending={pendingAction === "restore"}
                     onClick={() => handlers.onRestore(item.id)}
                   >
                     <RestoreIcon />
@@ -196,8 +199,9 @@ export default function LegacyProjectsTable({
                     action="duplicate"
                     title="نسخ المشروع"
                     disabled={
-                      pending || handlers.isBusy || !handlers.onDuplicate
+                      pending || handlers.isBulkPending || !handlers.onDuplicate
                     }
+                    pending={pendingAction === "duplicate"}
                     onClick={() => handlers.onDuplicate?.(item.id)}
                   />
                 ) : null}
@@ -205,7 +209,8 @@ export default function LegacyProjectsTable({
                   <AdminDataGridActionButton
                     tone="dark"
                     title="أرشفة المشروع"
-                    disabled={pending || handlers.isBusy}
+                    disabled={pending || handlers.isBulkPending}
+                    pending={pendingAction === "archive"}
                     onClick={() => handlers.onArchive(item.id)}
                   >
                     <ArchiveIcon />
@@ -214,7 +219,8 @@ export default function LegacyProjectsTable({
                 <AdminDataGridActionButton
                   tone="dark"
                   title="حذف نهائي"
-                  disabled={pending || handlers.isBusy}
+                  disabled={pending || handlers.isBulkPending}
+                  pending={pendingAction === "delete"}
                   onClick={() => handlers.onRequestPermanentDelete(item)}
                 >
                   <span className="text-[10px] font-bold text-red-300">DEL</span>

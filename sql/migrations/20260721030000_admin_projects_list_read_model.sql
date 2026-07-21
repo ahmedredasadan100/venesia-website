@@ -13,11 +13,48 @@ create or replace function public.admin_list_projects(
   p_list_mode text default 'all'
 )
 returns jsonb
-language sql
+language plpgsql
 stable
 security invoker
 set search_path = public
 as $$
+begin
+  if p_page is null or p_page < 1 then
+    raise exception using errcode = '22023', message = 'p_page must be a positive integer';
+  end if;
+  if p_page_size is null or p_page_size not in (10, 20, 30) then
+    raise exception using errcode = '22023', message = 'p_page_size must be one of 10, 20, 30';
+  end if;
+  if p_sort_field is null or p_sort_field not in (
+    'homepage_order', 'arabic_name', 'code', 'featured',
+    'publication_status', 'location', 'updated_at'
+  ) then
+    raise exception using errcode = '22023', message = 'p_sort_field is not supported';
+  end if;
+  if p_sort_direction is null or p_sort_direction not in ('asc', 'desc') then
+    raise exception using errcode = '22023', message = 'p_sort_direction must be asc or desc';
+  end if;
+  if p_project_type is null or p_project_type not in ('residential', 'commercial') then
+    raise exception using errcode = '22023', message = 'p_project_type is not supported';
+  end if;
+  if p_publication_status is null or p_publication_status not in (
+    'all', 'draft', 'published', 'unpublished', 'archived'
+  ) then
+    raise exception using errcode = '22023', message = 'p_publication_status is not supported';
+  end if;
+  if p_implementation_status is null or p_implementation_status not in (
+    'all', 'under-construction', 'excavation', 'near-delivery', 'delivered'
+  ) then
+    raise exception using errcode = '22023', message = 'p_implementation_status is not supported';
+  end if;
+  if p_featured is null or p_featured not in ('all', 'yes', 'no') then
+    raise exception using errcode = '22023', message = 'p_featured is not supported';
+  end if;
+  if p_list_mode is null or p_list_mode not in ('all', 'active', 'archived') then
+    raise exception using errcode = '22023', message = 'p_list_mode is not supported';
+  end if;
+
+  return (
   with scoped as (
     select
       p.id,
@@ -124,7 +161,8 @@ as $$
       'published', (select published from metrics),
       'featured', (select featured from metrics)
     )
-  );
+  ));
+end;
 $$;
 
 revoke all on function public.admin_list_projects(

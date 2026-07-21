@@ -176,6 +176,7 @@ export default function ReferenceProjectsTable({
           const isArchived = item.publication_status === "archived";
           const previewPath = item.slug ? `/projects/${item.slug}` : null;
           const pending = handlers.isRowPending(item.id);
+          const pendingAction = handlers.rowPendingAction(item.id);
 
           return (
             <AdminDataGridRow
@@ -264,7 +265,8 @@ export default function ReferenceProjectsTable({
                     size="compact"
                     isCurrentlyHidden={!isPublished}
                     title={isPublished ? "إخفاء من الموقع" : "نشر في الموقع"}
-                    disabled={pending || handlers.isBusy}
+                    disabled={pending || handlers.isBulkPending}
+                    pending={pendingAction === "status"}
                     onClick={() =>
                       handlers.onTogglePublication(item.id, item.publication_status)
                     }
@@ -274,7 +276,8 @@ export default function ReferenceProjectsTable({
                     tone="dark"
                     size="compact"
                     title="استعادة كمسودة"
-                    disabled={pending || handlers.isBusy}
+                    disabled={pending || handlers.isBulkPending}
+                    pending={pendingAction === "restore"}
                     onClick={() => handlers.onRestore(item.id)}
                   >
                     <RestoreIcon />
@@ -285,7 +288,8 @@ export default function ReferenceProjectsTable({
                   action="duplicate"
                   size="compact"
                   title="نسخ المشروع"
-                  disabled={pending || handlers.isBusy || !handlers.onDuplicate}
+                  disabled={pending || handlers.isBulkPending || !handlers.onDuplicate}
+                  pending={pendingAction === "duplicate"}
                   onClick={() => handlers.onDuplicate?.(item.id)}
                 />
 
@@ -294,7 +298,8 @@ export default function ReferenceProjectsTable({
                     tone="dark"
                     size="compact"
                     title="أرشفة المشروع"
-                    disabled={pending || handlers.isBusy}
+                    disabled={pending || handlers.isBulkPending}
+                    pending={pendingAction === "archive"}
                     onClick={() => handlers.onArchive(item.id)}
                   >
                     <ArchiveIcon />
@@ -305,7 +310,8 @@ export default function ReferenceProjectsTable({
                   tone="dark"
                   size="compact"
                   title="حذف نهائي — يتطلب تأكيدًا"
-                  disabled={pending || handlers.isBusy}
+                  disabled={pending || handlers.isBulkPending}
+                  pending={pendingAction === "delete"}
                   onClick={() => handlers.onRequestPermanentDelete(item)}
                 >
                   <DeleteIcon />

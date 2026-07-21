@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import AdminNotice from "../../../components/admin/AdminNotice";
 import {
   AdminEntityListFilters,
@@ -29,6 +29,7 @@ import type {
   ProjectEntityListMetrics,
   ProjectEntityListRow,
 } from "../../../lib/admin/projects/entity-list-types";
+import { applyProjectPublicationMutation } from "../../../lib/admin/projects/instant-mutation-membership";
 import {
   archiveProjectAjax,
   bulkProjectsActionAjax,
@@ -155,6 +156,7 @@ export default function ProjectsTableClient({
   } | null>(null);
   const [pendingPermanentDelete, setPendingPermanentDelete] =
     useState<ProjectGridRow | null>(null);
+  const mutationLockRef = useRef(false);
   const columns = buildColumns(withDuplicateAction, referenceLayout);
   const rangeStart = controller.result.pagination.totalRows
     ? (controller.result.pagination.page - 1) *
@@ -170,8 +172,7 @@ export default function ProjectsTableClient({
     : 0;
   const publishedCount = controller.result.metrics?.published ?? 0;
   const featuredCount = controller.result.metrics?.featured ?? 0;
-  const isBusy =
-    instant.bulkPending !== null || instant.rowPending !== null;
+  const isBulkPending = instant.bulkPending !== null;
 
   function lockedFilters(next: Partial<ProjectFilters> = {}): ProjectFilters {
     return {
@@ -186,37 +187,54 @@ export default function ProjectsTableClient({
     };
   }
 
-  async function runMutation(request: {
-    rowId?: number;
-    action: string;
-    bulk?: boolean;
-    optimistic: Parameters<typeof instant.mutateAsync>[0]["optimistic"];
-    execute: Parameters<typeof instant.mutateAsync>[0]["execute"];
-  }) {
+  async function runMutation(
+    request: Parameters<typeof instant.mutateAsync>[0],
+  ) {
+    // The shared mutation state is single-flight. Keep unrelated rows visually
+    // available while refusing unsafe concurrent mutations deterministically.
+    if (
+      mutationLockRef.current ||
+      instant.rowPending !== null ||
+      instant.bulkPending !== null
+    ) {
+      return false;
+    }
+    mutationLockRef.current = true;
     try {
       const result = await instant.mutateAsync(request);
       if (request.bulk) selection.clearSelection();
       setFeedback({ type: "success", message: result.message });
+      return true;
     } catch (error) {
       setFeedback({
         type: "error",
         message:
           error instanceof Error ? error.message : "تعذر تنفيذ العملية.",
       });
+      return false;
+    } finally {
+      mutationLockRef.current = false;
     }
   }
 
   const handlers: ProjectRowActionHandlers = {
-    isBusy,
+    isBulkPending,
     isRowPending: (id) => instant.rowPending?.rowId === id,
+    rowPendingAction: (id) =>
+      instant.rowPending?.rowId === id ? instant.rowPending.action : null,
     onTogglePublication: (id, status) => {
       const nextStatus = status === "published" ? "unpublished" : "published";
       void runMutation({
         rowId: id,
         action: "status",
         optimistic: (cache) =>
-          cache.patchRows((row) =>
-            row.id === id ? { ...row, publication_status: nextStatus } : row,
+          applyProjectPublicationMutation(
+            cache,
+            controller.result.rows,
+            new Set([id]),
+            nextStatus,
+            controller.query.search,
+            controller.query.filters,
           ),
         execute: () => toggleProjectPublicationAjax(id, status),
       });
@@ -225,15 +243,15 @@ export default function ProjectsTableClient({
       void runMutation({
         rowId: id,
         action: "archive",
-        optimistic: (cache) => {
-          if (controller.query.filters.listMode === "active") {
-            cache.removeRows(new Set([id]));
-            return;
-          }
-          cache.patchRows((row) =>
-            row.id === id ? { ...row, publication_status: "archived" } : row,
-          );
-        },
+        optimistic: (cache) =>
+          applyProjectPublicationMutation(
+            cache,
+            controller.result.rows,
+            new Set([id]),
+            "archived",
+            controller.query.search,
+            controller.query.filters,
+          ),
         execute: () => archiveProjectAjax(id),
       });
     },
@@ -241,15 +259,15 @@ export default function ProjectsTableClient({
       void runMutation({
         rowId: id,
         action: "restore",
-        optimistic: (cache) => {
-          if (controller.query.filters.listMode === "archived") {
-            cache.removeRows(new Set([id]));
-            return;
-          }
-          cache.patchRows((row) =>
-            row.id === id ? { ...row, publication_status: "draft" } : row,
-          );
-        },
+        optimistic: (cache) =>
+          applyProjectPublicationMutation(
+            cache,
+            controller.result.rows,
+            new Set([id]),
+            "draft",
+            controller.query.search,
+            controller.query.filters,
+          ),
         execute: () => restoreProjectAjax(id),
       });
     },
@@ -265,6 +283,10 @@ export default function ProjectsTableClient({
         }
       : undefined,
   };
+  const isPendingPermanentDelete =
+    pendingPermanentDelete !== null &&
+    instant.rowPending?.rowId === pendingPermanentDelete.id &&
+    instant.rowPending.action === "delete";
 
   return (
     <div
@@ -400,20 +422,38 @@ export default function ProjectsTableClient({
             action,
             bulk: true,
             optimistic: (cache) => {
-              if (
-                action === "archive" &&
-                controller.query.filters.listMode === "active"
-              ) {
-                cache.removeRows(idSet);
-                return;
-              }
-              cache.patchRows((row) =>
-                idSet.has(row.id)
-                  ? { ...row, publication_status: nextStatus }
-                  : row,
+              applyProjectPublicationMutation(
+                cache,
+                controller.result.rows,
+                idSet,
+                nextStatus,
+                controller.query.search,
+                controller.query.filters,
               );
             },
             execute: () => bulkProjectsActionAjax(action, numericIds, type),
+            reconcileSuccess:
+              action === "publish"
+                ? (result, { cache, restoreSnapshot }) => {
+                    const affectedIds = Array.isArray(result.affectedIds)
+                      ? new Set(
+                          result.affectedIds.filter(
+                            (id): id is number =>
+                              typeof id === "number" && Number.isInteger(id),
+                          ),
+                        )
+                      : new Set<number>();
+                    restoreSnapshot();
+                    applyProjectPublicationMutation(
+                      cache,
+                      controller.result.rows,
+                      affectedIds,
+                      "published",
+                      controller.query.search,
+                      controller.query.filters,
+                    );
+                  }
+                : undefined,
           });
         }}
         isBusy={instant.bulkPending !== null}
@@ -513,20 +553,27 @@ export default function ProjectsTableClient({
             </p>
             <VenesiaActionModalButton
               tone="red"
-              disabled={isBusy}
+              disabled={
+                isBulkPending ||
+                instant.rowPending?.rowId === pendingPermanentDelete.id
+              }
               onClick={() => {
                 const target = pendingPermanentDelete;
-                setPendingPermanentDelete(null);
-                void runMutation({
-                  rowId: target.id,
-                  action: "delete",
-                  optimistic: (cache) =>
-                    cache.removeRows(new Set([target.id])),
-                  execute: () => deleteProjectAjax(target.id, true),
-                });
+                void (async () => {
+                  const succeeded = await runMutation({
+                    rowId: target.id,
+                    action: "delete",
+                    optimistic: (cache) =>
+                      cache.removeRows(new Set([target.id])),
+                    execute: () => deleteProjectAjax(target.id, true),
+                  });
+                  if (succeeded) setPendingPermanentDelete(null);
+                })();
               }}
             >
-              تأكيد الحذف النهائي
+              {isPendingPermanentDelete
+                ? "جارٍ الحذف..."
+                : "تأكيد الحذف النهائي"}
             </VenesiaActionModalButton>
             <VenesiaActionModalButton
               onClick={() => setPendingPermanentDelete(null)}
