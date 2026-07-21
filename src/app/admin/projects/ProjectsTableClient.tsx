@@ -25,6 +25,7 @@ import {
   type AdminActionFeedback,
 } from "../../../lib/admin/admin-action-feedback";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
+import { resolveAdminNoticeFeedback } from "../../../lib/admin/entity-list/feedback-codes";
 import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getDefaultVisibleColumnKeys,
@@ -217,11 +218,11 @@ export default function ProjectsTableClient({
   const [visibleColumns, setVisibleColumns] = useState<ProjectColumnKey[]>(() =>
     resolveProjectsVisibleColumns(type, initialVisibleColumns),
   );
-  const initialFeedback = errorMessage
-    ? projectActionFeedback("initial", false, errorMessage)
-    : notice
-      ? projectActionFeedback("initial", true, notice)
-      : null;
+  const initialFeedback = resolveAdminNoticeFeedback(
+    {},
+    errorMessage ? "error" : notice ? "notice" : null,
+    errorMessage ?? notice,
+  );
   const feedback = feedbackState?.feedback ?? initialFeedback;
 
   function showFeedback(nextFeedback: AdminActionFeedback) {

@@ -13,6 +13,7 @@ const root = resolve(import.meta.dirname, "..");
 const baseUrl = process.env.ADMIN_PROJECTS_QA_BASE_URL || "http://localhost:3000";
 const outputDir = process.env.ADMIN_PROJECTS_QA_OUTPUT_DIR || "";
 const routeDelayMs = Number(process.env.ADMIN_PROJECTS_QA_DELAY_MS ?? "250");
+const qaTarget = process.env.ADMIN_PROJECTS_QA_TARGET || "full";
 const runId = Date.now().toString(36);
 const adminUsername = `__QA_PROJECTS_${runId}__`;
 const adminEmail = `qa-projects-${runId}@venesia.local`;
@@ -507,6 +508,41 @@ async function auditPage(browser, type) {
   await context.close();
 }
 
+async function auditUrlNoticeCleanup(browser) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
+  const page = await context.newPage();
+  page.on("console", (message) => {
+    const text = message.text();
+    if (message.type() === "error" || (message.type() === "warning" && /react|hydrat|server rendered|did not match/i.test(text))) {
+      browserIssues.push({ type: "url-notice-cleanup", source: `console:${message.type()}`, text });
+    }
+  });
+  page.on("pageerror", (error) => browserIssues.push({ type: "url-notice-cleanup", source: "pageerror", text: String(error) }));
+
+  await login(page);
+  const response = await page.goto(`${baseUrl}/admin/projects/residential?notice=updated`, {
+    waitUntil: "domcontentloaded",
+    timeout: 60_000,
+  });
+  const notice = page.locator('[data-admin-notice-layout="inline"]');
+  const dismiss = page.getByRole("button", { name: "إغلاق الإشعار", exact: true });
+  check("url notice cleanup: document response succeeds", response?.status() === 200, `status=${response?.status()}`);
+  check("url notice cleanup: updated notice appears", await notice.getByText("تم تحديث المشروع بنجاح.", { exact: true }).isVisible());
+  check("url notice cleanup: dismiss control is available", (await dismiss.count()) === 1);
+
+  await dismiss.click();
+  await page.waitForFunction(() => {
+    const params = new URL(window.location.href).searchParams;
+    return !params.has("notice") && !params.has("error");
+  });
+  const dismissedUrl = new URL(page.url());
+  check("url notice cleanup: notice and error params are removed", !dismissedUrl.searchParams.has("notice") && !dismissedUrl.searchParams.has("error"), dismissedUrl.href);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  check("url notice cleanup: old notice stays dismissed after refresh", (await page.getByText("تم تحديث المشروع بنجاح.", { exact: true }).count()) === 0);
+  await context.close();
+}
+
 async function main() {
   const passwordHash = await bcrypt.hash(password, 10);
   const { data, error } = await supabase
@@ -519,8 +555,12 @@ async function main() {
 
   const browser = await chromium.launch({ headless: true });
   try {
-    await auditPage(browser, "residential");
-    await auditPage(browser, "commercial");
+    if (qaTarget === "url-notice-cleanup") {
+      await auditUrlNoticeCleanup(browser);
+    } else {
+      await auditPage(browser, "residential");
+      await auditPage(browser, "commercial");
+    }
   } finally {
     await browser.close();
     await cleanup();
