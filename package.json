@@ -19,6 +19,7 @@
     "capture:admin-data-engine-baseline": "node scripts/capture-admin-data-engine-baseline.mjs",
     "verify:admin-data-engine-contracts": "node --experimental-strip-types scripts/verify-admin-data-engine-contracts.mts",
     "verify:admin-instant-pages": "node scripts/verify-admin-instant-pages.mjs",
+    "verify:admin-instant-projects": "node --experimental-strip-types scripts/verify-admin-instant-projects.mts",
     "qa:admin-instant-pages": "node scripts/qa-admin-instant-pages.mjs",
     "qa:admin-data-engine-endpoint": "node scripts/qa-admin-data-engine-endpoint.mjs",
     "qa:admin-data-engine-controller": "node scripts/qa-admin-data-engine-controller.mjs",
@@ -43,7 +44,7 @@
     "verify:route-slot-policy": "node scripts/verify-route-slot-policy.mjs",
     "verify:project-child-fail-closed": "node scripts/verify-project-child-fail-closed.mjs",
     "verify:projects-hub-readiness": "node scripts/verify-projects-hub-readiness.mjs",
-    "verify:admin-runtime": "npm run verify:admin-entity-list && npm run verify:admin-shell-system && npm run verify:admin-data-engine-contracts && npm run verify:admin-instant-pages && npm run qa:admin-instant-pages",
+    "verify:admin-runtime": "npm run verify:admin-entity-list && npm run verify:admin-shell-system && npm run verify:admin-data-engine-contracts && npm run verify:admin-instant-pages && npm run qa:admin-instant-pages && npm run verify:admin-instant-projects",
     "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:unified-content && npm run verify:admin-runtime && npm run verify:audit-coverage",
     "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:unified-content && npm run verify:audit-coverage && npm run verify:admin-runtime && npm run build"
   },

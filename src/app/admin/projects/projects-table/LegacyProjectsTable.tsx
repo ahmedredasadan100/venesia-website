@@ -9,17 +9,20 @@ import {
   AdminDataGridRow,
   AdminDataGridSortLabel,
 } from "../../../../components/admin/ui";
-import { useAdminTable } from "../../../../components/admin/table-engine";
 import AdminStatusPill from "../../../../components/admin/ui/AdminStatusPill";
 import type { ProjectCategory } from "../../../../config/projects-data";
-import { duplicateProjectAjax } from "../actions";
 import {
   featuredLabel,
   formatDate,
   locationLabel,
   publicationMeta,
 } from "./projects-table-utils";
-import type { ProjectGridRow, ProjectRowActionHandlers } from "./projects-table-types";
+import type {
+  ProjectGridRow,
+  ProjectRowActionHandlers,
+  ProjectTableSelection,
+  ProjectTableSortState,
+} from "./projects-table-types";
 
 export type LegacyProjectSortKey = "code" | "location" | "updated_at";
 
@@ -67,24 +70,30 @@ function ProjectIcon({ type }: { type: ProjectCategory }) {
 
 type LegacyProjectsTableProps = {
   type: ProjectCategory;
-  table: ReturnType<typeof useAdminTable<ProjectGridRow, LegacyProjectSortKey>>;
+  rows: ProjectGridRow[];
   columns: string;
   withDuplicateAction: boolean;
+  sort: ProjectTableSortState;
+  onSort: (field: LegacyProjectSortKey) => void;
+  selection: ProjectTableSelection;
   handlers: ProjectRowActionHandlers;
 };
 
 export default function LegacyProjectsTable({
   type,
-  table,
+  rows,
   columns,
   withDuplicateAction,
+  sort,
+  onSort,
+  selection,
   handlers,
 }: LegacyProjectsTableProps) {
   function sortProps(key: LegacyProjectSortKey) {
     return {
-      active: table.sort.key === key,
-      direction: table.sort.direction,
-      onClick: () => table.toggleSort(key),
+      active: sort.field === key,
+      direction: sort.field === key ? sort.direction : ("asc" as const),
+      onClick: () => onSort(key),
     } as const;
   }
 
@@ -93,14 +102,16 @@ export default function LegacyProjectsTable({
       <AdminDataGridHeader columns={columns}>
         <div className="flex justify-center">
           <AdminDataGridCheckbox
-            inputRef={table.selection.selectAllRef}
-            checked={table.selection.allSelected}
-            onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
+            inputRef={selection.selectAllRef}
+            checked={selection.allSelected}
+            onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
             label="تحديد الكل"
           />
         </div>
         <AdminDataGridSortLabel {...sortProps("code")}>Code</AdminDataGridSortLabel>
-        <AdminDataGridSortLabel {...sortProps("location")}>Location / Area</AdminDataGridSortLabel>
+        <AdminDataGridSortLabel {...sortProps("location")}>
+          Location / Area
+        </AdminDataGridSortLabel>
         <span className="text-center">Featured</span>
         <span className="text-center">Published</span>
         <AdminDataGridSortLabel {...sortProps("updated_at")} className="mx-auto">
@@ -109,11 +120,12 @@ export default function LegacyProjectsTable({
         <span className="text-center">Actions</span>
       </AdminDataGridHeader>
 
-      {table.rows.length ? (
-        table.rows.map((item) => {
+      {rows.length ? (
+        rows.map((item) => {
           const published = publicationMeta(item.publication_status);
           const isHidden = item.publication_status !== "published";
           const isArchived = item.publication_status === "archived";
+          const pending = handlers.isRowPending(item.id);
 
           return (
             <AdminDataGridRow
@@ -123,42 +135,57 @@ export default function LegacyProjectsTable({
             >
               <div className="flex justify-center">
                 <AdminDataGridCheckbox
-                  checked={table.selection.selectedSet.has(item.id)}
-                  onChange={(event) => table.selection.toggleOne(item.id, event.currentTarget.checked)}
+                  checked={selection.selectedSet.has(item.id)}
+                  onChange={(event) =>
+                    selection.toggleOne(item.id, event.currentTarget.checked)
+                  }
                   label={`تحديد ${item.code}`}
                 />
               </div>
 
               <div className="flex min-w-0 items-center gap-2.5">
                 <ProjectIcon type={type} />
-                <span className="truncate font-en text-sm font-semibold text-[#D8B87A]">{item.code}</span>
+                <span className="truncate font-en text-sm font-semibold text-[#D8B87A]">
+                  {item.code}
+                </span>
               </div>
 
-              <div className="truncate text-sm text-white/60">{locationLabel(item)}</div>
+              <div className="truncate text-sm text-white/60">
+                {locationLabel(item)}
+              </div>
 
               <div className="flex justify-center">
-                <AdminStatusPill tone={item.featured ? "green" : "muted"}>{featuredLabel(item)}</AdminStatusPill>
+                <AdminStatusPill tone={item.featured ? "green" : "muted"}>
+                  {featuredLabel(item)}
+                </AdminStatusPill>
               </div>
               <div className="flex justify-center">
                 <AdminStatusPill tone={published.tone}>{published.label}</AdminStatusPill>
               </div>
-              <div className="text-center text-xs text-white/50">{formatDate(item.updated_at)}</div>
+              <div className="text-center text-xs text-white/50">
+                {formatDate(item.updated_at)}
+              </div>
 
               <AdminDataGridActionsCell>
-                <AdminDataGridActionButton action="edit" href={`/admin/projects/${item.id}`} />
+                <AdminDataGridActionButton
+                  action="edit"
+                  href={`/admin/projects/${item.id}`}
+                />
                 {!isArchived ? (
                   <AdminDataGridActionButton
                     action="visibility"
                     title={isHidden ? "نشر" : "إخفاء"}
                     isCurrentlyHidden={isHidden}
-                    disabled={handlers.isPending}
-                    onClick={() => handlers.onTogglePublication(item.id, item.publication_status)}
+                    disabled={pending || handlers.isBusy}
+                    onClick={() =>
+                      handlers.onTogglePublication(item.id, item.publication_status)
+                    }
                   />
                 ) : (
                   <AdminDataGridActionButton
                     tone="dark"
                     title="استعادة كمسودة"
-                    disabled={handlers.isPending}
+                    disabled={pending || handlers.isBusy}
                     onClick={() => handlers.onRestore(item.id)}
                   >
                     <RestoreIcon />
@@ -168,15 +195,17 @@ export default function LegacyProjectsTable({
                   <AdminDataGridActionButton
                     action="duplicate"
                     title="نسخ المشروع"
-                    disabled={handlers.isPending}
-                    onClick={() => table.runAction(() => duplicateProjectAjax(item.id))}
+                    disabled={
+                      pending || handlers.isBusy || !handlers.onDuplicate
+                    }
+                    onClick={() => handlers.onDuplicate?.(item.id)}
                   />
                 ) : null}
                 {!isArchived ? (
                   <AdminDataGridActionButton
                     tone="dark"
                     title="أرشفة المشروع"
-                    disabled={handlers.isPending}
+                    disabled={pending || handlers.isBusy}
                     onClick={() => handlers.onArchive(item.id)}
                   >
                     <ArchiveIcon />
@@ -185,7 +214,7 @@ export default function LegacyProjectsTable({
                 <AdminDataGridActionButton
                   tone="dark"
                   title="حذف نهائي"
-                  disabled={handlers.isPending}
+                  disabled={pending || handlers.isBusy}
                   onClick={() => handlers.onRequestPermanentDelete(item)}
                 >
                   <span className="text-[10px] font-bold text-red-300">DEL</span>

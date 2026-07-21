@@ -4,6 +4,7 @@ import { categoriesEntityListAdapter } from "../../content/entity-list-adapters/
 import { seriesEntityListAdapter } from "../../content/entity-list-adapters/series";
 import { topicsEntityListAdapter } from "../../content/entity-list-adapters/topics";
 import { pagesEntityListAdapter } from "../../pages/entity-list-adapter";
+import { projectsEntityListAdapter } from "../../projects/entity-list-adapter";
 import {
   parseAdminEntityListRequestQuery,
   type AdminEntityListQuery,
@@ -16,6 +17,7 @@ export const adminEntityListAdapterRegistry = {
   categories: categoriesEntityListAdapter,
   series: seriesEntityListAdapter,
   pages: pagesEntityListAdapter,
+  projects: projectsEntityListAdapter,
 } as const;
 
 export type AdminEntityListEntityKey =

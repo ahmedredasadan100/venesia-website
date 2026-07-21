@@ -5,7 +5,6 @@ export {
   createProject,
   deleteProjectAjax,
   duplicateProjectAjax,
-  getProjectsTableRows,
   restoreProjectAjax,
   toggleProjectPublicationAjax,
   updateProject,

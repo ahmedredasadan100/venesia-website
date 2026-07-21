@@ -10,14 +10,22 @@ import {
   AdminDataGridRow,
   AdminDataGridSortLabel,
 } from "../../../../components/admin/ui";
-import { useAdminTable } from "../../../../components/admin/table-engine";
 import AdminStatusPill from "../../../../components/admin/ui/AdminStatusPill";
 import type { ProjectCategory } from "../../../../config/projects-data";
-import { duplicateProjectAjax } from "../actions";
 import { featuredLabel, formatDate, publicationMeta } from "./projects-table-utils";
-import type { ProjectGridRow, ProjectRowActionHandlers } from "./projects-table-types";
+import type {
+  ProjectGridRow,
+  ProjectRowActionHandlers,
+  ProjectTableSelection,
+  ProjectTableSortState,
+} from "./projects-table-types";
 
-export type ReferenceProjectSortKey = "name" | "code" | "featured" | "status" | "updated_at";
+export type ReferenceProjectSortKey =
+  | "arabic_name"
+  | "code"
+  | "featured"
+  | "publication_status"
+  | "updated_at";
 
 function ArchiveIcon() {
   return (
@@ -91,42 +99,50 @@ function DeleteIcon() {
 
 type ReferenceProjectsTableProps = {
   type: ProjectCategory;
-  table: ReturnType<typeof useAdminTable<ProjectGridRow, ReferenceProjectSortKey>>;
+  rows: ProjectGridRow[];
   columns: string;
+  sort: ProjectTableSortState;
+  onSort: (field: ReferenceProjectSortKey) => void;
+  selection: ProjectTableSelection;
   handlers: ProjectRowActionHandlers;
 };
 
 export default function ReferenceProjectsTable({
   type,
-  table,
+  rows,
   columns,
+  sort,
+  onSort,
+  selection,
   handlers,
 }: ReferenceProjectsTableProps) {
   function sortProps(key: ReferenceProjectSortKey) {
     return {
-      active: table.sort.key === key,
-      direction: table.sort.direction,
-      onClick: () => table.toggleSort(key),
+      active: sort.field === key,
+      direction: sort.field === key ? sort.direction : ("asc" as const),
+      onClick: () => onSort(key),
     } as const;
   }
 
-  const publishedCount = table.rows.filter((item) => item.publication_status === "published").length;
+  const publishedCount = rows.filter(
+    (item) => item.publication_status === "published",
+  ).length;
 
   return (
     <AdminDataGrid
-      summary={`${table.rows.length} مشروع${publishedCount ? ` — ${publishedCount} منشور` : ""}`}
+      summary={`${rows.length} مشروع${publishedCount ? ` — ${publishedCount} منشور` : ""}`}
     >
       <AdminDataGridHeader columns={columns}>
         <div className="flex justify-center">
           <AdminDataGridCheckbox
-            inputRef={table.selection.selectAllRef}
-            checked={table.selection.allSelected}
-            onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
+            inputRef={selection.selectAllRef}
+            checked={selection.allSelected}
+            onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
             label="تحديد الكل"
           />
         </div>
         <div className="min-w-0 text-right">
-          <AdminDataGridSortLabel {...sortProps("name")} className="justify-end">
+          <AdminDataGridSortLabel {...sortProps("arabic_name")} className="justify-end">
             المشروع
           </AdminDataGridSortLabel>
         </div>
@@ -141,7 +157,7 @@ export default function ReferenceProjectsTable({
           </AdminDataGridSortLabel>
         </div>
         <div className="text-center">
-          <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
+          <AdminDataGridSortLabel {...sortProps("publication_status")} className="justify-center">
             حالة النشر
           </AdminDataGridSortLabel>
         </div>
@@ -153,19 +169,26 @@ export default function ReferenceProjectsTable({
         <div className="text-center">الإجراءات</div>
       </AdminDataGridHeader>
 
-      {table.rows.length ? (
-        table.rows.map((item) => {
+      {rows.length ? (
+        rows.map((item) => {
           const published = publicationMeta(item.publication_status);
           const isPublished = item.publication_status === "published";
           const isArchived = item.publication_status === "archived";
           const previewPath = item.slug ? `/projects/${item.slug}` : null;
+          const pending = handlers.isRowPending(item.id);
 
           return (
-            <AdminDataGridRow key={item.id} columns={columns} divided>
+            <AdminDataGridRow
+              key={item.id}
+              columns={columns}
+              divided
+            >
               <div className="flex justify-center">
                 <AdminDataGridCheckbox
-                  checked={table.selection.selectedSet.has(item.id)}
-                  onChange={(event) => table.selection.toggleOne(item.id, event.currentTarget.checked)}
+                  checked={selection.selectedSet.has(item.id)}
+                  onChange={(event) =>
+                    selection.toggleOne(item.id, event.currentTarget.checked)
+                  }
                   label={`تحديد ${item.arabic_name}`}
                 />
               </div>
@@ -184,13 +207,18 @@ export default function ReferenceProjectsTable({
               </div>
 
               <div className="min-w-0 text-center">
-                <span className="font-en block truncate text-sm font-medium text-[#D8B87A]/85" title={item.code}>
+                <span
+                  className="font-en block truncate text-sm font-medium text-[#D8B87A]/85"
+                  title={item.code}
+                >
                   {item.code}
                 </span>
               </div>
 
               <div className="flex justify-center">
-                <AdminStatusPill tone={item.featured ? "green" : "muted"}>{featuredLabel(item)}</AdminStatusPill>
+                <AdminStatusPill tone={item.featured ? "green" : "muted"}>
+                  {featuredLabel(item)}
+                </AdminStatusPill>
               </div>
 
               <div className="flex justify-center">
@@ -236,15 +264,17 @@ export default function ReferenceProjectsTable({
                     size="compact"
                     isCurrentlyHidden={!isPublished}
                     title={isPublished ? "إخفاء من الموقع" : "نشر في الموقع"}
-                    disabled={handlers.isPending}
-                    onClick={() => handlers.onTogglePublication(item.id, item.publication_status)}
+                    disabled={pending || handlers.isBusy}
+                    onClick={() =>
+                      handlers.onTogglePublication(item.id, item.publication_status)
+                    }
                   />
                 ) : (
                   <AdminDataGridActionButton
                     tone="dark"
                     size="compact"
                     title="استعادة كمسودة"
-                    disabled={handlers.isPending}
+                    disabled={pending || handlers.isBusy}
                     onClick={() => handlers.onRestore(item.id)}
                   >
                     <RestoreIcon />
@@ -255,8 +285,8 @@ export default function ReferenceProjectsTable({
                   action="duplicate"
                   size="compact"
                   title="نسخ المشروع"
-                  disabled={handlers.isPending}
-                  onClick={() => table.runAction(() => duplicateProjectAjax(item.id))}
+                  disabled={pending || handlers.isBusy || !handlers.onDuplicate}
+                  onClick={() => handlers.onDuplicate?.(item.id)}
                 />
 
                 {!isArchived ? (
@@ -264,7 +294,7 @@ export default function ReferenceProjectsTable({
                     tone="dark"
                     size="compact"
                     title="أرشفة المشروع"
-                    disabled={handlers.isPending}
+                    disabled={pending || handlers.isBusy}
                     onClick={() => handlers.onArchive(item.id)}
                   >
                     <ArchiveIcon />
@@ -275,7 +305,7 @@ export default function ReferenceProjectsTable({
                   tone="dark"
                   size="compact"
                   title="حذف نهائي — يتطلب تأكيدًا"
-                  disabled={handlers.isPending}
+                  disabled={pending || handlers.isBusy}
                   onClick={() => handlers.onRequestPermanentDelete(item)}
                 >
                   <DeleteIcon />
@@ -286,7 +316,9 @@ export default function ReferenceProjectsTable({
         })
       ) : (
         <AdminDataGridEmpty>
-          <p className="text-base font-semibold text-white">لا توجد مشاريع سكنية في هذه القائمة</p>
+          <p className="text-base font-semibold text-white">
+            لا توجد مشاريع سكنية في هذه القائمة
+          </p>
           <p className="mt-2 text-sm leading-7 text-white/45">
             أضف مشروعًا سكنيًا جديدًا من زر «إضافة مشروع» أعلى الصفحة، أو راجع مركز المشروعات إن كنت تبحث عن مشروع
             تجاري.
