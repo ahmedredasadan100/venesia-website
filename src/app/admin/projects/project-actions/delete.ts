@@ -43,5 +43,5 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     metadata: { permanent: true, slug: existing.slug },
   });
   revalidateProjectPaths(existing.type, undefined, existing.slug);
-  return { ok: true as const, message: "تم حذف المشروع." };
+  return { ok: true as const, message: "تم الحذف النهائي وإزالة المشروع من القائمة." };
 }

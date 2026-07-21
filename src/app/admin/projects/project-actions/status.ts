@@ -58,7 +58,10 @@ export async function toggleProjectPublicationAjax(id: number, currentStatus: st
   return {
     ok: true as const,
     publication_status: nextStatus,
-    message: nextStatus === "published" ? "تم نشر المشروع." : "تم إخفاء المشروع.",
+    message:
+      nextStatus === "published"
+        ? "أصبح المشروع ظاهرًا للعامة."
+        : "لم يعد المشروع ظاهرًا للعامة.",
   };
 }
 
@@ -88,7 +91,7 @@ export async function archiveProjectAjax(id: number) {
   return {
     ok: true as const,
     publication_status: "archived" as const,
-    message: "تم أرشفة المشروع.",
+    message: "أُزيل المشروع من القائمة النشطة.",
   };
 }
 
@@ -118,6 +121,6 @@ export async function restoreProjectAjax(id: number) {
   return {
     ok: true as const,
     publication_status: "draft" as const,
-    message: "تم استعادة المشروع كمسودة.",
+    message: "عاد المشروع إلى القائمة كمسودة.",
   };
 }

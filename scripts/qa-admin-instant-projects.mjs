@@ -143,6 +143,7 @@ async function assertLayout(page, type, viewportName) {
   const region = page.locator('[data-admin-data-grid-scroll]');
   const row = region.locator("article").first();
   const actions = row.locator('[data-admin-grid-actions="sticky"]');
+  const actionsHeader = region.locator('[data-admin-grid-actions-header="sticky"]');
   await region.waitFor();
   if (viewportName !== "wide") {
     await region.evaluate((element) => {
@@ -151,6 +152,7 @@ async function assertLayout(page, type, viewportName) {
   }
   const regionBox = await region.boundingBox();
   const actionBox = await actions.boundingBox();
+  const actionHeaderBox = await actionsHeader.boundingBox();
   const buttonBoxes = await actions.locator("a, button").evaluateAll((elements) =>
     elements.map((element) => {
       const box = element.getBoundingClientRect();
@@ -165,7 +167,51 @@ async function assertLayout(page, type, viewportName) {
       buttonBoxes.every((box) => box.left >= actionBox.x - 1 && box.right <= actionBox.x + actionBox.width + 1),
   );
   check(`${type} ${viewportName}: actions are not clipped`, actionsVisible, JSON.stringify({ regionBox, actionBox, buttonBoxes }));
+  check(
+    `${type} ${viewportName}: actions stay at the visual far left in RTL`,
+    Boolean(regionBox && actionBox && Math.abs(actionBox.x - regionBox.x) <= 2),
+    JSON.stringify({ regionBox, actionBox }),
+  );
+  check(
+    `${type} ${viewportName}: actions header aligns with rows`,
+    Boolean(actionBox && actionHeaderBox && Math.abs(actionHeaderBox.x - actionBox.x) <= 2 && Math.abs(actionHeaderBox.width - actionBox.width) <= 2),
+    JSON.stringify({ actionHeaderBox, actionBox }),
+  );
   check(`${type} ${viewportName}: table header remains visible`, await region.locator("[class*='border-b']").first().isVisible());
+
+  if (viewportName === "wide") {
+    const actionContracts = await actions.locator("a, button").evaluateAll((elements) =>
+      elements.map((element) => ({
+        label: element.getAttribute("aria-label") || element.getAttribute("title") || "",
+        className: element.className,
+      })),
+    );
+    const expectedToneClasses = type === "residential"
+      ? [
+          "bg-[#D8B87A]/10",
+          "bg-white/[0.075]",
+          "bg-emerald-500/14",
+          "bg-sky-500/10",
+          "bg-white/[0.075]",
+          "bg-red-500/85",
+        ]
+      : [
+          "bg-[#D8B87A]/10",
+          "bg-emerald-500/14",
+          "bg-white/[0.075]",
+          "bg-red-500/85",
+        ];
+    check(
+      `${type}: row actions use shared action tone contracts`,
+      actionContracts.length === expectedToneClasses.length &&
+        expectedToneClasses.every((token, index) => actionContracts[index]?.className.includes(token)),
+      JSON.stringify(actionContracts),
+    );
+    check(
+      `${type}: legacy in-grid project summary is absent`,
+      (await page.getByText(/\d+ مشروع — \d+ منشور/).count()) === 0,
+    );
+  }
 
   if (viewportName !== "wide") {
     const scrollPositions = await region.evaluate((element) => {
@@ -186,6 +232,112 @@ async function assertLayout(page, type, viewportName) {
       element.scrollLeft = 0;
     });
   }
+}
+
+async function assertBulkBar(page, type, viewportName) {
+  const rowCheckbox = page.locator('[data-admin-data-grid-scroll] article input[type="checkbox"]').first();
+  await rowCheckbox.check();
+  const bar = page.locator('[data-admin-bulk-action-bar]');
+  await bar.waitFor();
+  const visual = await bar.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      left: box.left,
+      right: box.right,
+      width: box.width,
+      flexDirection: getComputedStyle(element).flexDirection,
+    };
+  });
+  check(`${type} ${viewportName}: bulk bar appears after selection`, await bar.isVisible());
+  check(
+    `${type} ${viewportName}: bulk bar remains within the page width`,
+    visual.left >= 0 && visual.right <= (await page.evaluate(() => document.documentElement.clientWidth)) + 1,
+    JSON.stringify(visual),
+  );
+  check(
+    `${type} ${viewportName}: bulk bar uses shared responsive layout`,
+    viewportName === "mobile" ? visual.flexDirection === "column" : visual.flexDirection === "row",
+    JSON.stringify(visual),
+  );
+  await bar.getByRole("button", { name: "إلغاء التحديد", exact: true }).click();
+  await bar.waitFor({ state: "detached" });
+  check(`${type} ${viewportName}: clearing selection hides bulk bar`, (await bar.count()) === 0);
+}
+
+async function assertActionFeedback(page, type) {
+  const row = page.locator('[data-admin-data-grid-scroll] article').first();
+  const hideLabel = type === "residential" ? "إخفاء من الموقع" : "إخفاء";
+  const publishLabel = type === "residential" ? "نشر في الموقع" : "نشر";
+  const initialToggle = row.locator(`button[aria-label="${hideLabel}"], button[aria-label="${publishLabel}"]`).first();
+  const initialLabel = await initialToggle.getAttribute("aria-label");
+  await initialToggle.click();
+  await waitForListIdle(page);
+
+  const notice = page.locator('[data-admin-notice-layout="inline"]');
+  await notice.waitFor();
+  check(`${type}: action notice uses shared inline layout`, await notice.isVisible());
+  const dismiss = notice.getByRole("button", { name: "إغلاق الإشعار", exact: true });
+  check(`${type}: action notice exposes dismiss button`, (await dismiss.count()) === 1);
+  await dismiss.click();
+  await notice.waitFor({ state: "detached" });
+  check(`${type}: action notice dismiss button works`, (await notice.count()) === 0);
+
+  const reverseLabel = initialLabel === hideLabel ? publishLabel : hideLabel;
+  const reverseToggle = row.locator(`button[aria-label="${reverseLabel}"]`).first();
+  await reverseToggle.click();
+  await waitForListIdle(page);
+  const restoredNotice = page.locator('[data-admin-notice-layout="inline"]');
+  await restoredNotice.waitFor();
+  check(`${type}: reverse visibility action restores the original state`, await restoredNotice.isVisible());
+  await restoredNotice.getByRole("button", { name: "إغلاق الإشعار", exact: true }).click();
+}
+
+async function assertBulkExecution(page, type) {
+  const hideLabel = type === "residential" ? "إخفاء من الموقع" : "إخفاء";
+  const publishedRow = page.locator('[data-admin-data-grid-scroll] article', {
+    has: page.locator(`button[aria-label="${hideLabel}"]`),
+  }).first();
+  const rowCheckbox = publishedRow.locator('input[type="checkbox"]');
+  await rowCheckbox.check();
+  const bar = page.locator('[data-admin-bulk-action-bar]');
+  await bar.waitFor();
+  await bar.getByRole("button", { name: "تنفيذ", exact: true }).click();
+  await waitForListIdle(page);
+  await bar.waitFor({ state: "detached" });
+  check(`${type}: bulk action executes and clears selection`, (await bar.count()) === 0);
+  const notice = page.locator('[data-admin-notice-layout="inline"]');
+  await notice.waitFor();
+  check(`${type}: bulk action reports through shared notice`, await notice.isVisible());
+  await notice.getByRole("button", { name: "إغلاق الإشعار", exact: true }).click();
+}
+
+async function assertArchiveRestore(page, type) {
+  const hideLabel = type === "residential" ? "إخفاء من الموقع" : "إخفاء";
+  const publishedRow = page.locator('[data-admin-data-grid-scroll] article', {
+    has: page.locator(`button[aria-label="${hideLabel}"]`),
+  }).first();
+  const editHref = await publishedRow.locator('a[href^="/admin/projects/"]').first().getAttribute("href");
+  if (!editHref) throw new Error(`${type}: published project row has no edit href`);
+
+  await publishedRow.getByRole("button", { name: "أرشفة المشروع", exact: true }).click();
+  await waitForListIdle(page);
+  const archivedRow = page.locator('[data-admin-data-grid-scroll] article', {
+    has: page.locator(`a[href="${editHref}"]`),
+  });
+  await archivedRow.getByRole("button", { name: "استعادة كمسودة", exact: true }).click();
+  await waitForListIdle(page);
+  const restoredRow = page.locator('[data-admin-data-grid-scroll] article', {
+    has: page.locator(`a[href="${editHref}"]`),
+  });
+  await restoredRow.getByRole("button", {
+    name: type === "residential" ? "نشر في الموقع" : "نشر",
+    exact: true,
+  }).click();
+  await waitForListIdle(page);
+  check(`${type}: archive and restore actions complete`, true);
+  const notice = page.locator('[data-admin-notice-layout="inline"]');
+  await notice.waitFor();
+  await notice.getByRole("button", { name: "إغلاق الإشعار", exact: true }).click();
 }
 
 async function measureInteraction(page, network, label, action, { expectOldRows = false, allowCacheHit = false } = {}) {
@@ -234,7 +386,8 @@ async function hideAllOptionalColumns(page, type) {
   check(`${type}: empty preference survives refresh`, (await page.locator('[data-admin-projects-columns]').getAttribute("data-admin-projects-columns")) === locked.join(","));
 
   await page.getByRole("button", { name: "الأعمدة", exact: true }).click();
-  await page.getByRole("button", { name: "استعادة الأعمدة الافتراضية", exact: true }).click();
+  await menu.waitFor();
+  await menu.locator("button[data-default-columns]").click();
   const defaults = type === "residential"
     ? ["code", "featured", "publication_status", "updated_at"]
     : ["location", "featured", "publication_status", "updated_at"];
@@ -307,6 +460,10 @@ async function auditPage(browser, type) {
   }
 
   await assertLayout(page, type, "wide");
+  await assertBulkBar(page, type, "wide");
+  await assertActionFeedback(page, type);
+  await assertBulkExecution(page, type);
+  await assertArchiveRestore(page, type);
   if (outputDir) {
     mkdirSync(outputDir, { recursive: true });
     await page.screenshot({ path: resolve(outputDir, `${type}-wide.png`), fullPage: true });
@@ -334,9 +491,11 @@ async function auditPage(browser, type) {
   await hideAllOptionalColumns(page, type);
   await page.setViewportSize({ width: 1024, height: 900 });
   await assertLayout(page, type, "medium");
+  await assertBulkBar(page, type, "medium");
   if (outputDir) await page.screenshot({ path: resolve(outputDir, `${type}-medium.png`), fullPage: true });
   await page.setViewportSize({ width: 390, height: 900 });
   await assertLayout(page, type, "mobile");
+  await assertBulkBar(page, type, "mobile");
   check(`${type} mobile: selection remains reachable`, await page.getByRole("checkbox", { name: "تحديد الكل" }).isVisible());
   if (outputDir) {
     await page.screenshot({ path: resolve(outputDir, `${type}-mobile.png`), fullPage: true });

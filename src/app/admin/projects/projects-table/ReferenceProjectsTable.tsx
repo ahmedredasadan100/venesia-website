@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  ADMIN_DATA_GRID_RULES,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -35,44 +34,6 @@ export type ReferenceProjectSortKey =
   | "publication_status"
   | "updated_at";
 
-function ArchiveIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M3 7h18" />
-      <path d="M5 7l1 12h12l1-12" />
-      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
-}
-
-function RestoreIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M3 12a9 9 0 0 1 15-6.7" />
-      <path d="M18 3v4h-4" />
-      <path d="M21 12a9 9 0 0 1-15 6.7" />
-      <path d="M6 21v-4H2" />
-    </svg>
-  );
-}
-
-function PublicPreviewIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={ADMIN_DATA_GRID_RULES.actionIcon}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
-      <path d="M14 3h7v7" />
-      <path d="M10 14 21 3" />
-      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
-    </svg>
-  );
-}
-
 function ProjectIcon({ type }: { type: ProjectCategory }) {
   return (
     <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/16 bg-[#D8B87A]/8 text-[#D8B87A]">
@@ -91,17 +52,6 @@ function ProjectIcon({ type }: { type: ProjectCategory }) {
         </svg>
       )}
     </span>
-  );
-}
-
-function DeleteIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M4 7h16" />
-      <path d="M9 7V5h6v2" />
-      <path d="M7 7l1 13h8l1-13" />
-      <path d="M10 11v5M14 11v5" />
-    </svg>
   );
 }
 
@@ -137,17 +87,11 @@ export default function ReferenceProjectsTable({
   const show = (key: ProjectResidentialColumnKey) =>
     isProjectColumnVisible(visibleColumns, key);
 
-  const publishedCount = rows.filter(
-    (item) => item.publication_status === "published",
-  ).length;
   const actionsDisabled = handlers.isMutationBusy;
 
   return (
-    <AdminDataGrid
-      scrollLabel="جدول المشاريع السكنية"
-      summary={`${rows.length} مشروع${publishedCount ? ` — ${publishedCount} منشور` : ""}`}
-    >
-      <AdminDataGridHeader columns={columns} horizontalScroll>
+    <AdminDataGrid scrollLabel="جدول المشاريع السكنية">
+      <AdminDataGridHeader columns={columns} horizontalScroll flushInlineEnd>
         {show("selection") ? (
           <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
@@ -211,6 +155,7 @@ export default function ReferenceProjectsTable({
               key={item.id}
               columns={columns}
               horizontalScroll
+              flushInlineEnd
               divided
             >
               {show("selection") ? (
@@ -282,23 +227,19 @@ export default function ReferenceProjectsTable({
 
                   {previewPath ? (
                     <AdminDataGridActionButton
+                      action="preview"
                       href={previewPath}
                       target="_blank"
-                      tone="dark"
                       title="معاينة الصفحة العامة"
                       size="compact"
-                    >
-                      <PublicPreviewIcon />
-                    </AdminDataGridActionButton>
+                    />
                   ) : (
                     <AdminDataGridActionButton
-                      tone="dark"
+                      action="preview"
                       disabled
                       title="لا يوجد معرّف رابط للمعاينة"
                       size="compact"
-                    >
-                      <PublicPreviewIcon />
-                    </AdminDataGridActionButton>
+                    />
                   )}
 
                   {!isArchived ? (
@@ -315,15 +256,13 @@ export default function ReferenceProjectsTable({
                     />
                   ) : (
                     <AdminDataGridActionButton
-                      tone="dark"
+                      action="restore"
                       size="compact"
                       title="استعادة كمسودة"
                       disabled={actionsDisabled}
                       pending={pendingAction === "restore"}
                       onClick={() => handlers.onRestore(item.id)}
-                    >
-                      <RestoreIcon />
-                    </AdminDataGridActionButton>
+                    />
                   )}
 
                   <AdminDataGridActionButton
@@ -337,27 +276,23 @@ export default function ReferenceProjectsTable({
 
                   {!isArchived ? (
                     <AdminDataGridActionButton
-                      tone="dark"
+                      action="archive"
                       size="compact"
                       title="أرشفة المشروع"
                       disabled={actionsDisabled}
                       pending={pendingAction === "archive"}
                       onClick={() => handlers.onArchive(item.id)}
-                    >
-                      <ArchiveIcon />
-                    </AdminDataGridActionButton>
+                    />
                   ) : null}
 
                   <AdminDataGridActionButton
-                    tone="dark"
+                    action="delete"
                     size="compact"
                     title="حذف نهائي — يتطلب تأكيدًا"
                     disabled={actionsDisabled}
                     pending={pendingAction === "delete"}
                     onClick={() => handlers.onRequestPermanentDelete(item)}
-                  >
-                    <DeleteIcon />
-                  </AdminDataGridActionButton>
+                  />
                 </AdminDataGridActionsCell>
               ) : null}
             </AdminDataGridRow>

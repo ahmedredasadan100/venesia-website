@@ -139,5 +139,5 @@ export async function duplicateProjectAjax(id: number) {
     entityId: newProjectId,
     metadata: { source_project_id: id, slug: nextSlug, code: nextCode },
   });
-  return { ok: true as const, message: "تم نسخ المشروع كمسودة." };
+  return { ok: true as const, message: "أُنشئت نسخة جديدة كمسودة." };
 }

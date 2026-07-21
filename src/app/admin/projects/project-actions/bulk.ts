@@ -54,23 +54,23 @@ export async function bulkProjectsActionAjax(
         ok: true as const,
         publication_status: "published" as const,
         affectedIds: validation.validIds,
-        message: `تم نشر ${validation.validIds.length} مشروعًا. تم تخطي ${validation.failures.length} لعدم اكتمال البيانات.`,
+        message: `أصبح ${validation.validIds.length} مشروعًا ظاهرًا للعامة، وتخطينا ${validation.failures.length} لعدم اكتمال البيانات.`,
       };
     }
     return {
       ok: true as const,
       publication_status: "published" as const,
       affectedIds: validation.validIds,
-      message: "تم نشر المشاريع المحددة.",
+      message: "أصبحت المشاريع المحددة ظاهرة للعامة.",
     };
   } else if (action === "hide") {
     payload = { publication_status: "unpublished", updated_at: now };
     publicationStatus = "unpublished";
-    message = "تم إخفاء المشاريع المحددة.";
+    message = "لم تعد المشاريع المحددة ظاهرة للعامة.";
   } else if (action === "archive") {
     payload = { publication_status: "archived", updated_at: now };
     publicationStatus = "archived";
-    message = "تم أرشفة المشاريع المحددة.";
+    message = "أُزيلت المشاريع المحددة من القائمة النشطة.";
   } else if (action === "delete") {
     return {
       ok: false as const,

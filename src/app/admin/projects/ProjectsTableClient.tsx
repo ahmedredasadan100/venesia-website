@@ -20,6 +20,10 @@ import type {
   AdminEntityListQuery,
   AdminEntityListResult,
 } from "../../../lib/admin/entity-list/data-engine/contracts";
+import {
+  mapAdminActionResultToFeedback,
+  type AdminActionFeedback,
+} from "../../../lib/admin/admin-action-feedback";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
 import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
@@ -140,6 +144,31 @@ function toGridRow(row: ProjectEntityListRow): ProjectGridRow {
   };
 }
 
+function projectActionTitle(action: string, ok: boolean) {
+  if (!ok) return "تعذر تنفيذ العملية";
+  if (action === "status") return "تم تحديث ظهور المشروع";
+  if (action === "archive") return "تم أرشفة المشروع";
+  if (action === "restore") return "تم استعادة المشروع";
+  if (action === "duplicate") return "تم نسخ المشروع";
+  if (action === "delete") return "تم حذف المشروع";
+  if (action === "publish") return "تم نشر المشاريع";
+  if (action === "hide") return "تم إخفاء المشاريع";
+  if (action === "busy") return "العملية الحالية لم تكتمل";
+  return "تم تنفيذ الإجراء";
+}
+
+function projectActionFeedback(
+  action: string,
+  ok: boolean,
+  message: string,
+): AdminActionFeedback {
+  return mapAdminActionResultToFeedback({
+    ok,
+    title: projectActionTitle(action, ok),
+    message,
+  });
+}
+
 export default function ProjectsTableClient({
   type,
   basePath,
@@ -169,9 +198,9 @@ export default function ProjectsTableClient({
   const selection = useAdminGridSelection(
     useMemo(() => projects.map((item) => item.id), [projects]),
   );
-  const [feedback, setFeedback] = useState<{
-    type: "success" | "error";
-    message: string;
+  const [feedbackState, setFeedbackState] = useState<{
+    feedback: AdminActionFeedback;
+    revision: number;
   } | null>(null);
   const [pendingPermanentDelete, setPendingPermanentDelete] =
     useState<ProjectGridRow | null>(null);
@@ -188,6 +217,19 @@ export default function ProjectsTableClient({
   const [visibleColumns, setVisibleColumns] = useState<ProjectColumnKey[]>(() =>
     resolveProjectsVisibleColumns(type, initialVisibleColumns),
   );
+  const initialFeedback = errorMessage
+    ? projectActionFeedback("initial", false, errorMessage)
+    : notice
+      ? projectActionFeedback("initial", true, notice)
+      : null;
+  const feedback = feedbackState?.feedback ?? initialFeedback;
+
+  function showFeedback(nextFeedback: AdminActionFeedback) {
+    setFeedbackState((current) => ({
+      feedback: nextFeedback,
+      revision: (current?.revision ?? 0) + 1,
+    }));
+  }
   const columns = buildColumns(
     type,
     visibleColumns,
@@ -235,24 +277,31 @@ export default function ProjectsTableClient({
       instant.rowPending !== null ||
       instant.bulkPending !== null
     ) {
-      setFeedback({
-        type: "error",
-        message: "انتظر انتهاء العملية الحالية قبل تنفيذ إجراء آخر.",
-      });
+      showFeedback(
+        projectActionFeedback(
+          "busy",
+          false,
+          "انتظر انتهاء العملية الحالية قبل تنفيذ إجراء آخر.",
+        ),
+      );
       return false;
     }
     mutationLockRef.current = true;
     try {
       const result = await instant.mutateAsync(request);
       if (request.bulk) selection.clearSelection();
-      setFeedback({ type: "success", message: result.message });
+      showFeedback(
+        projectActionFeedback(request.action, true, result.message),
+      );
       return true;
     } catch (error) {
-      setFeedback({
-        type: "error",
-        message:
+      showFeedback(
+        projectActionFeedback(
+          request.action,
+          false,
           error instanceof Error ? error.message : "تعذر تنفيذ العملية.",
-      });
+        ),
+      );
       return false;
     } finally {
       mutationLockRef.current = false;
@@ -354,18 +403,18 @@ export default function ProjectsTableClient({
         meta={`${controller.result.pagination.totalRows} مشروع / ${publishedCount} منشور / ${featuredCount} مميز`}
       />
 
-      {notice ? <AdminNotice variant="success" message={notice} /> : null}
-      {errorMessage ? (
-        <AdminNotice
-          variant="danger"
-          title="تعذر تنفيذ العملية"
-          message={errorMessage}
-        />
-      ) : null}
       {feedback ? (
         <AdminNotice
-          variant={feedback.type === "success" ? "success" : "danger"}
+          key={feedbackState?.revision ?? "initial"}
+          variant={feedback.variant}
+          layout={feedback.layout}
+          dismissible={feedback.dismissible}
+          lifecycle={feedback.lifecycle}
+          autoDismissMs={feedback.autoDismissMs}
+          dismissSearchParams={feedback.dismissSearchParams}
+          title={feedback.title}
           message={feedback.message}
+          action={feedback.action}
         />
       ) : null}
 
@@ -445,73 +494,7 @@ export default function ProjectsTableClient({
         }}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <AdminBulkActionBar
-          selectedIds={selection.selectedIds}
-          entityLabel="مشروع"
-          options={[
-            { value: "publish", label: "نشر المحدد" },
-            { value: "hide", label: "إخفاء المحدد" },
-            { value: "archive", label: "أرشفة المحدد" },
-          ]}
-          onClearSelection={selection.clearSelection}
-          onExecute={(action, ids) => {
-            if (isMutationBusy) {
-              setFeedback({
-                type: "error",
-                message: "انتظر انتهاء العملية الحالية قبل تنفيذ إجراء آخر.",
-              });
-              return;
-            }
-            const numericIds = ids.map(Number);
-            const idSet = new Set(numericIds);
-            const nextStatus =
-              action === "publish"
-                ? "published"
-                : action === "hide"
-                  ? "unpublished"
-                  : "archived";
-            void runMutation({
-              action,
-              bulk: true,
-              optimistic: (cache) => {
-                applyProjectPublicationMutation(
-                  cache,
-                  controller.result.rows,
-                  idSet,
-                  nextStatus,
-                  controller.query.search,
-                  controller.query.filters,
-                );
-              },
-              execute: () => bulkProjectsActionAjax(action, numericIds, type),
-              reconcileSuccess:
-                action === "publish"
-                  ? (result, { cache, restoreSnapshot }) => {
-                      const affectedIds = Array.isArray(result.affectedIds)
-                        ? new Set(
-                            result.affectedIds.filter(
-                              (id): id is number =>
-                                typeof id === "number" && Number.isInteger(id),
-                            ),
-                          )
-                        : new Set<number>();
-                      restoreSnapshot();
-                      applyProjectPublicationMutation(
-                        cache,
-                        controller.result.rows,
-                        affectedIds,
-                        "published",
-                        controller.query.search,
-                        controller.query.filters,
-                      );
-                    }
-                  : undefined,
-            });
-          }}
-          isBusy={isBulkPending || instant.rowPending !== null}
-        />
-
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <AdminColumnVisibilityMenu
           columns={columnDefs}
           visibleColumns={visibleColumns}
@@ -528,6 +511,75 @@ export default function ProjectsTableClient({
           scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
         />
       </div>
+
+      <AdminBulkActionBar
+        selectedIds={selection.selectedIds}
+        entityLabel="مشروع"
+        options={[
+          { value: "publish", label: "نشر المحدد" },
+          { value: "hide", label: "إخفاء المحدد" },
+          { value: "archive", label: "أرشفة المحدد" },
+        ]}
+        onClearSelection={selection.clearSelection}
+        onExecute={(action, ids) => {
+          if (isMutationBusy) {
+            showFeedback(
+              projectActionFeedback(
+                "busy",
+                false,
+                "انتظر انتهاء العملية الحالية قبل تنفيذ إجراء آخر.",
+              ),
+            );
+            return;
+          }
+          const numericIds = ids.map(Number);
+          const idSet = new Set(numericIds);
+          const nextStatus =
+            action === "publish"
+              ? "published"
+              : action === "hide"
+                ? "unpublished"
+                : "archived";
+          void runMutation({
+            action,
+            bulk: true,
+            optimistic: (cache) => {
+              applyProjectPublicationMutation(
+                cache,
+                controller.result.rows,
+                idSet,
+                nextStatus,
+                controller.query.search,
+                controller.query.filters,
+              );
+            },
+            execute: () => bulkProjectsActionAjax(action, numericIds, type),
+            reconcileSuccess:
+              action === "publish"
+                ? (result, { cache, restoreSnapshot }) => {
+                    const affectedIds = Array.isArray(result.affectedIds)
+                      ? new Set(
+                          result.affectedIds.filter(
+                            (id): id is number =>
+                              typeof id === "number" && Number.isInteger(id),
+                          ),
+                        )
+                      : new Set<number>();
+                    restoreSnapshot();
+                    applyProjectPublicationMutation(
+                      cache,
+                      controller.result.rows,
+                      affectedIds,
+                      "published",
+                      controller.query.search,
+                      controller.query.filters,
+                    );
+                  }
+                : undefined,
+          });
+        }}
+        isBusy={isBulkPending || instant.rowPending !== null}
+      />
 
       {referenceLayout ? (
         <ReferenceProjectsTable

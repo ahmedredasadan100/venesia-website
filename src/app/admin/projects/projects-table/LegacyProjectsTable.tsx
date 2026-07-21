@@ -1,5 +1,4 @@
 import {
-  ADMIN_DATA_GRID_RULES,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
@@ -29,27 +28,6 @@ import type {
 } from "./projects-table-types";
 
 export type LegacyProjectSortKey = "code" | "location" | "updated_at";
-
-function ArchiveIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M3 7h18" />
-      <path d="M5 7l1 12h12l1-12" />
-      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
-}
-
-function RestoreIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M3 12a9 9 0 0 1 15-6.7" />
-      <path d="M18 3v4h-4" />
-      <path d="M21 12a9 9 0 0 1-15 6.7" />
-      <path d="M6 21v-4H2" />
-    </svg>
-  );
-}
 
 function ProjectIcon({ type }: { type: ProjectCategory }) {
   return (
@@ -109,7 +87,7 @@ export default function LegacyProjectsTable({
 
   return (
     <AdminDataGrid scrollLabel="جدول المشاريع التجارية">
-      <AdminDataGridHeader columns={columns} horizontalScroll>
+      <AdminDataGridHeader columns={columns} horizontalScroll flushInlineEnd>
         {show("selection") ? (
           <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
@@ -154,6 +132,7 @@ export default function LegacyProjectsTable({
               key={item.id}
               columns={columns}
               horizontalScroll
+              flushInlineEnd
               className="border-b border-white/[0.045] last:border-b-0"
             >
               {show("selection") ? (
@@ -220,14 +199,12 @@ export default function LegacyProjectsTable({
                     />
                   ) : (
                     <AdminDataGridActionButton
-                      tone="dark"
+                      action="restore"
                       title="استعادة كمسودة"
                       disabled={actionsDisabled}
                       pending={pendingAction === "restore"}
                       onClick={() => handlers.onRestore(item.id)}
-                    >
-                      <RestoreIcon />
-                    </AdminDataGridActionButton>
+                    />
                   )}
                   {withDuplicateAction ? (
                     <AdminDataGridActionButton
@@ -240,18 +217,15 @@ export default function LegacyProjectsTable({
                   ) : null}
                   {!isArchived ? (
                     <AdminDataGridActionButton
-                      tone="dark"
+                      action="archive"
                       title="أرشفة المشروع"
                       disabled={actionsDisabled}
                       pending={pendingAction === "archive"}
                       onClick={() => handlers.onArchive(item.id)}
-                    >
-                      <ArchiveIcon />
-                    </AdminDataGridActionButton>
+                    />
                   ) : null}
                   <AdminDataGridActionButton
                     action="delete"
-                    tone="dark"
                     title="حذف نهائي"
                     disabled={actionsDisabled}
                     pending={pendingAction === "delete"}
