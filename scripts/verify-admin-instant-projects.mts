@@ -29,6 +29,18 @@ import {
   applyProjectPublicationMutation,
   projectRowMatchesDataset,
 } from "../src/lib/admin/projects/instant-mutation-membership.ts";
+import {
+  filterPersistableColumnKeys,
+  getDefaultVisibleColumnKeys,
+  sanitizeVisibleColumnKeys,
+} from "../src/lib/admin/entity-list/column-preferences.ts";
+import {
+  getProjectsColumnMeta,
+  getProjectsDefaultColumnKeys,
+  getProjectsPreferenceColumnKeys,
+  PROJECTS_COMMERCIAL_COLUMNS,
+  PROJECTS_RESIDENTIAL_COLUMNS,
+} from "../src/lib/admin/projects/projects-list-config.ts";
 
 const read = (path: string) =>
   readFile(new URL(`../${path}`, import.meta.url), "utf8");
@@ -46,6 +58,9 @@ const [
   client,
   referenceTable,
   legacyTable,
+  tableUtils,
+  listConfig,
+  columnPreferencesAction,
   adapter,
   types,
   migration,
@@ -57,6 +72,7 @@ const [
   bulkActions,
   deleteActions,
   actionsFacade,
+  auditActions,
 ] = await Promise.all([
   read("src/lib/admin/entity-list/data-engine/registry.ts"),
   read("src/app/admin/projects/residential/page.tsx"),
@@ -64,6 +80,9 @@ const [
   read("src/app/admin/projects/ProjectsTableClient.tsx"),
   read("src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx"),
   read("src/app/admin/projects/projects-table/LegacyProjectsTable.tsx"),
+  read("src/app/admin/projects/projects-table/projects-table-utils.ts"),
+  read("src/lib/admin/projects/projects-list-config.ts"),
+  read("src/app/admin/projects/project-actions/column-preferences.ts"),
   read("src/lib/admin/projects/entity-list-adapter.ts"),
   read("src/lib/admin/projects/entity-list-types.ts"),
   read("sql/migrations/20260721030000_admin_projects_list_read_model.sql"),
@@ -75,8 +94,8 @@ const [
   read("src/app/admin/projects/project-actions/bulk.ts"),
   read("src/app/admin/projects/project-actions/delete.ts"),
   read("src/app/admin/projects/actions.ts"),
+  read("src/lib/admin/audit/cms-audit-actions.ts"),
 ]);
-
 check(registry.includes("projects: projectsEntityListAdapter"), "registry registers projects");
 check(residentialPage.includes("loadProjectsEntityListResult"), "residential RSC hydrates");
 check(commercialPage.includes("loadProjectsEntityListResult"), "commercial RSC hydrates");
@@ -184,15 +203,101 @@ check(client.includes("isBulkPending"), "client separates bulk pending");
 check(client.includes("rowPendingAction"), "client exposes row-local pending action");
 check(!client.includes("const isBusy ="), "client has no global row busy state");
 check(client.includes("mutationLockRef"), "client retains single-flight mutation safety");
+check(client.includes("isMutationBusy"), "client exposes explicit mutation busy flag");
+check(
+  client.includes("انتظر انتهاء العملية الحالية قبل تنفيذ إجراء آخر"),
+  "client surfaces busy feedback instead of silent click drops",
+);
 check(
   referenceTable.includes('pending={pendingAction === "status"}') &&
     legacyTable.includes('pending={pendingAction === "status"}'),
   "row pending presentation is action-local",
 );
 check(
-  referenceTable.includes("pending || handlers.isBulkPending") &&
-    legacyTable.includes("pending || handlers.isBulkPending"),
-  "bulk pending disables all row actions",
+  referenceTable.includes("handlers.isMutationBusy") &&
+    legacyTable.includes("handlers.isMutationBusy"),
+  "all row actions disable while any mutation is in flight",
+);
+check(
+  !referenceTable.includes("pending || handlers.isBulkPending") &&
+    !legacyTable.includes("pending || handlers.isBulkPending"),
+  "row actions no longer leave sibling rows visually enabled under single-flight lock",
+);
+
+// Shared column management wiring (residential + commercial).
+check(client.includes("AdminFloatingLayerProvider"), "projects wrap shared floating layer for filters/columns");
+check(client.includes("saveProjectsTablePreferences"), "client persists columns via shared preferences");
+check(client.includes("restoreProjectsTablePreferences"), "client restores defaults via shared preferences");
+check(client.includes("sanitizeVisibleColumnKeys"), "client sanitizes column keys via shared core");
+check(columnPreferencesAction.includes("saveAdminColumnPreferences"), "projects preferences use shared persistence");
+check(
+  listConfig.includes('PROJECTS_RESIDENTIAL_LIST_VIEW_KEY = "projects-residential"') &&
+    listConfig.includes('PROJECTS_COMMERCIAL_LIST_VIEW_KEY = "projects-commercial"'),
+  "residential and commercial use distinct preference view keys",
+);
+check(
+  listConfig.includes('key: "project"') && listConfig.includes('key: "location"'),
+  "residential/commercial column sets differ without sharing one layout",
+);
+check(
+  listConfig.includes('key: "selection"') &&
+    listConfig.includes('key: "actions"') &&
+    listConfig.includes("hideable: false"),
+  "selection/actions remain locked in projects column config",
+);
+check(
+  residentialPage.includes("initialVisibleColumns") &&
+    commercialPage.includes("initialVisibleColumns"),
+  "pages hydrate column preferences into shared client menu",
+);
+check(
+  residentialPage.includes("PROJECTS_RESIDENTIAL_LIST_VIEW_KEY") &&
+    commercialPage.includes("PROJECTS_COMMERCIAL_LIST_VIEW_KEY"),
+  "pages load preferences from the shared view-key contract",
+);
+check(
+  tableUtils.includes("sanitizeVisibleColumnKeys") &&
+    tableUtils.includes("getDefaultVisibleColumnKeys"),
+  "projects column utils reuse shared sanitize/default helpers",
+);
+
+// Critical-path readiness: no preflight projects count before list RPC.
+check(
+  !residentialPage.includes("getProjectsTableReady") &&
+    !commercialPage.includes("getProjectsTableReady"),
+  "list pages do not call getProjectsTableReady on the critical path",
+);
+check(
+  residentialPage.includes("loadProjectsEntityListResult") &&
+    commercialPage.includes("loadProjectsEntityListResult"),
+  "list pages still RSC-hydrate through loadProjectsEntityListResult",
+);
+check(
+  residentialPage.includes("listResult.error") &&
+    commercialPage.includes("تعذر تحميل قائمة المشاريع"),
+  "list pages show explicit error state when read model fails",
+);
+check(
+  !adapter.includes("getProjectsTableReady") &&
+    (adapter.match(/\.from\("projects"\)/g) ?? []).length === 0,
+  "adapter has no separate projects table preflight query",
+);
+
+// Audit: archive is not delete.
+check(auditActions.includes('archive: "archive"'), "shared audit vocabulary includes archive");
+check(
+  statusActions.includes('buildCmsAuditAction("project", "archive")') &&
+    !statusActions.includes('buildCmsAuditAction("project", "delete")'),
+  "single archive audits as archive, not delete",
+);
+check(
+  bulkActions.includes('action === "archive" ? "archive"') &&
+    !bulkActions.includes('action === "archive" ? "delete"'),
+  "bulk archive audits as archive, not delete",
+);
+check(
+  deleteActions.includes('buildCmsAuditAction("project", "delete")'),
+  "permanent delete still audits as delete",
 );
 
 const residential = normalizeAdminEntityListQuery(
@@ -724,6 +829,107 @@ check(
   "normalized cache keeps totalRows/totalPages contract",
 );
 controllerQueryClient.clear();
+
+// Behavioral shared-core column contracts for projects.
+function toColumnDefs(
+  meta: readonly {
+    key: string;
+    label: string;
+    defaultVisible: boolean;
+    hideable: boolean;
+  }[],
+) {
+  return meta.map((column) => ({
+    key: column.key,
+    label: column.label,
+    defaultVisible: column.defaultVisible,
+    hideable: column.hideable,
+    minWidth: 44,
+    renderCell: () => null,
+  }));
+}
+
+const residentialDefs = toColumnDefs(PROJECTS_RESIDENTIAL_COLUMNS);
+const commercialDefs = toColumnDefs(PROJECTS_COMMERCIAL_COLUMNS);
+const residentialDefaults = getDefaultVisibleColumnKeys(residentialDefs);
+const commercialDefaults = getDefaultVisibleColumnKeys(commercialDefs);
+check(
+  residentialDefaults.includes("selection") &&
+    residentialDefaults.includes("actions") &&
+    residentialDefaults.includes("project"),
+  "residential defaults keep locked identity columns",
+);
+check(
+  commercialDefaults.includes("selection") &&
+    commercialDefaults.includes("actions") &&
+    commercialDefaults.includes("code") &&
+    commercialDefaults.includes("location"),
+  "commercial defaults keep locked identity columns and location",
+);
+check(
+  !residentialDefaults.includes("location") &&
+    !commercialDefaults.includes("project"),
+  "residential/commercial defaults stay layout-specific",
+);
+
+const residentialHidden = sanitizeVisibleColumnKeys(residentialDefs, [
+  "selection",
+  "project",
+  "actions",
+]);
+check(
+  residentialHidden.includes("selection") &&
+    residentialHidden.includes("project") &&
+    residentialHidden.includes("actions") &&
+    !residentialHidden.includes("code"),
+  "residential sanitize allows hiding hideable columns",
+);
+const residentialMissingLocked = sanitizeVisibleColumnKeys(residentialDefs, [
+  "code",
+  "featured",
+]);
+check(
+  residentialMissingLocked.includes("selection") &&
+    residentialMissingLocked.includes("project") &&
+    residentialMissingLocked.includes("actions"),
+  "residential sanitize restores locked columns when omitted",
+);
+const commercialMissingLocked = sanitizeVisibleColumnKeys(commercialDefs, [
+  "featured",
+]);
+check(
+  commercialMissingLocked.includes("selection") &&
+    commercialMissingLocked.includes("code") &&
+    commercialMissingLocked.includes("actions"),
+  "commercial sanitize restores locked columns when omitted",
+);
+
+const residentialPersisted = filterPersistableColumnKeys(
+  [...getProjectsDefaultColumnKeys("residential"), "selection", "actions", "bogus"],
+  getProjectsPreferenceColumnKeys("residential"),
+);
+check(
+  !residentialPersisted.includes("selection") &&
+    !residentialPersisted.includes("actions") &&
+    !residentialPersisted.includes("bogus") &&
+    residentialPersisted.includes("code"),
+  "residential persistence allowlist excludes locked/unknown keys",
+);
+const commercialPersisted = filterPersistableColumnKeys(
+  [...getProjectsDefaultColumnKeys("commercial"), "selection", "project"],
+  getProjectsPreferenceColumnKeys("commercial"),
+);
+check(
+  !commercialPersisted.includes("selection") &&
+    !commercialPersisted.includes("project") &&
+    commercialPersisted.includes("location"),
+  "commercial persistence allowlist excludes locked/foreign keys",
+);
+check(
+  getProjectsColumnMeta("residential").some((column) => column.key === "project") &&
+    getProjectsColumnMeta("commercial").some((column) => column.key === "location"),
+  "column meta APIs expose layout-specific columns",
+);
 
 console.log(
   `verify:admin-instant-projects passed (${assertions} structural/runtime assertions)`,

@@ -1,18 +1,82 @@
-import { adminDataGridActionsColumn, ADMIN_DATA_GRID_ACTION_COLUMNS } from "../../../../components/admin/ui";
+import {
+  adminDataGridActionsColumn,
+  ADMIN_DATA_GRID_ACTION_COLUMNS,
+} from "../../../../components/admin/ui";
+import {
+  getDefaultVisibleColumnKeys,
+  sanitizeVisibleColumnKeys,
+  type AdminEntityColumnDef,
+} from "../../../../lib/admin/entity-list";
+import {
+  getProjectsColumnMeta,
+  type ProjectColumnKey,
+} from "../../../../lib/admin/projects/projects-list-config";
 import type { ProjectGridRow } from "./projects-table-types";
 
-export function buildColumns(withDuplicateAction: boolean, referenceLayout: boolean) {
+function resolveActionsTrack(
+  withDuplicateAction: boolean,
+  referenceLayout: boolean,
+) {
   if (referenceLayout) {
     // Reference rows expose 6 compact actions (edit, preview, publish, duplicate, archive, delete).
-    const referenceActions = adminDataGridActionsColumn(6, "compact");
-    return `44px minmax(280px, 1fr) 104px 80px 104px 124px ${referenceActions}`;
+    return adminDataGridActionsColumn(6, "compact");
   }
-
-  const actionsColumn = withDuplicateAction
+  return withDuplicateAction
     ? ADMIN_DATA_GRID_ACTION_COLUMNS.four
     : ADMIN_DATA_GRID_ACTION_COLUMNS.three;
+}
 
-  return `44px minmax(96px,110px) minmax(200px,1.2fr) 90px 110px 150px ${actionsColumn}`;
+/**
+ * Shared-core compatible column defs for sanitize/default helpers.
+ * Projects keep custom DataGrid rendering; renderCell is intentionally unused.
+ */
+export function getProjectsColumnDefs(
+  type: "residential" | "commercial",
+): AdminEntityColumnDef<ProjectGridRow, ProjectColumnKey>[] {
+  return getProjectsColumnMeta(type).map((column) => ({
+    key: column.key,
+    label: column.label,
+    defaultVisible: column.defaultVisible,
+    hideable: column.hideable,
+    minWidth: 44,
+    renderCell: () => null,
+  }));
+}
+
+export function resolveProjectsVisibleColumns(
+  type: "residential" | "commercial",
+  initialVisibleColumns?: readonly string[] | null,
+): ProjectColumnKey[] {
+  const columns = getProjectsColumnDefs(type);
+  return sanitizeVisibleColumnKeys(
+    columns,
+    initialVisibleColumns?.length
+      ? initialVisibleColumns
+      : getDefaultVisibleColumnKeys(columns),
+  );
+}
+
+export function buildColumns(
+  type: "residential" | "commercial",
+  visibleColumns: readonly ProjectColumnKey[],
+  withDuplicateAction: boolean,
+  referenceLayout: boolean,
+) {
+  const actionsTrack = resolveActionsTrack(withDuplicateAction, referenceLayout);
+  const visible = new Set(visibleColumns);
+  return getProjectsColumnMeta(type)
+    .filter((column) => visible.has(column.key))
+    .map((column) =>
+      column.gridTrack === "actions" ? actionsTrack : column.gridTrack,
+    )
+    .join(" ");
+}
+
+export function isProjectColumnVisible(
+  visibleColumns: readonly ProjectColumnKey[],
+  key: ProjectColumnKey,
+) {
+  return visibleColumns.includes(key);
 }
 
 export function formatDate(value?: string | null) {

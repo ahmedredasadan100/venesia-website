@@ -79,7 +79,7 @@ export async function archiveProjectAjax(id: number) {
     };
   }
   await recordCmsAdminAudit({
-    action: buildCmsAuditAction("project", "delete"),
+    action: buildCmsAuditAction("project", "archive"),
     entityType: "project",
     entityId: id,
     metadata: { publication_status: "archived" },

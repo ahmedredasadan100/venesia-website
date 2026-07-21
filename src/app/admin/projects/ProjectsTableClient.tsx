@@ -5,12 +5,15 @@ import AdminNotice from "../../../components/admin/AdminNotice";
 import {
   AdminEntityListFilters,
 } from "../../../components/admin/entity-list";
+import { AdminFloatingLayerProvider } from "../../../components/admin/entity-list/AdminFloatingLayerContext";
 import {
   AdminBulkActionBar,
+  AdminColumnVisibilityMenu,
   AdminInfoBar,
   AdminTablePagination,
   useAdminGridSelection,
 } from "../../../components/admin/ui";
+import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "../../../components/admin/ui/admin-scrollbar-styles";
 import VenesiaActionModal, { VenesiaActionModalButton } from "../../../components/admin/VenesiaActionModal";
 import type { ProjectCategory } from "../../../config/projects-data";
 import type {
@@ -19,6 +22,10 @@ import type {
 } from "../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
 import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
+import {
+  getDefaultVisibleColumnKeys,
+  sanitizeVisibleColumnKeys,
+} from "../../../lib/admin/entity-list";
 import type { AdminEntityFilterDef } from "../../../lib/admin/entity-list";
 import {
   projectsQueryContract,
@@ -31,16 +38,26 @@ import type {
 } from "../../../lib/admin/projects/entity-list-types";
 import { applyProjectPublicationMutation } from "../../../lib/admin/projects/instant-mutation-membership";
 import {
+  getProjectsDefaultColumnKeys,
+} from "../../../lib/admin/projects/projects-list-config";
+import type { ProjectColumnKey } from "../../../lib/admin/projects/projects-list-config";
+import {
   archiveProjectAjax,
   bulkProjectsActionAjax,
   deleteProjectAjax,
   duplicateProjectAjax,
   restoreProjectAjax,
+  restoreProjectsTablePreferences,
+  saveProjectsTablePreferences,
   toggleProjectPublicationAjax,
 } from "./actions";
 import LegacyProjectsTable from "./projects-table/LegacyProjectsTable";
 import ReferenceProjectsTable from "./projects-table/ReferenceProjectsTable";
-import { buildColumns } from "./projects-table/projects-table-utils";
+import {
+  buildColumns,
+  getProjectsColumnDefs,
+  resolveProjectsVisibleColumns,
+} from "./projects-table/projects-table-utils";
 import type { ProjectGridRow, ProjectRowActionHandlers } from "./projects-table/projects-table-types";
 
 export type { ProjectGridRow } from "./projects-table/projects-table-types";
@@ -53,6 +70,7 @@ type ProjectsTableClientProps = {
     ProjectEntityListRow,
     ProjectEntityListMetrics
   >;
+  initialVisibleColumns?: readonly string[];
   withDuplicateAction?: boolean;
   referenceLayout?: boolean;
   notice?: string | null;
@@ -127,6 +145,7 @@ export default function ProjectsTableClient({
   basePath,
   initialQuery,
   initialResult,
+  initialVisibleColumns,
   withDuplicateAction = false,
   referenceLayout = false,
   notice = null,
@@ -157,7 +176,24 @@ export default function ProjectsTableClient({
   const [pendingPermanentDelete, setPendingPermanentDelete] =
     useState<ProjectGridRow | null>(null);
   const mutationLockRef = useRef(false);
-  const columns = buildColumns(withDuplicateAction, referenceLayout);
+  const columnDefs = useMemo(() => getProjectsColumnDefs(type), [type]);
+  const defaultVisibleColumns = useMemo(
+    () =>
+      sanitizeVisibleColumnKeys(
+        columnDefs,
+        getProjectsDefaultColumnKeys(type),
+      ),
+    [columnDefs, type],
+  );
+  const [visibleColumns, setVisibleColumns] = useState<ProjectColumnKey[]>(() =>
+    resolveProjectsVisibleColumns(type, initialVisibleColumns),
+  );
+  const columns = buildColumns(
+    type,
+    visibleColumns,
+    withDuplicateAction,
+    referenceLayout,
+  );
   const rangeStart = controller.result.pagination.totalRows
     ? (controller.result.pagination.page - 1) *
         controller.result.pagination.pageSize +
@@ -173,6 +209,8 @@ export default function ProjectsTableClient({
   const publishedCount = controller.result.metrics?.published ?? 0;
   const featuredCount = controller.result.metrics?.featured ?? 0;
   const isBulkPending = instant.bulkPending !== null;
+  // Single-flight shared mutation: disable every row/bulk control while busy.
+  const isMutationBusy = instant.rowPending !== null || isBulkPending;
 
   function lockedFilters(next: Partial<ProjectFilters> = {}): ProjectFilters {
     return {
@@ -190,13 +228,17 @@ export default function ProjectsTableClient({
   async function runMutation(
     request: Parameters<typeof instant.mutateAsync>[0],
   ) {
-    // The shared mutation state is single-flight. Keep unrelated rows visually
-    // available while refusing unsafe concurrent mutations deterministically.
+    // Shared instant mutation is single-flight. Row actions stay visually
+    // disabled while busy so clicks are never silently ignored.
     if (
       mutationLockRef.current ||
       instant.rowPending !== null ||
       instant.bulkPending !== null
     ) {
+      setFeedback({
+        type: "error",
+        message: "انتظر انتهاء العملية الحالية قبل تنفيذ إجراء آخر.",
+      });
       return false;
     }
     mutationLockRef.current = true;
@@ -219,6 +261,7 @@ export default function ProjectsTableClient({
 
   const handlers: ProjectRowActionHandlers = {
     isBulkPending,
+    isMutationBusy,
     isRowPending: (id) => instant.rowPending?.rowId === id,
     rowPendingAction: (id) =>
       instant.rowPending?.rowId === id ? instant.rowPending.action : null,
@@ -289,11 +332,13 @@ export default function ProjectsTableClient({
     instant.rowPending.action === "delete";
 
   return (
+    <AdminFloatingLayerProvider>
     <div
       className="space-y-4"
       data-admin-entity-list-consumer="projects"
       data-admin-entity-list-pending={controller.isFetching ? "true" : "false"}
       data-admin-projects-type={type}
+      data-admin-projects-columns={visibleColumns.join(",")}
     >
       <AdminInfoBar
         label={
@@ -400,70 +445,105 @@ export default function ProjectsTableClient({
         }}
       />
 
-      <AdminBulkActionBar
-        selectedIds={selection.selectedIds}
-        entityLabel="مشروع"
-        options={[
-          { value: "publish", label: "نشر المحدد" },
-          { value: "hide", label: "إخفاء المحدد" },
-          { value: "archive", label: "أرشفة المحدد" },
-        ]}
-        onClearSelection={selection.clearSelection}
-        onExecute={(action, ids) => {
-          const numericIds = ids.map(Number);
-          const idSet = new Set(numericIds);
-          const nextStatus =
-            action === "publish"
-              ? "published"
-              : action === "hide"
-                ? "unpublished"
-                : "archived";
-          void runMutation({
-            action,
-            bulk: true,
-            optimistic: (cache) => {
-              applyProjectPublicationMutation(
-                cache,
-                controller.result.rows,
-                idSet,
-                nextStatus,
-                controller.query.search,
-                controller.query.filters,
-              );
-            },
-            execute: () => bulkProjectsActionAjax(action, numericIds, type),
-            reconcileSuccess:
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <AdminBulkActionBar
+          selectedIds={selection.selectedIds}
+          entityLabel="مشروع"
+          options={[
+            { value: "publish", label: "نشر المحدد" },
+            { value: "hide", label: "إخفاء المحدد" },
+            { value: "archive", label: "أرشفة المحدد" },
+          ]}
+          onClearSelection={selection.clearSelection}
+          onExecute={(action, ids) => {
+            if (isMutationBusy) {
+              setFeedback({
+                type: "error",
+                message: "انتظر انتهاء العملية الحالية قبل تنفيذ إجراء آخر.",
+              });
+              return;
+            }
+            const numericIds = ids.map(Number);
+            const idSet = new Set(numericIds);
+            const nextStatus =
               action === "publish"
-                ? (result, { cache, restoreSnapshot }) => {
-                    const affectedIds = Array.isArray(result.affectedIds)
-                      ? new Set(
-                          result.affectedIds.filter(
-                            (id): id is number =>
-                              typeof id === "number" && Number.isInteger(id),
-                          ),
-                        )
-                      : new Set<number>();
-                    restoreSnapshot();
-                    applyProjectPublicationMutation(
-                      cache,
-                      controller.result.rows,
-                      affectedIds,
-                      "published",
-                      controller.query.search,
-                      controller.query.filters,
-                    );
-                  }
-                : undefined,
-          });
-        }}
-        isBusy={instant.bulkPending !== null}
-      />
+                ? "published"
+                : action === "hide"
+                  ? "unpublished"
+                  : "archived";
+            void runMutation({
+              action,
+              bulk: true,
+              optimistic: (cache) => {
+                applyProjectPublicationMutation(
+                  cache,
+                  controller.result.rows,
+                  idSet,
+                  nextStatus,
+                  controller.query.search,
+                  controller.query.filters,
+                );
+              },
+              execute: () => bulkProjectsActionAjax(action, numericIds, type),
+              reconcileSuccess:
+                action === "publish"
+                  ? (result, { cache, restoreSnapshot }) => {
+                      const affectedIds = Array.isArray(result.affectedIds)
+                        ? new Set(
+                            result.affectedIds.filter(
+                              (id): id is number =>
+                                typeof id === "number" && Number.isInteger(id),
+                            ),
+                          )
+                        : new Set<number>();
+                      restoreSnapshot();
+                      applyProjectPublicationMutation(
+                        cache,
+                        controller.result.rows,
+                        affectedIds,
+                        "published",
+                        controller.query.search,
+                        controller.query.filters,
+                      );
+                    }
+                  : undefined,
+            });
+          }}
+          isBusy={isBulkPending || instant.rowPending !== null}
+        />
+
+        <AdminColumnVisibilityMenu
+          columns={columnDefs}
+          visibleColumns={visibleColumns}
+          defaultColumns={
+            defaultVisibleColumns.length
+              ? defaultVisibleColumns
+              : getDefaultVisibleColumnKeys(columnDefs)
+          }
+          onChange={(next) =>
+            setVisibleColumns(sanitizeVisibleColumnKeys(columnDefs, next))
+          }
+          onPersist={(next) => saveProjectsTablePreferences(type, next)}
+          onRestore={() => restoreProjectsTablePreferences(type)}
+          scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
+        />
+      </div>
 
       {referenceLayout ? (
         <ReferenceProjectsTable
           type={type}
           rows={projects}
           columns={columns}
+          visibleColumns={visibleColumns as Extract<
+            ProjectColumnKey,
+            | "selection"
+            | "project"
+            | "code"
+            | "featured"
+            | "publication_status"
+            | "updated_at"
+            | "actions"
+          >[]}
           sort={{
             field: controller.query.sort.field,
             direction: controller.query.sort.direction,
@@ -494,6 +574,16 @@ export default function ProjectsTableClient({
           type={type}
           rows={projects}
           columns={columns}
+          visibleColumns={visibleColumns as Extract<
+            ProjectColumnKey,
+            | "selection"
+            | "code"
+            | "location"
+            | "featured"
+            | "publication_status"
+            | "updated_at"
+            | "actions"
+          >[]}
           withDuplicateAction={withDuplicateAction}
           sort={{
             field: controller.query.sort.field,
@@ -553,10 +643,7 @@ export default function ProjectsTableClient({
             </p>
             <VenesiaActionModalButton
               tone="red"
-              disabled={
-                isBulkPending ||
-                instant.rowPending?.rowId === pendingPermanentDelete.id
-              }
+              disabled={isMutationBusy}
               onClick={() => {
                 const target = pendingPermanentDelete;
                 void (async () => {
@@ -584,5 +671,6 @@ export default function ProjectsTableClient({
         ) : null}
       </VenesiaActionModal>
     </div>
+    </AdminFloatingLayerProvider>
   );
 }

@@ -93,7 +93,7 @@ export async function bulkProjectsActionAjax(
   await recordCmsAdminAudit({
     action: buildCmsAuditAction(
       "project",
-      action === "hide" ? "unpublish" : action === "archive" ? "delete" : "update",
+      action === "hide" ? "unpublish" : action === "archive" ? "archive" : "update",
     ),
     entityType: "project",
     metadata: {

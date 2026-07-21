@@ -1,12 +1,17 @@
 import { AdminActionButton, AdminPageHeader } from "../../../../components/admin/ui";
 import AdminNotice from "../../../../components/admin/AdminNotice";
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { loadProjectsEntityListResult } from "../../../../lib/admin/projects/entity-list-adapter";
 import {
   projectsQueryContract,
   withLockedProjectType,
 } from "../../../../lib/admin/projects/entity-list-contract";
-import { getProjectsTableReady } from "../../../../lib/projects/seed-from-static-data";
+import {
+  getProjectsDefaultColumnKeys,
+  PROJECTS_COMMERCIAL_LIST_VIEW_KEY,
+} from "../../../../lib/admin/projects/projects-list-config";
+import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import AddProjectPanelClient from "../AddProjectPanelClient";
 import ProjectsTableClient from "../ProjectsTableClient";
 
@@ -31,6 +36,7 @@ export default async function CommercialProjectsPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const actor = await requireAdminSession();
   const resolved = searchParams ? await searchParams : {};
   const notice = getNoticeText(
     typeof resolved.notice === "string" ? resolved.notice : undefined,
@@ -39,20 +45,6 @@ export default async function CommercialProjectsPage({
     typeof resolved.error === "string"
       ? decodeURIComponent(resolved.error)
       : null;
-  const tableStatus = await getProjectsTableReady();
-
-  if (!tableStatus.ready) {
-    return (
-      <main className="space-y-7">
-        <AdminPageHeader title="المشاريع التجارية" description="مدير المشاريع التجارية." />
-        <AdminNotice
-          variant="danger"
-          title="جداول المشاريع غير جاهزة"
-          message={tableStatus.error ?? ""}
-        />
-      </main>
-    );
-  }
 
   const params = new URLSearchParams();
   Object.entries(resolved).forEach(([key, value]) => {
@@ -64,7 +56,42 @@ export default async function CommercialProjectsPage({
     ...normalized,
     filters: withLockedProjectType(normalized.filters, "commercial"),
   };
-  const initialResult = await loadProjectsEntityListResult(initialQuery);
+
+  const [{ data: preference, error: preferenceError }, listResult] =
+    await Promise.all([
+      getSupabaseAdmin()
+        .from("admin_user_preferences")
+        .select("preferences")
+        .eq("admin_user_id", actor.id)
+        .eq("view_key", PROJECTS_COMMERCIAL_LIST_VIEW_KEY)
+        .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
+      loadProjectsEntityListResult(initialQuery)
+        .then((data) => ({ data, error: null as Error | null }))
+        .catch((error: unknown) => ({
+          data: null,
+          error:
+            error instanceof Error
+              ? error
+              : new Error("تعذر تحميل قائمة المشاريع التجارية."),
+        })),
+    ]);
+
+  if (listResult.error) {
+    return (
+      <main className="space-y-7">
+        <AdminPageHeader title="المشاريع التجارية" description="مدير المشاريع التجارية." />
+        <AdminNotice
+          variant="danger"
+          title="تعذر تحميل قائمة المشاريع"
+          message={listResult.error.message}
+        />
+      </main>
+    );
+  }
+
+  const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
+    ? preference.preferences.visibleColumns
+    : [...getProjectsDefaultColumnKeys("commercial")];
 
   return (
     <main className="space-y-7">
@@ -81,14 +108,25 @@ export default async function CommercialProjectsPage({
         }
       />
 
-      <ProjectsTableClient
-        type="commercial"
-        basePath={BASE_PATH}
-        initialQuery={initialQuery}
-        initialResult={initialResult}
-        notice={notice}
-        errorMessage={errorMessage}
-      />
+      {preferenceError ? (
+        <AdminNotice
+          variant="danger"
+          title="تعذر تحميل تفضيلات الأعمدة"
+          message={preferenceError.message}
+        />
+      ) : null}
+
+      {listResult.data ? (
+        <ProjectsTableClient
+          type="commercial"
+          basePath={BASE_PATH}
+          initialQuery={initialQuery}
+          initialResult={listResult.data}
+          initialVisibleColumns={visibleColumns}
+          notice={notice}
+          errorMessage={errorMessage}
+        />
+      ) : null}
     </main>
   );
 }

@@ -5,3 +5,7 @@ export { toggleProjectPublicationAjax, archiveProjectAjax, restoreProjectAjax } 
 export { deleteProjectAjax } from "./delete";
 export { duplicateProjectAjax } from "./duplicate";
 export { bulkProjectsActionAjax } from "./bulk";
+export {
+  saveProjectsTablePreferences,
+  restoreProjectsTablePreferences,
+} from "./column-preferences";

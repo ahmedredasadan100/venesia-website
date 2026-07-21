@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import type { ProjectColumnKey } from "../../../../lib/admin/projects/projects-list-config";
 
 export type ProjectGridRow = {
   id: number;
@@ -21,6 +22,8 @@ export type ProjectRowActionHandlers = {
   onDuplicate?: (id: number) => void;
   isRowPending: (id: number) => boolean;
   rowPendingAction: (id: number) => string | null;
+  /** True while any row or bulk mutation owns the single-flight lock. */
+  isMutationBusy: boolean;
   isBulkPending: boolean;
 };
 
@@ -38,3 +41,5 @@ export type ProjectTableSelection = {
   toggleOne: (id: number, checked: boolean) => void;
   clearSelection: () => void;
 };
+
+export type { ProjectColumnKey };

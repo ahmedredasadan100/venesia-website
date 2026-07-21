@@ -11,9 +11,11 @@ import {
 } from "../../../../components/admin/ui";
 import AdminStatusPill from "../../../../components/admin/ui/AdminStatusPill";
 import type { ProjectCategory } from "../../../../config/projects-data";
+import type { ProjectCommercialColumnKey } from "../../../../lib/admin/projects/projects-list-config";
 import {
   featuredLabel,
   formatDate,
+  isProjectColumnVisible,
   locationLabel,
   publicationMeta,
 } from "./projects-table-utils";
@@ -72,6 +74,7 @@ type LegacyProjectsTableProps = {
   type: ProjectCategory;
   rows: ProjectGridRow[];
   columns: string;
+  visibleColumns: readonly ProjectCommercialColumnKey[];
   withDuplicateAction: boolean;
   sort: ProjectTableSortState;
   onSort: (field: LegacyProjectSortKey) => void;
@@ -83,6 +86,7 @@ export default function LegacyProjectsTable({
   type,
   rows,
   columns,
+  visibleColumns,
   withDuplicateAction,
   sort,
   onSort,
@@ -97,27 +101,41 @@ export default function LegacyProjectsTable({
     } as const;
   }
 
+  const show = (key: ProjectCommercialColumnKey) =>
+    isProjectColumnVisible(visibleColumns, key);
+  const actionsDisabled = handlers.isMutationBusy;
+
   return (
     <AdminDataGrid>
       <AdminDataGridHeader columns={columns}>
-        <div className="flex justify-center">
-          <AdminDataGridCheckbox
-            inputRef={selection.selectAllRef}
-            checked={selection.allSelected}
-            onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
-            label="تحديد الكل"
-          />
-        </div>
-        <AdminDataGridSortLabel {...sortProps("code")}>Code</AdminDataGridSortLabel>
-        <AdminDataGridSortLabel {...sortProps("location")}>
-          Location / Area
-        </AdminDataGridSortLabel>
-        <span className="text-center">Featured</span>
-        <span className="text-center">Published</span>
-        <AdminDataGridSortLabel {...sortProps("updated_at")} className="mx-auto">
-          Last Updated
-        </AdminDataGridSortLabel>
-        <span className="text-center">Actions</span>
+        {show("selection") ? (
+          <div className="flex justify-center">
+            <AdminDataGridCheckbox
+              inputRef={selection.selectAllRef}
+              checked={selection.allSelected}
+              onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
+              label="تحديد الكل"
+            />
+          </div>
+        ) : null}
+        {show("code") ? (
+          <AdminDataGridSortLabel {...sortProps("code")}>Code</AdminDataGridSortLabel>
+        ) : null}
+        {show("location") ? (
+          <AdminDataGridSortLabel {...sortProps("location")}>
+            Location / Area
+          </AdminDataGridSortLabel>
+        ) : null}
+        {show("featured") ? <span className="text-center">Featured</span> : null}
+        {show("publication_status") ? (
+          <span className="text-center">Published</span>
+        ) : null}
+        {show("updated_at") ? (
+          <AdminDataGridSortLabel {...sortProps("updated_at")} className="mx-auto">
+            Last Updated
+          </AdminDataGridSortLabel>
+        ) : null}
+        {show("actions") ? <span className="text-center">Actions</span> : null}
       </AdminDataGridHeader>
 
       {rows.length ? (
@@ -125,7 +143,6 @@ export default function LegacyProjectsTable({
           const published = publicationMeta(item.publication_status);
           const isHidden = item.publication_status !== "published";
           const isArchived = item.publication_status === "archived";
-          const pending = handlers.isRowPending(item.id);
           const pendingAction = handlers.rowPendingAction(item.id);
 
           return (
@@ -134,98 +151,110 @@ export default function LegacyProjectsTable({
               columns={columns}
               className="border-b border-white/[0.045] last:border-b-0"
             >
-              <div className="flex justify-center">
-                <AdminDataGridCheckbox
-                  checked={selection.selectedSet.has(item.id)}
-                  onChange={(event) =>
-                    selection.toggleOne(item.id, event.currentTarget.checked)
-                  }
-                  label={`تحديد ${item.code}`}
-                />
-              </div>
-
-              <div className="flex min-w-0 items-center gap-2.5">
-                <ProjectIcon type={type} />
-                <span className="truncate font-en text-sm font-semibold text-[#D8B87A]">
-                  {item.code}
-                </span>
-              </div>
-
-              <div className="truncate text-sm text-white/60">
-                {locationLabel(item)}
-              </div>
-
-              <div className="flex justify-center">
-                <AdminStatusPill tone={item.featured ? "green" : "muted"}>
-                  {featuredLabel(item)}
-                </AdminStatusPill>
-              </div>
-              <div className="flex justify-center">
-                <AdminStatusPill tone={published.tone}>{published.label}</AdminStatusPill>
-              </div>
-              <div className="text-center text-xs text-white/50">
-                {formatDate(item.updated_at)}
-              </div>
-
-              <AdminDataGridActionsCell>
-                <AdminDataGridActionButton
-                  action="edit"
-                  href={`/admin/projects/${item.id}`}
-                />
-                {!isArchived ? (
-                  <AdminDataGridActionButton
-                    action="visibility"
-                    title={isHidden ? "نشر" : "إخفاء"}
-                    isCurrentlyHidden={isHidden}
-                    disabled={pending || handlers.isBulkPending}
-                    pending={pendingAction === "status"}
-                    onClick={() =>
-                      handlers.onTogglePublication(item.id, item.publication_status)
+              {show("selection") ? (
+                <div className="flex justify-center">
+                  <AdminDataGridCheckbox
+                    checked={selection.selectedSet.has(item.id)}
+                    onChange={(event) =>
+                      selection.toggleOne(item.id, event.currentTarget.checked)
                     }
+                    label={`تحديد ${item.code}`}
                   />
-                ) : (
+                </div>
+              ) : null}
+
+              {show("code") ? (
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <ProjectIcon type={type} />
+                  <span className="truncate font-en text-sm font-semibold text-[#D8B87A]">
+                    {item.code}
+                  </span>
+                </div>
+              ) : null}
+
+              {show("location") ? (
+                <div className="truncate text-sm text-white/60">
+                  {locationLabel(item)}
+                </div>
+              ) : null}
+
+              {show("featured") ? (
+                <div className="flex justify-center">
+                  <AdminStatusPill tone={item.featured ? "green" : "muted"}>
+                    {featuredLabel(item)}
+                  </AdminStatusPill>
+                </div>
+              ) : null}
+              {show("publication_status") ? (
+                <div className="flex justify-center">
+                  <AdminStatusPill tone={published.tone}>{published.label}</AdminStatusPill>
+                </div>
+              ) : null}
+              {show("updated_at") ? (
+                <div className="text-center text-xs text-white/50">
+                  {formatDate(item.updated_at)}
+                </div>
+              ) : null}
+
+              {show("actions") ? (
+                <AdminDataGridActionsCell>
+                  <AdminDataGridActionButton
+                    action="edit"
+                    href={`/admin/projects/${item.id}`}
+                  />
+                  {!isArchived ? (
+                    <AdminDataGridActionButton
+                      action="visibility"
+                      title={isHidden ? "نشر" : "إخفاء"}
+                      isCurrentlyHidden={isHidden}
+                      disabled={actionsDisabled}
+                      pending={pendingAction === "status"}
+                      onClick={() =>
+                        handlers.onTogglePublication(item.id, item.publication_status)
+                      }
+                    />
+                  ) : (
+                    <AdminDataGridActionButton
+                      tone="dark"
+                      title="استعادة كمسودة"
+                      disabled={actionsDisabled}
+                      pending={pendingAction === "restore"}
+                      onClick={() => handlers.onRestore(item.id)}
+                    >
+                      <RestoreIcon />
+                    </AdminDataGridActionButton>
+                  )}
+                  {withDuplicateAction ? (
+                    <AdminDataGridActionButton
+                      action="duplicate"
+                      title="نسخ المشروع"
+                      disabled={actionsDisabled || !handlers.onDuplicate}
+                      pending={pendingAction === "duplicate"}
+                      onClick={() => handlers.onDuplicate?.(item.id)}
+                    />
+                  ) : null}
+                  {!isArchived ? (
+                    <AdminDataGridActionButton
+                      tone="dark"
+                      title="أرشفة المشروع"
+                      disabled={actionsDisabled}
+                      pending={pendingAction === "archive"}
+                      onClick={() => handlers.onArchive(item.id)}
+                    >
+                      <ArchiveIcon />
+                    </AdminDataGridActionButton>
+                  ) : null}
                   <AdminDataGridActionButton
                     tone="dark"
-                    title="استعادة كمسودة"
-                    disabled={pending || handlers.isBulkPending}
-                    pending={pendingAction === "restore"}
-                    onClick={() => handlers.onRestore(item.id)}
+                    title="حذف نهائي"
+                    disabled={actionsDisabled}
+                    pending={pendingAction === "delete"}
+                    onClick={() => handlers.onRequestPermanentDelete(item)}
                   >
-                    <RestoreIcon />
+                    <span className="text-[10px] font-bold text-red-300">DEL</span>
                   </AdminDataGridActionButton>
-                )}
-                {withDuplicateAction ? (
-                  <AdminDataGridActionButton
-                    action="duplicate"
-                    title="نسخ المشروع"
-                    disabled={
-                      pending || handlers.isBulkPending || !handlers.onDuplicate
-                    }
-                    pending={pendingAction === "duplicate"}
-                    onClick={() => handlers.onDuplicate?.(item.id)}
-                  />
-                ) : null}
-                {!isArchived ? (
-                  <AdminDataGridActionButton
-                    tone="dark"
-                    title="أرشفة المشروع"
-                    disabled={pending || handlers.isBulkPending}
-                    pending={pendingAction === "archive"}
-                    onClick={() => handlers.onArchive(item.id)}
-                  >
-                    <ArchiveIcon />
-                  </AdminDataGridActionButton>
-                ) : null}
-                <AdminDataGridActionButton
-                  tone="dark"
-                  title="حذف نهائي"
-                  disabled={pending || handlers.isBulkPending}
-                  pending={pendingAction === "delete"}
-                  onClick={() => handlers.onRequestPermanentDelete(item)}
-                >
-                  <span className="text-[10px] font-bold text-red-300">DEL</span>
-                </AdminDataGridActionButton>
-              </AdminDataGridActionsCell>
+                </AdminDataGridActionsCell>
+              ) : null}
             </AdminDataGridRow>
           );
         })
