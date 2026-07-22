@@ -51,13 +51,14 @@ export async function generateMetadata({
       title: topic.seoTitle,
       description: topic.seoDescription,
       keywords: topic.seoKeywords,
-      image: topic.image,
-      imageAlt: topic.title,
+      image: topic.metadataImage || undefined,
+      imageAlt: topic.metadataImage ? topic.imageAlt : undefined,
+      canonical: topic.canonicalUrl || undefined,
+      robotsIndex: topic.robotsIndex,
+      robotsFollow: topic.robotsFollow,
     },
     title: `${topic.seoTitle || topic.title} | فينيسيا للتطوير العقاري`,
     description: topic.seoDescription || topic.excerpt,
-    image: topic.image,
-    imageAlt: topic.title,
     type: "article",
     publishedTime: topic.publishedAt,
     modifiedTime: topic.publishedAt,
@@ -98,6 +99,20 @@ function renderContent(content?: string) {
       );
     }
 
+    const aligned = /^::(right|center|left|justify)::\s*(.+)$/.exec(trimmed);
+    if (aligned) {
+      const alignmentClass = aligned[1] === "center" ? "text-center" : aligned[1] === "left" ? "text-left" : aligned[1] === "justify" ? "text-justify" : "text-right";
+      return <p key={index} className={`${alignmentClass} leading-9 text-white/68`}>{aligned[2]}</p>;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      return <li key={index} className="mr-6 list-decimal leading-8 text-white/68">{trimmed.replace(/^\d+\.\s+/, "")}</li>;
+    }
+
+    if (trimmed.startsWith("> ")) {
+      return <blockquote key={index} className="my-5 border-r-4 border-[#D8B87A] bg-[#D8B87A]/8 px-5 py-3 leading-8 text-white/72">{trimmed.slice(2)}</blockquote>;
+    }
+
     if (trimmed.startsWith("- ")) {
       return (
         <li key={index} className="mr-6 list-disc leading-8 text-white/68">
@@ -134,7 +149,7 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
       image: topic.image,
       publishedAt: topic.publishedAt,
       updatedAt: topic.publishedAt,
-      faqs: topic.faq.length > 0 ? topic.faq : undefined,
+      faqs: topic.showFaqOnPage && topic.faq.length > 0 ? topic.faq : undefined,
     },
     globalSeo,
   );
@@ -145,6 +160,9 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
       eyebrow={topic.series || topic.category}
       subtitle={topic.excerpt}
       heroImage={topic.image}
+      showTitle={topic.showTitleOnPage}
+      showHeroImage={topic.showImageOnPage}
+      showSubtitle={topic.showExcerptOnPage}
     >
       <TopicViewTracker topicId={topic.id} />
       <JsonLd data={pageJsonLd} />
@@ -152,17 +170,19 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:[direction:ltr]">
         <main dir="rtl" className="space-y-10 text-right">
           <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.025]">
-            <div className="relative h-[340px] w-full">
-              <Image
-                src={topic.image}
-                alt={topic.title}
-                fill
-                sizes="(max-width: 768px) 100vw, 900px"
-                className="object-cover"
-                priority
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent" />
-            </div>
+            {topic.showImageOnPage ? (
+              <div className="relative h-[340px] w-full">
+                <Image
+                  src={topic.image}
+                  alt={topic.imageAlt}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 900px"
+                  className="object-cover"
+                  priority
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent" />
+              </div>
+            ) : null}
 
             <div className="space-y-5 p-6 md:p-8">
               <div className="flex flex-wrap gap-3 text-xs text-white/45">
@@ -173,11 +193,15 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
                 {topic.readingTime ? <span>{topic.readingTime}</span> : null}
               </div>
 
-              <h1 className="text-3xl font-semibold leading-[1.4] text-white md:text-5xl">
-                {topic.title}
-              </h1>
+              {topic.showTitleOnPage ? (
+                <h1 className="text-3xl font-semibold leading-[1.4] text-white md:text-5xl">
+                  {topic.title}
+                </h1>
+              ) : null}
 
-              <p className="max-w-3xl leading-8 text-white/60">{topic.excerpt}</p>
+              {topic.showExcerptOnPage ? (
+                <p className="max-w-3xl leading-8 text-white/60">{topic.excerpt}</p>
+              ) : null}
             </div>
           </div>
 
@@ -187,11 +211,11 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
             </div>
           </article>
 
-          {topic.faq.length > 0 && (
+          {topic.showFaqOnPage && topic.faq.length > 0 && (
             <section className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-6 md:p-8">
-              <h2 className="text-2xl font-semibold text-white">أسئلة شائعة</h2>
+              {topic.showFaqTitleOnPage ? <h2 className="text-2xl font-semibold text-white">أسئلة شائعة</h2> : null}
 
-              <div className="mt-6 space-y-4">
+              <div className={topic.showFaqTitleOnPage ? "mt-6 space-y-4" : "space-y-4"}>
                 {topic.faq.map((item) => (
                   <div
                     key={item.question}

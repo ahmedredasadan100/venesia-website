@@ -27,6 +27,13 @@ export function getBoolean(formData: FormData, key: string) {
   return formData.get(key) === "on" || formData.get(key) === "true";
 }
 
+export function getOptionalBoolean(formData: FormData, key: string) {
+  const value = formData.get(key);
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
 export function validateId(id: string) {
   return /^\d+$/.test(id);
 }
@@ -195,9 +202,18 @@ export function getPayload(formData: FormData) {
     seoDescription: getString(formData, "seo_description"),
     focusKeyword: getString(formData, "focus_keyword"),
     seoKeywords: getKeywords(formData),
+    canonicalUrl: getString(formData, "canonical_url"),
+    robotsIndex: getOptionalBoolean(formData, "robots_index"),
+    robotsFollow: getOptionalBoolean(formData, "robots_follow"),
     faq: getFaq(formData),
+    faqEditorPresent: getBoolean(formData, "faq_editor_present"),
     isFeatured: getBoolean(formData, "is_featured"),
     isPopular: getBoolean(formData, "is_popular"),
+    showTitleOnPage: getBoolean(formData, "show_title_on_page"),
+    showImageOnPage: getBoolean(formData, "show_image_on_page"),
+    showExcerptOnPage: getBoolean(formData, "show_excerpt_on_page"),
+    showFaqOnPage: getBoolean(formData, "show_faq_on_page"),
+    showFaqTitleOnPage: getBoolean(formData, "show_faq_title_on_page"),
   };
 }
 
@@ -263,7 +279,7 @@ export function preservePayloadFromCurrent(payload: TopicPayload, currentTopic: 
     payload.seoKeywords = currentTopic.seo_keywords.map(String).filter(Boolean);
   }
 
-  if (!payload.faq.length && Array.isArray(currentTopic.faq)) {
+  if (!payload.faqEditorPresent && !payload.faq.length && Array.isArray(currentTopic.faq)) {
     payload.faq = currentTopic.faq
       .map((item) => ({
         question: String(item.question ?? "").trim(),
@@ -308,9 +324,17 @@ export function buildTopicWritePayload(
     seo_description: payload.seoDescription || null,
     seo_keywords: payload.seoKeywords,
     focus_keyword: payload.focusKeyword || null,
+    canonical_url: payload.canonicalUrl || null,
+    robots_index: payload.robotsIndex,
+    robots_follow: payload.robotsFollow,
     faq: payload.faq,
     is_featured: payload.isFeatured,
     is_popular: payload.isPopular,
+    show_title_on_page: payload.showTitleOnPage,
+    show_image_on_page: payload.showImageOnPage,
+    show_excerpt_on_page: payload.showExcerptOnPage,
+    show_faq_on_page: payload.showFaqOnPage,
+    show_faq_title_on_page: payload.showFaqTitleOnPage,
     published_at: resolveTopicPublishedAt({
       formPublishedDate: payload.publishedAt,
       currentPublishedAt: currentTopic?.published_at ?? null,

@@ -10,6 +10,11 @@ export type TopicRow = {
   content: string | null;
   image: string | null;
   image_alt: string | null;
+  show_title_on_page?: boolean | null;
+  show_image_on_page?: boolean | null;
+  show_excerpt_on_page?: boolean | null;
+  show_faq_on_page?: boolean | null;
+  show_faq_title_on_page?: boolean | null;
   category_slug: string | null;
   series_id?: number | null;
   status: TopicStatus | string | null;
@@ -18,6 +23,9 @@ export type TopicRow = {
   seo_description: string | null;
   focus_keyword: string | null;
   seo_keywords: string[] | null;
+  canonical_url: string | null;
+  robots_index: boolean | null;
+  robots_follow: boolean | null;
   faq: { question: string; answer: string }[] | null;
 };
 

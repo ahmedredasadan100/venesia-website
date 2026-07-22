@@ -115,7 +115,15 @@ export function resolveSeoMetadata(
     SEO_SITE.defaultImage,
   );
 
-  const canonical = route?.alternates?.canonical ?? buildCanonicalWithBase(input.path, metadataBase);
+  const canonical = buildCanonicalWithBase(
+    pickString(
+      input.entitySeo?.canonical,
+      input.pageSeo?.canonical,
+      route?.alternates?.canonical,
+      input.path,
+    ),
+    metadataBase,
+  );
 
   const robots = buildRobotsDirective(
     input.robots ?? route?.robots,

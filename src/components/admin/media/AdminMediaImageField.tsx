@@ -22,6 +22,7 @@ type AdminMediaImageFieldProps = {
   variant?: "default" | "compact";
   showLabel?: boolean;
   onValueChange?: (value: string) => void;
+  compactAspectClassName?: string;
 };
 
 export default function AdminMediaImageField({
@@ -34,6 +35,7 @@ export default function AdminMediaImageField({
   variant = "default",
   showLabel = true,
   onValueChange,
+  compactAspectClassName = "aspect-[4/3]",
 }: AdminMediaImageFieldProps) {
   const [value, setValue] = useState(defaultValue);
   const [prevDefaultValue, setPrevDefaultValue] = useState(defaultValue);
@@ -54,7 +56,7 @@ export default function AdminMediaImageField({
       <>
         <input type="hidden" name={name} value={value} />
 
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-white/10 bg-black/30">
+        <div className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-black/30 ${compactAspectClassName}`}>
           {value ? (
             <>
               <Image

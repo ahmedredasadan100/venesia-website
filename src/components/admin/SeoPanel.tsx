@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { analyzeTopicSeo, type FaqItem, type SeoIssue } from "../../lib/admin/seo-score";
 import AdminTagsField from "./AdminTagsField";
+import TopicCorrectionButton from "./content/editors/article/TopicCorrectionButton";
 
 type SeoPanelProps = {
   title: string;
@@ -15,316 +16,392 @@ type SeoPanelProps = {
   seoDescription: string;
   seoKeywords: string[];
   focusKeyword: string;
+  canonicalUrl: string;
+  robotsIndex: boolean | null;
+  robotsFollow: boolean | null;
   faq?: FaqItem[];
   hideImageAltField?: boolean;
 };
 
-type LiveState = SeoPanelProps;
+type CorrectionTarget = {
+  tabId: "basic" | "faq" | "seo";
+  targetId: string;
+};
 
-function getStringFromForm(form: HTMLFormElement | null, name: string, fallback: string) {
-  const field = form?.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+const SEO_CORRECTION_TARGETS: Record<string, CorrectionTarget> = {
+  "seo-title-length": { tabId: "seo", targetId: "topic-seo-title" },
+  "meta-description-length": { tabId: "seo", targetId: "topic-seo-description" },
+  "focus-keyword": { tabId: "seo", targetId: "topic-focus-keyword" },
+  "keyword-title": { tabId: "seo", targetId: "topic-seo-title" },
+  "keyword-description": { tabId: "seo", targetId: "topic-seo-description" },
+  "keyword-intro": { tabId: "basic", targetId: "topic-content-markdown" },
+  image: { tabId: "basic", targetId: "topic-image-field" },
+  "image-alt-length": { tabId: "basic", targetId: "topic-image-alt" },
+  "keyword-alt": { tabId: "basic", targetId: "topic-image-alt" },
+  "seo-keywords": { tabId: "seo", targetId: "topic-seo-keywords" },
+  slug: { tabId: "basic", targetId: "topic-slug" },
+  "keyword-density": { tabId: "basic", targetId: "topic-content-markdown" },
+};
+
+function value(form: HTMLFormElement, name: string, fallback: string) {
+  const field = form.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | null;
   return field?.value ?? fallback;
 }
 
-function getFaqFromForm(form: HTMLFormElement | null, fallback: FaqItem[] = []) {
-  if (!form) return fallback;
+function optionalBoolean(
+  form: HTMLFormElement,
+  name: string,
+  fallback: boolean | null,
+) {
+  const field = form.elements.namedItem(name);
+  if (!(field instanceof HTMLSelectElement)) return fallback;
+  if (field.value === "true") return true;
+  if (field.value === "false") return false;
+  return null;
+}
 
+function faqFrom(form: HTMLFormElement, fallback: FaqItem[] = []) {
   const questions = Array.from(form.querySelectorAll<HTMLInputElement>('[name="faq_question"]'));
   const answers = Array.from(form.querySelectorAll<HTMLTextAreaElement>('[name="faq_answer"]'));
-
+  if (!questions.length) return fallback;
   return questions
     .map((question, index) => ({
       question: question.value.trim(),
-      answer: (answers[index]?.value ?? "").trim(),
+      answer: answers[index]?.value.trim() ?? "",
     }))
     .filter((item) => item.question || item.answer);
 }
 
-function getRangeStatus(value: number, min: number, max: number) {
-  if (value < min) return "short";
-  if (value > max) return "long";
-  return "good";
+function range(valueLength: number, min: number, max: number) {
+  return valueLength < min ? "قصير" : valueLength > max ? "طويل" : "مناسب";
 }
 
-function getStatusLabel(status: "short" | "long" | "good") {
-  if (status === "short") return "قصير";
-  if (status === "long") return "طويل";
-  return "ممتاز";
-}
-
-function getStatusClass(status: "short" | "long" | "good") {
-  if (status === "good") return "border-emerald-400/25 bg-emerald-400/10 text-emerald-200";
-  if (status === "short") return "border-[#D8B87A]/30 bg-[#D8B87A]/10 text-[#F2D99B]";
-  return "border-red-400/25 bg-red-400/10 text-red-200";
-}
-
-function getScoreClass(score: number) {
-  if (score >= 75) return "text-emerald-200";
-  if (score >= 55) return "text-[#F2D99B]";
-  return "text-red-200";
+function robotsLabel(value: boolean | null, enabled: string, disabled: string) {
+  if (value === null) return "الإعداد العام";
+  return value ? enabled : disabled;
 }
 
 export default function SeoPanel(props: SeoPanelProps) {
-  const [live, setLive] = useState<LiveState>(props);
+  const [live, setLive] = useState(props);
 
   useEffect(() => {
     const root = document.getElementById("seo-command-center");
     const form = root?.closest("form") as HTMLFormElement | null;
     if (!form) return;
 
-    function readForm() {
+    const read = () =>
       setLive({
-        title: getStringFromForm(form, "title", props.title),
-        excerpt: getStringFromForm(form, "excerpt", props.excerpt),
-        slug: getStringFromForm(form, "slug", props.slug),
-        content: getStringFromForm(form, "content", props.content),
-        image: getStringFromForm(form, "image", props.image),
-        imageAlt: getStringFromForm(form, "image_alt", props.imageAlt),
-        seoTitle: getStringFromForm(form, "seo_title", props.seoTitle),
-        seoDescription: getStringFromForm(form, "seo_description", props.seoDescription),
-        seoKeywords: getStringFromForm(form, "seo_keywords", props.seoKeywords.join(", "))
+        ...props,
+        title: value(form, "title", props.title),
+        excerpt: value(form, "excerpt", props.excerpt),
+        slug: value(form, "slug", props.slug),
+        content: value(form, "content", props.content),
+        image: value(form, "image", props.image),
+        imageAlt: value(form, "image_alt", props.imageAlt),
+        seoTitle: value(form, "seo_title", props.seoTitle),
+        seoDescription: value(form, "seo_description", props.seoDescription),
+        focusKeyword: value(form, "focus_keyword", props.focusKeyword),
+        canonicalUrl: value(form, "canonical_url", props.canonicalUrl),
+        robotsIndex: optionalBoolean(form, "robots_index", props.robotsIndex),
+        robotsFollow: optionalBoolean(form, "robots_follow", props.robotsFollow),
+        seoKeywords: value(form, "seo_keywords", props.seoKeywords.join(", "))
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
-        focusKeyword: getStringFromForm(form, "focus_keyword", props.focusKeyword),
-        faq: getFaqFromForm(form, props.faq),
+        faq: faqFrom(form, props.faq),
       });
-    }
 
-    readForm();
-    form.addEventListener("input", readForm);
-    form.addEventListener("change", readForm);
-
+    read();
+    form.addEventListener("input", read);
+    form.addEventListener("change", read);
     return () => {
-      form.removeEventListener("input", readForm);
-      form.removeEventListener("change", readForm);
+      form.removeEventListener("input", read);
+      form.removeEventListener("change", read);
     };
   }, [props]);
 
   const analysis = useMemo(() => analyzeTopicSeo(live), [live]);
-  const titleStatus = getRangeStatus(live.seoTitle.length, 45, 60);
-  const descriptionStatus = getRangeStatus(live.seoDescription.length, 120, 160);
-  const imageAltStatus = getRangeStatus(live.imageAlt.length, 35, 140);
+  const publicPath = `/topics/${live.slug.trim() || "your-slug"}`;
+  const previewTitle = live.seoTitle.trim() || live.title.trim() || "عنوان الموضوع";
+  const previewDescription =
+    live.seoDescription.trim() || live.excerpt.trim() || "سيظهر وصف الموضوع هنا عند إضافته.";
+  const canonicalPreview = live.canonicalUrl.trim() || publicPath;
 
   return (
     <section
       id="seo-command-center"
-      className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]"
+      className="rounded-[24px] border border-white/10 bg-[#080B10]/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.28)] md:p-6"
+      data-topic-seo-panel
     >
-      <div className="flex flex-col gap-5 border-b border-white/10 pb-6 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">SEO COMMAND CENTER</p>
-          <h3 className="mt-3 text-2xl font-semibold text-white">تقييم السيو وجودة الصفحة</h3>
-          <p className="mt-2 text-sm leading-7 text-white/50">
-            تحليل حي للحقول والمحتوى والجاهزية. لا يوجد أي اعتماد على reading_time.
-          </p>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.85fr)] xl:items-start">
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-white/10 bg-black/20 p-5">
+            <div className="mb-5">
+              <h3 className="text-lg font-semibold text-white">بيانات SEO الخاصة بالموضوع</h3>
+              <p className="mt-2 text-sm leading-7 text-white/42">
+                اترك أي Override اختياري فارغًا لاستخدام إعدادات SEO العامة للموقع.
+              </p>
+            </div>
+
+            <div className="space-y-5">
+              <SeoField
+                id="topic-seo-title"
+                label="SEO Title"
+                name="seo_title"
+                defaultValue={props.seoTitle}
+                count={live.seoTitle.length}
+                maxLength={70}
+                helper={`الحالة: ${range(live.seoTitle.length, 45, 60)} — المستهدف 45–60 حرفًا`}
+              />
+              <SeoField
+                id="topic-seo-description"
+                label="Meta Description"
+                name="seo_description"
+                defaultValue={props.seoDescription}
+                count={live.seoDescription.length}
+                maxLength={170}
+                helper={`الحالة: ${range(live.seoDescription.length, 120, 160)} — المستهدف 120–160 حرفًا`}
+                textarea
+              />
+              <SeoField
+                id="topic-focus-keyword"
+                label="Focus Keyword"
+                name="focus_keyword"
+                defaultValue={props.focusKeyword}
+                count={live.focusKeyword.length}
+                helper="عبارة البحث الرئيسية التي تُحسب عليها الكثافة والتحليلات"
+              />
+              <div id="topic-seo-keywords" className="scroll-mt-24">
+                <AdminTagsField
+                  name="seo_keywords"
+                  label="SEO Keywords"
+                  defaultTags={props.seoKeywords}
+                  placeholder="اكتب كلمة أو عبارة ثم Enter"
+                  helperText="كل عبارة متعددة الكلمات تُحفظ كوحدة واحدة"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section
+            id="topic-seo-overrides"
+            className="scroll-mt-24 rounded-2xl border border-white/10 bg-black/20 p-5"
+            data-topic-seo-overrides
+          >
+            <div>
+              <h3 className="text-base font-semibold text-white">Canonical وRobots</h3>
+              <p className="mt-2 text-sm leading-7 text-white/42">
+                القيم العامة تظل المصدر الافتراضي، ويمكن تخصيص هذا الموضوع فقط عند الحاجة.
+              </p>
+            </div>
+
+            <div className="mt-5 space-y-5">
+              <SeoField
+                id="topic-canonical-url"
+                label="Canonical URL"
+                name="canonical_url"
+                defaultValue={props.canonicalUrl}
+                count={live.canonicalUrl.length}
+                helper="اتركه فارغًا لاستخدام رابط الموضوع العام تلقائيًا"
+                dir="ltr"
+              />
+
+              <div id="topic-seo-robots" className="grid scroll-mt-24 gap-3 sm:grid-cols-2">
+                <RobotsSelect
+                  id="topic-robots-index"
+                  name="robots_index"
+                  label="الفهرسة"
+                  defaultValue={props.robotsIndex}
+                  positive="Index"
+                  negative="Noindex"
+                />
+                <RobotsSelect
+                  id="topic-robots-follow"
+                  name="robots_follow"
+                  label="تتبع الروابط"
+                  defaultValue={props.robotsFollow}
+                  positive="Follow"
+                  negative="Nofollow"
+                />
+              </div>
+            </div>
+          </section>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-4">
-          <ScoreCard label="SEO" score={analysis.seoScore} />
-          <ScoreCard label="Content" score={analysis.contentScore} />
-          <ScoreCard label="Ready" score={analysis.readinessScore} />
-          <ScoreCard label={analysis.label} score={analysis.overallScore} featured />
-        </div>
-      </div>
+        <aside className="space-y-5 xl:sticky xl:top-6">
+          <section className="rounded-2xl border border-white/10 bg-black/20 p-5">
+            <h3 className="text-base font-semibold text-white">معاينة نتائج البحث</h3>
+            <div className="mt-4 rounded-xl border border-white/10 bg-[#0B0F14] p-4" dir="rtl">
+              <p className="break-all text-xs text-emerald-200/70" dir="ltr">{canonicalPreview}</p>
+              <p className="mt-3 text-lg leading-7 text-[#8B8CFF]">{previewTitle}</p>
+              <p className="mt-2 text-sm leading-7 text-white/58">{previewDescription}</p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <PreviewValue label="Robots" value={robotsLabel(live.robotsIndex, "Index", "Noindex")} />
+              <PreviewValue label="Links" value={robotsLabel(live.robotsFollow, "Follow", "Nofollow")} />
+            </div>
+          </section>
 
-      {analysis.blockingErrors > 0 ? (
-        <div className="mt-6 rounded-[20px] border border-red-400/20 bg-red-400/10 p-4">
-          <p className="text-sm font-semibold text-red-100">يوجد {analysis.blockingErrors} تنبيه مانع للنشر.</p>
-          <p className="mt-2 text-sm leading-7 text-white/50">
-            عالج العناصر الحمراء أولًا قبل الضغط على نشر. المسودة يمكن حفظها، لكن النشر يحتاج نسخة مكتملة.
-          </p>
-        </div>
-      ) : null}
+          <section className="rounded-2xl border border-white/10 bg-black/20 p-5" data-topic-open-graph-preview>
+            <h3 className="text-base font-semibold text-white">معاينة Open Graph</h3>
+            <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-[#0B0F14]">
+              {live.image ? (
+                <div
+                  className="aspect-[1.91/1] bg-cover bg-center"
+                  style={{ backgroundImage: `url(${live.image})` }}
+                  role="img"
+                  aria-label={live.imageAlt || previewTitle}
+                />
+              ) : (
+                <div className="flex aspect-[1.91/1] items-center justify-center border-b border-white/10 text-xs text-white/30">
+                  تُستخدم صورة Open Graph العامة
+                </div>
+              )}
+              <div className="p-4">
+                <p className="line-clamp-2 text-sm font-semibold leading-6 text-white/78">{previewTitle}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/42">{previewDescription}</p>
+              </div>
+            </div>
+          </section>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-2">
-        <FieldBlock
-          label="SEO Title"
-          name="seo_title"
-          defaultValue={props.seoTitle}
-          placeholder="اكتب عنوان SEO واضح وجذاب..."
-          count={live.seoTitle.length}
-          recommended="الموصى به: 45 إلى 60 حرف"
-          status={titleStatus}
-        />
-
-        <FieldBlock
-          label="Meta Description"
-          name="seo_description"
-          defaultValue={props.seoDescription}
-          placeholder="اكتب وصف مختصر يظهر في نتائج البحث..."
-          count={live.seoDescription.length}
-          recommended="الموصى به: 120 إلى 160 حرف"
-          status={descriptionStatus}
-          textarea
-        />
-
-        <FieldBlock
-          label="Focus Keyword"
-          name="focus_keyword"
-          defaultValue={props.focusKeyword}
-          placeholder="مثال: بيت الوطن القاهرة الجديدة"
-          count={live.focusKeyword.length}
-          recommended="الكلمة الرئيسية التي يستهدفها المقال"
-          status={live.focusKeyword ? "good" : "short"}
-        />
-
-        {props.hideImageAltField ? null : (
-          <FieldBlock
-            label="Image Alt Text"
-            name="image_alt"
-            defaultValue={props.imageAlt}
-            placeholder="وصف واضح للصورة يحتوي على الكلمة الرئيسية إن أمكن..."
-            count={live.imageAlt.length}
-            recommended="الموصى به: 35 إلى 140 حرف"
-            status={imageAltStatus}
-          />
-        )}
-      </div>
-
-      <AdminTagsField
-        name="seo_keywords"
-        label="SEO Keywords"
-        defaultTags={props.seoKeywords}
-        placeholder="مثال: بيت الوطن — ثم Enter أو , أو ;"
-        helperText="الكلمات متعددة المسافات تُحفظ ككلمة واحدة"
-      />
-
-      <div className="mt-7 grid gap-4 md:grid-cols-4">
-        <MiniStat label="عدد الكلمات" value={analysis.wordCount} note="ينصح 800 - 1800" />
-        <MiniStat label="عدد الحروف" value={analysis.charCount} note="حسب عمق المقال" />
-        <MiniStat label="H1" value={analysis.h1Count} note="واحد فقط" />
-        <MiniStat label="عناوين H2" value={analysis.h2Count} note="ينصح 2 أو أكثر" />
-        <MiniStat label="أسئلة FAQ" value={analysis.faqCount} note="ينصح 3 - 6" />
-        <MiniStat label="H3" value={analysis.h3Count} note="اختياري لكنه مفيد" />
-        <MiniStat label="روابط داخلية" value={analysis.internalLinksCount} note="ينصح برابط داخلي واحد" />
-        <MiniStat label="كثافة الكلمة" value={analysis.keywordDensity} note="المريح 0.5% - 2%" suffix="%" />
-      </div>
-
-      <div className="mt-7 grid gap-5 xl:grid-cols-3">
-        <IssueGroup title="SEO Tasks" issues={analysis.issues.seo} />
-        <IssueGroup title="Content Tasks" issues={analysis.issues.content} />
-        <IssueGroup title="Publishing Tasks" issues={analysis.issues.readiness} />
+          <section className="rounded-2xl border border-white/10 bg-black/20 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold text-white">تحليل SEO المباشر</h3>
+                <p className="mt-1 text-xs text-white/40">الدرجة إرشادية ولا تمنع النشر وحدها.</p>
+              </div>
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-[7px] border-[#D8B87A]/60 bg-black/25 font-en text-xl font-semibold text-white">
+                {analysis.seoScore}
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm" data-topic-seo-keyword-density>
+              <span className="text-white/55">كثافة Focus Keyword</span>
+              <span className="font-en font-semibold text-[#D8B87A]">
+                {live.focusKeyword.trim() ? `${analysis.keywordDensity}%` : "غير متاح"}
+              </span>
+            </div>
+            <div className="mt-5 space-y-2">
+              <IssueRows issues={analysis.issues.seo} />
+            </div>
+          </section>
+        </aside>
       </div>
     </section>
   );
 }
 
-function ScoreCard({ label, score, featured = false }: { label: string; score: number; featured?: boolean }) {
-  return (
-    <div
-      className={
-        featured
-          ? "rounded-[22px] border border-[#D8B87A]/35 bg-[#D8B87A]/12 px-5 py-4 text-center"
-          : "rounded-[22px] border border-white/10 bg-black/25 px-5 py-4 text-center"
-      }
-      title={`${label}: ${score}/100`}
-    >
-      <p className={`font-en text-3xl font-semibold ${getScoreClass(score)}`}>
-        {score}<span className="text-base">/100</span>
-      </p>
-      <p className="mt-1 text-xs text-white/50">{label}</p>
-    </div>
-  );
-}
-
-function FieldBlock({
+function SeoField({
+  id,
   label,
   name,
   defaultValue,
-  placeholder,
   count,
-  recommended,
-  status,
+  helper,
+  maxLength,
   textarea = false,
+  dir = "rtl",
 }: {
+  id: string;
   label: string;
   name: string;
   defaultValue: string;
-  placeholder: string;
   count: number;
-  recommended: string;
-  status: "short" | "long" | "good";
+  helper: string;
+  maxLength?: number;
   textarea?: boolean;
+  dir?: "rtl" | "ltr";
 }) {
-  const statusClass = getStatusClass(status);
-
+  const classes =
+    "mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45";
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3">
-        <label className="text-sm font-medium text-white/75">{label}</label>
-        <span className={`rounded-full border px-3 py-1 text-xs ${statusClass}`}>{getStatusLabel(status)}</span>
-      </div>
-
+    <label htmlFor={id} className="block scroll-mt-24 text-sm font-medium text-white/75">
+      <span>{label}</span>
       {textarea ? (
         <textarea
+          id={id}
           name={name}
           defaultValue={defaultValue}
+          maxLength={maxLength}
           rows={4}
-          placeholder={placeholder}
-          className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/30 focus:border-[#D8B87A]/45"
+          dir={dir}
+          className={`${classes} resize-y leading-7`}
         />
       ) : (
-        <input
-          name={name}
-          defaultValue={defaultValue}
-          placeholder={placeholder}
-          className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[#D8B87A]/45"
-        />
+        <input id={id} name={name} defaultValue={defaultValue} maxLength={maxLength} dir={dir} className={classes} />
       )}
+      <span className="mt-2 flex justify-between gap-3 text-xs text-white/35">
+        <span>{helper}</span>
+        <span className="font-en">{count}{maxLength ? ` / ${maxLength}` : ""}</span>
+      </span>
+    </label>
+  );
+}
 
-      <div className="mt-2 flex items-center justify-between gap-3 text-xs">
-        <span className="text-white/35">{recommended}</span>
-        <span className="font-en text-white/45">{count} حرف</span>
-      </div>
+function RobotsSelect({
+  id,
+  name,
+  label,
+  defaultValue,
+  positive,
+  negative,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  defaultValue: boolean | null;
+  positive: string;
+  negative: string;
+}) {
+  return (
+    <label htmlFor={id} className="block rounded-xl border border-white/10 bg-white/[0.025] p-4 text-sm text-white/70">
+      <span>{label}</span>
+      <select
+        id={id}
+        name={name}
+        defaultValue={defaultValue === null ? "" : String(defaultValue)}
+        className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-[#090D12] px-3 text-sm text-white outline-none focus:border-[#D8B87A]/45"
+      >
+        <option value="">استخدام الإعداد العام</option>
+        <option value="true">{positive}</option>
+        <option value="false">{negative}</option>
+      </select>
+    </label>
+  );
+}
+
+function PreviewValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.025] p-3">
+      <p className="text-white/35">{label}</p>
+      <p className="mt-1 font-en text-white/72">{value}</p>
     </div>
   );
 }
 
-function MiniStat({ label, value, note, suffix = "" }: { label: string; value: number; note: string; suffix?: string }) {
-  return (
-    <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
-      <p className="text-xs text-white/40">{label}</p>
-      <p className="mt-2 font-en text-2xl font-semibold text-[#D8B87A]">{value}{suffix}</p>
-      <p className="mt-2 text-xs leading-6 text-white/35">{note}</p>
-    </div>
-  );
-}
+function IssueRows({ issues }: { issues: SeoIssue[] }) {
+  return issues.map((issue) => {
+    const target = issue.id ? SEO_CORRECTION_TARGETS[issue.id] : undefined;
+    const className =
+      issue.type === "success"
+        ? "border-emerald-400/15 bg-emerald-400/8"
+        : issue.type === "error"
+          ? "border-red-400/20 bg-red-400/8"
+          : "border-[#D8B87A]/18 bg-[#D8B87A]/8";
 
-function IssueGroup({ title, issues }: { title: string; issues: SeoIssue[] }) {
-  return (
-    <div className="rounded-[22px] border border-white/10 bg-black/20 p-5">
-      <p className="text-sm font-semibold text-white">{title}</p>
-      <div className="mt-4 space-y-3">
-        {issues.map((issue) => (
-          <div
-            key={`${issue.label}-${issue.hint}`}
-            className={
-              issue.type === "success"
-                ? "rounded-2xl border border-emerald-400/15 bg-emerald-400/8 p-4"
-                : issue.type === "error"
-                  ? "rounded-2xl border border-red-400/20 bg-red-400/10 p-4"
-                  : "rounded-2xl border border-[#D8B87A]/18 bg-[#D8B87A]/8 p-4"
-            }
-          >
-            <div className="flex items-center justify-between gap-3">
-              <p
-                className={
-                  issue.type === "success"
-                    ? "text-sm font-medium text-emerald-200"
-                    : issue.type === "error"
-                      ? "text-sm font-medium text-red-100"
-                      : "text-sm font-medium text-[#F2D99B]"
-                }
-              >
-                {issue.type === "success" ? "✓" : issue.type === "error" ? "×" : "!"} {issue.label}
-              </p>
-              <span className="font-en text-xs text-white/35">+{issue.points}</span>
-            </div>
-            <p className="mt-2 text-xs leading-6 text-white/40">{issue.hint}</p>
-          </div>
-        ))}
+    return (
+      <div key={issue.id ?? `${issue.label}-${issue.hint}`} className={`rounded-xl border px-4 py-3 ${className}`}>
+        <div className="flex items-start justify-between gap-3">
+          <details className="min-w-0 flex-1">
+            <summary className="cursor-pointer text-sm font-medium text-white/78">
+              {issue.type === "success" ? "✓" : issue.type === "error" ? "×" : "!"} {issue.label}
+            </summary>
+            <p className="mt-2 text-xs leading-6 text-white/45">{issue.hint}</p>
+          </details>
+          {issue.type !== "success" && target ? (
+            <TopicCorrectionButton tabId={target.tabId} targetId={target.targetId} />
+          ) : null}
+        </div>
       </div>
-    </div>
-  );
+    );
+  });
 }
