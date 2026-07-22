@@ -160,6 +160,7 @@ export function getPayload(formData: FormData) {
     excerpt: getString(formData, "excerpt"),
     content: getString(formData, "content"),
     image: getString(formData, "image"),
+    imageFieldPresent: formData.has("image"),
     imageAlt: getString(formData, "image_alt"),
     categorySlug: getString(formData, "category_slug"),
     seriesId: seriesId && validateId(seriesId) ? Number(seriesId) : null,
@@ -221,8 +222,9 @@ export function getPublishValidationError(payload: TopicPayload) {
   return getTopicPublishValidationError(payloadToPublishInput(payload));
 }
 
-export function preserveImage(nextValue: string, currentValue: string) {
-  return nextValue.trim() || currentValue;
+export function preserveImage(nextValue: string, currentValue: string, imageFieldPresent: boolean) {
+  const normalized = nextValue.trim();
+  return imageFieldPresent ? normalized : normalized || currentValue;
 }
 
 export function preserveText(nextValue: string, currentValue: string) {
@@ -230,7 +232,11 @@ export function preserveText(nextValue: string, currentValue: string) {
 }
 
 export function preservePayloadFromCurrent(payload: TopicPayload, currentTopic: TopicRow) {
-  payload.image = preserveImage(payload.image, String(currentTopic.image ?? ""));
+  payload.image = preserveImage(
+    payload.image,
+    String(currentTopic.image ?? ""),
+    payload.imageFieldPresent,
+  );
   payload.imageAlt = preserveText(payload.imageAlt, String(currentTopic.image_alt ?? ""));
   payload.seoTitle = preserveText(payload.seoTitle, String(currentTopic.seo_title ?? ""));
   payload.seoDescription = preserveText(payload.seoDescription, String(currentTopic.seo_description ?? ""));

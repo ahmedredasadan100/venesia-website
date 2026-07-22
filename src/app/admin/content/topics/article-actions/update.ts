@@ -51,7 +51,11 @@ export async function updateTopicWithStatus(
     redirectEditError(id, error instanceof Error ? error.message : "تعذر رفع الصورة.");
   }
 
-  payload.image = preserveImage(payload.image, String(currentTopic.image ?? ""));
+  payload.image = preserveImage(
+    payload.image,
+    String(currentTopic.image ?? ""),
+    payload.imageFieldPresent,
+  );
 
   const currentStatus = getNormalizedStatus(String(currentTopic.status ?? "draft"), "draft");
 
