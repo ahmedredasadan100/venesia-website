@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type TopicMarkdownEditorProps = {
   defaultValue?: string;
+  variant?: "default" | "compact";
 };
 
 type ViewMode = "write" | "preview" | "split";
@@ -16,6 +17,7 @@ type EditorStats = {
   h1: number;
   h2: number;
   h3: number;
+  internalLinks: number;
 };
 
 const STORAGE_PREFIX = "venesia-topic-editor-draft";
@@ -78,6 +80,7 @@ function normalizeInitialContent(value: string) {
 function normalizePlainText(value: string) {
   return stripHtml(value)
     .replace(/\[[^\]]+\]\(([^)]+)\)/g, " ")
+    .replace(/^::(?:right|center|left|justify)::\s*/gm, "")
     .replace(/[#>*_`~\-[\]()]|\d+\.\s/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
@@ -87,6 +90,8 @@ function normalizePlainText(value: string) {
 function getTextStats(value: string): EditorStats {
   const plainText = normalizePlainText(value);
   const words = plainText ? plainText.split(/\s+/).filter(Boolean).length : 0;
+  const markdownInternalLinks = value.match(/(?<!!)\[[^\]]+\]\(\/(?!\/)[^)\s]+\)/g)?.length ?? 0;
+  const htmlInternalLinks = value.match(/<a\b[^>]*\bhref=["']\/(?!\/)[^"']*["'][^>]*>/gi)?.length ?? 0;
   const paragraphs = value
     .replace(/\r\n/g, "\n")
     .split(/\n{2,}/g)
@@ -101,6 +106,7 @@ function getTextStats(value: string): EditorStats {
     h1: value.match(/^#\s+/gm)?.length ?? 0,
     h2: value.match(/^##\s+/gm)?.length ?? 0,
     h3: value.match(/^###\s+/gm)?.length ?? 0,
+    internalLinks: markdownInternalLinks + htmlInternalLinks,
   };
 }
 
@@ -174,6 +180,14 @@ function markdownToHtml(markdown: string) {
       continue;
     }
 
+    const aligned = /^::(right|center|left|justify)::\s*(.+)$/.exec(line);
+    if (aligned) {
+      closeParagraph();
+      closeList();
+      html.push(`<p style="text-align:${aligned[1]}">${inlineMarkdownToHtml(aligned[2])}</p>`);
+      continue;
+    }
+
     const unordered = /^[-*]\s+(.+)$/.exec(line);
     if (unordered) {
       closeParagraph();
@@ -238,11 +252,11 @@ function prefixSelection(textarea: HTMLTextAreaElement, content: string, prefix:
   return { next, cursor: blockStart + nextBlock.length };
 }
 
-function MiniCounter({ label, value }: { label: string; value: number | string }) {
+function MiniCounter({ label, value, compact = false, warning = false }: { label: string; value: number | string; compact?: boolean; warning?: boolean }) {
   return (
-    <div className="rounded-[18px] border border-white/10 bg-black/25 px-4 py-3 text-center">
-      <p className="font-en text-2xl font-semibold text-[#D8B87A]">{value}</p>
-      <p className="mt-1 text-xs text-white/40">{label}</p>
+    <div data-topic-stat={label} className={`${compact ? "rounded-lg px-2 py-1.5" : "rounded-[18px] px-4 py-3"} border bg-black/25 text-center ${warning ? "border-amber-400/30" : "border-white/10"}`}>
+      <p className={`font-en font-semibold ${warning ? "text-amber-300" : "text-[#D8B87A]"} ${compact ? "text-sm" : "text-2xl"}`}>{value}</p>
+      <p className={`${compact ? "text-[10px]" : "mt-1 text-xs"} text-white/40`}>{label}</p>
     </div>
   );
 }
@@ -277,20 +291,27 @@ function ToolButton({ label, title, onClick }: { label: string; title?: string; 
   );
 }
 
-function PreviewPane({ content }: { content: string }) {
+function PreviewPane({ content, compact = false }: { content: string; compact?: boolean }) {
   return (
     <article
-      className="venesia-article-preview min-h-[620px] rounded-[24px] border border-white/10 bg-[#F4EFE5] px-7 py-7 text-[#111827] shadow-inner"
+      className={`venesia-article-preview rounded-xl border border-white/10 bg-[#F4EFE5] text-[#111827] shadow-inner ${compact ? "min-h-72 px-5 py-5" : "min-h-[620px] px-7 py-7"}`}
       dir="rtl"
       dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }}
     />
   );
 }
 
-function MarkdownEditor({ content, setContent }: { content: string; setContent: (value: string) => void }) {
+function MarkdownEditor({ content, setContent, compact = false }: { content: string; setContent: (value: string) => void; compact?: boolean }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const historyRef = useRef<string[]>([content]);
+  const historyIndexRef = useRef(0);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
 
-  function updateWithCursor(next: string, cursor?: number) {
+  function updateWithCursor(next: string, cursor?: number, record = true) {
+    if (record && historyRef.current[historyIndexRef.current] !== next) {
+      historyRef.current = [...historyRef.current.slice(0, historyIndexRef.current + 1), next].slice(-80);
+      historyIndexRef.current = historyRef.current.length - 1;
+    }
     setContent(next);
     window.requestAnimationFrame(() => {
       if (cursor !== undefined && textareaRef.current) {
@@ -298,6 +319,42 @@ function MarkdownEditor({ content, setContent }: { content: string; setContent: 
         textareaRef.current.setSelectionRange(cursor, cursor);
       }
     });
+  }
+
+  function undo() {
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    updateWithCursor(historyRef.current[historyIndexRef.current], undefined, false);
+  }
+
+  function redo() {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    updateWithCursor(historyRef.current[historyIndexRef.current], undefined, false);
+  }
+
+  function paragraph() {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = content.lastIndexOf("\n", textarea.selectionStart - 1) + 1;
+    const endIndex = content.indexOf("\n", textarea.selectionEnd);
+    const end = endIndex < 0 ? content.length : endIndex;
+    const block = content.slice(start, end).replace(/^::(?:right|center|left|justify)::\s*|^#{1,3}\s+|^[-*]\s+|^\d+\.\s+|^>\s+/gm, "");
+    updateWithCursor(`${content.slice(0, start)}${block}${content.slice(end)}`, start + block.length);
+  }
+
+  function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter") return;
+    const textarea = event.currentTarget;
+    const lineStart = content.lastIndexOf("\n", textarea.selectionStart - 1) + 1;
+    const line = content.slice(lineStart, textarea.selectionStart);
+    const ordered = /^(\d+)\.\s+/.exec(line);
+    const unordered = /^[-*]\s+/.exec(line);
+    if (!ordered && !unordered) return;
+    event.preventDefault();
+    const prefixValue = ordered ? `${Number(ordered[1]) + 1}. ` : "- ";
+    const next = `${content.slice(0, textarea.selectionStart)}\n${prefixValue}${content.slice(textarea.selectionEnd)}`;
+    updateWithCursor(next, textarea.selectionStart + prefixValue.length + 1);
   }
 
   function wrap(before: string, after = before) {
@@ -332,12 +389,6 @@ function MarkdownEditor({ content, setContent }: { content: string; setContent: 
     updateWithCursor(`${content.slice(0, start)}${inserted}${content.slice(end)}`, start + inserted.length);
   }
 
-  function addCta() {
-    const trimmed = content.trimEnd();
-    const cta = `${trimmed ? "\n\n" : ""}الثقة مش وعد… الثقة فعل.\n`;
-    updateWithCursor(`${trimmed}${cta}`, `${trimmed}${cta}`.length);
-  }
-
   function clearFormat() {
     const clean = content
       .replace(/^#{1,3}\s+/gm, "")
@@ -353,8 +404,9 @@ function MarkdownEditor({ content, setContent }: { content: string; setContent: 
   }
 
   return (
-    <div className="rounded-[26px] border border-[#D8B87A]/14 bg-[#070A0F]/80 shadow-[0_24px_70px_rgba(0,0,0,0.28)]">
-      <div className="sticky top-4 z-20 flex flex-wrap gap-2 rounded-t-[26px] border-b border-white/10 bg-[#070A0F]/95 p-3 backdrop-blur-xl">
+    <div className={`border border-[#D8B87A]/14 bg-[#070A0F]/80 ${compact ? "rounded-xl" : "rounded-[26px] shadow-[0_24px_70px_rgba(0,0,0,0.28)]"}`}>
+      <div className={`z-20 flex flex-wrap border-b border-white/10 bg-[#070A0F]/95 backdrop-blur-xl ${compact ? "gap-1.5 rounded-t-xl p-2" : "sticky top-4 gap-2 rounded-t-[26px] p-3"}`}>
+        <ToolButton label="فقرة" title="فقرة" onClick={paragraph} />
         <ToolButton label="H1" title="عنوان رئيسي" onClick={() => prefix("# ")} />
         <ToolButton label="H2" title="عنوان فرعي" onClick={() => prefix("## ")} />
         <ToolButton label="H3" title="عنوان تفصيلي" onClick={() => prefix("### ")} />
@@ -367,67 +419,47 @@ function MarkdownEditor({ content, setContent }: { content: string; setContent: 
         <ToolButton label="1. List" title="قائمة رقمية" onClick={() => prefix("1. ")} />
         <ToolButton label="Quote" title="اقتباس" onClick={() => prefix("> ")} />
         <ToolButton label="Link" title="رابط" onClick={addLink} />
-        <ToolButton label="CTA" title="إضافة خاتمة فينيسيا" onClick={addCta} />
+        <span className="mx-1 h-9 w-px bg-white/10" />
+        <ToolButton label="يمين" title="محاذاة لليمين" onClick={() => prefix("::right:: ")} />
+        <ToolButton label="وسط" title="محاذاة للوسط" onClick={() => prefix("::center:: ")} />
+        <ToolButton label="يسار" title="محاذاة لليسار" onClick={() => prefix("::left:: ")} />
+        <ToolButton label="ضبط" title="ضبط النص" onClick={() => prefix("::justify:: ")} />
+        <ToolButton label="تراجع" title="Undo" onClick={undo} />
+        <ToolButton label="إعادة" title="Redo" onClick={redo} />
         <ToolButton label="Clear" title="إزالة التنسيق" onClick={clearFormat} />
+        <div className="relative">
+          <ToolButton label="إضافة محتوى" onClick={() => setAddMenuOpen((open) => !open)} />
+          {addMenuOpen ? (
+            <div className="absolute end-0 top-12 z-30 min-w-56 rounded-xl border border-white/10 bg-[#10151C] p-2 shadow-2xl">
+              <button type="button" onClick={() => { prefix("> "); setAddMenuOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-right text-sm text-white/75 hover:bg-white/5">اقتباس</button>
+              <button type="button" disabled className="block w-full cursor-not-allowed rounded-lg px-3 py-2 text-right text-sm text-white/30">رابط داخلي — قريبًا</button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <textarea
+        id="topic-content-markdown"
         ref={textareaRef}
         value={content}
-        onChange={(event) => setContent(event.target.value)}
+        onChange={(event) => updateWithCursor(event.target.value)}
+        onKeyDown={handleEditorKeyDown}
         dir="rtl"
         spellCheck
         placeholder="ابدأ كتابة المقال هنا بصيغة Markdown... مثال: # عنوان المقال ثم الفقرات والعناوين الفرعية."
-        className="min-h-[680px] w-full resize-y rounded-b-[26px] border-0 bg-[#0B0F14] px-7 py-7 text-[15px] leading-9 text-white/88 outline-none placeholder:text-white/25"
+        className={`w-full resize-y border-0 bg-[#0B0F14] text-sm text-white/88 outline-none placeholder:text-white/25 ${compact ? "min-h-72 rounded-b-xl px-4 py-4 leading-7" : "min-h-[680px] rounded-b-[26px] px-7 py-7 text-[15px] leading-9"}`}
       />
     </div>
   );
 }
 
-function AnalysisCard({ stats }: { stats: EditorStats }) {
-  return (
-    <aside className="space-y-4">
-      <div className="rounded-[22px] border border-white/10 bg-black/25 p-5">
-        <p className="text-sm font-semibold text-[#D8B87A]">قراءة فنية سريعة</p>
-        <ul className="mt-4 space-y-3 text-sm leading-6 text-white/50">
-          <li>استخدم H1 واحد فقط بصيغة # عنوان المقال.</li>
-          <li>استخدم H2 للعناوين الرئيسية داخل المقال.</li>
-          <li>اترك سطرًا فارغًا بين الفقرات الطويلة.</li>
-          <li>المحتوى المثالي من 800 إلى 1800 كلمة.</li>
-        </ul>
-      </div>
-
-      <div className="rounded-[22px] border border-white/10 bg-black/25 p-5">
-        <p className="text-sm font-semibold text-white">تحليل مباشر</p>
-        <div className="mt-4 space-y-3 text-sm">
-          <CheckLine label="عنوان H1 في المحتوى" active={stats.h1 === 1} warning={stats.h1 > 1 ? "يوجد أكثر من H1. الأفضل عنوان رئيسي واحد فقط." : "اختياري — عنوان المقال موجود في حقل Title. أضف # عنوان داخل المحتوى فقط إن احتجت هيكلة Markdown."} />
-          <CheckLine label="عناوين H2 كافية" active={stats.h2 >= 2} warning="ينصح بوجود عنوانين فرعيين على الأقل." />
-          <CheckLine label="تفاصيل H3" active={stats.h3 >= 1} warning="اختياري لكنه مفيد للمقالات الطويلة." />
-          <CheckLine label="طول المحتوى" active={stats.chars >= 300} warning="تحذير للنشر: الحد الأدنى المبدئي 300 حرف — لا يمنع حفظ المسودة." />
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-function CheckLine({ label, active, warning }: { label: string; active: boolean; warning?: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3">
-      <p className={active ? "text-emerald-200" : "text-[#F2D99B]"}>
-        {active ? "✓ " : "⚠ "}
-        {label}
-      </p>
-      {!active && warning ? <p className="mt-1 text-xs leading-5 text-white/35">{warning}</p> : null}
-    </div>
-  );
-}
-
-export default function TopicMarkdownEditor({ defaultValue = "" }: TopicMarkdownEditorProps) {
+export default function TopicMarkdownEditor({ defaultValue = "", variant = "default" }: TopicMarkdownEditorProps) {
   const normalizedDefaultValue = useMemo(() => normalizeInitialContent(defaultValue), [defaultValue]);
   const [content, setContent] = useState(normalizedDefaultValue);
   const [viewMode, setViewMode] = useState<ViewMode>("write");
   const [draftRestored, setDraftRestored] = useState(false);
   const draftKeyRef = useRef<string>("");
+  const contentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     draftKeyRef.current = getDraftKey();
@@ -446,18 +478,19 @@ export default function TopicMarkdownEditor({ defaultValue = "" }: TopicMarkdown
   useEffect(() => {
     if (!draftKeyRef.current) return;
     window.localStorage.setItem(draftKeyRef.current, content);
+    contentInputRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
   }, [content]);
 
   const stats = useMemo(() => getTextStats(content), [content]);
   const showEditor = viewMode === "write" || viewMode === "split";
   const showPreview = viewMode === "preview" || viewMode === "split";
-
+  const compact = variant === "compact";
   const setCleanContent = useCallback((value: string) => {
     setContent(value.replace(/\r\n/g, "\n"));
   }, []);
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+    <section id="topic-content-editor" className={`${compact ? "min-w-0" : "rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]"} scroll-mt-24`} data-topic-content-editor={variant}>
       <style jsx global>{`
         .venesia-article-preview .empty-preview {
           color: rgba(17, 24, 39, 0.5);
@@ -514,33 +547,33 @@ export default function TopicMarkdownEditor({ defaultValue = "" }: TopicMarkdown
         }
       `}</style>
 
-      <input type="hidden" name="content" value={content} />
+      <input ref={contentInputRef} type="hidden" name="content" value={content} />
 
-      <div className="flex flex-col gap-5 border-b border-white/10 pb-6 xl:flex-row xl:items-center xl:justify-between">
+      <div className={`flex flex-col border-b border-white/10 xl:flex-row xl:items-center xl:justify-between ${compact ? "gap-3 pb-3" : "gap-5 pb-6"}`}>
         <div>
-          <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">ARTICLE BODY</p>
-          <h3 className="mt-3 text-2xl font-semibold text-white">محتوى المقال</h3>
-          <p className="mt-2 max-w-3xl text-sm leading-7 text-white/50">
-            محرر Markdown ثابت ومتوافق مع المقالات القديمة وقواعد الحفظ الحالية. اكتب العنوان الرئيسي بصيغة # عنوان المقال.
-          </p>
+          {compact ? null : <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">ARTICLE BODY</p>}
+          <h3 className={compact ? "text-sm font-semibold text-white" : "mt-3 text-2xl font-semibold text-white"}>المحتوى</h3>
+          {compact ? null : <p className="mt-2 max-w-3xl text-sm leading-7 text-white/50">محرر Markdown ثابت ومتوافق مع المقالات القديمة وقواعد الحفظ الحالية. اكتب العنوان الرئيسي بصيغة # عنوان المقال.</p>}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MiniCounter label="كلمة" value={stats.words} />
-          <MiniCounter label="حرف" value={stats.chars} />
-          <MiniCounter label="دقيقة" value={stats.readingMinutes} />
-          <MiniCounter label="فقرة" value={stats.paragraphs} />
+        <div className={`grid grid-cols-3 sm:grid-cols-6 ${compact ? "gap-1.5" : "gap-3"}`} data-topic-editor-stats>
+          <MiniCounter label="كلمة" value={stats.words} compact={compact} />
+          <MiniCounter label="حرف" value={stats.chars} compact={compact} />
+          <MiniCounter label="H1" value={stats.h1} compact={compact} />
+          <MiniCounter label="H2" value={stats.h2} compact={compact} />
+          <MiniCounter label="H3" value={stats.h3} compact={compact} />
+          <MiniCounter label="روابط داخلية" value={stats.internalLinks} compact={compact} warning={stats.internalLinks === 0} />
         </div>
       </div>
 
       {draftRestored ? (
-        <div className="mt-5 rounded-[20px] border border-[#D8B87A]/20 bg-[#D8B87A]/10 px-5 py-4 text-sm leading-7 text-[#F2D99B]">
+        <div className={`${compact ? "mt-3 rounded-xl px-4 py-3" : "mt-5 rounded-[20px] px-5 py-4"} border border-[#D8B87A]/20 bg-[#D8B87A]/10 text-sm leading-7 text-[#F2D99B]`}>
           تم استرجاع آخر مسودة محفوظة محليًا لهذا المقال حتى لا تفقد ما كتبته بعد أخطاء الحفظ.
         </div>
       ) : null}
 
-      <div className="mt-5 flex flex-col gap-4 rounded-[24px] border border-white/10 bg-black/25 p-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="rounded-[20px] border border-[#D8B87A]/15 bg-[#05070B] px-4 py-3 text-sm font-semibold text-[#D8B87A]">
+      <div className={`${compact ? "mt-3 gap-2 rounded-xl p-2" : "mt-5 gap-4 rounded-[24px] p-3"} flex flex-col border border-white/10 bg-black/25 xl:flex-row xl:items-center xl:justify-between`}>
+        <div className={`${compact ? "rounded-lg px-3 py-2 text-xs" : "rounded-[20px] px-4 py-3 text-sm"} border border-[#D8B87A]/15 bg-[#05070B] font-semibold text-[#D8B87A]`}>
           محرر Markdown
         </div>
 
@@ -551,21 +584,17 @@ export default function TopicMarkdownEditor({ defaultValue = "" }: TopicMarkdown
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(260px,3fr)] xl:items-start">
+      <div className={compact ? "mt-3" : "mt-6"}>
         <div className="min-w-0 space-y-5">
           <div className={["grid gap-5", viewMode === "split" ? "xl:grid-cols-2" : ""].join(" ")}>
-            {showEditor ? <MarkdownEditor content={content} setContent={setCleanContent} /> : null}
-            {showPreview ? <PreviewPane content={content} /> : null}
+            {showEditor ? <MarkdownEditor content={content} setContent={setCleanContent} compact={compact} /> : null}
+            {showPreview ? <PreviewPane content={content} compact={compact} /> : null}
           </div>
 
-          <div className="rounded-[22px] border border-white/10 bg-black/20 p-5 text-sm leading-7 text-white/45">
+          {compact ? null : <div className="rounded-[22px] border border-white/10 bg-black/20 p-5 text-sm leading-7 text-white/45">
             الصورة الرئيسية للموضوع تظل من الحقل الحالي في الصفحة. الصور داخل المقال والروابط الداخلية الذكية يمكن إضافتها لاحقًا كمرحلة مستقلة بدون خلط HTML مع Markdown.
-          </div>
+          </div>}
         </div>
-
-        <aside className="min-w-0 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
-          <AnalysisCard stats={stats} />
-        </aside>
       </div>
     </section>
   );

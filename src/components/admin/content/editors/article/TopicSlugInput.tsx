@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { ContentType } from "../../../../../lib/admin/content/content-types";
+import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
 
 type TopicSlugInputProps = {
   defaultValue?: string | null;
   titleInputName?: string;
   required?: boolean;
+  contentType?: ContentType;
 };
 
 const arabicMap: Record<string, string> = {
@@ -86,12 +89,27 @@ export default function TopicSlugInput({
   }, [isManual, titleInputName]);
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3">
-        <label htmlFor="topic-slug" className="text-sm font-medium text-white/70">
-          Slug
-        </label>
-
+    <div className="space-y-1.5">
+      <label htmlFor="topic-slug" className="text-xs font-medium text-white/58">
+        الرابط المختصر (Slug) <span className="text-red-400">*</span>
+      </label>
+      <div className="relative" data-topic-slug-field>
+        <input
+          ref={inputRef}
+          id="topic-slug"
+          name="slug"
+          value={value}
+          onChange={(event) => {
+            setValue(slugify(event.target.value));
+            setIsManual(true);
+          }}
+          required={required}
+          pattern="[a-z0-9]+(-[a-z0-9]+)*"
+          title="استخدم حروف إنجليزية صغيرة وأرقام وشرطة بين الكلمات فقط"
+          placeholder="best-district-in-bait-al-watan"
+          dir="ltr"
+          className={adminFormFieldClassName("h-11 rounded-xl py-2.5 pl-[7.25rem] pr-3 font-en")}
+        />
         <button
           type="button"
           onClick={() => {
@@ -100,33 +118,10 @@ export default function TopicSlugInput({
             setValue(slugify(titleInput?.value ?? ""));
             setIsManual(false);
           }}
-          className="rounded-full border border-[#D8B87A]/25 px-3 py-1 text-xs text-[#D8B87A] transition hover:bg-[#D8B87A]/10"
+          className="absolute bottom-1 left-1 top-1 z-10 shrink-0 whitespace-nowrap rounded-lg border border-[#D8B87A]/25 bg-[#090D12]/96 px-3 text-xs font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E2B84F]/70"
         >
           توليد تلقائي
         </button>
-      </div>
-
-      <input
-        ref={inputRef}
-        id="topic-slug"
-        name="slug"
-        value={value}
-        onChange={(event) => {
-          setValue(slugify(event.target.value));
-          setIsManual(true);
-        }}
-        required={required}
-        pattern="[a-z0-9]+(-[a-z0-9]+)*"
-        title="استخدم حروف إنجليزية صغيرة وأرقام وشرطة بين الكلمات فقط"
-        placeholder="best-district-in-bait-al-watan"
-        className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 font-en text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
-      />
-
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <p className="text-white/35">
-          يتم توليده تلقائيًا من العنوان، ويمكن تعديله يدويًا قبل الحفظ.
-        </p>
-        <span className="font-en text-white/40">{value.length} chars</span>
       </div>
     </div>
   );

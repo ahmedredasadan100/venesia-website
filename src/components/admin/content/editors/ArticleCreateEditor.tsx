@@ -3,17 +3,15 @@ import { AdminActionButton, AdminPageContextHeader } from "../../ui";
 import SeoPanel from "../../SeoPanel";
 import FaqEditor from "./article/FaqEditor";
 import TopicEditTabs from "./article/TopicEditTabs";
-import TopicDateLabelField from "./article/TopicDateLabelField";
-import TopicImageField from "./article/TopicImageField";
+import TopicBasicDataPanel from "./article/TopicBasicDataPanel";
 import TopicMarkdownEditor from "./article/TopicMarkdownEditor";
-import TopicSeriesFields from "./article/TopicSeriesFields";
-import TopicSlugInput from "./article/TopicSlugInput";
 import { buildArticleTopicCategoryFilterGroups } from "../../../../lib/admin/article-topic-categories";
-import ArticleTopicCategorySelect from "./article/ArticleTopicCategorySelect";
 import TopicPublishChecklistPanel from "../../content-workflow/TopicPublishChecklistPanel";
 import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import { createTopic } from "../../../../app/admin/content/topics/article-actions";
 import type { ArticleEditorCategory, ArticleEditorSeries } from "./ArticleEditor";
+import TopicPublishingOptions from "./article/TopicPublishingOptions";
+import TopicPreviousTabButton from "./article/TopicPreviousTabButton";
 
 export default function ArticleCreateEditor({
   categories,
@@ -48,51 +46,22 @@ export default function ArticleCreateEditor({
       {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء الموضوع" message={errorMessage} /> : null}
 
       <form id="topic-create-form" action={createTopic} className="space-y-7" noValidate>
+        <input type="hidden" name="content_type" value="article" />
         <TopicEditTabs
           tabs={[
             {
               id: "basic",
-              label: "بيانات أساسية",
-              content: (
-                <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <label className="block lg:col-span-2">
-                      <span className="text-sm font-medium text-white/70">عنوان الموضوع</span>
-                      <input name="title" required placeholder="مثال: أفضل حي في بيت الوطن للسكن" className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-xl font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45" />
-                    </label>
-
-                    <TopicSlugInput />
-
-                    <label className="block">
-                      <span className="text-sm font-medium text-white/70">التصنيف</span>
-                      <ArticleTopicCategorySelect groups={categoryGroups} />
-                    </label>
-
-                    <label className="block lg:col-span-2">
-                      <span className="text-sm font-medium text-white/70">الوصف المختصر</span>
-                      <textarea name="excerpt" rows={4} placeholder="اكتب وصفًا مختصرًا واضحًا للمقال..." className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45" />
-                    </label>
-
-                    <TopicImageField formId="topic-create-form" />
-                    <TopicSeriesFields options={safeSeries} />
-                    <TopicDateLabelField />
-                  </div>
-                </section>
-              ),
-            },
-            {
-              id: "content",
-              label: "المحتوى",
-              content: <TopicMarkdownEditor defaultValue={defaultContent} />,
+              label: "المحتوى الأساسي",
+              content: <TopicBasicDataPanel formId="topic-create-form" contentType="article" contentTypeMode="create" categoryGroups={categoryGroups} series={safeSeries} contentEditor={<TopicMarkdownEditor defaultValue={defaultContent} variant="compact" />} />,
             },
             {
               id: "faq",
-              label: "الأسئلة الشائعة (FAQ)",
+              label: "الأسئلة الشائعة",
               content: <FaqEditor />,
             },
             {
               id: "seo",
-              label: "SEO",
+              label: "SEO والتحليل",
               content: (
                 <SeoPanel
                   title=""
@@ -105,6 +74,9 @@ export default function ArticleCreateEditor({
                   seoDescription=""
                   seoKeywords={[]}
                   focusKeyword=""
+                  canonicalUrl=""
+                  robotsIndex={null}
+                  robotsFollow={null}
                   faq={[]}
                   hideImageAltField
                 />
@@ -112,42 +84,23 @@ export default function ArticleCreateEditor({
             },
             {
               id: "publish",
-              label: "النشر",
+              label: "المراجعة والنشر",
               content: (
                 <div className="space-y-6">
-                  <TopicPublishChecklistPanel formId="topic-create-form" initial={publishInput} />
-                  <section className="max-w-xl rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
-                  <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">PUBLISHING</p>
-                  <h3 className="mt-3 text-xl font-semibold text-white">إعدادات الظهور</h3>
-                  <div className="mt-6 space-y-4">
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/70">
-                      <span>موضوع مميز</span>
-                      <input type="checkbox" name="is_featured" className="h-4 w-4 accent-[#D8B87A]" />
-                    </label>
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/70">
-                      <span>موضوع شائع</span>
-                      <input type="checkbox" name="is_popular" className="h-4 w-4 accent-[#D8B87A]" />
-                    </label>
-                  </div>
-                </section>
+                  <TopicPublishingOptions status="draft">
+                    <div className="flex flex-wrap gap-3">
+                      <TopicPreviousTabButton />
+                      <button type="submit" name="intent" value="draft" className="rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C]">إنشاء كمسودة</button>
+                      <button type="submit" name="intent" value="publish" className="rounded-full border border-emerald-400/30 px-6 py-3 text-sm font-medium text-emerald-200">نشر الآن</button>
+                    </div>
+                  </TopicPublishingOptions>
+                  <TopicPublishChecklistPanel formId="topic-create-form" initial={publishInput} status="draft" />
                 </div>
               ),
             },
           ]}
         />
 
-        <div className="sticky bottom-5 z-40 mt-8 rounded-[26px] border border-white/10 bg-[#080B10]/95 p-4 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-white">إنشاء الموضوع</p>
-              <p className="mt-1 text-xs text-white/45">المسودة تحتاج العنوان والتصنيف والـ Slug فقط. النشر يحتاج نسخة مكتملة.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <button type="submit" name="intent" value="draft" className="rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]">إنشاء كمسودة</button>
-              <button type="submit" name="intent" value="publish" className="rounded-full border border-emerald-400/30 px-6 py-3 text-sm font-medium text-emerald-200 transition hover:bg-emerald-400/10">إنشاء ونشر</button>
-            </div>
-          </div>
-        </div>
       </form>
     </main>
   );

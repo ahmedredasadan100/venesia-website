@@ -1,130 +1,218 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { TrashIcon } from "../../../AdminRowActions";
+import { AdminConfirmDialog } from "../../../ui";
 
-type FaqItem = {
-  question?: string;
-  answer?: string;
-};
+type FaqItem = { id: string; question: string; answer: string };
+type StoredFaqItem = { question?: string; answer?: string };
 
 type FaqEditorProps = {
-  defaultFaq?: FaqItem[];
+  defaultFaq?: StoredFaqItem[];
+  defaultVisible?: boolean | null;
+  defaultTitleVisible?: boolean | null;
 };
 
-const emptyFaq: FaqItem = { question: "", answer: "" };
+function makeItem(item?: StoredFaqItem): FaqItem {
+  return {
+    id: `faq-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    question: item?.question ?? "",
+    answer: item?.answer ?? "",
+  };
+}
 
-export default function FaqEditor({ defaultFaq = [] }: FaqEditorProps) {
-  const initialItems = defaultFaq.length > 0 ? defaultFaq : [emptyFaq, emptyFaq, emptyFaq];
-  const [items, setItems] = useState<FaqItem[]>(initialItems.slice(0, 8));
+function FaqDisplaySwitch({
+  name,
+  label,
+  checked,
+  onChange,
+}: {
+  name: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-3 text-xs leading-5 text-white/70">
+      <span>{label}</span>
+      <span className="relative inline-flex h-5 w-9 shrink-0">
+        <input
+          type="checkbox"
+          role="switch"
+          name={name}
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          className="peer sr-only"
+        />
+        <span className="absolute inset-0 rounded-full bg-white/10 transition peer-checked:bg-[#C9972F] peer-focus-visible:ring-2 peer-focus-visible:ring-[#E2B84F]" />
+        <span className="absolute start-0.5 top-0.5 size-4 rounded-full bg-white/80 shadow transition peer-checked:translate-x-4 peer-checked:bg-white rtl:peer-checked:-translate-x-4" />
+      </span>
+    </label>
+  );
+}
 
+export default function FaqEditor({
+  defaultFaq = [],
+  defaultVisible = true,
+  defaultTitleVisible = true,
+}: FaqEditorProps) {
+  const [items, setItems] = useState<FaqItem[]>(() => defaultFaq.map(makeItem));
+  const [openId, setOpenId] = useState<string | null>(() => defaultFaq.length ? null : "new");
+  const [showSection, setShowSection] = useState(defaultVisible !== false);
+  const [showTitle, setShowTitle] = useState(defaultTitleVisible !== false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
   const filledCount = useMemo(
-    () => items.filter((item) => item.question?.trim() && item.answer?.trim()).length,
-    [items]
+    () => items.filter((item) => item.question.trim() && item.answer.trim()).length,
+    [items],
+  );
+  const previewItems = useMemo(
+    () => items.filter((item) => item.question.trim() || item.answer.trim()).slice(0, 3),
+    [items],
   );
 
-  function updateItem(index: number, key: keyof FaqItem, value: string) {
-    setItems((current) =>
-      current.map((item, itemIndex) => (itemIndex === index ? { ...item, [key]: value } : item))
-    );
+  useEffect(() => {
+    rootRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [items]);
+
+  function updateItem(id: string, key: "question" | "answer", value: string) {
+    setItems((current) => current.map((item) => item.id === id ? { ...item, [key]: value } : item));
   }
 
-  function removeItem(index: number) {
-    setItems((current) => (current.length <= 1 ? current : current.filter((_, itemIndex) => itemIndex !== index)));
+  function addItem() {
+    if (items.length >= 8) return;
+    const item = makeItem();
+    setItems((current) => [...current, item]);
+    setOpenId(item.id);
+  }
+
+  function moveItem(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    setItems((current) => {
+      const from = current.findIndex((item) => item.id === fromId);
+      const to = current.findIndex((item) => item.id === toId);
+      if (from < 0 || to < 0) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>, toId: string) {
+    event.preventDefault();
+    if (draggedId) moveItem(draggedId, toId);
+    setDraggedId(null);
   }
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
-      <div className="flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">FAQ SCHEMA</p>
-          <h3 className="mt-3 text-2xl font-semibold text-white">الأسئلة الشائعة</h3>
-          <p className="mt-2 text-sm leading-7 text-white/50">
-            أضف أسئلة حقيقية يبحث عنها العميل. الأفضل من 3 إلى 6 أسئلة واضحة بإجابات مختصرة.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-[22px] border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-5 py-4 text-center">
-            <p className="font-en text-3xl font-semibold text-[#D8B87A]">{filledCount}</p>
-            <p className="mt-1 text-xs text-white/50">سؤال مكتمل</p>
+    <section id="topic-faq-editor" ref={rootRef} className="scroll-mt-24 rounded-[24px] border border-white/10 bg-[#080B10]/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.28)] md:p-6" data-topic-faq-editor>
+      <input type="hidden" name="faq_editor_present" value="true" />
+      <div className="grid gap-5 xl:grid-cols-[minmax(280px,0.75fr)_minmax(0,1.45fr)] xl:items-start">
+        <div className="min-w-0 rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5 xl:col-start-2 xl:row-start-1" data-topic-faq-list>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-semibold text-white">الأسئلة الشائعة (FAQ)</h3>
+              <p className="mt-2 text-sm leading-7 text-white/45">أضف أسئلة حقيقية تساعد القارئ، ثم رتّبها بالسحب.</p>
+            </div>
+            <span className="rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-4 py-2 text-sm text-[#F2D99B]">{filledCount} مكتمل من {items.length}</span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setItems((current) => [...current, emptyFaq].slice(0, 8))}
-            disabled={items.length >= 8}
-            className="rounded-full border border-[#D8B87A]/35 px-5 py-3 text-sm font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            إضافة سؤال
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-6 space-y-5">
-        {items.map((item, index) => {
-          const isComplete = Boolean(item.question?.trim() && item.answer?.trim());
-
-          return (
-            <div key={index} className="rounded-[22px] border border-white/10 bg-black/25 p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-[#D8B87A]">سؤال رقم {index + 1}</p>
-
-                <div className="flex items-center gap-2">
-                  <span
-                    className={
-                      isComplete
-                        ? "rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-200"
-                        : "rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/40"
-                    }
-                  >
-                    {isComplete ? "مكتمل" : "غير مكتمل"}
-                  </span>
-
-                  {items.length > 1 ? (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(index)}
-                      className="rounded-full border border-red-400/20 px-3 py-1 text-xs text-red-200 transition hover:bg-red-400/10"
-                    >
-                      حذف
+          <div className="mt-5 space-y-3">
+            {items.map((item, index) => {
+              const expanded = openId === item.id;
+              return (
+                <div
+                  key={item.id}
+                  draggable
+                  onDragStart={() => setDraggedId(item.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => handleDrop(event, item.id)}
+                  className="rounded-xl border border-white/10 bg-[#090D12]"
+                  data-faq-item
+                >
+                  <div className="flex items-center gap-2 px-3 py-3">
+                    <span aria-hidden className="text-white/45">{expanded ? "⌃" : "⌄"}</span>
+                    <button type="button" onClick={() => setOpenId(expanded ? null : item.id)} className="min-w-0 flex-1 text-right" aria-expanded={expanded}>
+                      <span className="block truncate text-sm font-medium text-white/78">{item.question.trim() || `سؤال رقم ${index + 1}`}</span>
+                      {!expanded && item.answer.trim() ? <span className="mt-1 block truncate text-xs text-white/35">{item.answer}</span> : null}
                     </button>
-                  ) : null}
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button type="button" onClick={() => moveItem(item.id, items[Math.max(0, index - 1)]?.id ?? item.id)} disabled={index === 0} aria-label="تحريك السؤال لأعلى" title="تحريك السؤال لأعلى" className="rounded-md px-1.5 py-1 text-white/40 hover:bg-white/5 disabled:opacity-20">↑</button>
+                      <button type="button" onClick={() => moveItem(item.id, items[Math.min(items.length - 1, index + 1)]?.id ?? item.id)} disabled={index === items.length - 1} aria-label="تحريك السؤال لأسفل" title="تحريك السؤال لأسفل" className="rounded-md px-1.5 py-1 text-white/40 hover:bg-white/5 disabled:opacity-20">↓</button>
+                      <button
+                        ref={pendingDeleteId === item.id ? deleteButtonRef : undefined}
+                        type="button"
+                        onClick={() => setPendingDeleteId(item.id)}
+                        aria-label="حذف السؤال"
+                        title="حذف السؤال"
+                        className="inline-flex size-8 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-400/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+                      >
+                        <TrashIcon />
+                      </button>
+                      <span className="cursor-grab select-none rounded-md px-1.5 py-1 text-white/30" title="اسحب لإعادة الترتيب" aria-hidden>⠿</span>
+                    </div>
+                  </div>
+                  {expanded ? (
+                    <div className="grid gap-4 border-t border-white/10 p-4">
+                      <label className="grid gap-2 text-sm text-white/65">
+                        السؤال
+                        <input name="faq_question" value={item.question} onChange={(event) => updateItem(item.id, "question", event.target.value)} placeholder="اكتب السؤال بوضوح" className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none focus:border-[#D8B87A]/45" />
+                      </label>
+                      <label className="grid gap-2 text-sm text-white/65">
+                        الإجابة
+                        <textarea name="faq_answer" value={item.answer} onChange={(event) => updateItem(item.id, "answer", event.target.value)} rows={4} placeholder="اكتب إجابة مباشرة ومفيدة" className="resize-y rounded-xl border border-white/10 bg-black/30 px-4 py-3 leading-7 text-white outline-none focus:border-[#D8B87A]/45" />
+                      </label>
+                    </div>
+                  ) : (
+                    <>
+                      <input type="hidden" name="faq_question" value={item.question} />
+                      <textarea hidden readOnly name="faq_answer" value={item.answer} />
+                    </>
+                  )}
                 </div>
-              </div>
+              );
+            })}
+          </div>
 
-              <label className="block">
-                <span className="text-sm font-medium text-white/65">السؤال</span>
-                <input
-                  name="faq_question"
-                  value={item.question ?? ""}
-                  onChange={(event) => updateItem(index, "question", event.target.value)}
-                  placeholder="مثال: هل بيت الوطن مناسب للاستثمار؟"
-                  className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
-                />
-              </label>
+          <button type="button" onClick={addItem} disabled={items.length >= 8} className="mt-4 rounded-xl border border-dashed border-[#D8B87A]/35 px-4 py-3 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/8 disabled:opacity-40">＋ إضافة سؤال جديد</button>
+        </div>
 
-              <label className="mt-4 block">
-                <span className="text-sm font-medium text-white/65">الإجابة</span>
-                <textarea
-                  name="faq_answer"
-                  value={item.answer ?? ""}
-                  onChange={(event) => updateItem(index, "answer", event.target.value)}
-                  rows={4}
-                  placeholder="اكتب إجابة واضحة ومباشرة..."
-                  className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
-                />
-              </label>
+        <aside className="space-y-4 xl:col-start-1 xl:row-start-1">
+          <section className="rounded-2xl border border-white/10 bg-black/20 p-4" data-topic-faq-settings>
+            <h3 className="text-base font-semibold text-white">إعدادات العرض</h3>
+            <div className="mt-4 space-y-2">
+              <FaqDisplaySwitch name="show_faq_on_page" label="إظهار قسم الأسئلة الشائعة في الصفحة" checked={showSection} onChange={setShowSection} />
+              <FaqDisplaySwitch name="show_faq_title_on_page" label="إظهار عنوان قسم الأسئلة الشائعة" checked={showTitle} onChange={setShowTitle} />
             </div>
-          );
-        })}
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-black/20 p-4" data-topic-faq-preview>
+            <h3 className="text-base font-semibold text-white">معاينة الشكل في الصفحة</h3>
+            <div className="mt-4 rounded-xl border border-white/10 bg-[#090D12] p-3">
+              {!showSection ? (
+                <p className="text-xs leading-6 text-white/38">قسم الأسئلة الشائعة مخفي من الصفحة.</p>
+              ) : (
+                <>
+                  {showTitle ? <p className="text-sm font-semibold text-[#D8B87A]">الأسئلة الشائعة</p> : null}
+                  <div className={showTitle ? "mt-3 space-y-2" : "space-y-2"}>
+                    {previewItems.length ? previewItems.map((item, index) => (
+                      <div key={item.id} className="rounded-lg border border-white/8 bg-black/20 px-3 py-2.5">
+                        <p className="text-xs font-medium leading-5 text-white/68">{item.question || `سؤال رقم ${index + 1}`}</p>
+                        {index === 0 && item.answer ? <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-white/35">{item.answer}</p> : null}
+                      </div>
+                    )) : <p className="text-xs leading-6 text-white/38">أضف سؤالًا لمعاينة شكل القسم.</p>}
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        </aside>
       </div>
 
-      <div className="mt-6 rounded-[20px] border border-[#D8B87A]/20 bg-[#D8B87A]/8 p-4">
-        <p className="text-sm font-semibold text-[#F2D99B]">ملاحظة SEO</p>
-        <p className="mt-2 text-sm leading-7 text-white/50">
-          الأسئلة الشائعة القوية لا تكرر الكلام. استخدم أسئلة يبحث عنها العميل فعلًا مثل الموقع، السداد، التسليم، الرخصة، والفرق بين المناطق.
-        </p>
-      </div>
+      <AdminConfirmDialog open={Boolean(pendingDeleteId)} title="حذف السؤال؟" description="سيُحذف السؤال وإجابته من النموذج الحالي. لن يُحفظ الحذف قبل حفظ الموضوع." confirmLabel="حذف السؤال" onCancel={() => setPendingDeleteId(null)} onConfirm={() => { setItems((current) => current.filter((item) => item.id !== pendingDeleteId)); setPendingDeleteId(null); }} returnFocusRef={deleteButtonRef} />
     </section>
   );
 }

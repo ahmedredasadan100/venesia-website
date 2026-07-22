@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TopicPreviousTabButton from "./content/editors/article/TopicPreviousTabButton";
 
 type SaveBarProps = {
   topicId: number | string;
@@ -34,6 +35,7 @@ export default function SaveBar({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <TopicPreviousTabButton />
           <button
             type="submit"
             formAction={saveAction}

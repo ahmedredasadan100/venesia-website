@@ -24,6 +24,9 @@ type InternalPageLayoutProps = {
   heroBelowTitle?: React.ReactNode;
   /** When false and dynamicHero is absent, static hero section is omitted (Home/Media CMS hide rule). */
   allowStaticHeroFallback?: boolean;
+  showTitle?: boolean;
+  showHeroImage?: boolean;
+  showSubtitle?: boolean;
 };
 
 export default function InternalPageLayout({
@@ -39,6 +42,9 @@ export default function InternalPageLayout({
   dynamicHero,
   heroBelowTitle,
   allowStaticHeroFallback = true,
+  showTitle = true,
+  showHeroImage = true,
+  showSubtitle = true,
 }: InternalPageLayoutProps) {
   const pathname = usePathname();
   const navItems = usePublicNavigation();
@@ -73,7 +79,7 @@ export default function InternalPageLayout({
             heroHeightClassName ?? "h-[min(62vh,580px)] min-h-[440px]"
           }`}
         >
-          {heroImage ? (
+          {heroImage && showHeroImage ? (
             <>
               <div className="absolute inset-0 z-0 overflow-hidden">
                 <Image
@@ -122,11 +128,13 @@ export default function InternalPageLayout({
                     {eyebrow ?? "Internal Page"}
                   </p>
 
-                  <h1 className="max-w-[14ch] text-[2rem] font-bold leading-[1.2] tracking-[-0.02em] text-white sm:text-4xl md:text-[2.5rem]">
-                    {title}
-                  </h1>
+                  {showTitle ? (
+                    <h1 className="max-w-[14ch] text-[2rem] font-bold leading-[1.2] tracking-[-0.02em] text-white sm:text-4xl md:text-[2.5rem]">
+                      {title}
+                    </h1>
+                  ) : null}
 
-                  {subtitle ? (
+                  {showSubtitle && subtitle ? (
                     <p className="mt-4 max-w-2xl text-[15px] leading-8 text-white/60 md:text-base md:leading-9">
                       {subtitle}
                     </p>

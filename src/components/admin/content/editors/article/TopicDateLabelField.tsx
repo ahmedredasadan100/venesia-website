@@ -7,6 +7,7 @@ import {
   getDateInputValue,
   getTodayInputValue,
 } from "../../../../../lib/content-dates";
+import { TOPIC_SETTINGS_SURFACE_CLASS_NAME } from "./TopicFormSwitch";
 
 type TopicDateLabelFieldProps = {
   defaultValue?: string | null;
@@ -44,10 +45,10 @@ export default function TopicDateLabelField({ defaultValue, publishedAt }: Topic
   }
 
   return (
-    <div className="block">
-      <span className="text-sm font-medium text-white/70">تاريخ النشر</span>
-      <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1.2fr]">
-        <div className="flex overflow-hidden rounded-2xl border border-white/10 bg-black/30 focus-within:border-[#D8B87A]/45">
+    <>
+      <div className={`${TOPIC_SETTINGS_SURFACE_CLASS_NAME} min-w-0`} data-topic-publish-date-field>
+        <span className="text-xs font-medium text-white/70">تاريخ النشر</span>
+        <div className="mt-2 flex min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 focus-within:border-[#D8B87A]/45">
           <input
             ref={inputRef}
             type="date"
@@ -56,28 +57,29 @@ export default function TopicDateLabelField({ defaultValue, publishedAt }: Topic
               setDateValue(event.target.value);
               setManualLabel("");
             }}
-            className="w-full bg-transparent px-4 py-3 text-sm text-white outline-none"
+            aria-label="تاريخ النشر"
+            className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none"
           />
           <button
             type="button"
             onClick={openCalendar}
-            className="border-r border-white/10 px-4 text-xs font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10"
+            className="shrink-0 whitespace-nowrap border-r border-white/10 px-3 text-xs font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10"
           >
             فتح التقويم
           </button>
         </div>
+      </div>
+      <label className={`${TOPIC_SETTINGS_SURFACE_CLASS_NAME} block min-w-0`} data-topic-publish-label-field>
+        <span className="text-xs font-medium text-white/70">الـLabel اليدوي الاختياري</span>
         <input
           value={manualLabel}
           onChange={(event) => setManualLabel(event.target.value)}
           placeholder="اختياري: Label يدوي مثل دليل محدث"
-          className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+          className="mt-2 min-w-0 w-full rounded-2xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
         />
-      </div>
+      </label>
       <input type="hidden" name="published_at" value={dateValue} />
       <input type="hidden" name="date_label" value={computedLabel} />
-      <p className="mt-2 text-xs leading-6 text-white/35">
-        التاريخ المعروض للزائر: <span className="text-[#D8B87A]">{computedLabel || "—"}</span>
-      </p>
-    </div>
+    </>
   );
 }

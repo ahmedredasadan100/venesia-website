@@ -7,6 +7,7 @@ export type EntitySeoData = {
   image?: string | null;
   imageAlt?: string | null;
   ogImage?: string | null;
+  canonical?: string | null;
   robotsIndex?: boolean | null;
   robotsFollow?: boolean | null;
 };

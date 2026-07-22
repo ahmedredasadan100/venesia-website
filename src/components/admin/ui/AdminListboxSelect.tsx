@@ -29,6 +29,7 @@ export type AdminListboxSelectProps = {
   layerId?: string;
   openLayerId?: string | null;
   onOpenLayer?: (id: string | null) => void;
+  inline?: boolean;
 };
 
 function ChevronDownIcon() {
@@ -61,6 +62,7 @@ export default function AdminListboxSelect({
   layerId,
   openLayerId,
   onOpenLayer,
+  inline = false,
 }: AdminListboxSelectProps) {
   const generatedId = useId();
   const controlId = id ?? generatedId;
@@ -159,6 +161,19 @@ export default function AdminListboxSelect({
     }
   }
 
+  function handleInlineKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      onChange(options[(index + direction + options.length) % options.length].value);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleSelect(options[index].value);
+    }
+  }
+
   const menu =
     isMounted &&
     isOpen &&
@@ -212,6 +227,22 @@ export default function AdminListboxSelect({
 
   return (
     <div className={`relative overflow-visible ${className}`}>
+      {inline ? (
+        <div id={`${controlId}-listbox`} role="listbox" aria-label={placeholder} dir="rtl" className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto rounded-2xl border border-white/10 bg-black/25 p-1.5`}>
+          {options.map((option, index) => {
+            const selectedOption = option.value === value;
+            return (
+              <button key={option.value} type="button" id={`${controlId}-option-${option.value}`} role="option" aria-selected={selectedOption} tabIndex={selectedOption ? 0 : -1} onClick={() => handleSelect(option.value)} onKeyDown={(event) => handleInlineKeyDown(event, index)} className={`block w-full cursor-pointer rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${selectedOption ? "bg-[#D8B87A]/14 font-medium text-[#E6C882]" : "text-white/78 hover:bg-white/[0.05]"}`}>
+                <span className="flex min-w-0 items-center">
+                  {option.depth ? <span aria-hidden="true" className="shrink-0 text-white/28">{"— ".repeat(option.depth)}</span> : null}
+                  <span className="truncate">{option.label}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      {!inline ? (
       <button
         ref={triggerRef}
         type="button"
@@ -238,6 +269,7 @@ export default function AdminListboxSelect({
           <ChevronDownIcon />
         </span>
       </button>
+      ) : null}
       {menu}
     </div>
   );

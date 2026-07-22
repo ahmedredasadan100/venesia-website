@@ -16,6 +16,7 @@ import { getContentTypeLabel, resolveContentEditor } from "../../../../../lib/ad
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
+import TopicContentTypeControl from "../../../../../components/admin/content/editors/TopicContentTypeControl";
 import { isMediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import {
@@ -139,6 +140,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       />
       {query?.notice ? <AdminNotice variant="success" message="تم حفظ التغييرات بنجاح." /> : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر حفظ المحتوى" message={errorMessage} /> : null}
+      <TopicContentTypeControl value={topic.content_type} mode="edit" />
       <MediaContentForm
         mode="edit"
         contentType={topic.content_type}

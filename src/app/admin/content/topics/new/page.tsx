@@ -1,6 +1,6 @@
 import AdminNotice from "../../../../../components/admin/AdminNotice";
-import ContentTypePicker from "../../../../../components/admin/content/ContentTypePicker";
 import ArticleCreateEditor from "../../../../../components/admin/content/editors/ArticleCreateEditor";
+import TopicContentTypeControl from "../../../../../components/admin/content/editors/TopicContentTypeControl";
 import { AdminActionButton, AdminPageContextHeader } from "../../../../../components/admin/ui";
 import {
   buildAdminCategoryTree,
@@ -24,25 +24,7 @@ export default async function NewUnifiedContentPage({
 }) {
   await requireAdminSession();
   const query = await searchParams;
-  const contentType = isContentType(query?.type) ? query.type : null;
-
-  if (!contentType) {
-    return (
-      <main className="space-y-7">
-        <AdminPageContextHeader
-          eyebrow="UNIFIED CONTENT ENGINE"
-          title="إضافة موضوع جديد"
-          description="أنشئ كل أنواع المحتوى من مسار واحد، ثم استخدم المحرر المتخصص حسب النوع."
-          actions={
-            <AdminActionButton href="/admin/content/topics" variant="dark">
-              عرض الموضوعات
-            </AdminActionButton>
-          }
-        />
-        <ContentTypePicker />
-      </main>
-    );
-  }
+  const contentType = isContentType(query?.type) ? query.type : "article";
 
   const supabase = getSupabaseAdmin();
   const [{ data: categoryRows, error: categoriesError }, { data: seriesRows, error: seriesError }] =
@@ -99,6 +81,7 @@ export default async function NewUnifiedContentPage({
       />
       {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء المحتوى" message={errorMessage} /> : null}
       {loadError ? <AdminNotice variant="danger" title="تعذر تحميل التصنيفات أو السلاسل" message={loadError} /> : null}
+      <TopicContentTypeControl value={contentType} mode="create" />
       {!loadError ? (
         <MediaContentForm
           mode="create"

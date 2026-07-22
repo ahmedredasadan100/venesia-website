@@ -20,6 +20,7 @@ type DbTopic = {
   excerpt: string | null;
   content: string | null;
   image: string | null;
+  image_alt?: string | null;
   category: string | null;
   category_slug: string | null;
   series: string | null;
@@ -31,7 +32,15 @@ type DbTopic = {
   seo_title: string | null;
   seo_description: string | null;
   seo_keywords: string[] | null;
+  canonical_url?: string | null;
+  robots_index?: boolean | null;
+  robots_follow?: boolean | null;
   faq: { question: string; answer: string }[] | null;
+  show_title_on_page?: boolean | null;
+  show_image_on_page?: boolean | null;
+  show_excerpt_on_page?: boolean | null;
+  show_faq_on_page?: boolean | null;
+  show_faq_title_on_page?: boolean | null;
 };
 
 export type PublicTopicDetail = {
@@ -41,6 +50,8 @@ export type PublicTopicDetail = {
   excerpt: string;
   content: string;
   image: string;
+  metadataImage: string;
+  imageAlt: string;
   category: string;
   categorySlug: string;
   series: string;
@@ -53,7 +64,15 @@ export type PublicTopicDetail = {
   seoTitle: string;
   seoDescription: string;
   seoKeywords: string[];
+  canonicalUrl: string;
+  robotsIndex: boolean | null;
+  robotsFollow: boolean | null;
   faq: { question: string; answer: string }[];
+  showTitleOnPage: boolean;
+  showImageOnPage: boolean;
+  showExcerptOnPage: boolean;
+  showFaqOnPage: boolean;
+  showFaqTitleOnPage: boolean;
 };
 
 function mapDbTopicToListingTopic(topic: DbTopic): Topic {
@@ -88,6 +107,8 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
     excerpt: topic.excerpt ?? "",
     content: topic.content ?? "",
     image: resolveLocalPublicImage(topic.image, DEFAULT_TOPIC_IMAGE),
+    metadataImage: resolveLocalPublicImage(topic.image, ""),
+    imageAlt: topic.image_alt ?? topic.title ?? "",
     category: topic.category ?? "",
     categorySlug: topic.category_slug ?? "",
     series: topic.series ?? "",
@@ -100,7 +121,15 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
     seoTitle: topic.seo_title ?? "",
     seoDescription: topic.seo_description ?? "",
     seoKeywords: topic.seo_keywords ?? [],
+    canonicalUrl: topic.canonical_url ?? "",
+    robotsIndex: topic.robots_index ?? null,
+    robotsFollow: topic.robots_follow ?? null,
     faq: topic.faq ?? [],
+    showTitleOnPage: topic.show_title_on_page !== false,
+    showImageOnPage: topic.show_image_on_page !== false,
+    showExcerptOnPage: topic.show_excerpt_on_page !== false,
+    showFaqOnPage: topic.show_faq_on_page !== false,
+    showFaqTitleOnPage: topic.show_faq_title_on_page !== false,
   };
 }
 

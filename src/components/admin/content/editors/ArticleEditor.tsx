@@ -5,13 +5,9 @@ import SaveBar from "../../SaveBar";
 import SeoPanel from "../../SeoPanel";
 import FaqEditor from "./article/FaqEditor";
 import TopicEditTabs from "./article/TopicEditTabs";
-import TopicDateLabelField from "./article/TopicDateLabelField";
-import TopicImageField from "./article/TopicImageField";
+import TopicBasicDataPanel from "./article/TopicBasicDataPanel";
 import TopicMarkdownEditor from "./article/TopicMarkdownEditor";
-import TopicSeriesFields from "./article/TopicSeriesFields";
-import TopicSlugInput from "./article/TopicSlugInput";
 import { buildArticleTopicCategoryFilterGroups } from "../../../../lib/admin/article-topic-categories";
-import ArticleTopicCategorySelect from "./article/ArticleTopicCategorySelect";
 import TopicPublishChecklistPanel from "../../content-workflow/TopicPublishChecklistPanel";
 import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import {
@@ -21,6 +17,7 @@ import {
   saveTopicAndClose,
   unpublishTopic,
 } from "../../../../app/admin/content/topics/article-actions";
+import TopicPublishingOptions from "./article/TopicPublishingOptions";
 
 type TopicFaqItem = { question?: string; answer?: string };
 export type ArticleEditorCategory = {
@@ -50,11 +47,19 @@ export type ArticleEditorTopic = {
   seo_description: string | null;
   seo_keywords: unknown;
   focus_keyword: string | null;
+  canonical_url?: string | null;
+  robots_index?: boolean | null;
+  robots_follow?: boolean | null;
   status: string | null;
   published_at: string | null;
   updated_at: string | null;
   is_featured: boolean | null;
   is_popular: boolean | null;
+  show_title_on_page?: boolean | null;
+  show_image_on_page?: boolean | null;
+  show_excerpt_on_page?: boolean | null;
+  show_faq_on_page?: boolean | null;
+  show_faq_title_on_page?: boolean | null;
 };
 function getNoticeText(notice?: string) {
   if (notice === "created") return "تم إنشاء الموضوع كمسودة بنجاح.";
@@ -64,7 +69,6 @@ function getNoticeText(notice?: string) {
   if (notice === "unpublished") return "تم إخفاء الموضوع بنجاح مع الحفاظ على تاريخ أول نشر.";
   return null;
 }
-
 function truncateWords(value: string, limit = 4) {
   const words = value.trim().split(/\s+/);
   if (words.length <= limit) return value;
@@ -102,6 +106,7 @@ export default function ArticleEditor({
   const noticeText = getNoticeText(notice);
   const status = topic.status || "draft";
   const publishInput = topicRowToPublishInput({ ...topic, faq });
+  const selectedCategory = safeCategories.find((category) => category.slug === topic.category_slug)?.name ?? topic.category_slug ?? "—";
 
   return (
     <main className="space-y-7">
@@ -125,52 +130,48 @@ export default function ArticleEditor({
       <form id="topic-edit-form" key={topic.id} action={saveTopic} className="space-y-7" noValidate>
         <input type="hidden" name="id" value={topic.id} />
         <input type="hidden" name="status" value={status} />
+        <input type="hidden" name="content_type" value="article" />
 
         <TopicEditTabs
           tabs={[
             {
               id: "basic",
-              label: "بيانات أساسية",
+              label: "المحتوى الأساسي",
               content: (
-                <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <label className="block lg:col-span-2">
-                      <span className="text-sm font-medium text-white/70">عنوان الموضوع</span>
-                      <input name="title" required defaultValue={topic.title ?? ""} placeholder="مثال: أفضل حي في بيت الوطن للسكن" className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-xl font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45" />
-                    </label>
-
-                    <TopicSlugInput defaultValue={topic.slug ?? ""} />
-
-                    <label className="block">
-                      <span className="text-sm font-medium text-white/70">التصنيف</span>
-                      <ArticleTopicCategorySelect groups={categoryGroups} defaultValue={topic.category_slug ?? ""} />
-                    </label>
-
-                    <label className="block lg:col-span-2">
-                      <span className="text-sm font-medium text-white/70">الوصف المختصر</span>
-                      <textarea name="excerpt" rows={4} defaultValue={topic.excerpt ?? ""} placeholder="اكتب وصفًا مختصرًا واضحًا للمقال..." className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45" />
-                    </label>
-
-                    <TopicImageField defaultImage={topic.image ?? ""} defaultAlt={topic.image_alt ?? ""} formId="topic-edit-form" />
-                    <TopicSeriesFields options={safeSeries} defaultSeriesId={topic.series_id ?? ""} defaultSeries={topic.series ?? ""} defaultSeriesSlug={topic.series_slug ?? ""} />
-                    <TopicDateLabelField defaultValue={topic.date_label ?? ""} publishedAt={topic.published_at} />
-                  </div>
-                </section>
+                <TopicBasicDataPanel
+                  formId="topic-edit-form"
+                  contentType="article"
+                  contentTypeMode="edit"
+                  categoryGroups={categoryGroups}
+                  series={safeSeries}
+                  contentEditor={<TopicMarkdownEditor defaultValue={topic.content ?? ""} variant="compact" />}
+                  values={{
+                    title: topic.title,
+                    slug: topic.slug,
+                    excerpt: topic.excerpt,
+                    image: topic.image,
+                    imageAlt: topic.image_alt,
+                    categorySlug: topic.category_slug,
+                    seriesId: topic.series_id,
+                    series: topic.series,
+                    seriesSlug: topic.series_slug,
+                    dateLabel: topic.date_label,
+                    publishedAt: topic.published_at,
+                    showTitle: topic.show_title_on_page,
+                    showImage: topic.show_image_on_page,
+                    showExcerpt: topic.show_excerpt_on_page,
+                  }}
+                />
               ),
             },
             {
-              id: "content",
-              label: "المحتوى",
-              content: <TopicMarkdownEditor defaultValue={topic.content ?? ""} />,
-            },
-            {
               id: "faq",
-              label: "الأسئلة الشائعة (FAQ)",
-              content: <FaqEditor defaultFaq={faq} />,
+              label: "الأسئلة الشائعة",
+              content: <FaqEditor defaultFaq={faq} defaultVisible={topic.show_faq_on_page} defaultTitleVisible={topic.show_faq_title_on_page} />,
             },
             {
               id: "seo",
-              label: "SEO",
+              label: "SEO والتحليل",
               content: (
                 <SeoPanel
                   title={topic.title ?? ""}
@@ -183,6 +184,9 @@ export default function ArticleEditor({
                   seoDescription={topic.seo_description ?? ""}
                   seoKeywords={seoKeywords}
                   focusKeyword={topic.focus_keyword ?? ""}
+                  canonicalUrl={topic.canonical_url ?? ""}
+                  robotsIndex={topic.robots_index ?? null}
+                  robotsFollow={topic.robots_follow ?? null}
                   faq={faq}
                   hideImageAltField
                 />
@@ -190,44 +194,20 @@ export default function ArticleEditor({
             },
             {
               id: "publish",
-              label: "النشر",
+              label: "المراجعة والنشر",
               content: (
                 <div className="space-y-6">
-                  <TopicPublishChecklistPanel formId="topic-edit-form" initial={publishInput} />
-                  <section className="max-w-xl rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
-                  <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">PUBLISHING</p>
-                  <h3 className="mt-3 text-xl font-semibold text-white">إعدادات الظهور</h3>
-                  <div className="mt-6 space-y-4">
-                    <InfoLine label="الحالة الحالية" value={status} />
-                    <InfoLine label="أول نشر" value={topic.published_at ? new Date(topic.published_at).toLocaleDateString("ar-EG") : "لم ينشر بعد"} />
-                    <InfoLine label="آخر تعديل" value={topic.updated_at ? new Date(topic.updated_at).toLocaleString("ar-EG") : "غير متاح"} />
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/70">
-                      <span>موضوع مميز</span>
-                      <input type="checkbox" name="is_featured" defaultChecked={Boolean(topic.is_featured)} className="h-4 w-4 accent-[#D8B87A]" />
-                    </label>
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/70">
-                      <span>موضوع شائع</span>
-                      <input type="checkbox" name="is_popular" defaultChecked={Boolean(topic.is_popular)} className="h-4 w-4 accent-[#D8B87A]" />
-                    </label>
-                  </div>
-                </section>
+                  <TopicPublishingOptions status={status} featured={Boolean(topic.is_featured)} popular={Boolean(topic.is_popular)} publishedAt={topic.published_at} dateLabel={topic.date_label}>
+                    <SaveBar topicId={topic.id} slug={topic.slug} status={status} saveAction={saveTopic} saveAndCloseAction={saveTopicAndClose} draftAction={saveDraftTopic} publishAction={publishTopic} unpublishAction={unpublishTopic} />
+                  </TopicPublishingOptions>
+                  <TopicPublishChecklistPanel formId="topic-edit-form" initial={publishInput} status={status} publishedAt={topic.published_at} dateLabel={topic.date_label} categoryLabel={selectedCategory} seriesLabel={topic.series ?? "—"} initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }} />
                 </div>
               ),
             },
           ]}
         />
 
-        <SaveBar topicId={topic.id} slug={topic.slug} status={status} saveAction={saveTopic} saveAndCloseAction={saveTopicAndClose} draftAction={saveDraftTopic} publishAction={publishTopic} unpublishAction={unpublishTopic} />
       </form>
     </main>
-  );
-}
-
-function InfoLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
-      <p className="text-xs text-white/35">{label}</p>
-      <p className="mt-1 text-sm text-white/70">{value}</p>
-    </div>
   );
 }

@@ -18,6 +18,7 @@ export type SeoScoreInput = {
 };
 
 export type SeoIssue = {
+  id?: string;
   type: "error" | "warning" | "success";
   label: string;
   points: number;
@@ -85,6 +86,12 @@ function addScore(
 
 function clampScore(score: number) {
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function assignIssueIds(issues: SeoIssue[], ids: readonly string[]) {
+  issues.forEach((issue, index) => {
+    issue.id = ids[index] ?? `issue-${index + 1}`;
+  });
 }
 
 export function analyzeTopicSeo(input: SeoScoreInput) {
@@ -404,6 +411,43 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
     5,
     "وجود FAQ واحد على الأقل أفضل من عدمه."
   );
+
+  assignIssueIds(seoIssues, [
+    "seo-title-length",
+    "meta-description-length",
+    "focus-keyword",
+    "keyword-title",
+    "keyword-description",
+    "keyword-intro",
+    "image",
+    "image-alt-length",
+    "keyword-alt",
+    "seo-keywords",
+    "slug",
+    "keyword-density",
+  ]);
+  assignIssueIds(contentIssues, [
+    "content-length",
+    "h1",
+    "h2",
+    "faq",
+    "internal-links",
+    "h3",
+    "content-depth",
+    "excerpt",
+  ]);
+  assignIssueIds(readinessIssues, [
+    "title",
+    "slug",
+    "excerpt",
+    "content",
+    "image",
+    "image-alt",
+    "seo-title",
+    "seo-description",
+    "focus-keyword",
+    "faq",
+  ]);
 
   seoScore = clampScore(seoScore);
   contentScore = clampScore(contentScore);
