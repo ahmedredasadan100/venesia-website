@@ -25,6 +25,7 @@
     "verify:topic-editor-basic-data": "node scripts/verify-topic-editor-basic-data.mjs",
     "verify:topic-editor-tabs": "node scripts/verify-topic-editor-tabs.mjs",
     "verify:topic-save-bar": "node scripts/verify-topic-save-bar.mjs",
+    "verify:topic-image-clear-persistence": "node --experimental-strip-types scripts/verify-topic-image-clear-persistence.mts",
     "verify:topic-publish-checklist": "node scripts/verify-topic-publish-checklist.mjs",
     "verify:topic-seo-review": "node --experimental-strip-types scripts/verify-topic-seo-review.mts",
     "qa:admin-instant-projects": "node scripts/qa-admin-instant-projects.mjs",
@@ -53,8 +54,8 @@
     "verify:project-child-fail-closed": "node scripts/verify-project-child-fail-closed.mjs",
     "verify:projects-hub-readiness": "node scripts/verify-projects-hub-readiness.mjs",
     "verify:admin-runtime": "npm run verify:admin-entity-list && npm run verify:admin-shell-system && npm run verify:admin-data-engine-contracts && npm run verify:admin-instant-pages && npm run qa:admin-instant-pages && npm run verify:admin-instant-projects",
-    "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:unified-content && npm run verify:admin-runtime && npm run verify:audit-coverage",
-    "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:unified-content && npm run verify:audit-coverage && npm run verify:admin-runtime && npm run build"
+    "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:unified-content && npm run verify:topic-image-clear-persistence && npm run verify:admin-runtime && npm run verify:audit-coverage",
+    "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:unified-content && npm run verify:topic-image-clear-persistence && npm run verify:audit-coverage && npm run verify:admin-runtime && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
