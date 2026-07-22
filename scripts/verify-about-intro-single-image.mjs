@@ -20,6 +20,23 @@ function assert(condition, message) {
   if (!condition) failures.push(message);
 }
 
+function readStructuralTemplateSlugs(source) {
+  const declaration = source.match(
+    /export const STRUCTURAL_CONTENT_TEMPLATE_SLUGS\s*=\s*\[([\s\S]*?)\]\s*as const/,
+  );
+  return new Set(
+    Array.from(declaration?.[1].matchAll(/"([^"]+)"/g) ?? [], (match) => match[1]),
+  );
+}
+
+function usesSharedStructuralSlugLock(source) {
+  const checksExistingIdentity =
+    /isStructuralContentTemplateSlug\(\s*existing\.slug\s*,\s*existing\.variant\s*\)/.test(source);
+  const preservesExistingSlug =
+    /slugLocked\s*\?\s*existing\.slug\s*:\s*requestedSlug/.test(source);
+  return checksExistingIdentity && preservesExistingSlug;
+}
+
 const client = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
 const editor = read(
   "src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx",
@@ -31,6 +48,7 @@ const configs = read("src/lib/page-blocks/configs.ts");
 const slots = read("src/components/page-composition/slot-module-nodes.tsx");
 const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 const slotRegistry = read("src/lib/page-composition/slot-module-registry.ts");
+const structuralTemplateSlugs = readStructuralTemplateSlugs(registry);
 
 assert(registry.includes('"about-intro-single-image"'), "Editor registry key missing");
 assert(configs.includes("isAboutIntroSingleImageTemplate"), "Config detector missing");
@@ -54,8 +72,12 @@ assert(!slots.includes("template.id ==="), "Renderer must not hardcode template 
 assert(slotRegistry.includes('"about-intro-single-image"'), "Slot registry slug missing");
 assert(actions.includes("buildAboutIntroSingleImageConfig"), "Save builder missing");
 assert(
-  actions.includes('existing.slug === "about-intro-single-image"'),
-  "Single-image slug must be locked on update",
+  structuralTemplateSlugs.has("about-intro-single-image"),
+  "Single-image slug must be registered in the shared structural lock",
+);
+assert(
+  usesSharedStructuralSlugLock(actions),
+  "Server update must preserve slugs through the shared structural lock",
 );
 
 if (failures.length) {
