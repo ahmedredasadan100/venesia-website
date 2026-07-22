@@ -1,4 +1,3 @@
-import Link from "next/link";
 import AdminNotice from "../../AdminNotice";
 import { AdminActionButton, AdminPageContextHeader } from "../../ui";
 import SaveBar from "../../SaveBar";
@@ -119,7 +118,6 @@ export default function ArticleEditor({
             <AdminActionButton href={returnPath} variant="dark">عرض الموضوعات</AdminActionButton>
             <AdminActionButton href="/admin/content/categories" variant="dark">عرض التصنيفات</AdminActionButton>
             <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
-            <Link href={`/admin/content/topics/${topic.id}/preview`} target="_blank" className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18 hover:bg-white/[0.05]">معاينة داخلية</Link>
           </>
         }
       />
@@ -198,7 +196,7 @@ export default function ArticleEditor({
               content: (
                 <div className="space-y-6">
                   <TopicPublishingOptions status={status} featured={Boolean(topic.is_featured)} popular={Boolean(topic.is_popular)} publishedAt={topic.published_at} dateLabel={topic.date_label}>
-                    <SaveBar topicId={topic.id} slug={topic.slug} status={status} saveAction={saveTopic} saveAndCloseAction={saveTopicAndClose} draftAction={saveDraftTopic} publishAction={publishTopic} unpublishAction={unpublishTopic} />
+                    <SaveBar mode="edit" topicId={topic.id} slug={topic.slug} status={status} closeHref={returnPath} saveAction={saveTopic} saveAndCloseAction={saveTopicAndClose} draftAction={saveDraftTopic} publishAction={publishTopic} unpublishAction={unpublishTopic} />
                   </TopicPublishingOptions>
                   <TopicPublishChecklistPanel formId="topic-edit-form" initial={publishInput} status={status} publishedAt={topic.published_at} dateLabel={topic.date_label} categoryLabel={selectedCategory} seriesLabel={topic.series ?? "—"} initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }} />
                 </div>

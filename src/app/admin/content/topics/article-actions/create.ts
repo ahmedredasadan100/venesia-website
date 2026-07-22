@@ -22,6 +22,7 @@ export async function createTopic(formData: FormData) {
   const actor = await requireAdminSession();
   const intent = getString(formData, "intent");
   const status: TopicStatus = intent === "publish" ? "published" : "draft";
+  const redirectToList = intent === "draft-close";
   const payload = getPayload(formData);
 
   try {
@@ -73,5 +74,9 @@ export async function createTopic(formData: FormData) {
     entityLabel: payload.title,
     metadata: { slug: data.slug, status },
   });
-  redirect(`/admin/content/topics/${data.id}?notice=${status === "published" ? "published" : "created"}`);
+  redirect(
+    redirectToList
+      ? "/admin/content/topics?notice=created"
+      : `/admin/content/topics/${data.id}?notice=${status === "published" ? "published" : "created"}`,
+  );
 }

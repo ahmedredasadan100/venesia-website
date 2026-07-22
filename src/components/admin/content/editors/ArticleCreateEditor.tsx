@@ -11,7 +11,7 @@ import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/t
 import { createTopic } from "../../../../app/admin/content/topics/article-actions";
 import type { ArticleEditorCategory, ArticleEditorSeries } from "./ArticleEditor";
 import TopicPublishingOptions from "./article/TopicPublishingOptions";
-import TopicPreviousTabButton from "./article/TopicPreviousTabButton";
+import SaveBar from "../../SaveBar";
 
 export default function ArticleCreateEditor({
   categories,
@@ -88,11 +88,7 @@ export default function ArticleCreateEditor({
               content: (
                 <div className="space-y-6">
                   <TopicPublishingOptions status="draft">
-                    <div className="flex flex-wrap gap-3">
-                      <TopicPreviousTabButton />
-                      <button type="submit" name="intent" value="draft" className="rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C]">إنشاء كمسودة</button>
-                      <button type="submit" name="intent" value="publish" className="rounded-full border border-emerald-400/30 px-6 py-3 text-sm font-medium text-emerald-200">نشر الآن</button>
-                    </div>
+                    <SaveBar mode="create" />
                   </TopicPublishingOptions>
                   <TopicPublishChecklistPanel formId="topic-create-form" initial={publishInput} status="draft" />
                 </div>
