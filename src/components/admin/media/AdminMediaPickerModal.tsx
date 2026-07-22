@@ -212,7 +212,7 @@ export default function AdminMediaPickerModal({
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
           <p className="font-mono text-xs text-white/45" dir="ltr">
-            public/{folder}
+            storage/{folder}
           </p>
           <label className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15">
             {uploading ? "جاري الرفع…" : isPdfMode ? "رفع PDF" : "رفع صورة"}

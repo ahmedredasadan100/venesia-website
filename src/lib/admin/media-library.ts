@@ -1,52 +1,61 @@
 import "server-only";
 
+import { createSupabaseCmsMediaStorageAdapter } from "../storage/upload-cms-asset";
 import {
-  listCmsFolderFromStorage,
-  uploadCmsDocumentToStorage,
-  uploadCmsImageToStorage,
-  isSupabaseCmsStorageEnabled,
-} from "../storage/upload-cms-asset";
-
-/**
- * Media library read/upload: filesystem (`public/…`) by default.
- * Supabase Storage only when CMS_STORAGE_UPLOADS=supabase.
- * Migration plan: docs/security-media-upload-migration.md
- */
+  resolveMediaStorageProvider,
+  type MediaStorageAdapter,
+  type MediaUploadOptions,
+} from "./media-storage-adapter";
 
 export type { PublicMediaFolderListing } from "./media-library-paths";
 export { normalizeMediaFolder } from "./media-library-paths";
+export {
+  getPublicMediaStorageError,
+  MediaStorageError,
+  resolveMediaStorageProvider,
+} from "./media-storage-adapter";
 
-export async function listPublicMediaFolder(folder = "images") {
-  if (isSupabaseCmsStorageEnabled()) {
-    return listCmsFolderFromStorage(folder);
+export async function getMediaStorageAdapter(
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<MediaStorageAdapter> {
+  if (resolveMediaStorageProvider(environment) === "supabase") {
+    return createSupabaseCmsMediaStorageAdapter();
   }
 
-  const { listPublicMediaFolderFromFs } = await import("./media-library-fs");
-  return listPublicMediaFolderFromFs(folder);
+  // Local development keeps read/write support for bundled legacy assets.
+  // This module is never imported by the production provider branch.
+  const { createFilesystemMediaStorageAdapter } = await import("./media-library-fs");
+  return createFilesystemMediaStorageAdapter();
+}
+
+export async function listPublicMediaFolder(folder = "images") {
+  return (await getMediaStorageAdapter()).listFolder(folder);
+}
+
+export async function listPublicImagePaths(folder = "images", limit = 240) {
+  return (await getMediaStorageAdapter()).listImagePaths(folder, limit);
 }
 
 export async function savePublicMediaUpload(
   folder: string,
   file: File,
-  options?: { replacePath?: string | null },
+  options?: MediaUploadOptions,
 ) {
-  if (isSupabaseCmsStorageEnabled()) {
-    return uploadCmsImageToStorage(folder, file, options);
-  }
-
-  const { savePublicMediaUploadToFs } = await import("./media-library-fs");
-  return savePublicMediaUploadToFs(folder, file, options);
+  return (await getMediaStorageAdapter()).uploadImage(folder, file, options);
 }
 
 export async function savePublicDocumentUpload(
   folder: string,
   file: File,
-  options?: { replacePath?: string | null },
+  options?: MediaUploadOptions,
 ) {
-  if (isSupabaseCmsStorageEnabled()) {
-    return uploadCmsDocumentToStorage(folder, file, options);
-  }
+  return (await getMediaStorageAdapter()).uploadDocument(folder, file, options);
+}
 
-  const { savePublicDocumentUploadToFs } = await import("./media-library-fs");
-  return savePublicDocumentUploadToFs(folder, file, options);
+export async function isManagedPublicMediaAsset(value: string) {
+  return (await getMediaStorageAdapter()).isManagedAsset(value);
+}
+
+export async function deletePublicMediaAsset(value: string) {
+  return (await getMediaStorageAdapter()).deleteAsset(value);
 }

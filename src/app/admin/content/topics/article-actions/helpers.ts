@@ -1,8 +1,6 @@
-import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { redirect } from "next/navigation";
 import { parseFormPublishedDate, resolveTopicPublishedAt } from "../../../../../lib/content-dates";
+import { savePublicMediaUpload } from "../../../../../lib/admin/media-library";
 import {
   getTopicDraftValidationError,
   getTopicPublishOnlyValidationError,
@@ -122,43 +120,14 @@ function getDateLabel(formData: FormData) {
   return label || null;
 }
 
-function getImageExtension(file: File) {
-  const allowedTypes: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-  };
-
-  return allowedTypes[file.type] ?? null;
-}
-
-export async function uploadTopicImage(formData: FormData, slug: string) {
+export async function uploadTopicImage(formData: FormData, _slug: string) {
+  void _slug; // The storage adapter owns sanitized, collision-resistant object names.
   const imageFile = getFile(formData, "image_file");
   const currentImage = getString(formData, "image");
 
   if (!imageFile) return currentImage;
-
-  const extension = getImageExtension(imageFile);
-  if (!extension) {
-    throw new Error("صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WEBP أو GIF.");
-  }
-
-  const maxSize = 5 * 1024 * 1024;
-  if (imageFile.size > maxSize) {
-    throw new Error("حجم الصورة كبير. الحد الأقصى 5MB.");
-  }
-
-  const safeSlug = slug || "topic";
-  const fileName = `${safeSlug}-${Date.now()}-${randomUUID().slice(0, 8)}.${extension}`;
-  const publicDir = path.join(process.cwd(), "public", "images", "topics");
-  const filePath = path.join(publicDir, fileName);
-
-  await mkdir(publicDir, { recursive: true });
-  const buffer = Buffer.from(await imageFile.arrayBuffer());
-  await writeFile(filePath, buffer);
-
-  return `/images/topics/${fileName}`;
+  const saved = await savePublicMediaUpload("images/topics", imageFile);
+  return saved.path;
 }
 
 function getFaq(formData: FormData) {

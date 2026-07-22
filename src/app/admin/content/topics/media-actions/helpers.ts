@@ -1,6 +1,3 @@
-import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { redirect } from "next/navigation";
 import {
   assertPayloadMatchesContentType,
@@ -17,6 +14,7 @@ import {
 } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { validateSlugFormat } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
 import { resolveTopicPublishedAt } from "../../../../../lib/content-dates";
+import { savePublicMediaUpload } from "../../../../../lib/admin/media-library";
 import type { MediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 import type { MediaStatus, MediaTopicRow } from "./types";
 import { VALID_STATUSES } from "./types";
@@ -110,43 +108,14 @@ function getFile(formData: FormData, key: string) {
   return value instanceof File && value.size > 0 ? value : null;
 }
 
-function getImageExtension(file: File) {
-  const allowedTypes: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-  };
-
-  return allowedTypes[file.type] ?? null;
-}
-
-export async function uploadMediaImage(formData: FormData, slug: string) {
+export async function uploadMediaImage(formData: FormData, _slug: string) {
+  void _slug; // The storage adapter owns sanitized, collision-resistant object names.
   const imageFile = getFile(formData, "image_file");
   const currentImage = getString(formData, "image");
 
   if (!imageFile) return currentImage;
-
-  const extension = getImageExtension(imageFile);
-  if (!extension) {
-    throw new Error("صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WEBP أو GIF.");
-  }
-
-  const maxSize = 5 * 1024 * 1024;
-  if (imageFile.size > maxSize) {
-    throw new Error("حجم الصورة كبير. الحد الأقصى 5MB.");
-  }
-
-  const safeSlug = slug || "media";
-  const fileName = `${safeSlug}-${Date.now()}-${randomUUID().slice(0, 8)}.${extension}`;
-  const publicDir = path.join(process.cwd(), "public", "images", "topics");
-  const filePath = path.join(publicDir, fileName);
-
-  await mkdir(publicDir, { recursive: true });
-  const buffer = Buffer.from(await imageFile.arrayBuffer());
-  await writeFile(filePath, buffer);
-
-  return `/images/topics/${fileName}`;
+  const saved = await savePublicMediaUpload("images/topics", imageFile);
+  return saved.path;
 }
 
 export function getPayload(formData: FormData) {

@@ -104,7 +104,7 @@ function MediaUsagePanelContent({ assetPath }: { assetPath: string }) {
       ) : null}
 
       <p className="mt-4 text-xs leading-6 text-white/35">
-        فحص للقراءة فقط — لا يمنع الحذف ولا يغطي كل السياقات المحتملة خارج الجداول المفحوصة.
+        يمنع الحذف عند وجود مرجع ظاهر في الجداول المفحوصة؛ راجع الاستخدامات قبل إزالة الأصل.
       </p>
     </section>
   );
