@@ -5,6 +5,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseFetch } from "./supabase-fetch";
 
 let adminClient: SupabaseClient | null = null;
+let storageAdminClient: SupabaseClient | null = null;
+
+export const SUPABASE_STORAGE_REQUEST_TIMEOUT_MS = 60_000;
 
 function missingEnvMessage() {
   const missing: string[] = [];
@@ -39,4 +42,28 @@ export function getSupabaseAdmin(): SupabaseClient {
   }
 
   return adminClient;
+}
+
+/** Storage uploads can legitimately exceed the short database-query timeout. */
+export function getSupabaseStorageAdmin(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+  if (!url || !serviceRoleKey) {
+    throw new Error(missingEnvMessage());
+  }
+
+  if (!storageAdminClient) {
+    storageAdminClient = createClient(url, serviceRoleKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+      global: {
+        fetch: createSupabaseFetch(SUPABASE_STORAGE_REQUEST_TIMEOUT_MS),
+      },
+    });
+  }
+
+  return storageAdminClient;
 }

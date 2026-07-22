@@ -16,6 +16,11 @@ import {
   type MediaAssetItem,
   type PublicMediaFolderListing,
 } from "./media-library-paths";
+import {
+  MediaStorageError,
+  type MediaStorageAdapter,
+  type MediaUploadOptions,
+} from "./media-storage-adapter";
 
 const IMAGE_EXTENSIONS = CMS_IMAGE_EXTENSION_SET;
 const PDF_EXTENSIONS = CMS_PDF_EXTENSION_SET;
@@ -33,6 +38,7 @@ function buildAssetItem(
   filename: string,
   kind: "image" | "document",
   sizeBytes: number | null,
+  uploadedAt: string | null,
 ): MediaAssetItem {
   return {
     path: publicPath,
@@ -40,6 +46,11 @@ function buildAssetItem(
     extension: path.extname(filename).toLowerCase(),
     kind,
     sizeBytes,
+    contentType: null,
+    uploadedAt,
+    managed: false,
+    provider: "filesystem",
+    storagePath: null,
   };
 }
 
@@ -90,21 +101,25 @@ export function listPublicMediaFolderFromFs(folder = "images"): PublicMediaFolde
 
     const publicPath = `/${path.posix.join(normalized, entry.name)}`;
     let sizeBytes: number | null = null;
+    let uploadedAt: string | null = null;
     try {
-      sizeBytes = fs.statSync(path.join(target, entry.name)).size;
+      const stats = fs.statSync(path.join(target, entry.name));
+      sizeBytes = stats.size;
+      uploadedAt = stats.birthtime.toISOString();
     } catch {
       sizeBytes = null;
+      uploadedAt = null;
     }
 
     if (isImageFile(entry.name)) {
       images.push(publicPath);
-      items.push(buildAssetItem(publicPath, entry.name, "image", sizeBytes));
+      items.push(buildAssetItem(publicPath, entry.name, "image", sizeBytes, uploadedAt));
       continue;
     }
 
     if (isPdfFile(entry.name)) {
       documents.push(publicPath);
-      items.push(buildAssetItem(publicPath, entry.name, "document", sizeBytes));
+      items.push(buildAssetItem(publicPath, entry.name, "document", sizeBytes, uploadedAt));
     }
   }
 
@@ -154,7 +169,7 @@ export function listPublicImagePathsFromFs(folder = "images", limit = 240) {
 export async function savePublicMediaUploadToFs(
   folder: string,
   file: File,
-  options?: { replacePath?: string | null },
+  options?: MediaUploadOptions,
 ) {
   const validation = validateCmsUploadFile(file, "image");
   if (!validation.ok) throw new Error(validation.message);
@@ -183,7 +198,7 @@ export async function savePublicMediaUploadToFs(
 export async function savePublicDocumentUploadToFs(
   folder: string,
   file: File,
-  options?: { replacePath?: string | null },
+  options?: MediaUploadOptions,
 ) {
   const validation = validateCmsUploadFile(file, "pdf");
   if (!validation.ok) throw new Error(validation.message);
@@ -206,5 +221,30 @@ export async function savePublicDocumentUploadToFs(
   return {
     path: `/${path.posix.join(normalized, filename)}`,
     filename,
+  };
+}
+
+export function createFilesystemMediaStorageAdapter(): MediaStorageAdapter {
+  return {
+    provider: "filesystem",
+    async listFolder(folder = "images") {
+      return listPublicMediaFolderFromFs(folder);
+    },
+    async listImagePaths(folder = "images", limit = 240) {
+      return listPublicImagePathsFromFs(folder, limit);
+    },
+    uploadImage: savePublicMediaUploadToFs,
+    uploadDocument: savePublicDocumentUploadToFs,
+    isManagedAsset() {
+      // Files under public/ are legacy/static assets without an ownership ledger.
+      return false;
+    },
+    async deleteAsset() {
+      throw new MediaStorageError(
+        "unmanaged_media_asset",
+        "لا يمكن حذف هذا الملف لأنه ليس أصلًا مُدارًا داخل التخزين الدائم.",
+        400,
+      );
+    },
   };
 }

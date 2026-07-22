@@ -13,6 +13,12 @@ function formatBytes(sizeBytes: number | null) {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} م.ب`;
 }
 
+function formatUploadedAt(value: string | null) {
+  if (!value) return "غير معروف";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "غير معروف" : date.toLocaleDateString("ar-EG");
+}
+
 type ViewMode = "grid" | "list";
 
 export default function AdminMediaLibraryClient() {
@@ -25,6 +31,8 @@ export default function AdminMediaLibraryClient() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
 
   const loadFolder = useCallback(async (targetFolder: string) => {
     setLoading(true);
@@ -93,6 +101,32 @@ export default function AdminMediaLibraryClient() {
       window.setTimeout(() => setCopiedPath((current) => (current === pathValue ? null : current)), 1800);
     } catch {
       setError("تعذر نسخ الرابط — انسخه يدويًا.");
+    }
+  }
+
+  async function deleteAsset(item: MediaAssetItem) {
+    if (!item.managed || deletingPath) return;
+    if (confirmDeletePath !== item.path) {
+      setConfirmDeletePath(item.path);
+      return;
+    }
+
+    setDeletingPath(item.path);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/media-library", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset: item.path }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "تعذر حذف الملف.");
+      await loadFolder(folder);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر حذف الملف.");
+    } finally {
+      setDeletingPath(null);
+      setConfirmDeletePath(null);
     }
   }
 
@@ -220,6 +254,9 @@ export default function AdminMediaLibraryClient() {
                 copied={copiedPath === item.path}
                 onSelect={() => setSelectedPath(item.path)}
                 onCopy={() => void copyPath(item.path)}
+                onDelete={() => void deleteAsset(item)}
+                deleting={deletingPath === item.path}
+                confirmingDelete={confirmDeletePath === item.path}
               />
             ))}
           </div>
@@ -233,6 +270,9 @@ export default function AdminMediaLibraryClient() {
                 copied={copiedPath === item.path}
                 onSelect={() => setSelectedPath(item.path)}
                 onCopy={() => void copyPath(item.path)}
+                onDelete={() => void deleteAsset(item)}
+                deleting={deletingPath === item.path}
+                confirmingDelete={confirmDeletePath === item.path}
               />
             ))}
           </div>
@@ -246,8 +286,8 @@ export default function AdminMediaLibraryClient() {
           <p className="font-semibold text-white">ملاحظات الاستبدال</p>
           <ul className="mt-3 space-y-2 text-xs leading-6">
             <li>الاستبدال الآمن يعمل عند اختيار «استبدال» من حقول الصور مع replacePath.</li>
-            <li>على Supabase وعلى الملفات المحلية يُكتب فوق نفس المسار عند توافق المجلد.</li>
-            <li>الرفع بدون استبدال ينشئ ملفًا جديدًا — قد تبقى نسخ قديمة يتيمة.</li>
+            <li>الاستبدال يحافظ على نفس الرابط عندما يتطابق النوع والمسار المُدار.</li>
+            <li>الملفات القديمة تحت /images تظل قابلة للاستخدام، لكنها غير قابلة للحذف من هذه المكتبة.</li>
           </ul>
         </section>
       </aside>
@@ -262,6 +302,8 @@ function AssetMeta({ item }: { item: MediaAssetItem }) {
         النوع: {item.kind === "image" ? "صورة" : "مستند"} — {item.extension}
       </p>
       <p>الحجم: {formatBytes(item.sizeBytes)}</p>
+      <p>نوع MIME: {item.contentType || "غير معروف"}</p>
+      <p>تاريخ الرفع: {formatUploadedAt(item.uploadedAt)}</p>
     </div>
   );
 }
@@ -272,12 +314,18 @@ function AssetCard({
   copied,
   onSelect,
   onCopy,
+  onDelete,
+  deleting,
+  confirmingDelete,
 }: {
   item: MediaAssetItem;
   selected: boolean;
   copied: boolean;
   onSelect: () => void;
   onCopy: () => void;
+  onDelete: () => void;
+  deleting: boolean;
+  confirmingDelete: boolean;
 }) {
   return (
     <article
@@ -302,7 +350,7 @@ function AssetCard({
           </p>
         </div>
       </button>
-      <div className="border-t border-white/8 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-t border-white/8 px-3 py-2">
         <button
           type="button"
           onClick={onCopy}
@@ -310,6 +358,17 @@ function AssetCard({
         >
           {copied ? "تم النسخ" : "نسخ الرابط"}
         </button>
+        {item.managed ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            aria-label={`${confirmingDelete ? "تأكيد حذف" : "حذف"} ${item.filename}`}
+            className="rounded-full border border-red-400/30 px-3 py-1.5 text-xs font-semibold text-red-200 disabled:cursor-wait disabled:opacity-50"
+          >
+            {deleting ? "جاري الحذف…" : confirmingDelete ? "تأكيد الحذف" : "حذف"}
+          </button>
+        ) : null}
       </div>
     </article>
   );
@@ -321,12 +380,18 @@ function AssetRow({
   copied,
   onSelect,
   onCopy,
+  onDelete,
+  deleting,
+  confirmingDelete,
 }: {
   item: MediaAssetItem;
   selected: boolean;
   copied: boolean;
   onSelect: () => void;
   onCopy: () => void;
+  onDelete: () => void;
+  deleting: boolean;
+  confirmingDelete: boolean;
 }) {
   return (
     <div
@@ -349,6 +414,17 @@ function AssetRow({
       >
         {copied ? "تم النسخ" : "نسخ الرابط"}
       </button>
+      {item.managed ? (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          aria-label={`${confirmingDelete ? "تأكيد حذف" : "حذف"} ${item.filename}`}
+          className="rounded-full border border-red-400/30 px-3 py-1.5 text-xs font-semibold text-red-200 disabled:cursor-wait disabled:opacity-50"
+        >
+          {deleting ? "جاري الحذف…" : confirmingDelete ? "تأكيد الحذف" : "حذف"}
+        </button>
+      ) : null}
     </div>
   );
 }
