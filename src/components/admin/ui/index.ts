@@ -45,6 +45,7 @@ export { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 export { default as AdminCard } from "./AdminCard";
 export { default as AdminToolbar } from "./AdminToolbar";
 export { default as AdminActionButton } from "./AdminActionButton";
+export { default as AdminEntityPreviewActions } from "./AdminEntityPreviewActions";
 export { default as AdminStatusPill } from "./AdminStatusPill";
 export { default as AdminToneBadge } from "./AdminToneBadge";
 export { default as AdminInfoBar } from "./AdminInfoBar";

@@ -37,6 +37,20 @@ export function createAdminFormInitialState(
   return { status: "idle", mode, revision: 0 };
 }
 
+export function createAdminFormErrorState(
+  mode: AdminFormMode,
+  title: string,
+  message: string,
+): AdminFormActionState {
+  return {
+    status: "error",
+    mode,
+    revision: 0,
+    title,
+    message,
+  };
+}
+
 export type AdminFormAction = (
   previousState: AdminFormActionState,
   formData: FormData,

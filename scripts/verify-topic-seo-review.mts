@@ -45,6 +45,9 @@ const displaySettings = read("src/components/admin/content/editors/article/Topic
 const review = read("src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx");
 const createEditor = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
 const editEditor = read("src/components/admin/content/editors/ArticleEditor.tsx");
+const previewCapability = read("src/lib/admin/interaction-system/entity-preview-capability.ts");
+const contentPreviewCapability = read("src/lib/admin/content/entity-preview-capabilities.ts");
+const previewActions = read("src/components/admin/ui/AdminEntityPreviewActions.tsx");
 const publicLoader = read("src/lib/topics/load-public-topics.ts");
 const publicPage = read("src/app/(site)/topics/[slug]/page.tsx");
 const newMigration = read("sql/migrations/20260722120000_topics_seo_overrides.sql");
@@ -55,6 +58,10 @@ function check(label: string, condition: unknown) {
   assert.ok(condition, label);
   passed += 1;
   console.log(`PASS ${label}`);
+}
+
+function visibleJsxText(source: string) {
+  return source.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 const global = {
@@ -152,10 +159,24 @@ check("tab navigation accepts tab and target without reload", navigation.include
 check("SEO issues have explicit correction targets", seoPanel.includes("SEO_CORRECTION_TARGETS") && seoPanel.includes('targetId: "topic-seo-title"') && seoPanel.includes('targetId: "topic-content-markdown"') && seoPanel.includes('targetId: "topic-image-alt"'));
 check("review issues map to basic, FAQ, and SEO targets", review.includes("CHECKLIST_CORRECTION_TARGETS") && review.includes('tabId: "basic"') && review.includes('tabId: "faq"') && review.includes('tabId: "seo"'));
 
-check("publishing actions and page display settings delegate to the shared switch", publishingOptions.includes("TopicFormSwitch") && displaySettings.includes("TopicFormSwitch") && formSwitch.includes("<AdminFormSwitch") && formSwitch.includes("ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME") && sharedFormSwitch.includes('role="switch"'));
+check("topic switches are a thin adapter over the one shared switch DOM contract", formSwitch.match(/<AdminFormSwitch\b/g)?.length === 1 && !formSwitch.includes("<input") && !formSwitch.includes('role="switch"') && ["id={id}", "name={name}", "label={label}", "defaultChecked={defaultChecked}", "surface={surface}", "disabled={disabled}"].every((marker) => formSwitch.includes(marker)) && formSwitch.includes("ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME"));
+check("the shared switch alone owns checkbox and controlled or uncontrolled semantics", sharedFormSwitch.match(/<input\b/g)?.length === 1 && ["id={id}", 'type="checkbox"', 'role="switch"', "name={name}", "defaultChecked={checked === undefined ? defaultChecked : undefined}", "checked={checked}", "onChange={onChange}", "disabled={disabled}", "value={value}", "aria-describedby={describedBy}"].every((marker) => sharedFormSwitch.includes(marker)));
+check("publishing and display switches preserve field parity through TopicFormSwitch", !publishingOptions.includes("<AdminFormSwitch") && !displaySettings.includes("<AdminFormSwitch") && ["is_featured", "is_popular", "is_published"].every((name) => publishingOptions.includes(`name="${name}"`)) && /<TopicFormSwitch[\s\S]*?id="topic-published-switch"[\s\S]*?name="is_published"/.test(publishingOptions) && !publishingOptions.includes('<div id="topic-published-switch"') && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.includes(`name="${name}"`)));
 check("publishing actions keep four balanced responsive controls", publishingOptions.includes("data-topic-publishing-actions-row") && publishingOptions.includes("sm:grid-cols-2") && publishingOptions.includes("xl:grid-cols-4") && publishingOptions.includes('name="is_featured"') && publishingOptions.includes('name="is_popular"') && publishingOptions.includes('name="is_published"') && publishingOptions.includes("TopicDateLabelField"));
-check("publishing date keeps calendar and saved field names without visitor preview text", publishingDateField.includes("openCalendar") && publishingDateField.includes("فتح التقويم") && publishingDateField.includes('name="published_at"') && publishingDateField.includes('name="date_label"') && !publishingDateField.includes("التاريخ المعروض للزائر"));
+const dateLabelTrigger = publishingDateField.match(/<button\b(?=[^>]*data-topic-date-picker-trigger="label")[\s\S]*?<\/button>/)?.[0] ?? "";
+const dateInputMarkerIndex = publishingDateField.indexOf('data-topic-date-picker-input=""');
+const dateInputStart = publishingDateField.lastIndexOf("<input", dateInputMarkerIndex);
+const dateInputEnd = publishingDateField.indexOf("/>", dateInputMarkerIndex);
+const dateInput = dateInputMarkerIndex >= 0 && dateInputStart >= 0 && dateInputEnd >= 0
+  ? publishingDateField.slice(dateInputStart, dateInputEnd + 2)
+  : "";
+const dateLabelVisibleText = visibleJsxText(dateLabelTrigger);
+check("publishing date exposes one visible label trigger with a shared icon marker", dateLabelTrigger.includes('data-topic-date-picker-trigger="label"') && dateLabelTrigger.includes('data-topic-date-picker-icon=""') && dateLabelTrigger.includes("onClick={openCalendar}") && dateLabelVisibleText.includes("تاريخ النشر") && !dateLabelVisibleText.includes("فتح التقويم"));
+check("publishing date input keeps its native picker without changing its submitted name", dateInput.includes('id="topic-published-at"') && dateInput.includes('data-topic-date-picker-input=""') && dateInput.includes('type="date"') && dateInput.includes('name="published_at"') && !dateInput.includes("onClick={openCalendar}") && publishingDateField.includes("input.click()") && publishingDateField.match(/name="published_at"/g)?.length === 1);
+check("publishing date preserves saved and fallback date semantics", publishingDateField.includes("openCalendar") && publishingDateField.includes("publishedDateValue") && publishingDateField.includes("defaultIsDate") && publishingDateField.includes("getTodayInputValue()") && publishingDateField.includes('name="date_label"') && !publishingDateField.includes("التاريخ المعروض للزائر"));
 check("legacy publication label is preserved by a hidden field without manual label UI", publishingDateField.includes("preservedLegacyLabel") && publishingDateField.includes('<input type="hidden" name="date_label" value={preservedLegacyLabel} />') && !publishingDateField.includes("data-topic-publish-label-field") && !publishingDateField.includes("setManualLabel"));
+check("topic preview actions use the shared capability resolver and renderer", previewCapability.includes("export type AdminEntityPreviewCapability") && previewCapability.includes("export function resolveAdminEntityPreviewActions") && contentPreviewCapability.includes("export function buildAdminContentPreviewCapability") && previewActions.includes("resolveAdminEntityPreviewActions") && previewActions.includes("capability"));
+check("edit preview actions render outside the form and publishing options contain no preview transport", editEditor.includes("<AdminEntityPreviewActions capability={previewCapability}") && editEditor.indexOf("<AdminEntityPreviewActions capability={previewCapability}") < editEditor.indexOf("<AdminFormRuntime") && ["next/link", "topicId", "slug", "data-topic-preview-links", "/preview", "/topics/", "previewLinkClassName"].every((marker) => !publishingOptions.includes(marker)));
 check("create and edit use one shared Save action with no parallel SaveBar", [createEditor, editEditor].every((source) => source.includes("<AdminFormRuntime") && source.includes("action={saveTopicForm}") && source.match(/<AdminFormActions\s*\/>/g)?.length === 1 && !source.includes("SaveBar")));
 check("publishing actions render before review in create and edit", [createEditor, editEditor].every((source) => source.indexOf("<TopicPublishingOptions") < source.indexOf("<TopicPublishChecklistPanel")));
 check("review uses three desktop columns", review.includes("data-topic-publish-review-grid") && review.includes("xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]"));

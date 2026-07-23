@@ -52,6 +52,14 @@ check(
     checklist.includes("item instanceof HTMLSelectElement"),
 );
 check(
+  "checklist reads the live named publication date into summary state",
+  checklist.includes("publishedAt: string") &&
+    checklist.includes('publishedAt: field(form, "published_at", seed.publishedAt)') &&
+    checklist.includes('publishedAt: publishedAt?.slice(0, 10) ?? ""') &&
+    checklist.includes('const publishDate = dateLabel || input.publishedAt || "غير محدد"') &&
+    !checklist.includes("const publishDate = dateLabel || publishedAt?.slice"),
+);
+check(
   "category changes notify the mounted checklist",
   categorySelect.includes('dispatchEvent(new Event("change", { bubbles: true }))'),
 );

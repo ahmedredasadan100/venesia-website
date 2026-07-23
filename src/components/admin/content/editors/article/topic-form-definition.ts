@@ -22,6 +22,6 @@ export const TOPIC_FORM_NAVIGATION: AdminFormNavigationContract = {
     focus_keyword: { tabId: "seo", targetId: "topic-focus-keyword" },
     canonical_url: { tabId: "seo", targetId: "topic-canonical-url" },
     is_published: { tabId: "publish", targetId: "topic-published-switch" },
-    published_at: { tabId: "publish", targetId: "topic-publish-date-field" },
+    published_at: { tabId: "publish", targetId: "topic-published-at" },
   },
 };

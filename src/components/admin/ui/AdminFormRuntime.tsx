@@ -23,7 +23,8 @@ import {
   type AdminFormMode,
   type AdminFormNavigationContract,
 } from "../../../lib/admin/form-runtime";
-import { useOptionalAdminFeedback } from "../AdminFeedbackProvider";
+import { resolveSafeInternalPath } from "../../../lib/security/safe-internal-path";
+import { useAdminFeedback } from "../AdminFeedbackProvider";
 import AdminConfirmDialog from "./AdminConfirmDialog";
 import { AdminStickyFormBar } from "./AdminForm";
 
@@ -218,8 +219,6 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
         event.stopPropagation();
         return;
       }
-      if (!dirtyRef.current || allowNavigationRef.current) return;
-
       const destination = new URL(anchor.href, window.location.href);
       const current = new URL(window.location.href);
       if (
@@ -227,6 +226,10 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
         destination.pathname === current.pathname &&
         destination.search === current.search
       ) {
+        return;
+      }
+      if (!dirtyRef.current || allowNavigationRef.current) {
+        onNavigate?.();
         return;
       }
 
@@ -241,7 +244,7 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("click", handleLinkNavigation, true);
     };
-  }, []);
+  }, [onNavigate]);
 
   const dialog = pendingNavigation ? (
     <div data-admin-unsaved-dialog="" className="contents">
@@ -356,13 +359,6 @@ function revealFormError(
   focusTarget(targetId);
 }
 
-function resolveSafeInternalHref(href: string) {
-  if (!href.startsWith("/") || href.startsWith("//")) return null;
-  const destination = new URL(href, window.location.href);
-  if (destination.origin !== window.location.origin) return null;
-  return `${destination.pathname}${destination.search}${destination.hash}`;
-}
-
 function formFeedback(
   state: AdminFormActionState,
 ): AdminActionFeedback | null {
@@ -399,10 +395,12 @@ export default function AdminFormRuntime({
   children,
 }: AdminFormRuntimeProps) {
   const router = useRouter();
-  const feedback = useOptionalAdminFeedback();
-  const publishFeedback = feedback?.publishFeedback;
-  const clearFeedback = feedback?.clearFeedback;
+  const { publishFeedback, clearFeedback } = useAdminFeedback();
   const feedbackChannel = `form:${entityKey}`;
+  const clearFormFeedback = useCallback(
+    () => clearFeedback(feedbackChannel),
+    [clearFeedback, feedbackChannel],
+  );
   const [resolvedInitialState] = useState(
     () => initialState ?? createAdminFormInitialState(mode),
   );
@@ -418,14 +416,14 @@ export default function AdminFormRuntime({
   const formRef = useRef<HTMLFormElement>(null);
   const submittedBaselineRef = useRef<string | null>(null);
   const handledResultRef = useRef<AdminFormActionState>(
-    resolvedInitialState,
+    createAdminFormInitialState(mode),
   );
   const { isDirty, markClean, requestNavigation, dialog } =
     useAdminUnsavedChangesGuard({
       rootRef: formRef,
       pending,
       resetKey: state.status === "success" ? state.savedRevision : undefined,
-      onNavigate: () => clearFeedback?.(feedbackChannel),
+      onNavigate: clearFormFeedback,
     });
   const requestClose = useCallback(
     () => requestNavigation(closeHref),
@@ -435,11 +433,11 @@ export default function AdminFormRuntime({
   useEffect(() => {
     if (state.status === "idle" || handledResultRef.current === state) return;
     handledResultRef.current = state;
-    clearFeedback?.(feedbackChannel);
+    clearFeedback(feedbackChannel);
 
     const nextFeedback = formFeedback(state);
     if (nextFeedback) {
-      publishFeedback?.(nextFeedback, {
+      publishFeedback(nextFeedback, {
         channel: feedbackChannel,
         critical: false,
       });
@@ -456,9 +454,9 @@ export default function AdminFormRuntime({
     );
 
     if (state.mode === "create" && state.editHref) {
-      const editHref = resolveSafeInternalHref(state.editHref);
+      const editHref = resolveSafeInternalPath(state.editHref, "");
       if (!editHref) {
-        publishFeedback?.(
+        publishFeedback(
           {
             variant: "danger",
             title: "تعذر الانتقال إلى وضع التعديل",
@@ -512,7 +510,7 @@ export default function AdminFormRuntime({
           submittedBaselineRef.current = formRef.current
             ? serializeForm(formRef.current)
             : null;
-          clearFeedback?.(feedbackChannel);
+          clearFeedback(feedbackChannel);
         }}
         noValidate
         aria-busy={pending || undefined}

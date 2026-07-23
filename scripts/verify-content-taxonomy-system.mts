@@ -369,7 +369,8 @@ check(
     feedbackProvider.includes("AdminFeedbackViewport") &&
     feedbackProvider.includes("useAdminFeedback") &&
     feedbackProvider.includes("data-admin-feedback-viewport") &&
-    runtime.includes("useOptionalAdminFeedback") &&
+    runtime.includes("useAdminFeedback") &&
+    !runtime.includes("useOptionalAdminFeedback") &&
     runtime.includes("publishFeedback"),
 );
 check(
@@ -395,7 +396,8 @@ check(
 check(
   "feedback",
   "form-level feedback stays global while field validation stays local",
-  runtime.includes("useOptionalAdminFeedback") &&
+  runtime.includes("useAdminFeedback") &&
+    !runtime.includes("useOptionalAdminFeedback") &&
     runtime.includes("publishFeedback") &&
     runtime.includes("hasFieldErrors") &&
     runtime.includes('state.status === "error" && hasFieldErrors') &&

@@ -13,6 +13,11 @@ const helper = read("src/app/admin/content/topics/article-actions/helpers.ts");
 const publicPage = read("src/app/(site)/topics/[slug]/page.tsx");
 const migration = read("sql/migrations/20260721143000_topics_page_display_settings.sql");
 const displaySettings = read("src/components/admin/content/editors/article/TopicDisplaySettings.tsx");
+const topicSwitch = read("src/components/admin/content/editors/article/TopicFormSwitch.tsx");
+const sharedSwitch = read("src/components/admin/ui/AdminFormSwitch.tsx");
+const previewCapability = read("src/lib/admin/interaction-system/entity-preview-capability.ts");
+const contentPreviewCapability = read("src/lib/admin/content/entity-preview-capabilities.ts");
+const previewActions = read("src/components/admin/ui/AdminEntityPreviewActions.tsx");
 
 let passed = 0;
 function check(label, condition) { assert.ok(condition, label); passed += 1; console.log(`PASS ${label}`); }
@@ -42,6 +47,8 @@ check("review separates blockers", review.includes("التنبيهات") || revi
 check("review separates optional improvements", review.includes("تحسينات اختيارية"));
 check("review includes read-only summary", review.includes("ملخص الموضوع") && review.includes("حالة SEO") && review.includes("الأسئلة الشائعة"));
 check("publish date exists in the top publishing actions", publishingOptions.includes("TopicDateLabelField") && !review.includes("TopicDateLabelField"));
+check("topic switch consumers preserve one shared DOM and field contract", topicSwitch.match(/<AdminFormSwitch\b/g)?.length === 1 && !topicSwitch.includes("<input") && topicSwitch.includes("id={id}") && sharedSwitch.match(/<input\b/g)?.length === 1 && ["id={id}", 'type="checkbox"', 'role="switch"', "name={name}", "checked={checked}", "onChange={onChange}", "disabled={disabled}"].every((marker) => sharedSwitch.includes(marker)) && ["is_featured", "is_popular", "is_published"].every((name) => publishingOptions.includes(`name="${name}"`)) && /<TopicFormSwitch[\s\S]*?id="topic-published-switch"[\s\S]*?name="is_published"/.test(publishingOptions) && !publishingOptions.includes('<div id="topic-published-switch"') && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.includes(`name="${name}"`)));
+check("preview and public actions are capability driven outside the topic form", previewCapability.includes("export type AdminEntityPreviewCapability") && previewCapability.includes("export function resolveAdminEntityPreviewActions") && contentPreviewCapability.includes("export function buildAdminContentPreviewCapability") && previewActions.includes("resolveAdminEntityPreviewActions") && edit.includes("<AdminEntityPreviewActions capability={previewCapability}") && edit.indexOf("<AdminEntityPreviewActions capability={previewCapability}") < edit.indexOf("<AdminFormRuntime") && ["next/link", "topicId", "slug", "data-topic-preview-links", "/preview", "/topics/", "previewLinkClassName"].every((marker) => !publishingOptions.includes(marker)));
 check("publishing is a switch committed by the single shared Save action", publishingOptions.includes('name="is_published"') && [create, edit].every((source) => source.includes("action={saveTopicForm}") && source.match(/<AdminFormActions\s*\/>/g)?.length === 1 && !source.includes("SaveBar")));
 check("create and edit share the moved editor and remaining panels", [create, edit].every((source) => ["TopicMarkdownEditor", "FaqEditor", "SeoPanel", "TopicPublishChecklistPanel", "TopicPublishingOptions"].every((token) => source.includes(token))));
 check("create and edit delegate the literal form to AdminFormRuntime", [create, edit].every((source) => source.includes("<AdminFormRuntime") && !source.includes("<form")));

@@ -1,4 +1,3 @@
-import AdminNotice from "../../AdminNotice";
 import {
   AdminActionButton,
   AdminFormActions,
@@ -17,6 +16,7 @@ import { saveTopicForm } from "../../../../app/admin/content/topics/article-acti
 import type { ArticleEditorCategory, ArticleEditorSeries } from "./ArticleEditor";
 import TopicPublishingOptions from "./article/TopicPublishingOptions";
 import { TOPIC_FORM_NAVIGATION } from "./article/topic-form-definition";
+import { createAdminFormErrorState } from "../../../../lib/admin/form-runtime";
 
 export default function ArticleCreateEditor({
   categories,
@@ -48,10 +48,17 @@ export default function ArticleCreateEditor({
         }
       />
 
-      {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء الموضوع" message={errorMessage} /> : null}
-
       <AdminFormRuntime
         action={saveTopicForm}
+        initialState={
+          errorMessage
+            ? createAdminFormErrorState(
+                "create",
+                "تعذر إنشاء الموضوع",
+                errorMessage,
+              )
+            : undefined
+        }
         mode="create"
         entityKey="topic"
         closeHref="/admin/content/topics"

@@ -6,6 +6,7 @@ export const TOPIC_SETTINGS_SURFACE_CLASS_NAME =
   ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME;
 
 type TopicFormSwitchProps = {
+  id?: string;
   name: string;
   label: string;
   defaultChecked: boolean;
@@ -14,6 +15,7 @@ type TopicFormSwitchProps = {
 };
 
 export default function TopicFormSwitch({
+  id,
   name,
   label,
   defaultChecked,
@@ -22,6 +24,7 @@ export default function TopicFormSwitch({
 }: TopicFormSwitchProps) {
   return (
     <AdminFormSwitch
+      id={id}
       name={name}
       label={label}
       defaultChecked={defaultChecked}

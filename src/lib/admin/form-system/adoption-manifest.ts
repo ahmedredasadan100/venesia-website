@@ -1,10 +1,10 @@
 /**
- * Admin Form System adoption ledger.
+ * Admin Form Runtime module adoption ledger.
  *
- * This phase closes the shared reference-consumer contract only. It is not a
- * declaration that every Admin mutation surface has adopted AdminFormRuntime.
- * Keep every remaining generic gap and every intentional exception explicit so
- * future closure work cannot silently turn a partial rollout into a global one.
+ * Form Runtime is one independent module governed by the Admin Interaction
+ * System contracts umbrella. This ledger does not describe Collection, Data,
+ * Feedback, Confirmation, or Shared Capability ownership, and it is not a
+ * declaration that every Admin interaction has adopted AdminFormRuntime.
  */
 
 export type AdminFormAdoptionClassification =
@@ -22,14 +22,23 @@ export type AdminFormAdoptionEntry = {
   rationale: string;
 };
 
+export const ADMIN_FORM_RUNTIME_MODULE = {
+  id: "form_runtime",
+  governanceSystem: "admin_interaction_system",
+  role: "independent_runtime",
+  owns: "long_lived_create_edit_form_lifecycle",
+  ownsSharedCapabilities: false,
+} as const;
+
 export const ADMIN_FORM_SYSTEM_CLOSURE = {
-  phase: "Admin Form System Closure - Topic Reference Consumer",
+  phase: "Admin Form Runtime Closure - Topic Reference Consumer",
+  module: ADMIN_FORM_RUNTIME_MODULE.id,
   scope: "reference_consumers",
   allowedClaim: "reference_consumer_closed",
   globalClosed: false,
   globalClosureBlockers: [
-    "Legacy generic Admin forms remain outside AdminFormRuntime.",
-    "Specialized workflows and explicit command exceptions remain recorded below.",
+    "Legacy generic Admin forms remain outside the Form Runtime module.",
+    "Other Admin Interaction System runtimes and capabilities have independent adoption ledgers.",
   ],
 } as const;
 

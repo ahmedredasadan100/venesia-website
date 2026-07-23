@@ -1,6 +1,6 @@
-import AdminNotice from "../../AdminNotice";
 import {
   AdminActionButton,
+  AdminEntityPreviewActions,
   AdminFormActions,
   AdminPageContextHeader,
 } from "../../ui";
@@ -16,6 +16,8 @@ import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/t
 import { saveTopicForm } from "../../../../app/admin/content/topics/article-actions";
 import TopicPublishingOptions from "./article/TopicPublishingOptions";
 import { TOPIC_FORM_NAVIGATION } from "./article/topic-form-definition";
+import { buildAdminContentPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
+import { createAdminFormErrorState } from "../../../../lib/admin/form-runtime";
 
 type TopicFaqItem = { question?: string; answer?: string };
 export type ArticleEditorCategory = {
@@ -92,6 +94,14 @@ export default function ArticleEditor({
   const faq = getFaq(topic.faq);
   const seoKeywords = getSeoKeywords(topic.seo_keywords);
   const status = topic.status || "draft";
+  const previewCapability = buildAdminContentPreviewCapability({
+    entityType: "topic",
+    id: topic.id,
+    contentType: "article",
+    slug: topic.slug,
+    publicationStatus: status,
+    allowedActions: ["internal-preview", "public-view"],
+  });
   const publishInput = topicRowToPublishInput({ ...topic, faq });
   const selectedCategory = safeCategories.find((category) => category.slug === topic.category_slug)?.name ?? topic.category_slug ?? "—";
 
@@ -106,15 +116,23 @@ export default function ArticleEditor({
             <AdminActionButton href={returnPath} variant="dark">عرض الموضوعات</AdminActionButton>
             <AdminActionButton href="/admin/content/categories" variant="dark">عرض التصنيفات</AdminActionButton>
             <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
+            <AdminEntityPreviewActions capability={previewCapability} />
           </>
         }
       />
 
-      {errorMessage ? <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={errorMessage} /> : null}
-
       <AdminFormRuntime
         key={topic.id}
         action={saveTopicForm}
+        initialState={
+          errorMessage
+            ? createAdminFormErrorState(
+                "edit",
+                "تعذر تنفيذ العملية",
+                errorMessage,
+              )
+            : undefined
+        }
         mode="edit"
         entityKey="topic"
         closeHref={returnPath}
@@ -190,7 +208,7 @@ export default function ArticleEditor({
               label: "المراجعة والنشر",
               content: (
                 <div className="space-y-6">
-                  <TopicPublishingOptions status={status} featured={Boolean(topic.is_featured)} popular={Boolean(topic.is_popular)} publishedAt={topic.published_at} dateLabel={topic.date_label} topicId={topic.id} slug={topic.slug} />
+                  <TopicPublishingOptions status={status} featured={Boolean(topic.is_featured)} popular={Boolean(topic.is_popular)} publishedAt={topic.published_at} dateLabel={topic.date_label} />
                   <TopicPublishChecklistPanel formId="topic-edit-form" initial={publishInput} status={status} publishedAt={topic.published_at} dateLabel={topic.date_label} categoryLabel={selectedCategory} seriesLabel={topic.series ?? "—"} initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }} />
                 </div>
               ),

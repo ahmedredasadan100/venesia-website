@@ -4,6 +4,7 @@ export const ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME =
   "rounded-xl border border-white/10 bg-black/16 px-4 py-3";
 
 export type AdminFormSwitchProps = {
+  id?: string;
   name: string;
   label: ReactNode;
   defaultChecked?: boolean;
@@ -17,6 +18,7 @@ export type AdminFormSwitchProps = {
 };
 
 export default function AdminFormSwitch({
+  id,
   name,
   label,
   defaultChecked = false,
@@ -30,6 +32,7 @@ export default function AdminFormSwitch({
 }: AdminFormSwitchProps) {
   return (
     <label
+      id={id}
       className={`flex min-w-0 cursor-pointer items-center gap-2 text-xs text-white/70 lg:whitespace-nowrap ${
         surface
           ? ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME
