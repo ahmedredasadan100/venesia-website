@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { analyzeTopicSeo, type FaqItem, type SeoIssue } from "../../lib/admin/seo-score";
 import AdminTagsField from "./AdminTagsField";
 import TopicCorrectionButton from "./content/editors/article/TopicCorrectionButton";
+import {
+  AdminFormError,
+  useOptionalAdminFormRuntime,
+} from "./ui/AdminFormRuntime";
 
 type SeoPanelProps = {
   title: string;
@@ -311,6 +315,10 @@ function SeoField({
   textarea?: boolean;
   dir?: "rtl" | "ltr";
 }) {
+  const hasError = Boolean(
+    useOptionalAdminFormRuntime()?.fieldErrors[name]?.length,
+  );
+  const errorId = `${name}-error`;
   const classes =
     "mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45";
   return (
@@ -324,15 +332,18 @@ function SeoField({
           maxLength={maxLength}
           rows={4}
           dir={dir}
+          aria-invalid={hasError || undefined}
+          aria-describedby={hasError ? errorId : undefined}
           className={`${classes} resize-y leading-7`}
         />
       ) : (
-        <input id={id} name={name} defaultValue={defaultValue} maxLength={maxLength} dir={dir} className={classes} />
+        <input id={id} name={name} defaultValue={defaultValue} maxLength={maxLength} dir={dir} aria-invalid={hasError || undefined} aria-describedby={hasError ? errorId : undefined} className={classes} />
       )}
       <span className="mt-2 flex justify-between gap-3 text-xs text-white/35">
         <span>{helper}</span>
         <span className="font-en">{count}{maxLength ? ` / ${maxLength}` : ""}</span>
       </span>
+      <AdminFormError name={name} />
     </label>
   );
 }

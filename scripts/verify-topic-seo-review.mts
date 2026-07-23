@@ -4,6 +4,13 @@ import { createRequire } from "node:module";
 import ts from "typescript";
 
 const require = createRequire(import.meta.url);
+const moduleLoader = require("node:module") as {
+  _load(request: string, parent: NodeModule | null, isMain: boolean): unknown;
+};
+const loadModule = moduleLoader._load;
+moduleLoader._load = (request, parent, isMain) =>
+  request === "server-only" ? {} : loadModule(request, parent, isMain);
+
 require.extensions[".ts"] = (module, filename) => {
   const source = readFileSync(filename, "utf8");
   const output = ts.transpileModule(source, {
@@ -33,6 +40,7 @@ const correctionButton = read("src/components/admin/content/editors/article/Topi
 const publishingOptions = read("src/components/admin/content/editors/article/TopicPublishingOptions.tsx");
 const publishingDateField = read("src/components/admin/content/editors/article/TopicDateLabelField.tsx");
 const formSwitch = read("src/components/admin/content/editors/article/TopicFormSwitch.tsx");
+const sharedFormSwitch = read("src/components/admin/ui/AdminFormSwitch.tsx");
 const displaySettings = read("src/components/admin/content/editors/article/TopicDisplaySettings.tsx");
 const review = read("src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx");
 const createEditor = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
@@ -144,10 +152,11 @@ check("tab navigation accepts tab and target without reload", navigation.include
 check("SEO issues have explicit correction targets", seoPanel.includes("SEO_CORRECTION_TARGETS") && seoPanel.includes('targetId: "topic-seo-title"') && seoPanel.includes('targetId: "topic-content-markdown"') && seoPanel.includes('targetId: "topic-image-alt"'));
 check("review issues map to basic, FAQ, and SEO targets", review.includes("CHECKLIST_CORRECTION_TARGETS") && review.includes('tabId: "basic"') && review.includes('tabId: "faq"') && review.includes('tabId: "seo"'));
 
-check("publishing actions use the same shared switch as page display settings", publishingOptions.includes("TopicFormSwitch") && displaySettings.includes("TopicFormSwitch") && formSwitch.includes('role="switch"') && formSwitch.includes("TOPIC_SETTINGS_SURFACE_CLASS_NAME"));
-check("publishing actions keep four balanced controls on one desktop row", publishingOptions.includes("data-topic-publishing-actions-row") && publishingOptions.includes("lg:grid-cols-[minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,1.3fr)_minmax(0,1.3fr)]") && publishingOptions.includes('name="is_featured"') && publishingOptions.includes('name="is_popular"') && publishingOptions.includes("TopicDateLabelField"));
+check("publishing actions and page display settings delegate to the shared switch", publishingOptions.includes("TopicFormSwitch") && displaySettings.includes("TopicFormSwitch") && formSwitch.includes("<AdminFormSwitch") && formSwitch.includes("ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME") && sharedFormSwitch.includes('role="switch"'));
+check("publishing actions keep four balanced responsive controls", publishingOptions.includes("data-topic-publishing-actions-row") && publishingOptions.includes("sm:grid-cols-2") && publishingOptions.includes("xl:grid-cols-4") && publishingOptions.includes('name="is_featured"') && publishingOptions.includes('name="is_popular"') && publishingOptions.includes('name="is_published"') && publishingOptions.includes("TopicDateLabelField"));
 check("publishing date keeps calendar and saved field names without visitor preview text", publishingDateField.includes("openCalendar") && publishingDateField.includes("فتح التقويم") && publishingDateField.includes('name="published_at"') && publishingDateField.includes('name="date_label"') && !publishingDateField.includes("التاريخ المعروض للزائر"));
-check("manual publication label remains a separate fourth control", publishingDateField.includes("data-topic-publish-label-field") && publishingDateField.includes("الـLabel اليدوي الاختياري") && publishingDateField.includes("setManualLabel"));
+check("legacy publication label is preserved by a hidden field without manual label UI", publishingDateField.includes("preservedLegacyLabel") && publishingDateField.includes('<input type="hidden" name="date_label" value={preservedLegacyLabel} />') && !publishingDateField.includes("data-topic-publish-label-field") && !publishingDateField.includes("setManualLabel"));
+check("create and edit use one shared Save action with no parallel SaveBar", [createEditor, editEditor].every((source) => source.includes("<AdminFormRuntime") && source.includes("action={saveTopicForm}") && source.match(/<AdminFormActions\s*\/>/g)?.length === 1 && !source.includes("SaveBar")));
 check("publishing actions render before review in create and edit", [createEditor, editEditor].every((source) => source.indexOf("<TopicPublishingOptions") < source.indexOf("<TopicPublishChecklistPanel")));
 check("review uses three desktop columns", review.includes("data-topic-publish-review-grid") && review.includes("xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]"));
 check("mobile DOM order is blockers, tasks, improvements, summary", review.indexOf("data-topic-publish-blockers") < review.indexOf("data-topic-publishing-tasks") && review.indexOf("data-topic-publishing-tasks") < review.indexOf("data-topic-publish-improvements") && review.indexOf("data-topic-publish-improvements") < review.indexOf("data-topic-publish-summary"));

@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
-import type { AdminFormActionState } from "../../../lib/admin/form-runtime";
+import type {
+  AdminFormActionState,
+  AdminFormMode,
+} from "../../../lib/admin/form-runtime";
 import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../lib/admin/audit-log";
@@ -29,29 +32,45 @@ type DatabaseErrorLike = {
   message?: string;
 };
 
-function formFailure(
+function buildFormFailure(
+  mode: AdminFormMode,
+  revision: number,
   message: string,
   fieldErrors?: Record<string, string[]>,
 ): AdminFormActionState {
+  const focusTarget = fieldErrors
+    ? Object.entries(fieldErrors).find(([, messages]) => messages.length > 0)?.[0]
+    : undefined;
   return {
     status: "error",
+    mode,
+    revision,
     title: "تعذر حفظ البيانات",
     message,
+    ...(focusTarget ? { focusTarget } : {}),
     ...(fieldErrors ? { fieldErrors } : {}),
   };
 }
 
-function formSuccess(
+function buildFormSuccess(
+  mode: AdminFormMode,
+  revision: number,
   message: string,
   code: "created" | "updated",
   entityId: number,
+  editHref: string,
+  savedRevision: string,
 ): AdminFormActionState {
   return {
     status: "success",
+    revision,
     title: "تم الحفظ بنجاح",
     message,
     code,
     entityId,
+    mode,
+    ...(code === "created" ? { editHref } : {}),
+    savedRevision: `${entityId}:${savedRevision}`,
   };
 }
 
@@ -61,23 +80,28 @@ function getDatabaseError(error: unknown): DatabaseErrorLike {
     : {};
 }
 
-function databaseFormFailure(error: unknown, fallback: string) {
+function buildDatabaseFormFailure(
+  mode: AdminFormMode,
+  revision: number,
+  error: unknown,
+  fallback: string,
+) {
   const databaseError = getDatabaseError(error);
   if (databaseError.code === "23505") {
-    return formFailure("هذا الـ Slug مستخدم بالفعل.", {
+    return buildFormFailure(mode, revision, "هذا الـ Slug مستخدم بالفعل.", {
       slug: ["اختر Slug مختلفًا."],
     });
   }
   if (databaseError.code === "23503") {
-    return formFailure("العلاقة المحددة لم تعد موجودة. حدّث الصفحة وحاول مرة أخرى.");
+    return buildFormFailure(mode, revision, "العلاقة المحددة لم تعد موجودة. حدّث الصفحة وحاول مرة أخرى.");
   }
   if (databaseError.code === "22023" || databaseError.code === "P0001") {
-    return formFailure(databaseError.message || fallback);
+    return buildFormFailure(mode, revision, databaseError.message || fallback);
   }
-  return formFailure(fallback);
+  return buildFormFailure(mode, revision, fallback);
 }
 
-function revalidateTaxonomyPaths() {
+function revalidateTaxonomyPaths(editPath: string) {
   revalidateTopicsCache();
   revalidatePath("/admin/content/categories");
   revalidatePath("/admin/content/categories/new");
@@ -86,6 +110,7 @@ function revalidateTaxonomyPaths() {
   revalidatePath("/admin/content/topics");
   revalidatePath("/admin/content/topics/new");
   revalidatePath("/topics");
+  revalidatePath(editPath);
 }
 
 async function slugExists(
@@ -158,6 +183,14 @@ export async function createCategoryForm(
   _previousState: AdminFormActionState,
   formData: FormData,
 ): Promise<AdminFormActionState> {
+  const mode: AdminFormMode = "create";
+  const revision = _previousState.revision + 1;
+  const formFailure = (message: string, fieldErrors?: Record<string, string[]>) =>
+    buildFormFailure(mode, revision, message, fieldErrors);
+  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string) =>
+    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision);
+  const databaseFormFailure = (error: unknown, fallback: string) =>
+    buildDatabaseFormFailure(mode, revision, error, fallback);
   const actor = await requireAdminSession();
   const parsed = categoryTaxonomyFormSchema.safeParse(
     categoryTaxonomyFormInput(formData),
@@ -214,8 +247,14 @@ export async function createCategoryForm(
       },
       actor,
     );
-    revalidateTaxonomyPaths();
-    return formSuccess("تم إنشاء التصنيف بنجاح.", "created", data.id);
+    revalidateTaxonomyPaths(`/admin/content/categories/${data.id}`);
+    return formSuccess(
+      "تم إنشاء التصنيف بنجاح.",
+      "created",
+      data.id,
+      `/admin/content/categories/${data.id}`,
+      now,
+    );
   } catch (error) {
     return databaseFormFailure(error, "تعذر إنشاء التصنيف. حاول مرة أخرى.");
   }
@@ -225,6 +264,14 @@ export async function updateCategoryForm(
   _previousState: AdminFormActionState,
   formData: FormData,
 ): Promise<AdminFormActionState> {
+  const mode: AdminFormMode = "edit";
+  const revision = _previousState.revision + 1;
+  const formFailure = (message: string, fieldErrors?: Record<string, string[]>) =>
+    buildFormFailure(mode, revision, message, fieldErrors);
+  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string) =>
+    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision);
+  const databaseFormFailure = (error: unknown, fallback: string) =>
+    buildDatabaseFormFailure(mode, revision, error, fallback);
   const actor = await requireAdminSession();
   const id = Number(taxonomyFormDataValue(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) {
@@ -258,7 +305,7 @@ export async function updateCategoryForm(
     if (parentError) return formFailure(parentError, { parent_id: [parentError] });
     const colorToken =
       parsed.data.color_token ?? getDeterministicAdminTone(current.slug);
-    await updateTopicCategoryAtomically({
+    const mutation = await updateTopicCategoryAtomically({
       id,
       name: parsed.data.name,
       parentId: parsed.data.parent_id,
@@ -281,8 +328,14 @@ export async function updateCategoryForm(
       },
       actor,
     );
-    revalidateTaxonomyPaths();
-    return formSuccess("تم تحديث التصنيف بنجاح.", "updated", id);
+    revalidateTaxonomyPaths(`/admin/content/categories/${id}`);
+    return formSuccess(
+      "تم تحديث التصنيف بنجاح.",
+      "updated",
+      id,
+      `/admin/content/categories/${id}`,
+      mutation.category.updated_at ?? String(revision),
+    );
   } catch (error) {
     return databaseFormFailure(error, "تعذر تحديث التصنيف. حاول مرة أخرى.");
   }
@@ -292,6 +345,14 @@ export async function createSeriesForm(
   _previousState: AdminFormActionState,
   formData: FormData,
 ): Promise<AdminFormActionState> {
+  const mode: AdminFormMode = "create";
+  const revision = _previousState.revision + 1;
+  const formFailure = (message: string, fieldErrors?: Record<string, string[]>) =>
+    buildFormFailure(mode, revision, message, fieldErrors);
+  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string) =>
+    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision);
+  const databaseFormFailure = (error: unknown, fallback: string) =>
+    buildDatabaseFormFailure(mode, revision, error, fallback);
   const actor = await requireAdminSession();
   const parsed = seriesTaxonomyFormSchema.safeParse(
     seriesTaxonomyFormInput(formData),
@@ -342,8 +403,14 @@ export async function createSeriesForm(
       },
       actor,
     );
-    revalidateTaxonomyPaths();
-    return formSuccess("تم إنشاء السلسلة بنجاح.", "created", data.id);
+    revalidateTaxonomyPaths(`/admin/content/series/${data.id}`);
+    return formSuccess(
+      "تم إنشاء السلسلة بنجاح.",
+      "created",
+      data.id,
+      `/admin/content/series/${data.id}`,
+      now,
+    );
   } catch (error) {
     return databaseFormFailure(error, "تعذر إنشاء السلسلة. حاول مرة أخرى.");
   }
@@ -353,6 +420,14 @@ export async function updateSeriesForm(
   _previousState: AdminFormActionState,
   formData: FormData,
 ): Promise<AdminFormActionState> {
+  const mode: AdminFormMode = "edit";
+  const revision = _previousState.revision + 1;
+  const formFailure = (message: string, fieldErrors?: Record<string, string[]>) =>
+    buildFormFailure(mode, revision, message, fieldErrors);
+  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string) =>
+    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision);
+  const databaseFormFailure = (error: unknown, fallback: string) =>
+    buildDatabaseFormFailure(mode, revision, error, fallback);
   const actor = await requireAdminSession();
   const id = Number(taxonomyFormDataValue(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) {
@@ -399,7 +474,7 @@ export async function updateSeriesForm(
       : current.status === "archived" || current.status === "draft"
         ? current.status
         : "unpublished";
-    await updateTopicSeriesAtomically({
+    const mutation = await updateTopicSeriesAtomically({
       id,
       name: parsed.data.name,
       categoryId: parsed.data.category_id,
@@ -421,8 +496,14 @@ export async function updateSeriesForm(
       },
       actor,
     );
-    revalidateTaxonomyPaths();
-    return formSuccess("تم تحديث السلسلة بنجاح.", "updated", id);
+    revalidateTaxonomyPaths(`/admin/content/series/${id}`);
+    return formSuccess(
+      "تم تحديث السلسلة بنجاح.",
+      "updated",
+      id,
+      `/admin/content/series/${id}`,
+      mutation.series.updated_at ?? String(revision),
+    );
   } catch (error) {
     return databaseFormFailure(error, "تعذر تحديث السلسلة. حاول مرة أخرى.");
   }

@@ -42,7 +42,9 @@ check("review separates blockers", review.includes("التنبيهات") || revi
 check("review separates optional improvements", review.includes("تحسينات اختيارية"));
 check("review includes read-only summary", review.includes("ملخص الموضوع") && review.includes("حالة SEO") && review.includes("الأسئلة الشائعة"));
 check("publish date exists in the top publishing actions", publishingOptions.includes("TopicDateLabelField") && !review.includes("TopicDateLabelField"));
+check("publishing is a switch committed by the single shared Save action", publishingOptions.includes('name="is_published"') && [create, edit].every((source) => source.includes("action={saveTopicForm}") && source.match(/<AdminFormActions\s*\/>/g)?.length === 1 && !source.includes("SaveBar")));
 check("create and edit share the moved editor and remaining panels", [create, edit].every((source) => ["TopicMarkdownEditor", "FaqEditor", "SeoPanel", "TopicPublishChecklistPanel", "TopicPublishingOptions"].every((token) => source.includes(token))));
+check("create and edit delegate the literal form to AdminFormRuntime", [create, edit].every((source) => source.includes("<AdminFormRuntime") && !source.includes("<form")));
 check("legacy content tab is absent", !create.includes('id: "content"') && !edit.includes('id: "content"'));
 check("one content editor registration per form", create.match(/<TopicMarkdownEditor/g)?.length === 1 && edit.match(/<TopicMarkdownEditor/g)?.length === 1);
 check("four tabs remain mounted by shared shell", create.includes('id: "basic"') && create.includes('id: "publish"') && edit.includes('id: "basic"') && edit.includes('id: "publish"'));

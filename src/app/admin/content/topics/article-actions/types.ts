@@ -19,6 +19,9 @@ export type TopicRow = {
   series_id?: number | null;
   status: TopicStatus | string | null;
   published_at: string | null;
+  published_by?: number | null;
+  date_label?: string | null;
+  deleted_at?: string | null;
   seo_title: string | null;
   seo_description: string | null;
   focus_keyword: string | null;

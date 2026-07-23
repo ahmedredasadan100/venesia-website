@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { ContentType } from "../../../../../lib/admin/content/content-types";
 import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
+import {
+  AdminFormError,
+  useOptionalAdminFormRuntime,
+} from "../../../ui/AdminFormRuntime";
 
 type TopicSlugInputProps = {
   defaultValue?: string | null;
@@ -70,6 +74,9 @@ export default function TopicSlugInput({
   const [value, setValue] = useState(defaultValue ?? "");
   const [isManual, setIsManual] = useState(Boolean(defaultValue));
   const inputRef = useRef<HTMLInputElement>(null);
+  const hasError = Boolean(
+    useOptionalAdminFormRuntime()?.fieldErrors.slug?.length,
+  );
 
   useEffect(() => {
     const form = inputRef.current?.form;
@@ -104,6 +111,8 @@ export default function TopicSlugInput({
             setIsManual(true);
           }}
           required={required}
+          aria-invalid={hasError || undefined}
+          aria-describedby={hasError ? "slug-error" : undefined}
           pattern="[a-z0-9]+(-[a-z0-9]+)*"
           title="استخدم حروف إنجليزية صغيرة وأرقام وشرطة بين الكلمات فقط"
           placeholder="best-district-in-bait-al-watan"
@@ -123,6 +132,7 @@ export default function TopicSlugInput({
           توليد تلقائي
         </button>
       </div>
+      <AdminFormError name="slug" />
     </div>
   );
 }

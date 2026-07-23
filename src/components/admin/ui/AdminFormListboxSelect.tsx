@@ -10,6 +10,7 @@ export type AdminFormListboxSelectProps = {
   name: string;
   options: readonly AdminListboxSelectOption[];
   id?: string;
+  focusTargetId?: string;
   label?: ReactNode;
   value?: string;
   defaultValue?: string;
@@ -33,6 +34,7 @@ export default function AdminFormListboxSelect({
   name,
   options,
   id,
+  focusTargetId,
   label,
   value: controlledValue,
   defaultValue = "",
@@ -73,8 +75,10 @@ export default function AdminFormListboxSelect({
     onChange?.(next);
   }
 
-  const unavailable = loading || Boolean(error) || options.length === 0;
+  const unavailable = options.length === 0;
   const statusId = `${controlId}-status`;
+  const labelId = `${controlId}-label`;
+  const describedBy = loading || error || unavailable || hint ? statusId : undefined;
   const labelText = typeof label === "string" ? label : placeholder;
 
   return (
@@ -87,7 +91,7 @@ export default function AdminFormListboxSelect({
       className={`space-y-2 ${className}`.trim()}
     >
       {label ? (
-        <span id={`${controlId}-label`} className="block text-sm font-medium text-white/70">
+        <span id={labelId} className="block text-sm font-medium text-white/70">
           {label}
           {required ? " *" : null}
         </span>
@@ -118,12 +122,16 @@ export default function AdminFormListboxSelect({
 
       <AdminListboxSelect
         id={controlId}
+        triggerId={focusTargetId}
         value={selectedValue}
         options={options}
         onChange={updateValue}
-        disabled={disabled || unavailable}
+        disabled={disabled || loading}
         placeholder={placeholder}
-        ariaLabel={labelText}
+        ariaLabel={label ? undefined : labelText}
+        ariaLabelledBy={label ? labelId : undefined}
+        ariaDescribedBy={describedBy}
+        ariaInvalid={Boolean(error)}
         searchable={searchable}
         searchPlaceholder={searchPlaceholder}
         emptyMessage={emptyMessage}
@@ -145,7 +153,7 @@ export default function AdminFormListboxSelect({
           {emptyMessage}
         </p>
       ) : hint ? (
-        <p className="text-xs leading-5 text-white/40">{hint}</p>
+        <p id={statusId} className="text-xs leading-5 text-white/40">{hint}</p>
       ) : null}
     </div>
   );

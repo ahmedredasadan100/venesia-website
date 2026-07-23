@@ -5,6 +5,7 @@ import AdminMediaImageField from "../../../media/AdminMediaImageField";
 import AdminMediaAltWarning from "../../../media-intelligence/AdminMediaAltWarning";
 import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
 import TopicFieldCounter from "./TopicFieldCounter";
+import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
 type TopicImageFieldProps = {
   defaultImage?: string | null;
@@ -27,6 +28,7 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "", fo
         showLabel={false}
         compactAspectClassName="aspect-video"
       />
+      <AdminFormError name="image" />
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] leading-5 text-white/42">
         <span>JPG، PNG، WEBP، GIF، AVIF</span>
@@ -48,6 +50,7 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "", fo
           <TopicFieldCounter count={altLength} />
         </div>
       </label>
+      <AdminFormError name="image_alt" />
 
       {formId ? <AdminMediaAltWarning formId={formId} requiredForPublish /> : null}
     </div>

@@ -44,10 +44,9 @@ export default function CategoryForm({
   return (
     <AdminFormRuntime
       action={action}
+      mode={mode}
       entityKey="category"
       closeHref="/admin/content/categories"
-      noticePath="/admin/content/categories"
-      noticeCode={isEdit ? "updated" : "created"}
       formId="category-taxonomy-form"
     >
       {({ fieldErrors, pending }) => (
@@ -89,6 +88,7 @@ export default function CategoryForm({
 
               <AdminFormListboxSelect
                 name="parent_id"
+                focusTargetId="parent_id"
                 label="التصنيف الأب"
                 options={options}
                 defaultValue={
@@ -122,12 +122,7 @@ export default function CategoryForm({
             </div>
           </AdminFormSection>
 
-          <AdminFormError />
-          <AdminFormActions
-            submitLabel="حفظ وإغلاق"
-            pendingLabel="جارٍ الحفظ والإغلاق…"
-            closeLabel="إغلاق"
-          />
+          <AdminFormActions />
         </>
       )}
     </AdminFormRuntime>

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { ArticleTopicCategoryGroup } from "../../../../../lib/admin/article-topic-categories";
 import AdminListboxSelect from "../../../ui/AdminListboxSelect";
+import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
 type ArticleTopicCategorySelectProps = {
   groups: ArticleTopicCategoryGroup[];
@@ -46,6 +47,7 @@ export default function ArticleTopicCategorySelect({ groups, defaultValue = "", 
         ))}
       </select>
       <AdminListboxSelect id="topic-category" value={value} options={options} onChange={update} placeholder="اختر التصنيف" className="w-full" inline />
+      <AdminFormError name={name} />
     </div>
   );
 }

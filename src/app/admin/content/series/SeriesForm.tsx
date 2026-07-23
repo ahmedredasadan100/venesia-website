@@ -39,10 +39,9 @@ export default function SeriesForm({
   return (
     <AdminFormRuntime
       action={action}
+      mode={mode}
       entityKey="series"
       closeHref="/admin/content/series"
-      noticePath="/admin/content/series"
-      noticeCode={isEdit ? "updated" : "created"}
       formId="series-taxonomy-form"
     >
       {({ fieldErrors, pending }) => (
@@ -84,6 +83,7 @@ export default function SeriesForm({
 
               <AdminFormListboxSelect
                 name="category_id"
+                focusTargetId="category_id"
                 label="التصنيف"
                 options={categoryOptions}
                 defaultValue={
@@ -114,12 +114,7 @@ export default function SeriesForm({
             </div>
           </AdminFormSection>
 
-          <AdminFormError />
-          <AdminFormActions
-            submitLabel="حفظ وإغلاق"
-            pendingLabel="جارٍ الحفظ والإغلاق…"
-            closeLabel="إغلاق"
-          />
+          <AdminFormActions />
         </>
       )}
     </AdminFormRuntime>

@@ -18,8 +18,8 @@ function check(label, condition) {
 
 check(
   "category control submits through one select field",
-  categorySelect.match(/name=\{name\}/g)?.length === 1 &&
-    categorySelect.includes("<select") &&
+  /<select[\s\S]*?name=\{name\}[\s\S]*?<\/select>/.test(categorySelect) &&
+    categorySelect.match(/<select/g)?.length === 1 &&
     !categorySelect.includes('type="hidden" name={name}'),
 );
 check(

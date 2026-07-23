@@ -103,7 +103,6 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
         topic={topic as ArticleEditorTopic}
         categories={selectableCategories as ArticleEditorCategory[]}
         series={selectableSeries as ArticleEditorSeries[]}
-        notice={query?.notice}
         errorMessage={errorMessage}
         returnPath={returnPath}
       />

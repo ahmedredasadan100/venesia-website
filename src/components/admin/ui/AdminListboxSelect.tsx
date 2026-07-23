@@ -19,6 +19,7 @@ export type AdminListboxSelectOption = {
 
 export type AdminListboxSelectProps = {
   id?: string;
+  triggerId?: string;
   value: string;
   options: readonly AdminListboxSelectOption[];
   onChange: (value: string) => void;
@@ -31,6 +32,9 @@ export type AdminListboxSelectProps = {
   onOpenLayer?: (id: string | null) => void;
   inline?: boolean;
   ariaLabel?: string;
+  ariaLabelledBy?: string;
+  ariaDescribedBy?: string;
+  ariaInvalid?: boolean;
   dir?: "rtl" | "ltr";
   searchable?: boolean;
   searchPlaceholder?: string;
@@ -58,6 +62,7 @@ function ChevronDownIcon() {
  */
 export default function AdminListboxSelect({
   id,
+  triggerId,
   value,
   options,
   onChange,
@@ -69,6 +74,9 @@ export default function AdminListboxSelect({
   onOpenLayer,
   inline = false,
   ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
+  ariaInvalid = false,
   dir = "rtl",
   searchable = false,
   searchPlaceholder = "ابحث في الخيارات",
@@ -76,6 +84,7 @@ export default function AdminListboxSelect({
 }: AdminListboxSelectProps) {
   const generatedId = useId();
   const controlId = id ?? generatedId;
+  const resolvedTriggerId = triggerId ?? `${controlId}-trigger`;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isMounted = useClientMounted();
@@ -281,7 +290,7 @@ export default function AdminListboxSelect({
         <div
           id={`${controlId}-listbox`}
           role="listbox"
-          aria-labelledby={`${controlId}-trigger`}
+          aria-labelledby={resolvedTriggerId}
           className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} p-0.5`}
         >
           {visibleOptions.length ? (
@@ -355,6 +364,9 @@ export default function AdminListboxSelect({
             id={`${controlId}-listbox`}
             role="listbox"
             aria-label={ariaLabel ?? placeholder}
+            aria-labelledby={ariaLabelledBy}
+            aria-describedby={ariaDescribedBy}
+            aria-invalid={ariaInvalid || undefined}
             className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto p-0.5`}
           >
             {visibleOptions.length ? (
@@ -402,9 +414,12 @@ export default function AdminListboxSelect({
         <button
           ref={triggerRef}
           type="button"
-          id={`${controlId}-trigger`}
+          id={resolvedTriggerId}
           role="combobox"
           aria-label={ariaLabel ?? placeholder}
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid || undefined}
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           aria-controls={`${controlId}-listbox`}

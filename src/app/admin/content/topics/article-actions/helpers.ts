@@ -316,7 +316,7 @@ export function buildTopicWritePayload(
       status,
       nowIso: now,
     }),
-    deleted_at: status === "archived" ? now : null,
+    deleted_at: currentTopic?.deleted_at ?? null,
     updated_at: now,
     content_type: "article" as const,
   };

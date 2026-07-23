@@ -82,7 +82,7 @@ function AdminFeedbackViewportEntry({
       data-admin-feedback-entry=""
       data-admin-feedback-variant={entry.feedback.variant}
       data-admin-feedback-critical={entry.critical ? "true" : "false"}
-      className="pointer-events-auto drop-shadow-[0_20px_45px_rgba(0,0,0,0.45)] focus:outline-none"
+      className="pointer-events-none drop-shadow-[0_20px_45px_rgba(0,0,0,0.45)] focus:outline-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto"
     >
       <AdminNotice
         {...entry.feedback}

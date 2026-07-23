@@ -1,6 +1,10 @@
 import AdminNotice from "../../AdminNotice";
-import { AdminActionButton, AdminPageContextHeader } from "../../ui";
-import SaveBar from "../../SaveBar";
+import {
+  AdminActionButton,
+  AdminFormActions,
+  AdminPageContextHeader,
+} from "../../ui";
+import AdminFormRuntime from "../../ui/AdminFormRuntime";
 import SeoPanel from "../../SeoPanel";
 import FaqEditor from "./article/FaqEditor";
 import TopicEditTabs from "./article/TopicEditTabs";
@@ -9,14 +13,9 @@ import TopicMarkdownEditor from "./article/TopicMarkdownEditor";
 import { buildArticleTopicCategoryFilterGroups } from "../../../../lib/admin/article-topic-categories";
 import TopicPublishChecklistPanel from "../../content-workflow/TopicPublishChecklistPanel";
 import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
-import {
-  publishTopic,
-  saveDraftTopic,
-  saveTopic,
-  saveTopicAndClose,
-  unpublishTopic,
-} from "../../../../app/admin/content/topics/article-actions";
+import { saveTopicForm } from "../../../../app/admin/content/topics/article-actions";
 import TopicPublishingOptions from "./article/TopicPublishingOptions";
+import { TOPIC_FORM_NAVIGATION } from "./article/topic-form-definition";
 
 type TopicFaqItem = { question?: string; answer?: string };
 export type ArticleEditorCategory = {
@@ -60,14 +59,6 @@ export type ArticleEditorTopic = {
   show_faq_on_page?: boolean | null;
   show_faq_title_on_page?: boolean | null;
 };
-function getNoticeText(notice?: string) {
-  if (notice === "created") return "تم إنشاء الموضوع كمسودة بنجاح.";
-  if (notice === "saved") return "تم حفظ التعديلات بنجاح.";
-  if (notice === "draft") return "تم حفظ الموضوع كمسودة بنجاح.";
-  if (notice === "published") return "تم نشر الموضوع بنجاح.";
-  if (notice === "unpublished") return "تم إخفاء الموضوع بنجاح مع الحفاظ على تاريخ أول نشر.";
-  return null;
-}
 function truncateWords(value: string, limit = 4) {
   const words = value.trim().split(/\s+/);
   if (words.length <= limit) return value;
@@ -86,14 +77,12 @@ export default function ArticleEditor({
   topic,
   categories,
   series,
-  notice,
   errorMessage,
   returnPath = "/admin/content/topics",
 }: {
   topic: ArticleEditorTopic;
   categories: ArticleEditorCategory[];
   series: ArticleEditorSeries[];
-  notice?: string;
   errorMessage?: string | null;
   returnPath?: string;
 }) {
@@ -102,7 +91,6 @@ export default function ArticleEditor({
   const safeSeries = series;
   const faq = getFaq(topic.faq);
   const seoKeywords = getSeoKeywords(topic.seo_keywords);
-  const noticeText = getNoticeText(notice);
   const status = topic.status || "draft";
   const publishInput = topicRowToPublishInput({ ...topic, faq });
   const selectedCategory = safeCategories.find((category) => category.slug === topic.category_slug)?.name ?? topic.category_slug ?? "—";
@@ -122,12 +110,19 @@ export default function ArticleEditor({
         }
       />
 
-      {noticeText ? <AdminNotice variant="success" message={noticeText} /> : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={errorMessage} /> : null}
 
-      <form id="topic-edit-form" key={topic.id} action={saveTopic} className="space-y-7" noValidate>
+      <AdminFormRuntime
+        key={topic.id}
+        action={saveTopicForm}
+        mode="edit"
+        entityKey="topic"
+        closeHref={returnPath}
+        navigation={TOPIC_FORM_NAVIGATION}
+        formId="topic-edit-form"
+        className="space-y-7"
+      >
         <input type="hidden" name="id" value={topic.id} />
-        <input type="hidden" name="status" value={status} />
         <input type="hidden" name="content_type" value="article" />
 
         <TopicEditTabs
@@ -195,17 +190,15 @@ export default function ArticleEditor({
               label: "المراجعة والنشر",
               content: (
                 <div className="space-y-6">
-                  <TopicPublishingOptions status={status} featured={Boolean(topic.is_featured)} popular={Boolean(topic.is_popular)} publishedAt={topic.published_at} dateLabel={topic.date_label}>
-                    <SaveBar mode="edit" topicId={topic.id} slug={topic.slug} status={status} closeHref={returnPath} saveAction={saveTopic} saveAndCloseAction={saveTopicAndClose} draftAction={saveDraftTopic} publishAction={publishTopic} unpublishAction={unpublishTopic} />
-                  </TopicPublishingOptions>
+                  <TopicPublishingOptions status={status} featured={Boolean(topic.is_featured)} popular={Boolean(topic.is_popular)} publishedAt={topic.published_at} dateLabel={topic.date_label} topicId={topic.id} slug={topic.slug} />
                   <TopicPublishChecklistPanel formId="topic-edit-form" initial={publishInput} status={status} publishedAt={topic.published_at} dateLabel={topic.date_label} categoryLabel={selectedCategory} seriesLabel={topic.series ?? "—"} initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }} />
                 </div>
               ),
             },
           ]}
         />
-
-      </form>
+        <AdminFormActions />
+      </AdminFormRuntime>
     </main>
   );
 }
