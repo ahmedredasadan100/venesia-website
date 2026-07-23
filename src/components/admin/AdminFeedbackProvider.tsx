@@ -86,7 +86,7 @@ function AdminFeedbackViewportEntry({
     >
       <AdminNotice
         {...entry.feedback}
-        dismissible={entry.feedback.dismissible}
+        dismissible
         onDismiss={() => onDismiss(entry.id)}
       />
     </div>

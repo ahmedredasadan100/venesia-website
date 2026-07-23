@@ -41,7 +41,7 @@ export default function AdminNotice({
   message,
   variant = "info",
   layout = "stacked",
-  dismissible = false,
+  dismissible = true,
   lifecycle = "persistent",
   dismissSearchParams,
   action,
@@ -117,6 +117,7 @@ export default function AdminNotice({
     <div
       role={role}
       aria-live={ariaLive}
+      data-admin-notice-dismissible="false"
       data-admin-notice-layout={layout}
       className={className}
     >

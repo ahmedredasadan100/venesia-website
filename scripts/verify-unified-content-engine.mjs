@@ -347,9 +347,11 @@ check(
     pagination.includes("ADMIN_SCROLLBAR_VISUAL_CLASSES"),
 );
 check(
-  "Publish failures must use shared feedback with an editor action",
-  entityList.includes("useOptionalAdminFeedback") &&
-    entityList.includes("publishFeedback(feedback") &&
+  "Publish failures must use inline shared entity-list feedback with an editor action",
+  entityList.includes("data-admin-entity-feedback-slot") &&
+    entityList.includes("<AdminNotice") &&
+    !entityList.includes("useOptionalAdminFeedback") &&
+    !entityList.includes("publishFeedback(feedback") &&
     feedbackProvider.includes("<AdminNotice") &&
     feedbackProvider.includes("data-admin-feedback-viewport") &&
     list.includes("mapTopicsActionResultToFeedback") &&

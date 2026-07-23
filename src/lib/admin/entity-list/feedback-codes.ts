@@ -19,10 +19,9 @@ export function resolveAdminNoticeFeedback(
     entry?.kind ??
     (notice === "error" ? "action_validation" : "transient_action");
   const policy = getAdminFeedbackPolicy(kind);
-  const dismissSearchParams =
-    policy.dismissible && kind !== "critical_system"
-      ? ["notice", "message", "error"]
-      : undefined;
+  const dismissSearchParams = policy.dismissible
+    ? ["notice", "message", "error"]
+    : undefined;
 
   if (message) {
     return {

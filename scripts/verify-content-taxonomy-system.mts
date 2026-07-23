@@ -347,7 +347,7 @@ check(
     !updateSeries.includes("slug: rawInput.slug"),
 );
 
-// 6. Persistent viewport feedback contract.
+// 6. Shared form viewport + inline entity-list feedback contract.
 check(
   "feedback",
   "feedback provider exposes shared publisher, hook, and viewport, and the runtime publishes through it",
@@ -380,9 +380,39 @@ check(
 );
 check(
   "feedback",
-  "entity lists publish feedback to the viewport and remove the old inline slot",
-  entityList.includes("useOptionalAdminFeedback") &&
-    !entityList.includes("data-admin-entity-feedback-slot"),
+  "form-level feedback stays global while field validation stays local",
+  runtime.includes("useOptionalAdminFeedback") &&
+    runtime.includes("publishFeedback") &&
+    runtime.includes("hasFieldErrors") &&
+    runtime.includes('state.status === "error" && hasFieldErrors') &&
+    categoryForm.includes("AdminFormError") &&
+    seriesForm.includes("AdminFormError"),
+);
+check(
+  "feedback",
+  "entity lists render feedback in the shared inline slot instead of the global viewport",
+  entityList.includes("AdminNotice") &&
+    entityList.includes("data-admin-entity-feedback-slot") &&
+    !entityList.includes("useOptionalAdminFeedback") &&
+    !entityList.includes("publishFeedback") &&
+    entityList.indexOf("data-admin-entity-feedback-slot") >
+      entityList.lastIndexOf("<AdminBulkActionBar") &&
+    entityList.indexOf("data-admin-entity-feedback-slot") <
+      entityList.indexOf("<AdminEntityListTable"),
+);
+check(
+  "feedback",
+  "entity-list feedback owns visibility-aware smart reveal and reduced-motion focus",
+  entityList.includes("feedbackSlotRef") &&
+    entityList.includes("revealedFeedbackRevisionRef") &&
+    entityList.includes("pendingFeedbackFocusRevisionRef") &&
+    entityList.includes("getBoundingClientRect") &&
+    entityList.includes("scrollIntoView") &&
+    entityList.includes("prefers-reduced-motion: reduce") &&
+    entityList.includes('prefersReducedMotion ? "auto" : "smooth"') &&
+    entityList.includes("focus({ preventScroll: true })") &&
+    entityList.includes("options.bulk === true") &&
+    entityList.includes('result.code === "deleted"'),
 );
 
 // 7. Categories list query contract.

@@ -302,6 +302,10 @@ function formFeedback(
   state: AdminFormActionState,
 ): AdminActionFeedback | null {
   if (state.status === "idle") return null;
+  const hasFieldErrors = Object.values(state.fieldErrors ?? {}).some(
+    (messages) => messages.length > 0,
+  );
+  if (state.status === "error" && hasFieldErrors) return null;
   return {
     variant: state.status === "success" ? "success" : "danger",
     title:

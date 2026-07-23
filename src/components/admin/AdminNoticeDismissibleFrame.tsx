@@ -3,6 +3,12 @@
 import { useCallback, useState, type ReactNode } from "react";
 import type { AdminFeedbackLifecycle } from "../../lib/admin/admin-action-feedback";
 
+const DEFAULT_DISMISS_SEARCH_PARAMS = [
+  "notice",
+  "message",
+  "error",
+] as const;
+
 type AdminNoticeDismissibleFrameProps = {
   children: ReactNode;
   className: string;
@@ -20,7 +26,7 @@ export default function AdminNoticeDismissibleFrame({
   layout,
   role,
   ariaLive,
-  dismissSearchParams = [],
+  dismissSearchParams = DEFAULT_DISMISS_SEARCH_PARAMS,
   lifecycle,
   onDismiss,
 }: AdminNoticeDismissibleFrameProps) {
@@ -52,6 +58,7 @@ export default function AdminNoticeDismissibleFrame({
     <div
       role={role}
       aria-live={ariaLive}
+      data-admin-notice-dismissible="true"
       data-admin-notice-lifecycle={lifecycle}
       data-admin-notice-layout={layout}
       className={className}
@@ -64,8 +71,8 @@ export default function AdminNoticeDismissibleFrame({
         style={{ cursor: "pointer" }}
         className={
           layout === "inline"
-            ? "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-current/15 text-xl leading-none transition hover:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
-            : "absolute left-3 top-3 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-current/15 text-xl leading-none transition hover:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+            ? "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-white/30 bg-black/25 text-xl leading-none text-white shadow-sm transition hover:border-white/50 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            : "absolute left-3 top-3 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-white/30 bg-black/25 text-xl leading-none text-white shadow-sm transition hover:border-white/50 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         }
       >
         <span aria-hidden="true">×</span>

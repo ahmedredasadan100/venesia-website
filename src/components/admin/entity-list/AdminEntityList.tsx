@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { useOptionalAdminFeedback } from "../AdminFeedbackProvider";
+import AdminNotice from "../AdminNotice";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import {
@@ -78,6 +78,15 @@ export type AdminEntityListProps<
   initialFeedback?: AdminActionFeedback | null;
 };
 
+function isAttentionFeedback(feedback: AdminActionFeedback | null) {
+  return Boolean(
+    feedback &&
+      (feedback.variant === "danger" ||
+        feedback.variant === "warning" ||
+        feedback.lifecycle === "persistent"),
+  );
+}
+
 function AdminEntityListInner<
   TRow,
   TKey extends string,
@@ -115,10 +124,12 @@ function AdminEntityListInner<
   } = props;
 
   const router = useRouter();
-  const publishFeedback = useOptionalAdminFeedback()?.publishFeedback;
   const floating = useAdminFloatingLayer();
   const bulkPendingRef = useRef(false);
   const sortCorrectionRef = useRef(false);
+  const feedbackSlotRef = useRef<HTMLDivElement>(null);
+  const revealedFeedbackRevisionRef = useRef<number | null>(null);
+  const pendingFeedbackFocusRevisionRef = useRef<number | null>(null);
   const selection = useAdminGridSelection(rows.map(getRowId));
   const resolvedDefaultVisibleColumns = sanitizeVisibleColumnKeys(
     columns,
@@ -139,6 +150,8 @@ function AdminEntityListInner<
     sourceSignature: initialFeedbackSignature,
     feedback: initialFeedback,
     revision: 0,
+    shouldReveal: isAttentionFeedback(initialFeedback),
+    shouldFocus: isAttentionFeedback(initialFeedback),
   }));
 
   if (feedbackState.sourceSignature !== initialFeedbackSignature) {
@@ -146,6 +159,8 @@ function AdminEntityListInner<
       sourceSignature: initialFeedbackSignature,
       feedback: initialFeedback,
       revision: feedbackState.revision + 1,
+      shouldReveal: isAttentionFeedback(initialFeedback),
+      shouldFocus: isAttentionFeedback(initialFeedback),
     });
   }
 
@@ -164,20 +179,84 @@ function AdminEntityListInner<
   }, [sort?.key, sort?.direction]);
 
   useEffect(() => {
-    if (!feedback || !publishFeedback) return;
-    publishFeedback(feedback, {
-      channel: `entity-list:${listId}`,
-      critical:
-        feedback.variant === "danger" &&
-        feedback.lifecycle === "persistent",
-    });
-  }, [feedback, feedbackRevision, listId, publishFeedback]);
+    if (!feedback || !feedbackState.shouldReveal) {
+      pendingFeedbackFocusRevisionRef.current = null;
+      return;
+    }
 
-  function showFeedback(result: AdminActionResult) {
+    const slot = feedbackSlotRef.current;
+    if (!slot) return;
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    if (revealedFeedbackRevisionRef.current !== feedbackRevision) {
+      revealedFeedbackRevisionRef.current = feedbackRevision;
+      const rect = slot.getBoundingClientRect();
+      const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+      if (isVisible) {
+        pendingFeedbackFocusRevisionRef.current = null;
+        return;
+      }
+
+      slot.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "nearest",
+      });
+      pendingFeedbackFocusRevisionRef.current = feedbackState.shouldFocus
+        ? feedbackRevision
+        : null;
+    }
+
+    if (
+      !feedbackState.shouldFocus ||
+      pendingFeedbackFocusRevisionRef.current !== feedbackRevision
+    ) {
+      return;
+    }
+    if (prefersReducedMotion) {
+      slot.focus({ preventScroll: true });
+      pendingFeedbackFocusRevisionRef.current = null;
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      if (pendingFeedbackFocusRevisionRef.current !== feedbackRevision) return;
+      slot.focus({ preventScroll: true });
+      pendingFeedbackFocusRevisionRef.current = null;
+    }, 350);
+    return () => window.clearTimeout(focusTimer);
+  }, [
+    feedback,
+    feedbackRevision,
+    feedbackState.shouldFocus,
+    feedbackState.shouldReveal,
+  ]);
+
+  function showFeedback(
+    result: AdminActionResult,
+    options: { bulk?: boolean } = {},
+  ) {
+    const nextFeedback = mapResultToFeedback(result);
+    const shouldFocus = isAttentionFeedback(nextFeedback);
     setFeedbackState((current) => ({
       sourceSignature: initialFeedbackSignature,
-      feedback: mapResultToFeedback(result),
+      feedback: nextFeedback,
       revision: current.revision + 1,
+      shouldReveal:
+        shouldFocus || options.bulk === true || result.code === "deleted",
+      shouldFocus,
+    }));
+  }
+
+  function dismissFeedback() {
+    setFeedbackState((current) => ({
+      ...current,
+      feedback: null,
+      revision: current.revision + 1,
+      shouldReveal: false,
+      shouldFocus: false,
     }));
   }
 
@@ -211,18 +290,21 @@ function AdminEntityListInner<
     setBulkPending(true);
     try {
       const result = await onBulkExecute(action, ids);
-      showFeedback(result);
+      showFeedback(result, { bulk: true });
       if (result.ok) {
         selection.clearSelection();
         if (onSuccessfulMutation) await onSuccessfulMutation(result);
         else router.refresh();
       }
     } catch {
-      showFeedback({
-        ok: false,
-        title: "تعذر تنفيذ العملية",
-        message: "حدث خطأ غير متوقع. حاول مرة أخرى.",
-      });
+      showFeedback(
+        {
+          ok: false,
+          title: "تعذر تنفيذ العملية",
+          message: "حدث خطأ غير متوقع. حاول مرة أخرى.",
+        },
+        { bulk: true },
+      );
     } finally {
       bulkPendingRef.current = false;
       setBulkPending(false);
@@ -283,6 +365,31 @@ function AdminEntityListInner<
             setOpenLayerId,
           })}
         />
+      ) : null}
+
+      {feedback ? (
+        <div
+          ref={feedbackSlotRef}
+          tabIndex={feedbackState.shouldFocus ? -1 : undefined}
+          data-admin-entity-feedback-slot=""
+          data-admin-entity-feedback-reveal={
+            feedbackState.shouldReveal ? "true" : "false"
+          }
+          className="scroll-mt-6 focus:outline-none"
+        >
+          <AdminNotice
+            key={feedbackRevision}
+            variant={feedback.variant}
+            layout={feedback.layout}
+            dismissible
+            lifecycle={feedback.lifecycle}
+            dismissSearchParams={feedback.dismissSearchParams}
+            title={feedback.title}
+            message={feedback.message}
+            action={feedback.action}
+            onDismiss={dismissFeedback}
+          />
+        </div>
       ) : null}
 
       <AdminEntityListTable
