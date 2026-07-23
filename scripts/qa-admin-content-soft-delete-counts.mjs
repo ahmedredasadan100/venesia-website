@@ -620,44 +620,45 @@ function staticWiringPhase() {
     resolve(ROOT, "src/app/admin/content/categories/page.tsx"),
     "utf8",
   );
-  const seriesListOwner = readFileSync(
-    resolve(ROOT, "src/lib/admin/content/load-series-list.ts"),
+  const seriesAdapter = readFileSync(
+    resolve(ROOT, "src/lib/admin/content/entity-list-adapters/series.ts"),
     "utf8",
   );
-  const categoriesListOwner = readFileSync(
-    resolve(ROOT, "src/lib/admin/content/load-categories-list.ts"),
+  const categoriesAdapter = readFileSync(
+    resolve(ROOT, "src/lib/admin/content/entity-list-adapters/categories.ts"),
+    "utf8",
+  );
+  const taxonomyMigration = readFileSync(
+    resolve(
+      ROOT,
+      "sql/migrations/20260723040000_content_taxonomy_data_runtime.sql",
+    ),
     "utf8",
   );
   check(
-    "Series page and fresh-rows action share the list owner backed by loadActiveSeriesTopicCounts",
-    (seriesPage.includes("loadSeriesListData") ||
-      seriesPage.includes("seriesEntityListAdapter")) &&
-      seriesActions.includes("loadSeriesListData") &&
-      seriesListOwner.includes("loadActiveSeriesTopicCounts") &&
-      readFileSync(
-        resolve(ROOT, "src/lib/admin/content/entity-list-adapters/series.ts"),
-        "utf8",
-      ).includes("loadSeriesListData"),
+    "Series list delegates one snapshot to admin_list_series with active-topic counts",
+    seriesPage.includes("seriesEntityListAdapter") &&
+      seriesAdapter.includes('.rpc("admin_list_series"') &&
+      (seriesAdapter.match(/\.rpc\(/g)?.length ?? 0) === 1 &&
+      !seriesAdapter.includes("loadSeriesListData") &&
+      !seriesActions.includes("loadSeriesListData") &&
+      taxonomyMigration.includes("where topics.series_id is not null") &&
+      taxonomyMigration.includes("topics.deleted_at is null"),
   );
   check(
     "No unfiltered topics->series_id fetch remains in series consumers",
     !seriesPage.includes('.from("topics").select("series_id")') &&
       !seriesActions.includes('.from("topics").select("series_id")') &&
-      !seriesListOwner.includes('.from("topics").select("series_id")'),
+      !seriesAdapter.includes('.from("topics").select("series_id")'),
   );
   check(
-    "Categories shared list owner filters the embedded topics count on deleted_at",
-    (categoriesPage.includes("loadCategoriesListData") ||
-      categoriesPage.includes("categoriesEntityListAdapter")) &&
-      categoriesListOwner.includes("topics_count:topics(count)") &&
-      categoriesListOwner.includes('.is("topics.deleted_at", null)') &&
-      readFileSync(
-        resolve(
-          ROOT,
-          "src/lib/admin/content/entity-list-adapters/categories.ts",
-        ),
-        "utf8",
-      ).includes("loadCategoriesListData"),
+    "Categories list delegates one snapshot to admin_list_categories with active-topic counts",
+    categoriesPage.includes("categoriesEntityListAdapter") &&
+      categoriesAdapter.includes('.rpc("admin_list_categories"') &&
+      (categoriesAdapter.match(/\.rpc\(/g)?.length ?? 0) === 1 &&
+      !categoriesAdapter.includes("loadCategoriesListData") &&
+      taxonomyMigration.includes("where topics.category_id is not null") &&
+      taxonomyMigration.includes("topics.deleted_at is null"),
   );
   const publicFeed = readFileSync(
     resolve(ROOT, "src/lib/feed-modules/resolve-topics-feed.ts"),

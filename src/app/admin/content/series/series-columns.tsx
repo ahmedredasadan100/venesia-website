@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import {
   AdminActivityPopover,
@@ -16,11 +17,6 @@ import {
 } from "../../../../lib/content-dates";
 import type { SeriesListRow } from "../../../../lib/admin/content/load-series-list";
 import { useRef, useState } from "react";
-import {
-  deleteSeriesAjax,
-  duplicateSeriesAjax,
-  toggleSeriesStatusAjax,
-} from "./actions";
 
 export type SeriesColumnKey =
   | "name"
@@ -87,38 +83,27 @@ function singleLine(value: string) {
 function SeriesRowActions({
   row,
   onMutationResult,
-  onRowsUpdated,
+  handlers,
 }: {
   row: SeriesListRow;
   onMutationResult?: (result: AdminActionResult) => void;
-  onRowsUpdated?: (rows: SeriesListRow[]) => void;
+  handlers: SeriesRowActionHandlers;
 }) {
-  const [pending, setPending] = useState(false);
+  const [localPending, setLocalPending] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const isHidden = row.status === "unpublished";
+  const pending = localPending || handlers.isRowPending(row.id);
+  const isHidden = row.status !== "published";
   const topicsPreviewHref = `/admin/content/topics?series=${row.id}`;
 
   async function run(
-    action: () => Promise<{
-      ok: boolean;
-      message?: string;
-      rows?: SeriesListRow[];
-    }>,
-    successCode?: AdminActionResult["code"],
+    action: () => Promise<AdminActionResult>,
   ) {
     if (pending) return;
-    setPending(true);
+    setLocalPending(true);
     try {
       const result = await action();
-      if (result.rows) onRowsUpdated?.(result.rows);
-      onMutationResult?.({
-        ok: result.ok,
-        title: result.ok ? "تم بنجاح" : "تعذر تنفيذ العملية",
-        message: result.message ?? (result.ok ? "تم التحديث." : "فشلت العملية."),
-        code: result.ok ? successCode : undefined,
-        entityId: row.id,
-      });
+      onMutationResult?.(result);
       return result;
     } catch {
       onMutationResult?.({
@@ -128,7 +113,7 @@ function SeriesRowActions({
       });
       return { ok: false as const };
     } finally {
-      setPending(false);
+      setLocalPending(false);
     }
   }
 
@@ -155,17 +140,14 @@ function SeriesRowActions({
           isCurrentlyHidden={isHidden}
           disabled={pending}
           onClick={() =>
-            void run(
-              () => toggleSeriesStatusAjax(row.id, row.status),
-              isHidden ? "published" : "unpublished",
-            )
+            void run(() => handlers.onToggle(row))
           }
         />
         <AdminDataGridActionButton
           action="duplicate"
           size="compact"
           disabled={pending}
-          onClick={() => void run(() => duplicateSeriesAjax(row.id), "created")}
+          onClick={() => void run(() => handlers.onDuplicate(row))}
         />
         <AdminDataGridActionButton
           buttonRef={deleteTriggerRef}
@@ -211,7 +193,7 @@ function SeriesRowActions({
         returnFocusRef={deleteTriggerRef}
         onCancel={() => setDeleteOpen(false)}
         onConfirm={async () => {
-          const result = await run(() => deleteSeriesAjax(row.id), "deleted");
+          const result = await run(() => handlers.onDelete(row));
           if (result?.ok) setDeleteOpen(false);
         }}
       />
@@ -219,9 +201,16 @@ function SeriesRowActions({
   );
 }
 
-export function createSeriesColumns(handlers: {
-  onRowsUpdated?: (rows: SeriesListRow[]) => void;
-}): AdminEntityColumnDef<SeriesListRow, SeriesColumnKey, SeriesSortKey>[] {
+export type SeriesRowActionHandlers = {
+  isRowPending: (id: number) => boolean;
+  onToggle: (row: SeriesListRow) => Promise<AdminActionResult>;
+  onDuplicate: (row: SeriesListRow) => Promise<AdminActionResult>;
+  onDelete: (row: SeriesListRow) => Promise<AdminActionResult>;
+};
+
+export function createSeriesColumns(
+  handlers: SeriesRowActionHandlers,
+): AdminEntityColumnDef<SeriesListRow, SeriesColumnKey, SeriesSortKey>[] {
   return [
     {
       key: "name",
@@ -235,7 +224,7 @@ export function createSeriesColumns(handlers: {
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
-        <a
+        <Link
           href={`/admin/content/series/${row.id}`}
           className="flex min-w-0 cursor-pointer items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
         >
@@ -243,7 +232,7 @@ export function createSeriesColumns(handlers: {
           <span className="min-w-0 truncate text-sm font-bold text-white">
             {row.name}
           </span>
-        </a>
+        </Link>
       ),
     },
     {
@@ -365,7 +354,7 @@ export function createSeriesColumns(handlers: {
         <SeriesRowActions
           row={row}
           onMutationResult={onMutationResult}
-          onRowsUpdated={handlers.onRowsUpdated}
+          handlers={handlers}
         />
       ),
     },

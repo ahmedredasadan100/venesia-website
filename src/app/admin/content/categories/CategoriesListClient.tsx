@@ -30,9 +30,15 @@ import type {
   AdminEntityListResult,
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
+import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
+  deleteCategorySafelyAjax,
+  duplicateCategoryAjax,
   restoreCategoriesTablePreferences,
   saveCategoriesTablePreferences,
+  toggleCategoryStatusAjax,
+  type CategoryDuplicateMutationResult,
+  type CategoryStatusMutationResult,
 } from "./actions";
 import {
   createCategoryColumns,
@@ -80,12 +86,11 @@ export default function CategoriesListClient({
     initialResult,
     staleTimeMs: 30_000,
   });
-  const patchRows = controller.patchRows;
-  const rows = controller.result.rows;
-  const parentOptions = useMemo(
-    () => controller.result.metrics?.parentOptions ?? [],
-    [controller.result.metrics?.parentOptions],
+  const instant = useAdminEntityInstantMutation<CategoryListRow, CategoryMetrics>(
+    "categories",
+    controller.query,
   );
+  const rows = controller.result.rows;
   const filterSignature = `${controller.query.search}\u0000${controller.query.filters.status}`;
   const [treeState, setTreeState] = useState<{
     filterSignature: string;
@@ -122,18 +127,199 @@ export default function CategoriesListClient({
   // Stable identity so shared filter nodes don't remount on every render.
   const filters = useMemo(() => [STATUS_FILTER], []);
 
+  const toggleStatus = useCallback(
+    async (category: CategoryListRow): Promise<CategoryStatusMutationResult> => {
+      const nextActive = !Boolean(category.is_active);
+      const nextStatus = nextActive ? "published" : "draft";
+      try {
+        const result = await instant.mutateAsync({
+          rowId: category.id,
+          action: "status",
+          optimistic: (cache) => {
+            if (controller.query.filters.status !== "all") {
+              cache.removeRows(new Set([category.id]));
+              return;
+            }
+            cache.patchRows((row) =>
+              row.id === category.id
+                ? { ...row, is_active: nextActive, status: nextStatus }
+                : row,
+            );
+          },
+          execute: async () => {
+            const actionResult = await toggleCategoryStatusAjax(category.id);
+            if (!actionResult.ok) {
+              return {
+                ok: false as const,
+                code: "category_status_failed",
+                message: actionResult.message,
+              };
+            }
+            return {
+              ok: true as const,
+              message: actionResult.message,
+              isActive: actionResult.isActive,
+              status: actionResult.status,
+              updatedAt: actionResult.updatedAt,
+            };
+          },
+          reconcileSuccess: (mutationResult, { cache }) => {
+            if (controller.query.filters.status !== "all") return;
+            const isActive =
+              typeof mutationResult.isActive === "boolean"
+                ? mutationResult.isActive
+                : nextActive;
+            cache.patchRows((row) =>
+              row.id === category.id
+                ? {
+                    ...row,
+                    is_active: isActive,
+                    status:
+                      typeof mutationResult.status === "string"
+                        ? mutationResult.status
+                        : isActive
+                          ? "published"
+                          : "draft",
+                    updated_at:
+                      typeof mutationResult.updatedAt === "string"
+                        ? mutationResult.updatedAt
+                        : row.updated_at,
+                  }
+                : row,
+            );
+          },
+        });
+        return {
+          ok: true,
+          title: "تم بنجاح",
+          message: result.message,
+          code: nextActive ? "published" : "unpublished",
+          entityId: category.id,
+          isActive:
+            typeof result.isActive === "boolean" ? result.isActive : nextActive,
+          status:
+            typeof result.status === "string" ? result.status : nextStatus,
+          updatedAt:
+            typeof result.updatedAt === "string" ? result.updatedAt : undefined,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          title: "تعذر تنفيذ العملية",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تحديث حالة التصنيف.",
+          entityId: category.id,
+        };
+      }
+    },
+    [controller.query.filters.status, instant],
+  );
+
+  const duplicate = useCallback(
+    async (category: CategoryListRow): Promise<CategoryDuplicateMutationResult> => {
+      try {
+        const result = await instant.mutateAsync({
+          rowId: category.id,
+          action: "duplicate",
+          optimistic: () => undefined,
+          execute: async () => {
+            const actionResult = await duplicateCategoryAjax(category.id);
+            if (!actionResult.ok) {
+              return {
+                ok: false as const,
+                code: "category_duplicate_failed",
+                message: actionResult.message,
+              };
+            }
+            return {
+              ok: true as const,
+              message: actionResult.message,
+              insertedId: actionResult.insertedId,
+            };
+          },
+        });
+        const insertedId =
+          typeof result.insertedId === "number" ? result.insertedId : undefined;
+        return {
+          ok: true,
+          title: "تم بنجاح",
+          message: result.message,
+          code: "created",
+          entityId: insertedId,
+          insertedId,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          title: "تعذر نسخ التصنيف",
+          message:
+            error instanceof Error ? error.message : "تعذر نسخ التصنيف.",
+          entityId: category.id,
+        };
+      }
+    },
+    [instant],
+  );
+
+  const removeCategory = useCallback(
+    async (categoryId: number, transferToId: number | null) => {
+      try {
+        const result = await instant.mutateAsync({
+          rowId: categoryId,
+          action: "delete",
+          optimistic: (cache) => cache.removeRows(new Set([categoryId])),
+          execute: async () => {
+            const actionResult = await deleteCategorySafelyAjax(
+              categoryId,
+              transferToId,
+            );
+            return actionResult.ok
+              ? {
+                  ok: true as const,
+                  message:
+                    actionResult.message ?? "تم حذف التصنيف بنجاح.",
+                }
+              : {
+                  ok: false as const,
+                  code: "category_delete_failed",
+                  message: actionResult.message ?? "تعذر حذف التصنيف.",
+                };
+          },
+        });
+        return { ok: true, message: result.message };
+      } catch (error) {
+        return {
+          ok: false,
+          message:
+            error instanceof Error ? error.message : "تعذر حذف التصنيف.",
+        };
+      }
+    },
+    [instant],
+  );
+
   const columns = useMemo(
     () =>
-      createCategoryColumns(parentOptions, {
+      createCategoryColumns({
         isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
         onToggle: toggleCategory,
-        onCategoryUpdated: (updated) => {
-          patchRows((row) =>
-            row.id === updated.id ? updated : row,
-          );
-        },
+        isRowPending: () =>
+          instant.rowPending !== null || instant.bulkPending !== null,
+        onToggleStatus: toggleStatus,
+        onDuplicate: duplicate,
+        onDelete: removeCategory,
       }),
-    [collapsedCategoryIds, parentOptions, patchRows, toggleCategory],
+    [
+      collapsedCategoryIds,
+      duplicate,
+      instant.bulkPending,
+      instant.rowPending,
+      removeCategory,
+      toggleCategory,
+      toggleStatus,
+    ],
   );
 
   const pageRows = rows.filter((row) => {
@@ -225,7 +411,9 @@ export default function CategoriesListClient({
           enableColumnManagement
           enableSelection={false}
           mapResultToFeedback={(result) => mapAdminActionResultToFeedback(result)}
-          onSuccessfulMutation={() => controller.invalidate()}
+          onSuccessfulMutation={(result) => {
+            if (!result) return controller.invalidate();
+          }}
           sort={sort}
           sortMode={{
             mode: "callback",

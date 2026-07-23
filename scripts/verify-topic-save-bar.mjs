@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const saveBar = read("src/components/admin/SaveBar.tsx");
+const formRuntime = read("src/components/admin/ui/AdminFormRuntime.tsx");
 const previousButton = read("src/components/admin/content/editors/article/TopicPreviousTabButton.tsx");
 const createEditor = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
 const editEditor = read("src/components/admin/content/editors/ArticleEditor.tsx");
@@ -81,12 +82,14 @@ check(
     saveBar.includes("ACTION_LABELS"),
 );
 check(
-  "shared dirty guard covers close, links, and browser unload",
-  saveBar.includes("serializeForm") &&
-    saveBar.includes('window.addEventListener("beforeunload"') &&
-    saveBar.includes('document.addEventListener("click"') &&
-    saveBar.includes("window.confirm(LEAVE_WARNING)") &&
-    saveBar.includes("router.push(closeHref)"),
+  "shared dirty guard covers close, links, and browser unload through the accessible dialog",
+  saveBar.includes("useAdminUnsavedChangesGuard") &&
+    saveBar.includes("guard.requestNavigation") &&
+    !saveBar.includes("window.confirm") &&
+    formRuntime.includes("serializeForm") &&
+    formRuntime.includes('window.addEventListener("beforeunload"') &&
+    formRuntime.includes("AdminConfirmDialog") &&
+    formRuntime.includes("data-admin-unsaved-dialog"),
 );
 check(
   "shared bar retains responsive wrapping without horizontal overflow",

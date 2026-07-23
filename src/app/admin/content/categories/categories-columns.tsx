@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import AdminCategoryBadge from "../../../../components/admin/content/AdminCategoryBadge";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import { formatAdminListDate } from "../../../../lib/content-dates";
@@ -8,8 +10,11 @@ import {
   AdminStatusPill,
   getAdminDataGridActionsColumnWidth,
 } from "../../../../components/admin/ui";
-import CategoryEditModal from "./CategoryEditModal";
 import CategoryRowActions from "./CategoryRowActions";
+import type {
+  CategoryDuplicateMutationResult,
+  CategoryStatusMutationResult,
+} from "./actions";
 
 export type CategoryColumnKey =
   | "name"
@@ -90,11 +95,20 @@ function singleLine(value: string) {
 }
 
 export function createCategoryColumns(
-  parentOptions: Array<{ id: number; name: string; level: number }>,
   tree: {
     isExpanded: (categoryId: number) => boolean;
     onToggle: (categoryId: number) => void;
-    onCategoryUpdated: (category: CategoryListRow) => void;
+    isRowPending: (categoryId: number) => boolean;
+    onToggleStatus: (
+      category: CategoryListRow,
+    ) => Promise<CategoryStatusMutationResult>;
+    onDuplicate: (
+      category: CategoryListRow,
+    ) => Promise<CategoryDuplicateMutationResult>;
+    onDelete: (
+      categoryId: number,
+      transferToId: number | null,
+    ) => Promise<{ ok: boolean; message?: string }>;
   },
 ): AdminEntityColumnDef<CategoryListRow, CategoryColumnKey, CategorySortKey>[] {
   return [
@@ -139,26 +153,18 @@ export function createCategoryColumns(
                 <FolderIcon large={row.depth === 0} />
               </span>
             )}
-            <CategoryEditModal
-              category={row}
-              parentOptions={parentOptions}
-              showActionButton={false}
-              renderTrigger={(open) => (
-                <button
-                  type="button"
-                  data-category-edit-trigger=""
-                  onClick={open}
-                  className="min-w-0 cursor-pointer rounded-[8px] px-1.5 py-1 text-right transition hover:bg-white/[0.04] hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
-                  title={`تعديل ${row.name}`}
-                >
-                  <AdminCategoryBadge
-                    name={row.name}
-                    colorToken={row.color_token}
-                    className={row.depth === 0 ? "text-sm font-bold" : "font-semibold"}
-                  />
-                </button>
-              )}
-            />
+            <Link
+              href={`/admin/content/categories/${row.id}`}
+              data-category-edit-link=""
+              className="min-w-0 cursor-pointer rounded-[8px] px-1.5 py-1 text-right transition hover:bg-white/[0.04] hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+              title={`تعديل ${row.name}`}
+            >
+              <AdminCategoryBadge
+                name={row.name}
+                colorToken={row.color_token}
+                className={row.depth === 0 ? "text-sm font-bold" : "font-semibold"}
+              />
+            </Link>
           </div>
         );
       },
@@ -273,9 +279,11 @@ export function createCategoryColumns(
       renderCell: ({ row, onMutationResult }) => (
         <CategoryRowActions
           category={row}
-          parentOptions={parentOptions}
           onMutationResult={onMutationResult}
-          onCategoryUpdated={tree.onCategoryUpdated}
+          isPending={tree.isRowPending(row.id)}
+          onToggle={tree.onToggleStatus}
+          onDuplicate={tree.onDuplicate}
+          onDelete={tree.onDelete}
         />
       ),
     },

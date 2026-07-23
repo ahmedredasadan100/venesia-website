@@ -7,10 +7,10 @@ import {
 } from "../../../../../components/admin/ui";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import {
-  loadSeriesCategoryFormOptions,
-  loadSeriesFormRecord,
+  loadCategoryFormRecord,
+  loadCategoryParentFormOptions,
 } from "../../../../../lib/admin/content/load-taxonomy-form-data";
-import SeriesForm from "../SeriesForm";
+import CategoryForm from "../CategoryForm";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ function truncateWords(value: string, limit = 4) {
     : `${words.slice(0, limit).join(" ")}...`;
 }
 
-export default async function EditSeriesPage({
+export default async function EditTopicCategoryPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -30,38 +30,39 @@ export default async function EditSeriesPage({
   const { id: rawId } = await params;
   if (!/^\d+$/.test(rawId)) notFound();
   const id = Number(rawId);
-  const series = await loadSeriesFormRecord(id);
-  const categoryOptions = await loadSeriesCategoryFormOptions(
-    series.category_id,
-  );
+
+  const [category, parentOptions] = await Promise.all([
+    loadCategoryFormRecord(id),
+    loadCategoryParentFormOptions(id),
+  ]);
 
   return (
     <AdminPageExperience>
       <AdminPageContextHeader
-        eyebrow="SERIES CONTROL"
-        contextLine="تعديل سلسلة:"
-        title={truncateWords(series.name || "بدون اسم")}
-        description="حدّث بيانات السلسلة مع الحفاظ على Slug الثابت وروابط الموضوعات الحالية."
+        eyebrow="CATEGORIES CONTROL"
+        contextLine="تعديل تصنيف:"
+        title={truncateWords(category.name || "بدون اسم")}
+        description="حدّث بيانات التصنيف مع الحفاظ على Slug الثابت وروابط المحتوى الحالية."
         actions={
           <>
-            <AdminActionButton href="/admin/content/series" variant="dark">
-              عرض السلاسل
-            </AdminActionButton>
             <AdminActionButton href="/admin/content/categories" variant="dark">
               عرض التصنيفات
             </AdminActionButton>
             <AdminActionButton href="/admin/content/topics" variant="dark">
               عرض الموضوعات
             </AdminActionButton>
+            <AdminActionButton href="/admin/content/series" variant="dark">
+              عرض السلاسل
+            </AdminActionButton>
           </>
         }
       />
 
-      <SeriesForm
-        key={series.id}
+      <CategoryForm
+        key={category.id}
         mode="edit"
-        series={series}
-        categoryOptions={categoryOptions}
+        category={category}
+        parentOptions={parentOptions}
       />
     </AdminPageExperience>
   );

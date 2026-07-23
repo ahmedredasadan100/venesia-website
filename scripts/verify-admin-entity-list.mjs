@@ -8,12 +8,14 @@ import ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
+let assertionCount = 0;
 
 function read(path) {
   return readFileSync(resolve(ROOT, path), "utf8");
 }
 
 function check(label, condition) {
+  assertionCount += 1;
   if (!condition) failures.push(label);
 }
 
@@ -70,6 +72,8 @@ const filterListbox = read("src/components/admin/ui/AdminFilterListbox.tsx");
 const bulkBar = read("src/components/admin/ui/AdminBulkActionBar.tsx");
 const feedbackCodes = read("src/lib/admin/entity-list/feedback-codes.ts");
 const feedbackPolicy = read("src/lib/admin/admin-action-feedback.ts");
+const feedbackProvider = read("src/components/admin/AdminFeedbackProvider.tsx");
+const noticeSource = read("src/components/admin/AdminNotice.tsx");
 const noticeFrame = read("src/components/admin/AdminNoticeDismissibleFrame.tsx");
 const floatingPosition = read("src/components/admin/ui/admin-floating-position.ts");
 const floatingHook = read("src/components/admin/ui/useAdminFloatingMenuPosition.ts");
@@ -212,29 +216,79 @@ check(
 );
 
 check(
-  "Feedback lifecycle distinguishes auto success, manual action errors, and persistent system errors",
+  "Feedback lifecycle keeps action outcomes visible until dismissal and system errors persistent",
   feedbackCodes.includes("getAdminFeedbackPolicy") &&
     feedbackCodes.includes('"transient_action"') &&
     feedbackCodes.includes('"action_validation"') &&
-    feedbackPolicy.includes('lifecycle: "auto"') &&
-    feedbackPolicy.includes("autoDismissMs: 5_000") &&
     feedbackPolicy.includes('lifecycle: "manual"') &&
     feedbackPolicy.includes('lifecycle: "persistent"') &&
-    noticeFrame.includes("window.setTimeout(dismiss, autoDismissMs)") &&
+    !feedbackPolicy.includes('lifecycle: "auto"') &&
+    !feedbackPolicy.includes("autoDismissMs: 5_000") &&
+    (feedbackPolicy.match(/dismissible: true/g)?.length ?? 0) === 3 &&
+    noticeSource.includes("dismissible = true") &&
+    noticeFrame.includes('data-admin-notice-dismissible="true"') &&
+    noticeFrame.includes("const DEFAULT_DISMISS_SEARCH_PARAMS = [") &&
+    ["notice", "message", "error"].every((param) =>
+      noticeFrame.includes(`"${param}",`),
+    ) &&
+    noticeFrame.includes(
+      "dismissSearchParams = DEFAULT_DISMISS_SEARCH_PARAMS",
+    ) &&
+    noticeFrame.includes("border-white/30") &&
+    noticeFrame.includes("cursor-pointer") &&
+    noticeFrame.includes("url.searchParams.delete(param)") &&
+    noticeFrame.includes("window.history.replaceState") &&
+    !noticeFrame.includes("window.setTimeout(dismiss") &&
     noticeFrame.includes('aria-label="إغلاق الإشعار"'),
 );
 
 check(
-  "Feedback renders in one shared slot after filters for every entity consumer",
-  entityList.includes("data-admin-entity-feedback-slot") &&
+  "Entity-list feedback stays in one shared inline slot after tools and before the grid",
+  feedbackProvider.includes("AdminFeedbackViewport") &&
+    feedbackProvider.includes("data-admin-feedback-viewport") &&
+    feedbackProvider.includes("fixed") &&
+    entityList.includes("AdminNotice") &&
+    entityList.includes("data-admin-entity-feedback-slot") &&
+    !entityList.includes("useOptionalAdminFeedback") &&
+    !entityList.includes("publishFeedback") &&
+    entityList.indexOf("data-admin-entity-feedback-slot") >
+      entityList.lastIndexOf("<AdminBulkActionBar") &&
     entityList.indexOf("data-admin-entity-feedback-slot") <
-      entityList.lastIndexOf("AdminBulkActionBar") &&
+      entityList.indexOf("<AdminEntityListTable") &&
     categoriesClient.includes("initialFeedback={initialFeedback}") &&
     seriesClient.includes("initialFeedback={initialFeedback}") &&
     topicsList.includes("initialFeedback={initialFeedback}") &&
     !categoriesPage.includes("{noticeFeedback ? (") &&
     !seriesPage.includes("{noticeFeedback ? (") &&
     !topicsPage.includes("{noticeFeedback ? ("),
+);
+
+check(
+  "Entity-list feedback auto-reveal is visibility-aware, event-stable, and reduced-motion safe",
+  entityList.includes("feedbackSlotRef") &&
+    entityList.includes("revealedFeedbackRevisionRef") &&
+    entityList.includes("pendingFeedbackFocusRevisionRef") &&
+    entityList.includes("getBoundingClientRect") &&
+    entityList.includes("rect.bottom > 0 && rect.top < window.innerHeight") &&
+    entityList.includes("window.matchMedia") &&
+    entityList.includes("(prefers-reduced-motion: reduce)") &&
+    entityList.includes('behavior: prefersReducedMotion ? "auto" : "smooth"') &&
+    entityList.includes('block: "nearest"') &&
+    entityList.includes("focus({ preventScroll: true })") &&
+    entityList.includes(
+      "pendingFeedbackFocusRevisionRef.current !== feedbackRevision",
+    ) &&
+    entityList.includes("pendingFeedbackFocusRevisionRef.current = null"),
+);
+
+check(
+  "Entity-list feedback reveals attention, bulk, and delete outcomes without pulling simple row successes",
+  entityList.includes('feedback.variant === "danger"') &&
+    entityList.includes('feedback.variant === "warning"') &&
+    entityList.includes('feedback.lifecycle === "persistent"') &&
+    entityList.includes("options.bulk === true") &&
+    entityList.includes('result.code === "deleted"') &&
+    entityList.includes("showFeedback(result, { bulk: true })"),
 );
 
 check(
@@ -280,14 +334,14 @@ check(
 );
 
 check(
-  "Categories split edit and folder interactions",
+  "Categories split full-page edit and folder interactions",
   categoriesColumns.includes("data-category-folder-toggle") &&
     categoriesColumns.includes("data-category-folder-static") &&
-    categoriesColumns.includes("data-category-edit-trigger") &&
+    categoriesColumns.includes("data-category-edit-link") &&
     categoriesColumns.includes("aria-expanded") &&
     categoriesClient.includes("collapsedCategoryIds") &&
-    read("src/lib/admin/content/entity-list-adapters/categories.ts").includes(
-      "matchingIds.add(parentId)",
+    /\.rpc\(\s*"admin_list_categories"/.test(
+      read("src/lib/admin/content/entity-list-adapters/categories.ts"),
     ),
 );
 
@@ -310,15 +364,12 @@ check(
 );
 
 check(
-  "Series category adapter includes selected parent descendants",
+  "Series category read model includes selected parent descendants",
   read("src/lib/admin/content/category-hierarchy.ts").includes(
     "buildAdminCategoryFilterModel",
   ) &&
-    read("src/lib/admin/content/entity-list-adapters/series.ts").includes(
-      "categoryDescendantIdsByValue",
-    ) &&
-    read("src/lib/admin/content/load-series-list.ts").includes(
-      "buildAdminCategoryFilterModel",
+    /\.rpc\(\s*"admin_list_series"/.test(
+      read("src/lib/admin/content/entity-list-adapters/series.ts"),
     ) &&
     seriesClient.includes("onQueryPatch") &&
     !seriesClient.includes('String(row.category_id ?? "") === category'),
@@ -404,8 +455,8 @@ check(
   notice?.message === "ok" &&
     notice?.variant === "success" &&
     notice?.dismissible === true &&
-    notice?.lifecycle === "auto" &&
-    notice?.autoDismissMs === 5_000 &&
+    notice?.lifecycle === "manual" &&
+    notice?.autoDismissMs === undefined &&
     notice?.dismissSearchParams?.includes("notice"),
 );
 
@@ -420,10 +471,12 @@ const criticalNotice = noticeModule.resolveAdminNoticeFeedback(
   "unavailable",
 );
 check(
-  "Critical system notice remains persistent",
-  criticalNotice?.dismissible === false &&
+  "Critical system notice remains persistent, dismissible, and URL-cleaning",
+  criticalNotice?.dismissible === true &&
     criticalNotice?.lifecycle === "persistent" &&
-    criticalNotice?.dismissSearchParams === undefined,
+    criticalNotice?.dismissSearchParams?.includes("notice") &&
+    criticalNotice?.dismissSearchParams?.includes("message") &&
+    criticalNotice?.dismissSearchParams?.includes("error"),
 );
 
 const emptyStateModule = loadPureTypeScriptModule(
@@ -501,4 +554,6 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`verify-admin-entity-list passed (${coreFiles.length} core files gated).`);
+console.log(
+  `verify-admin-entity-list passed (${assertionCount} assertions; ${coreFiles.length} core files gated).`,
+);

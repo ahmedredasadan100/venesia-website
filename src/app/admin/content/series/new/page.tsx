@@ -1,28 +1,40 @@
-import { AdminActionButton, AdminInfoBar, AdminPageContextHeader } from "../../../../../components/admin/ui";
-import { loadActiveTopicCategoriesForAdmin } from "../../../../../lib/admin/load-topic-categories";
+import {
+  AdminActionButton,
+  AdminPageContextHeader,
+  AdminPageExperience,
+} from "../../../../../components/admin/ui";
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { loadSeriesCategoryFormOptions } from "../../../../../lib/admin/content/load-taxonomy-form-data";
 import SeriesForm from "../SeriesForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
-  const categories = await loadActiveTopicCategoriesForAdmin();
+export default async function NewSeriesPage() {
+  await requireAdminSession();
+  const categoryOptions = await loadSeriesCategoryFormOptions();
 
   return (
-    <main className="space-y-7">
+    <AdminPageExperience>
       <AdminPageContextHeader
         eyebrow="SERIES CONTROL"
         title="إضافة سلسلة جديدة"
-        description="أضف سلسلة جديدة تحت تصنيف محدد ليتم اختيارها لاحقًا من داخل الموضوعات."
+        description="أنشئ سلسلة مرتبطة بتصنيف واضح لتصبح متاحة داخل نظام الموضوعات."
         actions={
           <>
-            <AdminActionButton href="/admin/content/topics" variant="dark">عرض الموضوعات</AdminActionButton>
-            <AdminActionButton href="/admin/content/categories" variant="dark">عرض التصنيفات</AdminActionButton>
-            <AdminActionButton href="/admin/content/series" variant="dark">عرض السلاسل</AdminActionButton>
+            <AdminActionButton href="/admin/content/series" variant="dark">
+              عرض السلاسل
+            </AdminActionButton>
+            <AdminActionButton href="/admin/content/categories" variant="dark">
+              عرض التصنيفات
+            </AdminActionButton>
+            <AdminActionButton href="/admin/content/topics" variant="dark">
+              عرض الموضوعات
+            </AdminActionButton>
           </>
         }
       />
-      <AdminInfoBar label="Series Create" description="كل سلسلة يجب أن تنتمي إلى تصنيف من Topics Categories." />
-      <SeriesForm mode="create" categories={categories} />
-    </main>
+
+      <SeriesForm mode="create" categoryOptions={categoryOptions} />
+    </AdminPageExperience>
   );
 }

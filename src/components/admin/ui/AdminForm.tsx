@@ -67,12 +67,13 @@ export function AdminFormSection({
 type AdminFormFieldProps = {
   label: ReactNode;
   hint?: ReactNode;
+  error?: ReactNode;
   required?: boolean;
   children: ReactNode;
   className?: string;
 };
 
-export function AdminFormField({ label, hint, required, children, className = "" }: AdminFormFieldProps) {
+export function AdminFormField({ label, hint, error, required, children, className = "" }: AdminFormFieldProps) {
   return (
     <label className={`block ${className}`.trim()}>
       <span className="text-sm font-medium text-white/70">
@@ -81,6 +82,11 @@ export function AdminFormField({ label, hint, required, children, className = ""
       </span>
       {hint ? <span className="mt-1 block text-xs text-white/45">{hint}</span> : null}
       <div className="mt-3">{children}</div>
+      {error ? (
+        <span role="alert" className="mt-2 block text-xs font-semibold text-red-300">
+          {error}
+        </span>
+      ) : null}
     </label>
   );
 }

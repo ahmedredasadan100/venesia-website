@@ -4,10 +4,10 @@ import { useState } from "react";
 
 import {
   AdminDataGridActionButton,
+  AdminListboxSelect,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   VenesiaModal,
-  adminFormFieldClassName,
   adminFormLabelClassName,
 } from "../../../../components/admin/ui";
 import { deleteCategorySafelyAjax, getCategoryDeletePreviewAjax } from "./actions";
@@ -23,12 +23,19 @@ type ModalMode = "confirm" | "transfer" | "blocked-relations" | "no-targets" | "
 
 type CategoryDeleteButtonProps = {
   categoryId: number;
+  disabled?: boolean;
   onMutationResult?: (result: AdminActionResult) => void;
+  onDelete?: (
+    categoryId: number,
+    transferToId: number | null,
+  ) => Promise<{ ok: boolean; message?: string }>;
 };
 
 export default function CategoryDeleteButton({
   categoryId,
+  disabled = false,
   onMutationResult,
+  onDelete,
 }: CategoryDeleteButtonProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -87,6 +94,7 @@ export default function CategoryDeleteButton({
   }
 
   function openModal() {
+    if (disabled) return;
     setOpen(true);
     loadDeletePreview();
   }
@@ -100,7 +108,10 @@ export default function CategoryDeleteButton({
     setPending(true);
     setValidationError(null);
     try {
-      const result = await deleteCategorySafelyAjax(categoryId);
+      const result = await (onDelete ?? deleteCategorySafelyAjax)(
+        categoryId,
+        null,
+      );
       if (!result.ok) {
         setValidationError(result.message ?? "تعذر حذف التصنيف.");
         onMutationResult?.({
@@ -142,7 +153,7 @@ export default function CategoryDeleteButton({
 
     setPending(true);
     try {
-      const result = await deleteCategorySafelyAjax(
+      const result = await (onDelete ?? deleteCategorySafelyAjax)(
         categoryId,
         Number(transferToId),
       );
@@ -207,6 +218,7 @@ export default function CategoryDeleteButton({
         action="delete"
         size="compact"
         title="حذف التصنيف"
+        disabled={disabled}
         onClick={openModal}
       />
 
@@ -254,24 +266,25 @@ export default function CategoryDeleteButton({
               </div>
             ) : null}
 
-            <label className={adminFormLabelClassName()}>
-              نقل الموضوعات إلى
-              <select
+            <div className={adminFormLabelClassName()}>
+              <span>نقل الموضوعات إلى</span>
+              <AdminListboxSelect
+                id={`category-${categoryId}-transfer-target`}
                 value={transferToId}
-                onChange={(event) => {
-                  setTransferToId(event.target.value);
+                onChange={(value) => {
+                  setTransferToId(value);
                   setValidationError(null);
                 }}
-                className={adminFormFieldClassName()}
-              >
-                <option value="">اختر تصنيفًا...</option>
-                {transferTargets.map((target) => (
-                  <option key={target.id} value={target.id}>
-                    {`${"— ".repeat(target.level)}${target.name}`}
-                  </option>
-                ))}
-              </select>
-            </label>
+                placeholder="اختر تصنيفًا..."
+                options={transferTargets.map((target) => ({
+                  value: String(target.id),
+                  label: target.name,
+                  depth: target.level,
+                }))}
+                disabled={pending}
+                className="mt-2 w-full"
+              />
+            </div>
           </div>
         ) : null}
 

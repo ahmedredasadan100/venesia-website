@@ -9,6 +9,7 @@ import type {
   ResolvedAdminCompanyConfig,
 } from "../../lib/admin/shell/contracts";
 import AdminShell from "./AdminShell";
+import AdminFeedbackProvider from "./AdminFeedbackProvider";
 import AdminEntityListQueryProvider from "./entity-list/AdminEntityListQueryProvider";
 
 type AdminAccessLayoutProps = {
@@ -30,9 +31,11 @@ export default function AdminAccessLayout({
 
   return (
     <AdminEntityListQueryProvider>
-      <AdminShell company={company} navigation={navigation}>
-        {children}
-      </AdminShell>
+      <AdminFeedbackProvider>
+        <AdminShell company={company} navigation={navigation}>
+          {children}
+        </AdminShell>
+      </AdminFeedbackProvider>
     </AdminEntityListQueryProvider>
   );
 }
