@@ -258,6 +258,17 @@ check(
 );
 check(
   "select-single-source",
+  "search is delegated to the shared open listbox instead of rendering as a permanent form field",
+  !formListbox.includes('type="search"') &&
+    formListbox.includes("searchable={searchable}") &&
+    formListbox.includes("searchPlaceholder={searchPlaceholder}") &&
+    listbox.includes('data-admin-listbox-popover=""') &&
+    listbox.includes('data-admin-listbox-search=""') &&
+    listbox.indexOf('data-admin-listbox-search=""') >
+      listbox.indexOf('data-admin-listbox-popover=""'),
+);
+check(
+  "select-single-source",
   "delegated listbox owns the required keyboard contract",
   [
     "ArrowDown",
@@ -274,6 +285,13 @@ check(
     seriesForm.includes("AdminFormListboxSelect") &&
     !categoryForm.includes("<select") &&
     !seriesForm.includes("<select"),
+);
+check(
+  "select-single-source",
+  "category keeps the empty parent option while both taxonomy consumers expose no local search input",
+  categoryForm.includes('{ value: "", label: "بدون تصنيف أب" }') &&
+    !categoryForm.includes('type="search"') &&
+    !seriesForm.includes('type="search"'),
 );
 
 // 5. Slug create/edit lock contract, including pure input behavior.

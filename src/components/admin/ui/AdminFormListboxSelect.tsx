@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import AdminListboxSelect, {
   type AdminListboxSelectOption,
@@ -56,16 +56,7 @@ export default function AdminFormListboxSelect({
   const nativeSelectRef = useRef<HTMLSelectElement>(null);
   const dispatchChangeRef = useRef(false);
   const [internalValue, setInternalValue] = useState(defaultValue);
-  const [search, setSearch] = useState("");
   const selectedValue = controlledValue ?? internalValue;
-
-  const visibleOptions = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("ar");
-    if (!query) return options;
-    return options.filter((option) =>
-      option.label.toLocaleLowerCase("ar").includes(query),
-    );
-  }, [options, search]);
 
   useEffect(() => {
     if (!dispatchChangeRef.current) return;
@@ -82,7 +73,7 @@ export default function AdminFormListboxSelect({
     onChange?.(next);
   }
 
-  const unavailable = loading || Boolean(error) || visibleOptions.length === 0;
+  const unavailable = loading || Boolean(error) || options.length === 0;
   const statusId = `${controlId}-status`;
   const labelText = typeof label === "string" ? label : placeholder;
 
@@ -125,26 +116,17 @@ export default function AdminFormListboxSelect({
         ))}
       </select>
 
-      {searchable ? (
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.currentTarget.value)}
-          disabled={disabled || loading || Boolean(error)}
-          placeholder={searchPlaceholder}
-          aria-label={searchPlaceholder}
-          className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-[#D8B87A]/45 disabled:cursor-not-allowed disabled:opacity-55"
-        />
-      ) : null}
-
       <AdminListboxSelect
         id={controlId}
         value={selectedValue}
-        options={visibleOptions}
+        options={options}
         onChange={updateValue}
         disabled={disabled || unavailable}
         placeholder={placeholder}
         ariaLabel={labelText}
+        searchable={searchable}
+        searchPlaceholder={searchPlaceholder}
+        emptyMessage={emptyMessage}
         inline={inline}
         dir={dir}
         className="w-full"
