@@ -102,7 +102,7 @@ export function AdminFeedbackViewport() {
     <section
       aria-label="إشعارات لوحة الإدارة"
       data-admin-feedback-viewport=""
-      className="pointer-events-none fixed inset-x-4 bottom-4 z-[120] flex max-h-[min(70vh,560px)] flex-col gap-3 overflow-y-auto sm:inset-x-auto sm:bottom-6 sm:left-6 sm:w-[min(480px,calc(100vw-3rem))]"
+      className="pointer-events-none fixed inset-x-4 top-4 bottom-auto z-[120] flex max-h-[min(70vh,560px)] flex-col gap-3 overflow-y-auto sm:inset-x-auto sm:top-auto sm:bottom-6 sm:left-6 sm:w-[min(480px,calc(100vw-3rem))]"
     >
       {entries.map((entry) => (
         <AdminFeedbackViewportEntry

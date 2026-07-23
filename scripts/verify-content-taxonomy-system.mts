@@ -349,6 +349,12 @@ check(
 );
 check(
   "feedback",
+  "feedback clears mobile sticky actions and returns to the desktop bottom rail",
+  feedbackProvider.includes("top-4 bottom-auto") &&
+    feedbackProvider.includes("sm:top-auto sm:bottom-6"),
+);
+check(
+  "feedback",
   "feedback policies publish dismissible action outcomes without an auto-dismiss duration",
   !read("src/lib/admin/admin-action-feedback.ts").includes('lifecycle: "auto"') &&
     !read("src/lib/admin/admin-action-feedback.ts").includes("autoDismissMs: 5_000") &&
