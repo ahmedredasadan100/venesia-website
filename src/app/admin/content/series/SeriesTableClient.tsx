@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import {
   AdminEntityList,
   AdminEntityListFilters,
@@ -30,15 +30,20 @@ import type {
   AdminEntityListResult,
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
+import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   bulkSeriesActionAjax,
+  deleteSeriesAjax,
+  duplicateSeriesAjax,
   restoreSeriesTablePreferences,
   saveSeriesTablePreferences,
+  toggleSeriesStatusAjax,
 } from "./actions";
 import {
   createSeriesColumns,
   SERIES_ACTIONS_COLUMN_WIDTH,
   type SeriesColumnKey,
+  type SeriesRowActionHandlers,
   type SeriesSortKey,
 } from "./series-columns";
 
@@ -91,16 +96,171 @@ export default function SeriesTableClient({
     initialResult,
     staleTimeMs: 30_000,
   });
+  const instant = useAdminEntityInstantMutation<SeriesListRow, SeriesMetrics>(
+    "series",
+    controller.query,
+  );
 
-  const invalidate = controller.invalidate;
+  const toggleSeries = useCallback(
+    async (row: SeriesListRow): Promise<AdminActionResult> => {
+      const nextStatus =
+        row.status === "published" ? "unpublished" : "published";
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "status",
+          optimistic: (cache) => {
+            if (controller.query.filters.status !== "all") {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((current) =>
+              current.id === row.id
+                ? { ...current, status: nextStatus }
+                : current,
+            );
+          },
+          execute: async () => {
+            const actionResult = await toggleSeriesStatusAjax(row.id, row.status);
+            return actionResult.ok
+              ? {
+                  ok: true as const,
+                  message: actionResult.message ?? "تم تحديث حالة السلسلة.",
+                }
+              : {
+                  ok: false as const,
+                  code: "series_status_failed",
+                  message: actionResult.message ?? "تعذر تحديث حالة السلسلة.",
+                };
+          },
+        });
+        return {
+          ok: true,
+          title: "تم بنجاح",
+          message: result.message,
+          code: nextStatus === "published" ? "published" : "unpublished",
+          entityId: row.id,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          title: "تعذر تنفيذ العملية",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تحديث حالة السلسلة.",
+          entityId: row.id,
+        };
+      }
+    },
+    [controller.query.filters.status, instant],
+  );
+
+  const duplicateSeries = useCallback(
+    async (row: SeriesListRow): Promise<AdminActionResult> => {
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "duplicate",
+          optimistic: () => undefined,
+          execute: async () => {
+            const actionResult = await duplicateSeriesAjax(row.id);
+            return actionResult.ok
+              ? {
+                  ok: true as const,
+                  message: actionResult.message ?? "تم نسخ السلسلة بنجاح.",
+                  affectedIds: actionResult.affectedIds,
+                }
+              : {
+                  ok: false as const,
+                  code: "series_duplicate_failed",
+                  message: actionResult.message ?? "تعذر نسخ السلسلة.",
+                };
+          },
+        });
+        const insertedId = Array.isArray(result.affectedIds)
+          ? result.affectedIds.find((id): id is number => typeof id === "number")
+          : undefined;
+        return {
+          ok: true,
+          title: "تم بنجاح",
+          message: result.message,
+          code: "created",
+          entityId: insertedId,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          title: "تعذر نسخ السلسلة",
+          message:
+            error instanceof Error ? error.message : "تعذر نسخ السلسلة.",
+          entityId: row.id,
+        };
+      }
+    },
+    [instant],
+  );
+
+  const deleteSeries = useCallback(
+    async (row: SeriesListRow): Promise<AdminActionResult> => {
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "delete",
+          optimistic: (cache) => cache.removeRows(new Set([row.id])),
+          execute: async () => {
+            const actionResult = await deleteSeriesAjax(row.id);
+            return actionResult.ok
+              ? {
+                  ok: true as const,
+                  message: actionResult.message ?? "تم حذف السلسلة بنجاح.",
+                }
+              : {
+                  ok: false as const,
+                  code: "series_delete_failed",
+                  message: actionResult.message ?? "تعذر حذف السلسلة.",
+                };
+          },
+        });
+        return {
+          ok: true,
+          title: "تم بنجاح",
+          message: result.message,
+          code: "deleted",
+          entityId: row.id,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          title: "تعذر حذف السلسلة",
+          message:
+            error instanceof Error ? error.message : "تعذر حذف السلسلة.",
+          entityId: row.id,
+        };
+      }
+    },
+    [instant],
+  );
+
+  const rowHandlers = useMemo<SeriesRowActionHandlers>(
+    () => ({
+      isRowPending: () =>
+        instant.rowPending !== null || instant.bulkPending !== null,
+      onToggle: toggleSeries,
+      onDuplicate: duplicateSeries,
+      onDelete: deleteSeries,
+    }),
+    [
+      deleteSeries,
+      duplicateSeries,
+      instant.bulkPending,
+      instant.rowPending,
+      toggleSeries,
+    ],
+  );
   const columns = useMemo(
-    () =>
-      createSeriesColumns({
-        onRowsUpdated: () => {
-          void invalidate();
-        },
-      }),
-    [invalidate],
+    () => createSeriesColumns(rowHandlers),
+    [rowHandlers],
   );
 
   const filters = useMemo<AdminEntityFilterDef[]>(
@@ -117,19 +277,64 @@ export default function SeriesTableClient({
     [controller.result.metrics?.categoryOptions],
   );
 
-  function mapSeriesResult(result: {
-    ok: boolean;
-    message?: string;
-    rows?: SeriesListRow[];
-  }): AdminActionResult {
-    if (result.ok) void controller.invalidate();
-    return {
-      ok: result.ok,
-      title: result.ok ? "تم بنجاح" : "تعذر تنفيذ العملية",
-      message: result.message ?? (result.ok ? "تم التحديث." : "فشلت العملية."),
-      code: result.ok ? "saved" : undefined,
-    };
-  }
+  const executeBulkMutation = useCallback(
+    async (action: string, ids: number[]): Promise<AdminActionResult> => {
+      const idSet = new Set(ids);
+      const nextStatus = action === "publish" ? "published" : "unpublished";
+      try {
+        const result = await instant.mutateAsync({
+          action: `bulk-${action}`,
+          bulk: true,
+          optimistic: (cache) => {
+            if (action === "delete") {
+              cache.removeRows(idSet);
+              return;
+            }
+            if (action !== "publish" && action !== "hide") return;
+            if (controller.query.filters.status !== "all") {
+              cache.removeRows(idSet);
+              return;
+            }
+            cache.patchRows((row) =>
+              idSet.has(Number(row.id)) ? { ...row, status: nextStatus } : row,
+            );
+          },
+          execute: async () => {
+            const actionResult = await bulkSeriesActionAjax(action, ids);
+            return actionResult.ok
+              ? {
+                  ok: true as const,
+                  message: actionResult.message ?? "تم تنفيذ العملية.",
+                }
+              : {
+                  ok: false as const,
+                  code: "series_bulk_failed",
+                  message: actionResult.message ?? "تعذر تنفيذ العملية.",
+                };
+          },
+        });
+        return {
+          ok: true,
+          title: "تم بنجاح",
+          message: result.message,
+          code:
+            action === "delete"
+              ? "deleted"
+              : nextStatus === "published"
+                ? "published"
+                : "unpublished",
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          title: "تعذر تنفيذ العملية",
+          message:
+            error instanceof Error ? error.message : "تعذر تنفيذ العملية.",
+        };
+      }
+    },
+    [controller.query.filters.status, instant],
+  );
 
   return (
     <AdminEntityListSurface className="space-y-4" consumer="series">
@@ -221,7 +426,9 @@ export default function SeriesTableClient({
           bulkOptions={BULK_OPTIONS}
           bulkEntityLabel="سلسلة"
           mapResultToFeedback={(result) => mapAdminActionResultToFeedback(result)}
-          onSuccessfulMutation={() => controller.invalidate()}
+          onSuccessfulMutation={(result) => {
+            if (!result) return controller.invalidate();
+          }}
           sort={{
             key: controller.query.sort.field as SeriesSortKey,
             direction: controller.query.sort.direction,
@@ -266,9 +473,7 @@ export default function SeriesTableClient({
               </p>
             ),
           }}
-          onBulkExecute={async (action, ids) =>
-            mapSeriesResult(await bulkSeriesActionAjax(action, ids))
-          }
+          onBulkExecute={executeBulkMutation}
           initialFeedback={initialFeedback}
         />
       </div>

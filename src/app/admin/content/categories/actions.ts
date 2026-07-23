@@ -5,12 +5,8 @@ import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actio
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
-import {
-  getDeterministicAdminTone,
-  isAdminToneToken,
-} from "../../../../lib/admin/content/admin-tone-palette";
+import { getDeterministicAdminTone } from "../../../../lib/admin/content/admin-tone-palette";
 import {
   CATEGORIES_DEFAULT_COLUMN_KEYS,
   CATEGORIES_LIST_VIEW_KEY,
@@ -27,74 +23,10 @@ import {
   getCategoryDeleteBlockMessage,
   loadCategoryDeleteDependencies,
 } from "../../../../lib/admin/content/category-delete-guard";
-
-function getString(formData: FormData, key: string) {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function getBoolean(formData: FormData, key: string) {
-  return formData.get(key) === "on" || formData.get(key) === "true";
-}
-
-function validateId(id: string) {
-  return /^\d+$/.test(id);
-}
-
-function normalizeArabicForSlug(value: string) {
-  const map: Record<string, string> = {
-    ا: "a",
-    أ: "a",
-    إ: "e",
-    آ: "a",
-    ب: "b",
-    ت: "t",
-    ث: "th",
-    ج: "g",
-    ح: "h",
-    خ: "kh",
-    د: "d",
-    ذ: "z",
-    ر: "r",
-    ز: "z",
-    س: "s",
-    ش: "sh",
-    ص: "s",
-    ض: "d",
-    ط: "t",
-    ظ: "z",
-    ع: "a",
-    غ: "gh",
-    ف: "f",
-    ق: "q",
-    ك: "k",
-    ل: "l",
-    م: "m",
-    ن: "n",
-    ه: "h",
-    و: "w",
-    ي: "y",
-    ى: "a",
-    ة: "h",
-    ء: "",
-    ئ: "e",
-    ؤ: "o",
-  };
-
-  return value
-    .split("")
-    .map((char) => map[char] ?? char)
-    .join("")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
-}
-
-function redirectError(message: string): never {
-  redirect(`/admin/content/categories?error=${encodeURIComponent(message)}`);
-}
+import {
+  deleteTopicCategoryAtomically,
+  TaxonomyMutationDatabaseError,
+} from "../../../../lib/admin/content/taxonomy-mutations";
 
 function revalidateCategories() {
   revalidateTopicsCache();
@@ -105,13 +37,6 @@ function revalidateCategories() {
   revalidatePath("/topics");
 }
 
-function getParentId(formData: FormData) {
-  const rawParentId = getString(formData, "parent_id");
-  if (!rawParentId) return null;
-  if (!validateId(rawParentId)) redirectError("التصنيف الأب غير صالح.");
-  return Number(rawParentId);
-}
-
 async function ensureUniqueSlug(slug: string, id?: string) {
   let query = getSupabaseAdmin().from("topic_categories").select("id").eq("slug", slug).limit(1);
   if (id) query = query.neq("id", id);
@@ -119,44 +44,6 @@ async function ensureUniqueSlug(slug: string, id?: string) {
   const { data, error } = await query.maybeSingle<{ id: number }>();
   if (error) return false;
   return !data;
-}
-
-async function getCategory(id: string) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .select("id, name, slug, is_active, parent_id")
-    .eq("id", id)
-    .maybeSingle<{ id: number; name: string; slug: string; is_active: boolean | null; parent_id: number | null }>();
-
-  if (error) redirectError(error.message);
-  if (!data) redirectError("التصنيف غير موجود.");
-  return data;
-}
-
-async function getUsageCount(id: string) {
-  const { count, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("id", { count: "exact", head: true })
-    .eq("category_id", Number(id));
-
-  if (error) redirectError(error.message);
-  return count ?? 0;
-}
-
-async function getChildrenCount(id: string) {
-  const { count, error } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .select("id", { count: "exact", head: true })
-    .eq("parent_id", Number(id));
-
-  if (error) redirectError(error.message);
-  return count ?? 0;
-}
-
-async function loadCategoryRelations() {
-  const { data, error } = await getSupabaseAdmin().from("topic_categories").select("id, parent_id, name");
-  if (error) redirectError(error.message);
-  return data ?? [];
 }
 
 function buildChildrenByParent(categories: Array<{ id: number | string; parent_id: number | null }>) {
@@ -219,172 +106,6 @@ function flattenValidTransferTargets(
       level: getLevel(Number(category.id)),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "ar"));
-}
-
-async function ensureParentIsValid(parentId: number | null, currentId?: string) {
-  if (!parentId) return;
-  if (currentId && parentId === Number(currentId)) {
-    redirectError("لا يمكن جعل التصنيف أب لنفسه.");
-  }
-
-  const { data: parent, error: parentError } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .select("id")
-    .eq("id", parentId)
-    .maybeSingle<{ id: number }>();
-
-  if (parentError) redirectError(parentError.message);
-  if (!parent) redirectError("التصنيف الأب غير موجود.");
-
-  if (!currentId) return;
-
-  const categories = await loadCategoryRelations();
-  const childrenByParent = buildChildrenByParent(categories);
-  const blockedIds = collectDescendantIds(Number(currentId), childrenByParent);
-
-  if (blockedIds.has(parentId)) {
-    redirectError("لا يمكن نقل التصنيف داخل نفسه أو داخل أحد التصنيفات الفرعية التابعة له.");
-  }
-}
-
-export async function createCategory(formData: FormData) {
-  await requireAdminSession();
-  const name = getString(formData, "name");
-  const rawSlug = getString(formData, "slug");
-  const slug = rawSlug ? normalizeArabicForSlug(rawSlug) : normalizeArabicForSlug(name);
-  const sortOrder = Number(getString(formData, "sort_order") || "0");
-  const isActive = getBoolean(formData, "is_active");
-  const parentId = getParentId(formData);
-  const requestedColorToken = getString(formData, "color_token");
-
-  if (!name) redirectError("اسم التصنيف مطلوب.");
-  if (!slug) redirectError("Slug التصنيف مطلوب.");
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) redirectError("Slug التصنيف غير صالح.");
-
-  await ensureParentIsValid(parentId);
-
-  const isUnique = await ensureUniqueSlug(slug);
-  if (!isUnique) redirectError("هذا الـ Slug مستخدم في تصنيف آخر.");
-
-  const now = new Date().toISOString();
-  const colorToken = isAdminToneToken(requestedColorToken)
-    ? requestedColorToken
-    : getDeterministicAdminTone(slug);
-  const { error } = await getSupabaseAdmin().from("topic_categories").insert({
-    name,
-    slug,
-    sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
-    is_active: isActive,
-    parent_id: parentId,
-    color_token: colorToken,
-    status: isActive ? "published" : "draft",
-    show_in_menu: true,
-    is_featured: false,
-    created_at: now,
-    updated_at: now,
-  });
-
-  if (error) redirectError(error.message);
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_category", "create"),
-    entityType: "topic_category",
-    entityLabel: name,
-    metadata: { slug, parent_id: parentId, color_token: colorToken },
-  });
-  revalidateCategories();
-  redirect("/admin/content/categories?notice=created");
-}
-
-export async function updateCategory(formData: FormData) {
-  const actor = await requireAdminSession();
-  const id = getString(formData, "id");
-  const name = getString(formData, "name");
-  const rawSlug = getString(formData, "slug");
-  const slug = rawSlug ? normalizeArabicForSlug(rawSlug) : normalizeArabicForSlug(name);
-  const sortOrder = Number(getString(formData, "sort_order") || "0");
-  const isActive = getBoolean(formData, "is_active");
-  const parentId = getParentId(formData);
-  const requestedColorToken = getString(formData, "color_token");
-
-  if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
-  if (!name) redirectError("اسم التصنيف مطلوب.");
-  if (!slug) redirectError("Slug التصنيف مطلوب.");
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) redirectError("Slug التصنيف غير صالح.");
-
-  const current = await getCategory(id);
-  await ensureParentIsValid(parentId, id);
-
-  const isUnique = await ensureUniqueSlug(slug, id);
-  if (!isUnique) redirectError("هذا الـ Slug مستخدم في تصنيف آخر.");
-
-  const now = new Date().toISOString();
-  const colorToken = isAdminToneToken(requestedColorToken)
-    ? requestedColorToken
-    : getDeterministicAdminTone(slug);
-  const { error } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .update({
-      name,
-      slug,
-      sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
-      is_active: isActive,
-      parent_id: parentId,
-      color_token: colorToken,
-      status: isActive ? "published" : "draft",
-      updated_at: now,
-    })
-    .eq("id", id);
-
-  if (error) redirectError(error.message);
-
-  if (current.slug !== slug) {
-    await getSupabaseAdmin()
-      .from("topics")
-      .update({ category: name, category_slug: slug, category_id: Number(id), updated_at: now, updated_by: actor.id })
-      .eq("category_slug", current.slug);
-  } else {
-    await getSupabaseAdmin()
-      .from("topics")
-      .update({ category: name, category_id: Number(id), updated_at: now, updated_by: actor.id })
-      .eq("category_slug", slug);
-  }
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_category", "update"),
-    entityType: "topic_category",
-    entityId: Number(id),
-    entityLabel: name,
-    metadata: { slug, color_token: colorToken },
-  });
-  revalidateCategories();
-  redirect("/admin/content/categories?notice=updated");
-}
-
-export async function toggleCategoryStatus(formData: FormData) {
-  await requireAdminSession();
-  const id = getString(formData, "id");
-  if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
-
-  const current = await getCategory(id);
-  const nextStatus = !Boolean(current.is_active);
-  const now = new Date().toISOString();
-
-  const { error } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .update({ is_active: nextStatus, status: nextStatus ? "published" : "draft", updated_at: now })
-    .eq("id", id);
-
-  if (error) redirectError(error.message);
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_category", nextStatus ? "publish" : "unpublish"),
-    entityType: "topic_category",
-    entityId: Number(id),
-    metadata: { is_active: nextStatus },
-  });
-  revalidateCategories();
-  redirect(`/admin/content/categories?notice=${nextStatus ? "shown" : "hidden"}`);
 }
 
 export type CategoryStatusMutationResult = AdminActionResult & {
@@ -461,10 +182,17 @@ export async function toggleCategoryStatusAjax(
   };
 }
 
-export async function duplicateCategory(formData: FormData) {
+export type CategoryDuplicateMutationResult = AdminActionResult & {
+  insertedId?: number;
+};
+
+export async function duplicateCategoryAjax(
+  id: number,
+): Promise<CategoryDuplicateMutationResult> {
   await requireAdminSession();
-  const id = getString(formData, "id");
-  if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
+  if (!Number.isInteger(id) || id <= 0) {
+    return adminActionFailure("تعذر نسخ التصنيف", "معرّف التصنيف غير صالح.");
+  }
 
   const { data: current, error: readError } = await getSupabaseAdmin()
     .from("topic_categories")
@@ -481,8 +209,12 @@ export async function duplicateCategory(formData: FormData) {
       color_token: string | null;
     }>();
 
-  if (readError) redirectError(readError.message);
-  if (!current) redirectError("التصنيف غير موجود.");
+  if (readError) {
+    return adminActionFailure("تعذر نسخ التصنيف", readError.message);
+  }
+  if (!current) {
+    return adminActionFailure("تعذر نسخ التصنيف", "التصنيف غير موجود.");
+  }
 
   let nextSlug = `${current.slug}-copy`;
   let suffix = 2;
@@ -492,31 +224,48 @@ export async function duplicateCategory(formData: FormData) {
   }
 
   const now = new Date().toISOString();
-  const { error } = await getSupabaseAdmin().from("topic_categories").insert({
-    name: `${current.name} - نسخة`,
-    slug: nextSlug,
-    description: current.description,
-    sort_order: current.sort_order ?? 0,
-    is_active: false,
-    parent_id: current.parent_id,
-    color_token: current.color_token || getDeterministicAdminTone(nextSlug),
-    status: "draft",
-    show_in_menu: true,
-    is_featured: false,
-    created_at: now,
-    updated_at: now,
-  });
+  const { data: inserted, error } = await getSupabaseAdmin()
+    .from("topic_categories")
+    .insert({
+      name: `${current.name} - نسخة`,
+      slug: nextSlug,
+      description: current.description,
+      sort_order: current.sort_order ?? 0,
+      is_active: false,
+      parent_id: current.parent_id,
+      color_token: current.color_token || getDeterministicAdminTone(nextSlug),
+      status: "draft",
+      show_in_menu: true,
+      is_featured: false,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single<{ id: number }>();
 
-  if (error) redirectError(error.message);
+  if (error || !inserted) {
+    return adminActionFailure(
+      "تعذر نسخ التصنيف",
+      error?.message ?? "تعذر إنشاء نسخة التصنيف.",
+    );
+  }
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic_category", "duplicate"),
     entityType: "topic_category",
     entityLabel: `${current.name} - نسخة`,
-    metadata: { slug: nextSlug, source_category_id: Number(id) },
+    entityId: inserted.id,
+    metadata: { slug: nextSlug, source_category_id: id },
   });
   revalidateCategories();
-  redirect("/admin/content/categories?notice=created");
+  return {
+    ...adminActionSuccess(
+      "تم بنجاح",
+      "تم نسخ التصنيف بنجاح.",
+      { code: "created", entityId: inserted.id },
+    ),
+    insertedId: inserted.id,
+  };
 }
 
 export async function getCategoryDeletePreviewAjax(id: number) {
@@ -580,80 +329,32 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
     return { ok: false as const, message: "معرّف التصنيف غير صالح." };
   }
 
-  const supabase = getSupabaseAdmin();
-
-  let dependencies;
+  let mutation: Awaited<ReturnType<typeof deleteTopicCategoryAtomically>>;
   try {
-    dependencies = await loadCategoryDeleteDependencies(id);
-  } catch {
-    return {
-      ok: false as const,
-      message: "تعذر التحقق من العناصر المرتبطة بالتصنيف.",
-    };
-  }
-  const { topicCount } = dependencies;
-  const blockingMessage = getCategoryDeleteBlockMessage(dependencies, {
-    includeTopics:
-      dependencies.seriesCount > 0 || dependencies.childrenCount > 0,
-  });
-  if (blockingMessage) return { ok: false as const, message: blockingMessage };
-
-  if (topicCount > 0) {
-    if (!transferToId || !Number.isFinite(transferToId)) {
-      return { ok: false as const, message: "اختر تصنيفًا لنقل الموضوعات إليه." };
+    mutation = await deleteTopicCategoryAtomically({
+      id,
+      transferToId:
+        transferToId && Number.isFinite(transferToId) ? transferToId : null,
+      actorId: actor.id,
+    });
+  } catch (error) {
+    if (error instanceof TaxonomyMutationDatabaseError) {
+      if (error.message === "category still has linked series") {
+        return { ok: false as const, message: "لا يمكن حذف التصنيف لأنه مرتبط بسلاسل محتوى." };
+      }
+      if (error.message === "category still has child categories") {
+        return { ok: false as const, message: "لا يمكن حذف التصنيف لأنه يحتوي على تصنيفات فرعية." };
+      }
+      if (error.message === "a valid transfer category is required") {
+        return { ok: false as const, message: "اختر تصنيفًا لنقل الموضوعات إليه." };
+      }
+      if (error.message === "transfer category was not found") {
+        return { ok: false as const, message: "التصنيف الهدف غير موجود." };
+      }
+      if (error.message === "category was not found") {
+        return { ok: false as const, message: "التصنيف غير موجود." };
+      }
     }
-
-    if (transferToId === id) {
-      return { ok: false as const, message: "لا يمكن النقل إلى نفس التصنيف." };
-    }
-
-    const { data: categories, error: categoriesError } = await getSupabaseAdmin()
-      .from("topic_categories")
-      .select("id, parent_id, name");
-    if (categoriesError) {
-      return { ok: false as const, message: "تعذر قراءة التصنيفات البديلة." };
-    }
-
-    const childrenByParent = buildChildrenByParent(categories ?? []);
-    const blockedIds = collectDescendantIds(id, childrenByParent);
-
-    if (blockedIds.has(transferToId)) {
-      return {
-        ok: false as const,
-        message: "لا يمكن النقل إلى هذا التصنيف لأنه نفس التصنيف أو أحد أبنائه.",
-      };
-    }
-
-    const { data: target, error: targetError } = await supabase
-      .from("topic_categories")
-      .select("id, name, slug")
-      .eq("id", transferToId)
-      .maybeSingle<{ id: number; name: string; slug: string }>();
-
-    if (targetError) {
-      return { ok: false as const, message: "تعذر التحقق من التصنيف الهدف." };
-    }
-    if (!target) return { ok: false as const, message: "التصنيف الهدف غير موجود." };
-
-    const now = new Date().toISOString();
-    const { error: moveError } = await supabase
-      .from("topics")
-      .update({
-        category_id: target.id,
-        category: target.name,
-        category_slug: target.slug,
-        updated_at: now,
-        updated_by: actor.id,
-      })
-      .eq("category_id", id);
-
-    if (moveError) {
-      return { ok: false as const, message: "تعذر نقل الموضوعات إلى التصنيف الهدف." };
-    }
-  }
-
-  const { error: deleteError } = await supabase.from("topic_categories").delete().eq("id", id);
-  if (deleteError) {
     return { ok: false as const, message: "تعذر حذف التصنيف. تحقق من العناصر المرتبطة به." };
   }
 
@@ -661,44 +362,13 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
     action: buildCmsAuditAction("topic_category", "delete"),
     entityType: "topic_category",
     entityId: id,
-    metadata: { transfer_to_id: transferToId ?? null },
+    metadata: {
+      transfer_to_id: mutation.transfer_to_id,
+      topics_updated: mutation.topics_updated,
+    },
   });
   revalidateCategories();
   return { ok: true as const, message: "تم حذف التصنيف بنجاح." };
-}
-
-export async function deleteCategory(formData: FormData) {
-  await requireAdminSession();
-  const id = getString(formData, "id");
-  if (!id || !validateId(id)) redirectError("معرّف التصنيف غير صالح.");
-
-  let deleteDependencies;
-  try {
-    deleteDependencies = await loadCategoryDeleteDependencies(Number(id));
-  } catch {
-    redirectError("تعذر التحقق من العناصر المرتبطة بالتصنيف.");
-  }
-  const relationBlockMessage = getCategoryDeleteBlockMessage(
-    deleteDependencies,
-  );
-  if (relationBlockMessage) redirectError(relationBlockMessage);
-
-  const usageCount = await getUsageCount(id);
-  if (usageCount > 0) redirectError("لا يمكن حذف تصنيف مستخدم داخل موضوعات. عطّله بدل حذفه.");
-
-  const childrenCount = await getChildrenCount(id);
-  if (childrenCount > 0) redirectError("لا يمكن حذف تصنيف يحتوي على تصنيفات فرعية. انقل التصنيفات الفرعية أولًا.");
-
-  const { error } = await getSupabaseAdmin().from("topic_categories").delete().eq("id", id);
-  if (error) redirectError("تعذر حذف التصنيف. تحقق من العناصر المرتبطة به.");
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_category", "delete"),
-    entityType: "topic_category",
-    entityId: Number(id),
-  });
-  revalidateCategories();
-  redirect("/admin/content/categories?notice=deleted");
 }
 
 export async function saveCategoriesTablePreferences(visibleColumns: string[]) {

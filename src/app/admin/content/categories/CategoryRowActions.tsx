@@ -10,16 +10,29 @@ import {
 } from "../../../../components/admin/ui";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
 import CategoryDeleteButton from "./CategoryDeleteButton";
-import CategoryEditModal from "./CategoryEditModal";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
-import { duplicateCategory, toggleCategoryStatusAjax } from "./actions";
+import {
+  duplicateCategoryAjax,
+  toggleCategoryStatusAjax,
+  type CategoryDuplicateMutationResult,
+  type CategoryStatusMutationResult,
+} from "./actions";
 
 type CategoryRowActionsProps = {
   category: CategoryListRow;
-  parentOptions: Array<{ id: number; name: string; level: number }>;
   onMutationResult?: (result: AdminActionResult) => void;
-  onCategoryUpdated?: (category: CategoryListRow) => void;
+  isPending?: boolean;
+  onToggle?: (
+    category: CategoryListRow,
+  ) => Promise<CategoryStatusMutationResult>;
+  onDuplicate?: (
+    category: CategoryListRow,
+  ) => Promise<CategoryDuplicateMutationResult>;
+  onDelete?: (
+    categoryId: number,
+    transferToId: number | null,
+  ) => Promise<{ ok: boolean; message?: string }>;
 };
 
 function PublicPreviewIcon() {
@@ -41,11 +54,14 @@ function PublicPreviewIcon() {
 
 export default function CategoryRowActions({
   category,
-  parentOptions,
   onMutationResult,
-  onCategoryUpdated,
+  isPending = false,
+  onToggle,
+  onDuplicate,
+  onDelete,
 }: CategoryRowActionsProps) {
-  const [pending, setPending] = useState(false);
+  const [localPending, setLocalPending] = useState(false);
+  const pending = isPending || localPending;
   const isActive = Boolean(category.is_active);
   const previewHref = category.slug
     ? `/topics?category=${encodeURIComponent(category.slug)}`
@@ -53,17 +69,11 @@ export default function CategoryRowActions({
 
   async function toggleVisibility() {
     if (pending) return;
-    setPending(true);
+    setLocalPending(true);
     try {
-      const result = await toggleCategoryStatusAjax(category.id);
-      if (result.ok && typeof result.isActive === "boolean") {
-        onCategoryUpdated?.({
-          ...category,
-          is_active: result.isActive,
-          status: result.status ?? (result.isActive ? "published" : "draft"),
-          updated_at: result.updatedAt ?? category.updated_at,
-        });
-      }
+      const result = await (onToggle
+        ? onToggle(category)
+        : toggleCategoryStatusAjax(category.id));
       onMutationResult?.(result);
     } catch {
       onMutationResult?.({
@@ -73,13 +83,38 @@ export default function CategoryRowActions({
         entityId: category.id,
       });
     } finally {
-      setPending(false);
+      setLocalPending(false);
+    }
+  }
+
+  async function duplicate() {
+    if (pending) return;
+    setLocalPending(true);
+    try {
+      const result = await (onDuplicate
+        ? onDuplicate(category)
+        : duplicateCategoryAjax(category.id));
+      onMutationResult?.(result);
+    } catch {
+      onMutationResult?.({
+        ok: false,
+        title: "تعذر نسخ التصنيف",
+        message: "حدث خطأ غير متوقع. حاول مرة أخرى.",
+        entityId: category.id,
+      });
+    } finally {
+      setLocalPending(false);
     }
   }
 
   return (
     <AdminDataGridActionsCell compact>
-      <CategoryEditModal category={category} parentOptions={parentOptions} />
+      <AdminDataGridActionButton
+        action="edit"
+        href={`/admin/content/categories/${category.id}`}
+        size="compact"
+        title="تعديل التصنيف"
+      />
 
       <AdminDataGridActionButton
         href={previewHref}
@@ -103,19 +138,21 @@ export default function CategoryRowActions({
         onClick={() => void toggleVisibility()}
       />
 
-      <form action={duplicateCategory} className="contents">
-        <input type="hidden" name="id" value={category.id} />
-        <AdminDataGridActionButton
-          type="submit"
-          action="duplicate"
-          size="compact"
-          title="نسخ التصنيف"
-        />
-      </form>
+      <AdminDataGridActionButton
+        type="button"
+        action="duplicate"
+        size="compact"
+        title="نسخ التصنيف"
+        pending={pending}
+        disabled={pending}
+        onClick={() => void duplicate()}
+      />
 
       <CategoryDeleteButton
         categoryId={category.id}
+        disabled={pending}
         onMutationResult={onMutationResult}
+        onDelete={onDelete}
       />
 
       <AdminActivityPopover

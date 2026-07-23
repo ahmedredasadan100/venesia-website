@@ -136,22 +136,24 @@ const criticalFeedback = actionFeedback.mapAdminActionResultToFeedback(
   { kind: "critical_system" },
 );
 check(
-  "Transient action feedback must be inline and dismissible",
+  "Action feedback must remain visible and dismissible until the user closes it",
   transientSuccessFeedback.variant === "success" &&
-    transientSuccessFeedback.layout === "inline" &&
-    transientSuccessFeedback.dismissible === true,
+    transientSuccessFeedback.dismissible === true &&
+    transientSuccessFeedback.lifecycle === "manual" &&
+    transientSuccessFeedback.autoDismissMs === undefined,
 );
 check(
   "Action validation feedback must retain its repair action",
   validationFeedback.variant === "danger" &&
-    validationFeedback.layout === "inline" &&
     validationFeedback.dismissible === true &&
+    validationFeedback.lifecycle === "manual" &&
     validationFeedback.action?.href === "/admin/fix",
 );
 check(
-  "Critical system feedback must remain stacked and persistent",
+  "Critical system feedback must remain stacked, persistent, and dismissible",
   criticalFeedback.layout === "stacked" &&
-    criticalFeedback.dismissible === false,
+    criticalFeedback.lifecycle === "persistent" &&
+    criticalFeedback.dismissible === true,
 );
 
 const editorRoute = read("src/app/admin/content/topics/[id]/page.tsx");
@@ -290,6 +292,7 @@ const floatingMenuStyle = read(
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
 const entityListTable = read("src/components/admin/entity-list/AdminEntityListTable.tsx");
+const feedbackProvider = read("src/components/admin/AdminFeedbackProvider.tsx");
 check(
   "Topics list must consume the shared Admin Entity List System",
   list.includes("AdminEntityList") &&
@@ -345,7 +348,10 @@ check(
 );
 check(
   "Publish failures must use shared feedback with an editor action",
-  entityList.includes("<AdminNotice") &&
+  entityList.includes("useOptionalAdminFeedback") &&
+    entityList.includes("publishFeedback(feedback") &&
+    feedbackProvider.includes("<AdminNotice") &&
+    feedbackProvider.includes("data-admin-feedback-viewport") &&
     list.includes("mapTopicsActionResultToFeedback") &&
     !list.includes('feedback.code === "publish_validation"') &&
     topicsFeedback.includes("mapAdminActionResultToFeedback") &&

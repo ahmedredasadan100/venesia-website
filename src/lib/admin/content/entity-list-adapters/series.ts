@@ -3,7 +3,6 @@ import "server-only";
 import { z } from "zod";
 
 import {
-  loadSeriesListData,
   seriesListRowSchema,
   type SeriesListRow,
 } from "../load-series-list";
@@ -12,45 +11,87 @@ import {
   type SeriesFilters,
   type SeriesSortField,
 } from "../entity-list-contracts/series";
-import { createAdminEntityListResultSchema } from "../../entity-list/data-engine/contracts";
+import {
+  createAdminEntityListResultSchema,
+  type AdminEntityListQuery,
+} from "../../entity-list/data-engine/contracts";
 import type { AdminEntityListAdapter } from "../../entity-list/data-engine/adapter";
 
-function compareRows(
-  left: SeriesListRow,
-  right: SeriesListRow,
-  field: SeriesSortField,
-) {
-  if (field === "topics_count") return left.topics_count - right.topics_count;
-  if (field === "id") return left.id - right.id;
-  if (field === "sort_order") {
-    return (left.sort_order ?? 0) - (right.sort_order ?? 0);
-  }
-  if (field === "category") {
-    return (left.category_name ?? "").localeCompare(
-      right.category_name ?? "",
-      "ar",
-    );
-  }
-  if (field === "created_at" || field === "updated_at") {
-    return String(left[field] ?? "").localeCompare(String(right[field] ?? ""));
-  }
-  return String(left[field] ?? "").localeCompare(
-    String(right[field] ?? ""),
-    field === "slug" ? "en" : "ar",
-  );
-}
+import { getSupabaseAdmin } from "../../../supabase-admin";
 
-const seriesMetricsSchema = z.object({
-  total: z.number().int().nonnegative(),
-  published: z.number().int().nonnegative(),
-  topics: z.number().int().nonnegative(),
+const seriesMetricsSchema = z.strictObject({
+  total: z.coerce.number().int().nonnegative().finite(),
+  published: z.coerce.number().int().nonnegative().finite(),
+  topics: z.coerce.number().int().nonnegative().finite(),
   categoryOptions: z.array(
-    z.object({ value: z.string(), label: z.string() }),
+    z.strictObject({
+      value: z.string(),
+      label: z.string(),
+      depth: z.number().int().nonnegative().optional(),
+      parentValue: z.string().optional(),
+    }),
   ),
   categoryDescendantIdsByValue: z.record(z.string(), z.array(z.number().int())),
 });
 
 type SeriesMetrics = z.infer<typeof seriesMetricsSchema>;
+
+const seriesReadModelSchema = z.strictObject({
+  rows: z.array(seriesListRowSchema.strict()),
+  total_count: z.coerce.number().int().nonnegative().finite(),
+  page: z.coerce.number().int().positive().finite(),
+  metrics: seriesMetricsSchema,
+});
+
+export class SeriesEntityListDatabaseError extends Error {
+  readonly code: string | null;
+  readonly details: string | null;
+  readonly hint: string | null;
+
+  constructor(error: {
+    message: string;
+    code?: string | null;
+    details?: string | null;
+    hint?: string | null;
+  }) {
+    super(error.message);
+    this.name = "SeriesEntityListDatabaseError";
+    this.code = error.code ?? null;
+    this.details = error.details ?? null;
+    this.hint = error.hint ?? null;
+  }
+}
+
+export async function loadSeriesEntityListResult(
+  query: AdminEntityListQuery<SeriesFilters, SeriesSortField>,
+) {
+  const { data, error } = await getSupabaseAdmin().rpc("admin_list_series", {
+    p_page: query.page,
+    p_page_size: query.pageSize,
+    p_sort_field: query.sort.field,
+    p_sort_direction: query.sort.direction,
+    p_search: query.search,
+    p_status: query.filters.status,
+    p_category_id: query.filters.categoryId,
+  });
+  if (error) throw new SeriesEntityListDatabaseError(error);
+
+  const readModel = seriesReadModelSchema.parse(data);
+  const totalRows = readModel.total_count;
+  const totalPages = Math.max(1, Math.ceil(totalRows / query.pageSize));
+
+  return {
+    rows: readModel.rows,
+    pagination: {
+      page: readModel.page,
+      pageSize: query.pageSize,
+      totalRows,
+      totalPages,
+    },
+    metrics: readModel.metrics,
+    meta: { generatedAt: new Date().toISOString(), mode: query.mode },
+  };
+}
 
 export const seriesEntityListAdapter: AdminEntityListAdapter<
   "series",
@@ -67,63 +108,5 @@ export const seriesEntityListAdapter: AdminEntityListAdapter<
   ),
   staleTimeMs: 30_000,
   mutationInvalidation: "entity",
-  async load(query) {
-    const source = await loadSeriesListData();
-    const selectedCategoryIds = new Set(
-      query.filters.categoryId
-        ? (source.categoryFilterModel.descendantIdsByValue[
-            String(query.filters.categoryId)
-          ] ?? [query.filters.categoryId])
-        : [],
-    );
-    const search = query.search.toLocaleLowerCase("ar");
-    const filtered = source.rows
-      .filter((row) => {
-        if (
-          query.filters.status !== "all" &&
-          row.status !== query.filters.status
-        ) {
-          return false;
-        }
-        if (
-          query.filters.categoryId &&
-          (row.category_id === null || !selectedCategoryIds.has(row.category_id))
-        ) {
-          return false;
-        }
-        return (
-          !search ||
-          row.name.toLocaleLowerCase("ar").includes(search) ||
-          row.slug.toLocaleLowerCase("en").includes(search)
-        );
-      })
-      .sort((left, right) => {
-        const result = compareRows(left, right, query.sort.field);
-        return query.sort.direction === "asc" ? result : -result;
-      });
-    const totalRows = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(totalRows / query.pageSize));
-    const page = Math.min(query.page, totalPages);
-    const from = (page - 1) * query.pageSize;
-
-    return {
-      rows: filtered.slice(from, from + query.pageSize),
-      pagination: {
-        page,
-        pageSize: query.pageSize,
-        totalRows,
-        totalPages,
-      },
-      metrics: {
-        ...source.metrics,
-        categoryOptions: source.categoryFilterModel.options,
-        categoryDescendantIdsByValue:
-          source.categoryFilterModel.descendantIdsByValue,
-      },
-      meta: {
-        generatedAt: new Date().toISOString(),
-        mode: query.mode,
-      },
-    };
-  },
+  load: loadSeriesEntityListResult,
 };

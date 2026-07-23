@@ -6,7 +6,7 @@ export type AdminActionFeedbackKind =
   | "transient_action"
   | "action_validation"
   | "critical_system";
-export type AdminFeedbackLifecycle = "auto" | "manual" | "persistent";
+export type AdminFeedbackLifecycle = "manual" | "persistent";
 
 export type AdminActionFeedbackAction = {
   href: string;
@@ -20,7 +20,6 @@ export type AdminActionFeedback = {
   layout: AdminFeedbackLayout;
   dismissible: boolean;
   lifecycle: AdminFeedbackLifecycle;
-  autoDismissMs?: number;
   /** URL params to remove client-side when a redirect notice is dismissed. */
   dismissSearchParams?: readonly string[];
   action?: AdminActionFeedbackAction;
@@ -30,14 +29,13 @@ const feedbackKindDefaults: Record<
   AdminActionFeedbackKind,
   Pick<
     AdminActionFeedback,
-    "layout" | "dismissible" | "lifecycle" | "autoDismissMs"
+    "layout" | "dismissible" | "lifecycle"
   >
 > = {
   transient_action: {
     layout: "inline",
     dismissible: true,
-    lifecycle: "auto",
-    autoDismissMs: 5_000,
+    lifecycle: "manual",
   },
   action_validation: {
     layout: "inline",
@@ -46,7 +44,7 @@ const feedbackKindDefaults: Record<
   },
   critical_system: {
     layout: "stacked",
-    dismissible: false,
+    dismissible: true,
     lifecycle: "persistent",
   },
 };

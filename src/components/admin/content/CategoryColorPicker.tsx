@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ADMIN_TONE_PALETTE,
   resolveAdminTone,
@@ -30,7 +30,17 @@ export default function CategoryColorPicker({
   const [selected, setSelected] = useState<AdminToneToken | "">(
     hasStoredToken ? resolveAdminTone(defaultToken).token : "",
   );
+  const sourceRef = useRef<HTMLInputElement>(null);
+  const initialRenderRef = useRef(true);
   const previewToken = selected || "slate";
+
+  useEffect(() => {
+    if (initialRenderRef.current) {
+      initialRenderRef.current = false;
+      return;
+    }
+    sourceRef.current?.dispatchEvent(new Event("change", { bubbles: true }));
+  }, [selected]);
 
   return (
     <fieldset className="space-y-3 md:col-span-2">
@@ -38,7 +48,7 @@ export default function CategoryColorPicker({
         <PaletteIcon />
         لون التصنيف
       </legend>
-      <input type="hidden" name="color_token" value={selected} />
+      <input ref={sourceRef} type="hidden" name="color_token" value={selected} />
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

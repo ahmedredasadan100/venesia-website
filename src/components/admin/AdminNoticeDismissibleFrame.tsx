@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import type { AdminFeedbackLifecycle } from "../../lib/admin/admin-action-feedback";
 
 type AdminNoticeDismissibleFrameProps = {
@@ -11,7 +11,7 @@ type AdminNoticeDismissibleFrameProps = {
   ariaLive: "assertive" | "polite";
   dismissSearchParams?: readonly string[];
   lifecycle: AdminFeedbackLifecycle;
-  autoDismissMs?: number;
+  onDismiss?: () => void;
 };
 
 export default function AdminNoticeDismissibleFrame({
@@ -22,12 +22,13 @@ export default function AdminNoticeDismissibleFrame({
   ariaLive,
   dismissSearchParams = [],
   lifecycle,
-  autoDismissMs,
+  onDismiss,
 }: AdminNoticeDismissibleFrameProps) {
   const [dismissed, setDismissed] = useState(false);
 
   const dismiss = useCallback(() => {
     setDismissed(true);
+    onDismiss?.();
     if (!dismissSearchParams.length) return;
     const url = new URL(window.location.href);
     let changed = false;
@@ -43,13 +44,7 @@ export default function AdminNoticeDismissibleFrame({
         `${url.pathname}${url.search}${url.hash}`,
       );
     }
-  }, [dismissSearchParams]);
-
-  useEffect(() => {
-    if (lifecycle !== "auto" || !autoDismissMs || dismissed) return;
-    const timer = window.setTimeout(dismiss, autoDismissMs);
-    return () => window.clearTimeout(timer);
-  }, [autoDismissMs, dismiss, dismissed, lifecycle]);
+  }, [dismissSearchParams, onDismiss]);
 
   if (dismissed) return null;
 
@@ -57,6 +52,7 @@ export default function AdminNoticeDismissibleFrame({
     <div
       role={role}
       aria-live={ariaLive}
+      data-admin-notice-lifecycle={lifecycle}
       data-admin-notice-layout={layout}
       className={className}
     >

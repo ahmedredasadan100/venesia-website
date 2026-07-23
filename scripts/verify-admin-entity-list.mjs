@@ -70,6 +70,7 @@ const filterListbox = read("src/components/admin/ui/AdminFilterListbox.tsx");
 const bulkBar = read("src/components/admin/ui/AdminBulkActionBar.tsx");
 const feedbackCodes = read("src/lib/admin/entity-list/feedback-codes.ts");
 const feedbackPolicy = read("src/lib/admin/admin-action-feedback.ts");
+const feedbackProvider = read("src/components/admin/AdminFeedbackProvider.tsx");
 const noticeFrame = read("src/components/admin/AdminNoticeDismissibleFrame.tsx");
 const floatingPosition = read("src/components/admin/ui/admin-floating-position.ts");
 const floatingHook = read("src/components/admin/ui/useAdminFloatingMenuPosition.ts");
@@ -212,23 +213,24 @@ check(
 );
 
 check(
-  "Feedback lifecycle distinguishes auto success, manual action errors, and persistent system errors",
+  "Feedback lifecycle keeps action outcomes visible until dismissal and system errors persistent",
   feedbackCodes.includes("getAdminFeedbackPolicy") &&
     feedbackCodes.includes('"transient_action"') &&
     feedbackCodes.includes('"action_validation"') &&
-    feedbackPolicy.includes('lifecycle: "auto"') &&
-    feedbackPolicy.includes("autoDismissMs: 5_000") &&
     feedbackPolicy.includes('lifecycle: "manual"') &&
     feedbackPolicy.includes('lifecycle: "persistent"') &&
-    noticeFrame.includes("window.setTimeout(dismiss, autoDismissMs)") &&
+    !feedbackPolicy.includes('lifecycle: "auto"') &&
+    !feedbackPolicy.includes("autoDismissMs: 5_000") &&
     noticeFrame.includes('aria-label="إغلاق الإشعار"'),
 );
 
 check(
-  "Feedback renders in one shared slot after filters for every entity consumer",
-  entityList.includes("data-admin-entity-feedback-slot") &&
-    entityList.indexOf("data-admin-entity-feedback-slot") <
-      entityList.lastIndexOf("AdminBulkActionBar") &&
+  "Feedback publishes through one fixed shared viewport for every entity consumer",
+  feedbackProvider.includes("AdminFeedbackViewport") &&
+    feedbackProvider.includes("data-admin-feedback-viewport") &&
+    feedbackProvider.includes("fixed") &&
+    entityList.includes("useOptionalAdminFeedback") &&
+    !entityList.includes("data-admin-entity-feedback-slot") &&
     categoriesClient.includes("initialFeedback={initialFeedback}") &&
     seriesClient.includes("initialFeedback={initialFeedback}") &&
     topicsList.includes("initialFeedback={initialFeedback}") &&
@@ -280,14 +282,14 @@ check(
 );
 
 check(
-  "Categories split edit and folder interactions",
+  "Categories split full-page edit and folder interactions",
   categoriesColumns.includes("data-category-folder-toggle") &&
     categoriesColumns.includes("data-category-folder-static") &&
-    categoriesColumns.includes("data-category-edit-trigger") &&
+    categoriesColumns.includes("data-category-edit-link") &&
     categoriesColumns.includes("aria-expanded") &&
     categoriesClient.includes("collapsedCategoryIds") &&
-    read("src/lib/admin/content/entity-list-adapters/categories.ts").includes(
-      "matchingIds.add(parentId)",
+    /\.rpc\(\s*"admin_list_categories"/.test(
+      read("src/lib/admin/content/entity-list-adapters/categories.ts"),
     ),
 );
 
@@ -310,15 +312,12 @@ check(
 );
 
 check(
-  "Series category adapter includes selected parent descendants",
+  "Series category read model includes selected parent descendants",
   read("src/lib/admin/content/category-hierarchy.ts").includes(
     "buildAdminCategoryFilterModel",
   ) &&
-    read("src/lib/admin/content/entity-list-adapters/series.ts").includes(
-      "categoryDescendantIdsByValue",
-    ) &&
-    read("src/lib/admin/content/load-series-list.ts").includes(
-      "buildAdminCategoryFilterModel",
+    /\.rpc\(\s*"admin_list_series"/.test(
+      read("src/lib/admin/content/entity-list-adapters/series.ts"),
     ) &&
     seriesClient.includes("onQueryPatch") &&
     !seriesClient.includes('String(row.category_id ?? "") === category'),
@@ -404,8 +403,8 @@ check(
   notice?.message === "ok" &&
     notice?.variant === "success" &&
     notice?.dismissible === true &&
-    notice?.lifecycle === "auto" &&
-    notice?.autoDismissMs === 5_000 &&
+    notice?.lifecycle === "manual" &&
+    notice?.autoDismissMs === undefined &&
     notice?.dismissSearchParams?.includes("notice"),
 );
 
@@ -420,8 +419,8 @@ const criticalNotice = noticeModule.resolveAdminNoticeFeedback(
   "unavailable",
 );
 check(
-  "Critical system notice remains persistent",
-  criticalNotice?.dismissible === false &&
+  "Critical system notice remains persistent and manually dismissible",
+  criticalNotice?.dismissible === true &&
     criticalNotice?.lifecycle === "persistent" &&
     criticalNotice?.dismissSearchParams === undefined,
 );

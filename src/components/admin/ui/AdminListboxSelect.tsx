@@ -30,6 +30,8 @@ export type AdminListboxSelectProps = {
   openLayerId?: string | null;
   onOpenLayer?: (id: string | null) => void;
   inline?: boolean;
+  ariaLabel?: string;
+  dir?: "rtl" | "ltr";
 };
 
 function ChevronDownIcon() {
@@ -63,6 +65,8 @@ export default function AdminListboxSelect({
   openLayerId,
   onOpenLayer,
   inline = false,
+  ariaLabel,
+  dir = "rtl",
 }: AdminListboxSelectProps) {
   const generatedId = useId();
   const controlId = id ?? generatedId;
@@ -144,6 +148,7 @@ export default function AdminListboxSelect({
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
+      if (!options.length) return;
       if (!isOpen) {
         setActiveValue(value);
         setOpen(true);
@@ -157,11 +162,13 @@ export default function AdminListboxSelect({
     }
     if ((event.key === "Enter" || event.key === " ") && isOpen) {
       event.preventDefault();
+      if (!options.length) return;
       handleSelect(options[activeIndex].value);
     }
   }
 
   function handleInlineKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (!options.length) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const direction = event.key === "ArrowDown" ? 1 : -1;
@@ -184,7 +191,7 @@ export default function AdminListboxSelect({
         id={`${controlId}-listbox`}
         role="listbox"
         aria-labelledby={`${controlId}-trigger`}
-        dir="rtl"
+        dir={dir}
         data-admin-listbox-menu=""
         data-placement={menuPosition.placement}
         style={menuPosition.style}
@@ -228,7 +235,7 @@ export default function AdminListboxSelect({
   return (
     <div className={`relative overflow-visible ${className}`}>
       {inline ? (
-        <div id={`${controlId}-listbox`} role="listbox" aria-label={placeholder} dir="rtl" className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto rounded-2xl border border-white/10 bg-black/25 p-1.5`}>
+        <div id={`${controlId}-listbox`} role="listbox" aria-label={ariaLabel ?? placeholder} dir={dir} className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto rounded-2xl border border-white/10 bg-black/25 p-1.5`}>
           {options.map((option, index) => {
             const selectedOption = option.value === value;
             return (
@@ -248,6 +255,7 @@ export default function AdminListboxSelect({
         type="button"
         id={`${controlId}-trigger`}
         role="combobox"
+        aria-label={ariaLabel ?? placeholder}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={`${controlId}-listbox`}

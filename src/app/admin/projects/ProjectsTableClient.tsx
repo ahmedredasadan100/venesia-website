@@ -411,7 +411,6 @@ export default function ProjectsTableClient({
           layout={feedback.layout}
           dismissible={feedback.dismissible}
           lifecycle={feedback.lifecycle}
-          autoDismissMs={feedback.autoDismissMs}
           dismissSearchParams={feedback.dismissSearchParams}
           title={feedback.title}
           message={feedback.message}

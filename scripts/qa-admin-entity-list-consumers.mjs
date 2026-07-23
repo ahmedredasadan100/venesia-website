@@ -56,6 +56,8 @@ const supabase = createClient(
 const checks = [];
 const consoleIssues = [];
 const pageErrors = [];
+const failureEvidence = [];
+let capturedFailureCount = 0;
 let adminId;
 let rootCategoryId;
 let childCategoryIds = [];
@@ -66,6 +68,20 @@ let cleanupProof = null;
 function check(name, ok, detail = "") {
   checks.push({ name, ok: Boolean(ok), detail });
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? `: ${detail}` : ""}`);
+}
+
+async function captureFailureEvidence(target, options) {
+  const failedCount = checks.filter((item) => !item.ok).length;
+  if (failedCount === 0 || failedCount <= capturedFailureCount) return;
+  capturedFailureCount = failedCount;
+  try {
+    await target.screenshot(options);
+    failureEvidence.push(options.path);
+  } catch (error) {
+    console.warn(
+      `Unable to capture failure evidence at ${options.path}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 async function waitForQuery(page, expected, timeout = 15_000) {
@@ -768,7 +784,7 @@ async function main() {
       (await page.locator(`[data-entity-row-id="${childCategoryIds[0]}"]`).count()) === 1 &&
         (await page.locator(`[data-entity-row-id="${childCategoryIds[1]}"]`).count()) === 1,
     );
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "categories-folder-open-1440.png"),
       fullPage: true,
     });
@@ -782,23 +798,35 @@ async function main() {
       (await page.locator(`[data-entity-row-id="${childCategoryIds[0]}"]`).count()) === 0 &&
         (await page.locator(`[data-entity-row-id="${childCategoryIds[1]}"]`).count()) === 0,
     );
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "categories-folder-closed-1440.png"),
       fullPage: true,
     });
     await folderToggle.click();
     await page.waitForTimeout(120);
 
-    const nameEditTrigger = rootRow.locator("[data-category-edit-trigger]");
-    check("Category name edit trigger is mandatory", (await nameEditTrigger.count()) === 1);
+    const nameEditTrigger = rootRow.locator("[data-category-edit-link]");
+    check("Category name edit link is mandatory", (await nameEditTrigger.count()) === 1);
     check(
-      "Category name has pointer cursor",
+      "Category edit link has pointer cursor",
       (await nameEditTrigger.evaluate((element) => getComputedStyle(element).cursor)) === "pointer",
     );
+    const categoryEditHref = await nameEditTrigger.getAttribute("href");
+    check(
+      "Category edit trigger targets the canonical full-page route",
+      categoryEditHref === `/admin/content/categories/${rootCategoryId}`,
+      String(categoryEditHref),
+    );
     await nameEditTrigger.click();
-    check("Category name opens edit modal", (await page.getByRole("dialog").count()) === 1);
-    await page.getByRole("button", { name: "إغلاق", exact: true }).click();
-    check("Category edit modal closes", (await page.getByRole("dialog").count()) === 0);
+    await page.waitForURL(`${baseUrl}/admin/content/categories/${rootCategoryId}`);
+    check(
+      "Category name opens the full edit page without a modal",
+      new URL(page.url()).pathname === `/admin/content/categories/${rootCategoryId}` &&
+        (await page.getByRole("dialog").count()) === 0 &&
+        (await page.locator('[data-admin-form-runtime][data-admin-form-entity="category"]').count()) === 1,
+    );
+    await page.goto(fixtureCategoriesUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(250);
 
     const catRowCount = await page.locator("[data-entity-row-id]").count();
     const catSummary = await page.locator("text=/عرض .* من إجمالي/").first().textContent();
@@ -826,7 +854,7 @@ async function main() {
       .getByRole("button", { name: "2", exact: true })
       .or(categoriesPagination.getByRole("link", { name: "2", exact: true }));
     check("Categories page 2 control is mandatory", (await page2.count()) === 1);
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "categories-page-1-1440.png"),
       fullPage: true,
     });
@@ -862,7 +890,7 @@ async function main() {
       "Categories pagination uses client navigation",
       (await page.evaluate(() => performance.timeOrigin)) === timeOriginBeforePageChange,
     );
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "categories-page-2-1440.png"),
       fullPage: true,
     });
@@ -880,7 +908,7 @@ async function main() {
     const hiddenRow = page.locator(`[data-entity-row-id="${hiddenCategoryId}"]`);
     const hiddenVisibility = hiddenRow.getByRole("button", { name: "إظهار التصنيف" });
     check("Hidden category uses eye-off action", (await hiddenVisibility.count()) === 1);
-    await hiddenVisibility.screenshot({ path: resolve(OUT, "visibility-eye-off-1440.png") });
+    await captureFailureEvidence(hiddenVisibility, { path: resolve(OUT, "visibility-eye-off-1440.png") });
     const hiddenPath = await hiddenVisibility.locator("svg path").first().getAttribute("d");
 
     await page.goto(fixtureCategoriesUrl, { waitUntil: "domcontentloaded" });
@@ -889,7 +917,7 @@ async function main() {
       .locator(`[data-entity-row-id="${rootCategoryId}"]`)
       .getByRole("button", { name: "إخفاء التصنيف" });
     check("Published category uses open-eye action", (await visibleVisibility.count()) === 1);
-    await visibleVisibility.screenshot({ path: resolve(OUT, "visibility-open-eye-1440.png") });
+    await captureFailureEvidence(visibleVisibility, { path: resolve(OUT, "visibility-open-eye-1440.png") });
     const visiblePath = await visibleVisibility.locator("svg path").first().getAttribute("d");
     check("Visibility states use distinct SVG paths", Boolean(visiblePath && hiddenPath && visiblePath !== hiddenPath));
 
@@ -1055,7 +1083,7 @@ async function main() {
         parentSeriesText?.includes(`${fixtureSearch} Series Child 2`),
       parentSeriesText ?? "",
     );
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "series-parent-filter-1440.png"),
       fullPage: true,
     });
@@ -1163,7 +1191,7 @@ async function main() {
       seriesTheadAfter === seriesTheadBefore,
       JSON.stringify({ before: seriesTheadBefore, after: seriesTheadAfter }),
     );
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "series-optimistic-category-1440.png"),
       fullPage: true,
     });
@@ -1180,7 +1208,7 @@ async function main() {
         !filteredEmptyText?.includes("ابدأ بإضافة أول سلسلة"),
       filteredEmptyText ?? "",
     );
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "series-filtered-empty-1440.png"),
       fullPage: true,
     });
@@ -1287,7 +1315,7 @@ async function main() {
     );
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(150);
-    await page.screenshot({ path: resolve(OUT, "series-bulk-listbox-bottom-1440.png") });
+    await captureFailureEvidence(page, { path: resolve(OUT, "series-bulk-listbox-bottom-1440.png") });
     await page.keyboard.press("Escape");
     check("Bulk Escape closes and returns focus", (await bulkMenu.count()) === 0 && (await bulkTrigger.evaluate((element) => document.activeElement === element)));
 
@@ -1313,7 +1341,7 @@ async function main() {
       topMeasurement?.placement === "top" && topMeasurement.gap <= 10,
       JSON.stringify(topMeasurement),
     );
-    await page.screenshot({ path: resolve(OUT, "series-bulk-listbox-top-1440.png") });
+    await captureFailureEvidence(page, { path: resolve(OUT, "series-bulk-listbox-top-1440.png") });
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
     await page.waitForTimeout(100);
@@ -1450,7 +1478,7 @@ async function main() {
       String(stickyActions),
     );
 
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "series-1440.png"),
       fullPage: true,
     });
@@ -1466,7 +1494,7 @@ async function main() {
       "Action feedback close button has pointer cursor",
       (await noticeClose.evaluate((element) => getComputedStyle(element).cursor)) === "pointer",
     );
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "feedback-dismissible-1440.png"),
       fullPage: true,
     });
@@ -1487,8 +1515,8 @@ async function main() {
     });
     await page.waitForTimeout(200);
     check(
-      "Categories redirect feedback uses the shared entity-list slot",
-      (await page.locator("[data-admin-entity-list] [data-admin-entity-feedback-slot]").count()) === 1,
+      "Categories redirect feedback uses the shared viewport",
+      (await page.locator("[data-admin-feedback-viewport] [role='status']").count()) === 1,
     );
 
     await page.goto(`${baseUrl}/admin/content/series?notice=updated`, {
@@ -1496,118 +1524,70 @@ async function main() {
     });
     await page.waitForTimeout(200);
     check(
-      "Series redirect feedback uses the shared entity-list slot",
-      (await page.locator("[data-admin-entity-list] [data-admin-entity-feedback-slot]").count()) === 1,
+      "Series redirect feedback uses the shared viewport",
+      (await page.locator("[data-admin-feedback-viewport] [role='status']").count()) === 1,
     );
     await page.waitForTimeout(6_000);
     check(
-      "Success feedback auto-dismisses after five seconds",
-      (await page.getByRole("button", { name: "إغلاق الإشعار" }).count()) === 0,
+      "Success feedback remains visible beyond five seconds until dismissal",
+      (await page.getByRole("button", { name: "إغلاق الإشعار" }).count()) === 1 &&
+        (await page.locator("[data-admin-feedback-viewport] [role='status']").count()) === 1,
     );
 
     await page.goto(`${baseUrl}/admin/content/series?notice=error`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForTimeout(5_200);
+    await page.waitForTimeout(6_200);
     check(
-      "Action error remains until manually dismissed",
-      (await page.getByRole("button", { name: "إغلاق الإشعار" }).count()) === 1,
+      "Action error remains in the shared viewport until manually dismissed",
+      (await page.getByRole("button", { name: "إغلاق الإشعار" }).count()) === 1 &&
+        (await page.locator("[data-admin-feedback-viewport] [role='alert']").count()) === 1,
     );
     await page.getByRole("button", { name: "إغلاق الإشعار" }).click();
 
-    // ── Critical/system persistent feedback (non-dismissible path) ──
-    // Uses the production create-category failure redirect, which renders
-    // AdminNotice with the same policy contract as critical_system:
-    // stacked layout, dismissible=false, persistent lifecycle, no autoDismissMs.
-    const criticalMessage = `QA critical persistence ${runId}`;
-    await page.goto(
-      `${baseUrl}/admin/content/categories/new?error=${encodeURIComponent(criticalMessage)}`,
-      { waitUntil: "domcontentloaded" },
-    );
-    await page.waitForTimeout(300);
-    const criticalNotice = page.locator('[role="alert"]', {
-      hasText: criticalMessage,
-    });
-    check(
-      "Critical notice renders via role=alert",
-      (await criticalNotice.count()) === 1,
-    );
-    check(
-      "Critical notice uses the stacked non-dismissible layout",
-      (await criticalNotice.getAttribute("data-admin-notice-layout")) === "stacked",
-    );
-    check(
-      "Critical notice exposes no close control",
-      (await page.getByRole("button", { name: "إغلاق الإشعار" }).count()) === 0,
-    );
-    await page.waitForTimeout(6_500);
-    check(
-      "Critical notice persists beyond the transient auto-dismiss window",
-      (await criticalNotice.count()) === 1 && (await criticalNotice.isVisible()),
-    );
-    await page.screenshot({
-      path: resolve(OUT, "critical-persistent-notice-1440.png"),
-      fullPage: true,
-    });
-
-    // ── Topics direct feedback slot proof ───────────────────────
+    // ── Topics shared feedback viewport proof ───────────────────
     await page.goto(`${baseUrl}/admin/content/topics?notice=published`, {
       waitUntil: "domcontentloaded",
       timeout: 60_000,
     });
     await page.waitForTimeout(300);
     const topicsNoticeMessage = "تم نشر المحتوى بنجاح.";
-    const topicsFeedbackSlot = page.locator(
-      "[data-admin-entity-list] [data-admin-entity-feedback-slot]",
-    );
-    await topicsFeedbackSlot
+    const topicsFeedbackViewport = page.locator("[data-admin-feedback-viewport]");
+    await topicsFeedbackViewport
       .first()
       .waitFor({ state: "visible", timeout: 15_000 })
       .catch(() => null);
     check(
-      "Topics feedback slot exists inside the entity list",
-      (await topicsFeedbackSlot.count()) === 1,
+      "Topics feedback viewport exists once",
+      (await topicsFeedbackViewport.count()) === 1,
     );
     check(
-      "Topics redirect notice renders inside the shared slot",
-      (await topicsFeedbackSlot.getByText(topicsNoticeMessage).count()) === 1,
+      "Topics redirect notice renders inside the shared viewport",
+      (await topicsFeedbackViewport.getByText(topicsNoticeMessage).count()) === 1,
     );
     check(
       "Topics redirect notice appears exactly once on the page",
       (await page.getByText(topicsNoticeMessage).count()) === 1,
     );
-    const topicsSlotPosition = await page.evaluate(() => {
-      const slot = document.querySelector(
-        "[data-admin-entity-list] [data-admin-entity-feedback-slot]",
-      );
-      const searchInput = document.querySelector(
-        'input[placeholder="ابحث في الموضوعات"]',
-      );
-      const table = document.querySelector("#content-topics-table table");
-      const columnsButton = Array.from(
-        document.querySelectorAll("#content-topics-table button"),
-      ).find((button) => button.textContent?.includes("الأعمدة"));
-      if (!slot || !searchInput || !table || !columnsButton) return null;
-      const follows = (first, second) =>
-        Boolean(
-          first.compareDocumentPosition(second) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
-        );
+    const topicsViewportPosition = await topicsFeedbackViewport.evaluate((viewport) => {
+      const rect = viewport.getBoundingClientRect();
+      const style = getComputedStyle(viewport);
       return {
-        afterFilters: follows(searchInput, slot),
-        beforeToolbar: follows(slot, columnsButton),
-        beforeTable: follows(slot, table),
+        position: style.position,
+        insideViewport:
+          rect.top >= 0 &&
+          rect.left >= 0 &&
+          rect.bottom <= window.innerHeight &&
+          rect.right <= window.innerWidth,
       };
     });
     check(
-      "Topics feedback slot sits after filters and before toolbar/table",
-      topicsSlotPosition?.afterFilters === true &&
-        topicsSlotPosition?.beforeToolbar === true &&
-        topicsSlotPosition?.beforeTable === true,
-      JSON.stringify(topicsSlotPosition),
+      "Topics feedback viewport remains fixed and visible regardless of table scroll",
+      topicsViewportPosition.position === "fixed" && topicsViewportPosition.insideViewport,
+      JSON.stringify(topicsViewportPosition),
     );
-    await page.screenshot({
-      path: resolve(OUT, "topics-feedback-slot-1440.png"),
+    await captureFailureEvidence(page, {
+      path: resolve(OUT, "topics-feedback-viewport-1440.png"),
       fullPage: true,
     });
 
@@ -1786,7 +1766,7 @@ async function main() {
         JSON.stringify(topicsSeededColumns),
       JSON.stringify(topicsPrefsAfterClear?.preferences ?? null),
     );
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "topics-series-clear-1440.png"),
       fullPage: true,
     });
@@ -1811,7 +1791,7 @@ async function main() {
       JSON.stringify(overflow),
     );
 
-    await page.screenshot({
+    await captureFailureEvidence(page, {
       path: resolve(OUT, "topics-1440.png"),
       fullPage: true,
     });
@@ -1848,23 +1828,7 @@ async function main() {
     checks,
     consoleIssues,
     pageErrors,
-    evidence: [
-      "categories-page-1-1440.png",
-      "categories-page-2-1440.png",
-      "categories-folder-open-1440.png",
-      "categories-folder-closed-1440.png",
-      "series-parent-filter-1440.png",
-      "series-filtered-empty-1440.png",
-      "series-bulk-listbox-bottom-1440.png",
-      "series-bulk-listbox-top-1440.png",
-      "series-optimistic-category-1440.png",
-      "feedback-dismissible-1440.png",
-      "critical-persistent-notice-1440.png",
-      "topics-feedback-slot-1440.png",
-      "topics-series-clear-1440.png",
-      "visibility-open-eye-1440.png",
-      "visibility-eye-off-1440.png",
-    ],
+    failureEvidence,
   };
   writeFileSync(
     resolve(OUT, "qa-admin-entity-list-hardening-report.json"),

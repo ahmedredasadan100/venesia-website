@@ -1,5 +1,6 @@
 "use client";
 
+import CategoryColorPicker from "../../../../components/admin/content/CategoryColorPicker";
 import {
   AdminFormField,
   AdminFormSection,
@@ -14,56 +15,60 @@ import AdminFormRuntime, {
 } from "../../../../components/admin/ui/AdminFormRuntime";
 import AdminFormSwitch from "../../../../components/admin/ui/AdminFormSwitch";
 import type {
-  SeriesFormRecord,
+  CategoryFormRecord,
   TaxonomyFormOption,
 } from "../../../../lib/admin/content/load-taxonomy-form-data";
 import {
-  createSeriesForm,
-  updateSeriesForm,
+  createCategoryForm,
+  updateCategoryForm,
 } from "../taxonomy-form-actions";
 
-type SeriesFormProps = {
+type CategoryFormProps = {
   mode: "create" | "edit";
-  series?: SeriesFormRecord | null;
-  categoryOptions: TaxonomyFormOption[];
+  category?: CategoryFormRecord | null;
+  parentOptions: TaxonomyFormOption[];
 };
 
-export default function SeriesForm({
+export default function CategoryForm({
   mode,
-  series,
-  categoryOptions,
-}: SeriesFormProps) {
+  category,
+  parentOptions,
+}: CategoryFormProps) {
   const isEdit = mode === "edit";
-  const action = isEdit ? updateSeriesForm : createSeriesForm;
+  const action = isEdit ? updateCategoryForm : createCategoryForm;
+  const options: TaxonomyFormOption[] = [
+    { value: "", label: "بدون تصنيف أب" },
+    ...parentOptions,
+  ];
 
   return (
     <AdminFormRuntime
       action={action}
-      entityKey="series"
-      closeHref="/admin/content/series"
-      noticePath="/admin/content/series"
+      entityKey="category"
+      closeHref="/admin/content/categories"
+      noticePath="/admin/content/categories"
       noticeCode={isEdit ? "updated" : "created"}
-      formId="series-taxonomy-form"
+      formId="category-taxonomy-form"
     >
       {({ fieldErrors, pending }) => (
         <>
-          {series?.id ? (
-            <input type="hidden" name="id" value={series.id} />
+          {category?.id ? (
+            <input type="hidden" name="id" value={category.id} />
           ) : null}
 
           <AdminFormSection
             eyebrow="BASIC DATA"
-            title="بيانات السلسلة"
-            description="أنشئ علاقة واضحة بين السلسلة وتصنيفها، مع الحفاظ على رابط ثابت بعد أول حفظ."
+            title="بيانات التصنيف"
+            description="الاسم والرابط الودّي والعلاقة الهرمية هي مصدر بيانات التصنيف داخل نظام المحتوى."
           >
             <AdminFormGrid columns={3}>
-              <AdminFormField label="اسم السلسلة" required>
+              <AdminFormField label="اسم التصنيف" required>
                 <input
                   name="name"
                   required
                   disabled={pending}
-                  defaultValue={series?.name ?? ""}
-                  placeholder="مثال: اعرف السوق"
+                  defaultValue={category?.name ?? ""}
+                  placeholder="مثال: نصائح عقارية"
                   aria-invalid={Boolean(fieldErrors.name?.length)}
                   aria-describedby={
                     fieldErrors.name?.length ? "name-error" : undefined
@@ -77,40 +82,43 @@ export default function SeriesForm({
 
               <AdminSlugField
                 sourceInputName="name"
-                value={isEdit ? series?.slug ?? "" : undefined}
+                value={isEdit ? category?.slug ?? "" : undefined}
                 readOnly={isEdit}
                 error={fieldErrors.slug?.[0] ?? null}
               />
 
               <AdminFormListboxSelect
-                name="category_id"
-                label="التصنيف"
-                options={categoryOptions}
+                name="parent_id"
+                label="التصنيف الأب"
+                options={options}
                 defaultValue={
-                  series?.category_id ? String(series.category_id) : ""
+                  category?.parent_id ? String(category.parent_id) : ""
                 }
-                placeholder="اختر التصنيف"
+                placeholder="بدون تصنيف أب"
                 searchPlaceholder="ابحث في التصنيفات"
-                searchable={categoryOptions.length > 7}
-                required
+                searchable={parentOptions.length > 7}
                 disabled={pending}
-                error={fieldErrors.category_id?.[0] ?? null}
-                emptyMessage="لا توجد تصنيفات منشورة متاحة."
-                hint="يظهر في الاختيار التصنيف الحالي حتى لو أصبح غير منشور."
+                error={fieldErrors.parent_id?.[0] ?? null}
+                emptyMessage="لا توجد تصنيفات متاحة للاختيار."
+                hint="اختياري — اتركه فارغًا لإنشاء تصنيف رئيسي."
               />
             </AdminFormGrid>
 
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 space-y-5">
               <AdminFormSwitch
                 name="is_published"
                 label="منشور"
-                defaultChecked={
-                  isEdit ? series?.status === "published" : true
-                }
+                defaultChecked={category?.is_active ?? true}
                 disabled={pending}
                 surface
               />
               <AdminFormError name="is_published" />
+
+              <CategoryColorPicker
+                defaultToken={category?.color_token}
+                previewName={category?.name || "معاينة التصنيف"}
+              />
+              <AdminFormError name="color_token" />
             </div>
           </AdminFormSection>
 

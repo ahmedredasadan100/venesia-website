@@ -17,9 +17,9 @@ export type AdminNoticeProps = {
   layout?: AdminNoticeLayout;
   dismissible?: boolean;
   lifecycle?: AdminFeedbackLifecycle;
-  autoDismissMs?: number;
   dismissSearchParams?: readonly string[];
   action?: AdminActionFeedbackAction;
+  onDismiss?: () => void;
 };
 
 const variantClasses: Record<AdminNoticeVariant, string> = {
@@ -43,9 +43,9 @@ export default function AdminNotice({
   layout = "stacked",
   dismissible = false,
   lifecycle = "persistent",
-  autoDismissMs,
   dismissSearchParams,
   action,
+  onDismiss,
 }: AdminNoticeProps) {
   const role = variant === "danger" ? "alert" : "status";
   const ariaLive = variant === "danger" ? "assertive" : "polite";
@@ -106,7 +106,7 @@ export default function AdminNotice({
         className={className}
         dismissSearchParams={dismissSearchParams}
         lifecycle={lifecycle}
-        autoDismissMs={autoDismissMs}
+        onDismiss={onDismiss}
       >
         {content}
       </AdminNoticeDismissibleFrame>

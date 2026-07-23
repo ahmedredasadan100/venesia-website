@@ -15,6 +15,7 @@ type AdminSlugFieldProps = {
   value?: string;
   error?: string | null;
   required?: boolean;
+  readOnly?: boolean;
   onChange?: (slug: string) => void;
 };
 
@@ -24,6 +25,7 @@ export default function AdminSlugField({
   value: controlledValue,
   error = null,
   required = true,
+  readOnly = false,
   onChange,
 }: AdminSlugFieldProps) {
   const [internalSlug, setInternalSlug] = useState(controlledValue ?? "");
@@ -66,22 +68,27 @@ export default function AdminSlugField({
     <label className={adminFormLabelClassName()}>
       <span className="flex items-center justify-between gap-3">
         <span>Slug</span>
-        <button
-          type="button"
-          onClick={handleGenerate}
-          className="cursor-pointer rounded-full border border-[#D8B87A]/25 px-3 py-1 font-en text-xs font-semibold text-[#D8B87A] transition hover:bg-[#D8B87A]/10"
-        >
-          Generate
-        </button>
+        {!readOnly ? (
+          <button
+            type="button"
+            onClick={handleGenerate}
+            className="cursor-pointer rounded-full border border-[#D8B87A]/25 px-3 py-1 font-en text-xs font-semibold text-[#D8B87A] transition hover:bg-[#D8B87A]/10"
+          >
+            Generate
+          </button>
+        ) : null}
       </span>
       <input
         ref={slugRef}
         name={name}
         value={slug}
         required={required}
+        readOnly={readOnly}
+        data-admin-slug-locked={readOnly ? "true" : "false"}
         dir="ltr"
         placeholder="main-menu"
         onChange={(event) => {
+          if (readOnly) return;
           setIsManual(true);
           updateSlug(normalizeSlugInput(event.target.value));
         }}
@@ -95,7 +102,9 @@ export default function AdminSlugField({
         </span>
       ) : (
         <span id="admin-slug-hint" className={adminFormHintClassName()}>
-          يُولَّد تلقائيًا من الاسم أثناء الكتابة، ويمكنك تعديله يدويًا في أي وقت.
+          {readOnly
+            ? "Slug ثابت بعد أول حفظ لحماية الروابط والعلاقات الحالية."
+            : "يُولَّد تلقائيًا من الاسم أثناء الكتابة، ويمكنك تعديله يدويًا قبل أول حفظ."}
         </span>
       )}
     </label>

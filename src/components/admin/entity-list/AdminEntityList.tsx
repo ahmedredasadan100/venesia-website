@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import AdminNotice from "../AdminNotice";
+import { useOptionalAdminFeedback } from "../AdminFeedbackProvider";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import {
@@ -115,6 +115,7 @@ function AdminEntityListInner<
   } = props;
 
   const router = useRouter();
+  const publishFeedback = useOptionalAdminFeedback()?.publishFeedback;
   const floating = useAdminFloatingLayer();
   const bulkPendingRef = useRef(false);
   const sortCorrectionRef = useRef(false);
@@ -161,6 +162,16 @@ function AdminEntityListInner<
   useEffect(() => {
     sortCorrectionRef.current = false;
   }, [sort?.key, sort?.direction]);
+
+  useEffect(() => {
+    if (!feedback || !publishFeedback) return;
+    publishFeedback(feedback, {
+      channel: `entity-list:${listId}`,
+      critical:
+        feedback.variant === "danger" &&
+        feedback.lifecycle === "persistent",
+    });
+  }, [feedback, feedbackRevision, listId, publishFeedback]);
 
   function showFeedback(result: AdminActionResult) {
     setFeedbackState((current) => ({
@@ -223,23 +234,6 @@ function AdminEntityListInner<
 
   return (
     <section id={listId} className="scroll-mt-6 space-y-3" data-admin-entity-list="">
-      {feedback ? (
-        <div data-admin-entity-feedback-slot="">
-          <AdminNotice
-            key={feedbackRevision}
-            variant={feedback.variant}
-            layout={feedback.layout}
-            dismissible={feedback.dismissible}
-            lifecycle={feedback.lifecycle}
-            autoDismissMs={feedback.autoDismissMs}
-            dismissSearchParams={feedback.dismissSearchParams}
-            title={feedback.title}
-            message={feedback.message}
-            action={feedback.action}
-          />
-        </div>
-      ) : null}
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">{toolbarStart}</div>
         {enableColumnManagement && onPersistColumns ? (

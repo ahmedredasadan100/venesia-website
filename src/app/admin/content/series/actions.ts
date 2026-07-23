@@ -8,89 +8,16 @@ import {
   SERIES_LIST_VIEW_KEY,
   SERIES_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/series-list-config";
-import {
-  loadSeriesListData,
-  type SeriesListRow,
-} from "../../../../lib/admin/content/load-series-list";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
-const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
-type SeriesStatus = (typeof VALID_STATUSES)[number];
-
-function getString(formData: FormData, key: string) {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function getAllStrings(formData: FormData, key: string) {
-  return formData.getAll(key).filter((value): value is string => typeof value === "string" && /^\d+$/.test(value));
-}
-
-function normalizeArabicForSlug(value: string) {
-  const map: Record<string, string> = {
-    ا: "a", أ: "a", إ: "e", آ: "a", ب: "b", ت: "t", ث: "th", ج: "g", ح: "h", خ: "kh", د: "d", ذ: "z", ر: "r", ز: "z", س: "s", ش: "sh", ص: "s", ض: "d", ط: "t", ظ: "z", ع: "a", غ: "gh", ف: "f", ق: "q", ك: "k", ل: "l", م: "m", ن: "n", ه: "h", و: "w", ي: "y", ى: "a", ة: "h", ء: "", ئ: "e", ؤ: "o",
-  };
-
-  return value
-    .split("")
-    .map((char) => map[char] ?? char)
-    .join("");
-}
-
-function createSlug(value: string) {
-  return normalizeArabicForSlug(value)
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
-}
-
-function validateSlug(slug: string) {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
-}
+type SeriesStatus = "draft" | "published" | "unpublished" | "archived";
 
 function validateId(id: string) {
   return /^\d+$/.test(id);
-}
-
-function getStatus(value: string): SeriesStatus {
-  return VALID_STATUSES.includes(value as SeriesStatus) ? (value as SeriesStatus) : "published";
-}
-
-function getSortOrder(value: string) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getCategoryId(formData: FormData) {
-  const parsed = Number.parseInt(getString(formData, "category_id"), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-}
-
-async function ensureActiveCategory(categoryId: number) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topic_categories")
-    .select("id")
-    .eq("id", categoryId)
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (error) return false;
-  return Boolean(data);
-}
-
-function redirectWithNotice(notice: string): never {
-  redirect(`/admin/content/series?notice=${notice}`);
-}
-
-function redirectWithError(message: string): never {
-  redirect(`/admin/content/series?error=${encodeURIComponent(message)}`);
 }
 
 function revalidateSeriesPaths() {
@@ -110,275 +37,18 @@ async function ensureUniqueSlug(slug: string, id?: string) {
   return !data;
 }
 
-function getPayload(formData: FormData) {
-  const name = getString(formData, "name");
-  const rawSlug = getString(formData, "slug");
-  const slug = rawSlug ? createSlug(rawSlug) : createSlug(name);
-
-  return {
-    name,
-    slug,
-    status: getStatus(getString(formData, "status")),
-    sortOrder: getSortOrder(getString(formData, "sort_order")),
-    categoryId: getCategoryId(formData),
-  };
-}
-
-function validatePayload(payload: ReturnType<typeof getPayload>) {
-  if (!payload.name) return "اسم السلسلة مطلوب.";
-  if (!payload.slug) return "Slug السلسلة مطلوب.";
-  if (!validateSlug(payload.slug)) return "الـ Slug لازم يكون إنجليزي صغير، أرقام، وشرطة بين الكلمات فقط.";
-  if (!payload.categoryId) return "التصنيف مطلوب.";
-  return null;
-}
-
-async function validatePayloadWithCategory(payload: ReturnType<typeof getPayload>) {
-  const validationError = validatePayload(payload);
-  if (validationError) return validationError;
-
-  const categoryExists = await ensureActiveCategory(payload.categoryId);
-  if (!categoryExists) return "التصنيف المختار غير موجود أو غير مفعل.";
-
-  return null;
-}
-
-export async function createSeries(formData: FormData) {
-  await requireAdminSession();
-  const payload = getPayload(formData);
-  const validationError = await validatePayloadWithCategory(payload);
-  if (validationError) redirectWithError(validationError);
-
-  const isUniqueSlug = await ensureUniqueSlug(payload.slug);
-  if (!isUniqueSlug) redirectWithError("هذا الـ Slug مستخدم بالفعل في سلسلة أخرى.");
-
-  const now = new Date().toISOString();
-  const { error } = await getSupabaseAdmin().from("topic_series").insert({
-    name: payload.name,
-    slug: payload.slug,
-    status: payload.status,
-    sort_order: payload.sortOrder,
-    category_id: payload.categoryId,
-    deleted_at: payload.status === "archived" ? now : null,
-    created_at: now,
-    updated_at: now,
-  });
-
-  if (error) redirectWithError(error.message);
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_series", "create"),
-    entityType: "topic_series",
-    entityLabel: payload.name,
-    metadata: { slug: payload.slug, status: payload.status },
-  });
-  revalidateSeriesPaths();
-  redirectWithNotice("created");
-}
-
-export async function updateSeries(formData: FormData) {
-  await requireAdminSession();
-  const id = getString(formData, "id");
-  if (!id || !validateId(id)) redirectWithError("السلسلة غير صالحة.");
-
-  const payload = getPayload(formData);
-  const validationError = await validatePayloadWithCategory(payload);
-  if (validationError) redirectWithError(validationError);
-
-  const isUniqueSlug = await ensureUniqueSlug(payload.slug, id);
-  if (!isUniqueSlug) redirectWithError("هذا الـ Slug مستخدم بالفعل في سلسلة أخرى.");
-
-  const now = new Date().toISOString();
-  const { error } = await getSupabaseAdmin()
-    .from("topic_series")
-    .update({
-      name: payload.name,
-      slug: payload.slug,
-      status: payload.status,
-      sort_order: payload.sortOrder,
-      category_id: payload.categoryId,
-      deleted_at: payload.status === "archived" ? now : null,
-      updated_at: now,
-    })
-    .eq("id", id);
-
-  if (error) redirectWithError(error.message);
-
-  await getSupabaseAdmin()
-    .from("topics")
-    .update({ series: payload.name, series_slug: payload.slug, updated_at: now })
-    .eq("series_id", id);
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_series", "update"),
-    entityType: "topic_series",
-    entityId: Number(id),
-    entityLabel: payload.name,
-    metadata: { slug: payload.slug, status: payload.status },
-  });
-  revalidateSeriesPaths();
-  redirectWithNotice("updated");
-}
-
-export async function toggleSeriesStatus(formData: FormData) {
-  await requireAdminSession();
-  const id = getString(formData, "id");
-  const currentStatus = getString(formData, "status");
-  if (!id || !validateId(id)) redirectWithError("السلسلة غير صالحة.");
-
-  const nextStatus: SeriesStatus = currentStatus === "published" ? "unpublished" : "published";
-  const now = new Date().toISOString();
-
-  const { error } = await getSupabaseAdmin()
-    .from("topic_series")
-    .update({ status: nextStatus, deleted_at: null, updated_at: now })
-    .eq("id", id);
-
-  if (error) redirectWithError(error.message);
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_series", nextStatus === "published" ? "publish" : "unpublish"),
-    entityType: "topic_series",
-    entityId: Number(id),
-    metadata: { status: nextStatus },
-  });
-  revalidateSeriesPaths();
-  redirectWithNotice(nextStatus === "published" ? "published" : "unpublished");
-}
-
-export async function duplicateSeries(formData: FormData) {
-  await requireAdminSession();
-  const id = getString(formData, "id");
-  if (!id || !validateId(id)) redirectWithError("السلسلة غير صالحة.");
-
-  const { data, error } = await getSupabaseAdmin()
-    .from("topic_series")
-    .select("name, slug, status, sort_order, category_id")
-    .eq("id", id)
-    .maybeSingle<{ name: string; slug: string; status: string | null; sort_order: number | null; category_id: number | null }>();
-
-  if (error) redirectWithError(error.message);
-  if (!data) redirectWithError("السلسلة غير موجودة.");
-  if (!data.category_id) redirectWithError("لا يمكن نسخ سلسلة بدون تصنيف. عيّن تصنيفًا للسلسلة أولًا.");
-
-  let slug = `${data.slug}-copy`;
-  let counter = 2;
-  while (!(await ensureUniqueSlug(slug))) {
-    slug = `${data.slug}-copy-${counter}`;
-    counter += 1;
-  }
-
-  const now = new Date().toISOString();
-  const { error: insertError } = await getSupabaseAdmin().from("topic_series").insert({
-    name: `${data.name} - نسخة`,
-    slug,
-    status: "draft",
-    sort_order: data.sort_order ?? 0,
-    category_id: data.category_id,
-    deleted_at: null,
-    created_at: now,
-    updated_at: now,
-  });
-
-  if (insertError) redirectWithError(insertError.message);
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_series", "duplicate"),
-    entityType: "topic_series",
-    entityLabel: `${data.name} - نسخة`,
-    metadata: { slug, source_series_id: Number(id) },
-  });
-  revalidateSeriesPaths();
-  redirectWithNotice("duplicated");
-}
-
-export async function deleteSeries(formData: FormData) {
-  await requireAdminSession();
-  const id = getString(formData, "id");
-  if (!id || !validateId(id)) redirectWithError("السلسلة غير صالحة.");
-
-  const { count, error: countError } = await getSupabaseAdmin()
-    .from("topics")
-    .select("id", { count: "exact", head: true })
-    .eq("series_id", id);
-
-  if (countError) redirectWithError(countError.message);
-  if ((count ?? 0) > 0) redirectWithError("لا يمكن حذف سلسلة مرتبطة بموضوعات. أخفها أو انقل الموضوعات أولًا.");
-
-  const { error } = await getSupabaseAdmin().from("topic_series").delete().eq("id", id);
-  if (error) redirectWithError(error.message);
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("topic_series", "delete"),
-    entityType: "topic_series",
-    entityId: Number(id),
-  });
-  revalidateSeriesPaths();
-  redirectWithNotice("deleted");
-}
-
-export async function bulkSeriesAction(formData: FormData) {
-  await requireAdminSession();
-  const action = getString(formData, "bulk_action");
-  const ids = getAllStrings(formData, "ids");
-  if (!ids.length) redirectWithError("حدد سلسلة واحدة على الأقل.");
-
-  const now = new Date().toISOString();
-
-  if (action === "publish" || action === "hide") {
-    const status = action === "publish" ? "published" : "unpublished";
-    const { error } = await getSupabaseAdmin()
-      .from("topic_series")
-      .update({ status, deleted_at: null, updated_at: now })
-      .in("id", ids);
-    if (error) redirectWithError(error.message);
-    await recordCmsAdminAudit({
-      action: buildCmsAuditAction("topic_series", status === "published" ? "publish" : "unpublish"),
-      entityType: "topic_series",
-      metadata: { bulk_action: action, ids: ids.map(Number) },
-    });
-    revalidateSeriesPaths();
-    redirectWithNotice(status === "published" ? "published" : "unpublished");
-  }
-
-  if (action === "delete") {
-    const { data: linked, error: linkedError } = await getSupabaseAdmin()
-      .from("topics")
-      .select("series_id")
-      .in("series_id", ids);
-
-    if (linkedError) redirectWithError(linkedError.message);
-    if ((linked ?? []).length > 0) redirectWithError("لا يمكن حذف سلاسل مرتبطة بموضوعات. انقل الموضوعات أولًا.");
-
-    const { error } = await getSupabaseAdmin().from("topic_series").delete().in("id", ids);
-    if (error) redirectWithError(error.message);
-    await recordCmsAdminAudit({
-      action: buildCmsAuditAction("topic_series", "delete"),
-      entityType: "topic_series",
-      metadata: { bulk_action: action, ids: ids.map(Number) },
-    });
-    revalidateSeriesPaths();
-    redirectWithNotice("deleted");
-  }
-
-  redirectWithError("عملية غير معروفة.");
-}
-
-export type SeriesTableRow = SeriesListRow;
-
 export type SeriesTableResult = {
   ok: boolean;
   message?: string;
-  rows?: SeriesTableRow[];
+  affectedIds?: number[];
 };
 
-export async function getSeriesTableRows(): Promise<SeriesTableRow[]> {
-  await requireAdminSession();
-  return (await loadSeriesListData()).rows;
-}
-
-async function successWithFreshRows(message: string): Promise<SeriesTableResult> {
+function successWithAffectedIds(
+  message: string,
+  affectedIds: number[],
+): SeriesTableResult {
   revalidateSeriesPaths();
-  return { ok: true, message, rows: await getSeriesTableRows() };
+  return { ok: true, message, affectedIds };
 }
 
 function failure(message: string): SeriesTableResult {
@@ -404,7 +74,12 @@ export async function toggleSeriesStatusAjax(id: number, currentStatus: string |
     entityId: id,
     metadata: { status: nextStatus },
   });
-  return successWithFreshRows(nextStatus === "published" ? "تم إظهار السلسلة بنجاح." : "تم إخفاء السلسلة بنجاح.");
+  return successWithAffectedIds(
+    nextStatus === "published"
+      ? "تم إظهار السلسلة بنجاح."
+      : "تم إخفاء السلسلة بنجاح.",
+    [id],
+  );
 }
 
 export async function duplicateSeriesAjax(id: number): Promise<SeriesTableResult> {
@@ -429,25 +104,31 @@ export async function duplicateSeriesAjax(id: number): Promise<SeriesTableResult
   }
 
   const now = new Date().toISOString();
-  const { error: insertError } = await getSupabaseAdmin().from("topic_series").insert({
-    name: `${data.name} - نسخة`,
-    slug,
-    status: "draft",
-    sort_order: data.sort_order ?? 0,
-    category_id: data.category_id,
-    deleted_at: null,
-    created_at: now,
-    updated_at: now,
-  });
+  const { data: inserted, error: insertError } = await getSupabaseAdmin()
+    .from("topic_series")
+    .insert({
+      name: `${data.name} - نسخة`,
+      slug,
+      status: "draft",
+      sort_order: data.sort_order ?? 0,
+      category_id: data.category_id,
+      deleted_at: null,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single<{ id: number }>();
 
-  if (insertError) return failure(insertError.message);
+  if (insertError || !inserted) {
+    return failure(insertError?.message ?? "تعذر نسخ السلسلة.");
+  }
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic_series", "duplicate"),
     entityType: "topic_series",
     entityLabel: `${data.name} - نسخة`,
     metadata: { slug, source_series_id: id },
   });
-  return successWithFreshRows("تم نسخ السلسلة بنجاح.");
+  return successWithAffectedIds("تم نسخ السلسلة بنجاح.", [inserted.id]);
 }
 
 export async function deleteSeriesAjax(id: number): Promise<SeriesTableResult> {
@@ -470,7 +151,7 @@ export async function deleteSeriesAjax(id: number): Promise<SeriesTableResult> {
     entityType: "topic_series",
     entityId: id,
   });
-  return successWithFreshRows("تم حذف السلسلة بنجاح.");
+  return successWithAffectedIds("تم حذف السلسلة بنجاح.", [id]);
 }
 
 export async function bulkSeriesActionAjax(action: string, ids: number[]): Promise<SeriesTableResult> {
@@ -493,7 +174,12 @@ export async function bulkSeriesActionAjax(action: string, ids: number[]): Promi
       entityType: "topic_series",
       metadata: { bulk_action: action, ids: validIds.map(Number) },
     });
-    return successWithFreshRows(status === "published" ? "تم إظهار السلاسل المحددة بنجاح." : "تم إخفاء السلاسل المحددة بنجاح.");
+    return successWithAffectedIds(
+      status === "published"
+        ? "تم إظهار السلاسل المحددة بنجاح."
+        : "تم إخفاء السلاسل المحددة بنجاح.",
+      validIds.map(Number),
+    );
   }
 
   if (action === "delete") {
@@ -513,7 +199,10 @@ export async function bulkSeriesActionAjax(action: string, ids: number[]): Promi
       entityType: "topic_series",
       metadata: { bulk_action: action, ids: validIds.map(Number) },
     });
-    return successWithFreshRows("تم حذف السلاسل المحددة بنجاح.");
+    return successWithAffectedIds(
+      "تم حذف السلاسل المحددة بنجاح.",
+      validIds.map(Number),
+    );
   }
 
   return failure("عملية غير معروفة.");

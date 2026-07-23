@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type {
   AdminEntityListQuery,
@@ -35,6 +35,21 @@ type AdminEntityMutationResult =
   | AdminEntityMutationSuccess<Record<string, unknown>>
   | AdminEntityMutationError;
 
+export type AdminEntityMutationRequest<Row> = {
+  rowId?: number | string;
+  action: string;
+  bulk?: boolean;
+  optimistic: (cache: AdminInstantMutationPatch<Row>) => void;
+  execute: () => Promise<AdminEntityMutationResult>;
+  reconcileSuccess?: (
+    result: AdminEntityMutationSuccess<Record<string, unknown>>,
+    tools: {
+      cache: AdminInstantMutationPatch<Row>;
+      restoreSnapshot: () => void;
+    },
+  ) => void;
+};
+
 export type AdminInstantMutationPatch<Row> = {
   patchRows: (updater: (row: Row) => Row) => void;
   removeRows: (ids: ReadonlySet<number | string>) => void;
@@ -48,6 +63,7 @@ export function useAdminEntityInstantMutation<
   scopeQuery: AdminEntityListQuery<Record<string, unknown>, string>,
 ) {
   const queryClient = useQueryClient();
+  const inFlightRef = useRef(false);
   const [rowPending, setRowPending] = useState<PendingAction>(null);
   const [bulkPending, setBulkPending] = useState<string | null>(null);
 
@@ -80,20 +96,7 @@ export function useAdminEntityInstantMutation<
   }
 
   const mutation = useMutation({
-    mutationFn: async (request: {
-      rowId?: number | string;
-      action: string;
-      bulk?: boolean;
-      optimistic: (cache: AdminInstantMutationPatch<Row>) => void;
-      execute: () => Promise<AdminEntityMutationResult>;
-      reconcileSuccess?: (
-        result: AdminEntityMutationSuccess<Record<string, unknown>>,
-        tools: {
-          cache: AdminInstantMutationPatch<Row>;
-          restoreSnapshot: () => void;
-        },
-      ) => void;
-    }) => {
+    mutationFn: async (request: AdminEntityMutationRequest<Row>) => {
       const result = await request.execute();
       if (!result.ok) throw Object.assign(new Error(result.message), result);
       return result;
@@ -127,5 +130,21 @@ export function useAdminEntityInstantMutation<
     onSettled: () => { setRowPending(null); setBulkPending(null); },
   });
 
-  return { mutateAsync: mutation.mutateAsync, rowPending, bulkPending, error: mutation.error };
+  async function mutateAsync(request: AdminEntityMutationRequest<Row>) {
+    if (inFlightRef.current) {
+      throw Object.assign(
+        new Error("انتظر انتهاء العملية الحالية ثم حاول مرة أخرى."),
+        { ok: false as const, code: "mutation_in_flight" },
+      );
+    }
+
+    inFlightRef.current = true;
+    try {
+      return await mutation.mutateAsync(request);
+    } finally {
+      inFlightRef.current = false;
+    }
+  }
+
+  return { mutateAsync, rowPending, bulkPending, error: mutation.error };
 }
