@@ -28,9 +28,18 @@ export default async function RedirectsPage({
     status: filters.status === "all" ? undefined : filters.status,
     redirectType: filters.redirectType === "all" ? undefined : filters.redirectType,
   }).catch(() => []);
+  const clientSnapshotKey = [
+    filters.q,
+    filters.status,
+    filters.redirectType,
+    query?.notice ?? "",
+    query?.error ?? "",
+    ...redirects.map((row) => `${row.id}:${row.updated_at}`),
+  ].join("|");
 
   return (
     <RedirectsClient
+      key={clientSnapshotKey}
       redirects={redirects}
       notice={query?.notice ?? null}
       error={query?.error ?? null}

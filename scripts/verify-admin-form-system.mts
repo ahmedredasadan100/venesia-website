@@ -236,9 +236,11 @@ check(
 );
 
 check(
-  "Form Runtime closure claim is limited to reference consumers",
-  ADMIN_FORM_SYSTEM_CLOSURE.scope === "reference_consumers" &&
-    ADMIN_FORM_SYSTEM_CLOSURE.allowedClaim === "reference_consumer_closed",
+  "Form Runtime closure claim is limited to reference consumers and Redirect create/edit",
+  ADMIN_FORM_SYSTEM_CLOSURE.scope ===
+      "reference_consumers_and_redirect_create_edit" &&
+    ADMIN_FORM_SYSTEM_CLOSURE.allowedClaim ===
+      "seo_redirect_create_edit_adopted",
 );
 check(
   "global Form Runtime closure is explicitly forbidden",
@@ -267,12 +269,12 @@ const expectedClassifications: Record<
     "topic-category-create-edit",
     "topic-series-create-edit",
   ],
+  shared_adopter: ["redirects-create-edit"],
   legacy_generic_gap: [
     "topic-media-create-edit",
     "projects-create",
     "projects-edit",
     "pages-quick-create",
-    "redirects-create-edit",
   ],
   specialized_exception: [
     "page-composition-and-seo",

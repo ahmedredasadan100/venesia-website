@@ -21,7 +21,15 @@ export type RedirectValidationResult =
       redirectType: RedirectType;
       status: "active" | "inactive";
     }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      field:
+        | "sourcePath"
+        | "destinationPath"
+        | "redirectType"
+        | "status";
+    };
 
 function pathsEqual(left: string, right: string) {
   return left === right;
@@ -89,39 +97,67 @@ export function validateRedirectInput(
   activeRedirects: Array<Pick<UrlRedirectRecord, "id" | "source_path" | "destination_path" | "status">>,
 ): RedirectValidationResult {
   const source = normalizeInternalRedirectPath(input.sourcePath);
-  if (!source.ok) return source;
+  if (!source.ok) {
+    return { ...source, field: "sourcePath" };
+  }
 
   if (isProtectedRedirectPath(source.value)) {
-    return { ok: false, error: "لا يمكن تحويل مسارات الإدارة أو النظام." };
+    return {
+      ok: false,
+      error: "لا يمكن تحويل مسارات الإدارة أو النظام.",
+      field: "sourcePath",
+    };
   }
 
   const destination = normalizeRedirectDestination(input.destinationPath);
-  if (!destination.ok) return destination;
+  if (!destination.ok) {
+    return { ...destination, field: "destinationPath" };
+  }
 
   if (destination.kind === "internal" && isProtectedRedirectPath(destination.value)) {
-    return { ok: false, error: "لا يمكن التحويل إلى مسارات الإدارة أو النظام." };
+    return {
+      ok: false,
+      error: "لا يمكن التحويل إلى مسارات الإدارة أو النظام.",
+      field: "destinationPath",
+    };
   }
 
   if (input.redirectType !== "301" && input.redirectType !== "302") {
-    return { ok: false, error: "نوع التحويل غير صالح." };
+    return {
+      ok: false,
+      error: "نوع التحويل غير صالح.",
+      field: "redirectType",
+    };
   }
 
   if (input.status !== "active" && input.status !== "inactive") {
-    return { ok: false, error: "حالة التحويل غير صالحة." };
+    return {
+      ok: false,
+      error: "حالة التحويل غير صالحة.",
+      field: "status",
+    };
   }
 
   const comparableDestination =
     destination.kind === "internal" ? destination.value : destination.value;
 
   if (pathsEqual(source.value, destinationComparable(comparableDestination))) {
-    return { ok: false, error: "لا يمكن أن تكون الوجهة مطابقة للمصدر." };
+    return {
+      ok: false,
+      error: "لا يمكن أن تكون الوجهة مطابقة للمصدر.",
+      field: "destinationPath",
+    };
   }
 
   const duplicateSource = activeRedirects.find(
     (rule) => rule.source_path === source.value && rule.id !== input.excludeId,
   );
   if (duplicateSource) {
-    return { ok: false, error: "مسار المصدر مستخدم بالفعل." };
+    return {
+      ok: false,
+      error: "مسار المصدر مستخدم بالفعل.",
+      field: "sourcePath",
+    };
   }
 
   if (input.status === "active") {
@@ -134,7 +170,11 @@ export function validateRedirectInput(
 
     const loopError = detectRedirectLoop(source.value, comparableDestination, rulesForLoop);
     if (loopError) {
-      return { ok: false, error: loopError };
+      return {
+        ok: false,
+        error: loopError,
+        field: "destinationPath",
+      };
     }
   }
 

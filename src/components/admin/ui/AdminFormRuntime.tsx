@@ -7,11 +7,13 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
+  type Ref,
   type RefObject,
 } from "react";
 
@@ -42,9 +44,15 @@ function resolveForm(root: HTMLElement | null) {
   return root?.closest("form") ?? null;
 }
 
-type PendingNavigation = {
-  href: string;
-};
+type PendingNavigation =
+  | {
+      kind: "href";
+      href: string;
+    }
+  | {
+      kind: "callback";
+      callback: () => void;
+    };
 
 export type AdminUnsavedChangesGuardOptions<T extends HTMLElement> = {
   rootRef: RefObject<T | null>;
@@ -60,6 +68,7 @@ export type AdminUnsavedChangesGuard = {
   isDirty: boolean;
   markClean: (submittedBaseline?: string) => void;
   requestNavigation: (href: string) => void;
+  requestCallback: (callback: () => void) => void;
   dialog: ReactNode;
 };
 
@@ -130,6 +139,17 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     [navigate, onNavigate, updateDirty],
   );
 
+  const completeCallback = useCallback(
+    (callback: () => void) => {
+      allowNavigationRef.current = true;
+      updateDirty(false);
+      setPendingNavigation(null);
+      onNavigate?.();
+      callback();
+    },
+    [onNavigate, updateDirty],
+  );
+
   const requestNavigation = useCallback(
     (href: string) => {
       const decision = resolveAdminFormNavigationDecision({
@@ -142,9 +162,26 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
         leave(href);
         return;
       }
-      setPendingNavigation({ href });
+      setPendingNavigation({ kind: "href", href });
     },
     [leave],
+  );
+
+  const requestCallback = useCallback(
+    (callback: () => void) => {
+      const decision = resolveAdminFormNavigationDecision({
+        pending: pendingRef.current,
+        dirty: dirtyRef.current,
+        navigationAllowed: allowNavigationRef.current,
+      });
+      if (decision === "blocked_pending") return;
+      if (decision === "navigate") {
+        completeCallback(callback);
+        return;
+      }
+      setPendingNavigation({ kind: "callback", callback });
+    },
+    [completeCallback],
   );
 
   useLayoutEffect(() => {
@@ -240,7 +277,7 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
 
       event.preventDefault();
       event.stopPropagation();
-      setPendingNavigation({ href: destination.href });
+      setPendingNavigation({ kind: "href", href: destination.href });
     }
 
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -259,7 +296,13 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
         description={description}
         confirmLabel={confirmLabel}
         onCancel={() => setPendingNavigation(null)}
-        onConfirm={() => leave(pendingNavigation.href)}
+        onConfirm={() => {
+          if (pendingNavigation.kind === "href") {
+            leave(pendingNavigation.href);
+            return;
+          }
+          completeCallback(pendingNavigation.callback);
+        }}
       />
     </div>
   ) : null;
@@ -268,12 +311,13 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     isDirty,
     markClean,
     requestNavigation,
+    requestCallback,
     dialog,
   };
 }
 
-export type AdminFormRuntimeContextValue = {
-  state: AdminFormActionState;
+export type AdminFormRuntimeContextValue<TResult = unknown> = {
+  state: AdminFormActionState<TResult>;
   mode: AdminFormMode;
   pending: boolean;
   fieldErrors: Record<string, string[]>;
@@ -296,18 +340,25 @@ export function useOptionalAdminFormRuntime() {
   return useContext(AdminFormRuntimeContext);
 }
 
-export type AdminFormRuntimeProps = {
-  action: AdminFormAction;
-  initialState?: AdminFormActionState;
+export type AdminFormRuntimeHandle = {
+  requestClose: () => void;
+};
+
+export type AdminFormRuntimeProps<TResult = unknown> = {
+  action: AdminFormAction<TResult>;
+  initialState?: AdminFormActionState<TResult>;
   mode: AdminFormMode;
   entityKey: string;
-  closeHref: string;
+  closeHref?: string;
+  onClose?: () => void;
+  onSuccess?: (state: AdminFormActionState<TResult>) => void;
+  runtimeRef?: Ref<AdminFormRuntimeHandle>;
   navigation?: AdminFormNavigationContract;
   formId?: string;
   className?: string;
   children:
     | ReactNode
-    | ((context: AdminFormRuntimeContextValue) => ReactNode);
+    | ((context: AdminFormRuntimeContextValue<TResult>) => ReactNode);
 };
 
 function firstFieldError(state: AdminFormActionState) {
@@ -388,17 +439,20 @@ function formFeedback(
   };
 }
 
-export default function AdminFormRuntime({
+export default function AdminFormRuntime<TResult = unknown>({
   action,
   initialState,
   mode,
   entityKey,
   closeHref,
+  onClose,
+  onSuccess,
+  runtimeRef,
   navigation,
   formId,
   className = "",
   children,
-}: AdminFormRuntimeProps) {
+}: AdminFormRuntimeProps<TResult>) {
   const router = useRouter();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const feedbackChannel = `form:${entityKey}`;
@@ -406,8 +460,8 @@ export default function AdminFormRuntime({
     () => clearFeedback(feedbackChannel),
     [clearFeedback, feedbackChannel],
   );
-  const [resolvedInitialState] = useState(
-    () => initialState ?? createAdminFormInitialState(mode),
+  const [resolvedInitialState] = useState<AdminFormActionState<TResult>>(
+    () => initialState ?? createAdminFormInitialState<TResult>(mode),
   );
   const [state, formAction, actionPending] = useActionState(
     action,
@@ -421,10 +475,10 @@ export default function AdminFormRuntime({
   const formRef = useRef<HTMLFormElement>(null);
   const submittedBaselineRef = useRef<string | null>(null);
   const submittedControlsRef = useRef<AdminFormControlSnapshot[] | null>(null);
-  const handledResultRef = useRef<AdminFormActionState>(
-    createAdminFormInitialState(mode),
+  const handledResultRef = useRef<AdminFormActionState<TResult>>(
+    createAdminFormInitialState<TResult>(mode),
   );
-  const { isDirty, markClean, requestNavigation, dialog } =
+  const { isDirty, markClean, requestNavigation, requestCallback, dialog } =
     useAdminUnsavedChangesGuard({
       rootRef: formRef,
       pending,
@@ -432,9 +486,17 @@ export default function AdminFormRuntime({
       onNavigate: clearFormFeedback,
     });
   const requestClose = useCallback(
-    () => requestNavigation(closeHref),
-    [closeHref, requestNavigation],
+    () => {
+      if (onClose) {
+        requestCallback(onClose);
+        return;
+      }
+      if (closeHref) requestNavigation(closeHref);
+    },
+    [closeHref, onClose, requestCallback, requestNavigation],
   );
+
+  useImperativeHandle(runtimeRef, () => ({ requestClose }), [requestClose]);
 
   useLayoutEffect(() => {
     const form = formRef.current;
@@ -494,17 +556,19 @@ export default function AdminFormRuntime({
     submittedBaselineRef.current = null;
     submittedControlsRef.current = null;
     markClean(submittedBaseline);
+    onSuccess?.(state);
   }, [
     clearFeedback,
     feedbackChannel,
     markClean,
     navigation,
+    onSuccess,
     publishFeedback,
     router,
     state,
   ]);
 
-  const context = useMemo<AdminFormRuntimeContextValue>(
+  const context = useMemo<AdminFormRuntimeContextValue<TResult>>(
     () => ({
       state,
       mode,

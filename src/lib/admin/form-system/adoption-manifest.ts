@@ -9,6 +9,7 @@
 
 export type AdminFormAdoptionClassification =
   | "shared_reference"
+  | "shared_adopter"
   | "legacy_generic_gap"
   | "specialized_exception"
   | "explicit_exception";
@@ -31,10 +32,10 @@ export const ADMIN_FORM_RUNTIME_MODULE = {
 } as const;
 
 export const ADMIN_FORM_SYSTEM_CLOSURE = {
-  phase: "Admin Form Runtime Closure - Topic Reference Consumer",
+  phase: "SEO Redirect Create/Edit - Form Runtime Adoption",
   module: ADMIN_FORM_RUNTIME_MODULE.id,
-  scope: "reference_consumers",
-  allowedClaim: "reference_consumer_closed",
+  scope: "reference_consumers_and_redirect_create_edit",
+  allowedClaim: "seo_redirect_create_edit_adopted",
   globalClosed: false,
   globalClosureBlockers: [
     "Legacy generic Admin forms remain outside the Form Runtime module.",
@@ -125,11 +126,11 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "redirects-create-edit",
     label: "SEO Redirect create and edit",
-    classification: "legacy_generic_gap",
+    classification: "shared_adopter",
     sourceFiles: ["src/app/admin/seo/redirects/RedirectFormModal.tsx"],
     surfaces: ["create", "edit"],
     rationale:
-      "Generic modal create/edit form remains outside the shared runtime.",
+      "Generic modal create/edit form delegates lifecycle ownership to AdminFormRuntime while Redirect validation and list reconciliation remain entity adapters.",
   },
   {
     id: "page-composition-and-seo",
