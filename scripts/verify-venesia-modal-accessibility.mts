@@ -42,6 +42,18 @@ const keyDownSection = modal.slice(
   modal.indexOf("function handleKeyDown"),
   modal.indexOf('document.addEventListener("keydown", handleKeyDown)'),
 );
+const emptyFocusablesSection = keyDownSection.slice(
+  keyDownSection.indexOf("if (!focusable.length)"),
+  keyDownSection.indexOf("const first = focusable[0]"),
+);
+const outsidePanelRecoverySection = keyDownSection.slice(
+  keyDownSection.indexOf(
+    "if (!(activeElement instanceof Node) || !panel.contains(activeElement))",
+  ),
+  keyDownSection.indexOf(
+    "if (!focusable.includes(activeElement as HTMLElement))",
+  ),
+);
 const cleanupSection = modal.slice(
   modal.indexOf("return () => {", modal.indexOf("function handleKeyDown")),
   modal.indexOf("}, [mounted, open])"),
@@ -96,7 +108,34 @@ check(
     keyDownSection.includes("last.focus({ preventScroll: true })"),
 );
 check(
-  "dynamic disabled or removed focus targets recover within the modal",
+  "Tab recovery prevents escape when the active element leaves the modal",
+  outsidePanelRecoverySection.includes("event.preventDefault()") &&
+    outsidePanelRecoverySection.includes("return;"),
+);
+check(
+  "Tab from outside the modal restores the current first focusable element",
+  outsidePanelRecoverySection.includes("if (event.shiftKey)") &&
+    outsidePanelRecoverySection.includes(
+      "first.focus({ preventScroll: true })",
+    ),
+);
+check(
+  "Shift+Tab from outside the modal restores the current last focusable element",
+  outsidePanelRecoverySection.includes(
+    "last.focus({ preventScroll: true })",
+  ) &&
+    outsidePanelRecoverySection.indexOf(
+      "last.focus({ preventScroll: true })",
+    ) < outsidePanelRecoverySection.indexOf("} else {"),
+);
+check(
+  "an empty dynamic focusable set prevents escape and focuses the modal panel",
+  emptyFocusablesSection.includes("event.preventDefault()") &&
+    emptyFocusablesSection.includes("panel.focus({ preventScroll: true })") &&
+    emptyFocusablesSection.includes("return;"),
+);
+check(
+  "a disabled active descendant recovers within the modal",
   keyDownSection.includes("!focusable.includes(activeElement as HTMLElement)") &&
     keyDownSection.includes("event.shiftKey ? last : first"),
 );

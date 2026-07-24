@@ -327,17 +327,25 @@ export default function VenesiaModal({
       const last = focusable[focusable.length - 1];
       const activeElement = document.activeElement;
 
-      if (activeElement instanceof Node && panel.contains(activeElement)) {
-        if (!focusable.includes(activeElement as HTMLElement)) {
-          event.preventDefault();
-          (event.shiftKey ? last : first).focus({ preventScroll: true });
-        } else if (event.shiftKey && activeElement === first) {
-          event.preventDefault();
+      if (!(activeElement instanceof Node) || !panel.contains(activeElement)) {
+        event.preventDefault();
+        if (event.shiftKey) {
           last.focus({ preventScroll: true });
-        } else if (!event.shiftKey && activeElement === last) {
-          event.preventDefault();
+        } else {
           first.focus({ preventScroll: true });
         }
+        return;
+      }
+
+      if (!focusable.includes(activeElement as HTMLElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus({ preventScroll: true });
+      } else if (event.shiftKey && activeElement === first) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && activeElement === last) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
       }
     }
 
