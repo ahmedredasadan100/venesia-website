@@ -68,7 +68,7 @@ export default function TopicPublishingOptions({
         <TopicDateLabelField
           defaultValue={dateLabel}
           publishedAt={publishedAt}
-          disabled={pending}
+          disabled={pending || Boolean(publishedAt)}
         />
       </div>
 

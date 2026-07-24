@@ -42,6 +42,12 @@ const { adminContentTopicPreviewPath } = await jiti.import<
 const { resolvePublicContentPath } = await jiti.import<
   typeof import("../src/lib/content/public-content-path.ts")
 >("../src/lib/content/public-content-path.ts");
+const { resolveAdminFormNavigationDecision } = await jiti.import<
+  typeof import("../src/lib/admin/form-runtime.ts")
+>("../src/lib/admin/form-runtime.ts");
+const { parseFormPublishedDate, resolveTopicPublishedAt } = await jiti.import<
+  typeof import("../src/lib/content-dates.ts")
+>("../src/lib/content-dates.ts");
 
 const normalizePath = (value: string) => value.replaceAll("\\", "/");
 const absolutePath = (sourceFile: string) => join(ROOT, sourceFile);
@@ -439,6 +445,15 @@ check(
     runtimeActionMarkers[1] === "close",
 );
 check(
+  "Close decision blocks pending, navigates clean, and confirms dirty forms",
+  resolveAdminFormNavigationDecision({ pending: true, dirty: true }) ===
+    "blocked_pending" &&
+    resolveAdminFormNavigationDecision({ pending: false, dirty: false }) ===
+      "navigate" &&
+    resolveAdminFormNavigationDecision({ pending: false, dirty: true }) ===
+      "confirm_discard",
+);
+check(
   "Form Runtime stays form-only and does not own Preview/Public capabilities",
   [runtime, formRuntimeContract].every(
     (source) =>
@@ -465,6 +480,18 @@ check(
     "disabled={pending}",
     'aria-live="polite"',
   ].every((marker) => runtime.includes(marker)),
+);
+const formDomPreservation = read(
+  "src/lib/admin/form-dom-preservation.ts",
+);
+check(
+  "shared runtime wires central DOM snapshot restoration; React timing remains Browser QA",
+  runtime.includes("captureAdminFormControls(form)") &&
+    runtime.includes("restoreAdminFormControls(form, snapshot)") &&
+    runtime.includes("useLayoutEffect(() =>") &&
+    formDomPreservation.includes("form.elements") &&
+    formDomPreservation.includes("entry.element.form !== form") &&
+    formDomPreservation.includes("new DataTransfer()"),
 );
 check(
   "shared runtime locks every consumer field while a save or handoff is pending",
@@ -525,6 +552,48 @@ check(
     "TopicDateLabelField",
   ].every((marker) => publishingOptions.includes(marker)) &&
     !publishingOptions.includes("SaveBar"),
+);
+const articleSaveHelpers = read(
+  "src/app/admin/content/topics/article-actions/helpers.ts",
+);
+const publicationForm = new FormData();
+publicationForm.set("published_at", "2026-08-15");
+const submittedPublicationDate = parseFormPublishedDate(publicationForm);
+const firstPublishedAt = resolveTopicPublishedAt({
+  formPublishedDate: submittedPublicationDate,
+  currentPublishedAt: null,
+  status: "published",
+  nowIso: "2026-08-15T08:00:00.000Z",
+});
+check(
+  "submitted first-publication date persists and survives unpublish or republish",
+  articleSaveHelpers.includes(
+    "publishedAt: parseFormPublishedDate(formData)",
+  ) &&
+    articleSaveHelpers.includes("published_at: resolveTopicPublishedAt({") &&
+    publishingOptions.includes(
+      "disabled={pending || Boolean(publishedAt)}",
+    ) &&
+    submittedPublicationDate === "2026-08-15" &&
+    firstPublishedAt === "2026-08-15T12:00:00.000Z" &&
+    resolveTopicPublishedAt({
+      formPublishedDate: "2026-09-01",
+      currentPublishedAt: firstPublishedAt,
+      status: "published",
+      nowIso: "2026-09-01T08:00:00.000Z",
+    }) === firstPublishedAt &&
+    resolveTopicPublishedAt({
+      formPublishedDate: submittedPublicationDate,
+      currentPublishedAt: firstPublishedAt,
+      status: "unpublished",
+      nowIso: "2026-09-01T08:00:00.000Z",
+    }) === firstPublishedAt &&
+    resolveTopicPublishedAt({
+      formPublishedDate: submittedPublicationDate,
+      currentPublishedAt: null,
+      status: "draft",
+      nowIso: "2026-08-15T08:00:00.000Z",
+    }) === null,
 );
 check(
   "Topic PublishingOptions cannot reintroduce local Preview/Public ownership",

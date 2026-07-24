@@ -22,6 +22,7 @@
     "verify:admin-data-engine-contracts": "node --experimental-strip-types scripts/verify-admin-data-engine-contracts.mts",
     "verify:content-taxonomy": "node --experimental-strip-types scripts/verify-content-taxonomy-system.mts",
     "verify:admin-form-system": "node --experimental-strip-types scripts/verify-admin-form-system.mts",
+    "qa:admin-form-runtime": "node --experimental-strip-types scripts/qa-admin-form-runtime-behavior.mts",
     "verify:admin-instant-pages": "node scripts/verify-admin-instant-pages.mjs",
     "verify:admin-instant-projects": "node --experimental-strip-types scripts/verify-admin-instant-projects.mts",
     "verify:topic-editor-basic-data": "node scripts/verify-topic-editor-basic-data.mjs",

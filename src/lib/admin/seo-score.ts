@@ -1,3 +1,10 @@
+import {
+  SEO_LENGTH_STANDARDS,
+  assessSeoLength,
+  describeSeoLength,
+  type SeoLengthAssessment,
+} from "./seo-length-standards";
+
 export type FaqItem = {
   question?: string;
   answer?: string;
@@ -19,7 +26,7 @@ export type SeoScoreInput = {
 
 export type SeoIssue = {
   id?: string;
-  type: "error" | "warning" | "success";
+  type: "error" | "warning" | "success" | "muted";
   label: string;
   points: number;
   hint: string;
@@ -84,6 +91,28 @@ function addScore(
   return condition ? points : 0;
 }
 
+function addLengthScore(
+  issues: SeoIssue[],
+  assessment: SeoLengthAssessment,
+  successLabel: string,
+  failLabel: string,
+  points: number,
+) {
+  const successful = assessment.state === "success";
+  issues.push({
+    type: successful
+      ? "success"
+      : assessment.state === "danger"
+        ? "error"
+        : assessment.state,
+    label: successful ? successLabel : failLabel,
+    points: successful ? points : 0,
+    hint: describeSeoLength(assessment),
+  });
+
+  return successful ? points : 0;
+}
+
 function clampScore(score: number) {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
@@ -117,6 +146,14 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
   const keywordInFirstWords = includesText(getFirstWords(input.content), input.focusKeyword);
   const keywordInAlt = includesText(input.imageAlt, input.focusKeyword);
   const keywordInSlug = includesText(input.slug.replace(/-/g, " "), input.focusKeyword);
+  const seoTitleLength = assessSeoLength(
+    input.seoTitle,
+    SEO_LENGTH_STANDARDS.title,
+  );
+  const seoDescriptionLength = assessSeoLength(
+    input.seoDescription,
+    SEO_LENGTH_STANDARDS.description,
+  );
 
   const internalLinksCount =
     input.content.match(/\[[^\]]+\]\((\/topics\/|\/projects\/)[^)]+\)/g)?.length ?? 0;
@@ -129,22 +166,20 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
   let contentScore = 0;
   let readinessScore = 0;
 
-  seoScore += addScore(
+  seoScore += addLengthScore(
     seoIssues,
-    input.seoTitle.length >= 45 && input.seoTitle.length <= 60,
+    seoTitleLength,
     "SEO Title مضبوط",
     "SEO Title محتاج ضبط",
     14,
-    "اكتب عنوانًا بين 45 و60 حرفًا، واضح ومقنع ويحتوي على زاوية البحث."
   );
 
-  seoScore += addScore(
+  seoScore += addLengthScore(
     seoIssues,
-    input.seoDescription.length >= 120 && input.seoDescription.length <= 160,
+    seoDescriptionLength,
     "Meta Description مضبوط",
     "Meta Description محتاج ضبط",
     14,
-    "الوصف المثالي بين 120 و160 حرفًا، ويشرح وعد المقال بدون حشو."
   );
 
   seoScore += addScore(

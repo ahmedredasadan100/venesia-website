@@ -17,7 +17,14 @@ import {
 
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import {
+  captureAdminFormControls,
+  restoreAdminFormControls,
+  serializeAdminForm,
+  type AdminFormControlSnapshot,
+} from "../../../lib/admin/form-dom-preservation";
+import {
   createAdminFormInitialState,
+  resolveAdminFormNavigationDecision,
   type AdminFormAction,
   type AdminFormActionState,
   type AdminFormMode,
@@ -29,17 +36,6 @@ import AdminConfirmDialog from "./AdminConfirmDialog";
 import { AdminStickyFormBar } from "./AdminForm";
 
 const LEAVE_WARNING = "لديك تعديلات غير محفوظة. هل تريد الإغلاق دون حفظها؟";
-
-function serializeForm(form: HTMLFormElement) {
-  return JSON.stringify(
-    Array.from(new FormData(form).entries()).map(([name, value]) => [
-      name,
-      typeof value === "string"
-        ? value
-        : `${value.name}:${value.size}:${value.type}:${value.lastModified}`,
-    ]),
-  );
-}
 
 function resolveForm(root: HTMLElement | null) {
   if (root instanceof HTMLFormElement) return root;
@@ -101,10 +97,12 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     if (submittedBaseline !== undefined) {
       baselineRef.current = submittedBaseline;
     } else if (form) {
-      baselineRef.current = serializeForm(form);
+      baselineRef.current = serializeAdminForm(form);
     }
     allowNavigationRef.current = false;
-    updateDirty(form ? serializeForm(form) !== baselineRef.current : false);
+    updateDirty(
+      form ? serializeAdminForm(form) !== baselineRef.current : false,
+    );
   }, [readForm, updateDirty]);
 
   const navigate = useCallback(
@@ -134,8 +132,13 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
 
   const requestNavigation = useCallback(
     (href: string) => {
-      if (pendingRef.current) return;
-      if (!dirtyRef.current || allowNavigationRef.current) {
+      const decision = resolveAdminFormNavigationDecision({
+        pending: pendingRef.current,
+        dirty: dirtyRef.current,
+        navigationAllowed: allowNavigationRef.current,
+      });
+      if (decision === "blocked_pending") return;
+      if (decision === "navigate") {
         leave(href);
         return;
       }
@@ -146,7 +149,7 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
 
   useLayoutEffect(() => {
     const form = readForm();
-    if (form) baselineRef.current = serializeForm(form);
+    if (form) baselineRef.current = serializeAdminForm(form);
     dirtyRef.current = false;
     allowNavigationRef.current = false;
     const frame = window.requestAnimationFrame(() => setIsDirty(false));
@@ -159,7 +162,7 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     const form: HTMLFormElement = currentForm;
 
     function handleFormChange() {
-      updateDirty(serializeForm(form) !== baselineRef.current);
+      updateDirty(serializeAdminForm(form) !== baselineRef.current);
     }
 
     form.addEventListener("input", handleFormChange);
@@ -181,7 +184,9 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     wasPendingRef.current = false;
     allowNavigationRef.current = false;
     const form = readForm();
-    if (form) updateDirty(serializeForm(form) !== baselineRef.current);
+    if (form) {
+      updateDirty(serializeAdminForm(form) !== baselineRef.current);
+    }
   }, [pending, readForm, updateDirty]);
 
   useEffect(() => {
@@ -415,6 +420,7 @@ export default function AdminFormRuntime({
   const pending = actionPending || handoffPending;
   const formRef = useRef<HTMLFormElement>(null);
   const submittedBaselineRef = useRef<string | null>(null);
+  const submittedControlsRef = useRef<AdminFormControlSnapshot[] | null>(null);
   const handledResultRef = useRef<AdminFormActionState>(
     createAdminFormInitialState(mode),
   );
@@ -429,6 +435,14 @@ export default function AdminFormRuntime({
     () => requestNavigation(closeHref),
     [closeHref, requestNavigation],
   );
+
+  useLayoutEffect(() => {
+    const form = formRef.current;
+    const snapshot = submittedControlsRef.current;
+    if (!form || !snapshot) return;
+
+    restoreAdminFormControls(form, snapshot);
+  }, [actionPending, state]);
 
   useEffect(() => {
     if (state.status === "idle" || handledResultRef.current === state) return;
@@ -471,12 +485,14 @@ export default function AdminFormRuntime({
       }
       const submittedBaseline = submittedBaselineRef.current ?? undefined;
       submittedBaselineRef.current = null;
+      submittedControlsRef.current = null;
       markClean(submittedBaseline);
       router.replace(editHref, { scroll: false });
       return;
     }
     const submittedBaseline = submittedBaselineRef.current ?? undefined;
     submittedBaselineRef.current = null;
+    submittedControlsRef.current = null;
     markClean(submittedBaseline);
   }, [
     clearFeedback,
@@ -506,10 +522,10 @@ export default function AdminFormRuntime({
         ref={formRef}
         id={formId}
         action={formAction}
-        onSubmitCapture={() => {
-          submittedBaselineRef.current = formRef.current
-            ? serializeForm(formRef.current)
-            : null;
+        onSubmitCapture={(event) => {
+          const form = event.currentTarget;
+          submittedBaselineRef.current = serializeAdminForm(form);
+          submittedControlsRef.current = captureAdminFormControls(form);
           clearFeedback(feedbackChannel);
         }}
         noValidate

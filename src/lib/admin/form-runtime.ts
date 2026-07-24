@@ -25,6 +25,21 @@ export type AdminFormNavigationContract = {
   fields: Record<string, AdminFormFieldTarget>;
 };
 
+export type AdminFormNavigationDecision =
+  | "blocked_pending"
+  | "navigate"
+  | "confirm_discard";
+
+export function resolveAdminFormNavigationDecision(options: {
+  pending: boolean;
+  dirty: boolean;
+  navigationAllowed?: boolean;
+}): AdminFormNavigationDecision {
+  if (options.pending) return "blocked_pending";
+  if (!options.dirty || options.navigationAllowed) return "navigate";
+  return "confirm_discard";
+}
+
 export const ADMIN_FORM_INITIAL_STATE: AdminFormActionState = {
   status: "idle",
   mode: "create",
