@@ -69,6 +69,7 @@ export default function RedirectsClient({
   initialFilters,
 }: RedirectsClientProps) {
   const [isPending, startTransition] = useTransition();
+  const [rows, setRows] = useState(redirects);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRedirect, setEditingRedirect] = useState<UrlRedirectRecord | null>(null);
 
@@ -76,7 +77,7 @@ export default function RedirectsClient({
 
   const filteredRedirects = useMemo(() => {
     const q = initialFilters.q.trim().toLowerCase();
-    return redirects.filter((row) => {
+    return rows.filter((row) => {
       if (initialFilters.status !== "all" && row.status !== initialFilters.status) return false;
       if (initialFilters.redirectType !== "all" && row.redirect_type !== initialFilters.redirectType) {
         return false;
@@ -88,7 +89,20 @@ export default function RedirectsClient({
         (row.note ?? "").toLowerCase().includes(q)
       );
     });
-  }, [redirects, initialFilters]);
+  }, [rows, initialFilters]);
+
+  function handleRedirectSaved(savedRedirect: UrlRedirectRecord) {
+    setRows((current) => {
+      const nextRows = current.some((row) => row.id === savedRedirect.id)
+        ? current.map((row) =>
+            row.id === savedRedirect.id ? savedRedirect : row,
+          )
+        : [savedRedirect, ...current];
+      return nextRows.sort((left, right) =>
+        right.updated_at.localeCompare(left.updated_at),
+      );
+    });
+  }
 
   function handleToggleStatus(redirect: UrlRedirectRecord) {
     const formData = new FormData();
@@ -125,7 +139,7 @@ export default function RedirectsClient({
           />
         </div>
 
-        {redirects.length === 0 ? (
+        {rows.length === 0 ? (
           <AdminListEmptyState
             title="لا توجد تحويلات بعد"
             description="أنشئ أول تحويل URL لإدارة تغييرات المسارات العامة بعد الإطلاق."
@@ -202,12 +216,18 @@ export default function RedirectsClient({
         )}
       </section>
 
-      <RedirectFormModal open={createOpen} mode="create" onClose={() => setCreateOpen(false)} />
+      <RedirectFormModal
+        open={createOpen}
+        mode="create"
+        onClose={() => setCreateOpen(false)}
+        onSaved={handleRedirectSaved}
+      />
       <RedirectFormModal
         open={Boolean(editingRedirect)}
         mode="edit"
         redirect={editingRedirect ?? undefined}
         onClose={() => setEditingRedirect(null)}
+        onSaved={handleRedirectSaved}
       />
     </main>
   );

@@ -1,6 +1,6 @@
 export type AdminFormMode = "create" | "edit";
 
-export type AdminFormActionState = {
+export type AdminFormActionState<TResult = unknown> = {
   status: "idle" | "error" | "success";
   mode: AdminFormMode;
   revision: number;
@@ -13,6 +13,7 @@ export type AdminFormActionState = {
   focusTarget?: string;
   tabTarget?: string;
   fieldErrors?: Record<string, string[]>;
+  result?: TResult;
 };
 
 export type AdminFormFieldTarget = {
@@ -46,9 +47,9 @@ export const ADMIN_FORM_INITIAL_STATE: AdminFormActionState = {
   revision: 0,
 };
 
-export function createAdminFormInitialState(
+export function createAdminFormInitialState<TResult = unknown>(
   mode: AdminFormMode,
-): AdminFormActionState {
+): AdminFormActionState<TResult> {
   return { status: "idle", mode, revision: 0 };
 }
 
@@ -66,7 +67,9 @@ export function createAdminFormErrorState(
   };
 }
 
-export type AdminFormAction = (
-  previousState: AdminFormActionState,
+export type AdminFormAction<TResult = unknown> = (
+  previousState: AdminFormActionState<TResult>,
   formData: FormData,
-) => AdminFormActionState | Promise<AdminFormActionState>;
+) =>
+  | AdminFormActionState<TResult>
+  | Promise<AdminFormActionState<TResult>>;
