@@ -10,6 +10,7 @@ export type AdminEntityPreviewCapability = {
   entityType: string;
   entityId: number | string;
   publicationStatus?: string | null;
+  publicViewPublicationPolicy?: "published-only" | "always";
   routes: {
     internalPreview?: string | null;
     publicView?: string | null;
@@ -62,7 +63,10 @@ export function resolveAdminEntityPreviewActions(
   );
   if (internalPreview) actions.push(internalPreview);
 
-  if (capability.publicationStatus === "published") {
+  if (
+    capability.publicViewPublicationPolicy === "always" ||
+    capability.publicationStatus === "published"
+  ) {
     const publicView = resolveAction(
       "public-view",
       capability.routes.publicView,

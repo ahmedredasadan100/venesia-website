@@ -42,3 +42,45 @@ export function buildAdminContentPreviewCapability(input: {
     },
   };
 }
+
+export function buildAdminCategoryCollectionPreviewCapability(input: {
+  id: number | string;
+  slug?: string | null;
+  isActive: boolean;
+}): AdminEntityPreviewCapability {
+  const slug = input.slug?.trim() ?? "";
+
+  return {
+    entityType: "topic-category",
+    entityId: input.id,
+    publicationStatus: input.isActive ? "published" : "unpublished",
+    publicViewPublicationPolicy: "always",
+    routes: {
+      internalPreview: null,
+      publicView: slug
+        ? `/topics?category=${encodeURIComponent(slug)}`
+        : null,
+    },
+    access: {
+      "internal-preview": "hidden",
+      "public-view": "allowed",
+    },
+  };
+}
+
+export function buildAdminSeriesCollectionPreviewCapability(input: {
+  id: number | string;
+}): AdminEntityPreviewCapability {
+  return {
+    entityType: "topic-series",
+    entityId: input.id,
+    routes: {
+      internalPreview: `/admin/content/topics?series=${encodeURIComponent(String(input.id))}`,
+      publicView: null,
+    },
+    access: {
+      "internal-preview": "allowed",
+      "public-view": "hidden",
+    },
+  };
+}

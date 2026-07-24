@@ -108,7 +108,7 @@ export default function SeriesTableClient({
       try {
         const result = await instant.mutateAsync({
           rowId: row.id,
-          action: "status",
+          action: "visibility",
           optimistic: (cache) => {
             if (controller.query.filters.status !== "all") {
               cache.removeRows(new Set([row.id]));
@@ -244,8 +244,10 @@ export default function SeriesTableClient({
 
   const rowHandlers = useMemo<SeriesRowActionHandlers>(
     () => ({
-      isRowPending: () =>
-        instant.rowPending !== null || instant.bulkPending !== null,
+      rowPendingAction: (seriesId) =>
+        instant.rowPending?.rowId === seriesId
+          ? instant.rowPending.action
+          : null,
       onToggle: toggleSeries,
       onDuplicate: duplicateSeries,
       onDelete: deleteSeries,
@@ -253,7 +255,6 @@ export default function SeriesTableClient({
     [
       deleteSeries,
       duplicateSeries,
-      instant.bulkPending,
       instant.rowPending,
       toggleSeries,
     ],

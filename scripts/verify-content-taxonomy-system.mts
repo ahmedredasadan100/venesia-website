@@ -60,6 +60,8 @@ const paths = {
   categoryEdit: "src/app/admin/content/categories/[id]/page.tsx",
   categoryClient: "src/app/admin/content/categories/CategoriesListClient.tsx",
   categoryColumns: "src/app/admin/content/categories/categories-columns.tsx",
+  categoryRowActions:
+    "src/app/admin/content/categories/CategoryRowActions.tsx",
   categoryActions: "src/app/admin/content/categories/actions.ts",
   taxonomyFormActions: "src/app/admin/content/taxonomy-form-actions.ts",
   taxonomyFormValidation:
@@ -68,6 +70,12 @@ const paths = {
   seriesNew: "src/app/admin/content/series/new/page.tsx",
   seriesEdit: "src/app/admin/content/series/[id]/page.tsx",
   seriesClient: "src/app/admin/content/series/SeriesTableClient.tsx",
+  seriesColumns: "src/app/admin/content/series/series-columns.tsx",
+  dataGrid: "src/components/admin/ui/AdminDataGrid.tsx",
+  previewActions: "src/components/admin/ui/AdminEntityPreviewActions.tsx",
+  previewAdapters: "src/lib/admin/content/entity-preview-capabilities.ts",
+  interactionManifest:
+    "src/lib/admin/interaction-system/adoption-manifest.ts",
   categoryAdapter:
     "src/lib/admin/content/entity-list-adapters/categories.ts",
   seriesAdapter: "src/lib/admin/content/entity-list-adapters/series.ts",
@@ -97,6 +105,7 @@ const categoryNew = read(paths.categoryNew);
 const categoryEdit = read(paths.categoryEdit);
 const categoryClient = read(paths.categoryClient);
 const categoryColumns = read(paths.categoryColumns);
+const categoryRowActions = read(paths.categoryRowActions);
 const categoryActions = read(paths.categoryActions);
 const taxonomyFormActions = read(paths.taxonomyFormActions);
 const taxonomyFormValidation = read(paths.taxonomyFormValidation);
@@ -104,6 +113,11 @@ const seriesForm = read(paths.seriesForm);
 const seriesNew = read(paths.seriesNew);
 const seriesEdit = read(paths.seriesEdit);
 const seriesClient = read(paths.seriesClient);
+const seriesColumns = read(paths.seriesColumns);
+const dataGrid = read(paths.dataGrid);
+const previewActions = read(paths.previewActions);
+const previewAdapters = read(paths.previewAdapters);
+const interactionManifest = read(paths.interactionManifest);
 const categoryAdapter = read(paths.categoryAdapter);
 const seriesAdapter = read(paths.seriesAdapter);
 const taxonomyMutations = read(paths.taxonomyMutations);
@@ -406,27 +420,26 @@ check(
 );
 check(
   "feedback",
-  "entity lists render feedback in the shared inline slot instead of the global viewport",
-  entityList.includes("AdminNotice") &&
-    entityList.includes("data-admin-entity-feedback-slot") &&
-    !entityList.includes("useOptionalAdminFeedback") &&
-    !entityList.includes("publishFeedback") &&
-    entityList.indexOf("data-admin-entity-feedback-slot") >
+  "entity lists publish through the shared runtime into its inline channel viewport",
+  feedbackProvider.includes("AdminFeedbackChannelViewport") &&
+    feedbackProvider.includes("data-admin-entity-feedback-slot") &&
+    entityList.includes("useAdminFeedback") &&
+    entityList.includes("publishFeedback(nextFeedback") &&
+    entityList.includes("AdminFeedbackChannelViewport") &&
+    entityList.indexOf("<AdminFeedbackChannelViewport") >
       entityList.lastIndexOf("<AdminBulkActionBar") &&
-    entityList.indexOf("data-admin-entity-feedback-slot") <
+    entityList.indexOf("<AdminFeedbackChannelViewport") <
       entityList.indexOf("<AdminEntityListTable"),
 );
 check(
   "feedback",
-  "entity-list feedback owns visibility-aware smart reveal and reduced-motion focus",
-  entityList.includes("feedbackSlotRef") &&
-    entityList.includes("revealedFeedbackRevisionRef") &&
-    entityList.includes("pendingFeedbackFocusRevisionRef") &&
-    entityList.includes("getBoundingClientRect") &&
-    entityList.includes("scrollIntoView") &&
-    entityList.includes("prefers-reduced-motion: reduce") &&
-    entityList.includes('prefersReducedMotion ? "auto" : "smooth"') &&
-    entityList.includes("focus({ preventScroll: true })") &&
+  "feedback runtime owns inline smart reveal and reduced-motion focus",
+  feedbackProvider.includes("latestEntry?.reveal") &&
+    feedbackProvider.includes("getBoundingClientRect") &&
+    feedbackProvider.includes("scrollIntoView") &&
+    feedbackProvider.includes("prefers-reduced-motion: reduce") &&
+    feedbackProvider.includes('prefersReducedMotion ? "auto" : "smooth"') &&
+    feedbackProvider.includes("focus({ preventScroll: true })") &&
     entityList.includes("options.bulk === true") &&
     entityList.includes('result.code === "deleted"'),
 );
@@ -533,6 +546,73 @@ check(
     instantMutationCache.includes("setAdminEntityListCachesInScope") &&
     !categoryClient.includes("router.refresh") &&
     !seriesClient.includes("router.refresh"),
+);
+check(
+  "collection-interaction",
+  "pending presentation is scoped to rowId plus action without local pending owners",
+  [categoryClient, seriesClient].every(
+    (source) =>
+      source.includes("rowPendingAction:") &&
+      source.includes("instant.rowPending?.rowId ===") &&
+      !source.includes(
+        "instant.rowPending !== null || instant.bulkPending !== null",
+      ),
+  ) &&
+    [categoryRowActions, seriesColumns].every(
+      (source) =>
+        source.includes('pendingAction === "visibility"') &&
+        source.includes('pendingAction === "duplicate"') &&
+        source.includes('pendingAction === "delete"') &&
+        !source.includes("localPending"),
+    ),
+);
+check(
+  "collection-interaction",
+  "Categories and Series delegate visibility icon, tone, label, accessibility, and pending presentation",
+  dataGrid.includes('action === "visibility"') &&
+    dataGrid.includes("resolveAdminDataGridVisibilityAction") &&
+    dataGrid.includes('tone: "dark" as const') &&
+    dataGrid.includes('tone: "green" as const') &&
+    dataGrid.includes("resolvedAriaPressed") &&
+    dataGrid.includes("data-admin-visibility-state") &&
+    [categoryRowActions, seriesColumns].every(
+      (source) =>
+        source.includes('action="visibility"') &&
+        source.includes("isCurrentlyHidden=") &&
+        source.includes("visibilityEntityLabel=") &&
+        !source.includes("title={isHidden") &&
+        !source.includes("title={isActive") &&
+        !source.includes("tone={isHidden") &&
+        !source.includes("tone={isActive"),
+    ),
+);
+check(
+  "collection-interaction",
+  "taxonomy collection outcomes use one shared feedback channel and no local notice engine",
+  feedbackProvider.includes("AdminFeedbackChannelViewport") &&
+    feedbackProvider.includes("entry.channel === channel") &&
+    feedbackProvider.includes("entry.placement === placement") &&
+    entityList.includes("publishFeedback(nextFeedback") &&
+    entityList.includes('placement: "inline"') &&
+    [categoryRowActions, seriesColumns].every(
+      (source) => !source.includes("AdminNotice"),
+    ),
+);
+check(
+  "collection-interaction",
+  "Category and Series Preview/Public use the shared capability entry point with only proven routes",
+  previewActions.includes('presentation === "data-grid-compact"') &&
+    previewAdapters.includes("buildAdminCategoryCollectionPreviewCapability") &&
+    previewAdapters.includes("/topics?category=") &&
+    previewAdapters.includes('publicViewPublicationPolicy: "always"') &&
+    previewAdapters.includes("buildAdminSeriesCollectionPreviewCapability") &&
+    previewAdapters.includes("/admin/content/topics?series=") &&
+    previewAdapters.includes("publicView: null") &&
+    categoryRowActions.includes("AdminEntityPreviewActions") &&
+    seriesColumns.includes("AdminEntityPreviewActions") &&
+    interactionManifest.includes('status: "adopted"') &&
+    !categoryRowActions.includes("previewHref") &&
+    !seriesColumns.includes("topicsPreviewHref"),
 );
 
 const sections = new Map<string, { passed: number; total: number }>();

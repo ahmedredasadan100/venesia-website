@@ -164,24 +164,30 @@ export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
   {
     id: "topic-category-collection-preview",
     capability: "entity_preview_public",
-    status: "gap",
+    status: "adopted",
     capabilityOwner: "shared_capabilities",
     consumerBoundary: "collection_runtime",
     sourceFiles: [
       "src/app/admin/content/categories/CategoryRowActions.tsx",
+      "src/lib/admin/content/entity-preview-capabilities.ts",
+      "src/components/admin/ui/AdminEntityPreviewActions.tsx",
     ],
     rationale:
-      "The Category collection still derives and renders its public topics preview inside row actions.",
+      "The Category collection declares its existing public topics route through a thin content adapter and delegates rendering to the shared capability.",
   },
   {
     id: "topic-series-collection-preview",
     capability: "entity_preview_public",
-    status: "gap",
+    status: "adopted",
     capabilityOwner: "shared_capabilities",
     consumerBoundary: "collection_runtime",
-    sourceFiles: ["src/app/admin/content/series/series-columns.tsx"],
+    sourceFiles: [
+      "src/app/admin/content/series/series-columns.tsx",
+      "src/lib/admin/content/entity-preview-capabilities.ts",
+      "src/components/admin/ui/AdminEntityPreviewActions.tsx",
+    ],
     rationale:
-      "The Series collection still derives and renders its topics-view action inside row actions.",
+      "The Series collection declares its existing filtered Admin topics route as an internal view through a thin content adapter; no unsupported public route is declared.",
   },
 ] as const satisfies readonly AdminEntityPreviewCapabilityAdoption[];
 
@@ -194,55 +200,5 @@ export type AdminInteractionCollectionRuntimeGap = {
   rationale: string;
 };
 
-export const ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS = [
-  {
-    id: "topic-category-collection-row-actions",
-    runtime: "collection_runtime",
-    sourceFiles: [
-      "src/app/admin/content/categories/CategoriesListClient.tsx",
-      "src/app/admin/content/categories/CategoryRowActions.tsx",
-    ],
-    gaps: [
-      "row_action_pending_scope",
-      "shared_entity_preview_capability",
-      "shared_feedback_delivery",
-      "collection_visibility_command_policy",
-    ],
-    nextReferenceContract: [
-      "row_scoped_pending",
-      "optimistic_update",
-      "targeted_invalidation",
-      "shared_feedback",
-      "confirmation_contract",
-      "audit",
-      "no_collection_wide_visual_refresh",
-    ],
-    rationale:
-      "Category row commands remain locally composed and expose collection-wide pending behavior; they require a Collection Runtime pass, not a Form Runtime change.",
-  },
-  {
-    id: "topic-series-collection-row-actions",
-    runtime: "collection_runtime",
-    sourceFiles: [
-      "src/app/admin/content/series/SeriesTableClient.tsx",
-      "src/app/admin/content/series/series-columns.tsx",
-    ],
-    gaps: [
-      "row_action_pending_scope",
-      "shared_entity_preview_capability",
-      "shared_feedback_delivery",
-      "collection_visibility_command_policy",
-    ],
-    nextReferenceContract: [
-      "row_scoped_pending",
-      "optimistic_update",
-      "targeted_invalidation",
-      "shared_feedback",
-      "confirmation_contract",
-      "audit",
-      "no_collection_wide_visual_refresh",
-    ],
-    rationale:
-      "Series row commands retain local pending and topics-view ownership; they require the same future Collection Runtime pass as Categories.",
-  },
-] as const satisfies readonly AdminInteractionCollectionRuntimeGap[];
+export const ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS =
+  [] as const satisfies readonly AdminInteractionCollectionRuntimeGap[];

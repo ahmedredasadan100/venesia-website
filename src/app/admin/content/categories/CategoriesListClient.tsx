@@ -134,7 +134,7 @@ export default function CategoriesListClient({
       try {
         const result = await instant.mutateAsync({
           rowId: category.id,
-          action: "status",
+          action: "visibility",
           optimistic: (cache) => {
             if (controller.query.filters.status !== "all") {
               cache.removeRows(new Set([category.id]));
@@ -305,8 +305,10 @@ export default function CategoriesListClient({
       createCategoryColumns({
         isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
         onToggle: toggleCategory,
-        isRowPending: () =>
-          instant.rowPending !== null || instant.bulkPending !== null,
+        rowPendingAction: (categoryId) =>
+          instant.rowPending?.rowId === categoryId
+            ? instant.rowPending.action
+            : null,
         onToggleStatus: toggleStatus,
         onDuplicate: duplicate,
         onDelete: removeCategory,
@@ -314,7 +316,6 @@ export default function CategoriesListClient({
     [
       collapsedCategoryIds,
       duplicate,
-      instant.bulkPending,
       instant.rowPending,
       removeCategory,
       toggleCategory,

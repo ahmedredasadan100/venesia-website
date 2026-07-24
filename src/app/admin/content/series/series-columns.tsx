@@ -7,6 +7,7 @@ import {
   AdminConfirmDialog,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  AdminEntityPreviewActions,
   AdminStatusPill,
   getAdminDataGridActionsColumnWidth,
 } from "../../../../components/admin/ui";
@@ -16,6 +17,7 @@ import {
   formatAdminListDate,
 } from "../../../../lib/content-dates";
 import type { SeriesListRow } from "../../../../lib/admin/content/load-series-list";
+import { buildAdminSeriesCollectionPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
 import { useRef, useState } from "react";
 
 export type SeriesColumnKey =
@@ -89,18 +91,17 @@ function SeriesRowActions({
   onMutationResult?: (result: AdminActionResult) => void;
   handlers: SeriesRowActionHandlers;
 }) {
-  const [localPending, setLocalPending] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const pending = localPending || handlers.isRowPending(row.id);
+  const pendingAction = handlers.rowPendingAction(row.id);
   const isHidden = row.status !== "published";
-  const topicsPreviewHref = `/admin/content/topics?series=${row.id}`;
+  const previewCapability = buildAdminSeriesCollectionPreviewCapability({
+    id: row.id,
+  });
 
   async function run(
     action: () => Promise<AdminActionResult>,
   ) {
-    if (pending) return;
-    setLocalPending(true);
     try {
       const result = await action();
       onMutationResult?.(result);
@@ -112,8 +113,6 @@ function SeriesRowActions({
         message: "حدث خطأ غير متوقع. حاول مرة أخرى.",
       });
       return { ok: false as const };
-    } finally {
-      setLocalPending(false);
     }
   }
 
@@ -125,20 +124,17 @@ function SeriesRowActions({
           href={`/admin/content/series/${row.id}`}
           size="compact"
         />
-        <AdminDataGridActionButton
-          action="preview"
-          href={topicsPreviewHref}
-          target="_blank"
-          rel="noreferrer"
-          size="compact"
-          title="عرض موضوعات السلسلة"
+        <AdminEntityPreviewActions
+          capability={previewCapability}
+          presentation="data-grid-compact"
         />
         <AdminDataGridActionButton
           action="visibility"
           size="compact"
-          title={isHidden ? "إظهار" : "إخفاء"}
           isCurrentlyHidden={isHidden}
-          disabled={pending}
+          visibilityEntityLabel="السلسلة"
+          pending={pendingAction === "visibility"}
+          disabled={pendingAction === "visibility"}
           onClick={() =>
             void run(() => handlers.onToggle(row))
           }
@@ -146,14 +142,16 @@ function SeriesRowActions({
         <AdminDataGridActionButton
           action="duplicate"
           size="compact"
-          disabled={pending}
+          pending={pendingAction === "duplicate"}
+          disabled={pendingAction === "duplicate"}
           onClick={() => void run(() => handlers.onDuplicate(row))}
         />
         <AdminDataGridActionButton
           buttonRef={deleteTriggerRef}
           action="delete"
           size="compact"
-          disabled={pending}
+          pending={pendingAction === "delete"}
+          disabled={pendingAction === "delete"}
           onClick={() => setDeleteOpen(true)}
         />
         <AdminActivityPopover
@@ -189,7 +187,7 @@ function SeriesRowActions({
         title="حذف السلسلة"
         description={`هل تريد حذف سلسلة «${row.name}»؟ لا يمكن التراجع عن هذا الإجراء.`}
         confirmLabel="حذف"
-        pending={pending}
+        pending={pendingAction === "delete"}
         returnFocusRef={deleteTriggerRef}
         onCancel={() => setDeleteOpen(false)}
         onConfirm={async () => {
@@ -202,7 +200,7 @@ function SeriesRowActions({
 }
 
 export type SeriesRowActionHandlers = {
-  isRowPending: (id: number) => boolean;
+  rowPendingAction: (id: number) => string | null;
   onToggle: (row: SeriesListRow) => Promise<AdminActionResult>;
   onDuplicate: (row: SeriesListRow) => Promise<AdminActionResult>;
   onDelete: (row: SeriesListRow) => Promise<AdminActionResult>;
