@@ -82,11 +82,11 @@ npm run verify:audit-coverage
 
 ## Documentation
 
-- [Unified Content Engine ADR](docs/architecture/UNIFIED_CONTENT_ENGINE.md)
-- [Admin Audit Coverage](docs/admin-audit-coverage.md)
-- [Oversized Actions Split Plan](docs/oversized-actions-split-plan.md)
-- [Migration Metadata Reference](docs/database/migration-metadata.md)
-- [Media Upload / Supabase Storage Migration Plan](docs/security-media-upload-migration.md)
+- [Systems, Runtimes, Capabilities, and Unified Content](docs/SYSTEMS_RUNTIMES_CAPABILITIES.md)
+- [QA, Release, Closure, and Audit Coverage](docs/QA_RELEASE_CLOSURE.md)
+- [Roadmap and Debt Register](docs/ROADMAP_AND_DEBT_REGISTER.md)
+- [Database and Migration Provenance](docs/DATABASE_MIGRATIONS_STORAGE.md)
+- [Media Storage and Migration Safety](docs/DATABASE_MIGRATIONS_STORAGE.md)
 
 ## SQL migrations
 

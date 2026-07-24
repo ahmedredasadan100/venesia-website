@@ -52,3 +52,9 @@ qa-mobile-audit/
 lint-errors.txt
 lint-report.txt
 dead-code-scan*.json
+# canonical documentation policy
+/.tmp-qa/
+/docs/qa/
+/docs/archive/
+/docs/*.docx
+/responsive-layout-audit.md
