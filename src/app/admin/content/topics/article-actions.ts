@@ -1,8 +1,1 @@
-export {
-  createTopic,
-  publishTopic,
-  saveDraftTopic,
-  saveTopic,
-  saveTopicAndClose,
-  unpublishTopic,
-} from "./article-actions/index";
+export { saveTopicForm } from "./article-actions/index";

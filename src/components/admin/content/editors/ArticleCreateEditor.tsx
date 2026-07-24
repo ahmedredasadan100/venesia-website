@@ -1,5 +1,9 @@
-import AdminNotice from "../../AdminNotice";
-import { AdminActionButton, AdminPageContextHeader } from "../../ui";
+import {
+  AdminActionButton,
+  AdminFormActions,
+  AdminPageContextHeader,
+} from "../../ui";
+import AdminFormRuntime from "../../ui/AdminFormRuntime";
 import SeoPanel from "../../SeoPanel";
 import FaqEditor from "./article/FaqEditor";
 import TopicEditTabs from "./article/TopicEditTabs";
@@ -8,10 +12,11 @@ import TopicMarkdownEditor from "./article/TopicMarkdownEditor";
 import { buildArticleTopicCategoryFilterGroups } from "../../../../lib/admin/article-topic-categories";
 import TopicPublishChecklistPanel from "../../content-workflow/TopicPublishChecklistPanel";
 import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
-import { createTopic } from "../../../../app/admin/content/topics/article-actions";
+import { saveTopicForm } from "../../../../app/admin/content/topics/article-actions";
 import type { ArticleEditorCategory, ArticleEditorSeries } from "./ArticleEditor";
 import TopicPublishingOptions from "./article/TopicPublishingOptions";
-import SaveBar from "../../SaveBar";
+import { TOPIC_FORM_NAVIGATION } from "./article/topic-form-definition";
+import { createAdminFormErrorState } from "../../../../lib/admin/form-runtime";
 
 export default function ArticleCreateEditor({
   categories,
@@ -43,9 +48,24 @@ export default function ArticleCreateEditor({
         }
       />
 
-      {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء الموضوع" message={errorMessage} /> : null}
-
-      <form id="topic-create-form" action={createTopic} className="space-y-7" noValidate>
+      <AdminFormRuntime
+        action={saveTopicForm}
+        initialState={
+          errorMessage
+            ? createAdminFormErrorState(
+                "create",
+                "تعذر إنشاء الموضوع",
+                errorMessage,
+              )
+            : undefined
+        }
+        mode="create"
+        entityKey="topic"
+        closeHref="/admin/content/topics"
+        navigation={TOPIC_FORM_NAVIGATION}
+        formId="topic-create-form"
+        className="space-y-7"
+      >
         <input type="hidden" name="content_type" value="article" />
         <TopicEditTabs
           tabs={[
@@ -87,17 +107,15 @@ export default function ArticleCreateEditor({
               label: "المراجعة والنشر",
               content: (
                 <div className="space-y-6">
-                  <TopicPublishingOptions status="draft">
-                    <SaveBar mode="create" />
-                  </TopicPublishingOptions>
+                  <TopicPublishingOptions status="draft" />
                   <TopicPublishChecklistPanel formId="topic-create-form" initial={publishInput} status="draft" />
                 </div>
               ),
             },
           ]}
         />
-
-      </form>
+        <AdminFormActions />
+      </AdminFormRuntime>
     </main>
   );
 }

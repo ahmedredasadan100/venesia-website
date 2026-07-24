@@ -2,8 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { analyzeTopicSeo, type FaqItem, type SeoIssue } from "../../lib/admin/seo-score";
+import {
+  SEO_LENGTH_STANDARDS,
+  assessSeoLength,
+  formatSeoLengthRange,
+  getSeoLengthStateLabel,
+  type SeoLengthAssessment,
+} from "../../lib/admin/seo-length-standards";
 import AdminTagsField from "./AdminTagsField";
 import TopicCorrectionButton from "./content/editors/article/TopicCorrectionButton";
+import {
+  AdminFormError,
+  useOptionalAdminFormRuntime,
+} from "./ui/AdminFormRuntime";
 
 type SeoPanelProps = {
   title: string;
@@ -72,10 +83,6 @@ function faqFrom(form: HTMLFormElement, fallback: FaqItem[] = []) {
     .filter((item) => item.question || item.answer);
 }
 
-function range(valueLength: number, min: number, max: number) {
-  return valueLength < min ? "قصير" : valueLength > max ? "طويل" : "مناسب";
-}
-
 function robotsLabel(value: boolean | null, enabled: string, disabled: string) {
   if (value === null) return "الإعداد العام";
   return value ? enabled : disabled;
@@ -126,6 +133,14 @@ export default function SeoPanel(props: SeoPanelProps) {
   const previewDescription =
     live.seoDescription.trim() || live.excerpt.trim() || "سيظهر وصف الموضوع هنا عند إضافته.";
   const canonicalPreview = live.canonicalUrl.trim() || publicPath;
+  const seoTitleLength = assessSeoLength(
+    live.seoTitle,
+    SEO_LENGTH_STANDARDS.title,
+  );
+  const seoDescriptionLength = assessSeoLength(
+    live.seoDescription,
+    SEO_LENGTH_STANDARDS.description,
+  );
 
   return (
     <section
@@ -149,18 +164,14 @@ export default function SeoPanel(props: SeoPanelProps) {
                 label="SEO Title"
                 name="seo_title"
                 defaultValue={props.seoTitle}
-                count={live.seoTitle.length}
-                maxLength={70}
-                helper={`الحالة: ${range(live.seoTitle.length, 45, 60)} — المستهدف 45–60 حرفًا`}
+                lengthAssessment={seoTitleLength}
               />
               <SeoField
                 id="topic-seo-description"
                 label="Meta Description"
                 name="seo_description"
                 defaultValue={props.seoDescription}
-                count={live.seoDescription.length}
-                maxLength={170}
-                helper={`الحالة: ${range(live.seoDescription.length, 120, 160)} — المستهدف 120–160 حرفًا`}
+                lengthAssessment={seoDescriptionLength}
                 textarea
               />
               <SeoField
@@ -297,7 +308,7 @@ function SeoField({
   defaultValue,
   count,
   helper,
-  maxLength,
+  lengthAssessment,
   textarea = false,
   dir = "rtl",
 }: {
@@ -305,12 +316,23 @@ function SeoField({
   label: string;
   name: string;
   defaultValue: string;
-  count: number;
-  helper: string;
-  maxLength?: number;
+  count?: number;
+  helper?: string;
+  lengthAssessment?: SeoLengthAssessment;
   textarea?: boolean;
   dir?: "rtl" | "ltr";
 }) {
+  const hasError = Boolean(
+    useOptionalAdminFormRuntime()?.fieldErrors[name]?.length,
+  );
+  const errorId = `${name}-error`;
+  const lengthFeedbackId = `${id}-length-feedback`;
+  const describedBy = [
+    lengthAssessment ? lengthFeedbackId : null,
+    hasError ? errorId : null,
+  ]
+    .filter(Boolean)
+    .join(" ") || undefined;
   const classes =
     "mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45";
   return (
@@ -321,18 +343,52 @@ function SeoField({
           id={id}
           name={name}
           defaultValue={defaultValue}
-          maxLength={maxLength}
           rows={4}
           dir={dir}
+          aria-invalid={hasError || undefined}
+          aria-describedby={describedBy}
           className={`${classes} resize-y leading-7`}
         />
       ) : (
-        <input id={id} name={name} defaultValue={defaultValue} maxLength={maxLength} dir={dir} className={classes} />
+        <input id={id} name={name} defaultValue={defaultValue} dir={dir} aria-invalid={hasError || undefined} aria-describedby={describedBy} className={classes} />
       )}
-      <span className="mt-2 flex justify-between gap-3 text-xs text-white/35">
-        <span>{helper}</span>
-        <span className="font-en">{count}{maxLength ? ` / ${maxLength}` : ""}</span>
+      <span
+        id={lengthAssessment ? lengthFeedbackId : undefined}
+        aria-live={lengthAssessment ? "polite" : undefined}
+        aria-atomic={lengthAssessment ? "true" : undefined}
+        className="mt-2 flex flex-col gap-2 text-xs text-white/35 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+      >
+        <span>
+          {lengthAssessment
+            ? getSeoLengthStateLabel(lengthAssessment.state)
+            : helper}
+        </span>
+        {lengthAssessment ? (
+          <span
+            data-seo-length-state={lengthAssessment.state}
+            data-seo-length-count={lengthAssessment.count}
+            data-seo-length-target={formatSeoLengthRange(lengthAssessment)}
+            className={`self-start whitespace-nowrap font-medium sm:self-auto ${
+              lengthAssessment.state === "muted"
+                ? "text-white/35"
+                : lengthAssessment.state === "warning"
+                  ? "text-amber-300/85"
+                  : lengthAssessment.state === "success"
+                    ? "text-emerald-300/85"
+                    : "text-red-300/90"
+            }`}
+          >
+            <span className="font-en">
+              {lengthAssessment.count}
+            </span>{" "}
+            حرف — المدى القياسي{" "}
+            <span className="font-en">{formatSeoLengthRange(lengthAssessment)}</span>
+          </span>
+        ) : (
+          <span className="font-en">{count}</span>
+        )}
       </span>
+      <AdminFormError name={name} />
     </label>
   );
 }
@@ -386,14 +442,23 @@ function IssueRows({ issues }: { issues: SeoIssue[] }) {
         ? "border-emerald-400/15 bg-emerald-400/8"
         : issue.type === "error"
           ? "border-red-400/20 bg-red-400/8"
-          : "border-[#D8B87A]/18 bg-[#D8B87A]/8";
+          : issue.type === "warning"
+            ? "border-[#D8B87A]/18 bg-[#D8B87A]/8"
+            : "border-white/10 bg-white/[0.025]";
 
     return (
       <div key={issue.id ?? `${issue.label}-${issue.hint}`} className={`rounded-xl border px-4 py-3 ${className}`}>
         <div className="flex items-start justify-between gap-3">
           <details className="min-w-0 flex-1">
             <summary className="cursor-pointer text-sm font-medium text-white/78">
-              {issue.type === "success" ? "✓" : issue.type === "error" ? "×" : "!"} {issue.label}
+              {issue.type === "success"
+                ? "✓"
+                : issue.type === "error"
+                  ? "×"
+                  : issue.type === "warning"
+                    ? "!"
+                    : "•"}{" "}
+              {issue.label}
             </summary>
             <p className="mt-2 text-xs leading-6 text-white/45">{issue.hint}</p>
           </details>

@@ -80,9 +80,10 @@ function AdminFeedbackViewportEntry({
       ref={rootRef}
       tabIndex={entry.critical ? -1 : undefined}
       data-admin-feedback-entry=""
+      data-admin-feedback-channel={entry.channel}
       data-admin-feedback-variant={entry.feedback.variant}
       data-admin-feedback-critical={entry.critical ? "true" : "false"}
-      className="pointer-events-auto drop-shadow-[0_20px_45px_rgba(0,0,0,0.45)] focus:outline-none"
+      className="pointer-events-none drop-shadow-[0_20px_45px_rgba(0,0,0,0.45)] focus:outline-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto"
     >
       <AdminNotice
         {...entry.feedback}
@@ -104,7 +105,7 @@ export function AdminFeedbackViewport() {
       data-admin-feedback-viewport=""
       className="pointer-events-none fixed inset-x-4 top-4 bottom-auto z-[120] flex max-h-[min(70vh,560px)] flex-col gap-3 overflow-y-auto sm:inset-x-auto sm:top-auto sm:bottom-6 sm:left-6 sm:w-[min(480px,calc(100vw-3rem))]"
     >
-      {entries.map((entry) => (
+      {[...entries].reverse().map((entry) => (
         <AdminFeedbackViewportEntry
           key={entry.id}
           entry={entry}

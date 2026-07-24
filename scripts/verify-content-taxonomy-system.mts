@@ -288,6 +288,20 @@ check(
 );
 check(
   "select-single-source",
+  "relation validation focuses the visible listbox trigger and keeps it interactive",
+    formListbox.includes("focusTargetId") &&
+    formListbox.includes("triggerId={focusTargetId}") &&
+    formListbox.includes("ariaInvalid={Boolean(error)}") &&
+    formListbox.includes("const unavailable = options.length === 0") &&
+    formListbox.includes("disabled={disabled || loading}") &&
+    categoryForm.includes('focusTargetId="parent_id"') &&
+    seriesForm.includes('focusTargetId="category_id"') &&
+    taxonomyFormActions.includes("messages.length > 0") &&
+    taxonomyFormActions.includes("{ parent_id: [parentError] }") &&
+    taxonomyFormActions.includes("{ category_id: [categoryError] }"),
+);
+check(
+  "select-single-source",
   "category keeps the empty parent option while both taxonomy consumers expose no local search input",
   categoryForm.includes('{ value: "", label: "بدون تصنيف أب" }') &&
     !categoryForm.includes('type="search"') &&
@@ -355,7 +369,8 @@ check(
     feedbackProvider.includes("AdminFeedbackViewport") &&
     feedbackProvider.includes("useAdminFeedback") &&
     feedbackProvider.includes("data-admin-feedback-viewport") &&
-    runtime.includes("useOptionalAdminFeedback") &&
+    runtime.includes("useAdminFeedback") &&
+    !runtime.includes("useOptionalAdminFeedback") &&
     runtime.includes("publishFeedback"),
 );
 check(
@@ -381,7 +396,8 @@ check(
 check(
   "feedback",
   "form-level feedback stays global while field validation stays local",
-  runtime.includes("useOptionalAdminFeedback") &&
+  runtime.includes("useAdminFeedback") &&
+    !runtime.includes("useOptionalAdminFeedback") &&
     runtime.includes("publishFeedback") &&
     runtime.includes("hasFieldErrors") &&
     runtime.includes('state.status === "error" && hasFieldErrors') &&

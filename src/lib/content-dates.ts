@@ -48,19 +48,17 @@ export function resolveTopicPublishedAt(options: {
   status: "draft" | "published" | "unpublished" | "archived";
   nowIso: string;
 }) {
-  if (options.formPublishedDate) {
-    return normalizePublishedAtStorage(options.formPublishedDate);
-  }
-
   if (options.currentPublishedAt) {
     return options.currentPublishedAt;
   }
 
-  if (options.status === "published") {
-    return options.nowIso;
+  if (options.status !== "published") {
+    return null;
   }
 
-  return null;
+  return options.formPublishedDate
+    ? normalizePublishedAtStorage(options.formPublishedDate)
+    : options.nowIso;
 }
 
 export function formatAdminListDate(value?: string | null) {

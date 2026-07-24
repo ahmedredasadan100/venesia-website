@@ -17,26 +17,25 @@ import {
 
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import {
-  ADMIN_FORM_INITIAL_STATE,
+  captureAdminFormControls,
+  restoreAdminFormControls,
+  serializeAdminForm,
+  type AdminFormControlSnapshot,
+} from "../../../lib/admin/form-dom-preservation";
+import {
+  createAdminFormInitialState,
+  resolveAdminFormNavigationDecision,
   type AdminFormAction,
   type AdminFormActionState,
+  type AdminFormMode,
+  type AdminFormNavigationContract,
 } from "../../../lib/admin/form-runtime";
-import { useOptionalAdminFeedback } from "../AdminFeedbackProvider";
+import { resolveSafeInternalPath } from "../../../lib/security/safe-internal-path";
+import { useAdminFeedback } from "../AdminFeedbackProvider";
 import AdminConfirmDialog from "./AdminConfirmDialog";
 import { AdminStickyFormBar } from "./AdminForm";
 
 const LEAVE_WARNING = "لديك تعديلات غير محفوظة. هل تريد الإغلاق دون حفظها؟";
-
-function serializeForm(form: HTMLFormElement) {
-  return JSON.stringify(
-    Array.from(new FormData(form).entries()).map(([name, value]) => [
-      name,
-      typeof value === "string"
-        ? value
-        : `${value.name}:${value.size}:${value.type}:${value.lastModified}`,
-    ]),
-  );
-}
 
 function resolveForm(root: HTMLElement | null) {
   if (root instanceof HTMLFormElement) return root;
@@ -51,6 +50,7 @@ export type AdminUnsavedChangesGuardOptions<T extends HTMLElement> = {
   rootRef: RefObject<T | null>;
   pending?: boolean;
   resetKey?: unknown;
+  onNavigate?: () => void;
   title?: string;
   description?: string;
   confirmLabel?: string;
@@ -58,7 +58,7 @@ export type AdminUnsavedChangesGuardOptions<T extends HTMLElement> = {
 
 export type AdminUnsavedChangesGuard = {
   isDirty: boolean;
-  markClean: () => void;
+  markClean: (submittedBaseline?: string) => void;
   requestNavigation: (href: string) => void;
   dialog: ReactNode;
 };
@@ -67,6 +67,7 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
   rootRef,
   pending = false,
   resetKey,
+  onNavigate,
   title = "إغلاق دون حفظ؟",
   description = LEAVE_WARNING,
   confirmLabel = "إغلاق دون حفظ",
@@ -91,10 +92,17 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     [rootRef],
   );
 
-  const markClean = useCallback(() => {
+  const markClean = useCallback((submittedBaseline?: string) => {
     const form = readForm();
-    if (form) baselineRef.current = serializeForm(form);
-    updateDirty(false);
+    if (submittedBaseline !== undefined) {
+      baselineRef.current = submittedBaseline;
+    } else if (form) {
+      baselineRef.current = serializeAdminForm(form);
+    }
+    allowNavigationRef.current = false;
+    updateDirty(
+      form ? serializeAdminForm(form) !== baselineRef.current : false,
+    );
   }, [readForm, updateDirty]);
 
   const navigate = useCallback(
@@ -116,15 +124,21 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
       allowNavigationRef.current = true;
       updateDirty(false);
       setPendingNavigation(null);
+      onNavigate?.();
       navigate(href);
     },
-    [navigate, updateDirty],
+    [navigate, onNavigate, updateDirty],
   );
 
   const requestNavigation = useCallback(
     (href: string) => {
-      if (pendingRef.current) return;
-      if (!dirtyRef.current || allowNavigationRef.current) {
+      const decision = resolveAdminFormNavigationDecision({
+        pending: pendingRef.current,
+        dirty: dirtyRef.current,
+        navigationAllowed: allowNavigationRef.current,
+      });
+      if (decision === "blocked_pending") return;
+      if (decision === "navigate") {
         leave(href);
         return;
       }
@@ -135,10 +149,12 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
 
   useLayoutEffect(() => {
     const form = readForm();
-    if (form) baselineRef.current = serializeForm(form);
+    if (form) baselineRef.current = serializeAdminForm(form);
     dirtyRef.current = false;
     allowNavigationRef.current = false;
-  }, [readForm, resetKey]);
+    const frame = window.requestAnimationFrame(() => setIsDirty(false));
+    return () => window.cancelAnimationFrame(frame);
+  }, [readForm, resetKey, updateDirty]);
 
   useEffect(() => {
     const currentForm = readForm();
@@ -146,21 +162,14 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     const form: HTMLFormElement = currentForm;
 
     function handleFormChange() {
-      updateDirty(serializeForm(form) !== baselineRef.current);
-    }
-
-    function handleSubmit() {
-      allowNavigationRef.current = true;
-      updateDirty(false);
+      updateDirty(serializeAdminForm(form) !== baselineRef.current);
     }
 
     form.addEventListener("input", handleFormChange);
     form.addEventListener("change", handleFormChange);
-    form.addEventListener("submit", handleSubmit);
     return () => {
       form.removeEventListener("input", handleFormChange);
       form.removeEventListener("change", handleFormChange);
-      form.removeEventListener("submit", handleSubmit);
     };
   }, [readForm, updateDirty]);
 
@@ -175,12 +184,17 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     wasPendingRef.current = false;
     allowNavigationRef.current = false;
     const form = readForm();
-    if (form) updateDirty(serializeForm(form) !== baselineRef.current);
+    if (form) {
+      updateDirty(serializeAdminForm(form) !== baselineRef.current);
+    }
   }, [pending, readForm, updateDirty]);
 
   useEffect(() => {
     function handleBeforeUnload(event: BeforeUnloadEvent) {
-      if (!dirtyRef.current || allowNavigationRef.current) return;
+      if (
+        (!dirtyRef.current && !pendingRef.current) ||
+        allowNavigationRef.current
+      ) return;
       event.preventDefault();
       event.returnValue = "";
     }
@@ -210,8 +224,6 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
         event.stopPropagation();
         return;
       }
-      if (!dirtyRef.current || allowNavigationRef.current) return;
-
       const destination = new URL(anchor.href, window.location.href);
       const current = new URL(window.location.href);
       if (
@@ -219,6 +231,10 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
         destination.pathname === current.pathname &&
         destination.search === current.search
       ) {
+        return;
+      }
+      if (!dirtyRef.current || allowNavigationRef.current) {
+        onNavigate?.();
         return;
       }
 
@@ -233,7 +249,7 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("click", handleLinkNavigation, true);
     };
-  }, []);
+  }, [onNavigate]);
 
   const dialog = pendingNavigation ? (
     <div data-admin-unsaved-dialog="" className="contents">
@@ -258,6 +274,7 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
 
 export type AdminFormRuntimeContextValue = {
   state: AdminFormActionState;
+  mode: AdminFormMode;
   pending: boolean;
   fieldErrors: Record<string, string[]>;
   isDirty: boolean;
@@ -275,13 +292,17 @@ export function useAdminFormRuntime() {
   return context;
 }
 
+export function useOptionalAdminFormRuntime() {
+  return useContext(AdminFormRuntimeContext);
+}
+
 export type AdminFormRuntimeProps = {
   action: AdminFormAction;
   initialState?: AdminFormActionState;
+  mode: AdminFormMode;
   entityKey: string;
   closeHref: string;
-  noticeCode?: string;
-  noticePath?: string;
+  navigation?: AdminFormNavigationContract;
   formId?: string;
   className?: string;
   children:
@@ -289,13 +310,58 @@ export type AdminFormRuntimeProps = {
     | ((context: AdminFormRuntimeContextValue) => ReactNode);
 };
 
-function buildNoticeHref(path: string, noticeCode?: string) {
-  if (!noticeCode) return path;
-  const url = new URL(path, window.location.href);
-  url.searchParams.set("notice", noticeCode);
-  return url.origin === window.location.origin
-    ? `${url.pathname}${url.search}${url.hash}`
-    : url.href;
+function firstFieldError(state: AdminFormActionState) {
+  return Object.entries(state.fieldErrors ?? {}).find(
+    ([, messages]) => messages.length > 0,
+  )?.[0];
+}
+
+function focusTarget(targetIdOrName: string) {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const escapedName = CSS.escape(targetIdOrName);
+      const target =
+        document.getElementById(targetIdOrName) ??
+        document.querySelector<HTMLElement>(`[name="${escapedName}"]`);
+      if (!target) return;
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      target.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "center",
+      });
+      const focusable = target.matches(
+        "input, textarea, select, button, [tabindex]",
+      )
+        ? target
+        : target.querySelector<HTMLElement>(
+            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          );
+      focusable?.focus({ preventScroll: true });
+    });
+  });
+}
+
+function revealFormError(
+  state: AdminFormActionState,
+  navigation?: AdminFormNavigationContract,
+) {
+  const fieldName = state.focusTarget ?? firstFieldError(state);
+  if (!fieldName) return;
+  const target = navigation?.fields[fieldName];
+  const targetId = target?.targetId ?? fieldName;
+  const tabId = state.tabTarget ?? target?.tabId;
+
+  if (tabId && navigation?.eventName) {
+    window.dispatchEvent(
+      new CustomEvent(navigation.eventName, {
+        detail: { tabId, targetId },
+      }),
+    );
+    return;
+  }
+  focusTarget(targetId);
 }
 
 function formFeedback(
@@ -324,44 +390,115 @@ function formFeedback(
 
 export default function AdminFormRuntime({
   action,
-  initialState = ADMIN_FORM_INITIAL_STATE,
+  initialState,
+  mode,
   entityKey,
   closeHref,
-  noticeCode,
-  noticePath,
+  navigation,
   formId,
   className = "",
   children,
 }: AdminFormRuntimeProps) {
   const router = useRouter();
-  const publishFeedback = useOptionalAdminFeedback()?.publishFeedback;
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const { publishFeedback, clearFeedback } = useAdminFeedback();
+  const feedbackChannel = `form:${entityKey}`;
+  const clearFormFeedback = useCallback(
+    () => clearFeedback(feedbackChannel),
+    [clearFeedback, feedbackChannel],
+  );
+  const [resolvedInitialState] = useState(
+    () => initialState ?? createAdminFormInitialState(mode),
+  );
+  const [state, formAction, actionPending] = useActionState(
+    action,
+    resolvedInitialState,
+  );
+  const handoffPending =
+    state.status === "success" &&
+    state.mode === "create" &&
+    Boolean(state.editHref);
+  const pending = actionPending || handoffPending;
   const formRef = useRef<HTMLFormElement>(null);
-  const { isDirty, requestNavigation, dialog } =
-    useAdminUnsavedChangesGuard({ rootRef: formRef, pending });
+  const submittedBaselineRef = useRef<string | null>(null);
+  const submittedControlsRef = useRef<AdminFormControlSnapshot[] | null>(null);
+  const handledResultRef = useRef<AdminFormActionState>(
+    createAdminFormInitialState(mode),
+  );
+  const { isDirty, markClean, requestNavigation, dialog } =
+    useAdminUnsavedChangesGuard({
+      rootRef: formRef,
+      pending,
+      resetKey: state.status === "success" ? state.savedRevision : undefined,
+      onNavigate: clearFormFeedback,
+    });
   const requestClose = useCallback(
     () => requestNavigation(closeHref),
     [closeHref, requestNavigation],
   );
 
+  useLayoutEffect(() => {
+    const form = formRef.current;
+    const snapshot = submittedControlsRef.current;
+    if (!form || !snapshot) return;
+
+    restoreAdminFormControls(form, snapshot);
+  }, [actionPending, state]);
+
   useEffect(() => {
+    if (state.status === "idle" || handledResultRef.current === state) return;
+    handledResultRef.current = state;
+    clearFeedback(feedbackChannel);
+
     const nextFeedback = formFeedback(state);
     if (nextFeedback) {
-      publishFeedback?.(nextFeedback, {
-        channel: `form:${entityKey}`,
+      publishFeedback(nextFeedback, {
+        channel: feedbackChannel,
         critical: false,
       });
     }
-    if (state.status !== "success") return;
+    if (state.status === "error") {
+      revealFormError(state, navigation);
+      return;
+    }
 
-    router.push(
-      buildNoticeHref(noticePath ?? closeHref, state.code ?? noticeCode),
+    formRef.current?.dispatchEvent(
+      new CustomEvent("admin-form-saved", {
+        detail: { entityId: state.entityId, savedRevision: state.savedRevision },
+      }),
     );
+
+    if (state.mode === "create" && state.editHref) {
+      const editHref = resolveSafeInternalPath(state.editHref, "");
+      if (!editHref) {
+        publishFeedback(
+          {
+            variant: "danger",
+            title: "تعذر الانتقال إلى وضع التعديل",
+            message: "تم رفض رابط تعديل غير آمن. حدّث الصفحة قبل الحفظ مرة أخرى.",
+            layout: "inline",
+            dismissible: true,
+            lifecycle: "manual",
+          },
+          { channel: feedbackChannel, critical: true },
+        );
+        return;
+      }
+      const submittedBaseline = submittedBaselineRef.current ?? undefined;
+      submittedBaselineRef.current = null;
+      submittedControlsRef.current = null;
+      markClean(submittedBaseline);
+      router.replace(editHref, { scroll: false });
+      return;
+    }
+    const submittedBaseline = submittedBaselineRef.current ?? undefined;
+    submittedBaselineRef.current = null;
+    submittedControlsRef.current = null;
+    markClean(submittedBaseline);
   }, [
-    closeHref,
-    entityKey,
-    noticeCode,
-    noticePath,
+    clearFeedback,
+    feedbackChannel,
+    markClean,
+    navigation,
     publishFeedback,
     router,
     state,
@@ -370,12 +507,13 @@ export default function AdminFormRuntime({
   const context = useMemo<AdminFormRuntimeContextValue>(
     () => ({
       state,
+      mode,
       pending,
       fieldErrors: state.fieldErrors ?? {},
       isDirty,
       requestClose,
     }),
-    [isDirty, pending, requestClose, state],
+    [isDirty, mode, pending, requestClose, state],
   );
 
   return (
@@ -384,14 +522,27 @@ export default function AdminFormRuntime({
         ref={formRef}
         id={formId}
         action={formAction}
+        onSubmitCapture={(event) => {
+          const form = event.currentTarget;
+          submittedBaselineRef.current = serializeAdminForm(form);
+          submittedControlsRef.current = captureAdminFormControls(form);
+          clearFeedback(feedbackChannel);
+        }}
         noValidate
         aria-busy={pending || undefined}
         data-admin-form-runtime=""
         data-admin-form-entity={entityKey}
+        data-admin-form-mode={mode}
         data-admin-form-dirty={isDirty ? "true" : "false"}
         className={className}
       >
-        {typeof children === "function" ? children(context) : children}
+        <fieldset
+          disabled={pending}
+          data-admin-form-fields=""
+          className="contents"
+        >
+          {typeof children === "function" ? children(context) : children}
+        </fieldset>
       </form>
       {dialog}
     </AdminFormRuntimeContext.Provider>
@@ -429,7 +580,9 @@ export function AdminFormError({
   children?: ReactNode;
   className?: string;
 }) {
-  const { state, fieldErrors } = useAdminFormRuntime();
+  const context = useOptionalAdminFormRuntime();
+  if (!context) return null;
+  const { state, fieldErrors } = context;
   const messages = name ? fieldErrors[name] ?? [] : [];
   const content = children ??
     (messages.length ? messages.join(" ") : name ? null : state.message);
@@ -450,7 +603,7 @@ const actionButtonClassName =
   "inline-flex min-h-11 min-w-[8.5rem] items-center justify-center rounded-full px-4 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45";
 
 export function AdminFormActions({
-  submitLabel = "حفظ وإغلاق",
+  submitLabel = "حفظ",
   pendingLabel = "جارٍ الحفظ…",
   closeLabel = "إغلاق",
   title = "إجراءات النموذج",
@@ -474,7 +627,8 @@ export function AdminFormActions({
       <button
         type="submit"
         disabled={pending}
-        className={`${actionButtonClassName} bg-[#D8B87A] text-[#06101C] hover:bg-[#e5c98d]`}
+        data-admin-form-action="save"
+        className={`${actionButtonClassName} flex-1 bg-[#D8B87A] text-[#06101C] hover:bg-[#e5c98d] sm:flex-none`}
       >
         {pending ? pendingLabel : submitLabel}
       </button>
@@ -482,10 +636,14 @@ export function AdminFormActions({
         type="button"
         disabled={pending}
         onClick={requestClose}
-        className={`${actionButtonClassName} border border-white/15 text-white/65 hover:border-white/30 hover:text-white`}
+        data-admin-form-action="close"
+        className={`${actionButtonClassName} flex-1 border border-white/15 text-white/65 hover:border-white/30 hover:text-white sm:flex-none`}
       >
         {closeLabel}
       </button>
+      <span className="sr-only" role="status" aria-live="polite">
+        {pending ? pendingLabel : ""}
+      </span>
     </AdminStickyFormBar>
   );
 }

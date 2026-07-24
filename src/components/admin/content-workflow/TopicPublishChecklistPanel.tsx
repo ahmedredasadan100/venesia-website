@@ -13,6 +13,7 @@ type SummaryState = TopicPublishInput & {
   contentType: string;
   category: string;
   series: string;
+  publishedAt: string;
   showTitle: boolean;
   showImage: boolean;
   showExcerpt: boolean;
@@ -102,6 +103,7 @@ function read(form: HTMLFormElement, seed: SummaryState): SummaryState {
     focusKeyword: field(form, "focus_keyword"),
     faq: faq(form),
     category,
+    publishedAt: field(form, "published_at", seed.publishedAt),
     showTitle: checked(form, "show_title_on_page", seed.showTitle),
     showImage: checked(form, "show_image_on_page", seed.showImage),
     showExcerpt: checked(form, "show_excerpt_on_page", seed.showExcerpt),
@@ -154,12 +156,20 @@ export default function TopicPublishChecklistPanel({
       contentType: contentTypeLabel,
       category: categoryLabel,
       series: seriesLabel,
+      publishedAt: publishedAt?.slice(0, 10) ?? "",
       showTitle: initialDisplay?.title !== false,
       showImage: initialDisplay?.image !== false,
       showExcerpt: initialDisplay?.excerpt !== false,
       faqVisible: initialDisplay?.faq !== false,
     }),
-    [initial, contentTypeLabel, categoryLabel, seriesLabel, initialDisplay],
+    [
+      initial,
+      contentTypeLabel,
+      categoryLabel,
+      seriesLabel,
+      publishedAt,
+      initialDisplay,
+    ],
   );
   const [input, setInput] = useState(seed);
 
@@ -209,7 +219,7 @@ export default function TopicPublishChecklistPanel({
     : seoItems.some((item) => item.status === "warn")
       ? "يحتاج تحسين"
       : "مكتمل";
-  const publishDate = dateLabel || publishedAt?.slice(0, 10) || "غير محدد";
+  const publishDate = dateLabel || input.publishedAt || "غير محدد";
 
   return (
     <section className="space-y-5" data-topic-publish-review>

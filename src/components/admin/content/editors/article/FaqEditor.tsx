@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { TrashIcon } from "../../../AdminRowActions";
 import { AdminConfirmDialog } from "../../../ui";
+import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
 type FaqItem = { id: string; question: string; answer: string };
 type StoredFaqItem = { question?: string; answer?: string };
@@ -110,6 +111,7 @@ export default function FaqEditor({
   return (
     <section id="topic-faq-editor" ref={rootRef} className="scroll-mt-24 rounded-[24px] border border-white/10 bg-[#080B10]/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.28)] md:p-6" data-topic-faq-editor>
       <input type="hidden" name="faq_editor_present" value="true" />
+      <AdminFormError name="faq_question" />
       <div className="grid gap-5 xl:grid-cols-[minmax(280px,0.75fr)_minmax(0,1.45fr)] xl:items-start">
         <div className="min-w-0 rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5 xl:col-start-2 xl:row-start-1" data-topic-faq-list>
           <div className="flex flex-wrap items-start justify-between gap-4">

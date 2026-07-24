@@ -44,6 +44,38 @@ function loadPureTypeScriptModule(path) {
   return commonJsModule.exports;
 }
 
+function findIfElseBranches(source, path, expectedCondition) {
+  const sourceFile = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const normalizeCondition = (value) => value.replace(/\s+/g, "");
+  let branches = null;
+
+  function visit(node) {
+    if (
+      !branches &&
+      ts.isIfStatement(node) &&
+      node.elseStatement &&
+      normalizeCondition(node.expression.getText(sourceFile)) ===
+        normalizeCondition(expectedCondition)
+    ) {
+      branches = {
+        then: node.thenStatement.getText(sourceFile),
+        else: node.elseStatement.getText(sourceFile),
+      };
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return branches ?? { then: "", else: "" };
+}
+
 const requiredRoutes = [
   "src/app/admin/content/topics/page.tsx",
   "src/app/admin/content/topics/new/page.tsx",
@@ -402,22 +434,53 @@ check(
   ),
 );
 
-const articleCreate = read("src/app/admin/content/topics/article-actions/create.ts");
-const articleUpdate = read("src/app/admin/content/topics/article-actions/update.ts");
+const articleSave = read("src/app/admin/content/topics/article-actions/save.ts");
 const mediaCreate = read("src/app/admin/content/topics/media-actions/create.ts");
 const mediaUpdate = read("src/app/admin/content/topics/media-actions/update.ts");
-check(
-  "Create actions must capture stable actor IDs",
-  containsAll(articleCreate, ["created_by: actor.id", "updated_by: actor.id"]) &&
-    containsAll(mediaCreate, ["created_by: actor.id", "updated_by: actor.id"]),
+const articleModeBranches = findIfElseBranches(
+  articleSave,
+  "src/app/admin/content/topics/article-actions/save.ts",
+  'mode === "create"',
 );
 check(
-  "Update actions must capture stable actor IDs",
-  articleUpdate.includes("updated_by: actor.id") && mediaUpdate.includes("updated_by: actor.id"),
+  "Article create branch must insert both stable creator and updater actor IDs",
+  containsAll(articleModeBranches.then, [
+    '.from("topics")',
+    ".insert({",
+    "created_by: actor.id",
+    "updated_by: actor.id",
+  ]) && !articleModeBranches.then.includes(".update({"),
+);
+check(
+  "Article update branch must update only the stable updater actor ID",
+  containsAll(articleModeBranches.else, [
+    '.from("topics")',
+    ".update({",
+    "updated_by: actor.id",
+  ]) &&
+    !articleModeBranches.else.includes("created_by: actor.id") &&
+    !articleModeBranches.else.includes(".insert({"),
+);
+check(
+  "Media create action must insert both stable creator and updater actor IDs",
+  containsAll(mediaCreate, [
+    '.from("topics")',
+    ".insert({",
+    "created_by: actor.id",
+    "updated_by: actor.id",
+  ]),
+);
+check(
+  "Media update action must update only the stable updater actor ID",
+  containsAll(mediaUpdate, [
+    '.from("topics")',
+    ".update(",
+    "updated_by: actor.id",
+  ]) && !mediaUpdate.includes("created_by: actor.id"),
 );
 check(
   "Draft saves must not assign a publisher",
-  articleCreate.includes('status === "published" ? actor.id : null') &&
+  articleSave.includes('nextStatus === "published" ? actor.id : null') &&
     mediaCreate.includes('payload.status === "published" ? actor.id : null'),
 );
 

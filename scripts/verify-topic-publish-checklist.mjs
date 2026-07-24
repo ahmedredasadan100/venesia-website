@@ -18,8 +18,8 @@ function check(label, condition) {
 
 check(
   "category control submits through one select field",
-  categorySelect.match(/name=\{name\}/g)?.length === 1 &&
-    categorySelect.includes("<select") &&
+  /<select[\s\S]*?name=\{name\}[\s\S]*?<\/select>/.test(categorySelect) &&
+    categorySelect.match(/<select/g)?.length === 1 &&
     !categorySelect.includes('type="hidden" name={name}'),
 );
 check(
@@ -50,6 +50,14 @@ check(
   checklist.includes("item instanceof HTMLInputElement") &&
     checklist.includes("item instanceof HTMLTextAreaElement") &&
     checklist.includes("item instanceof HTMLSelectElement"),
+);
+check(
+  "checklist reads the live named publication date into summary state",
+  checklist.includes("publishedAt: string") &&
+    checklist.includes('publishedAt: field(form, "published_at", seed.publishedAt)') &&
+    checklist.includes('publishedAt: publishedAt?.slice(0, 10) ?? ""') &&
+    checklist.includes('const publishDate = dateLabel || input.publishedAt || "غير محدد"') &&
+    !checklist.includes("const publishDate = dateLabel || publishedAt?.slice"),
 );
 check(
   "category changes notify the mounted checklist",

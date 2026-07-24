@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
+import {
+  AdminFormError,
+  useOptionalAdminFormRuntime,
+} from "../../../ui/AdminFormRuntime";
 import TopicFieldCounter from "./TopicFieldCounter";
 
 type TopicCharacterFieldProps = {
@@ -29,6 +33,8 @@ export default function TopicCharacterField({
 }: TopicCharacterFieldProps) {
   const initialValue = defaultValue ?? "";
   const [count, setCount] = useState(initialValue.length);
+  const fieldErrors = useOptionalAdminFormRuntime()?.fieldErrors[name] ?? [];
+  const hasError = fieldErrors.length > 0;
   const className = adminFormFieldClassName("h-11 rounded-xl px-3 py-2.5");
 
   return (
@@ -45,6 +51,8 @@ export default function TopicCharacterField({
             defaultValue={initialValue}
             placeholder={placeholder}
             required={required}
+            aria-invalid={hasError || undefined}
+            aria-describedby={hasError ? `${name}-error` : undefined}
             dir={dir}
             onInput={(event) => setCount(event.currentTarget.value.length)}
             className={`${className} h-auto min-h-20 resize-y leading-6`}
@@ -56,6 +64,8 @@ export default function TopicCharacterField({
             defaultValue={initialValue}
             placeholder={placeholder}
             required={required}
+            aria-invalid={hasError || undefined}
+            aria-describedby={hasError ? `${name}-error` : undefined}
             dir={dir}
             onInput={(event) => setCount(event.currentTarget.value.length)}
             className={className}
@@ -63,6 +73,7 @@ export default function TopicCharacterField({
         )}
         <TopicFieldCounter count={count} />
       </div>
+      <AdminFormError name={name} />
     </label>
   );
 }

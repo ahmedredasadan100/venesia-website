@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import AdminListboxSelect from "../../../ui/AdminListboxSelect";
+import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
 type SeriesOption = { id: number; name: string; slug: string };
 type TopicSeriesFieldsProps = {
@@ -29,6 +30,7 @@ export default function TopicSeriesFields({ options, defaultSeriesId = "", defau
       <span className="text-xs font-medium text-white/58">السلسلة (اختياري)</span>
       <input ref={hiddenRef} type="hidden" name="series_id" value={value} />
       <AdminListboxSelect id="topic-series" value={value} options={[{ value: "", label: "بدون سلسلة" }, ...options.map((option) => ({ value: String(option.id), label: option.name }))]} onChange={update} className="w-full" inline />
+      <AdminFormError name="series_id" />
       {fallbackSeries ? <input type="hidden" name="legacy_series" value={fallbackSeries} /> : null}
       {fallbackSeriesSlug ? <input type="hidden" name="legacy_series_slug" value={fallbackSeriesSlug} /> : null}
     </label>

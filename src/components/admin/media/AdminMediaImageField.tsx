@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
 
@@ -40,6 +40,7 @@ export default function AdminMediaImageField({
   const [value, setValue] = useState(defaultValue);
   const [prevDefaultValue, setPrevDefaultValue] = useState(defaultValue);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const valueInputRef = useRef<HTMLInputElement>(null);
 
   if (defaultValue !== prevDefaultValue) {
     setPrevDefaultValue(defaultValue);
@@ -48,13 +49,19 @@ export default function AdminMediaImageField({
 
   function updateValue(next: string) {
     setValue(next);
+    if (valueInputRef.current) {
+      valueInputRef.current.value = next;
+      valueInputRef.current.dispatchEvent(
+        new Event("input", { bubbles: true }),
+      );
+    }
     onValueChange?.(next);
   }
 
   if (variant === "compact") {
     return (
       <>
-        <input type="hidden" name={name} value={value} />
+        <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
         <div className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-black/30 ${compactAspectClassName}`}>
           {value ? (
@@ -108,7 +115,7 @@ export default function AdminMediaImageField({
 
   return (
     <div className="space-y-3">
-      <input type="hidden" name={name} value={value} />
+      <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
       {showLabel ? (
         <div className="flex flex-wrap items-center justify-between gap-3">

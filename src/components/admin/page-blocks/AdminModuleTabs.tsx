@@ -34,7 +34,13 @@ function focusNavigationTarget(targetId: string) {
       const target = document.getElementById(targetId);
       if (!target) return;
 
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      target.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "center",
+      });
       const focusTarget = target.matches("input, textarea, select, button, [tabindex]")
         ? target
         : target.querySelector<HTMLElement>(

@@ -36,6 +36,7 @@ const [
   markdownEditor,
   displaySettings,
   faqEditor,
+  formRuntime,
 ] = await Promise.all([
   read("src/lib/admin/content/content-types.ts"),
   read("src/app/admin/content/topics/new/page.tsx"),
@@ -59,6 +60,7 @@ const [
   read("src/components/admin/content/editors/article/TopicMarkdownEditor.tsx"),
   read("src/components/admin/content/editors/article/TopicDisplaySettings.tsx"),
   read("src/components/admin/content/editors/article/FaqEditor.tsx"),
+  read("src/components/admin/ui/AdminFormRuntime.tsx"),
 ]);
 
 for (const value of ["article", "news", "press", "site_update", "video", "gallery"]) {
@@ -70,8 +72,31 @@ check("edit content type stays locked without helper text", typeControl.includes
 
 check("/new defaults to article editor", newPage.includes('query.type : "article"'));
 check("create and edit share TopicBasicDataPanel", createEditor.includes("<TopicBasicDataPanel") && editEditor.includes("<TopicBasicDataPanel"));
-check("one create form owns all tabs", createEditor.indexOf('<form id="topic-create-form"') < createEditor.indexOf("<TopicEditTabs"));
-check("one edit form owns all tabs", editEditor.indexOf('<form id="topic-edit-form"') < editEditor.indexOf("<TopicEditTabs"));
+check("shared runtime centrally owns the literal form element", formRuntime.includes("<form") && formRuntime.includes("id={formId}"));
+check(
+  "create editor delegates its full tab form to the shared runtime",
+  createEditor.includes("<AdminFormRuntime") &&
+    createEditor.includes('mode="create"') &&
+    createEditor.includes('formId="topic-create-form"') &&
+    createEditor.includes("action={saveTopicForm}") &&
+    createEditor.indexOf("<AdminFormRuntime") < createEditor.indexOf("<TopicEditTabs") &&
+    !createEditor.includes("<form"),
+);
+check(
+  "edit editor delegates its full tab form to the shared runtime",
+  editEditor.includes("<AdminFormRuntime") &&
+    editEditor.includes('mode="edit"') &&
+    editEditor.includes('formId="topic-edit-form"') &&
+    editEditor.includes("action={saveTopicForm}") &&
+    editEditor.indexOf("<AdminFormRuntime") < editEditor.indexOf("<TopicEditTabs") &&
+    !editEditor.includes("<form"),
+);
+check(
+  "each editor exposes one shared Save and Close action row without SaveBar",
+  [createEditor, editEditor].every(
+    (source) => source.match(/<AdminFormActions\s*\/>/g)?.length === 1 && !source.includes("SaveBar"),
+  ),
+);
 
 for (const label of ["المحتوى الأساسي", "الأسئلة الشائعة", "SEO والتحليل", "المراجعة والنشر"]) {
   check(`four-tab shell includes ${label}`, createEditor.includes(`label: "${label}"`) && editEditor.includes(`label: "${label}"`));

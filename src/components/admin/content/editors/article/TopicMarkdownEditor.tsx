@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
 type TopicMarkdownEditorProps = {
   defaultValue?: string;
@@ -481,6 +482,21 @@ export default function TopicMarkdownEditor({ defaultValue = "", variant = "defa
     contentInputRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
   }, [content]);
 
+  useEffect(() => {
+    const form = contentInputRef.current?.form;
+    if (!form) return;
+
+    function clearSavedDraft() {
+      if (draftKeyRef.current) {
+        window.localStorage.removeItem(draftKeyRef.current);
+      }
+      setDraftRestored(false);
+    }
+
+    form.addEventListener("admin-form-saved", clearSavedDraft);
+    return () => form.removeEventListener("admin-form-saved", clearSavedDraft);
+  }, []);
+
   const stats = useMemo(() => getTextStats(content), [content]);
   const showEditor = viewMode === "write" || viewMode === "split";
   const showPreview = viewMode === "preview" || viewMode === "split";
@@ -548,6 +564,7 @@ export default function TopicMarkdownEditor({ defaultValue = "", variant = "defa
       `}</style>
 
       <input ref={contentInputRef} type="hidden" name="content" value={content} />
+      <AdminFormError name="content" />
 
       <div className={`flex flex-col border-b border-white/10 xl:flex-row xl:items-center xl:justify-between ${compact ? "gap-3 pb-3" : "gap-5 pb-6"}`}>
         <div>
