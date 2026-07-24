@@ -10,7 +10,7 @@ import {
   VenesiaModal,
   adminFormLabelClassName,
 } from "../../../../components/admin/ui";
-import { deleteCategorySafelyAjax, getCategoryDeletePreviewAjax } from "./actions";
+import { getCategoryDeletePreviewAjax } from "./actions";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 
 type TransferTarget = {
@@ -24,8 +24,9 @@ type ModalMode = "confirm" | "transfer" | "blocked-relations" | "no-targets" | "
 type CategoryDeleteButtonProps = {
   categoryId: number;
   disabled?: boolean;
+  mutationPending?: boolean;
   onMutationResult?: (result: AdminActionResult) => void;
-  onDelete?: (
+  onDelete: (
     categoryId: number,
     transferToId: number | null,
   ) => Promise<{ ok: boolean; message?: string }>;
@@ -34,6 +35,7 @@ type CategoryDeleteButtonProps = {
 export default function CategoryDeleteButton({
   categoryId,
   disabled = false,
+  mutationPending = false,
   onMutationResult,
   onDelete,
 }: CategoryDeleteButtonProps) {
@@ -108,7 +110,7 @@ export default function CategoryDeleteButton({
     setPending(true);
     setValidationError(null);
     try {
-      const result = await (onDelete ?? deleteCategorySafelyAjax)(
+      const result = await onDelete(
         categoryId,
         null,
       );
@@ -153,7 +155,7 @@ export default function CategoryDeleteButton({
 
     setPending(true);
     try {
-      const result = await (onDelete ?? deleteCategorySafelyAjax)(
+      const result = await onDelete(
         categoryId,
         Number(transferToId),
       );
@@ -218,7 +220,8 @@ export default function CategoryDeleteButton({
         action="delete"
         size="compact"
         title="حذف التصنيف"
-        disabled={disabled}
+        pending={mutationPending}
+        disabled={disabled || mutationPending}
         onClick={openModal}
       />
 

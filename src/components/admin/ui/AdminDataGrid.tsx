@@ -56,6 +56,7 @@ type ActionButtonProps = {
   tone?: "gold" | "green" | "blue" | "red" | "dark";
   action?: DataGridAction;
   isCurrentlyHidden?: boolean;
+  visibilityEntityLabel?: string;
   className?: string;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
@@ -91,6 +92,25 @@ const actionDefaults: Record<DataGridAction, { tone: NonNullable<ActionButtonPro
   delete: { tone: "red", title: "حذف" },
   activity: { tone: "dark", title: "معلومات النشاط" },
 };
+
+export function resolveAdminDataGridVisibilityAction(
+  isCurrentlyHidden: boolean,
+  entityLabel = "العنصر",
+) {
+  return isCurrentlyHidden
+    ? {
+        tone: "dark" as const,
+        title: `إظهار ${entityLabel}`,
+        ariaLabel: `إظهار ${entityLabel}`,
+        ariaPressed: false,
+      }
+    : {
+        tone: "green" as const,
+        title: `إخفاء ${entityLabel}`,
+        ariaLabel: `إخفاء ${entityLabel}`,
+        ariaPressed: true,
+      };
+}
 
 export const ADMIN_DATA_GRID_RULES = {
   actionOrder: ["edit", "preview", "visibility", "duplicate", "delete"],
@@ -519,6 +539,7 @@ export function AdminDataGridActionButton({
   tone,
   action,
   isCurrentlyHidden = false,
+  visibilityEntityLabel,
   className = "",
   onClick,
   disabled = false,
@@ -527,9 +548,25 @@ export function AdminDataGridActionButton({
   buttonRef,
   size = "default",
 }: ActionButtonProps) {
-  const resolvedTone = tone ?? (action ? actionDefaults[action].tone : "dark");
-  const resolvedTitle = title ?? (action ? actionDefaults[action].title : "إجراء");
-  const resolvedAriaLabel = ariaLabel ?? resolvedTitle;
+  const visibilityPresentation =
+    action === "visibility"
+      ? resolveAdminDataGridVisibilityAction(
+          isCurrentlyHidden,
+          visibilityEntityLabel,
+        )
+      : null;
+  const resolvedTone =
+    tone ??
+    visibilityPresentation?.tone ??
+    (action ? actionDefaults[action].tone : "dark");
+  const resolvedTitle =
+    title ??
+    visibilityPresentation?.title ??
+    (action ? actionDefaults[action].title : "إجراء");
+  const resolvedAriaLabel =
+    ariaLabel ?? visibilityPresentation?.ariaLabel ?? resolvedTitle;
+  const resolvedAriaPressed =
+    ariaPressed ?? visibilityPresentation?.ariaPressed;
   const content = pending ? (
     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
   ) : action ? (
@@ -557,6 +594,14 @@ export function AdminDataGridActionButton({
         rel={rel ?? (target === "_blank" ? "noreferrer" : undefined)}
         title={resolvedTitle}
         aria-label={resolvedAriaLabel}
+        data-admin-data-grid-action={action}
+        data-admin-visibility-state={
+          action === "visibility"
+            ? isCurrentlyHidden
+              ? "hidden"
+              : "visible"
+            : undefined
+        }
         className={classes}
       >
         {content}
@@ -572,9 +617,17 @@ export function AdminDataGridActionButton({
       aria-label={resolvedAriaLabel}
       aria-expanded={ariaExpanded}
       aria-haspopup={ariaHasPopup}
-      aria-pressed={ariaPressed}
+      aria-pressed={resolvedAriaPressed}
       aria-controls={ariaControls}
       aria-busy={pending || undefined}
+      data-admin-data-grid-action={action}
+      data-admin-visibility-state={
+        action === "visibility"
+          ? isCurrentlyHidden
+            ? "hidden"
+            : "visible"
+          : undefined
+      }
       onClick={onClick}
       disabled={disabled || pending}
       className={`${classes} disabled:cursor-not-allowed disabled:opacity-50`}

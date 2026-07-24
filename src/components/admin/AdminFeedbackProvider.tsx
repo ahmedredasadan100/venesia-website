@@ -18,12 +18,16 @@ type AdminFeedbackEntry = {
   id: string;
   channel: string;
   critical: boolean;
+  placement: "global" | "inline";
+  reveal: boolean;
   feedback: AdminActionFeedback;
 };
 
 export type AdminFeedbackPublishOptions = {
   channel?: string;
   critical?: boolean;
+  placement?: "global" | "inline";
+  reveal?: boolean;
 };
 
 type AdminFeedbackContextValue = {
@@ -64,16 +68,18 @@ export function useOptionalAdminFeedback() {
 function AdminFeedbackViewportEntry({
   entry,
   onDismiss,
+  placement = "global",
 }: {
   entry: AdminFeedbackEntry;
   onDismiss: (id: string) => void;
+  placement?: "global" | "inline";
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!entry.critical) return;
+    if (placement !== "global" || !entry.critical) return;
     rootRef.current?.focus({ preventScroll: true });
-  }, [entry.critical, entry.id]);
+  }, [entry.critical, entry.id, placement]);
 
   return (
     <div
@@ -83,7 +89,11 @@ function AdminFeedbackViewportEntry({
       data-admin-feedback-channel={entry.channel}
       data-admin-feedback-variant={entry.feedback.variant}
       data-admin-feedback-critical={entry.critical ? "true" : "false"}
-      className="pointer-events-none drop-shadow-[0_20px_45px_rgba(0,0,0,0.45)] focus:outline-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto"
+      className={
+        placement === "global"
+          ? "pointer-events-none drop-shadow-[0_20px_45px_rgba(0,0,0,0.45)] focus:outline-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto"
+          : "focus:outline-none"
+      }
     >
       <AdminNotice
         {...entry.feedback}
@@ -96,8 +106,11 @@ function AdminFeedbackViewportEntry({
 
 export function AdminFeedbackViewport() {
   const { entries, dismissFeedback } = useAdminFeedback();
+  const globalEntries = entries.filter(
+    (entry) => entry.placement === "global",
+  );
 
-  if (!entries.length) return null;
+  if (!globalEntries.length) return null;
 
   return (
     <section
@@ -105,10 +118,83 @@ export function AdminFeedbackViewport() {
       data-admin-feedback-viewport=""
       className="pointer-events-none fixed inset-x-4 top-4 bottom-auto z-[120] flex max-h-[min(70vh,560px)] flex-col gap-3 overflow-y-auto sm:inset-x-auto sm:top-auto sm:bottom-6 sm:left-6 sm:w-[min(480px,calc(100vw-3rem))]"
     >
-      {[...entries].reverse().map((entry) => (
+      {[...globalEntries].reverse().map((entry) => (
         <AdminFeedbackViewportEntry
           key={entry.id}
           entry={entry}
+          onDismiss={dismissFeedback}
+        />
+      ))}
+    </section>
+  );
+}
+
+export function AdminFeedbackChannelViewport({
+  channel,
+  label,
+}: {
+  channel: string;
+  label: string;
+}) {
+  const { entries, dismissFeedback } = useAdminFeedback();
+  const rootRef = useRef<HTMLElement>(null);
+  const inlineEntries = entries.filter(
+    (entry) =>
+      entry.channel === channel && entry.placement === "inline",
+  );
+  const latestEntry = inlineEntries.at(-1) ?? null;
+
+  useEffect(() => {
+    if (!latestEntry?.reveal) return;
+    const root = rootRef.current;
+    if (!root) return;
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const rect = root.getBoundingClientRect();
+    const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+
+    if (!isVisible) {
+      root.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "nearest",
+      });
+    }
+
+    if (!latestEntry.critical) return;
+    if (isVisible || prefersReducedMotion) {
+      root.focus({ preventScroll: true });
+      return;
+    }
+
+    const focusTimer = window.setTimeout(
+      () => root.focus({ preventScroll: true }),
+      350,
+    );
+    return () => window.clearTimeout(focusTimer);
+  }, [latestEntry?.critical, latestEntry?.id, latestEntry?.reveal]);
+
+  if (!inlineEntries.length) return null;
+
+  return (
+    <section
+      ref={rootRef}
+      tabIndex={latestEntry?.critical ? -1 : undefined}
+      aria-label={label}
+      data-admin-feedback-channel-viewport=""
+      data-admin-feedback-channel={channel}
+      data-admin-entity-feedback-slot=""
+      data-admin-entity-feedback-reveal={
+        latestEntry?.reveal ? "true" : "false"
+      }
+      className="scroll-mt-6 space-y-3 focus:outline-none"
+    >
+      {inlineEntries.map((entry) => (
+        <AdminFeedbackViewportEntry
+          key={entry.id}
+          entry={entry}
+          placement="inline"
           onDismiss={dismissFeedback}
         />
       ))}
@@ -140,6 +226,7 @@ export default function AdminFeedbackProvider({
       options: AdminFeedbackPublishOptions = {},
     ) => {
       const channel = options.channel ?? "global";
+      const placement = options.placement ?? "global";
       const critical =
         options.critical ??
         (feedback.variant === "danger" && feedback.lifecycle === "persistent");
@@ -148,6 +235,8 @@ export default function AdminFeedbackProvider({
         id,
         channel,
         critical,
+        placement,
+        reveal: options.reveal ?? critical,
         feedback,
       };
 
@@ -156,6 +245,7 @@ export default function AdminFeedbackProvider({
         const duplicate = current.find(
           (entry) =>
             entry.channel === channel &&
+            entry.placement === placement &&
             feedbackSignature(entry.feedback) === signature,
         );
         if (duplicate) {
@@ -171,7 +261,9 @@ export default function AdminFeedbackProvider({
             ...current.filter(
               (entry) =>
                 entry.feedback.variant !== "success" &&
-                (entry.critical || entry.channel !== channel),
+                (entry.critical ||
+                  entry.channel !== channel ||
+                  entry.placement !== placement),
             ),
             incoming,
           ];
@@ -184,7 +276,13 @@ export default function AdminFeedbackProvider({
           );
           return [
             ...current.filter(
-              (entry) => !entry.critical || retainedCriticalIds.has(entry.id),
+              (entry) =>
+                !(
+                  entry.channel === channel &&
+                  entry.placement === placement &&
+                  !entry.critical
+                ) &&
+                (!entry.critical || retainedCriticalIds.has(entry.id)),
             ),
             incoming,
           ];
@@ -192,7 +290,10 @@ export default function AdminFeedbackProvider({
 
         return [
           ...current.filter(
-            (entry) => entry.critical || entry.channel !== channel,
+            (entry) =>
+              entry.critical ||
+              entry.channel !== channel ||
+              entry.placement !== placement,
           ),
           incoming,
         ];

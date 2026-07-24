@@ -243,17 +243,18 @@ check(
 );
 
 check(
-  "Entity-list feedback stays in one shared inline slot after tools and before the grid",
+  "Entity-list feedback publishes through the shared runtime into one inline channel slot",
   feedbackProvider.includes("AdminFeedbackViewport") &&
+    feedbackProvider.includes("AdminFeedbackChannelViewport") &&
     feedbackProvider.includes("data-admin-feedback-viewport") &&
+    feedbackProvider.includes("data-admin-entity-feedback-slot") &&
     feedbackProvider.includes("fixed") &&
-    entityList.includes("AdminNotice") &&
-    entityList.includes("data-admin-entity-feedback-slot") &&
-    !entityList.includes("useOptionalAdminFeedback") &&
-    !entityList.includes("publishFeedback") &&
-    entityList.indexOf("data-admin-entity-feedback-slot") >
+    entityList.includes("useAdminFeedback") &&
+    entityList.includes("publishFeedback(nextFeedback") &&
+    entityList.includes("AdminFeedbackChannelViewport") &&
+    entityList.indexOf("<AdminFeedbackChannelViewport") >
       entityList.lastIndexOf("<AdminBulkActionBar") &&
-    entityList.indexOf("data-admin-entity-feedback-slot") <
+    entityList.indexOf("<AdminFeedbackChannelViewport") <
       entityList.indexOf("<AdminEntityListTable") &&
     categoriesClient.includes("initialFeedback={initialFeedback}") &&
     seriesClient.includes("initialFeedback={initialFeedback}") &&
@@ -265,20 +266,14 @@ check(
 
 check(
   "Entity-list feedback auto-reveal is visibility-aware, event-stable, and reduced-motion safe",
-  entityList.includes("feedbackSlotRef") &&
-    entityList.includes("revealedFeedbackRevisionRef") &&
-    entityList.includes("pendingFeedbackFocusRevisionRef") &&
-    entityList.includes("getBoundingClientRect") &&
-    entityList.includes("rect.bottom > 0 && rect.top < window.innerHeight") &&
-    entityList.includes("window.matchMedia") &&
-    entityList.includes("(prefers-reduced-motion: reduce)") &&
-    entityList.includes('behavior: prefersReducedMotion ? "auto" : "smooth"') &&
-    entityList.includes('block: "nearest"') &&
-    entityList.includes("focus({ preventScroll: true })") &&
-    entityList.includes(
-      "pendingFeedbackFocusRevisionRef.current !== feedbackRevision",
-    ) &&
-    entityList.includes("pendingFeedbackFocusRevisionRef.current = null"),
+  feedbackProvider.includes("latestEntry?.reveal") &&
+    feedbackProvider.includes("getBoundingClientRect") &&
+    feedbackProvider.includes("rect.bottom > 0 && rect.top < window.innerHeight") &&
+    feedbackProvider.includes("window.matchMedia") &&
+    feedbackProvider.includes("(prefers-reduced-motion: reduce)") &&
+    feedbackProvider.includes('behavior: prefersReducedMotion ? "auto" : "smooth"') &&
+    feedbackProvider.includes('block: "nearest"') &&
+    feedbackProvider.includes("focus({ preventScroll: true })"),
 );
 
 check(
@@ -353,8 +348,10 @@ check(
     seriesColumns.includes('key: "category"') &&
     seriesColumns.includes('key: "created_at"') &&
     seriesColumns.includes("AdminActivityPopover") &&
-    seriesColumns.includes("action=\"preview\"") &&
-    seriesColumns.includes("/admin/content/topics?series=") &&
+    seriesColumns.includes("AdminEntityPreviewActions") &&
+    read("src/lib/admin/content/entity-preview-capabilities.ts").includes(
+      "/admin/content/topics?series=",
+    ) &&
     seriesClient.includes("AdminEntityListFilters") &&
     seriesClient.includes("useAdminEntityListController") &&
     seriesClient.includes("onPageChange") &&

@@ -33,7 +33,11 @@ const jiti = createJiti(import.meta.url);
 const { resolveAdminEntityPreviewActions } = await jiti.import<
   typeof import("../src/lib/admin/interaction-system/entity-preview-capability.ts")
 >("../src/lib/admin/interaction-system/entity-preview-capability.ts");
-const { buildAdminContentPreviewCapability } = await jiti.import<
+const {
+  buildAdminContentPreviewCapability,
+  buildAdminCategoryCollectionPreviewCapability,
+  buildAdminSeriesCollectionPreviewCapability,
+} = await jiti.import<
   typeof import("../src/lib/admin/content/entity-preview-capabilities.ts")
 >("../src/lib/admin/content/entity-preview-capabilities.ts");
 const { adminContentTopicPreviewPath } = await jiti.import<
@@ -196,44 +200,27 @@ check(
     ),
 );
 check(
-  "Media Topic plus Category and Series collections remain explicit Preview/Public gaps",
-  [
-    "topic-media-edit-preview",
-    "topic-category-collection-preview",
-    "topic-series-collection-preview",
-  ].every((id) => previewCapabilityGapIds.has(id)),
+  "Media Topic remains the only explicit Preview/Public gap in this scope",
+  previewCapabilityGapIds.size === 1 &&
+    previewCapabilityGapIds.has("topic-media-edit-preview"),
 );
 
-const collectionRuntimeGapIds = new Set<string>(
-  ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS.map((entry) => entry.id),
-);
 check(
-  "Category and Series row interactions remain explicit Collection Runtime gaps",
-  ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS.length === 2 &&
-    collectionRuntimeGapIds.size ===
-      ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS.length &&
-    [
-      "topic-category-collection-row-actions",
-      "topic-series-collection-row-actions",
-    ].every((id) => collectionRuntimeGapIds.has(id)) &&
-    ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS.every(
-      (entry) =>
-        entry.runtime === "collection_runtime" &&
-        entry.gaps.includes("shared_entity_preview_capability") &&
-        entry.gaps.includes("row_action_pending_scope") &&
-        entry.gaps.includes("shared_feedback_delivery") &&
-        [
-          "row_scoped_pending",
-          "optimistic_update",
-          "targeted_invalidation",
-          "shared_feedback",
-          "confirmation_contract",
-          "audit",
-          "no_collection_wide_visual_refresh",
-        ].every((requirement) =>
-          new Set<string>(entry.nextReferenceContract).has(requirement),
-        ),
-    ),
+  "Category and Series collections adopt the shared Preview/Public capability",
+  [
+    "topic-category-collection-preview",
+    "topic-series-collection-preview",
+  ].every(
+    (id) =>
+      ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.find(
+        (entry) => entry.id === id,
+      )?.status === "adopted",
+  ),
+);
+
+check(
+  "Category and Series Collection Runtime interaction gaps are closed",
+  ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS.length === 0,
 );
 check(
   "every declared Admin Interaction adopter and gap source exists",
@@ -541,7 +528,8 @@ check(
     articleCreate.includes("createAdminFormErrorState") &&
     articleEdit.includes("createAdminFormErrorState") &&
     feedbackProvider.includes("data-admin-feedback-channel") &&
-    feedbackProvider.includes("[...entries].reverse().map"),
+    feedbackProvider.includes("[...globalEntries].reverse().map") &&
+    feedbackProvider.includes("inlineEntries.map"),
 );
 check(
   "Topic publication is an optional field capability inside the shared save",
@@ -724,6 +712,34 @@ check(
     resolvedContentCapability.routes.publicView ===
       resolvePublicContentPath("article", "reference-topic"),
 );
+const resolvedCategoryCapability =
+  buildAdminCategoryCollectionPreviewCapability({
+    id: 7,
+    slug: "reference-category",
+    isActive: true,
+  });
+const resolvedSeriesCapability = buildAdminSeriesCollectionPreviewCapability({
+  id: 9,
+});
+const hiddenCategoryActions = resolveAdminEntityPreviewActions(
+  buildAdminCategoryCollectionPreviewCapability({
+    id: 8,
+    slug: "hidden-category",
+    isActive: false,
+  }),
+);
+check(
+  "taxonomy collection Preview/Public adapters declare only proven routes",
+  resolvedCategoryCapability.routes.internalPreview === null &&
+    resolvedCategoryCapability.routes.publicView ===
+      "/topics?category=reference-category" &&
+    resolvedSeriesCapability.routes.internalPreview ===
+      "/admin/content/topics?series=9" &&
+    resolvedSeriesCapability.routes.publicView === null &&
+    hiddenCategoryActions.length === 1 &&
+    hiddenCategoryActions[0]?.kind === "public-view" &&
+    hiddenCategoryActions[0]?.href === "/topics?category=hidden-category",
+);
 check(
   "shared Preview/Public renderer owns labels, new-tab safety, and action presentation",
   entityPreviewActions.includes("resolveAdminEntityPreviewActions") &&
@@ -768,26 +784,36 @@ const seriesTableClient = read(
   "src/app/admin/content/series/SeriesTableClient.tsx",
 );
 check(
-  "declared Category and Series Collection Runtime Preview gaps remain truthful",
-  categoryRowActions.includes('action="preview"') &&
-    categoryRowActions.includes("previewHref") &&
-    seriesColumns.includes('action="preview"') &&
-    seriesColumns.includes("topicsPreviewHref"),
+  "Category and Series collection Preview/Public actions use the shared entry point",
+  categoryRowActions.includes("AdminEntityPreviewActions") &&
+    categoryRowActions.includes(
+      "buildAdminCategoryCollectionPreviewCapability",
+    ) &&
+    seriesColumns.includes("AdminEntityPreviewActions") &&
+    seriesColumns.includes("buildAdminSeriesCollectionPreviewCapability") &&
+    [categoryRowActions, seriesColumns].every(
+      (source) =>
+        source.includes('presentation="data-grid-compact"') &&
+        !source.includes("previewHref") &&
+        !source.includes("topicsPreviewHref"),
+    ),
 );
 check(
-  "declared Category and Series Collection Runtime pending and feedback gaps remain truthful",
+  "Category and Series collections consume action-scoped pending and shared feedback",
   [categoryListClient, seriesTableClient].every(
     (source) =>
-      source.includes("isRowPending: () =>") &&
-      source.includes(
+      source.includes("rowPendingAction:") &&
+      source.includes("instant.rowPending?.rowId ===") &&
+      !source.includes(
         "instant.rowPending !== null || instant.bulkPending !== null",
       ) &&
-      !source.includes("AdminFeedbackProvider") &&
-      !source.includes("publishFeedback"),
+      !source.includes("router.refresh"),
   ) &&
-    categoryListClient.includes("mapAdminActionResultToFeedback") &&
     read("src/components/admin/entity-list/AdminEntityList.tsx").includes(
-      "data-admin-entity-feedback-slot",
+      "AdminFeedbackChannelViewport",
+    ) &&
+    read("src/components/admin/entity-list/AdminEntityList.tsx").includes(
+      "publishFeedback(nextFeedback",
     ),
 );
 

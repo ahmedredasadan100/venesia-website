@@ -98,7 +98,7 @@ export function createCategoryColumns(
   tree: {
     isExpanded: (categoryId: number) => boolean;
     onToggle: (categoryId: number) => void;
-    isRowPending: (categoryId: number) => boolean;
+    rowPendingAction: (categoryId: number) => string | null;
     onToggleStatus: (
       category: CategoryListRow,
     ) => Promise<CategoryStatusMutationResult>;
@@ -280,7 +280,7 @@ export function createCategoryColumns(
         <CategoryRowActions
           category={row}
           onMutationResult={onMutationResult}
-          isPending={tree.isRowPending(row.id)}
+          pendingAction={tree.rowPendingAction(row.id)}
           onToggle={tree.onToggleStatus}
           onDuplicate={tree.onDuplicate}
           onDelete={tree.onDelete}

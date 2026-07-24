@@ -380,10 +380,10 @@ check(
 );
 check(
   "Publish failures must use inline shared entity-list feedback with an editor action",
-  entityList.includes("data-admin-entity-feedback-slot") &&
-    entityList.includes("<AdminNotice") &&
-    !entityList.includes("useOptionalAdminFeedback") &&
-    !entityList.includes("publishFeedback(feedback") &&
+  entityList.includes("AdminFeedbackChannelViewport") &&
+    entityList.includes("publishFeedback(nextFeedback") &&
+    feedbackProvider.includes("data-admin-entity-feedback-slot") &&
+    feedbackProvider.includes('placement === "inline"') &&
     feedbackProvider.includes("<AdminNotice") &&
     feedbackProvider.includes("data-admin-feedback-viewport") &&
     list.includes("mapTopicsActionResultToFeedback") &&
