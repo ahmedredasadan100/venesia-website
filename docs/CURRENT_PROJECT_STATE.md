@@ -58,17 +58,26 @@ The canonical Documentation Reset merged through PR #19 at the official baseline
 
 Documentation Reset closure did not itself implement an audit finding.
 
-## Active Media Library foundation tranche
+## Active Media Library implementation
 
-The branch created from the exact official baseline adds a persisted Media Catalog, typed reference providers, fail-closed deletion, unique-object replacement, one Manage/Select core, settings, quality reporting, and repository verification. The migration has not been applied remotely in this tranche because no connected environment was proven disposable and non-Production.
+Implementation is still in progress on branch `codex/media-library-system`, created from the exact official baseline `47b662d0761adeae15ada412652fc8c92f5e3d53`.
 
-This is a scoped foundation claim only. Global Media Capability closure remains false while remote migration/reconciliation proof, physical folder/bulk move, project child rebind/aggregate atomicity, and authenticated Browser QA remain incomplete or deferred.
+- No final HEAD or Commit has been accepted as official project state.
+- No Draft PR has been reviewed or accepted.
+- No remote migration application has been proven.
+- No authenticated Browser QA has been accepted.
+- No final Quality Gate has been accepted.
+- No Media foundation or Capability closure claim is valid yet.
+- Official behavior on `main` remains unchanged until verification and merge.
+- Global Media Capability closure remains false.
+
+All implementation and verification evidence on the active branch remains provisional until the required review, exact-head acceptance, and merge gates complete.
 
 ## Accepted finding groups
 
 ### Active Confirmed Defects
 
-- Media deletion reference safety has a repository implementation in the active foundation tranche; remote migration and reconciliation proof remain required before remote destructive use.
+- Media deletion reference safety remains a confirmed defect on official `main`. A correction is in progress on `codex/media-library-system`, but it has not been accepted, merged, or closed.
 - Page/Menu destructive and reorder operations contain non-atomic multi-step behavior.
 
 ### Deferred Confirmed Defect
@@ -95,7 +104,7 @@ This is a scoped foundation claim only. Global Media Capability closure remains 
 
 After Documentation Reset closure, the approved sequence is:
 
-1. Media deletion safety and catalog foundation (active implementation tranche; scoped, not global closure).
+1. Media deletion safety and Media Catalog foundation — active implementation in progress; not yet closed or merged.
 2. Page/Menu atomic operations.
 3. Runtime and Capability adoption gaps.
 4. Performance measurement, then evidence-based optimization.

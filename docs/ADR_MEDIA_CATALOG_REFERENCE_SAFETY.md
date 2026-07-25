@@ -1,6 +1,7 @@
 # ADR: Media Catalog and Reference Safety
 
-**Status:** Accepted for the Media Library foundation tranche
+**Decision status:** Accepted
+**Implementation status:** In progress on `codex/media-library-system`; no implementation or foundation closure is accepted
 **Date:** 2026-07-25
 **Baseline:** `47b662d0761adeae15ada412652fc8c92f5e3d53`
 

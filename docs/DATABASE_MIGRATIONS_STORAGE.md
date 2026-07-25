@@ -257,7 +257,7 @@ The Full Repository Audit completed on baseline `9e420620f4a802dc8f070334c7d8d21
 
 ### Confirmed Defects
 
-- **Media deletion safety:** the active repository tranche implements typed providers, persisted references, exhaustive scans, and fail-closed deletion. Remote migration/reconciliation and the declared adoption gaps still prevent global Media closure.
+- **Media deletion safety:** the defect remains open on official `main`. Typed providers, persisted references, exhaustive scans, and fail-closed deletion are under implementation on the active branch; no accepted foundation or global Media closure follows before review, merge, and remote proof.
 - **Page/Menu atomic operations:** multi-step delete and reorder operations can leave partial domain state. Domain transactions/RPCs must own required all-or-nothing behavior. This is the second active implementation priority.
 - **Projects aggregate atomicity:** root and child persistence can partially succeed. The finding remains confirmed but is **Deferred by Product Priority** until the final product stage.
 

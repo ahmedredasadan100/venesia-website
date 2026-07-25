@@ -26,6 +26,7 @@ npm run lint
 npm run typecheck
 npm run verify:migrations
 npm run verify:legacy-media-admin
+npm run verify:media-library-system
 npm run verify:audit-coverage
 npm run build
 ```
@@ -47,6 +48,7 @@ Runs on pull requests and pushes to `main`:
 - `npm run typecheck`
 - `npm run verify:migrations`
 - `npm run verify:legacy-media-admin`
+- `npm run verify:media-library-system`
 - `npm run verify:unified-content`
 - `npm run verify:audit-coverage`
 - `npm run build`
@@ -73,6 +75,10 @@ npm run verify:audit-coverage
   `/admin/content/topics`.
 - Categories are managed at `/admin/content/categories`.
 - Content series are managed at `/admin/content/series`.
+- Media assets are managed at `/admin/media-library`.
+- Media policies are managed at `/admin/settings/media`.
+- `/admin/media-library` manages storage assets and usage; it does not recreate
+  the removed `/admin/content/media` content CRUD engine.
 - The former `/admin/topics`, `/admin/content/media`, and
   `/admin/media-center` admin engines were removed; do not recreate parallel
   CRUD surfaces.
