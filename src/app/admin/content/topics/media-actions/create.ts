@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
+import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   isMediaEditableContentType,
@@ -92,6 +93,7 @@ export async function createMediaContent(formData: FormData) {
     redirectFormError(formPath, error?.message || "تعذر إنشاء المحتوى.");
   }
 
+  await synchronizeMediaReferencesAfterDomainMutation("topics", data.id);
   revalidateMediaContentPaths(data.id);
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic", payload.status === "published" ? "publish" : "create"),

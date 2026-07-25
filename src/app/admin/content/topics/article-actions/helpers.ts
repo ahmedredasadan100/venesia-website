@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { parseFormPublishedDate, resolveTopicPublishedAt } from "../../../../../lib/content-dates";
-import { savePublicMediaUpload } from "../../../../../lib/admin/media-library";
 import {
   getTopicDraftValidationError,
   getTopicPublishOnlyValidationError,
@@ -121,13 +120,13 @@ function getDateLabel(formData: FormData) {
 }
 
 export async function uploadTopicImage(formData: FormData, _slug: string) {
-  void _slug; // The storage adapter owns sanitized, collision-resistant object names.
+  void _slug;
   const imageFile = getFile(formData, "image_file");
   const currentImage = getString(formData, "image");
-
-  if (!imageFile) return currentImage;
-  const saved = await savePublicMediaUpload("images/topics", imageFile);
-  return saved.path;
+  if (imageFile) {
+    throw new Error("الرفع المباشر من نموذج الموضوع متوقف. استخدم مكتبة الصور المشتركة.");
+  }
+  return currentImage;
 }
 
 function getFaq(formData: FormData) {

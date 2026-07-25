@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { synchronizeMediaReferenceProvidersAfterMutation } from "../../../../../lib/admin/media-catalog/synchronization";
 import { parseAdminLinkFromFormData } from "../../../../../lib/admin/links/form-fields";
 import { serializeAdminLink } from "../../../../../lib/admin/links/serialize";
 import { isAdminLinkEmpty } from "../../../../../lib/admin/links/validate";
@@ -124,6 +125,7 @@ function buildHeroConfig(formData: FormData) {
 }
 
 async function revalidateHeroAdmin() {
+  await synchronizeMediaReferenceProvidersAfterMutation("hero_templates");
   revalidateHeroCache();
   revalidatePath("/admin/pages-blocks/blocks/hero");
   revalidatePath("/");

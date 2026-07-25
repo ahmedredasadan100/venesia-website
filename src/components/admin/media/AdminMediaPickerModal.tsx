@@ -1,308 +1,114 @@
 "use client";
 
-import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 
-import type { PublicMediaFolderListing } from "../../../lib/admin/media-library";
-import {
-  CMS_IMAGE_ACCEPT,
-  CMS_MAX_IMAGE_BYTES,
-  CMS_MAX_PDF_BYTES,
-  CMS_PDF_ACCEPT,
-  validateCmsUploadFile,
-} from "../../../lib/admin/media-intelligence/cms-upload-policy";
+import MediaLibraryCore from "./MediaLibraryCore";
 
 type AdminMediaPickerModalProps = {
   open: boolean;
   onClose: () => void;
   onSelect: (path: string) => void;
+  onSelectMany?: (paths: string[]) => void;
   initialFolder?: string;
   mode?: "image" | "pdf";
+  multiple?: boolean;
+  /** Kept for source compatibility. Picker replacement now selects a new asset; it never overwrites this path. */
   replacePath?: string | null;
 };
+
+const FOCUSABLE = [
+  "button:not([disabled])",
+  "a[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
 
 export default function AdminMediaPickerModal({
   open,
   onClose,
   onSelect,
+  onSelectMany,
   initialFolder,
   mode = "image",
-  replacePath = null,
+  multiple = false,
 }: AdminMediaPickerModalProps) {
-  const isPdfMode = mode === "pdf";
-  const rootFolder = isPdfMode ? "files" : "images";
-  const resolvedInitialFolder = initialFolder || rootFolder;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  const titleId = useId();
 
-  const [folder, setFolder] = useState(resolvedInitialFolder);
-  const [listing, setListing] = useState<PublicMediaFolderListing | null>(null);
-  const [listingKey, setListingKey] = useState<string | null>(null);
-  const [navigationLoading, setNavigationLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const openListingKey = open ? resolvedInitialFolder : null;
-  const loading = navigationLoading || (open && listingKey !== openListingKey);
-
-  const loadFolder = useCallback(async (targetFolder: string) => {
-    setNavigationLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/admin/media-library?folder=${encodeURIComponent(targetFolder)}`);
-      const payload = (await response.json()) as PublicMediaFolderListing & { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || (isPdfMode ? "تعذّر تحميل مكتبة الملفات." : "تعذّر تحميل مكتبة الصور."));
-      }
-      setListing(payload);
-      setFolder(payload.folder);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : isPdfMode ? "تعذّر تحميل مكتبة الملفات." : "تعذّر تحميل مكتبة الصور.");
-    } finally {
-      setNavigationLoading(false);
-    }
-  }, [isPdfMode]);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
-
-    let cancelled = false;
-
-    fetch(`/api/admin/media-library?folder=${encodeURIComponent(resolvedInitialFolder)}`)
-      .then(async (response) => {
-        const payload = (await response.json()) as PublicMediaFolderListing & { error?: string };
-        if (!response.ok) {
-          throw new Error(payload.error || (isPdfMode ? "تعذّر تحميل مكتبة الملفات." : "تعذّر تحميل مكتبة الصور."));
-        }
-        return payload;
-      })
-      .then((payload) => {
-        if (!cancelled) {
-          setListing(payload);
-          setFolder(payload.folder);
-          setError(null);
-          setListingKey(resolvedInitialFolder);
-        }
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setListing(null);
-          setError(err instanceof Error ? err.message : isPdfMode ? "تعذّر تحميل مكتبة الملفات." : "تعذّر تحميل مكتبة الصور.");
-          setListingKey(resolvedInitialFolder);
-        }
-      });
-
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => {
+      panelRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    });
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
     return () => {
-      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) window.requestAnimationFrame(() => previousFocus.focus());
     };
-  }, [open, resolvedInitialFolder, isPdfMode]);
-
-  async function handleUpload(file: File | null) {
-    if (!file) return;
-
-    const validation = validateCmsUploadFile(file, isPdfMode ? "pdf" : "image");
-    if (!validation.ok) {
-      setError(validation.message);
-      return;
-    }
-
-    setUploading(true);
-    setError(null);
-
-    try {
-      const formData = new FormData();
-      formData.set("file", file);
-      formData.set("folder", folder);
-      if (isPdfMode) {
-        formData.set("kind", "pdf");
-      }
-      if (replacePath) {
-        formData.set("replacePath", replacePath);
-      }
-
-      const response = await fetch("/api/admin/media-library", {
-        method: "POST",
-        body: formData,
-      });
-
-      const payload = (await response.json()) as { path?: string; error?: string };
-      if (!response.ok || !payload.path) {
-        throw new Error(payload.error || (isPdfMode ? "تعذّر رفع الملف." : "تعذّر رفع الصورة."));
-      }
-
-      await loadFolder(folder);
-      onSelect(payload.path);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : isPdfMode ? "تعذّر رفع الملف." : "تعذّر رفع الصورة.");
-    } finally {
-      setUploading(false);
-    }
-  }
+  }, [open]);
 
   if (!open) return null;
 
-  const breadcrumbs = folder.split("/").filter(Boolean);
-  const listedFiles = isPdfMode ? (listing?.documents ?? []) : (listing?.images ?? []);
-
   return (
-    <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
-      onMouseDown={onClose}
-    >
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/78 p-2 backdrop-blur-sm sm:p-4" dir="rtl">
+      <button type="button" tabIndex={-1} aria-label="إغلاق مكتبة الوسائط" onClick={onClose} className="absolute inset-0" />
       <div
-        className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-[28px] border border-white/10 bg-[#080B10] shadow-[0_30px_120px_rgba(0,0,0,0.5)]"
-        onMouseDown={(event) => event.stopPropagation()}
-        dir="rtl"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative z-10 flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[24px] border border-white/12 bg-[#05070B] shadow-[0_35px_140px_rgba(0,0,0,.7)]"
       >
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
+        <header className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
           <div>
-            <h3 className="text-lg font-semibold text-white">{isPdfMode ? "مكتبة الملفات" : "مكتبة الصور"}</h3>
-            <p className="mt-1 text-sm text-white/45">
-              {isPdfMode
-                ? `تصفح المجلدات، ارفع PDF جديد (حد أقصى ${Math.round(CMS_MAX_PDF_BYTES / (1024 * 1024))} ميجابايت)، أو اختر ملفًا موجودًا.`
-                : `تصفح المجلدات، ارفع صورة جديدة (حد أقصى ${Math.round(CMS_MAX_IMAGE_BYTES / (1024 * 1024))} ميجابايت)، أو اختر صورة موجودة.`}
-            </p>
+            <h2 id={titleId} className="text-lg font-semibold text-white">{mode === "pdf" ? "اختيار مستند من المكتبة" : "اختيار صورة من المكتبة"}</h2>
+            <p className="mt-1 text-xs text-white/42">التحديد لا يغيّر الحقل. اضغط «تأكيد الاختيار» بعد المراجعة.</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer rounded-xl border border-white/10 px-3 py-2 text-white/55 hover:text-white"
-          >
-            إغلاق
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-5 py-3 text-sm">
-          {listing?.parentFolder ? (
-            <button
-              type="button"
-              onClick={() => void loadFolder(listing.parentFolder!)}
-              className="cursor-pointer rounded-full border border-white/10 px-3 py-1.5 text-white/65 hover:bg-white/5 hover:text-white"
-            >
-              ← رجوع
-            </button>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={() => void loadFolder(rootFolder)}
-            className={`cursor-pointer rounded-full px-3 py-1.5 ${
-              folder === rootFolder ? "bg-[#D8B87A]/15 text-[#D8B87A]" : "text-white/55 hover:text-white"
-            }`}
-          >
-            {rootFolder}
-          </button>
-
-          {breadcrumbs.map((segment, index) => {
-            if (segment === rootFolder && index === 0) return null;
-            const target = breadcrumbs.slice(0, index + 1).join("/");
-            return (
-              <button
-                key={target}
-                type="button"
-                onClick={() => void loadFolder(target)}
-                className={`cursor-pointer rounded-full px-3 py-1.5 ${
-                  folder === target ? "bg-[#D8B87A]/15 text-[#D8B87A]" : "text-white/55 hover:text-white"
-                }`}
-              >
-                {segment}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
-          <p className="font-mono text-xs text-white/45" dir="ltr">
-            storage/{folder}
-          </p>
-          <label className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15">
-            {uploading ? "جاري الرفع…" : isPdfMode ? "رفع PDF" : "رفع صورة"}
-            <input
-              type="file"
-              accept={isPdfMode ? CMS_PDF_ACCEPT : CMS_IMAGE_ACCEPT}
-              className="hidden"
-              disabled={uploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                void handleUpload(file);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-        </div>
-
-        <div className="overflow-y-auto p-5">
-          {loading ? <p className="text-sm text-white/45">جاري التحميل…</p> : null}
-          {error ? <p className="mb-4 text-sm text-red-300">{error}</p> : null}
-
-          {listing?.subfolders.length ? (
-            <div className="mb-5">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/40">المجلدات</p>
-              <div className="flex flex-wrap gap-2">
-                {listing.subfolders.map((subfolder) => (
-                  <button
-                    key={subfolder}
-                    type="button"
-                    onClick={() => void loadFolder(`${folder}/${subfolder}`)}
-                    className="cursor-pointer rounded-2xl border border-white/10 bg-[#05070B] px-4 py-2 text-sm text-white/70 hover:border-[#D8B87A]/30 hover:text-white"
-                  >
-                    {subfolder}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {!loading && !listedFiles.length ? (
-            <p className="text-sm text-white/45">
-              {isPdfMode ? "لا توجد ملفات PDF في هذا المجلد." : "لا توجد صور في هذا المجلد."}
-            </p>
-          ) : null}
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {isPdfMode
-              ? listedFiles.map((filePath) => {
-                  const fileName = filePath.split("/").pop() ?? filePath;
-                  return (
-                    <button
-                      key={filePath}
-                      type="button"
-                      onClick={() => {
-                        onSelect(filePath);
-                        onClose();
-                      }}
-                      className="cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-black/25 text-right transition hover:border-[#D8B87A]/35"
-                    >
-                      <div className="flex h-32 items-center justify-center bg-[#05070B]">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#D8B87A]/25 bg-[#D8B87A]/10 text-sm font-bold uppercase tracking-wide text-[#D8B87A]">
-                          PDF
-                        </div>
-                      </div>
-                      <p className="truncate px-3 py-2 text-sm text-white/75">{fileName}</p>
-                      <p className="truncate px-3 pb-2 font-mono text-[11px] text-white/45" dir="ltr">
-                        {filePath}
-                      </p>
-                    </button>
-                  );
-                })
-              : listedFiles.map((imagePath) => (
-                  <button
-                    key={imagePath}
-                    type="button"
-                    onClick={() => {
-                      onSelect(imagePath);
-                      onClose();
-                    }}
-                    className="cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-black/25 text-right transition hover:border-[#D8B87A]/35"
-                  >
-                    <div className="relative h-32">
-                      <Image src={imagePath} alt="" fill className="object-cover" sizes="220px" />
-                    </div>
-                    <p className="truncate px-3 py-2 font-mono text-[11px] text-white/45" dir="ltr">
-                      {imagePath}
-                    </p>
-                  </button>
-                ))}
-          </div>
+          <button type="button" onClick={onClose} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/60 hover:text-white">إغلاق</button>
+        </header>
+        <div className="overflow-y-auto p-3 sm:p-5">
+          <MediaLibraryCore
+            mode={multiple ? "select-many" : "select-one"}
+            initialFolder={initialFolder || (mode === "pdf" ? "files" : "images")}
+            initialKind={mode === "pdf" ? "document" : "image"}
+            onCancelSelection={onClose}
+            onConfirmSelection={(paths) => {
+              if (multiple) onSelectMany?.(paths);
+              else if (paths[0]) onSelect(paths[0]);
+              onClose();
+            }}
+          />
         </div>
       </div>
     </div>

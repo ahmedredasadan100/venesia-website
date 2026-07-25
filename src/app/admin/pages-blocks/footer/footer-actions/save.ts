@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
+import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
 import { assertValidFooterSlots } from "../../../../../lib/footer/validate-footer-slots";
 import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidate-footer";
 import { FOOTER_SLOTS_SETTING_KEY, type FooterLegal } from "../../../../../lib/footer/types";
@@ -43,6 +44,12 @@ export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
   await upsertSetting("footer.contact_items", contactItems);
   await upsertSetting("footer.social_links", socialLinks);
   await upsertSetting("footer.legal", legal);
+
+  await Promise.all(
+    [FOOTER_SLOTS_SETTING_KEY, "footer.brand", "footer.contact_items", "footer.social_links", "footer.legal"].map(
+      (key) => synchronizeMediaReferencesAfterDomainMutation("site_settings", key),
+    ),
+  );
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("footer_settings", "update"),

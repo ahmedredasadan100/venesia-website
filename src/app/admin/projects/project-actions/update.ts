@@ -10,6 +10,7 @@ import { parseFormBoolean } from "../../../../lib/page-blocks/admin-utils";
 import type { ProjectRow, ProjectStatus } from "../../../../lib/projects/types";
 import { parseJsonArray } from "../../../../lib/projects/types";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { synchronizeProjectMediaReferencesAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import {
   getAllStrings,
   getNumber,
@@ -176,5 +177,6 @@ export async function updateProject(formData: FormData) {
       entityLabel: arabicName,
     });
   }
+  await synchronizeProjectMediaReferencesAfterMutation(numericId);
   redirectEditWithNotice(numericId, "updated");
 }

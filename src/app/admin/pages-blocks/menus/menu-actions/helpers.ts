@@ -13,6 +13,7 @@ import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidat
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { revalidatePath } from "next/cache";
+import { synchronizeMediaReferenceProvidersAfterMutation } from "../../../../../lib/admin/media-catalog/synchronization";
 import { redirect } from "next/navigation";
 import type { ImportedMenuItem } from "./types";
 
@@ -118,7 +119,8 @@ export async function resolveMenuItemLink(formData: FormData) {
   return adminLinkToMenuItemColumns(link, resolvedHref);
 }
 
-export function revalidateNavigation() {
+export async function revalidateNavigation() {
+  await synchronizeMediaReferenceProvidersAfterMutation("menu_items");
   revalidateNavigationCache();
   revalidateFooterPublicPaths();
   revalidatePath("/");

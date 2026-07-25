@@ -5,6 +5,7 @@ import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actio
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import type { ProjectCategory } from "../../../../config/projects-data";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { synchronizeProjectMediaReferencesAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import { revalidateProjectPaths } from "./revalidate";
 
 export async function deleteProjectAjax(id: number, confirmPermanent = false) {
@@ -42,6 +43,7 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     entityId: id,
     metadata: { permanent: true, slug: existing.slug },
   });
+  await synchronizeProjectMediaReferencesAfterMutation(id);
   revalidateProjectPaths(existing.type, undefined, existing.slug);
   return { ok: true as const, message: "تم الحذف النهائي وإزالة المشروع من القائمة." };
 }

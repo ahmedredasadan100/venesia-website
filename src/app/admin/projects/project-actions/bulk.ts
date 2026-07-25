@@ -5,6 +5,7 @@ import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actio
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import type { ProjectCategory } from "../../../../config/projects-data";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { synchronizeProjectsMediaReferencesAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import { validateProjectsCanPublish } from "./validation";
 import { revalidateProjectPaths } from "./revalidate";
 
@@ -48,6 +49,7 @@ export async function bulkProjectsActionAjax(
       entityType: "project",
       metadata: { bulk_action: action, project_ids: validation.validIds, count: validation.validIds.length },
     });
+    await synchronizeProjectsMediaReferencesAfterMutation(validation.validIds);
     revalidateProjectPaths(type);
     if (validation.failures.length) {
       return {
@@ -103,6 +105,7 @@ export async function bulkProjectsActionAjax(
       ...(action === "archive" ? { publication_status: "archived" } : {}),
     },
   });
+  await synchronizeProjectsMediaReferencesAfterMutation(ids);
   revalidateProjectPaths(type);
   return {
     ok: true as const,

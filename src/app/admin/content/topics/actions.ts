@@ -30,6 +30,7 @@ import {
 } from "../../../../lib/admin/content/topics-list-config";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -155,6 +156,7 @@ export async function setUnifiedContentStatus(
   const { error } = await getSupabaseAdmin().from("topics").update(payload).eq("id", id);
   if (error) return invalidMutation(error.message);
 
+  await synchronizeMediaReferencesAfterDomainMutation("topics", id);
   await finishMutation({
     actor,
     action: nextStatus === "published" ? "publish" : "unpublish",
@@ -266,6 +268,7 @@ export async function duplicateUnifiedContent(
     .single<{ id: number }>();
   if (error || !data) return invalidMutation(error?.message);
 
+  await synchronizeMediaReferencesAfterDomainMutation("topics", data.id);
   await finishMutation({
     actor,
     action: "duplicate",
@@ -296,6 +299,7 @@ export async function softDeleteUnifiedContent(
     .eq("id", id);
   if (error) return invalidMutation(error.message);
 
+  await synchronizeMediaReferencesAfterDomainMutation("topics", id);
   await finishMutation({
     actor,
     action: "delete",
@@ -383,6 +387,7 @@ export async function bulkUpdateUnifiedContent(
     );
     const publishError = results.find((result) => result.error)?.error;
     if (publishError) return invalidMutation(publishError.message);
+    await Promise.all(ids.map((topicId) => synchronizeMediaReferencesAfterDomainMutation("topics", topicId)));
     await finishMutation({
       actor,
       action: "publish",
@@ -423,6 +428,7 @@ export async function bulkUpdateUnifiedContent(
   const { error } = await getSupabaseAdmin().from("topics").update(payload).in("id", ids);
   if (error) return invalidMutation(error.message);
 
+  await Promise.all(ids.map((topicId) => synchronizeMediaReferencesAfterDomainMutation("topics", topicId)));
   await finishMutation({
     actor,
     action: action === "publish" ? "publish" : action === "unpublish" ? "unpublish" : action === "delete" ? "delete" : "update",

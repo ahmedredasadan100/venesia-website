@@ -24,7 +24,7 @@ export async function bulkMenuAction(formData: FormData) {
     await auditMenuAction("menu", "update", {
       metadata: { bulk_action: action, menu_ids: ids, is_active: action === "show" },
     });
-    revalidateNavigation();
+    await revalidateNavigation();
     backToMenus(action === "show" ? "تم إظهار القوائم المحددة." : "تم إخفاء القوائم المحددة.");
   }
 
@@ -34,7 +34,7 @@ export async function bulkMenuAction(formData: FormData) {
 
     if (error) backToMenus(error.message);
     await auditMenuAction("menu", "delete", { metadata: { bulk_action: action, menu_ids: ids } });
-    revalidateNavigation();
+    await revalidateNavigation();
     backToMenus("تم حذف القوائم المحددة.");
   }
 
@@ -50,6 +50,6 @@ export async function clearMenuItems(formData: FormData) {
   if (error) backToMenus(error.message);
 
   await auditMenuAction("menu_item", "delete", { entityId: id, metadata: { cleared_menu_id: id } });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenus("تم تفريغ عناصر القائمة.");
 }

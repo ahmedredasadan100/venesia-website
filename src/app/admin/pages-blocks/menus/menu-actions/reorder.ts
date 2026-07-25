@@ -45,6 +45,6 @@ export async function moveMenuItemSortOrder(formData: FormData) {
     entityId: currentId,
     metadata: { menu_id: menuId, target_id: targetId },
   });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenu(menuId, "تم تحديث ترتيب العنصر.");
 }

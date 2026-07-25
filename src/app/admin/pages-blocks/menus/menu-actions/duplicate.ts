@@ -67,7 +67,7 @@ export async function duplicateMenu(formData: FormData) {
     entityLabel: `${menu.name} - نسخة`,
     metadata: { source_menu_id: id, items_copied: sortedItems.length },
   });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenu(copiedMenu.id, "تم نسخ القائمة كمسودة مخفية.");
 }
 
@@ -101,6 +101,6 @@ export async function duplicateMenuItem(formData: FormData) {
     entityLabel: `${item.label} - نسخة`,
     metadata: { menu_id: menuId, source_item_id: id },
   });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenu(menuId, "تم نسخ العنصر كمسودة مخفية.");
 }

@@ -213,7 +213,12 @@ const replacement = await adapter.uploadImage(
   mockFile("replacement.png", "image/png", Buffer.concat([pngBytes, Buffer.from([1])])),
   { replacePath: uploaded.path },
 );
-check("managed same-type replacement keeps the stable URL", replacement.path === uploaded.path);
+check(
+  "replacement creates a distinct canonical object without same-path overwrite",
+  replacement.path !== uploaded.path &&
+    adapter.isManagedAsset(replacement.path) &&
+    (await adapter.listImagePaths("images", 20)).includes(uploaded.path),
+);
 check(
   "recursive image listing returns the managed public URL",
   (await adapter.listImagePaths("images", 20)).includes(uploaded.path),
@@ -320,26 +325,26 @@ check(
     ),
 );
 check(
-  "topic upload actions contain no direct public filesystem writes",
+  "topic forms use the shared picker and reject legacy direct file payloads",
   !/(fs\/promises|mkdir\(|writeFile\(|public["',\s]+["']images)/.test(
     `${articleHelperSource}\n${mediaHelperSource}`,
   ) &&
-    articleHelperSource.includes("savePublicMediaUpload") &&
-    mediaHelperSource.includes("savePublicMediaUpload"),
+    articleHelperSource.includes("الرفع المباشر من نموذج الموضوع متوقف") &&
+    mediaHelperSource.includes("الرفع المباشر من نموذج المحتوى متوقف"),
 );
 
 const routeSource = source("src/app/api/admin/media-library/route.ts");
 check(
   "upload and delete API handlers authenticate before reading request data",
-  routeSource.indexOf("await requireAdminApi()") >= 0 &&
+  (routeSource.match(/await requireAdminApi\(\)/g) ?? []).length === 4 &&
     routeSource.indexOf("await requireAdminApi()") < routeSource.indexOf("request.formData()") &&
-    routeSource.lastIndexOf("await requireAdminApi()") < routeSource.indexOf("request.json()"),
+    routeSource.lastIndexOf("await requireAdminApi()") < routeSource.lastIndexOf("request.json()"),
 );
 check(
-  "delete API blocks referenced and unmanaged assets",
-  routeSource.includes("isManagedPublicMediaAsset") &&
-    routeSource.includes("scanMediaAssetUsage") &&
-    routeSource.includes("media_asset_in_use"),
+  "delete API delegates to fail-closed catalog safety",
+  routeSource.includes("safelyDeleteMediaAsset") &&
+    routeSource.includes('result.eligibility.state === "in_use"') &&
+    routeSource.includes("Fail-Closed"),
 );
 
 const nextConfigSource = source("next.config.ts");

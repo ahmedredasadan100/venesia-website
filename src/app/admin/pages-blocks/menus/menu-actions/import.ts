@@ -65,6 +65,6 @@ export async function importMenuJson(formData: FormData) {
     entityId: menuId,
     metadata: { import: true, imported_items_count: sortedItems.length },
   });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenus("تم استيراد عناصر القائمة كمسودة مخفية.");
 }

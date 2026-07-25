@@ -3,6 +3,7 @@
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
+import { synchronizeMediaReferenceProvidersAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 
 import { revalidatePath } from "next/cache";
 import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
@@ -28,7 +29,8 @@ import {
   TaxonomyMutationDatabaseError,
 } from "../../../../lib/admin/content/taxonomy-mutations";
 
-function revalidateCategories() {
+async function revalidateCategories() {
+  await synchronizeMediaReferenceProvidersAfterMutation("topic_categories");
   revalidateTopicsCache();
   revalidatePath("/admin/content/categories");
   revalidatePath("/admin/content/categories/new");
@@ -167,7 +169,7 @@ export async function toggleCategoryStatusAjax(
     entityId: id,
     metadata: { is_active: isActive },
   });
-  revalidateCategories();
+  await revalidateCategories();
   return {
     ...adminActionSuccess(
       "تم بنجاح",
@@ -257,7 +259,7 @@ export async function duplicateCategoryAjax(
     entityId: inserted.id,
     metadata: { slug: nextSlug, source_category_id: id },
   });
-  revalidateCategories();
+  await revalidateCategories();
   return {
     ...adminActionSuccess(
       "تم بنجاح",
@@ -367,7 +369,7 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
       topics_updated: mutation.topics_updated,
     },
   });
-  revalidateCategories();
+  await revalidateCategories();
   return { ok: true as const, message: "تم حذف التصنيف بنجاح." };
 }
 

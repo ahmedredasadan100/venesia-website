@@ -39,7 +39,7 @@ export async function createMenuItem(formData: FormData) {
 
   if (error) backToMenu(menuId, error.message);
   await auditMenuAction("menu_item", "create", { entityLabel: label, metadata: { menu_id: menuId } });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenu(menuId, "تم إضافة عنصر للقائمة.");
 }
 
@@ -74,6 +74,6 @@ export async function updateMenuItem(formData: FormData) {
 
   if (error) backToMenu(menuId, error.message);
   await auditMenuAction("menu_item", "update", { entityId: id, entityLabel: label, metadata: { menu_id: menuId } });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenu(menuId, "تم تحديث العنصر.");
 }

@@ -14,6 +14,6 @@ export async function deleteMenu(formData: FormData) {
   if (error) backToMenus(error.message);
 
   await auditMenuAction("menu", "delete", { entityId: id });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenus("تم حذف القائمة.");
 }

@@ -1,42 +1,114 @@
 import { NextResponse } from "next/server";
 
 import { requireAdminApi } from "../../../../lib/admin/auth/require-admin-api";
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
+import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
+import {
+  createCatalogFolder,
+  getCatalogAssetById,
+  listMediaCatalogPage,
+  mergeCatalogFallback,
+  registerCatalogUpload,
+  updateCatalogAssetMetadata,
+} from "../../../../lib/admin/media-catalog/catalog";
+import { reconcileMediaCatalog } from "../../../../lib/admin/media-catalog/reconciliation";
+import { moveCatalogMediaAsset } from "../../../../lib/admin/media-catalog/physical-move";
+import { safelyDeleteMediaAsset } from "../../../../lib/admin/media-catalog/safe-delete";
+import { rebindAllSupportedMediaReferences } from "../../../../lib/admin/media-catalog/synchronization";
+import type { MediaSmartView } from "../../../../lib/admin/media-catalog/types";
+import {
+  loadMediaSettings,
+  mediaSettingsToUploadPolicy,
+} from "../../../../lib/admin/media-catalog/settings";
 import {
   deletePublicMediaAsset,
   getPublicMediaStorageError,
-  isManagedPublicMediaAsset,
   listPublicMediaFolder,
   normalizeMediaFolder,
   savePublicDocumentUpload,
   savePublicMediaUpload,
 } from "../../../../lib/admin/media-library";
-import { scanMediaAssetUsage } from "../../../../lib/admin/media-intelligence/scan-media-usage";
 import {
   resolveCmsUploadKind,
   validateCmsUploadFile,
 } from "../../../../lib/admin/media-intelligence/cms-upload-policy";
+import { resolveMediaStorageProvider } from "../../../../lib/admin/media-storage-adapter";
 
 export const maxDuration = 60;
 
+const PRIVATE_MEDIA_HEADERS = {
+  "Cache-Control": "private, no-store, max-age=0",
+  Pragma: "no-cache",
+  Vary: "Cookie",
+};
+
+const SMART_VIEWS = new Set<MediaSmartView>([
+  "all",
+  "used",
+  "unused",
+  "missing_alt",
+  "recent",
+  "large",
+  "missing",
+  "drift",
+]);
+
+function mediaJson(body: unknown, init?: { status?: number; headers?: HeadersInit }) {
+  return NextResponse.json(body, {
+    status: init?.status,
+    headers: { ...PRIVATE_MEDIA_HEADERS, ...init?.headers },
+  });
+}
+
+function boundedInteger(value: string | null, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
+}
+
+function safeError(error: unknown, fallback: string, fallbackStatus = 500) {
+  const publicError = getPublicMediaStorageError(error, fallback, fallbackStatus);
+  if (publicError.code !== "media_storage_error") return publicError;
+  if (error instanceof Error && "code" in error && typeof error.code === "string") {
+    return { message: error.message || fallback, code: error.code, status: fallbackStatus };
+  }
+  return publicError;
+}
+
 export async function GET(request: Request) {
+  const startedAt = performance.now();
   const authError = await requireAdminApi();
   if (authError) return authError;
 
   try {
     const { searchParams } = new URL(request.url);
     const folder = normalizeMediaFolder(searchParams.get("folder") || "images");
-    const listing = await listPublicMediaFolder(folder);
-    return NextResponse.json(listing);
+    const requestedSmartView = searchParams.get("view") as MediaSmartView | null;
+    const smartView = requestedSmartView && SMART_VIEWS.has(requestedSmartView) ? requestedSmartView : "all";
+    const kindParam = searchParams.get("kind");
+    const kind = kindParam === "image" || kindParam === "document" ? kindParam : "all";
+    const page = boundedInteger(searchParams.get("page"), 1, 1, 100_000);
+    const pageSize = boundedInteger(searchParams.get("pageSize"), 24, 12, 96);
+
+    let result = await listMediaCatalogPage({
+      folder,
+      query: searchParams.get("q") ?? "",
+      kind,
+      smartView,
+      page,
+      pageSize,
+    });
+    if (result.catalogState === "unavailable") {
+      const fallback = await listPublicMediaFolder(folder);
+      result = mergeCatalogFallback(result, fallback);
+    }
+
+    return mediaJson(result, {
+      headers: { "Server-Timing": `media_catalog;dur=${(performance.now() - startedAt).toFixed(1)}` },
+    });
   } catch (error) {
-    const publicError = getPublicMediaStorageError(
-      error,
-      "تعذر تحميل مكتبة الوسائط من التخزين الدائم.",
-      500,
-    );
-    return NextResponse.json(
-      { error: publicError.message, code: publicError.code },
-      { status: publicError.status },
-    );
+    const publicError = safeError(error, "تعذر تحميل مكتبة الوسائط.");
+    return mediaJson({ error: publicError.message, code: publicError.code }, { status: publicError.status });
   }
 }
 
@@ -45,37 +117,206 @@ export async function POST(request: Request) {
   if (authError) return authError;
 
   try {
+    const actor = await requireAdminSession();
+    const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const body = (await request.json()) as { operation?: unknown; folder?: unknown; displayName?: unknown; dryRun?: unknown };
+      if (body.operation === "create_folder") {
+        const folder = normalizeMediaFolder(String(body.folder ?? ""));
+        const displayName = typeof body.displayName === "string" ? body.displayName.trim().slice(0, 120) : "";
+        const created = await createCatalogFolder(folder, actor.id, displayName);
+        await recordCmsAdminAudit(
+          {
+            action: buildCmsAuditAction("media_folder", "create"),
+            entityType: "media_folder",
+            entityLabel: folder,
+            metadata: { folder, displayName: displayName || null },
+          },
+          actor,
+        );
+        return mediaJson({ created: true, folder: created }, { status: 201 });
+      }
+      if (body.operation === "reconcile") {
+        const result = await reconcileMediaCatalog({ dryRun: body.dryRun === true, actorId: actor.id });
+        if (!result.dryRun) {
+          await recordCmsAdminAudit(
+            {
+              action: buildCmsAuditAction("media_asset", "update"),
+              entityType: "media_catalog",
+              entityLabel: "reconciliation",
+              metadata: {
+                storageAssetCount: result.storageAssetCount,
+                discoveredReferenceCount: result.discoveredReferenceCount,
+                complete: result.complete,
+              },
+            },
+            actor,
+          );
+        }
+        return mediaJson(result);
+      }
+      return mediaJson({ error: "عملية Media Library غير مدعومة." }, { status: 400 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("file");
     const folder = normalizeMediaFolder(String(formData.get("folder") || "images"));
-
     if (!(file instanceof File) || !file.size) {
-      return NextResponse.json({ error: "لم يتم اختيار ملف للرفع." }, { status: 400 });
+      return mediaJson({ error: "لم يتم اختيار ملف للرفع." }, { status: 400 });
     }
 
-    const kind = String(formData.get("kind") || "image");
-    const uploadKind = resolveCmsUploadKind(file.name, file.type, kind);
-    const validation = validateCmsUploadFile(file, uploadKind);
-    if (!validation.ok) {
-      return NextResponse.json({ error: validation.message }, { status: 400 });
+    const settings = await loadMediaSettings();
+    const requestedKind = String(formData.get("kind") || "image");
+    const uploadKind = resolveCmsUploadKind(file.name, file.type, requestedKind);
+    const allowedKind = uploadKind === "pdf" ? "document" : "image";
+    if (!settings.allowedKinds.includes(allowedKind)) {
+      return mediaJson({ error: "هذا النوع غير مسموح من إعدادات الميديا." }, { status: 400 });
+    }
+    const validation = validateCmsUploadFile(file, uploadKind, mediaSettingsToUploadPolicy(settings));
+    if (!validation.ok) return mediaJson({ error: validation.message }, { status: 400 });
+    if (resolveMediaStorageProvider() !== "supabase") {
+      return mediaJson(
+        { error: "رفع Media Catalog يتطلب Supabase Storage مهيأً في هذه البيئة؛ تم منع كتابة filesystem غير مفهرسة." },
+        { status: 503 },
+      );
     }
 
-    const replacePath = String(formData.get("replacePath") || "").trim() || null;
     const saved =
       uploadKind === "pdf"
-        ? await savePublicDocumentUpload(folder, file, { replacePath })
-        : await savePublicMediaUpload(folder, file, { replacePath });
-    return NextResponse.json(saved);
+        ? await savePublicDocumentUpload(folder, file)
+        : await savePublicMediaUpload(folder, file);
+
+    let asset = null;
+    try {
+      asset = await registerCatalogUpload(saved, file, actor.id);
+      if (!asset) throw new Error("media_catalog_upload_registration_required");
+    } catch (error) {
+      if (saved.provider === "supabase") {
+        await deletePublicMediaAsset(saved.path).catch(() => undefined);
+      }
+      throw error;
+    }
+
+    await recordCmsAdminAudit(
+      {
+        action: buildCmsAuditAction("media_asset", "create"),
+        entityType: "media_asset",
+        entityLabel: saved.filename,
+        metadata: {
+          provider: saved.provider ?? "filesystem",
+          bucket: saved.bucket ?? null,
+          objectKey: saved.objectKey ?? saved.storagePath ?? null,
+          sizeBytes: file.size,
+        },
+      },
+      actor,
+    );
+    return mediaJson({ ...saved, asset }, { status: 201 });
   } catch (error) {
-    const publicError = getPublicMediaStorageError(
-      error,
-      "تعذر رفع الملف إلى التخزين الدائم.",
-      500,
-    );
-    return NextResponse.json(
-      { error: publicError.message, code: publicError.code },
-      { status: publicError.status },
-    );
+    const publicError = safeError(error, "تعذر تنفيذ عملية الرفع أو إنشاء المجلد.");
+    return mediaJson({ error: publicError.message, code: publicError.code }, { status: publicError.status });
+  }
+}
+
+export async function PATCH(request: Request) {
+  const authError = await requireAdminApi();
+  if (authError) return authError;
+
+  try {
+    const actor = await requireAdminSession();
+    const body = (await request.json()) as Record<string, unknown>;
+    if (body.operation === "update_metadata") {
+      const assetId = typeof body.assetId === "string" ? body.assetId : "";
+      if (!assetId) return mediaJson({ error: "معرّف الأصل مطلوب." }, { status: 400 });
+      const asset = await updateCatalogAssetMetadata(assetId, {
+        displayName: typeof body.displayName === "string" ? body.displayName : undefined,
+        defaultAltText: typeof body.defaultAltText === "string" || body.defaultAltText === null ? body.defaultAltText : undefined,
+        defaultTitle: typeof body.defaultTitle === "string" || body.defaultTitle === null ? body.defaultTitle : undefined,
+        defaultCaption: typeof body.defaultCaption === "string" || body.defaultCaption === null ? body.defaultCaption : undefined,
+      });
+      await recordCmsAdminAudit(
+        {
+          action: buildCmsAuditAction("media_asset", "update"),
+          entityType: "media_asset",
+          entityLabel: asset.displayName,
+          metadata: { assetId, operation: "metadata" },
+        },
+        actor,
+      );
+      return mediaJson({ updated: true, asset });
+    }
+
+    if (body.operation === "replace_all") {
+      const previousAssetId = typeof body.previousAssetId === "string" ? body.previousAssetId : "";
+      const nextAssetId = typeof body.nextAssetId === "string" ? body.nextAssetId : "";
+      const [previousAsset, nextAsset] = await Promise.all([
+        getCatalogAssetById(previousAssetId),
+        getCatalogAssetById(nextAssetId),
+      ]);
+      if (!previousAsset || !nextAsset) {
+        return mediaJson({ error: "تعذر العثور على الأصل القديم أو الجديد داخل الكتالوج." }, { status: 404 });
+      }
+      if (
+        previousAsset.provider === nextAsset.provider &&
+        previousAsset.bucket === nextAsset.bucket &&
+        previousAsset.objectKey === nextAsset.objectKey
+      ) {
+        return mediaJson({ error: "لا يسمح النظام بالاستبدال إلى نفس Storage object." }, { status: 400 });
+      }
+      const result = await rebindAllSupportedMediaReferences(previousAsset, nextAsset);
+      if (!result.ok) {
+        return mediaJson(
+          { error: "لم يكتمل الاستبدال؛ بقي الأصل القديم ولم يُحذف.", ...result },
+          { status: result.code === "unsupported_media_references" ? 409 : 503 },
+        );
+      }
+      await recordCmsAdminAudit(
+        {
+          action: buildCmsAuditAction("media_asset", "update"),
+          entityType: "media_asset",
+          entityLabel: previousAsset.displayName,
+          metadata: {
+            operation: "replace_all_supported_references",
+            previousAssetId,
+            nextAssetId,
+            appliedCount: result.appliedCount,
+            previousAssetRetained: true,
+          },
+        },
+        actor,
+      );
+      return mediaJson({ replaced: true, ...result });
+    }
+
+    if (body.operation === "move_asset") {
+      const assetId = typeof body.assetId === "string" ? body.assetId : "";
+      const targetFolder = typeof body.targetFolder === "string" ? normalizeMediaFolder(body.targetFolder) : "";
+      const targetFilename = typeof body.targetFilename === "string" ? body.targetFilename : undefined;
+      const asset = await getCatalogAssetById(assetId);
+      if (!asset || !targetFolder) return mediaJson({ error: "الأصل ومسار الوجهة مطلوبان." }, { status: 400 });
+      const result = await moveCatalogMediaAsset(asset, { targetFolder, targetFilename }, actor.id);
+      const operation = targetFolder === asset.folderPath ? "rename_physical_object" : "move_physical_object";
+      await recordCmsAdminAudit(
+        {
+          action: buildCmsAuditAction("media_asset", "update"),
+          entityType: "media_asset",
+          entityLabel: asset.displayName,
+          metadata: {
+            operation,
+            assetId,
+            previousObjectKey: asset.objectKey,
+            nextObjectKey: result.asset.objectKey,
+          },
+        },
+        actor,
+      );
+      return mediaJson({ moved: true, operation, ...result });
+    }
+
+    return mediaJson({ error: "عملية التعديل غير مدعومة." }, { status: 400 });
+  } catch (error) {
+    const publicError = safeError(error, "تعذر تعديل أصل الوسائط.");
+    return mediaJson({ error: publicError.message, code: publicError.code }, { status: publicError.status });
   }
 }
 
@@ -84,45 +325,41 @@ export async function DELETE(request: Request) {
   if (authError) return authError;
 
   try {
+    const actor = await requireAdminSession();
     const body = (await request.json()) as { asset?: unknown };
     const asset = typeof body.asset === "string" ? body.asset.trim() : "";
-    if (!asset) {
-      return NextResponse.json(
-        { error: "حدد رابط الملف المطلوب حذفه." },
-        { status: 400 },
-      );
+    if (!asset) return mediaJson({ error: "حدد رابط الملف المطلوب حذفه." }, { status: 400 });
+
+    const result = await safelyDeleteMediaAsset(asset);
+    if (!result.deleted) {
+      const status = result.eligibility.state === "unmanaged" ? 400 : result.eligibility.state === "uncertain" ? 503 : 409;
+      const message =
+        result.eligibility.state === "in_use"
+          ? "لا يمكن حذف الملف قبل فك جميع مراجعه الحالية."
+          : result.eligibility.state === "unmanaged"
+            ? "هذا الملف غير مُدار ولا يمكن حذفه عبر Media Library."
+            : result.eligibility.state === "already_missing"
+              ? "الملف مفقود من التخزين ويحتاج reconciliation."
+              : "تعذر إثبات أمان الحذف؛ تم منع العملية Fail-Closed.";
+      return mediaJson({ error: message, code: `media_delete_${result.eligibility.state}`, eligibility: result.eligibility }, { status });
     }
 
-    if (!(await isManagedPublicMediaAsset(asset))) {
-      return NextResponse.json(
-        { error: "لا يمكن حذف هذا الملف لأنه ليس أصلًا مُدارًا داخل التخزين الدائم." },
-        { status: 400 },
-      );
-    }
-
-    const hits = await scanMediaAssetUsage(asset);
-    if (hits.length > 0) {
-      return NextResponse.json(
-        {
-          error: "لا يمكن حذف الملف قبل إزالة استخداماته الحالية.",
-          code: "media_asset_in_use",
-          usageCount: hits.length,
+    await recordCmsAdminAudit(
+      {
+        action: buildCmsAuditAction("media_asset", "delete"),
+        entityType: "media_asset",
+        entityLabel: result.eligibility.asset.displayName,
+        metadata: {
+          assetId: result.eligibility.asset.id,
+          bucket: result.eligibility.asset.bucket,
+          objectKey: result.eligibility.asset.objectKey,
         },
-        { status: 409 },
-      );
-    }
-
-    const deleted = await deletePublicMediaAsset(asset);
-    return NextResponse.json({ deleted: true, ...deleted });
+      },
+      actor,
+    );
+    return mediaJson(result);
   } catch (error) {
-    const publicError = getPublicMediaStorageError(
-      error,
-      "تعذر حذف الملف من التخزين الدائم.",
-      500,
-    );
-    return NextResponse.json(
-      { error: publicError.message, code: publicError.code },
-      { status: publicError.status },
-    );
+    const publicError = safeError(error, "تعذر حذف الملف من التخزين الدائم.");
+    return mediaJson({ error: publicError.message, code: publicError.code }, { status: publicError.status });
   }
 }

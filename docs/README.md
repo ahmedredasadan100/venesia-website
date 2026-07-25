@@ -28,6 +28,7 @@ A lower source must not silently override a higher source.
 | `DATABASE_MIGRATIONS_STORAGE.md` | Database, migration provenance, atomicity, audit, and storage rules | Low |
 | `QA_RELEASE_CLOSURE.md` | Test layers, Browser QA, evidence, delivery, and closure | Low |
 | `ROADMAP_AND_DEBT_REGISTER.md` | Confirmed findings, approved exceptions, debt, and execution roadmap | High |
+| `ADR_MEDIA_CATALOG_REFERENCE_SAFETY.md` | Accepted canonical identity, reference, deletion, and replacement decision for Media | Low |
 
 ## Update rules
 

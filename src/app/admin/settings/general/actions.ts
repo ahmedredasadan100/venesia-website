@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
+import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import { setMaintenanceModeSetting } from "../../../../lib/maintenance/site-settings";
 import {
   parseAdminCompanyIdentity,
@@ -53,6 +54,7 @@ export async function updateAdminCompanyAction(
     }
 
     await saveAdminCompanyConfig(parsed.data);
+    await synchronizeMediaReferencesAfterDomainMutation("site_settings", "admin.company");
     await recordCmsAdminAudit({
       action: buildCmsAuditAction("site_settings", "update"),
       entityType: "site_settings",

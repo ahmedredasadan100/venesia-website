@@ -13,6 +13,7 @@ export const ADMIN_NAVIGATION_REGISTRY: AdminNavigationItem[] = [
       { id: "topics", href: "/admin/content/topics", label: "الموضوعات", icon: "•", order: 10, enabled: true, moduleKey: "topics", permission: currentAdminAccess },
       { id: "categories", href: "/admin/content/categories", label: "التصنيفات", icon: "•", order: 20, enabled: true, moduleKey: "categories", permission: currentAdminAccess },
       { id: "series", href: "/admin/content/series", label: "سلاسل المحتوى", icon: "•", order: 30, enabled: true, moduleKey: "series", permission: currentAdminAccess },
+      { id: "media-library", href: "/admin/media-library", label: "مكتبة الصور", icon: "▧", order: 40, enabled: true, moduleKey: "media-library", permission: currentAdminAccess },
     ],
   },
   {
@@ -48,8 +49,14 @@ export const ADMIN_NAVIGATION_REGISTRY: AdminNavigationItem[] = [
       { id: "settings-theme", href: "/admin/settings/theme", label: "الثيم", icon: "•", order: 30, enabled: true, moduleKey: "settings-theme", permission: currentAdminAccess },
       { id: "settings-appearance", href: "/admin/settings/appearance", label: "المظهر", icon: "•", order: 40, enabled: true, moduleKey: "settings-appearance", permission: currentAdminAccess },
       { id: "settings-integrations", href: "/admin/settings/integrations", label: "التكاملات", icon: "•", order: 50, enabled: true, moduleKey: "settings-integrations", permission: currentAdminAccess },
+      { id: "settings-media", href: "/admin/settings/media", label: "إعدادات الميديا", icon: "•", order: 60, enabled: true, moduleKey: "settings-media", permission: currentAdminAccess },
     ],
   },
-  { id: "reports", href: "/admin/reports", label: "التقارير", icon: "◒", order: 80, enabled: true, moduleKey: "reports", permission: currentAdminAccess },
+  {
+    id: "reports", href: "/admin/reports", label: "التقارير", icon: "◒", order: 80, enabled: true, moduleKey: "reports", permission: currentAdminAccess,
+    children: [
+      { id: "reports-media-quality", href: "/admin/reports/topics-without-image", label: "موضوعات بلا صورة", icon: "•", order: 10, enabled: true, moduleKey: "reports-media-quality", permission: currentAdminAccess },
+    ],
+  },
   { id: "activity", href: "/admin/activity-log", label: "سجل النشاط", icon: "☷", order: 90, enabled: true, moduleKey: "activity", permission: currentAdminAccess },
 ];

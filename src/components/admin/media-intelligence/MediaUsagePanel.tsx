@@ -8,6 +8,7 @@ type MediaUsageHit = {
   entityLabel: string;
   field: string;
   editHref: string | null;
+  referenceState?: string;
 };
 
 type MediaUsagePanelProps = {
@@ -32,18 +33,24 @@ function MediaUsagePanelContent({ assetPath }: { assetPath: string }) {
   const [hits, setHits] = useState<MediaUsageHit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authoritative, setAuthoritative] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     fetch(`/api/admin/media-usage?asset=${encodeURIComponent(assetPath)}`)
       .then(async (response) => {
-        const payload = (await response.json()) as { hits?: MediaUsageHit[]; error?: string };
+        const payload = (await response.json()) as { hits?: MediaUsageHit[]; authoritative?: boolean; warning?: string | null; error?: string };
         if (!response.ok) throw new Error(payload.error || "تعذر فحص الاستخدام.");
-        return payload.hits ?? [];
+        return payload;
       })
-      .then((nextHits) => {
-        if (!cancelled) setHits(nextHits);
+      .then((payload) => {
+        if (!cancelled) {
+          setHits(payload.hits ?? []);
+          setAuthoritative(payload.authoritative === true);
+          setWarning(payload.warning ?? null);
+        }
       })
       .catch((err: Error) => {
         if (!cancelled) {
@@ -70,9 +77,10 @@ function MediaUsagePanelContent({ assetPath }: { assetPath: string }) {
 
       {loading ? <p className="mt-4 text-sm text-white/45">جاري فحص المراجع…</p> : null}
       {error ? <p className="mt-4 text-sm text-red-200">{error}</p> : null}
+      {!error && warning ? <p className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/8 p-3 text-xs leading-6 text-amber-100">{warning}</p> : null}
 
       {!loading && !error && hits.length === 0 ? (
-        <p className="mt-4 text-sm text-white/48">لا توجد مراجع واضحة في البيانات الحالية.</p>
+        <p className="mt-4 text-sm text-white/48">{authoritative ? "لا توجد مراجع حالية مثبتة." : "لا يمكن اعتبار صفر المراجع آمنًا قبل اكتمال reconciliation."}</p>
       ) : null}
 
       {!loading && hits.length > 0 ? (
@@ -86,7 +94,7 @@ function MediaUsagePanelContent({ assetPath }: { assetPath: string }) {
                 <div>
                   <p className="text-sm font-semibold text-white">{hit.entityLabel}</p>
                   <p className="mt-1 text-xs text-white/45">
-                    {hit.entityType} — الحقل: <span className="font-en">{hit.field}</span>
+                    {hit.entityType} — الحقل: <span className="font-en">{hit.field}</span>{hit.referenceState ? ` — ${hit.referenceState}` : ""}
                   </p>
                 </div>
                 {hit.editHref ? (
@@ -104,7 +112,7 @@ function MediaUsagePanelContent({ assetPath }: { assetPath: string }) {
       ) : null}
 
       <p className="mt-4 text-xs leading-6 text-white/35">
-        يمنع الحذف عند وجود مرجع ظاهر في الجداول المفحوصة؛ راجع الاستخدامات قبل إزالة الأصل.
+        الحذف الآمن لا يعتمد على هذه اللوحة وحدها؛ يعيد فحص كل provider ويفشل مغلقًا عند أي عدم يقين.
       </p>
     </section>
   );

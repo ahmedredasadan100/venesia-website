@@ -6,6 +6,7 @@ import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import { validateSlugFormat } from "../../../../lib/admin/slug";
 import type { ProjectCategory } from "../../../../config/projects-data";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { synchronizeProjectMediaReferencesAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import {
   createProjectSlug,
   getString,
@@ -104,6 +105,7 @@ export async function createProject(formData: FormData) {
     entityLabel: arabicName,
     metadata: { slug, type, code },
   });
+  await synchronizeProjectMediaReferencesAfterMutation(data.id);
   revalidateProjectPaths(type, data.id, slug);
   redirectEditWithNotice(data.id, "created");
 }

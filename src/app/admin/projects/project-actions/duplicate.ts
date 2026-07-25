@@ -5,6 +5,7 @@ import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actio
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import type { ProjectCategory } from "../../../../config/projects-data";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { synchronizeProjectMediaReferencesAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import { revalidateProjectPaths } from "./revalidate";
 
 async function ensureUniqueProjectField(field: "code" | "slug", base: string) {
@@ -139,5 +140,6 @@ export async function duplicateProjectAjax(id: number) {
     entityId: newProjectId,
     metadata: { source_project_id: id, slug: nextSlug, code: nextCode },
   });
+  await synchronizeProjectMediaReferencesAfterMutation(newProjectId);
   return { ok: true as const, message: "أُنشئت نسخة جديدة كمسودة." };
 }

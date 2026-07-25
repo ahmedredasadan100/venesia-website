@@ -7,6 +7,7 @@ import type {
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
+import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   buildTopicWritePayload,
@@ -378,6 +379,8 @@ export async function saveTopicForm(
     entityId = data.id;
     savedSlug = data.slug;
   }
+
+  await synchronizeMediaReferencesAfterDomainMutation("topics", entityId);
 
   revalidateTopicPaths({
     id: entityId,

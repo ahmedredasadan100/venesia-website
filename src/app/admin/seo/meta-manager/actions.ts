@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
+import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import { revalidatePublicCacheTags } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { mergeGlobalSeoSettings } from "../../../../lib/seo/parse-global-seo";
@@ -76,6 +77,8 @@ export async function saveGlobalSeoSettingsAction(formData: FormData) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await synchronizeMediaReferencesAfterDomainMutation("site_settings", GLOBAL_SEO_SETTING_KEY);
 
   revalidatePublicCacheTags(["seo-global", "site-settings"]);
   revalidatePath("/admin/seo/meta-manager");

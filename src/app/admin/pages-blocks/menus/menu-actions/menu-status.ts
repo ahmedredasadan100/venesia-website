@@ -14,6 +14,6 @@ export async function toggleMenuVisibility(formData: FormData) {
   if (error) backToMenus(error.message);
 
   await auditMenuAction("menu", "update", { entityId: id, metadata: { is_active: isActive } });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenus("تم تغيير حالة القائمة.");
 }

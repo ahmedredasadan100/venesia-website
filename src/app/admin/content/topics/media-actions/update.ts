@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
+import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   isMediaEditableContentType,
@@ -44,7 +45,7 @@ export async function updateMediaContent(formData: FormData) {
     redirectEditError(id, error instanceof Error ? error.message : "تعذر رفع الصورة.");
   }
 
-  if (!payload.image.trim()) {
+  if (!formData.has("image")) {
     payload.image = String(currentTopic.image ?? "");
   }
 
@@ -115,6 +116,7 @@ export async function updateMediaContent(formData: FormData) {
 
   if (error) redirectEditError(id, error.message);
 
+  await synchronizeMediaReferencesAfterDomainMutation("topics", id);
   revalidateMediaContentPaths(id);
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic", becamePublished ? "publish" : "update"),

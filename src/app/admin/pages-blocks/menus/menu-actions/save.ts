@@ -34,7 +34,7 @@ export async function createMenu(formData: FormData) {
 
   if (error) backToMenus(error.message);
   await auditMenuAction("menu", "create", { entityId: data.id, entityLabel: name, metadata: { slug, location } });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenu(data.id, "تم إنشاء القائمة. ابدأ بإضافة عناصرها.");
 }
 
@@ -58,6 +58,6 @@ export async function updateMenu(formData: FormData) {
 
   if (error) backToMenus(error.message);
   await auditMenuAction("menu", "update", { entityId: id, entityLabel: name, metadata: { slug, location } });
-  revalidateNavigation();
+  await revalidateNavigation();
   backToMenus("تم تحديث القائمة.");
 }

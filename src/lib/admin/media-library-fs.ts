@@ -54,23 +54,6 @@ function buildAssetItem(
   };
 }
 
-function resolveReplaceDestination(normalized: string, target: string, replacePath?: string | null) {
-  if (!replacePath?.trim()) return null;
-
-  const trimmed = replacePath.trim();
-  const relative = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
-  if (!relative.startsWith(`${normalized}/`)) return null;
-
-  const destination = path.join(process.cwd(), "public", relative);
-  const publicRoot = path.join(process.cwd(), "public");
-
-  if (!destination.startsWith(publicRoot) || !fs.existsSync(destination)) {
-    return null;
-  }
-
-  return destination;
-}
-
 export function listPublicMediaFolderFromFs(folder = "images"): PublicMediaFolderListing {
   const { normalized, target } = resolvePublicFolder(folder);
 
@@ -180,11 +163,9 @@ export async function savePublicMediaUploadToFs(
     fs.mkdirSync(target, { recursive: true });
   }
 
-  const replaceDestination = resolveReplaceDestination(normalized, target, options?.replacePath);
-  const filename = replaceDestination
-    ? path.basename(replaceDestination)
-    : sanitizeCmsUploadFilename(file.name, IMAGE_EXTENSIONS, "image");
-  const destination = replaceDestination ?? path.join(target, filename);
+  void options?.replacePath;
+  const filename = sanitizeCmsUploadFilename(file.name, IMAGE_EXTENSIONS, "image");
+  const destination = path.join(target, filename);
   const bytes = Buffer.from(await file.arrayBuffer());
 
   fs.writeFileSync(destination, bytes);
@@ -209,11 +190,9 @@ export async function savePublicDocumentUploadToFs(
     fs.mkdirSync(target, { recursive: true });
   }
 
-  const replaceDestination = resolveReplaceDestination(normalized, target, options?.replacePath);
-  const filename = replaceDestination
-    ? path.basename(replaceDestination)
-    : sanitizeCmsUploadFilename(file.name, PDF_EXTENSIONS, "document");
-  const destination = replaceDestination ?? path.join(target, filename);
+  void options?.replacePath;
+  const filename = sanitizeCmsUploadFilename(file.name, PDF_EXTENSIONS, "document");
+  const destination = path.join(target, filename);
   const bytes = Buffer.from(await file.arrayBuffer());
 
   fs.writeFileSync(destination, bytes);

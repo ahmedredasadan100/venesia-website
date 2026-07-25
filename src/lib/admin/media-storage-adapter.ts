@@ -10,6 +10,12 @@ export type MediaUploadResult = {
   path: string;
   filename: string;
   storagePath?: string;
+  provider?: MediaStorageProvider;
+  bucket?: string;
+  objectKey?: string;
+  kind?: "image" | "document";
+  contentType?: string | null;
+  sizeBytes?: number | null;
 };
 
 export type MediaDeleteResult = {

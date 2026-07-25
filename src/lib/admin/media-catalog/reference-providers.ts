@@ -1,0 +1,402 @@
+import "server-only";
+
+import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
+import { getSupabaseAdmin } from "../../supabase-admin";
+import { getCanonicalMediaIdentityKey } from "./identity";
+import type { CanonicalMediaIdentity, MediaReferenceState } from "./types";
+
+const PROVIDER_PAGE_SIZE = 200;
+
+export type DiscoveredMediaReference = {
+  identity: CanonicalMediaIdentity;
+  publicValue: string;
+  domainKey: string;
+  entityType: string;
+  entityIdentity: string;
+  entityLabel: string | null;
+  fieldKey: string;
+  editHref: string | null;
+  publicHref: string | null;
+  referenceState: MediaReferenceState;
+  restorable: boolean;
+};
+
+export type MediaReferenceProvider = {
+  readonly domainKey: string;
+  readonly table: string;
+  readonly entityType: string;
+  readonly idField: string;
+  readonly fields: readonly string[];
+  readonly supportsRebind: boolean;
+  scanAll(): Promise<DiscoveredMediaReference[]>;
+  scanEntity(entityIdentity: string): Promise<DiscoveredMediaReference[]>;
+  rebind(reference: DiscoveredMediaReference, nextPublicValue: string): Promise<void>;
+};
+
+type ProviderConfig = {
+  domainKey: string;
+  table: string;
+  entityType: string;
+  idField?: string;
+  labelField?: string;
+  fields: readonly string[];
+  extraFields?: readonly string[];
+  stateFields?: readonly string[];
+  supportsRebind?: boolean;
+  editHref: (row: Record<string, unknown>) => string | null;
+  publicHref?: (row: Record<string, unknown>) => string | null;
+  state?: (row: Record<string, unknown>) => { state: MediaReferenceState; restorable: boolean };
+};
+
+function valueText(value: unknown) {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function defaultReferenceState(row: Record<string, unknown>) {
+  if (row.deleted_at) return { state: "soft_deleted" as const, restorable: true };
+  const status = valueText(row.status ?? row.publication_status).toLowerCase();
+  if (status === "draft" || status === "unpublished") return { state: "draft" as const, restorable: false };
+  if (status === "archived") return { state: "archived" as const, restorable: true };
+  return { state: "active" as const, restorable: false };
+}
+
+export function extractMediaCandidateValues(value: unknown): string[] {
+  const results = new Set<string>();
+
+  function visit(current: unknown) {
+    if (typeof current === "string") {
+      const trimmed = current.trim();
+      if (!trimmed) return;
+      if (/^(https?:\/\/|\/images\/|\/files\/)/i.test(trimmed)) results.add(trimmed);
+      for (const match of trimmed.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)) {
+        results.add(match[0].replace(/[),.;]+$/, ""));
+      }
+      return;
+    }
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (current && typeof current === "object") {
+      Object.values(current as Record<string, unknown>).forEach(visit);
+    }
+  }
+
+  visit(value);
+  return [...results];
+}
+
+export function replaceMediaValue(value: unknown, previousValue: string, nextValue: string): unknown {
+  if (typeof value === "string") return value.split(previousValue).join(nextValue);
+  if (Array.isArray(value)) return value.map((item) => replaceMediaValue(item, previousValue, nextValue));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        replaceMediaValue(item, previousValue, nextValue),
+      ]),
+    );
+  }
+  return value;
+}
+
+function discoverRowReferences(config: ProviderConfig, row: Record<string, unknown>) {
+  const entityIdentity = valueText(row[config.idField ?? "id"]);
+  const entityLabel = config.labelField ? valueText(row[config.labelField]) || null : entityIdentity;
+  const state = config.state?.(row) ?? defaultReferenceState(row);
+  const references: DiscoveredMediaReference[] = [];
+  const seen = new Set<string>();
+
+  for (const fieldKey of config.fields) {
+    for (const publicValue of extractMediaCandidateValues(row[fieldKey])) {
+      const managed = parseManagedStorageAsset(publicValue);
+      if (!managed) continue;
+      const identity: CanonicalMediaIdentity = {
+        provider: "supabase",
+        bucket: managed.bucket,
+        objectKey: managed.objectPath,
+      };
+      const key = `${getCanonicalMediaIdentityKey(identity)}:${fieldKey}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      references.push({
+        identity,
+        publicValue,
+        domainKey: config.domainKey,
+        entityType: config.entityType,
+        entityIdentity,
+        entityLabel,
+        fieldKey,
+        editHref: config.editHref(row),
+        publicHref: config.publicHref?.(row) ?? null,
+        referenceState: state.state,
+        restorable: state.restorable,
+      });
+    }
+  }
+  return references;
+}
+
+function providerColumns(config: ProviderConfig) {
+  return [...new Set([
+    config.idField ?? "id",
+    config.labelField,
+    ...(config.stateFields ?? []),
+    ...config.fields,
+    ...(config.extraFields ?? []),
+  ].filter(Boolean))].join(", ");
+}
+
+function createProvider(config: ProviderConfig): MediaReferenceProvider {
+  const idField = config.idField ?? "id";
+
+  async function fetchRows(entityIdentity?: string) {
+    const supabase = getSupabaseAdmin();
+    const rows: Record<string, unknown>[] = [];
+    let offset = 0;
+
+    while (true) {
+      let query = supabase.from(config.table).select(providerColumns(config)).order(idField, { ascending: true });
+      if (entityIdentity !== undefined) query = query.eq(idField, entityIdentity);
+      const { data, error } = await query.range(offset, offset + PROVIDER_PAGE_SIZE - 1);
+      if (error) {
+        throw new Error(`media_reference_provider:${config.domainKey}:${error.code ?? "query_failed"}`);
+      }
+      const pageRows = (data ?? []) as unknown as Record<string, unknown>[];
+      rows.push(...pageRows);
+      if (entityIdentity !== undefined || pageRows.length < PROVIDER_PAGE_SIZE) break;
+      offset += PROVIDER_PAGE_SIZE;
+    }
+    return rows;
+  }
+
+  return {
+    domainKey: config.domainKey,
+    table: config.table,
+    entityType: config.entityType,
+    idField,
+    fields: config.fields,
+    supportsRebind: config.supportsRebind ?? true,
+    async scanAll() {
+      const rows = await fetchRows();
+      return rows.flatMap((row) => discoverRowReferences(config, row));
+    },
+    async scanEntity(entityIdentity) {
+      const rows = await fetchRows(entityIdentity);
+      return rows.flatMap((row) => discoverRowReferences(config, row));
+    },
+    async rebind(reference, nextPublicValue) {
+      if (config.supportsRebind === false) {
+        throw new Error(`media_reference_rebind_unsupported:${config.domainKey}`);
+      }
+      const supabase = getSupabaseAdmin();
+      const { data: row, error: readError } = await supabase
+        .from(config.table)
+        .select(`${idField}, ${reference.fieldKey}`)
+        .eq(idField, reference.entityIdentity)
+        .single();
+      if (readError || !row) {
+        throw new Error(`media_reference_rebind_read_failed:${config.domainKey}`);
+      }
+      const currentValue = (row as unknown as Record<string, unknown>)[reference.fieldKey];
+      const nextValue = replaceMediaValue(currentValue, reference.publicValue, nextPublicValue);
+      const { error: updateError } = await supabase
+        .from(config.table)
+        .update({ [reference.fieldKey]: nextValue })
+        .eq(idField, reference.entityIdentity);
+      if (updateError) throw new Error(`media_reference_rebind_write_failed:${config.domainKey}`);
+    },
+  };
+}
+
+const PROVIDER_CONFIGS = [
+  {
+    domainKey: "topics",
+    table: "topics",
+    entityType: "topic",
+    labelField: "title",
+    fields: ["image", "excerpt", "content", "media_payload"],
+    extraFields: ["slug"],
+    stateFields: ["status", "deleted_at"],
+    editHref: (row) => `/admin/content/topics/${row.id}`,
+    publicHref: (row) => (row.slug ? `/topics/${row.slug}` : null),
+  },
+  {
+    domainKey: "topic_categories",
+    table: "topic_categories",
+    entityType: "topic_category",
+    labelField: "name",
+    fields: ["image"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/content/categories/${row.id}`,
+  },
+  {
+    domainKey: "legacy_media_items",
+    table: "media_items",
+    entityType: "legacy_media_item",
+    labelField: "title",
+    fields: ["image", "og_image", "content"],
+    stateFields: ["status", "deleted_at"],
+    editHref: () => "/admin/content/topics",
+  },
+  {
+    domainKey: "projects",
+    table: "projects",
+    entityType: "project",
+    labelField: "arabic_name",
+    fields: ["image", "hero_image", "og_image", "district_image", "overview_video_image", "brochure_url"],
+    stateFields: ["publication_status"],
+    editHref: (row) => `/admin/projects/${row.id}`,
+    supportsRebind: false,
+  },
+  {
+    domainKey: "project_media",
+    table: "project_media",
+    entityType: "project_media",
+    fields: ["image"],
+    extraFields: ["project_id"],
+    editHref: (row) => `/admin/projects/${row.project_id}`,
+    supportsRebind: false,
+  },
+  {
+    domainKey: "project_floor_plans",
+    table: "project_floor_plans",
+    entityType: "project_floor_plan",
+    fields: ["plan_image"],
+    extraFields: ["project_id"],
+    editHref: (row) => `/admin/projects/${row.project_id}`,
+    supportsRebind: false,
+  },
+  {
+    domainKey: "hero_templates",
+    table: "hero_templates",
+    entityType: "hero_template",
+    labelField: "name",
+    fields: ["config"],
+    editHref: (row) => `/admin/pages-blocks/blocks/hero/${row.id}`,
+  },
+  {
+    domainKey: "content_block_templates",
+    table: "content_block_templates",
+    entityType: "content_block_template",
+    labelField: "name",
+    fields: ["config"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/pages-blocks/blocks/content/${row.id}`,
+  },
+  {
+    domainKey: "cta_block_templates",
+    table: "cta_block_templates",
+    entityType: "cta_block_template",
+    labelField: "name",
+    fields: ["config"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/pages-blocks/blocks/cta/${row.id}`,
+  },
+  {
+    domainKey: "cards_block_templates",
+    table: "cards_block_templates",
+    entityType: "cards_block_template",
+    labelField: "name",
+    fields: ["config"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/pages-blocks/blocks/cards/${row.id}`,
+  },
+  {
+    domainKey: "breadcrumb_block_templates",
+    table: "breadcrumb_block_templates",
+    entityType: "breadcrumb_block_template",
+    labelField: "name",
+    fields: ["config"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/pages-blocks/blocks/breadcrumb/${row.id}`,
+  },
+  {
+    domainKey: "feed_module_templates",
+    table: "feed_module_templates",
+    entityType: "feed_module_template",
+    labelField: "name",
+    fields: ["config"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/pages-blocks/blocks/feed/${row.id}`,
+  },
+  {
+    domainKey: "media_sidebar_module_templates",
+    table: "media_sidebar_module_templates",
+    entityType: "media_sidebar_module_template",
+    labelField: "name",
+    fields: ["config"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/pages-blocks/blocks/media-sidebar/${row.id}`,
+  },
+  {
+    domainKey: "media_hub_module_templates",
+    table: "media_hub_module_templates",
+    entityType: "media_hub_module_template",
+    labelField: "name",
+    fields: ["config"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/pages-blocks/blocks/media-hub/${row.id}`,
+  },
+  {
+    domainKey: "page_sections",
+    table: "page_sections",
+    entityType: "legacy_page_section",
+    fields: ["config"],
+    extraFields: ["page_id"],
+    editHref: () => "/admin/pages-blocks/pages",
+  },
+  {
+    domainKey: "menu_items",
+    table: "menu_items",
+    entityType: "menu_item",
+    labelField: "label",
+    fields: ["href"],
+    extraFields: ["menu_id"],
+    editHref: (row) => `/admin/pages-blocks/menus/${row.menu_id}`,
+  },
+  {
+    domainKey: "site_settings",
+    table: "site_settings",
+    entityType: "site_setting",
+    idField: "key",
+    labelField: "key",
+    fields: ["value"],
+    editHref: (row) => {
+      const key = valueText(row.key);
+      if (key.startsWith("footer.")) return "/admin/pages-blocks/footer";
+      if (key === "seo.global") return "/admin/seo/meta-manager";
+      return "/admin/settings/general";
+    },
+  },
+] satisfies ProviderConfig[];
+
+export const MEDIA_REFERENCE_PROVIDER_REGISTRY = PROVIDER_CONFIGS.map(createProvider);
+export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v1";
+
+export function getMediaReferenceProvider(domainKey: string) {
+  return MEDIA_REFERENCE_PROVIDER_REGISTRY.find((provider) => provider.domainKey === domainKey) ?? null;
+}
+
+export function validateMediaReferenceProviderRegistry() {
+  const keys = MEDIA_REFERENCE_PROVIDER_REGISTRY.map((provider) => provider.domainKey);
+  const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index);
+  if (duplicates.length) throw new Error(`duplicate_media_reference_provider:${duplicates.join(",")}`);
+  return { version: MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION, providerCount: keys.length, keys };
+}
+
+export async function scanAllMediaReferenceProviders() {
+  validateMediaReferenceProviderRegistry();
+  const references: DiscoveredMediaReference[] = [];
+  const uncertainties: string[] = [];
+
+  for (const provider of MEDIA_REFERENCE_PROVIDER_REGISTRY) {
+    try {
+      references.push(...(await provider.scanAll()));
+    } catch (error) {
+      uncertainties.push(error instanceof Error ? error.message : `media_reference_provider:${provider.domainKey}:failed`);
+    }
+  }
+
+  return { references, uncertainties };
+}

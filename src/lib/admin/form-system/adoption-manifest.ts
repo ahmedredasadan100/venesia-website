@@ -212,6 +212,15 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "Singleton identity settings retain their dedicated settings contract.",
   },
   {
+    id: "media-library-settings",
+    label: "Media Library settings",
+    classification: "specialized_exception",
+    sourceFiles: ["src/app/admin/settings/media/MediaSettingsPanel.tsx"],
+    surfaces: ["media-policy-settings"],
+    rationale:
+      "Singleton upload, deletion, storage, and reconciliation policies retain a dedicated settings contract.",
+  },
+  {
     id: "security-settings",
     label: "Security settings",
     classification: "specialized_exception",
@@ -277,8 +286,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/app/admin/activity-log/ActivityLogClient.tsx",
       "src/app/admin/seo/sitemap/SitemapMonitorClient.tsx",
       "src/components/admin/media/AdminMediaPickerModal.tsx",
+      "src/components/admin/media/MediaLibraryCore.tsx",
       "src/components/admin/media-intelligence/AdminMediaLibraryClient.tsx",
       "src/components/admin/media-intelligence/MediaUsagePanel.tsx",
+      "src/app/admin/reports/topics-without-image/page.tsx",
     ],
     surfaces: ["activity-query", "sitemap-check", "media-command", "media-usage"],
     rationale:

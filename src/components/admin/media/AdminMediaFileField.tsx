@@ -110,7 +110,6 @@ export default function AdminMediaFileField({
         onSelect={updateValue}
         initialFolder={browseFolder}
         mode="pdf"
-        replacePath={value || null}
       />
     </div>
   );
