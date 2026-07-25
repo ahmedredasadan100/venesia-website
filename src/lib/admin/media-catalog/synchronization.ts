@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import {
   getAllCatalogAssetIdentityMap,
   getMediaCatalogRuntimeState,
@@ -46,15 +47,29 @@ function serializedReference(reference: DiscoveredMediaReference, assetId: strin
 }
 
 async function markRuntimeUncertain(warnings: string[]) {
-  let current: MediaCatalogRuntimeState;
+  const context = resolveMediaStorageRuntimeContext();
+  let current: MediaCatalogRuntimeState = {
+    state: "uncertain",
+    provider: context.provider,
+    environment: context.environment,
+    environmentKey: context.identity,
+    providerRegistryVersion: MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
+    lastScanAt: null,
+    lastCatalogSync: null,
+    lastDryRun: null,
+    storageAssetCount: null,
+    catalogAssetCount: null,
+    warnings: [],
+  };
   try {
     current = await getMediaCatalogRuntimeState();
-  } catch {
-    return;
-  }
+  } catch {}
   await setMediaCatalogRuntimeState({
     ...current,
     state: "uncertain",
+    provider: context.provider,
+    environment: context.environment,
+    environmentKey: context.identity,
     providerRegistryVersion: MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
     warnings: [...new Set([...current.warnings, ...warnings])].slice(-30),
   });
@@ -196,16 +211,21 @@ export async function synchronizeProjectsMediaReferencesAfterMutation(projectIds
   return { state: "synced" as const, failures: [] };
 }
 
-export async function reconcileAllMediaReferences(options: { dryRun?: boolean } = {}) {
+export async function reconcileAllMediaReferences(options: {
+  dryRun?: boolean;
+  assetMap?: Map<string, MediaCatalogAsset>;
+} = {}) {
   validateMediaReferenceProviderRegistry();
-  const assetMap = await getAllCatalogAssetIdentityMap();
+  const assetMap = options.assetMap ?? await getAllCatalogAssetIdentityMap();
   const uncertainties: string[] = [];
   let discoveredReferenceCount = 0;
+  let scannedProviderCount = 0;
   let synchronizedProviderCount = 0;
 
   for (const provider of MEDIA_REFERENCE_PROVIDER_REGISTRY) {
     try {
       const references = await provider.scanAll();
+      scannedProviderCount += 1;
       discoveredReferenceCount += references.length;
       const missing = references
         .filter((reference) => !assetMap.has(getCanonicalMediaIdentityKey(reference.identity)))
@@ -235,27 +255,10 @@ export async function reconcileAllMediaReferences(options: { dryRun?: boolean } 
     }
   }
 
-  if (!options.dryRun) {
-    const state = uncertainties.length ? "uncertain" : "synced";
-    const { error: assetStateError } = await getSupabaseAdmin()
-      .from("media_assets")
-      .update({ reconciliation_state: state })
-      .neq("status", "deleted")
-      .eq("missing_object", false);
-    if (assetStateError) uncertainties.push(`asset_reconciliation_state_failed:${assetStateError.code ?? "unknown"}`);
-
-    await setMediaCatalogRuntimeState({
-      state: uncertainties.length ? "uncertain" : "synced",
-      providerRegistryVersion: MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
-      lastCatalogSync: new Date().toISOString(),
-      lastDryRun: null,
-      warnings: [...new Set(uncertainties)].slice(-30),
-    });
-  }
-
   return {
     dryRun: options.dryRun === true,
     providerCount: MEDIA_REFERENCE_PROVIDER_REGISTRY.length,
+    scannedProviderCount,
     synchronizedProviderCount,
     discoveredReferenceCount,
     assetCount: assetMap.size,
@@ -270,9 +273,14 @@ export async function rebindAllSupportedMediaReferences(
 ) {
   const persisted = await listCatalogReferences(previousAsset.id);
   const runtimeState = await getMediaCatalogRuntimeState();
+  const context = resolveMediaStorageRuntimeContext();
   if (
     runtimeState.state !== "synced" ||
-    runtimeState.providerRegistryVersion !== MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION
+    runtimeState.providerRegistryVersion !== MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION ||
+    !context.identity ||
+    runtimeState.environmentKey !== context.identity ||
+    runtimeState.provider !== context.provider ||
+    runtimeState.environment !== context.environment
   ) {
     return {
       ok: false as const,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { logError } from "../../logging";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   CMS_IMAGE_EXTENSIONS,
@@ -30,6 +31,19 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   collisionPolicy: "unique_name",
   safeDeletePolicy: "authoritative_zero_references",
 };
+
+export class MediaSettingsSaveError extends Error {
+  constructor(
+    readonly reason:
+      | "settings_table_unavailable"
+      | "settings_write_forbidden"
+      | "settings_write_failed",
+    message: string,
+  ) {
+    super(message);
+    this.name = "MediaSettingsSaveError";
+  }
+}
 
 function boundedInteger(value: unknown, fallback: number, max: number) {
   const parsed = Number(value);
@@ -84,7 +98,28 @@ export async function saveMediaSettings(settings: MediaSettings) {
     { key: "media.settings", value: parsed, updated_at: new Date().toISOString() },
     { onConflict: "key" },
   );
-  if (error) throw new Error(error.message);
+  if (error) {
+    logError("media settings save failed", error, {
+      resource: "site_settings:media.settings",
+      code: error.code,
+    });
+    if (error.code === "42P01" || error.code === "PGRST205") {
+      throw new MediaSettingsSaveError(
+        "settings_table_unavailable",
+        "تعذر حفظ الإعدادات لأن مخزن إعدادات الموقع غير متاح في البيئة المتصلة.",
+      );
+    }
+    if (error.code === "42501" || error.code === "PGRST301") {
+      throw new MediaSettingsSaveError(
+        "settings_write_forbidden",
+        "لا يملك اتصال الخادم صلاحية حفظ إعدادات رفع الملفات.",
+      );
+    }
+    throw new MediaSettingsSaveError(
+      "settings_write_failed",
+      "تعذر حفظ إعدادات رفع الملفات في مخزن الإعدادات. لم يتم تسجيل أي تغيير.",
+    );
+  }
   return parsed;
 }
 

@@ -7,9 +7,9 @@ export default function AdminMediaLibraryPage() {
   return (
     <main className="space-y-7">
       <AdminPageContextHeader
-        eyebrow="MEDIA CAPABILITY"
+        eyebrow="إدارة الملفات"
         title="مكتبة الوسائط"
-        description="إدارة الأصول والمجلدات والمراجع من كتالوج واحد، مع حذف يفشل مغلقًا واستبدال لا يكتب فوق مسار قائم."
+        description="استعرض الملفات ونظّمها واعرف مواضع استخدامها من مكان واحد."
       />
 
       <AdminMediaLibraryClient />

@@ -1,6 +1,15 @@
-import type { PublicMediaFolderListing } from "./media-library-paths";
+import type { PublicMediaFolderListing, PublicMediaInventory } from "./media-library-paths";
 
 export type MediaStorageProvider = "filesystem" | "supabase";
+
+export type MediaRuntimeEnvironment = "local" | "preview" | "production";
+
+export type MediaStorageRuntimeContext = {
+  provider: "supabase";
+  environment: MediaRuntimeEnvironment;
+  projectReference: string | null;
+  identity: string | null;
+};
 
 export type MediaUploadOptions = {
   replacePath?: string | null;
@@ -26,6 +35,7 @@ export type MediaDeleteResult = {
 export interface MediaStorageAdapter {
   readonly provider: MediaStorageProvider;
   listFolder(folder?: string): Promise<PublicMediaFolderListing>;
+  listInventory(): Promise<PublicMediaInventory>;
   listImagePaths(folder?: string, limit?: number): Promise<string[]>;
   uploadImage(folder: string, file: File, options?: MediaUploadOptions): Promise<MediaUploadResult>;
   uploadDocument(folder: string, file: File, options?: MediaUploadOptions): Promise<MediaUploadResult>;
@@ -46,7 +56,15 @@ export class MediaStorageError extends Error {
 }
 
 type MediaStorageEnvironment = Partial<
-  Pick<NodeJS.ProcessEnv, "CMS_STORAGE_UPLOADS" | "NODE_ENV" | "VERCEL" | "VERCEL_ENV">
+  Pick<
+    NodeJS.ProcessEnv,
+    | "NODE_ENV"
+    | "VERCEL"
+    | "VERCEL_ENV"
+    | "NEXT_PUBLIC_SUPABASE_URL"
+    | "SUPABASE_URL"
+    | "SUPABASE_PROJECT_REF"
+  >
 >;
 
 export function isProductionMediaRuntime(environment: MediaStorageEnvironment = process.env) {
@@ -61,9 +79,55 @@ export function isProductionMediaRuntime(environment: MediaStorageEnvironment = 
 export function resolveMediaStorageProvider(
   environment: MediaStorageEnvironment = process.env,
 ): MediaStorageProvider {
-  // Vercel/production must never fall back to the deployment filesystem.
-  if (isProductionMediaRuntime(environment)) return "supabase";
-  return environment.CMS_STORAGE_UPLOADS === "supabase" ? "supabase" : "filesystem";
+  // Supabase is the only managed provider. The local filesystem is exposed
+  // separately as a read-only compatibility inventory in local development.
+  void environment;
+  return "supabase";
+}
+
+export function resolveMediaRuntimeEnvironment(
+  environment: MediaStorageEnvironment = process.env,
+): MediaRuntimeEnvironment {
+  if (environment.VERCEL_ENV === "preview") return "preview";
+  if (isProductionMediaRuntime(environment)) return "production";
+  return "local";
+}
+
+function resolveSupabaseProjectReference(environment: MediaStorageEnvironment) {
+  const explicit = environment.SUPABASE_PROJECT_REF?.trim();
+  if (explicit) return explicit;
+
+  const rawUrl = environment.NEXT_PUBLIC_SUPABASE_URL?.trim() || environment.SUPABASE_URL?.trim();
+  if (!rawUrl) return null;
+  try {
+    const hostname = new URL(rawUrl).hostname;
+    const projectReference = hostname.split(".")[0]?.trim();
+    return projectReference || null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveMediaStorageRuntimeContext(
+  environment: MediaStorageEnvironment = process.env,
+): MediaStorageRuntimeContext {
+  const provider = "supabase" as const;
+  const runtimeEnvironment = resolveMediaRuntimeEnvironment(environment);
+  const projectReference = resolveSupabaseProjectReference(environment);
+  return {
+    provider,
+    environment: runtimeEnvironment,
+    projectReference,
+    identity: projectReference
+      ? `${runtimeEnvironment}:${provider}:${projectReference}`
+      : null,
+  };
+}
+
+export function shouldIncludeLocalFilesystemReadThrough(
+  environment: MediaStorageEnvironment = process.env,
+) {
+  return resolveMediaRuntimeEnvironment(environment) === "local";
 }
 
 export function getPublicMediaStorageError(

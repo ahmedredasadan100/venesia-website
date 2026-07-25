@@ -4,6 +4,7 @@ import path from "path";
 
 import { moveManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import {
   ensureCatalogFolderHierarchy,
   getCatalogAssetByIdentity,
@@ -37,9 +38,14 @@ export async function moveCatalogMediaAsset(
     throw new Error("media_physical_move_asset_unavailable");
   }
   const runtimeState = await getMediaCatalogRuntimeState();
+  const context = resolveMediaStorageRuntimeContext();
   if (
     runtimeState.state !== "synced" ||
-    runtimeState.providerRegistryVersion !== MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION
+    runtimeState.providerRegistryVersion !== MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION ||
+    !context.identity ||
+    runtimeState.environmentKey !== context.identity ||
+    runtimeState.provider !== context.provider ||
+    runtimeState.environment !== context.environment
   ) {
     throw new Error("media_physical_move_catalog_uncertain");
   }

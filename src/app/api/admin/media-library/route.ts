@@ -5,10 +5,11 @@ import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-se
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import {
+  buildMediaLibraryReadModel,
   createCatalogFolder,
   getCatalogAssetById,
-  listMediaCatalogPage,
-  mergeCatalogFallback,
+  getMediaCatalogRuntimeState,
+  listMediaCatalogSnapshot,
   registerCatalogUpload,
   updateCatalogAssetMetadata,
 } from "../../../../lib/admin/media-catalog/catalog";
@@ -24,8 +25,9 @@ import {
 import {
   deletePublicMediaAsset,
   getPublicMediaStorageError,
-  listPublicMediaFolder,
+  listPublicMediaInventory,
   normalizeMediaFolder,
+  resolveMediaStorageRuntimeContext,
   savePublicDocumentUpload,
   savePublicMediaUpload,
 } from "../../../../lib/admin/media-library";
@@ -48,11 +50,11 @@ const SMART_VIEWS = new Set<MediaSmartView>([
   "used",
   "unused",
   "missing_alt",
-  "recent",
-  "large",
   "missing",
   "drift",
 ]);
+const MEDIA_LIBRARY_QUERY_KEYS = new Set(["folder", "view", "kind", "page", "pageSize", "q"]);
+const MEDIA_LIBRARY_PAGE_SIZES = new Set([10, 20, 30, 50, 100]);
 
 function mediaJson(body: unknown, init?: { status?: number; headers?: HeadersInit }) {
   return NextResponse.json(body, {
@@ -61,9 +63,15 @@ function mediaJson(body: unknown, init?: { status?: number; headers?: HeadersIni
   });
 }
 
-function boundedInteger(value: string | null, fallback: number, min: number, max: number) {
+function parseBoundedInteger(
+  value: string | null,
+  fallback: number,
+  min: number,
+  max: number,
+) {
+  if (value === null) return fallback;
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : null;
 }
 
 function safeError(error: unknown, fallback: string, fallbackStatus = 500) {
@@ -82,26 +90,74 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const folder = normalizeMediaFolder(searchParams.get("folder") || "images");
+    const unknownQueryKey = [...searchParams.keys()].find(
+      (key) => !MEDIA_LIBRARY_QUERY_KEYS.has(key),
+    );
+    if (unknownQueryKey) {
+      return mediaJson(
+        { error: `معامل البحث غير مدعوم: ${unknownQueryKey}`, code: "invalid_media_query" },
+        { status: 400 },
+      );
+    }
+    const requestedFolder = searchParams.get("folder");
+    const folder = requestedFolder ? normalizeMediaFolder(requestedFolder) : null;
     const requestedSmartView = searchParams.get("view") as MediaSmartView | null;
-    const smartView = requestedSmartView && SMART_VIEWS.has(requestedSmartView) ? requestedSmartView : "all";
+    if (requestedSmartView && !SMART_VIEWS.has(requestedSmartView)) {
+      return mediaJson(
+        { error: "عرض الملفات المطلوب غير معروف.", code: "invalid_media_view" },
+        { status: 400 },
+      );
+    }
+    const smartView = requestedSmartView ?? "all";
     const kindParam = searchParams.get("kind");
-    const kind = kindParam === "image" || kindParam === "document" ? kindParam : "all";
-    const page = boundedInteger(searchParams.get("page"), 1, 1, 100_000);
-    const pageSize = boundedInteger(searchParams.get("pageSize"), 24, 12, 96);
+    if (kindParam && kindParam !== "all" && kindParam !== "image" && kindParam !== "document") {
+      return mediaJson(
+        { error: "نوع الملف المطلوب غير معروف.", code: "invalid_media_kind" },
+        { status: 400 },
+      );
+    }
+    const kind: "all" | "image" | "document" = kindParam === "image" || kindParam === "document"
+      ? kindParam
+      : "all";
+    const page = parseBoundedInteger(searchParams.get("page"), 1, 1, 100_000);
+    const pageSize = parseBoundedInteger(searchParams.get("pageSize"), 20, 10, 100);
+    if (page === null) {
+      return mediaJson(
+        { error: "رقم الصفحة غير صالح.", code: "invalid_media_page" },
+        { status: 400 },
+      );
+    }
+    if (pageSize === null || !MEDIA_LIBRARY_PAGE_SIZES.has(pageSize)) {
+      return mediaJson(
+        { error: "حجم الصفحة غير مدعوم.", code: "invalid_media_page_size" },
+        { status: 400 },
+      );
+    }
 
-    let result = await listMediaCatalogPage({
+    const query = searchParams.get("q") ?? "";
+    if (query.length > 120) {
+      return mediaJson(
+        { error: "عبارة البحث أطول من الحد المسموح.", code: "invalid_media_query" },
+        { status: 400 },
+      );
+    }
+    const [catalog, inventory] = await Promise.all([
+      listMediaCatalogSnapshot(),
+      listPublicMediaInventory(),
+    ]);
+    const runtimeState = catalog.catalogState !== "unavailable"
+      ? await getMediaCatalogRuntimeState().catch(() => null)
+      : null;
+    const result = buildMediaLibraryReadModel(catalog, inventory, {
       folder,
-      query: searchParams.get("q") ?? "",
+      query,
       kind,
       smartView,
       page,
       pageSize,
+      context: resolveMediaStorageRuntimeContext(),
+      runtimeState,
     });
-    if (result.catalogState === "unavailable") {
-      const fallback = await listPublicMediaFolder(folder);
-      result = mergeCatalogFallback(result, fallback);
-    }
 
     return mediaJson(result, {
       headers: { "Server-Timing": `media_catalog;dur=${(performance.now() - startedAt).toFixed(1)}` },
@@ -137,6 +193,12 @@ export async function POST(request: Request) {
         return mediaJson({ created: true, folder: created }, { status: 201 });
       }
       if (body.operation === "reconcile") {
+        if (body.dryRun !== undefined && typeof body.dryRun !== "boolean") {
+          return mediaJson(
+            { error: "قيمة وضع المعاينة غير صالحة.", code: "invalid_media_dry_run" },
+            { status: 400 },
+          );
+        }
         const result = await reconcileMediaCatalog({ dryRun: body.dryRun === true, actorId: actor.id });
         if (!result.dryRun) {
           await recordCmsAdminAudit(
@@ -339,8 +401,8 @@ export async function DELETE(request: Request) {
           : result.eligibility.state === "unmanaged"
             ? "هذا الملف غير مُدار ولا يمكن حذفه عبر Media Library."
             : result.eligibility.state === "already_missing"
-              ? "الملف مفقود من التخزين ويحتاج reconciliation."
-              : "تعذر إثبات أمان الحذف؛ تم منع العملية Fail-Closed.";
+              ? "الملف مفقود من التخزين ويحتاج مراجعة حالته."
+              : "تعذر إثبات أمان الحذف؛ تم منع العملية لحماية المحتوى.";
       return mediaJson({ error: message, code: `media_delete_${result.eligibility.state}`, eligibility: result.eligibility }, { status });
     }
 

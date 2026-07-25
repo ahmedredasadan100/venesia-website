@@ -68,8 +68,13 @@ check(
   }) === "supabase",
 );
 check(
-  "local development retains an explicit legacy filesystem adapter",
-  storageContract.resolveMediaStorageProvider({ NODE_ENV: "development" }) === "filesystem",
+  "local development uses Supabase for every managed mutation",
+  storageContract.resolveMediaStorageProvider({ NODE_ENV: "development" }) === "supabase",
+);
+check(
+  "local development keeps filesystem as read-only browse-through only",
+  storageContract.shouldIncludeLocalFilesystemReadThrough({ NODE_ENV: "development" }) === true &&
+    storageContract.shouldIncludeLocalFilesystemReadThrough({ NODE_ENV: "production" }) === false,
 );
 
 assert.equal(mediaPaths.normalizeMediaFolder("images/topics"), "images/topics");
@@ -309,10 +314,13 @@ const mediaHelperSource = source(
   "src/app/admin/content/topics/media-actions/helpers.ts",
 );
 check(
-  "production facade resolves the provider before the dynamic filesystem import",
-  facadeSource.indexOf("resolveMediaStorageProvider(environment)") >= 0 &&
-    facadeSource.indexOf("resolveMediaStorageProvider(environment)") <
-      facadeSource.indexOf('import("./media-library-fs")'),
+  "media facade isolates filesystem behind local read-only list paths",
+  facadeSource.includes("shouldIncludeLocalFilesystemReadThrough") &&
+    facadeSource.includes('import("./media-library-fs")') &&
+    facadeSource.includes("getManagedMediaStorageAdapter") &&
+    facadeSource.includes("savePublicMediaUpload") &&
+    facadeSource.includes("deletePublicMediaAsset") &&
+    !source("src/lib/admin/media-library-fs.ts").includes("registerCatalogUpload"),
 );
 check(
   "Storage uses a dedicated request timeout without changing database queries",
@@ -344,7 +352,8 @@ check(
   "delete API delegates to fail-closed catalog safety",
   routeSource.includes("safelyDeleteMediaAsset") &&
     routeSource.includes('result.eligibility.state === "in_use"') &&
-    routeSource.includes("Fail-Closed"),
+    routeSource.includes('result.eligibility.state === "uncertain" ? 503') &&
+    routeSource.includes("تم منع العملية لحماية المحتوى"),
 );
 
 const nextConfigSource = source("next.config.ts");

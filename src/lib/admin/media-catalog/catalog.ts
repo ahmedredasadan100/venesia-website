@@ -4,8 +4,11 @@ import path from "path";
 
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
-import type { MediaUploadResult } from "../media-storage-adapter";
-import type { MediaAssetItem, PublicMediaFolderListing } from "../media-library-paths";
+import type {
+  MediaStorageRuntimeContext,
+  MediaUploadResult,
+} from "../media-storage-adapter";
+import type { MediaAssetItem, PublicMediaInventory } from "../media-library-paths";
 import { getFolderPathFromObjectKey, isMediaCatalogMissingError } from "./identity";
 import { getCanonicalMediaIdentityKey } from "./identity";
 import type {
@@ -13,16 +16,22 @@ import type {
   MediaCatalogAsset,
   MediaCatalogFolder,
   MediaCatalogPage,
+  MediaCatalogRuntimeState,
+  MediaCatalogSnapshot,
+  MediaLibrarySummary,
   MediaReferenceRecord,
   MediaSmartView,
 } from "./types";
 import { readUploadBinaryMetadata } from "./binary-metadata";
 import { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION } from "./reference-providers";
+import { buildMediaCatalogReadiness } from "./readiness";
+
+export type { MediaCatalogRuntimeState, MediaCatalogSnapshot } from "./types";
 
 export class MediaCatalogUnavailableError extends Error {
   readonly code = "media_catalog_unavailable";
 
-  constructor(message = "كتالوج الوسائط غير متاح. تم منع العمليات الحساسة حتى اكتمال الترحيل.") {
+  constructor(message = "بيانات إدارة الملفات الكاملة غير متاحة. تم إيقاف العمليات الحساسة حفاظًا على الملفات.") {
     super(message);
     this.name = "MediaCatalogUnavailableError";
   }
@@ -76,6 +85,8 @@ function mapCatalogAsset(row: Record<string, unknown>): MediaCatalogAsset {
         ? row.reconciliation_state
         : "synced",
     missingObject: Boolean(row.missing_object),
+    catalogRegistered: true,
+    source: "catalog",
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
     referenceCount: Number(row.reference_count ?? 0),
@@ -97,6 +108,8 @@ function mapCatalogFolder(row: Record<string, unknown>): MediaCatalogFolder {
     childFolderCount: Number(row.child_folder_count ?? 0),
     directAssetCount: Number(row.direct_asset_count ?? 0),
     directTotalBytes: Number(row.direct_total_bytes ?? 0),
+    totalAssetCount: Number(row.direct_asset_count ?? 0),
+    totalBytes: Number(row.direct_total_bytes ?? 0),
   };
 }
 
@@ -120,104 +133,11 @@ function mapReference(row: Record<string, unknown>): MediaReferenceRecord {
   };
 }
 
-export async function listMediaCatalogPage(input: {
-  folder?: string | null;
-  query?: string;
-  kind?: "all" | "image" | "document";
-  smartView?: MediaSmartView;
-  page?: number;
-  pageSize?: number;
-} = {}): Promise<MediaCatalogPage> {
-  const page = Math.max(1, Math.trunc(input.page ?? 1));
-  const pageSize = Math.min(96, Math.max(12, Math.trunc(input.pageSize ?? 24)));
-  const smartView = input.smartView ?? "all";
-  const supabase = getSupabaseAdmin();
-
-  let query = supabase
-    .from("admin_media_assets_catalog")
-    .select("*", { count: "exact" })
-    .neq("status", "deleted");
-
-  if (input.folder) query = query.eq("folder_path", input.folder);
-  if (input.kind && input.kind !== "all") query = query.eq("media_kind", input.kind);
-
-  const safeSearch = input.query?.trim().replace(/[,%_()]/g, " ").slice(0, 120);
-  if (safeSearch) query = query.ilike("display_name", `%${safeSearch}%`);
-
-  if (smartView === "used") query = query.gt("reference_count", 0);
-  if (smartView === "unused") {
-    query = query
-      .eq("reference_count", 0)
-      .eq("reconciliation_state", "synced")
-      .eq("missing_object", false);
-  }
-  if (smartView === "missing_alt") query = query.eq("media_kind", "image").is("default_alt_text", null);
-  if (smartView === "missing") query = query.eq("missing_object", true);
-  if (smartView === "drift") query = query.neq("reconciliation_state", "synced");
-  if (smartView === "large") {
-    query = query.order("byte_size", { ascending: false, nullsFirst: false });
-  } else {
-    query = query.order("created_at", { ascending: false }).order("id", { ascending: false });
-  }
-
-  const from = (page - 1) * pageSize;
-  const [{ data, error, count }, foldersResult] = await Promise.all([
-    query.range(from, from + pageSize - 1),
-    supabase.from("admin_media_folders_catalog").select("*").order("normalized_path"),
-  ]);
-
-  if (isMediaCatalogMissingError(error) || isMediaCatalogMissingError(foldersResult.error)) {
-    return {
-      catalogState: "unavailable",
-      warning: "Migration كتالوج الوسائط غير مطبقة في البيئة المتصلة؛ الحذف والاستبدال والنقل محجوبة.",
-      assets: [],
-      folders: [],
-      page,
-      pageSize,
-      total: 0,
-      totalPages: 0,
-    };
-  }
-  if (error) throw new Error(error.message);
-  if (foldersResult.error) throw new Error(foldersResult.error.message);
-
-  if (smartView === "unused") {
-    const runtimeState = await getMediaCatalogRuntimeState();
-    if (
-      runtimeState.state !== "synced" ||
-      runtimeState.providerRegistryVersion !== MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION
-    ) {
-      return {
-        catalogState: "uncertain",
-        warning: "لا يمكن إعلان أي أصل كغير مستخدم قبل اكتمال reconciliation بنفس إصدار Provider Registry.",
-        assets: [],
-        folders: (foldersResult.data ?? []).map((row) => mapCatalogFolder(row as Record<string, unknown>)),
-        page,
-        pageSize,
-        total: 0,
-        totalPages: 0,
-      };
-    }
-  }
-
-  const total = count ?? 0;
-  return {
-    catalogState: "available",
-    warning: null,
-    assets: (data ?? []).map((row) => mapCatalogAsset(row as Record<string, unknown>)),
-    folders: (foldersResult.data ?? []).map((row) => mapCatalogFolder(row as Record<string, unknown>)),
-    page,
-    pageSize,
-    total,
-    totalPages: total ? Math.ceil(total / pageSize) : 0,
-  };
-}
-
 function fallbackAsset(item: MediaAssetItem): MediaCatalogAsset {
   return {
     id: `unmanaged:${item.path}`,
     provider: item.provider,
-    bucket: item.provider === "filesystem" ? "public" : "unknown",
+    bucket: item.bucket,
     objectKey: item.storagePath ?? item.path.replace(/^\/+/, ""),
     publicUrl: item.path,
     originalFilename: item.filename,
@@ -237,19 +157,333 @@ function fallbackAsset(item: MediaAssetItem): MediaCatalogAsset {
     defaultCaption: null,
     reconciliationState: item.managed ? "storage_only" : "uncertain",
     missingObject: false,
+    catalogRegistered: false,
+    source: "storage",
     createdAt: item.uploadedAt ?? "",
     updatedAt: item.uploadedAt ?? "",
-    referenceCount: 0,
+    referenceCount: null,
   };
 }
 
-export function mergeCatalogFallback(page: MediaCatalogPage, listing: PublicMediaFolderListing): MediaCatalogPage {
-  if (page.catalogState !== "unavailable") return page;
+function identityKey(identity: CanonicalMediaIdentity) {
+  if (identity.provider === "supabase") return getCanonicalMediaIdentityKey(identity);
+  return `${identity.provider}:${identity.bucket}:${identity.objectKey.replace(/^\/+/, "")}`;
+}
+
+function storageFolder(folderPath: string): MediaCatalogFolder {
+  const parentPath = folderPath === "images" || folderPath === "files" ? null : path.posix.dirname(folderPath);
   return {
-    ...page,
-    assets: listing.items.map(fallbackAsset),
-    total: listing.items.length,
-    totalPages: listing.items.length ? 1 : 0,
+    id: `storage:${folderPath}`,
+    path: folderPath,
+    parentPath,
+    displayName:
+      folderPath === "images"
+        ? "الصور"
+        : folderPath === "files"
+          ? "المستندات"
+          : path.posix.basename(folderPath),
+    reconciliationState: "storage_only",
+    childFolderCount: 0,
+    directAssetCount: 0,
+    directTotalBytes: 0,
+    totalAssetCount: 0,
+    totalBytes: 0,
+  };
+}
+
+function storageItemIdentity(item: MediaAssetItem) {
+  return identityKey({
+    provider: item.provider,
+    bucket: item.bucket,
+    objectKey: item.storagePath ?? item.path.replace(/^\/+/, ""),
+  });
+}
+
+function mergeCatalogAndStorageAssets(catalog: MediaCatalogSnapshot, inventory: PublicMediaInventory) {
+  const storageByIdentity = new Map(inventory.items.map((item) => [storageItemIdentity(item), item]));
+  const storageByPublicUrl = new Map(inventory.items.map((item) => [item.path, item]));
+  const matchedStorageKeys = new Set<string>();
+  const merged: MediaCatalogAsset[] = [];
+
+  for (const catalogAsset of catalog.assets) {
+    const storageItem =
+      storageByIdentity.get(identityKey(catalogAsset)) ?? storageByPublicUrl.get(catalogAsset.publicUrl);
+    if (!storageItem) {
+      merged.push(
+        catalogAsset.provider === inventory.provider && inventory.providerAvailable !== false
+          ? {
+              ...catalogAsset,
+              missingObject: true,
+              reconciliationState: "missing_object",
+              source: "catalog",
+            }
+          : catalogAsset,
+      );
+      continue;
+    }
+
+    matchedStorageKeys.add(storageItemIdentity(storageItem));
+    merged.push({
+      ...catalogAsset,
+      publicUrl: storageItem.path,
+      objectKey: storageItem.storagePath ?? catalogAsset.objectKey,
+      sizeBytes: storageItem.sizeBytes,
+      mimeType: storageItem.contentType ?? catalogAsset.mimeType,
+      createdAt: storageItem.uploadedAt ?? catalogAsset.createdAt,
+      missingObject: false,
+      source: "catalog_storage",
+    });
+  }
+
+  for (const item of inventory.items) {
+    if (!matchedStorageKeys.has(storageItemIdentity(item))) merged.push(fallbackAsset(item));
+  }
+
+  return merged;
+}
+
+function buildMergedFolders(
+  catalogFolders: MediaCatalogFolder[],
+  inventory: PublicMediaInventory,
+  assets: MediaCatalogAsset[],
+) {
+  const folderMap = new Map(catalogFolders.map((folder) => [folder.path, folder]));
+  for (const folderPath of ["images", "files", ...inventory.folders, ...assets.map((asset) => asset.folderPath)]) {
+    if (!folderMap.has(folderPath)) folderMap.set(folderPath, storageFolder(folderPath));
+  }
+
+  const physicalByFolder = new Map<string, MediaAssetItem[]>();
+  for (const item of inventory.items) {
+    const folderPath = item.storagePath
+      ? path.posix.dirname(item.storagePath)
+      : path.posix.dirname(item.path.replace(/^\/+/, ""));
+    const current = physicalByFolder.get(folderPath) ?? [];
+    current.push(item);
+    physicalByFolder.set(folderPath, current);
+  }
+
+  const folderPaths = Array.from(folderMap.keys());
+  return folderPaths
+    .map((folderPath) => {
+      const folder = folderMap.get(folderPath)!;
+      const directAssets = assets.filter((asset) => asset.folderPath === folderPath);
+      const nestedAssets = assets.filter(
+        (asset) => asset.folderPath === folderPath || asset.folderPath.startsWith(`${folderPath}/`),
+      );
+      const directPhysical = physicalByFolder.get(folderPath) ?? [];
+      const nestedPhysical = inventory.items.filter((item) => {
+        const itemFolder = item.storagePath
+          ? path.posix.dirname(item.storagePath)
+          : path.posix.dirname(item.path.replace(/^\/+/, ""));
+        return itemFolder === folderPath || itemFolder.startsWith(`${folderPath}/`);
+      });
+      return {
+        ...folder,
+        childFolderCount: folderPaths.filter((candidate) => {
+          const parent = candidate === "images" || candidate === "files" ? null : path.posix.dirname(candidate);
+          return parent === folderPath;
+        }).length,
+        directAssetCount: directAssets.length,
+        directTotalBytes: directPhysical.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0),
+        totalAssetCount: nestedAssets.length,
+        totalBytes: nestedPhysical.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0),
+      };
+    })
+    .sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function buildMediaLibrarySummary(
+  inventory: PublicMediaInventory,
+  folders: MediaCatalogFolder[],
+  assets: MediaCatalogAsset[],
+): MediaLibrarySummary {
+  const knownSizeItems = inventory.items.filter((item) => item.sizeBytes !== null);
+  const largestItem = knownSizeItems.reduce<MediaAssetItem | null>(
+    (largest, item) => !largest || (item.sizeBytes ?? 0) > (largest.sizeBytes ?? 0) ? item : largest,
+    null,
+  );
+  const largestAsset = largestItem
+    ? assets.find(
+        (asset) => identityKey(asset) === storageItemIdentity(largestItem) || asset.publicUrl === largestItem.path,
+      ) ?? fallbackAsset(largestItem)
+    : null;
+
+  return {
+    provider: inventory.provider,
+    folderCount: folders.length,
+    assetCount: assets.length,
+    storageAssetCount: inventory.items.length,
+    managedStorageAssetCount: inventory.items.filter(
+      (item) => item.managed && item.provider === inventory.provider,
+    ).length,
+    readOnlyAssetCount: inventory.items.filter((item) => !item.managed).length,
+    catalogRegisteredCount: assets.filter(
+      (asset) => asset.catalogRegistered && asset.provider === inventory.provider,
+    ).length,
+    imageCount: assets.filter((asset) => asset.kind === "image").length,
+    documentCount: assets.filter((asset) => asset.kind === "document").length,
+    missingObjectCount: assets.filter(
+      (asset) => asset.provider === inventory.provider && asset.missingObject,
+    ).length,
+    unreconciledAssetCount: assets.filter(
+      (asset) =>
+        asset.provider === inventory.provider &&
+        (!asset.catalogRegistered || asset.reconciliationState !== "synced"),
+    ).length,
+    usageUnknownCount: assets.filter((asset) => asset.referenceCount === null).length,
+    totalBytes: inventory.items.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0),
+    unknownSizeCount: inventory.items.length - knownSizeItems.length,
+    largestAsset: largestAsset && largestAsset.sizeBytes !== null
+      ? {
+          id: largestAsset.id,
+          displayName: largestAsset.displayName,
+          publicUrl: largestAsset.publicUrl,
+          folderPath: largestAsset.folderPath,
+          sizeBytes: largestAsset.sizeBytes,
+        }
+      : null,
+  };
+}
+
+function matchesSmartView(
+  asset: MediaCatalogAsset,
+  smartView: MediaSmartView,
+  managedProvider: MediaStorageRuntimeContext["provider"],
+) {
+  if (smartView === "used") {
+    return asset.provider === managedProvider && asset.catalogRegistered && asset.referenceCount !== null && asset.referenceCount > 0;
+  }
+  if (smartView === "unused") {
+    return (
+      asset.provider === managedProvider &&
+      asset.catalogRegistered &&
+      asset.referenceCount === 0 &&
+      asset.reconciliationState === "synced" &&
+      !asset.missingObject
+    );
+  }
+  if (smartView === "missing_alt") {
+    return asset.provider === managedProvider && asset.catalogRegistered && asset.kind === "image" && !asset.defaultAltText;
+  }
+  if (smartView === "missing") return asset.provider === managedProvider && asset.missingObject;
+  if (smartView === "drift") {
+    return asset.provider === managedProvider && (asset.reconciliationState !== "synced" || !asset.catalogRegistered);
+  }
+  return true;
+}
+
+export function buildMediaLibraryReadModel(
+  catalog: MediaCatalogSnapshot,
+  inventory: PublicMediaInventory,
+  input: {
+    folder?: string | null;
+    query?: string;
+    kind?: "all" | "image" | "document";
+    smartView?: MediaSmartView;
+    page?: number;
+    pageSize?: number;
+    context: MediaStorageRuntimeContext;
+    runtimeState?: MediaCatalogRuntimeState | null;
+  },
+): MediaCatalogPage {
+  const smartView = input.smartView ?? "all";
+  const page = Math.max(1, Math.trunc(input.page ?? 1));
+  const requestedPageSize = Math.trunc(input.pageSize ?? 20);
+  const pageSize = [10, 20, 30, 50, 100].includes(requestedPageSize) ? requestedPageSize : 20;
+  const mergedAssets = mergeCatalogAndStorageAssets(catalog, inventory);
+  const folders = buildMergedFolders(catalog.folders, inventory, mergedAssets);
+  const summary = buildMediaLibrarySummary(inventory, folders, mergedAssets);
+  const readiness = buildMediaCatalogReadiness(
+    catalog,
+    inventory,
+    input.runtimeState ?? null,
+    input.context,
+    MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
+  );
+  const referenceViewBlocked =
+    (smartView === "used" || smartView === "unused") &&
+    !readiness.usageResultsAuthoritative;
+  const normalizedQuery = input.query?.trim().toLocaleLowerCase().slice(0, 120);
+  const filtered = referenceViewBlocked
+    ? []
+    : mergedAssets
+        .filter(
+          (asset) =>
+            !input.folder ||
+            asset.folderPath === input.folder ||
+            asset.folderPath.startsWith(`${input.folder}/`),
+        )
+        .filter((asset) => !input.kind || input.kind === "all" || asset.kind === input.kind)
+        .filter((asset) => !normalizedQuery || asset.displayName.toLocaleLowerCase().includes(normalizedQuery))
+        .filter((asset) => matchesSmartView(asset, smartView, input.context.provider))
+        .sort((left, right) => {
+          const byDate = right.createdAt.localeCompare(left.createdAt);
+          return byDate || right.id.localeCompare(left.id);
+        });
+  const total = filtered.length;
+  const offset = (page - 1) * pageSize;
+  return {
+    catalogState:
+      referenceViewBlocked || inventory.providerAvailable === false
+        ? "uncertain"
+        : catalog.catalogState,
+    warning: referenceViewBlocked
+      ? smartView === "used"
+        ? "لا يمكن إنشاء قائمة مكتملة للملفات المستخدمة قبل اكتمال فحص مواضع الاستخدام. يظل استعراض الملفات وعرض استخدام ملف محدد متاحًا."
+        : "لا يمكن تأكيد أن الملفات غير مستخدمة بعد. يظل استعراض الملفات وعرض استخدام ملف محدد متاحًا."
+      : catalog.warning ?? inventory.warning ?? null,
+    assets: filtered.slice(offset, offset + pageSize),
+    folders,
+    page,
+    pageSize,
+    total,
+    totalPages: total ? Math.ceil(total / pageSize) : 0,
+    summary,
+    readiness,
+  };
+}
+
+export async function listMediaCatalogSnapshot(): Promise<MediaCatalogSnapshot> {
+  const supabase = getSupabaseAdmin();
+  const assets: MediaCatalogAsset[] = [];
+  const pageSize = 1000;
+  const foldersResult = await supabase.from("admin_media_folders_catalog").select("*").order("normalized_path");
+  if (isMediaCatalogMissingError(foldersResult.error)) {
+    return {
+      catalogState: "unavailable",
+      warning: "بيانات إدارة الملفات الكاملة غير متاحة؛ يظل الاستعراض متاحًا، بينما أوقفت العمليات الحساسة حفاظًا على الملفات.",
+      assets: [],
+      folders: [],
+    };
+  }
+  if (foldersResult.error) throw new Error(foldersResult.error.message);
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from("admin_media_assets_catalog")
+      .select("*")
+      .neq("status", "deleted")
+      .order("id")
+      .range(offset, offset + pageSize - 1);
+    if (isMediaCatalogMissingError(error)) {
+      return {
+        catalogState: "unavailable",
+        warning: "بيانات إدارة الملفات الكاملة غير متاحة؛ يظل الاستعراض متاحًا، بينما أوقفت العمليات الحساسة حفاظًا على الملفات.",
+        assets: [],
+        folders: [],
+      };
+    }
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    assets.push(...rows.map(mapCatalogAsset));
+    if (rows.length < pageSize) break;
+  }
+
+  return {
+    catalogState: "available",
+    warning: null,
+    assets,
+    folders: (foldersResult.data ?? []).map((row) => mapCatalogFolder(row as Record<string, unknown>)),
   };
 }
 
@@ -451,14 +685,6 @@ export async function getAllCatalogAssetIdentityMap() {
   return result;
 }
 
-export type MediaCatalogRuntimeState = {
-  state: "synced" | "uncertain";
-  providerRegistryVersion: string | null;
-  lastCatalogSync: string | null;
-  lastDryRun: string | null;
-  warnings: string[];
-};
-
 export async function getMediaCatalogRuntimeState(): Promise<MediaCatalogRuntimeState> {
   const { data, error } = await getSupabaseAdmin()
     .from("site_settings")
@@ -470,9 +696,18 @@ export async function getMediaCatalogRuntimeState(): Promise<MediaCatalogRuntime
   const value = (data?.value ?? {}) as Record<string, unknown>;
   return {
     state: value.state === "synced" ? "synced" : "uncertain",
+    provider: value.provider === "supabase" || value.provider === "filesystem" ? value.provider : null,
+    environment:
+      value.environment === "local" || value.environment === "preview" || value.environment === "production"
+        ? value.environment
+        : null,
+    environmentKey: nullableText(value.environmentKey),
     providerRegistryVersion: nullableText(value.providerRegistryVersion),
+    lastScanAt: nullableText(value.lastScanAt),
     lastCatalogSync: nullableText(value.lastCatalogSync),
     lastDryRun: nullableText(value.lastDryRun),
+    storageAssetCount: numberOrNull(value.storageAssetCount),
+    catalogAssetCount: numberOrNull(value.catalogAssetCount),
     warnings: Array.isArray(value.warnings) ? value.warnings.map(text).filter(Boolean) : [],
   };
 }

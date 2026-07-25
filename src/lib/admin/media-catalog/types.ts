@@ -1,4 +1,8 @@
-import type { MediaStorageProvider } from "../media-storage-adapter";
+import type {
+  MediaRuntimeEnvironment,
+  MediaStorageProvider,
+  MediaStorageRuntimeContext,
+} from "../media-storage-adapter";
 
 export type ManagedMediaProvider = MediaStorageProvider;
 
@@ -36,9 +40,11 @@ export type MediaCatalogAsset = CanonicalMediaIdentity & {
   defaultCaption: string | null;
   reconciliationState: MediaReconciliationState;
   missingObject: boolean;
+  catalogRegistered: boolean;
+  source: "catalog" | "storage" | "catalog_storage";
   createdAt: string;
   updatedAt: string;
-  referenceCount: number;
+  referenceCount: number | null;
 };
 
 export type MediaCatalogFolder = {
@@ -50,6 +56,39 @@ export type MediaCatalogFolder = {
   childFolderCount: number;
   directAssetCount: number;
   directTotalBytes: number;
+  totalAssetCount: number;
+  totalBytes: number;
+};
+
+export type MediaCatalogSnapshot = {
+  catalogState: MediaCatalogState;
+  warning: string | null;
+  assets: MediaCatalogAsset[];
+  folders: MediaCatalogFolder[];
+};
+
+export type MediaLibrarySummary = {
+  provider: MediaStorageProvider;
+  folderCount: number;
+  assetCount: number;
+  storageAssetCount: number;
+  managedStorageAssetCount: number;
+  readOnlyAssetCount: number;
+  catalogRegisteredCount: number;
+  imageCount: number;
+  documentCount: number;
+  missingObjectCount: number;
+  unreconciledAssetCount: number;
+  usageUnknownCount: number;
+  totalBytes: number;
+  unknownSizeCount: number;
+  largestAsset: {
+    id: string;
+    displayName: string;
+    publicUrl: string;
+    folderPath: string;
+    sizeBytes: number;
+  } | null;
 };
 
 export type MediaReferenceState = "draft" | "active" | "archived" | "soft_deleted" | "restorable";
@@ -73,10 +112,57 @@ export type MediaSmartView =
   | "used"
   | "unused"
   | "missing_alt"
-  | "recent"
-  | "large"
   | "missing"
   | "drift";
+
+export type MediaCatalogRuntimeState = {
+  state: "synced" | "uncertain";
+  provider: MediaStorageProvider | null;
+  environment: MediaRuntimeEnvironment | null;
+  environmentKey: string | null;
+  providerRegistryVersion: string | null;
+  lastScanAt: string | null;
+  lastCatalogSync: string | null;
+  lastDryRun: string | null;
+  storageAssetCount: number | null;
+  catalogAssetCount: number | null;
+  warnings: string[];
+};
+
+export type MediaCatalogReadinessReason =
+  | "catalog_unavailable"
+  | "managed_storage_unavailable"
+  | "environment_identity_unproven"
+  | "runtime_state_missing"
+  | "runtime_context_mismatch"
+  | "runtime_dataset_mismatch"
+  | "provider_registry_mismatch"
+  | "catalog_coverage_incomplete"
+  | "asset_reconciliation_incomplete"
+  | "provider_scan_uncertain";
+
+export type MediaCatalogReadiness = {
+  context: MediaStorageRuntimeContext;
+  catalogAvailable: boolean;
+  managedStorageAvailable: boolean;
+  runtimeContextMatches: boolean;
+  runtimeDatasetMatches: boolean;
+  providerRegistryMatches: boolean;
+  catalogCoverageComplete: boolean;
+  assetReconciliationComplete: boolean;
+  usageResultsAuthoritative: boolean;
+  safeDeleteReady: boolean;
+  managedStorageAssetCount: number;
+  catalogAssetCount: number;
+  unregisteredAssetCount: number;
+  missingObjectCount: number;
+  unreconciledAssetCount: number;
+  unscannedAssetCount: number;
+  lastScanAt: string | null;
+  lastCompletedScanAt: string | null;
+  reasons: MediaCatalogReadinessReason[];
+  warnings: string[];
+};
 
 export type MediaCatalogPage = {
   catalogState: MediaCatalogState;
@@ -87,6 +173,8 @@ export type MediaCatalogPage = {
   pageSize: number;
   total: number;
   totalPages: number;
+  summary: MediaLibrarySummary;
+  readiness: MediaCatalogReadiness;
 };
 
 export type MediaDeleteEligibility =

@@ -21,6 +21,8 @@ export type DiscoveredMediaReference = {
   restorable: boolean;
 };
 
+export type DiscoveredMediaUsage = Omit<DiscoveredMediaReference, "identity">;
+
 export type MediaReferenceProvider = {
   readonly domainKey: string;
   readonly table: string;
@@ -30,6 +32,7 @@ export type MediaReferenceProvider = {
   readonly supportsRebind: boolean;
   scanAll(): Promise<DiscoveredMediaReference[]>;
   scanEntity(entityIdentity: string): Promise<DiscoveredMediaReference[]>;
+  scanUsageByPublicValue(publicValue: string): Promise<DiscoveredMediaUsage[]>;
   rebind(reference: DiscoveredMediaReference, nextPublicValue: string): Promise<void>;
 };
 
@@ -71,6 +74,9 @@ export function extractMediaCandidateValues(value: unknown): string[] {
       for (const match of trimmed.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)) {
         results.add(match[0].replace(/[),.;]+$/, ""));
       }
+      for (const match of trimmed.matchAll(/(?<![A-Za-z0-9:/])\/(?:images|files)\/[^\s"'<>\\]+/gi)) {
+        results.add(match[0].replace(/[),.;]+$/, ""));
+      }
       return;
     }
     if (Array.isArray(current)) {
@@ -84,6 +90,69 @@ export function extractMediaCandidateValues(value: unknown): string[] {
 
   visit(value);
   return [...results];
+}
+
+function mediaPublicValuesMatch(left: string, right: string) {
+  if (left.trim() === right.trim()) return true;
+  const leftManaged = parseManagedStorageAsset(left);
+  const rightManaged = parseManagedStorageAsset(right);
+  if (leftManaged && rightManaged) {
+    return leftManaged.bucket === rightManaged.bucket && leftManaged.objectPath === rightManaged.objectPath;
+  }
+
+  const normalizeLegacyPath = (value: string) => {
+    const trimmed = value.trim();
+    let pathname = trimmed;
+    if (/^https?:\/\//i.test(trimmed)) {
+      try {
+        pathname = new URL(trimmed).pathname;
+      } catch {
+        return null;
+      }
+    } else {
+      pathname = trimmed.split(/[?#]/, 1)[0];
+    }
+    if (!/^\/(?:images|files)\//i.test(pathname)) return null;
+    try {
+      return decodeURIComponent(pathname);
+    } catch {
+      return pathname;
+    }
+  };
+
+  const leftLegacy = normalizeLegacyPath(left);
+  const rightLegacy = normalizeLegacyPath(right);
+  return leftLegacy !== null && rightLegacy !== null && leftLegacy === rightLegacy;
+}
+
+function discoverRowUsage(config: ProviderConfig, row: Record<string, unknown>, requestedPublicValue: string) {
+  const entityIdentity = valueText(row[config.idField ?? "id"]);
+  const entityLabel = config.labelField ? valueText(row[config.labelField]) || null : entityIdentity;
+  const state = config.state?.(row) ?? defaultReferenceState(row);
+  const hits: DiscoveredMediaUsage[] = [];
+  const seen = new Set<string>();
+
+  for (const fieldKey of config.fields) {
+    for (const publicValue of extractMediaCandidateValues(row[fieldKey])) {
+      if (!mediaPublicValuesMatch(publicValue, requestedPublicValue)) continue;
+      const key = `${fieldKey}:${publicValue}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hits.push({
+        publicValue,
+        domainKey: config.domainKey,
+        entityType: config.entityType,
+        entityIdentity,
+        entityLabel,
+        fieldKey,
+        editHref: config.editHref(row),
+        publicHref: config.publicHref?.(row) ?? null,
+        referenceState: state.state,
+        restorable: state.restorable,
+      });
+    }
+  }
+  return hits;
 }
 
 export function replaceMediaValue(value: unknown, previousValue: string, nextValue: string): unknown {
@@ -184,6 +253,10 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
     async scanEntity(entityIdentity) {
       const rows = await fetchRows(entityIdentity);
       return rows.flatMap((row) => discoverRowReferences(config, row));
+    },
+    async scanUsageByPublicValue(publicValue) {
+      const rows = await fetchRows();
+      return rows.flatMap((row) => discoverRowUsage(config, row, publicValue));
     },
     async rebind(reference, nextPublicValue) {
       if (config.supportsRebind === false) {
@@ -395,6 +468,34 @@ export async function scanAllMediaReferenceProviders() {
       references.push(...(await provider.scanAll()));
     } catch (error) {
       uncertainties.push(error instanceof Error ? error.message : `media_reference_provider:${provider.domainKey}:failed`);
+    }
+  }
+
+  return { references, uncertainties };
+}
+
+export async function scanMediaUsageByPublicValue(publicValue: string) {
+  validateMediaReferenceProviderRegistry();
+  const references: DiscoveredMediaUsage[] = [];
+  const uncertainties: string[] = [];
+
+  for (let index = 0; index < MEDIA_REFERENCE_PROVIDER_REGISTRY.length; index += 4) {
+    const batch = MEDIA_REFERENCE_PROVIDER_REGISTRY.slice(index, index + 4);
+    const results = await Promise.all(
+      batch.map(async (provider) => {
+        try {
+          return { references: await provider.scanUsageByPublicValue(publicValue), uncertainty: null };
+        } catch (error) {
+          return {
+            references: [] as DiscoveredMediaUsage[],
+            uncertainty: error instanceof Error ? error.message : `media_reference_provider:${provider.domainKey}:failed`,
+          };
+        }
+      }),
+    );
+    for (const result of results) {
+      references.push(...result.references);
+      if (result.uncertainty) uncertainties.push(result.uncertainty);
     }
   }
 

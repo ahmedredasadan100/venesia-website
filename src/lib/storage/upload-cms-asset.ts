@@ -19,6 +19,7 @@ import {
   normalizeMediaFolder,
   type MediaAssetItem,
   type PublicMediaFolderListing,
+  type PublicMediaInventory,
 } from "../admin/media-library-paths";
 import { getSupabaseStorageAdmin } from "../supabase-admin";
 
@@ -99,6 +100,7 @@ function stringMetadata(metadata: Record<string, unknown> | null | undefined, ke
 
 function buildAssetItem(
   publicPath: string,
+  bucket: string,
   storagePath: string,
   entry: StorageListEntry,
   kind: "image" | "document",
@@ -116,6 +118,7 @@ function buildAssetItem(
     uploadedAt: entry.created_at ?? entry.updated_at ?? null,
     managed: true,
     provider: "supabase",
+    bucket,
     storagePath,
   };
 }
@@ -400,10 +403,10 @@ async function listCmsFolderFromStorageClient(
     const publicPath = publicUrlForObject(supabase, bucket, entryPath);
     if (isImageFile(entry.name)) {
       images.push(publicPath);
-      items.push(buildAssetItem(publicPath, entryPath, entry, "image"));
+      items.push(buildAssetItem(publicPath, bucket, entryPath, entry, "image"));
     } else if (isPdfFile(entry.name)) {
       documents.push(publicPath);
-      items.push(buildAssetItem(publicPath, entryPath, entry, "document"));
+      items.push(buildAssetItem(publicPath, bucket, entryPath, entry, "document"));
     }
   }
 
@@ -424,6 +427,26 @@ export function createSupabaseCmsMediaStorageAdapter(
     provider: "supabase",
     listFolder(folder = "images") {
       return listCmsFolderFromStorageClient(supabase, folder);
+    },
+    async listInventory(): Promise<PublicMediaInventory> {
+      const inventory = await listAllSupabaseManagedStorageAssets(supabase);
+      return {
+        provider: "supabase",
+        folders: inventory.folders,
+        items: inventory.assets.map((asset) => ({
+          path: asset.publicUrl,
+          filename: asset.filename,
+          extension: path.posix.extname(asset.filename).toLowerCase(),
+          kind: asset.kind,
+          sizeBytes: asset.sizeBytes,
+          contentType: asset.contentType,
+          uploadedAt: asset.uploadedAt,
+          managed: true,
+          provider: "supabase",
+          bucket: asset.bucket,
+          storagePath: asset.objectKey,
+        })),
+      };
     },
     listImagePaths(folder = "images", limit = 240) {
       return listPublicImagePathsFromStorageClient(supabase, folder, limit);
@@ -479,8 +502,8 @@ async function listStoragePrefixFully(
     });
     if (error) {
       throw new MediaStorageError(
-        "media_reconciliation_list_failed",
-        "تعذر إكمال سرد التخزين أثناء reconciliation.",
+        "media_inventory_list_failed",
+        "تعذر إكمال سرد أصول التخزين.",
         503,
       );
     }
