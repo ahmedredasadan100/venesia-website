@@ -27,6 +27,11 @@ npm run typecheck
 npm run verify:migrations
 npm run verify:legacy-media-admin
 npm run verify:media-library-system
+npm run verify:media-delete-saga
+npm run verify:media-write-adoption
+npm run verify:media-coordination-sql
+npm run verify:media-coordination-postgres
+npm run verify:media-live-qa-guards
 npm run verify:audit-coverage
 npm run build
 ```
@@ -49,6 +54,11 @@ Runs on pull requests and pushes to `main`:
 - `npm run verify:migrations`
 - `npm run verify:legacy-media-admin`
 - `npm run verify:media-library-system`
+- `npm run verify:media-delete-saga`
+- `npm run verify:media-write-adoption`
+- `npm run verify:media-coordination-sql`
+- `npm run verify:media-coordination-postgres` (isolated PostgreSQL 15 job)
+- `npm run verify:media-live-qa-guards`
 - `npm run verify:unified-content`
 - `npm run verify:audit-coverage`
 - `npm run build`

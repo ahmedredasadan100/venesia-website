@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "approvalId": "replace-with-reviewed-change-ticket",
+  "approvedBy": "replace-with-environment-owner",
+  "evidence": "replace-with-link-or-description-proving-this-is-a-disposable-development-or-qa-environment",
+  "classification": "qa",
+  "runtimeEnvironment": "preview",
+  "writable": true,
+  "production": false,
+  "projectRef": "abcdefghijklmnopqrst",
+  "supabaseUrl": "https://abcdefghijklmnopqrst.supabase.co/",
+  "appBaseUrl": "https://replace-with-qa-preview.example.test/",
+  "environmentKey": "preview:supabase:abcdefghijklmnopqrst",
+  "provider": "supabase",
+  "imageBucket": "cms-images",
+  "providerRegistryVersion": "replace-with-exact-provider-registry-version",
+  "fixturePrefix": "codex-media-coordination-qa",
+  "expiresAt": "replace-with-an-iso-timestamp-within-the-next-24-hours"
+}

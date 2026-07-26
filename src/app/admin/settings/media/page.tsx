@@ -11,6 +11,7 @@ import {
   resolveMediaStorageRuntimeContext,
 } from "../../../../lib/admin/media-library";
 import MediaSettingsPanel from "./MediaSettingsPanel";
+import MediaRecoveryCenter from "./MediaRecoveryCenter";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export default async function MediaSettingsPage() {
         description="تحكم في أنواع الملفات وأحجامها المسموح بها عند الرفع من لوحة الإدارة."
       />
       <MediaSettingsPanel settings={settings} readiness={readiness} />
+      <MediaRecoveryCenter />
     </AdminPageExperience>
   );
 }
