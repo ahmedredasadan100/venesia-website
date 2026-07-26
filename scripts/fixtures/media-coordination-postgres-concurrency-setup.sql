@@ -12,6 +12,15 @@ set value = jsonb_build_object(
 )
 where key = 'media.catalog_state';
 
+insert into public.media_folders (
+  normalized_path,
+  parent_path,
+  display_name,
+  reconciliation_state
+)
+values ('images/coordination', 'images', 'Media coordination QA', 'synced')
+on conflict (normalized_path) do nothing;
+
 insert into public.media_assets (
   id,
   provider,

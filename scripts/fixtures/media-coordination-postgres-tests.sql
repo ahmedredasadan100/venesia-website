@@ -1196,7 +1196,7 @@ select media_coordination_test.assert_true(
     '00000000-0000-0000-0000-0000000000ab',
     (select value::uuid from media_coordination_test.runtime_state where key = 'physical_move_lease'),
     'supabase', 'images', 'coordination/a11.jpg', '/images/coordination/a11.jpg',
-    'images', 'coordination/moved-a11.jpg', '/images/coordination/moved-a11.jpg', 'coordination'
+    'images', 'coordination/moved-a11.jpg', '/images/coordination/moved-a11.jpg', 'images/coordination'
   ) = 1,
   'physical move Catalog transition failed'
 );
@@ -1248,7 +1248,7 @@ select public.transition_media_asset_identity_for_move(
   '00000000-0000-0000-0000-0000000000ac',
   (select value::uuid from media_coordination_test.runtime_state where key = 'physical_move_rollback_lease'),
   'supabase', 'images', 'coordination/a12.jpg', '/images/coordination/a12.jpg',
-  'images', 'coordination/moved-a12.jpg', '/images/coordination/moved-a12.jpg', 'coordination'
+  'images', 'coordination/moved-a12.jpg', '/images/coordination/moved-a12.jpg', 'images/coordination'
 );
 select media_coordination_test.assert_true(
   public.rollback_media_asset_identity_move(

@@ -13,6 +13,9 @@ const runner = read("scripts/verify-media-coordination-postgres.mts");
 const fixture = read(
   "scripts/fixtures/media-coordination-postgres-bootstrap.sql",
 );
+const concurrencyFixture = read(
+  "scripts/fixtures/media-coordination-postgres-concurrency-setup.sql",
+);
 const integration = read(
   "scripts/fixtures/media-coordination-postgres-tests.sql",
 );
@@ -113,6 +116,7 @@ check("quality workflow has an independent PostgreSQL 15 job", postgresJob.start
 check("isolated PostgreSQL job does not consume Supabase secrets", !postgresJob.includes("SUPABASE_") && postgresJob.includes("127.0.0.1:5432/venesia_media_coordination_ci"));
 check("fixture enforces PostgreSQL 15", fixture.includes("server_major <> 15"));
 check("fixture creates Supabase runtime roles", fixture.includes("create role anon") && fixture.includes("create role authenticated") && fixture.includes("create role service_role"));
+check("physical-move fixtures provision a valid Catalog folder", concurrencyFixture.includes("values ('images/coordination', 'images'") && runner.includes("'images/coordination'") && integration.includes("'images/coordination'"));
 check("runtime primary identity comes from the first actual managed target", writeLeaseRuntime.includes("primaryEntityIdentity: targets[0].entityIdentity") && !writeLeaseRuntime.includes("primaryEntityIdentity: input.scopes[0].entityIdentity"));
 check("media-empty scopes are skipped before the primary target is selected", writeLeaseRuntime.includes("if (!managed) continue;") && writeLeaseRuntime.indexOf("if (!managed) continue;") < writeLeaseRuntime.indexOf("primaryEntityIdentity: targets[0].entityIdentity"));
 check("physical move retains one external lease through rebind and completion", physicalMoveRuntime.includes("externalLease: moveLease") && physicalMoveRuntime.indexOf("externalLease: moveLease") < physicalMoveRuntime.indexOf("completeMediaReferenceWriteLease(moveLease") && physicalMoveRuntime.includes("transition_media_asset_identity_for_move"));

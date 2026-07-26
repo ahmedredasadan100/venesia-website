@@ -585,7 +585,7 @@ async function verifyPhysicalMoveAgainstStaleSafeDelete() {
         'supabase', 'images', 'coordination/concurrent-c4.jpg',
         '/images/coordination/concurrent-c4.jpg',
         'images', 'coordination/moved-concurrent-c4.jpg',
-        '/images/coordination/moved-concurrent-c4.jpg', 'coordination'
+        '/images/coordination/moved-concurrent-c4.jpg', 'images/coordination'
       );
       \\echo MEDIA_MOVE_TRANSITION_LOCK_HELD
       select pg_sleep(1.5);
@@ -726,7 +726,7 @@ async function verifyPhysicalMoveAgainstStaleSafeDelete() {
         'supabase', 'images', 'coordination/concurrent-c5.jpg',
         '/images/coordination/concurrent-c5.jpg',
         'images', 'coordination/moved-concurrent-c5.jpg',
-        '/images/coordination/moved-concurrent-c5.jpg', 'coordination'
+        '/images/coordination/moved-concurrent-c5.jpg', 'images/coordination'
       );
     `,
   });
