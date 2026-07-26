@@ -12,6 +12,8 @@ $$;
 
 -- The harness allows this fixture only on an explicitly acknowledged,
 -- loopback-only disposable database whose name is reserved for this test.
+drop schema if exists media_coordination_acl_test cascade;
+drop schema if exists media_coordination_test cascade;
 drop schema if exists public cascade;
 create schema public authorization current_user;
 grant all on schema public to public;

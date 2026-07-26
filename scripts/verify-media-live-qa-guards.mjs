@@ -27,9 +27,15 @@ function check(name, condition) {
 check("guard accepts Development/QA classifications only", sources.guard.includes('authority.classification !== "development" && authority.classification !== "qa"'));
 check("guard denies Production runtime and authority", sources.guard.includes('production !== false') && sources.guard.includes('Runtime environment must be local or preview'));
 check("guard requires exact project, dataset, registry, and image bucket identity", sources.guard.includes("expected-project-ref") && sources.guard.includes("expected-environment-key") && sources.guard.includes("expected-provider-registry-version") && sources.guard.includes("expected-image-bucket"));
-check("guard independently denies the current unproven project", sources.guard.includes("DENIED_MEDIA_QA_PROJECT_REFS") && sources.guard.includes("pmqsfqvvekrlujqgurcu"));
+const reviewedAllowlistSource = sources.guard.match(
+  /const REVIEWED_MEDIA_QA_PROJECT_REFS = new Set<string>\(\[([\s\S]*?)\]\);/,
+)?.[1] ?? "";
+const reviewedProjectRefs = [...reviewedAllowlistSource.matchAll(/"([a-z0-9]{20})"/g)].map((match) => match[1]);
+check("guard allowlists only the repository-reviewed controlled project", JSON.stringify(reviewedProjectRefs) === JSON.stringify(["pmqsfqvvekrlujqgurcu"]));
 check("guard requires a repository-reviewed positive project allowlist", sources.guard.includes("REVIEWED_MEDIA_QA_PROJECT_REFS") && sources.guard.includes("repository-reviewed disposable QA allowlist"));
 check("guard requires an expiring external authority record", sources.guard.includes("Environment Authority has expired") && sources.guard.includes("must remain outside the repository"));
+check("guard requires the named destructive environment opt-in", sources.guard.includes('MEDIA_QA_DESTRUCTIVE_ENV_OPT_IN = "ALLOW_DESTRUCTIVE_MEDIA_QA"') && sources.guard.includes('!== "1"'));
+check("guard requires backup, both registry versions, and corrective ACL application proof", sources.guard.includes("backupProof") && sources.guard.includes("securityMigrationProof") && sources.guard.includes("registryVerified") && sources.guard.includes('["20260725180000", "20260726070000"]') && sources.guard.includes("remotely ACL-verified"));
 check("guard requires unique dedicated fixture namespace", sources.guard.includes("Fixture namespace must be unique"));
 check("guard keeps authenticated state outside Git", sources.guard.includes("Authenticated browser state is secret material"));
 check("live harness never loads local env files", !sources.live.includes(".env.local") && !sources.live.includes("loadEnv("));
@@ -60,12 +66,12 @@ check("browser harness intercepts the recovery mutation", sources.browser.includ
 check("browser harness covers RTL, mobile, keyboard, and failure feedback", sources.browser.includes("direction") && sources.browser.includes("width: 390") && sources.browser.includes("Shift+Tab") && sources.browser.includes("qa_injected_queue_failure"));
 check("authority example contains no credential", !/service[_-]?role[_-]?key|password|access[_-]?token/i.test(sources.example));
 
-function probeRejectedAuthority(overrides = {}) {
+function probeRejectedAuthority(overrides = {}, environmentOverrides = {}) {
   const temporaryRoot = mkdtempSync(join(tmpdir(), "venisia-media-qa-guard-"));
   const authorityPath = join(temporaryRoot, "authority.json");
   const projectRef = "abcdefghijklmnopqrst";
   const authority = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     approvalId: "reviewed-qa-probe",
     approvedBy: "independent-reviewer",
     evidence: "https://example.com/environment-authority",
@@ -82,6 +88,21 @@ function probeRejectedAuthority(overrides = {}) {
     providerRegistryVersion: "qa-probe-v1",
     fixturePrefix: "mediaqa",
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    backupProof: {
+      verified: true,
+      verifiedAt: new Date().toISOString(),
+      evidence: "https://example.com/backup-proof",
+    },
+    securityMigrationProof: {
+      version: "20260726070000",
+      sha256: "E6C198BB698B668CF01557D9FD64074C30CB486EFB9F72574EB89E0A6E2CDBEE",
+      applied: true,
+      aclVerified: true,
+      registryVerified: true,
+      registryVersions: ["20260725180000", "20260726070000"],
+      verifiedAt: new Date().toISOString(),
+      evidence: "https://example.com/security-migration-proof",
+    },
     ...overrides,
   };
   writeFileSync(authorityPath, `${JSON.stringify(authority)}\n`, "utf8");
@@ -104,7 +125,11 @@ function probeRejectedAuthority(overrides = {}) {
     ], {
       cwd: ROOT,
       encoding: "utf8",
-      env: { MEDIA_QA_PROBE_KEY: "never-used" },
+      env: {
+        ALLOW_DESTRUCTIVE_MEDIA_QA: "1",
+        MEDIA_QA_PROBE_KEY: "never-used",
+        ...environmentOverrides,
+      },
       timeout: 15_000,
     });
   } finally {
@@ -114,6 +139,40 @@ function probeRejectedAuthority(overrides = {}) {
 
 const unknownProjectProbe = probeRejectedAuthority();
 check("unknown project cannot self-declare itself as QA", unknownProjectProbe.status === 2 && unknownProjectProbe.stderr.includes("repository-reviewed disposable QA allowlist"));
+const reviewedProjectProbe = probeRejectedAuthority({
+  projectRef: "pmqsfqvvekrlujqgurcu",
+  supabaseUrl: "https://pmqsfqvvekrlujqgurcu.supabase.co/",
+  environmentKey: "local:supabase:pmqsfqvvekrlujqgurcu",
+});
+check(
+  "reviewed project still requires external authenticated browser state before network work",
+  reviewedProjectProbe.status === 2
+    && reviewedProjectProbe.stderr.includes("--auth-state")
+    && !reviewedProjectProbe.stderr.includes("allowlist"),
+);
+const missingDestructiveOptInProbe = probeRejectedAuthority({
+  projectRef: "pmqsfqvvekrlujqgurcu",
+  supabaseUrl: "https://pmqsfqvvekrlujqgurcu.supabase.co/",
+  environmentKey: "local:supabase:pmqsfqvvekrlujqgurcu",
+}, {
+  ALLOW_DESTRUCTIVE_MEDIA_QA: "",
+});
+check(
+  "reviewed project still requires ALLOW_DESTRUCTIVE_MEDIA_QA=1 before network work",
+  missingDestructiveOptInProbe.status === 2
+    && missingDestructiveOptInProbe.stderr.includes("ALLOW_DESTRUCTIVE_MEDIA_QA=1"),
+);
+const missingSecurityProofProbe = probeRejectedAuthority({
+  projectRef: "pmqsfqvvekrlujqgurcu",
+  supabaseUrl: "https://pmqsfqvvekrlujqgurcu.supabase.co/",
+  environmentKey: "local:supabase:pmqsfqvvekrlujqgurcu",
+  securityMigrationProof: undefined,
+});
+check(
+  "reviewed project remains blocked before corrective migration proof",
+  missingSecurityProofProbe.status === 2
+    && missingSecurityProofProbe.stderr.includes("exact corrective ACL migration"),
+);
 const productionHostProbe = probeRejectedAuthority({
   runtimeEnvironment: "preview",
   appBaseUrl: "https://www.example.com/",

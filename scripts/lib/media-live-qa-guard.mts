@@ -4,23 +4,23 @@ import { isAbsolute, relative, resolve } from "node:path";
 export const MEDIA_QA_MUTATION_OPT_IN = "MEDIA_COORDINATION_DISPOSABLE_QA";
 export const MEDIA_QA_BROWSER_OPT_IN = "MEDIA_RECOVERY_AUTHENTICATED_BROWSER_QA";
 export const MEDIA_QA_CLEANUP_ACK = "SAFE_DELETE_OR_RECORDED_RECOVERY";
+export const MEDIA_QA_DESTRUCTIVE_ENV_OPT_IN = "ALLOW_DESTRUCTIVE_MEDIA_QA";
+export const MEDIA_COORDINATION_ACL_MIGRATION_VERSION = "20260726070000";
+export const MEDIA_COORDINATION_ACL_MIGRATION_SHA256 =
+  "E6C198BB698B668CF01557D9FD64074C30CB486EFB9F72574EB89E0A6E2CDBEE";
 
-// This project reference is the currently connected, provenance-audited
-// environment. It has not been accepted as disposable Development/QA and is
-// therefore denied independently of any self-declared authority file.
-const DENIED_MEDIA_QA_PROJECT_REFS = new Set(["pmqsfqvvekrlujqgurcu"]);
-
-// Positive, repository-reviewed allowlist. It intentionally remains empty
-// until a dedicated disposable Development/QA Supabase project is approved in
-// Git. An external expiring authority record is necessary but cannot add a
-// project to this list by itself.
-const REVIEWED_MEDIA_QA_PROJECT_REFS = new Set<string>([]);
+// Positive, repository-reviewed allowlist. Approval here does not bypass the
+// external expiring authority, exact dataset/bucket identity, destructive
+// opt-in, fixture-isolation, cleanup, or non-Production checks below.
+const REVIEWED_MEDIA_QA_PROJECT_REFS = new Set<string>([
+  "pmqsfqvvekrlujqgurcu",
+]);
 
 type AuthorityClassification = "development" | "qa";
 type RuntimeEnvironment = "local" | "preview";
 
 export type MediaQaAuthority = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   approvalId: string;
   approvedBy: string;
   evidence: string;
@@ -37,6 +37,21 @@ export type MediaQaAuthority = {
   providerRegistryVersion: string;
   fixturePrefix: string;
   expiresAt: string;
+  backupProof: {
+    verified: true;
+    verifiedAt: string;
+    evidence: string;
+  };
+  securityMigrationProof: {
+    version: typeof MEDIA_COORDINATION_ACL_MIGRATION_VERSION;
+    sha256: typeof MEDIA_COORDINATION_ACL_MIGRATION_SHA256;
+    applied: true;
+    aclVerified: true;
+    registryVerified: true;
+    registryVersions: ["20260725180000", "20260726070000"];
+    verifiedAt: string;
+    evidence: string;
+  };
 };
 
 export type MediaQaGuard = {
@@ -95,7 +110,7 @@ function readAuthority(path: string): MediaQaAuthority {
 }
 
 function validateAuthority(authority: MediaQaAuthority) {
-  if (authority.schemaVersion !== 1) guardRefusal("Unsupported Environment Authority schemaVersion.");
+  if (authority.schemaVersion !== 2) guardRefusal("Unsupported Environment Authority schemaVersion.");
   if (authority.classification !== "development" && authority.classification !== "qa") {
     guardRefusal("Environment classification must be development or qa.");
   }
@@ -106,9 +121,6 @@ function validateAuthority(authority: MediaQaAuthority) {
     guardRefusal("Authority must explicitly prove production=false and writable=true.");
   }
   if (authority.provider !== "supabase") guardRefusal("Only the approved Supabase provider is supported.");
-  if (DENIED_MEDIA_QA_PROJECT_REFS.has(authority.projectRef)) {
-    guardRefusal("The connected project reference is explicitly denied for destructive QA because its Development/QA authority is unproven.");
-  }
   if (!/^[a-z0-9][a-z0-9._-]{1,62}$/.test(authority.imageBucket)) {
     guardRefusal("Authority imageBucket is invalid.");
   }
@@ -124,6 +136,26 @@ function validateAuthority(authority: MediaQaAuthority) {
   }
   if (!/^https:\/\//i.test(authority.evidence)) {
     guardRefusal("Authority evidence must be an HTTPS review or environment-authority record.");
+  }
+  if (
+    authority.backupProof?.verified !== true
+    || !/^https:\/\//i.test(authority.backupProof.evidence)
+    || !Number.isFinite(Date.parse(authority.backupProof.verifiedAt))
+  ) {
+    guardRefusal("Authority must include dated HTTPS proof of a verified backup before destructive QA.");
+  }
+  if (
+    authority.securityMigrationProof?.version !== MEDIA_COORDINATION_ACL_MIGRATION_VERSION
+    || authority.securityMigrationProof.sha256 !== MEDIA_COORDINATION_ACL_MIGRATION_SHA256
+    || authority.securityMigrationProof.applied !== true
+    || authority.securityMigrationProof.aclVerified !== true
+    || authority.securityMigrationProof.registryVerified !== true
+    || JSON.stringify(authority.securityMigrationProof.registryVersions)
+      !== JSON.stringify(["20260725180000", "20260726070000"])
+    || !/^https:\/\//i.test(authority.securityMigrationProof.evidence)
+    || !Number.isFinite(Date.parse(authority.securityMigrationProof.verifiedAt))
+  ) {
+    guardRefusal("Authority must prove the exact corrective ACL migration was applied, registry-verified, and remotely ACL-verified before mutating QA.");
   }
   if (!/^[a-z0-9]{20}$/.test(authority.projectRef)) {
     guardRefusal("Authority projectRef is not a valid Supabase project reference.");
@@ -179,6 +211,9 @@ export function establishMediaQaGuard(input: {
   expectedOptIn: string;
   repositoryRoot: string;
 }): MediaQaGuard {
+  if (process.env[MEDIA_QA_DESTRUCTIVE_ENV_OPT_IN] !== "1") {
+    guardRefusal(`${MEDIA_QA_DESTRUCTIVE_ENV_OPT_IN}=1 is required for destructive Media QA.`);
+  }
   const optIn = requiredArgument(input.values, input.optInArgument);
   if (optIn !== input.expectedOptIn) {
     guardRefusal(`--${input.optInArgument} must exactly equal ${input.expectedOptIn}.`);

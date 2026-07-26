@@ -43,7 +43,9 @@ jobs:
         run: npm run verify:legacy-media-admin
 
       - name: Verify Media coordination SQL contracts
-        run: npm run verify:media-coordination-sql
+        run: |
+          npm run verify:media-coordination-rpc-acl
+          npm run verify:media-coordination-sql
 
       - name: Verify Media library and delete Saga
         run: |
@@ -108,7 +110,9 @@ jobs:
           sudo apt-get install --yes postgresql-client
 
       - name: Verify Media coordination SQL contracts
-        run: npm run verify:media-coordination-sql
+        run: |
+          npm run verify:media-coordination-rpc-acl
+          npm run verify:media-coordination-sql
 
       - name: Verify Media coordination on isolated PostgreSQL 15
         run: npm run verify:media-coordination-postgres

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "approvalId": "replace-with-reviewed-change-ticket",
   "approvedBy": "replace-with-environment-owner",
   "evidence": "replace-with-link-or-description-proving-this-is-a-disposable-development-or-qa-environment",
@@ -15,5 +15,20 @@
   "imageBucket": "cms-images",
   "providerRegistryVersion": "replace-with-exact-provider-registry-version",
   "fixturePrefix": "codex-media-coordination-qa",
-  "expiresAt": "replace-with-an-iso-timestamp-within-the-next-24-hours"
+  "expiresAt": "replace-with-an-iso-timestamp-within-the-next-24-hours",
+  "backupProof": {
+    "verified": true,
+    "verifiedAt": "replace-with-backup-verification-iso-timestamp",
+    "evidence": "replace-with-https-backup-proof"
+  },
+  "securityMigrationProof": {
+    "version": "20260726070000",
+    "sha256": "E6C198BB698B668CF01557D9FD64074C30CB486EFB9F72574EB89E0A6E2CDBEE",
+    "applied": true,
+    "aclVerified": true,
+    "registryVerified": true,
+    "registryVersions": ["20260725180000", "20260726070000"],
+    "verifiedAt": "replace-with-remote-acl-verification-iso-timestamp",
+    "evidence": "replace-with-https-security-migration-verification-proof"
+  }
 }
