@@ -17,6 +17,7 @@ import type { ArticleEditorCategory, ArticleEditorSeries } from "./ArticleEditor
 import TopicPublishingOptions from "./article/TopicPublishingOptions";
 import { TOPIC_FORM_NAVIGATION } from "./article/topic-form-definition";
 import { createAdminFormErrorState } from "../../../../lib/admin/form-runtime";
+import TopicMediaCatalogSyncSignal from "./article/TopicMediaCatalogSyncSignal";
 
 export default function ArticleCreateEditor({
   categories,
@@ -47,6 +48,8 @@ export default function ArticleCreateEditor({
           </>
         }
       />
+
+      <TopicMediaCatalogSyncSignal formId="topic-create-form" />
 
       <AdminFormRuntime
         action={saveTopicForm}

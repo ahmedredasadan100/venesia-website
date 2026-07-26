@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -15,7 +16,7 @@ import type {
   MediaCatalogPage,
   MediaSmartView,
 } from "../../../lib/admin/media-catalog/types";
-import { getMediaReadinessReasonLabel } from "../../../lib/admin/media-catalog/readiness";
+import { getMediaReadinessReasonPresentation } from "../../../lib/admin/media-catalog/readiness";
 import {
   CMS_IMAGE_ACCEPT,
   CMS_PDF_ACCEPT,
@@ -57,6 +58,7 @@ const SMART_VIEWS: Array<{ id: MediaSmartView; label: string; description: strin
 ];
 
 const PAGE_SIZES: PageSize[] = [10, 20, 30, 50, 100];
+const TOPIC_MEDIA_CATALOG_SYNC_STORAGE_KEY = "venisia:admin:topic-media-catalog-sync";
 
 function formatBytes(value: number | null) {
   if (value == null) return "غير معروف";
@@ -136,6 +138,7 @@ export default function MediaLibraryCore({
   onCancelSelection,
   className = "",
 }: MediaLibraryCoreProps) {
+  const safeDeleteStatusId = useId();
   const { publishFeedback } = useAdminFeedback();
   const [folder, setFolder] = useState<string | null>(initialFolder);
   const [kind, setKind] = useState<KindFilter>(initialKind);
@@ -146,6 +149,7 @@ export default function MediaLibraryCore({
   const [pageSize, setPageSize] = useState<PageSize>(20);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [data, setData] = useState<MediaCatalogPage | null>(null);
+  const [dataRevision, setDataRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -159,6 +163,7 @@ export default function MediaLibraryCore({
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const replacementInputRef = useRef<HTMLInputElement>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
+  const refreshFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -190,6 +195,7 @@ export default function MediaLibraryCore({
       const payload = (await response.json()) as MediaCatalogPage & { error?: string };
       if (!response.ok) throw new Error(payload.error || "تعذر تحميل مكتبة الوسائط.");
       setData(payload);
+      setDataRevision((current) => current + 1);
       setSelectedIds((current) => current.filter((id) => payload.assets.some((asset) => asset.id === id)));
     } catch (loadError) {
       if (controller.signal.aborted) return;
@@ -203,6 +209,34 @@ export default function MediaLibraryCore({
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => void loadPage());
     return () => window.cancelAnimationFrame(frame);
+  }, [loadPage]);
+
+  useEffect(() => {
+    const scheduleLibraryRefresh = () => {
+      if (refreshFrameRef.current !== null) return;
+      refreshFrameRef.current = window.requestAnimationFrame(() => {
+        refreshFrameRef.current = null;
+        void loadPage();
+      });
+    };
+    const refreshVisibleLibrary = () => {
+      if (document.visibilityState === "hidden") return;
+      scheduleLibraryRefresh();
+    };
+    const refreshAfterTopicSave = (event: StorageEvent) => {
+      if (event.key !== TOPIC_MEDIA_CATALOG_SYNC_STORAGE_KEY || !event.newValue) return;
+      scheduleLibraryRefresh();
+    };
+    window.addEventListener("focus", refreshVisibleLibrary);
+    document.addEventListener("visibilitychange", refreshVisibleLibrary);
+    window.addEventListener("storage", refreshAfterTopicSave);
+    return () => {
+      window.removeEventListener("focus", refreshVisibleLibrary);
+      document.removeEventListener("visibilitychange", refreshVisibleLibrary);
+      window.removeEventListener("storage", refreshAfterTopicSave);
+      if (refreshFrameRef.current !== null) window.cancelAnimationFrame(refreshFrameRef.current);
+      refreshFrameRef.current = null;
+    };
   }, [loadPage]);
 
   useEffect(() => () => requestControllerRef.current?.abort(), []);
@@ -226,11 +260,44 @@ export default function MediaLibraryCore({
     folder === null &&
     (smartView === "used" || smartView === "unused") &&
     data?.readiness.usageResultsAuthoritative === false;
-  const safeDeleteUnavailableReason = selectedAssets.some((asset) => !isManaged(asset))
-    ? "الحذف الآمن متاح فقط للملفات الجاهزة للإدارة في Supabase Storage."
-    : data?.readiness.reasons[0]
-      ? getMediaReadinessReasonLabel(data.readiness.reasons[0])
-      : "لم تكتمل شروط الحذف الآمن بعد.";
+  const safeDeleteReadinessMessages = useMemo(() => {
+    if (!selectedAssets.length || canSafelyDeleteSelectedAssets) return [];
+
+    if (!selectedAssetsManaged) {
+      if (selectedAssets.some((asset) => asset.provider === "filesystem")) {
+        return [{
+          label: "الأصل محفوظ محليًا للعرض فقط ولا يخضع للحذف المُدار.",
+          action: "استخدم أصلًا جاهزًا للإدارة من Supabase Storage.",
+          actionHref: null,
+        }];
+      }
+      if (selectedAssets.some((asset) => !asset.catalogRegistered)) {
+        return [{
+          label: "الأصل غير مسجل داخل Media Catalog.",
+          action: "افتح إعدادات الميديا، ثم استخدم «معاينة الفحص»، وبعد نجاحها استخدم «تنفيذ الفحص والمزامنة».",
+          actionHref: "/admin/settings/media" as const,
+        }];
+      }
+      return [{
+        label: "الحذف الآمن متاح فقط للملفات الجاهزة للإدارة في Supabase Storage.",
+        action: "راجع حالة الأصل ومكان حفظه قبل إعادة المحاولة.",
+        actionHref: null,
+      }];
+    }
+
+    const readinessReasons = data?.readiness.reasons ?? [];
+    if (readinessReasons.length) {
+      return readinessReasons.map(getMediaReadinessReasonPresentation);
+    }
+    return [{
+      label: "لم تكتمل شروط الحذف الآمن بعد.",
+      action: "افتح إعدادات الميديا لمراجعة حالة الفحص والمزامنة.",
+      actionHref: "/admin/settings/media" as const,
+    }];
+  }, [canSafelyDeleteSelectedAssets, data?.readiness.reasons, selectedAssets, selectedAssetsManaged]);
+  const safeDeleteUnavailableReason = safeDeleteReadinessMessages
+    .map((item) => item.label)
+    .join(" ");
   const rootFolders = useMemo(
     () => (data?.folders ?? []).filter((item) => item.parentPath === null),
     [data?.folders],
@@ -531,7 +598,7 @@ export default function MediaLibraryCore({
               <button type="button" onClick={() => uploadInputRef.current?.click()} disabled={Boolean(busy)} className="rounded-xl bg-[#D8B87A] px-4 py-2 text-sm font-bold text-[#05070B] disabled:opacity-50">{busy === "upload" ? `جارٍ الرفع ${uploadSummary ?? ""}` : "رفع ملفات"}</button>
               <input ref={uploadInputRef} type="file" multiple accept={`${CMS_IMAGE_ACCEPT},${CMS_PDF_ACCEPT}`} className="hidden" onChange={(event) => { void uploadFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
               {mode === "manage" && selectedAssets.length ? (
-                <button type="button" title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => setConfirmation({ kind: "delete", assets: selectedAssets })} className="rounded-xl border border-red-300/25 px-4 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
+                <button type="button" aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined} title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => setConfirmation({ kind: "delete", assets: selectedAssets })} className="rounded-xl border border-red-300/25 px-4 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
               ) : null}
               {mode === "manage" && selectedAssets.length === 1 ? <button type="button" title={!canRebindSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canRebindSelectedAssets || Boolean(busy)} onClick={() => setShowPhysicalForm(true)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/65 disabled:opacity-40">نقل / إعادة تسمية</button> : null}
               {selectedAssets.length ? <button type="button" onClick={() => setSelectedIds([])} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/55">مسح التحديد</button> : null}
@@ -541,6 +608,26 @@ export default function MediaLibraryCore({
               <button type="button" onClick={() => setViewMode("list")} aria-pressed={viewMode === "list"} className={`rounded-lg px-3 py-1.5 text-xs ${viewMode === "list" ? "bg-white/10 text-white" : "text-white/45"}`}>قائمة</button>
             </div>
           </div>
+          {mode === "manage" && selectedAssets.length > 0 && !canSafelyDeleteSelectedAssets ? (
+            <div id={safeDeleteStatusId} className="mt-3 rounded-2xl border border-amber-300/20 bg-amber-300/8 px-4 py-3 text-xs leading-6 text-amber-50" role="status">
+              <p className="font-semibold text-amber-100">الحذف الآمن متوقف لحماية الملفات.</p>
+              <ul className="mt-1 space-y-2">
+                {safeDeleteReadinessMessages.map((item) => (
+                  <li key={`${item.label}:${item.action}`}>
+                    <p><span className="font-semibold">السبب:</span> {item.label}</p>
+                    <p>
+                      <span className="font-semibold">الإجراء المطلوب:</span> {item.action}{" "}
+                      {item.actionHref ? (
+                        <Link href={item.actionHref} className="font-semibold text-[#D8B87A] underline decoration-[#D8B87A]/40 underline-offset-4 hover:text-[#E7CC98]">
+                          فتح إعدادات الميديا
+                        </Link>
+                      ) : null}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {uploadRows.length ? <div className="mb-4 grid gap-2 rounded-2xl border border-white/8 bg-black/20 p-3 sm:grid-cols-2">{uploadRows.map((row, index) => <div key={`${row.name}-${index}`} className="min-w-0"><p className="truncate text-xs text-white/65">{row.name}</p><p className={`mt-1 text-[10px] ${row.state === "error" ? "text-red-200" : row.state === "complete" ? "text-emerald-300" : "text-white/35"}`}>{row.state === "pending" ? "في الانتظار" : row.state === "uploading" ? "جارٍ الرفع…" : row.state === "complete" ? "اكتمل" : row.error}</p></div>)}</div> : null}
 
           <div className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_170px]">
@@ -671,7 +758,7 @@ export default function MediaLibraryCore({
                   }} className="mt-4 space-y-2 border-t border-white/8 pt-4"><p className="text-xs font-semibold text-white/60">تغيير المجلد أو اسم الملف</p><input name="targetFolder" defaultValue={focusedAsset.folderPath} aria-label="مجلد الوجهة" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 font-mono text-xs text-white outline-none" dir="ltr" /><input name="targetFilename" defaultValue={focusedAsset.objectKey.split("/").at(-1)} aria-label="اسم الملف الفعلي الجديد" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 font-mono text-xs text-white outline-none" dir="ltr" /><div className="flex gap-2"><button type="button" onClick={() => setShowPhysicalForm(false)} className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/55">إلغاء</button><button type="submit" className="flex-1 rounded-xl border border-[#D8B87A]/30 px-3 py-2 text-xs font-semibold text-[#D8B87A]">مراجعة العملية</button></div></form> : null}
                 </section>
               ) : null}
-              <MediaUsagePanel assetPath={focusedAsset.publicUrl} />
+              <MediaUsagePanel assetPath={focusedAsset.publicUrl} refreshToken={dataRevision} />
             </>
           )}
         </aside>

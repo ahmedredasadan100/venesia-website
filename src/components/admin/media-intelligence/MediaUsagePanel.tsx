@@ -16,9 +16,10 @@ type MediaUsageHit = {
 
 type MediaUsagePanelProps = {
   assetPath: string | null;
+  refreshToken?: number;
 };
 
-export default function MediaUsagePanel({ assetPath }: MediaUsagePanelProps) {
+export default function MediaUsagePanel({ assetPath, refreshToken = 0 }: MediaUsagePanelProps) {
   if (!assetPath) {
     return (
       <section className="rounded-[24px] border border-white/10 bg-[#080B10]/88 p-5">
@@ -28,7 +29,7 @@ export default function MediaUsagePanel({ assetPath }: MediaUsagePanelProps) {
     );
   }
 
-  return <MediaUsagePanelContent key={assetPath} assetPath={assetPath} />;
+  return <MediaUsagePanelContent key={`${assetPath}:${refreshToken}`} assetPath={assetPath} />;
 }
 
 function MediaUsagePanelContent({ assetPath }: { assetPath: string }) {

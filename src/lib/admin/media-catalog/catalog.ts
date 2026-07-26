@@ -4,13 +4,21 @@ import path from "path";
 
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
-import type {
-  MediaStorageRuntimeContext,
-  MediaUploadResult,
+import {
+  resolveMediaStorageRuntimeContext,
+  type MediaStorageRuntimeContext,
+  type MediaUploadResult,
 } from "../media-storage-adapter";
-import type { MediaAssetItem, PublicMediaInventory } from "../media-library-paths";
-import { getFolderPathFromObjectKey, isMediaCatalogMissingError } from "./identity";
-import { getCanonicalMediaIdentityKey } from "./identity";
+import type {
+  MediaAssetItem,
+  PublicMediaInventory,
+} from "../media-library-paths";
+import { listManagedMediaInventory } from "../media-library";
+import {
+  getCanonicalMediaIdentityKey,
+  getFolderPathFromObjectKey,
+  isMediaCatalogMissingError,
+} from "./identity";
 import type {
   CanonicalMediaIdentity,
   MediaCatalogAsset,
@@ -19,12 +27,16 @@ import type {
   MediaCatalogRuntimeState,
   MediaCatalogSnapshot,
   MediaLibrarySummary,
+  ManagedMediaUploadProof,
   MediaReferenceRecord,
   MediaSmartView,
 } from "./types";
 import { readUploadBinaryMetadata } from "./binary-metadata";
 import { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION } from "./reference-providers";
-import { buildMediaCatalogReadiness } from "./readiness";
+import {
+  buildMediaCatalogReadiness,
+  getMediaIdentitySetFingerprint,
+} from "./readiness";
 
 export type { MediaCatalogRuntimeState, MediaCatalogSnapshot } from "./types";
 
@@ -34,6 +46,24 @@ export class MediaCatalogUnavailableError extends Error {
   constructor(message = "بيانات إدارة الملفات الكاملة غير متاحة. تم إيقاف العمليات الحساسة حفاظًا على الملفات.") {
     super(message);
     this.name = "MediaCatalogUnavailableError";
+  }
+}
+
+export class MediaCatalogUploadRegistrationUnprovenError extends Error {
+  readonly code = "media_catalog_upload_registration_unproven";
+
+  constructor() {
+    super("تعذر إثبات نتيجة تسجيل الملف داخل Media Catalog؛ تم إبقاء ملف التخزين دون حذف حتى يمكن التحقق منه بأمان.");
+    this.name = "MediaCatalogUploadRegistrationUnprovenError";
+  }
+}
+
+export class MediaCatalogUploadReadinessProofError extends Error {
+  readonly code = "media_catalog_upload_readiness_proof_unavailable";
+
+  constructor() {
+    super("تعذر إثبات أن الرفع الجديد امتداد آمن لآخر فحص مكتمل؛ لم يُعتمد الملف داخل المكتبة.");
+    this.name = "MediaCatalogUploadReadinessProofError";
   }
 }
 
@@ -50,6 +80,47 @@ function numberOrNull(value: unknown) {
   if (value == null || value === "") return null;
   const result = Number(value);
   return Number.isFinite(result) ? result : null;
+}
+
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function mapManagedUploadProof(value: unknown): ManagedMediaUploadProof | null {
+  const metadata = recordOrNull(value);
+  const proof = recordOrNull(metadata?.managedUploadRuntimeProof);
+  const baselineStorageAssetCount = numberOrNull(proof?.baselineStorageAssetCount);
+  const baselineCatalogAssetCount = numberOrNull(proof?.baselineCatalogAssetCount);
+  if (
+    proof?.version !== 1 ||
+    proof.origin !== "admin_media_library_upload" ||
+    typeof proof.reconciliationRunIdentity !== "string" ||
+    !proof.reconciliationRunIdentity ||
+    typeof proof.environmentKey !== "string" ||
+    !proof.environmentKey ||
+    typeof proof.providerRegistryVersion !== "string" ||
+    !proof.providerRegistryVersion ||
+    typeof proof.baselineIdentityFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(proof.baselineIdentityFingerprint) ||
+    baselineStorageAssetCount === null ||
+    !Number.isSafeInteger(baselineStorageAssetCount) ||
+    baselineStorageAssetCount < 0 ||
+    baselineCatalogAssetCount === null ||
+    !Number.isSafeInteger(baselineCatalogAssetCount) ||
+    baselineCatalogAssetCount < 0
+  ) {
+    return null;
+  }
+  return {
+    reconciliationRunIdentity: proof.reconciliationRunIdentity,
+    environmentKey: proof.environmentKey,
+    providerRegistryVersion: proof.providerRegistryVersion,
+    baselineStorageAssetCount,
+    baselineCatalogAssetCount,
+    baselineIdentityFingerprint: proof.baselineIdentityFingerprint,
+  };
 }
 
 function mapCatalogAsset(row: Record<string, unknown>): MediaCatalogAsset {
@@ -90,7 +161,132 @@ function mapCatalogAsset(row: Record<string, unknown>): MediaCatalogAsset {
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
     referenceCount: Number(row.reference_count ?? 0),
+    managedUploadProof: mapManagedUploadProof(row.metadata),
   };
+}
+
+export async function prepareCatalogUploadRegistration(actorId?: number | null) {
+  const context = resolveMediaStorageRuntimeContext();
+  let runtimeState: MediaCatalogRuntimeState;
+  try {
+    runtimeState = await getMediaCatalogRuntimeState();
+  } catch {
+    throw new MediaCatalogUploadReadinessProofError();
+  }
+
+  const storageAssetCount = runtimeState.storageAssetCount;
+  const catalogAssetCount = runtimeState.catalogAssetCount;
+  const trustedBaseline =
+    runtimeState.state === "synced" &&
+    runtimeState.warnings.length === 0 &&
+    Boolean(context.identity) &&
+    runtimeState.environmentKey === context.identity &&
+    runtimeState.provider === context.provider &&
+    runtimeState.environment === context.environment &&
+    runtimeState.providerRegistryVersion === MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION &&
+    Boolean(runtimeState.lastSuccessfulReconciliationRunIdentity) &&
+    Boolean(runtimeState.lastSuccessfulReconciliationAt) &&
+    Number.isFinite(Date.parse(runtimeState.lastSuccessfulReconciliationAt ?? "")) &&
+    storageAssetCount !== null &&
+    Number.isSafeInteger(storageAssetCount) &&
+    storageAssetCount >= 0 &&
+    catalogAssetCount !== null &&
+    Number.isSafeInteger(catalogAssetCount) &&
+    catalogAssetCount >= 0 &&
+    storageAssetCount === catalogAssetCount;
+  if (!trustedBaseline) throw new MediaCatalogUploadReadinessProofError();
+  if (actorId === null || actorId === undefined || !Number.isSafeInteger(actorId) || actorId <= 0) {
+    throw new MediaCatalogUploadReadinessProofError();
+  }
+
+  try {
+    const [catalog, inventory] = await Promise.all([
+      listMediaCatalogSnapshot(),
+      listManagedMediaInventory(),
+    ]);
+    const catalogAssets = catalog.assets.filter((asset) => asset.provider === context.provider);
+    const managedStorageAssets = inventory.items.filter(
+      (item) => item.managed && item.provider === context.provider && Boolean(item.storagePath),
+    );
+    if (
+      catalog.catalogState !== "available" ||
+      catalogAssets.some(
+        (asset) =>
+          !asset.catalogRegistered ||
+          asset.status !== "active" ||
+          asset.reconciliationState !== "synced" ||
+          asset.missingObject,
+      )
+    ) {
+      throw new MediaCatalogUploadReadinessProofError();
+    }
+    const priorProvenUploads = catalogAssets.filter((asset) => {
+      const proof = asset.managedUploadProof;
+      return Boolean(
+        proof &&
+          proof.reconciliationRunIdentity === runtimeState.lastSuccessfulReconciliationRunIdentity &&
+          proof.environmentKey === context.identity &&
+          proof.providerRegistryVersion === MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION &&
+          proof.baselineStorageAssetCount === storageAssetCount &&
+          proof.baselineCatalogAssetCount === catalogAssetCount,
+      );
+    });
+    if (
+      catalogAssets.length !== catalogAssetCount + priorProvenUploads.length ||
+      managedStorageAssets.length !== storageAssetCount + priorProvenUploads.length
+    ) {
+      throw new MediaCatalogUploadReadinessProofError();
+    }
+    const catalogKeys = new Set(catalogAssets.map(getCanonicalMediaIdentityKey));
+    const storageKeys = new Set(
+      managedStorageAssets.map((item) =>
+        getCanonicalMediaIdentityKey({
+          provider: item.provider,
+          bucket: item.bucket,
+          objectKey: item.storagePath!,
+        }),
+      ),
+    );
+    if (
+      catalogKeys.size !== catalogAssets.length ||
+      storageKeys.size !== storageAssetCount + priorProvenUploads.length ||
+      catalogKeys.size !== storageKeys.size ||
+      [...catalogKeys].some((key) => !storageKeys.has(key))
+    ) {
+      throw new MediaCatalogUploadReadinessProofError();
+    }
+    const priorProvenUploadKeys = new Set(
+      priorProvenUploads.map(getCanonicalMediaIdentityKey),
+    );
+    const baselineKeys = [...catalogKeys].filter((key) => !priorProvenUploadKeys.has(key));
+    if (baselineKeys.length !== catalogAssetCount) {
+      throw new MediaCatalogUploadReadinessProofError();
+    }
+    const baselineIdentityFingerprint = getMediaIdentitySetFingerprint(baselineKeys);
+    if (
+      priorProvenUploads.some(
+        (asset) =>
+          asset.managedUploadProof?.baselineIdentityFingerprint !== baselineIdentityFingerprint,
+      )
+    ) {
+      throw new MediaCatalogUploadReadinessProofError();
+    }
+    return {
+      managedUploadRuntimeProof: {
+        version: 1,
+        origin: "admin_media_library_upload",
+        reconciliationRunIdentity: runtimeState.lastSuccessfulReconciliationRunIdentity,
+        environmentKey: context.identity,
+        providerRegistryVersion: MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
+        baselineStorageAssetCount: storageAssetCount,
+        baselineCatalogAssetCount: catalogAssetCount,
+        baselineIdentityFingerprint,
+      },
+    };
+  } catch (error) {
+    if (error instanceof MediaCatalogUploadReadinessProofError) throw error;
+    throw new MediaCatalogUploadReadinessProofError();
+  }
 }
 
 function mapCatalogFolder(row: Record<string, unknown>): MediaCatalogFolder {
@@ -514,22 +710,47 @@ export async function ensureCatalogFolderHierarchy(folderPath: string, actorId?:
 export async function registerCatalogUpload(
   result: MediaUploadResult,
   file: Pick<File, "name" | "type" | "size" | "arrayBuffer">,
-  actorId?: number | null,
+  actorId: number | null | undefined,
+  managedUploadProofMetadata: Record<string, unknown>,
 ) {
   if (result.provider !== "supabase" || !result.bucket || !result.objectKey) return null;
-  const folderPath = getFolderPathFromObjectKey(result.objectKey);
+  const provider = result.provider;
+  const bucket = result.bucket;
+  const objectKey = result.objectKey;
+  const folderPath = getFolderPathFromObjectKey(objectKey);
   await ensureCatalogFolderHierarchy(folderPath, actorId);
 
   const extension = path.posix.extname(result.objectKey).toLowerCase();
   const kind = result.kind ?? "image";
   const binaryMetadata = await readUploadBinaryMetadata(file, kind);
-  const { data, error } = await getSupabaseAdmin()
-    .from("media_assets")
-    .upsert(
-      {
-        provider: result.provider,
-        bucket: result.bucket,
-        object_key: result.objectKey,
+  const readBackRegistration = async () => {
+    try {
+      return await getCatalogAssetByIdentity({
+        provider,
+        bucket,
+        objectKey,
+      });
+    } catch {
+      throw new MediaCatalogUploadRegistrationUnprovenError();
+    }
+  };
+  const registrationMatchesUpload = (observed: MediaCatalogAsset | null) => Boolean(
+    observed &&
+      observed.publicUrl === result.path &&
+      observed.sizeBytes === (result.sizeBytes ?? file.size) &&
+      observed.status === "active" &&
+      !observed.missingObject,
+  );
+
+  let data: unknown = null;
+  let error: { code?: string | null; message?: string | null } | null = null;
+  try {
+    const insertResult = await getSupabaseAdmin()
+      .from("media_assets")
+      .insert({
+        provider,
+        bucket,
+        object_key: objectKey,
         public_url: result.path,
         original_filename: file.name,
         display_name: file.name,
@@ -545,14 +766,25 @@ export async function registerCatalogUpload(
         uploaded_by: actorId ?? null,
         reconciliation_state: "synced",
         missing_object: false,
-      },
-      { onConflict: "provider,bucket,object_key" },
-    )
-    .select("*")
-    .single();
+        metadata: managedUploadProofMetadata,
+      })
+      .select("*")
+      .single();
+    data = insertResult.data;
+    error = insertResult.error;
+  } catch {
+    const observed = await readBackRegistration();
+    if (registrationMatchesUpload(observed)) return observed;
+    throw new MediaCatalogUploadRegistrationUnprovenError();
+  }
 
   if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
-  if (error) throw new Error(error.message);
+  if (error) {
+    const observed = await readBackRegistration();
+    if (!observed) throw new Error(error.message ?? "media_catalog_upload_registration_failed");
+    if (registrationMatchesUpload(observed)) return observed;
+    throw new MediaCatalogUploadRegistrationUnprovenError();
+  }
   return mapCatalogAsset({ ...(data as Record<string, unknown>), reference_count: 0 });
 }
 

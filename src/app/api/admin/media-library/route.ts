@@ -10,6 +10,8 @@ import {
   getCatalogAssetById,
   getMediaCatalogRuntimeState,
   listMediaCatalogSnapshot,
+  MediaCatalogUploadRegistrationUnprovenError,
+  prepareCatalogUploadRegistration,
   registerCatalogUpload,
   updateCatalogAssetMetadata,
 } from "../../../../lib/admin/media-catalog/catalog";
@@ -55,6 +57,15 @@ const SMART_VIEWS = new Set<MediaSmartView>([
 ]);
 const MEDIA_LIBRARY_QUERY_KEYS = new Set(["folder", "view", "kind", "page", "pageSize", "q"]);
 const MEDIA_LIBRARY_PAGE_SIZES = new Set([10, 20, 30, 50, 100]);
+
+class MediaUploadCompensationError extends Error {
+  readonly code = "media_upload_compensation_failed";
+
+  constructor() {
+    super("تعذر التراجع الآمن عن رفع لم يكتمل تسجيله؛ أوقفت العملية ويلزم فحص الملف قبل المتابعة.");
+    this.name = "MediaUploadCompensationError";
+  }
+}
 
 function mediaJson(body: unknown, init?: { status?: number; headers?: HeadersInit }) {
   return NextResponse.json(body, {
@@ -243,6 +254,10 @@ export async function POST(request: Request) {
       );
     }
 
+    // Prove the current synchronized baseline before creating a Storage object.
+    // Concurrent official uploads may share this immutable proof; readiness later
+    // verifies every additive identity against it.
+    const managedUploadProofMetadata = await prepareCatalogUploadRegistration(actor.id);
     const saved =
       uploadKind === "pdf"
         ? await savePublicDocumentUpload(folder, file)
@@ -250,11 +265,26 @@ export async function POST(request: Request) {
 
     let asset = null;
     try {
-      asset = await registerCatalogUpload(saved, file, actor.id);
+      asset = await registerCatalogUpload(saved, file, actor.id, managedUploadProofMetadata);
       if (!asset) throw new Error("media_catalog_upload_registration_required");
     } catch (error) {
-      if (saved.provider === "supabase") {
-        await deletePublicMediaAsset(saved.path).catch(() => undefined);
+      if (
+        saved.provider === "supabase" &&
+        !(error instanceof MediaCatalogUploadRegistrationUnprovenError)
+      ) {
+        try {
+          await deletePublicMediaAsset(saved.path);
+        } catch (compensationError) {
+          console.error("Media upload compensation failed", {
+            provider: saved.provider,
+            bucket: saved.bucket,
+            objectKey: saved.objectKey,
+            registrationError: error instanceof Error ? error.message : "unknown",
+            compensationError:
+              compensationError instanceof Error ? compensationError.message : "unknown",
+          });
+          throw new MediaUploadCompensationError();
+        }
       }
       throw error;
     }

@@ -72,6 +72,7 @@ function printUsage() {
     "  --fixture-namespace=<authority-prefix>-<unique suffix>",
     "  --auth-state=<absolute external Playwright storage-state path>",
     "  --service-role-env=<explicit environment variable name>",
+    "  --scenario=<standard|governing>",
     `  --confirm-cleanup-plan=${MEDIA_QA_CLEANUP_ACK}`,
     "",
   ].join("\n"));
@@ -112,6 +113,13 @@ function isApprovedAppRequest(
   return actual.origin === approvedAppOrigin(authority) && actual.pathname === expectedPathname;
 }
 
+function storageSafeNamespace(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function requireUploadedAsset(
   value: unknown,
   authority: Pick<MediaQaAuthority, "imageBucket" | "supabaseUrl">,
@@ -134,16 +142,16 @@ function requireUploadedAsset(
   ) {
     throw new Error(`Upload did not return a complete managed identity: ${JSON.stringify(result)}.`);
   }
-  const stem = originalFilename.replace(/\.png$/i, "");
+  const stem = storageSafeNamespace(originalFilename.replace(/\.png$/i, ""));
   const escapedStem = stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  if (!new RegExp(`^images/${escapedStem}-[0-9a-f-]{12}\\.png$`, "i").test(result.objectKey)) {
+  if (!new RegExp(`^images/${escapedStem}-\\d{13}-[0-9a-f-]{12}\\.png$`).test(result.objectKey)) {
     throw new Error(`Upload object key is outside the exact disposable identity: ${result.objectKey}.`);
   }
   const publicUrl = new URL(result.publicUrl);
   if (
     publicUrl.origin !== new URL(authority.supabaseUrl).origin
     || decodeURIComponent(publicUrl.pathname) !== `/storage/v1/object/public/${result.bucket}/${result.objectKey}`
-    || result.displayName !== result.objectKey.split("/").at(-1)
+    || result.displayName !== originalFilename
   ) {
     throw new Error(`Upload public identity does not match its exact bucket/object key: ${JSON.stringify(result)}.`);
   }
@@ -198,8 +206,9 @@ async function assertCatalogRuntime(supabase: SupabaseClient, authority: MediaQa
 }
 
 async function assertNamespaceUnused(supabase: SupabaseClient, authority: MediaQaAuthority, namespace: string) {
+  const storageNamespace = storageSafeNamespace(namespace);
   const checks = await Promise.all([
-    supabase.from("media_assets").select("id", { count: "exact", head: true }).ilike("object_key", `%${namespace}%`),
+    supabase.from("media_assets").select("id", { count: "exact", head: true }).ilike("object_key", `%${storageNamespace}%`),
     supabase.from("topics").select("id", { count: "exact", head: true }).ilike("slug", `${namespace}%`),
     supabase.from("media_delete_reservations").select("id", { count: "exact", head: true }).ilike("request_identity", `%${namespace}%`),
     supabase.from("media_reference_write_leases").select("id", { count: "exact", head: true }).ilike("request_identity", `%${namespace}%`),
@@ -212,7 +221,7 @@ async function assertNamespaceUnused(supabase: SupabaseClient, authority: MediaQ
   // Bucket identity is authority-owned; the path itself must also be unused.
   const { data: objects, error } = await supabase.storage
     .from(authority.imageBucket)
-    .list("images", { search: namespace, limit: 100 });
+    .list("images", { search: storageNamespace, limit: 100 });
   if (error) guardRefusal(`Cannot prove Storage namespace isolation: ${error.message}`);
   if (objects?.some((entry) => entry.name.includes(namespace))) {
     guardRefusal(`Storage already contains the fixture namespace ${namespace}.`);
@@ -315,7 +324,7 @@ async function discoverAmbiguousUpload(
   authority: MediaQaAuthority,
   originalFilename: string,
 ) {
-  const stem = originalFilename.replace(/\.png$/i, "");
+  const stem = storageSafeNamespace(originalFilename.replace(/\.png$/i, ""));
   const { data, error } = await supabase
     .from("media_assets")
     .select("id,provider,bucket,object_key,public_url,display_name")
@@ -345,7 +354,7 @@ async function discoverAmbiguousUpload(
     .list("images", { search: stem, limit: 2 });
   if (storageError) throw new Error(`Ambiguous Browser upload Storage discovery failed: ${storageError.message}`);
   const escapedStem = stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const exactName = new RegExp(`^${escapedStem}-[0-9a-f-]{12}\\.png$`, "i");
+  const exactName = new RegExp(`^${escapedStem}-\\d{13}-[0-9a-f-]{12}\\.png$`);
   const matching = (objects ?? []).filter((entry) => exactName.test(entry.name));
   if (matching.length > 1) throw new Error("Browser upload produced multiple exact Storage fixtures.");
   return {
@@ -373,6 +382,92 @@ async function referenceCount(supabase: SupabaseClient, assetId: string) {
   return count ?? 0;
 }
 
+async function assertFixtureDeleteProof(
+  supabase: SupabaseClient,
+  authority: MediaQaAuthority,
+  namespace: string,
+  asset: FixtureAsset,
+) {
+  const storageNamespace = storageSafeNamespace(namespace);
+  assert(asset.displayName.includes(namespace), "Delete proof lost the same-run display-name namespace.");
+  assert(asset.objectKey.includes(storageNamespace), "Delete proof lost the same-run Storage-safe object-key namespace.");
+  assert(asset.publicUrl.includes(storageNamespace), "Delete proof lost the same-run Storage-safe public-URL namespace.");
+  assert.equal(asset.bucket, authority.imageBucket, "Delete proof escaped the approved image bucket.");
+
+  const { data: catalog, error: catalogError } = await supabase
+    .from("media_assets")
+    .select("id,provider,bucket,object_key,public_url,status")
+    .eq("id", asset.id)
+    .single();
+  if (catalogError || !catalog) throw new Error(`Delete proof cannot read Catalog identity: ${catalogError?.message ?? "missing"}.`);
+  assert.deepEqual(
+    {
+      id: catalog.id,
+      provider: catalog.provider,
+      bucket: catalog.bucket,
+      objectKey: catalog.object_key,
+      publicUrl: catalog.public_url,
+      status: catalog.status,
+    },
+    {
+      id: asset.id,
+      provider: asset.provider,
+      bucket: asset.bucket,
+      objectKey: asset.objectKey,
+      publicUrl: asset.publicUrl,
+      status: "active",
+    },
+    "Catalog identity does not exactly match the same-run Storage identity.",
+  );
+  assert(await storageObjectExists(supabase, asset), "Delete proof cannot find the exact same-run Storage object.");
+
+  const { data: references, error: referencesError } = await supabase
+    .from("media_references")
+    .select("domain_key,entity_type,entity_identity")
+    .eq("asset_id", asset.id);
+  if (referencesError) throw new Error(`Delete proof cannot read persisted references: ${referencesError.message}.`);
+  assert.deepEqual(references ?? [], [], "Delete proof found a persisted reference outside the unlinked fixture state.");
+}
+
+function assertReadyLibraryPayload(value: unknown, authority: MediaQaAuthority, label: string) {
+  const payload = requireObject(value, label);
+  const readiness = requireObject(payload.readiness, `${label} readiness`);
+  const runtimeContext = requireObject(readiness.context, `${label} runtime context`);
+  assert.equal(runtimeContext.provider, authority.provider, `${label} provider mismatch.`);
+  assert.equal(runtimeContext.environment, authority.runtimeEnvironment, `${label} environment mismatch.`);
+  assert.equal(runtimeContext.identity, authority.environmentKey, `${label} environment identity mismatch.`);
+  assert.equal(readiness.runtimeDatasetMatches, true, `${label} runtime dataset is stale.`);
+  assert.equal(readiness.usageResultsAuthoritative, true, `${label} usage is not authoritative.`);
+  assert.equal(readiness.safeDeleteReady, true, `${label} Safe Delete is not ready.`);
+  return payload;
+}
+
+function assertUsagePayload(
+  value: unknown,
+  expectedCount: number,
+  authority: MediaQaAuthority,
+  label: string,
+) {
+  const payload = requireObject(value, label);
+  const readiness = requireObject(payload.readiness, `${label} readiness`);
+  const runtimeContext = requireObject(readiness.context, `${label} runtime context`);
+  assert.equal(runtimeContext.provider, authority.provider, `${label} provider mismatch.`);
+  assert.equal(runtimeContext.environment, authority.runtimeEnvironment, `${label} environment mismatch.`);
+  assert.equal(runtimeContext.identity, authority.environmentKey, `${label} environment identity mismatch.`);
+  assert.equal(payload.catalogRegistered, true, `${label} asset is not registered.`);
+  assert.equal(payload.count, expectedCount, `${label} live usage count mismatch.`);
+  assert(Array.isArray(payload.hits), `${label} hits are not an array.`);
+  assert.equal(payload.hits.length, expectedCount, `${label} live hit list mismatch.`);
+  assert.equal(payload.scanComplete, true, `${label} scan is incomplete.`);
+  assert.equal(payload.authoritative, true, `${label} usage result is not authoritative.`);
+  assert.equal(readiness.runtimeDatasetMatches, true, `${label} runtime dataset is stale.`);
+  assert.equal(readiness.safeDeleteReady, true, `${label} Safe Delete is not ready.`);
+  if (expectedCount === 0) {
+    assert.equal(payload.unusedAuthoritative, true, `${label} zero usage is not authoritative.`);
+  }
+  return payload;
+}
+
 async function uploadThroughMediaUi(page: Page, authority: MediaQaAuthority, filename: string) {
   const navigation = await page.goto(new URL("/admin/media-library", authority.appBaseUrl).toString(), {
     waitUntil: "domcontentloaded",
@@ -380,6 +475,11 @@ async function uploadThroughMediaUi(page: Page, authority: MediaQaAuthority, fil
   assert(navigation && navigation.status() < 400, `Media Library returned ${navigation?.status() ?? "no response"}.`);
   assertApprovedPageLocation(page, authority, "/admin/media-library", "Media upload navigation");
   await page.locator('[data-media-library-mode="manage"]').waitFor({ state: "visible" });
+  const uploadButton = page.getByRole("button", { name: "رفع ملفات", exact: true });
+  await uploadButton.waitFor({ state: "visible" });
+  await waitUntil("Media upload control readiness", async () => (
+    await uploadButton.isEnabled() ? true : null
+  ));
 
   const uploadResponsePromise = page.waitForResponse((response) => {
     const request = response.request();
@@ -449,8 +549,17 @@ async function openAndSelectAsset(page: Page, authority: MediaQaAuthority, asset
   await library.locator('input[type="search"]').fill(asset.displayName);
   const card = library.locator("article", { hasText: asset.displayName });
   await card.waitFor({ state: "visible" });
+  const usageResponse = page.waitForResponse((response) => {
+    const request = response.request();
+    if (request.method() !== "GET" || !isApprovedAppRequest(response.url(), authority, "/api/admin/media-usage")) {
+      return false;
+    }
+    return new URL(response.url()).searchParams.get("asset") === asset.publicUrl;
+  });
   await card.locator('button[aria-pressed]').click();
-  return { library, card };
+  const usage = await usageResponse;
+  assert.equal(usage.status(), 200, `Live Usage returned ${usage.status()}.`);
+  return { library, card, usage: await usage.json().catch(() => null) };
 }
 
 async function clickSafeDeleteAndCapture(
@@ -882,6 +991,7 @@ async function run() {
     "fixture-namespace",
     "auth-state",
     "service-role-env",
+    "scenario",
     "confirm-cleanup-plan",
   ]);
   const guard = establishMediaQaGuard({
@@ -891,6 +1001,11 @@ async function run() {
     repositoryRoot: ROOT,
   });
   const authState = assertExternalAuthenticationState(ROOT, requiredArgument(values, "auth-state"));
+  const scenario = values.get("scenario")?.trim() || "standard";
+  if (scenario !== "standard" && scenario !== "governing") {
+    guardRefusal("--scenario must equal standard or governing.");
+  }
+  const governingOnly = scenario === "governing";
   const serviceRoleEnvironmentName = requiredArgument(values, "service-role-env");
   if (!/^[A-Z][A-Z0-9_]{4,80}$/.test(serviceRoleEnvironmentName)) {
     guardRefusal("--service-role-env must name one explicit uppercase environment variable.");
@@ -928,6 +1043,23 @@ async function run() {
   let uploadAttempted = false;
   let deletionProven = false;
   let scenarioError: unknown = null;
+  let governingWorkflowActive = false;
+  const forbiddenGoverningRequests: string[] = [];
+  context.on("request", (request) => {
+    if (!governingWorkflowActive) return;
+    const url = new URL(request.url());
+    if (url.origin !== approvedAppOrigin(authority)) return;
+    if (url.pathname === "/admin/settings/media") {
+      forbiddenGoverningRequests.push(`${request.method()} ${url.pathname}`);
+      return;
+    }
+    if (request.method() !== "POST" || url.pathname !== "/api/admin/media-library") return;
+    try {
+      if (JSON.parse(request.postData() ?? "null")?.operation === "reconcile") {
+        forbiddenGoverningRequests.push("POST /api/admin/media-library operation=reconcile");
+      }
+    } catch {}
+  });
 
   try {
     // Authentication and connected app context are proven before Supabase is
@@ -941,23 +1073,69 @@ async function run() {
     }
     assertQueueContext(await authProbe.json().catch(() => null), authority);
 
+    const readinessProbe = await context.request.get(
+      new URL("/api/admin/media-library?view=all&kind=all&page=1&pageSize=10", authority.appBaseUrl).toString(),
+      { failOnStatusCode: false, maxRedirects: 0 },
+    );
+    if (readinessProbe.status() !== 200) {
+      guardRefusal(`Media readiness preflight was not accepted (${readinessProbe.status()}).`);
+    }
+    assertReadyLibraryPayload(
+      await readinessProbe.json().catch(() => null),
+      authority,
+      "Pre-mutation Media Library",
+    );
+
     supabase = createClient(authority.supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     await assertCatalogRuntime(supabase, authority);
     await assertNamespaceUnused(supabase, authority, fixtureNamespace);
     process.stdout.write("PASS approved Admin session, exact QA dataset, image bucket, and unused namespace proved before mutation\n");
+    governingWorkflowActive = true;
 
     topicSetupAttempted = true;
     topic = await createDraftTopic(supabase, fixtureNamespace);
     uploadAttempted = true;
     asset = await uploadThroughMediaUi(scenarioPage, authority, fixtureFilename);
     assert.equal(asset.bucket, authority.imageBucket);
-    assert(asset.objectKey.includes(fixtureNamespace), "UI upload escaped the disposable object-key namespace.");
-    assert(asset.publicUrl.includes(fixtureNamespace), "UI upload escaped the disposable public-URL namespace.");
+    const storageNamespace = storageSafeNamespace(fixtureNamespace);
+    assert(asset.objectKey.includes(storageNamespace), "UI upload escaped the disposable Storage-safe object-key namespace.");
+    assert(asset.publicUrl.includes(storageNamespace), "UI upload escaped the disposable Storage-safe public-URL namespace.");
     assert(asset.displayName.includes(fixtureNamespace), "UI upload escaped the disposable display-name namespace.");
     assert(await storageObjectExists(supabase, asset), "UI upload is not present in the exact approved Storage bucket.");
     await scenarioPage.locator("article", { hasText: asset.displayName }).waitFor({ state: "visible" });
+    const postUploadLibraryProbe = await context.request.get(
+      new URL(
+        `/api/admin/media-library?view=all&kind=all&page=1&pageSize=10&q=${encodeURIComponent(asset.displayName)}`,
+        authority.appBaseUrl,
+      ).toString(),
+      { failOnStatusCode: false, maxRedirects: 0 },
+    );
+    assert.equal(postUploadLibraryProbe.status(), 200, "Post-upload Media readiness probe failed.");
+    const postUploadLibrary = assertReadyLibraryPayload(
+      await postUploadLibraryProbe.json().catch(() => null),
+      authority,
+      "Post-upload Media Library",
+    );
+    assert(
+      Array.isArray(postUploadLibrary.assets) && postUploadLibrary.assets.some(
+        (candidate) => requireObject(candidate, "Post-upload asset").id === asset!.id
+          && requireObject(candidate, "Post-upload asset").catalogRegistered === true,
+      ),
+      "Managed upload did not remain registered and ready in the merged dataset.",
+    );
+    const postUploadUsageProbe = await context.request.get(
+      new URL(`/api/admin/media-usage?asset=${encodeURIComponent(asset.publicUrl)}`, authority.appBaseUrl).toString(),
+      { failOnStatusCode: false, maxRedirects: 0 },
+    );
+    assert.equal(postUploadUsageProbe.status(), 200, "Post-upload Live Usage probe failed.");
+    assertUsagePayload(
+      await postUploadUsageProbe.json().catch(() => null),
+      0,
+      authority,
+      "Post-upload Live Usage",
+    );
     process.stdout.write(`PASS 1 disposable namespaced asset uploaded through Admin UI: ${asset.id} ${asset.objectKey}\n`);
 
     const topicPath = `/admin/content/topics/${topic.id}`;
@@ -975,7 +1153,23 @@ async function run() {
 
     // The real Media UI submits Safe Delete. The server must reject the used
     // asset; an enabled button is not treated as proof of eligibility.
-    await openAndSelectAsset(scenarioPage, authority, asset);
+    const linkedSelection = await openAndSelectAsset(scenarioPage, authority, asset);
+    const linkedUsage = assertUsagePayload(
+      linkedSelection.usage,
+      1,
+      authority,
+      "Linked Topic Live Usage",
+    );
+    const linkedHits = linkedUsage.hits;
+    assert(Array.isArray(linkedHits), "Linked Topic Live Usage hits are not an array.");
+    assert(
+      linkedHits.some((candidate: unknown) => {
+        const hit = requireObject(candidate, "Linked Topic usage hit");
+        return hit.domainKey === "topics" && hit.entityIdentity === String(topic!.id);
+      }),
+      "Live Usage did not identify the disposable Topic reference.",
+    );
+    await scenarioPage.getByText(topic.title, { exact: true }).waitFor({ state: "visible" });
     const usedDeleteBody = await clickSafeDeleteAndCapture(scenarioPage, authority, 409);
     assert(
       usedDeleteBody?.code === "media_delete_in_use" || usedDeleteBody?.code === "media_delete_asset_in_use",
@@ -987,12 +1181,14 @@ async function run() {
 
     // Open the stale form while it still contains the asset, then keep this
     // page untouched while a different page explicitly removes the last link.
-    const stalePage = await context.newPage();
-    const staleNavigation = await stalePage.goto(topicUrl, { waitUntil: "domcontentloaded" });
-    assert(staleNavigation && staleNavigation.status() < 400);
-    assertApprovedPageLocation(stalePage, authority, topicPath, "Stale Topic navigation");
-    await assertTopicImageValue(stalePage, asset.publicUrl);
-    process.stdout.write("PASS 4 stale Topic form opened with the pre-unlink asset value\n");
+    const stalePage = governingOnly ? null : await context.newPage();
+    if (stalePage) {
+      const staleNavigation = await stalePage.goto(topicUrl, { waitUntil: "domcontentloaded" });
+      assert(staleNavigation && staleNavigation.status() < 400);
+      assertApprovedPageLocation(stalePage, authority, topicPath, "Stale Topic navigation");
+      await assertTopicImageValue(stalePage, asset.publicUrl);
+      process.stdout.write("PASS 4 stale Topic form opened with the pre-unlink asset value\n");
+    }
 
     const unlinkPage = await context.newPage();
     const unlinkNavigation = await unlinkPage.goto(topicUrl, { waitUntil: "domcontentloaded" });
@@ -1001,58 +1197,120 @@ async function run() {
     await assertTopicImageValue(unlinkPage, asset.publicUrl);
     await unlinkPage.locator("#topic-image-field").getByRole("button", { name: "إزالة", exact: true }).click();
     await assertTopicImageValue(unlinkPage, "");
+    const automaticLibraryRefresh = scenarioPage.waitForResponse((response) => (
+      response.request().method() === "GET"
+        && isApprovedAppRequest(response.url(), authority, "/api/admin/media-library")
+    ));
+    const automaticUsageRefresh = scenarioPage.waitForResponse((response) => (
+      response.request().method() === "GET"
+        && isApprovedAppRequest(response.url(), authority, "/api/admin/media-usage")
+        && new URL(response.url()).searchParams.get("asset") === asset!.publicUrl
+    ));
     await saveTopicAndWaitForPost(unlinkPage, authority, topicPath);
     await waitUntil("Explicit unlink and zero usage", async () => {
       const row = await readTopic(supabase!, topic!.id);
       return row?.image === "" && await referenceCount(supabase!, asset!.id) === 0 ? row : null;
     });
-    process.stdout.write("PASS 8-9 explicit unlink persisted and synchronized usage became exactly zero\n");
+    const [libraryRefreshResponse, usageRefreshResponse] = await Promise.all([
+      automaticLibraryRefresh,
+      automaticUsageRefresh,
+    ]);
+    assert.equal(libraryRefreshResponse.status(), 200, "Automatic Media Library refresh failed.");
+    assert.equal(usageRefreshResponse.status(), 200, "Automatic Live Usage refresh failed.");
+    const refreshedLibrary = assertReadyLibraryPayload(
+      await libraryRefreshResponse.json().catch(() => null),
+      authority,
+      "Post-unlink automatic Media Library refresh",
+    );
+    const refreshedAsset = Array.isArray(refreshedLibrary.assets)
+      ? refreshedLibrary.assets
+          .map((candidate) => requireObject(candidate, "Post-unlink refreshed asset"))
+          .find((candidate) => candidate.id === asset!.id)
+      : null;
+    assert(refreshedAsset, "Automatic Media Library refresh lost the selected fixture asset.");
+    assert.equal(refreshedAsset.referenceCount, 0, "Persisted References did not become zero in the refreshed dataset.");
+    assertUsagePayload(
+      await usageRefreshResponse.json().catch(() => null),
+      0,
+      authority,
+      "Post-unlink automatic Live Usage refresh",
+    );
+    await scenarioPage.getByText("لا توجد استخدامات حالية لهذا الملف.", { exact: true }).waitFor({ state: "visible" });
+    const automaticallyEnabledDelete = scenarioPage
+      .getByRole("button", { name: /حذف آمن|الحذف الآمن/ })
+      .first();
+    await waitUntil("Automatic Safe Delete readiness", async () => (
+      await automaticallyEnabledDelete.isEnabled() ? true : null
+    ));
+    process.stdout.write("PASS 8-9 explicit unlink produced Persisted=0 and Live=0, then focus refresh enabled Safe Delete without Settings or reconciliation\n");
 
-    // A direct reservation is the controlled concurrency seam. The stale UI
-    // save must be rejected before its unrelated title marker reaches Domain.
-    reservation = await reserveDelete(supabase, authority, fixtureNamespace, asset);
-    const { data: reservedAsset, error: reservedAssetError } = await supabase
-      .from("media_assets")
-      .select("status")
-      .eq("id", asset.id)
-      .single();
-    if (reservedAssetError || reservedAsset?.status !== "deleting") {
-      throw new Error(`Reserved asset is not deleting: ${reservedAssetError?.message ?? JSON.stringify(reservedAsset)}.`);
+    if (!governingOnly) {
+      // A direct reservation is the controlled concurrency seam. The stale UI
+      // save must be rejected before its unrelated title marker reaches Domain.
+      reservation = await reserveDelete(supabase, authority, fixtureNamespace, asset);
+      const { data: reservedAsset, error: reservedAssetError } = await supabase
+        .from("media_assets")
+        .select("status")
+        .eq("id", asset.id)
+        .single();
+      if (reservedAssetError || reservedAsset?.status !== "deleting") {
+        throw new Error(`Reserved asset is not deleting: ${reservedAssetError?.message ?? JSON.stringify(reservedAsset)}.`);
+      }
+      assert(await storageObjectExists(supabase, asset), "Reservation setup unexpectedly changed Storage.");
+      process.stdout.write(`PASS 5 direct QA delete reservation started: ${reservation.id}\n`);
+
+      assert(stalePage, "Standard scenario requires the stale Topic page.");
+      const staleTitle = `${fixtureNamespace} stale-should-not-commit`;
+      await stalePage.bringToFront();
+      await stalePage.locator('input[name="title"]').fill(staleTitle);
+      const stalePost = await saveTopicAndWaitForPost(stalePage, authority, topicPath);
+      assert(stalePost.status() < 500, `Stale form request crashed with ${stalePost.status()}.`);
+      await stalePage.locator('[role="alert"]').first().waitFor({ state: "visible" });
+      const afterStale = await readTopic(supabase, topic.id);
+      assert(afterStale, "Topic disappeared during stale save.");
+      assert.equal(afterStale.title, topic.title, "Stale title reached Domain despite the delete reservation.");
+      assert.equal(afterStale.image, "", "Stale asset reached Domain despite the delete reservation.");
+      assert.equal(await referenceCount(supabase, asset.id), 0, "Stale save recreated a persisted reference.");
+      const { data: stillReserved } = await supabase
+        .from("media_delete_reservations")
+        .select("status")
+        .eq("id", reservation.id)
+        .single();
+      assert.equal(stillReserved?.status, "reserved", "Stale save silently canceled or completed the reservation.");
+      process.stdout.write("PASS 6-7 stale picker/form save failed before Domain commit and left the reservation intact\n");
+
+      await cancelVerifiedExistingReservation(supabase, fixtureNamespace, asset, reservation);
+      const { data: reactivated } = await supabase
+        .from("media_assets")
+        .select("status")
+        .eq("id", asset.id)
+        .single();
+      assert.equal(reactivated?.status, "active");
+      assert(await storageObjectExists(supabase, asset));
+      process.stdout.write("PASS reservation cancellation used exact Storage-exists proof and restored active state\n");
+
+      const reactivatedLibraryRefresh = scenarioPage.waitForResponse((response) => (
+        response.request().method() === "GET"
+          && isApprovedAppRequest(response.url(), authority, "/api/admin/media-library")
+      ));
+      await scenarioPage.bringToFront();
+      const reactivatedResponse = await reactivatedLibraryRefresh;
+      assert.equal(reactivatedResponse.status(), 200, "Post-reservation Media Library refresh failed.");
+      assertReadyLibraryPayload(
+        await reactivatedResponse.json().catch(() => null),
+        authority,
+        "Post-reservation automatic Media Library refresh",
+      );
+      const finalDeleteButton = scenarioPage
+        .getByRole("button", { name: /حذف آمن|الحذف الآمن/ })
+        .first();
+      await waitUntil("Reactivated Safe Delete readiness", async () => (
+        await finalDeleteButton.isEnabled() ? true : null
+      ));
     }
-    assert(await storageObjectExists(supabase, asset), "Reservation setup unexpectedly changed Storage.");
-    process.stdout.write(`PASS 5 direct QA delete reservation started: ${reservation.id}\n`);
 
-    const staleTitle = `${fixtureNamespace} stale-should-not-commit`;
-    await stalePage.locator('input[name="title"]').fill(staleTitle);
-    const stalePost = await saveTopicAndWaitForPost(stalePage, authority, topicPath);
-    assert(stalePost.status() < 500, `Stale form request crashed with ${stalePost.status()}.`);
-    await stalePage.locator('[role="alert"]').first().waitFor({ state: "visible" });
-    const afterStale = await readTopic(supabase, topic.id);
-    assert(afterStale, "Topic disappeared during stale save.");
-    assert.equal(afterStale.title, topic.title, "Stale title reached Domain despite the delete reservation.");
-    assert.equal(afterStale.image, "", "Stale asset reached Domain despite the delete reservation.");
-    assert.equal(await referenceCount(supabase, asset.id), 0, "Stale save recreated a persisted reference.");
-    const { data: stillReserved } = await supabase
-      .from("media_delete_reservations")
-      .select("status")
-      .eq("id", reservation.id)
-      .single();
-    assert.equal(stillReserved?.status, "reserved", "Stale save silently canceled or completed the reservation.");
-    process.stdout.write("PASS 6-7 stale picker/form save failed before Domain commit and left the reservation intact\n");
-
-    await cancelVerifiedExistingReservation(supabase, fixtureNamespace, asset, reservation);
-    const { data: reactivated } = await supabase
-      .from("media_assets")
-      .select("status")
-      .eq("id", asset.id)
-      .single();
-    assert.equal(reactivated?.status, "active");
-    assert(await storageObjectExists(supabase, asset));
-    process.stdout.write("PASS reservation cancellation used exact Storage-exists proof and restored active state\n");
-
-    // With zero real usage and the reservation canceled, execute the final
-    // application Safe Delete through the actual Media UI.
-    await openAndSelectAsset(scenarioPage, authority, asset);
+    await assertFixtureDeleteProof(supabase, authority, fixtureNamespace, asset);
+    process.stdout.write("PASS same-run upload, exact Catalog/Storage identity, namespaced path, and zero external references proved before delete\n");
     const deleteBody = await clickSafeDeleteAndCapture(scenarioPage, authority, 200);
     assert.equal(deleteBody?.deleted, true, `Final Safe Delete did not report success: ${JSON.stringify(deleteBody)}.`);
     await waitUntil("Final Safe Delete Catalog/Storage state", async () => {
@@ -1065,6 +1323,12 @@ async function run() {
       return await storageObjectExists(supabase!, asset!) ? null : data;
     });
     deletionProven = true;
+    governingWorkflowActive = false;
+    assert.deepEqual(
+      forbiddenGoverningRequests,
+      [],
+      `Governing workflow used Settings or reconciliation: ${forbiddenGoverningRequests.join(", ")}`,
+    );
     process.stdout.write("PASS 10 final application Safe Delete completed through Admin UI and Storage absence is proven\n");
 
     // Reopen both consumers instead of trusting in-memory UI state.
@@ -1085,13 +1349,16 @@ async function run() {
 
     // The real endpoint was already authenticated and context-proven before
     // setup. Only the following Recovery UI action/failure fixture is mocked.
-    await runRecoveryUiChecks(context, scenarioPage, authority, fixtureNamespace);
+    if (!governingOnly) {
+      await runRecoveryUiChecks(context, scenarioPage, authority, fixtureNamespace);
+    }
 
-    await stalePage.close();
+    await stalePage?.close();
     await unlinkPage.close();
   } catch (error) {
     scenarioError = error;
   }
+  governingWorkflowActive = false;
 
   if (supabase) {
     if (topicSetupAttempted && !topic) {

@@ -12,6 +12,15 @@ export type CanonicalMediaIdentity = {
   objectKey: string;
 };
 
+export type ManagedMediaUploadProof = {
+  reconciliationRunIdentity: string;
+  environmentKey: string;
+  providerRegistryVersion: string;
+  baselineStorageAssetCount: number;
+  baselineCatalogAssetCount: number;
+  baselineIdentityFingerprint: string;
+};
+
 export type MediaCatalogState = "available" | "unavailable" | "uncertain";
 export type MediaReconciliationState =
   | "synced"
@@ -45,6 +54,7 @@ export type MediaCatalogAsset = CanonicalMediaIdentity & {
   createdAt: string;
   updatedAt: string;
   referenceCount: number | null;
+  managedUploadProof?: ManagedMediaUploadProof | null;
 };
 
 export type MediaCatalogFolder = {

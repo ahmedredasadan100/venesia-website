@@ -104,6 +104,12 @@ const readinessModule = loadTypeScriptModule("src/lib/admin/media-catalog/readin
 const catalogModule = loadTypeScriptModule("src/lib/admin/media-catalog/catalog.ts", {
   "server-only": {},
   path: { default: nodePath },
+  "../media-storage-adapter": {
+    resolveMediaStorageRuntimeContext: () => runtimeContext,
+  },
+  "../media-library": {
+    listManagedMediaInventory: async () => managedInventory,
+  },
   "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
   "../../supabase-admin": { getSupabaseAdmin: () => ({}) },
   "./identity": {
@@ -131,6 +137,8 @@ const completeRuntimeState = {
   lastScanAt: "2026-07-25T01:00:00.000Z",
   lastCatalogSync: "2026-07-25T01:00:00.000Z",
   lastDryRun: null,
+  lastSuccessfulReconciliationRunIdentity: "test-run",
+  lastSuccessfulReconciliationAt: "2026-07-25T01:00:00.000Z",
   storageAssetCount: 1,
   catalogAssetCount: 1,
   warnings: [],
@@ -359,6 +367,19 @@ const postUploadCatalogAsset = {
   id: "post-upload-catalog-asset",
   objectKey: "images/post-upload.png",
   publicUrl: "https://demo.supabase.co/post-upload.png",
+  uploadedBy: 7,
+  createdAt: "2026-07-25T02:00:00.000Z",
+  updatedAt: "2026-07-25T02:00:00.000Z",
+  managedUploadProof: {
+    reconciliationRunIdentity: completeRuntimeState.lastSuccessfulReconciliationRunIdentity,
+    environmentKey: runtimeContext.identity,
+    providerRegistryVersion: "test-registry",
+    baselineStorageAssetCount: 1,
+    baselineCatalogAssetCount: 1,
+    baselineIdentityFingerprint: readinessModule.getMediaIdentitySetFingerprint([
+      `${catalogAsset.provider}:${catalogAsset.bucket}:${catalogAsset.objectKey}`,
+    ]),
+  },
 };
 const postUploadInventory = {
   ...managedInventory,
@@ -380,9 +401,340 @@ const postUploadReadiness = readinessModule.buildMediaCatalogReadiness(
   "test-registry",
 );
 assert.equal(postUploadReadiness.catalogCoverageComplete, true);
-assert.equal(postUploadReadiness.runtimeDatasetMatches, false);
-assert.equal(postUploadReadiness.usageResultsAuthoritative, false);
-check("a post-scan upload invalidates authoritative usage even when Catalog registration succeeds", true);
+assert.equal(postUploadReadiness.runtimeDatasetMatches, true);
+assert.equal(postUploadReadiness.usageResultsAuthoritative, true);
+assert.equal(postUploadReadiness.safeDeleteReady, true);
+assert.deepEqual(postUploadReadiness.reasons, []);
+
+const unprovenPostUploadReadiness = readinessModule.buildMediaCatalogReadiness(
+  {
+    ...emptyCatalogSnapshot,
+    assets: [catalogAsset, { ...postUploadCatalogAsset, uploadedBy: 999, managedUploadProof: null }],
+  },
+  postUploadInventory,
+  completeRuntimeState,
+  runtimeContext,
+  "test-registry",
+);
+assert.equal(unprovenPostUploadReadiness.runtimeDatasetMatches, false);
+assert.equal(unprovenPostUploadReadiness.usageResultsAuthoritative, false);
+assert.deepEqual(unprovenPostUploadReadiness.reasons, ["runtime_dataset_mismatch"]);
+const runtimeMismatchPresentation = readinessModule.getMediaReadinessReasonPresentation(
+  "runtime_dataset_mismatch",
+);
+assert.equal(runtimeMismatchPresentation.label, "تغيرت مجموعة الملفات منذ آخر فحص مكتمل.");
+assert.match(runtimeMismatchPresentation.action, /معاينة الفحص/);
+assert.match(runtimeMismatchPresentation.action, /تنفيذ الفحص والمزامنة/);
+assert.equal(runtimeMismatchPresentation.actionHref, "/admin/settings/media");
+
+const secondPostUploadCatalogAsset = {
+  ...postUploadCatalogAsset,
+  id: "second-post-upload-catalog-asset",
+  objectKey: "images/second-post-upload.png",
+  publicUrl: "https://demo.supabase.co/second-post-upload.png",
+  uploadedBy: 8,
+  createdAt: "2026-07-25T03:00:00.000Z",
+  updatedAt: "2026-07-25T03:00:00.000Z",
+};
+const twoPostUploadInventory = {
+  ...postUploadInventory,
+  items: [
+    ...postUploadInventory.items,
+    {
+      ...managedInventory.items[0],
+      path: secondPostUploadCatalogAsset.publicUrl,
+      filename: "second-post-upload.png",
+      storagePath: secondPostUploadCatalogAsset.objectKey,
+    },
+  ],
+};
+const twoPostUploadReadiness = readinessModule.buildMediaCatalogReadiness(
+  {
+    ...emptyCatalogSnapshot,
+    assets: [catalogAsset, postUploadCatalogAsset, secondPostUploadCatalogAsset],
+  },
+  twoPostUploadInventory,
+  completeRuntimeState,
+  runtimeContext,
+  "test-registry",
+);
+assert.equal(twoPostUploadReadiness.runtimeDatasetMatches, true);
+assert.equal(twoPostUploadReadiness.safeDeleteReady, true);
+
+function catalogRow(asset, overrides = {}) {
+  return {
+    id: asset.id,
+    provider: asset.provider,
+    bucket: asset.bucket,
+    object_key: asset.objectKey,
+    public_url: asset.publicUrl,
+    original_filename: asset.originalFilename ?? asset.displayName,
+    display_name: asset.displayName,
+    media_kind: asset.kind,
+    mime_type: asset.mimeType,
+    extension: asset.extension,
+    byte_size: asset.sizeBytes,
+    width: asset.width,
+    height: asset.height,
+    checksum: asset.checksum,
+    folder_path: asset.folderPath,
+    status: asset.status,
+    uploaded_by: asset.uploadedBy,
+    default_alt_text: asset.defaultAltText,
+    default_title: asset.defaultTitle,
+    default_caption: asset.defaultCaption,
+    reconciliation_state: asset.reconciliationState,
+    missing_object: asset.missingObject,
+    created_at: asset.createdAt,
+    updated_at: asset.updatedAt,
+    reference_count: asset.referenceCount,
+    metadata: {},
+    ...overrides,
+  };
+}
+
+let observedRegistrationRow = catalogRow(postUploadCatalogAsset, {
+  original_filename: "post-upload-reconciliation-name.png",
+});
+let registrationInventory = managedInventory;
+let registrationRuntimeState = completeRuntimeState;
+let registrationInsertAttempts = 0;
+let registrationInsertThrows = false;
+const registrationRaceSupabase = {
+  from(table) {
+    if (table === "media_folders") {
+      return { upsert: async () => ({ error: null }) };
+    }
+    if (table === "site_settings") {
+      const query = {
+        select() { return this; },
+        eq() { return this; },
+        async maybeSingle() { return { data: { value: registrationRuntimeState }, error: null }; },
+      };
+      return query;
+    }
+    if (table === "admin_media_folders_catalog") {
+      return {
+        data: [],
+        error: null,
+        select() { return this; },
+        order() { return this; },
+      };
+    }
+    if (table === "admin_media_assets_catalog") {
+      return {
+        select() { return this; },
+        neq() { return this; },
+        order() { return this; },
+        eq() { return this; },
+        async range() { return { data: [catalogRow(catalogAsset)], error: null }; },
+        async maybeSingle() { return { data: observedRegistrationRow, error: null }; },
+      };
+    }
+    if (table === "media_assets") {
+      return {
+        insert() { registrationInsertAttempts += 1; return this; },
+        select() { return this; },
+        async single() {
+          if (registrationInsertThrows) throw new Error("response lost after insert");
+          return { data: null, error: { code: "23505", message: "duplicate identity" } };
+        },
+      };
+    }
+    throw new Error(`Unexpected registration test table ${table}`);
+  },
+};
+const registrationRaceCatalogModule = loadTypeScriptModule(
+  "src/lib/admin/media-catalog/catalog.ts",
+  {
+    "server-only": {},
+    path: { default: nodePath },
+    "../media-storage-adapter": {
+      resolveMediaStorageRuntimeContext: () => runtimeContext,
+    },
+    "../media-library": {
+      listManagedMediaInventory: async () => registrationInventory,
+    },
+    "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
+    "../../supabase-admin": { getSupabaseAdmin: () => registrationRaceSupabase },
+    "./identity": {
+      getFolderPathFromObjectKey: (objectKey) => nodePath.posix.dirname(objectKey),
+      isMediaCatalogMissingError: () => false,
+      getCanonicalMediaIdentityKey: (identity) => `${identity.provider}:${identity.bucket}:${identity.objectKey}`,
+    },
+    "./binary-metadata": {
+      readUploadBinaryMetadata: async () => ({ width: 1, height: 1, checksum: "fixture" }),
+    },
+    "./reference-providers": { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "test-registry" },
+    "./readiness": readinessModule,
+  },
+);
+const registrationRaceFile = {
+  name: "post-upload.png",
+  type: "image/png",
+  size: postUploadCatalogAsset.sizeBytes,
+  arrayBuffer: async () => new ArrayBuffer(0),
+};
+const registrationRaceResult = {
+  provider: "supabase",
+  bucket: postUploadCatalogAsset.bucket,
+  objectKey: postUploadCatalogAsset.objectKey,
+  path: postUploadCatalogAsset.publicUrl,
+  kind: "image",
+  contentType: "image/png",
+  sizeBytes: postUploadCatalogAsset.sizeBytes,
+};
+const preparedRegistrationProof = await registrationRaceCatalogModule.prepareCatalogUploadRegistration(7);
+assert.match(
+  preparedRegistrationProof.managedUploadRuntimeProof.baselineIdentityFingerprint,
+  /^[a-f0-9]{64}$/,
+);
+assert.deepEqual(
+  await registrationRaceCatalogModule.prepareCatalogUploadRegistration(8),
+  preparedRegistrationProof,
+);
+const observedRegistration = await registrationRaceCatalogModule.registerCatalogUpload(
+  registrationRaceResult,
+  registrationRaceFile,
+  7,
+  preparedRegistrationProof,
+);
+assert.equal(observedRegistration.id, postUploadCatalogAsset.id);
+assert.notEqual(observedRegistration.originalFilename, registrationRaceFile.name);
+registrationInsertThrows = true;
+assert.equal(
+  (await registrationRaceCatalogModule.registerCatalogUpload(
+    registrationRaceResult,
+    registrationRaceFile,
+    7,
+    preparedRegistrationProof,
+  )).id,
+  postUploadCatalogAsset.id,
+);
+registrationInsertThrows = false;
+observedRegistrationRow = { ...observedRegistrationRow, byte_size: 999_999 };
+await assert.rejects(
+  () => registrationRaceCatalogModule.registerCatalogUpload(
+    registrationRaceResult,
+    registrationRaceFile,
+    7,
+    preparedRegistrationProof,
+  ),
+  (error) => error?.code === "media_catalog_upload_registration_unproven",
+);
+const insertsBeforeUnprovenDataset = registrationInsertAttempts;
+registrationInventory = postUploadInventory;
+await assert.rejects(
+  () => registrationRaceCatalogModule.prepareCatalogUploadRegistration(7),
+  (error) => error?.code === "media_catalog_upload_readiness_proof_unavailable",
+);
+assert.equal(registrationInsertAttempts, insertsBeforeUnprovenDataset);
+registrationInventory = managedInventory;
+registrationRuntimeState = { ...completeRuntimeState, state: "uncertain" };
+await assert.rejects(
+  () => registrationRaceCatalogModule.prepareCatalogUploadRegistration(7),
+  (error) => error?.code === "media_catalog_upload_readiness_proof_unavailable",
+);
+assert.equal(registrationInsertAttempts, insertsBeforeUnprovenDataset);
+registrationRuntimeState = completeRuntimeState;
+check("upload registration read-back accepts a reconciled canonical identity and fails closed on conflicting data", true);
+check("every managed upload requires a synchronized baseline proof before Storage and Catalog mutation", true);
+
+const countNeutralReplacementInventory = {
+  ...managedInventory,
+  items: [postUploadInventory.items[1]],
+};
+const countNeutralReplacementReadiness = readinessModule.buildMediaCatalogReadiness(
+  { ...emptyCatalogSnapshot, assets: [postUploadCatalogAsset] },
+  countNeutralReplacementInventory,
+  completeRuntimeState,
+  runtimeContext,
+  "test-registry",
+);
+assert.equal(countNeutralReplacementReadiness.runtimeDatasetMatches, false);
+assert.equal(countNeutralReplacementReadiness.safeDeleteReady, false);
+
+const clockSkewIndependentReadiness = readinessModule.buildMediaCatalogReadiness(
+  {
+    ...emptyCatalogSnapshot,
+    assets: [catalogAsset, { ...postUploadCatalogAsset, createdAt: "2026-07-25T00:59:59.999Z" }],
+  },
+  postUploadInventory,
+  completeRuntimeState,
+  runtimeContext,
+  "test-registry",
+);
+assert.equal(clockSkewIndependentReadiness.runtimeDatasetMatches, true);
+assert.equal(clockSkewIndependentReadiness.safeDeleteReady, true);
+
+const uploaderAccountRemovedReadiness = readinessModule.buildMediaCatalogReadiness(
+  {
+    ...emptyCatalogSnapshot,
+    assets: [catalogAsset, { ...postUploadCatalogAsset, uploadedBy: null }],
+  },
+  postUploadInventory,
+  completeRuntimeState,
+  runtimeContext,
+  "test-registry",
+);
+assert.equal(uploaderAccountRemovedReadiness.runtimeDatasetMatches, true);
+assert.equal(uploaderAccountRemovedReadiness.safeDeleteReady, true);
+
+for (const [name, assets, inventory, runtimeState, registryVersion] of [
+  [
+    "mixed official and unknown Catalog additions",
+    [catalogAsset, postUploadCatalogAsset, { ...secondPostUploadCatalogAsset, managedUploadProof: null }],
+    twoPostUploadInventory,
+    completeRuntimeState,
+    "test-registry",
+  ],
+  [
+    "a positive uploadedBy without explicit upload proof",
+    [catalogAsset, { ...postUploadCatalogAsset, uploadedBy: 999, managedUploadProof: null }],
+    postUploadInventory,
+    completeRuntimeState,
+    "test-registry",
+  ],
+  [
+    "an uncertain runtime",
+    [catalogAsset, postUploadCatalogAsset],
+    postUploadInventory,
+    { ...completeRuntimeState, state: "uncertain" },
+    "test-registry",
+  ],
+  [
+    "runtime warnings",
+    [catalogAsset, postUploadCatalogAsset],
+    postUploadInventory,
+    { ...completeRuntimeState, warnings: ["provider_failed"] },
+    "test-registry",
+  ],
+  [
+    "a Provider Registry mismatch",
+    [catalogAsset, postUploadCatalogAsset],
+    postUploadInventory,
+    completeRuntimeState,
+    "new-registry",
+  ],
+  [
+    "an unproven reconciliation timestamp",
+    [catalogAsset, postUploadCatalogAsset],
+    postUploadInventory,
+    { ...completeRuntimeState, lastSuccessfulReconciliationAt: "invalid" },
+    "test-registry",
+  ],
+]) {
+  const readiness = readinessModule.buildMediaCatalogReadiness(
+    { ...emptyCatalogSnapshot, assets },
+    inventory,
+    runtimeState,
+    runtimeContext,
+    registryVersion,
+  );
+  assert.equal(readiness.runtimeDatasetMatches, false, name);
+  assert.equal(readiness.safeDeleteReady, false, name);
+}
+check("official post-reconciliation uploads extend readiness only when every additive identity is proven", true);
 
 const migration = source("sql/migrations/20260725090000_media_catalog_reference_foundation.sql");
 for (const table of ["media_folders", "media_assets", "media_references"]) {
@@ -419,7 +771,14 @@ check("Project aggregate providers remain explicit discovery-only boundaries", [
 const route = source("src/app/api/admin/media-library/route.ts");
 check("Media API is private no-store and authenticates every verb", route.includes('"Cache-Control": "private, no-store, max-age=0"') && (route.match(/await requireAdminApi\(\)/g) ?? []).length === 4);
 check("Media API builds one exhaustive Catalog plus Storage read model", route.includes("listPublicMediaInventory") && route.includes("listMediaCatalogSnapshot") && route.includes("buildMediaLibraryReadModel"));
-check("upload compensation removes a new object when catalog registration fails", route.includes("registerCatalogUpload") && route.includes("deletePublicMediaAsset(saved.path).catch"));
+check("upload compensation removes a new object only after a proven Catalog registration failure", route.includes("registerCatalogUpload") && route.includes("await deletePublicMediaAsset(saved.path)") && route.includes("MediaCatalogUploadRegistrationUnprovenError") && route.includes("MediaUploadCompensationError") && !route.includes("deletePublicMediaAsset(saved.path).catch"));
+const catalogSource = source("src/lib/admin/media-catalog/catalog.ts");
+const readinessSource = source("src/lib/admin/media-catalog/readiness.ts");
+check("managed upload registration is insert-only", catalogSource.includes('.from("media_assets")') && catalogSource.includes(".insert({") && !catalogSource.includes("onConflict: \"provider,bucket,object_key\""));
+check("managed upload registration records an explicit runtime baseline identity proof", catalogSource.includes("managedUploadRuntimeProof") && catalogSource.includes("reconciliationRunIdentity") && catalogSource.includes("baselineStorageAssetCount") && catalogSource.includes("baselineCatalogAssetCount") && catalogSource.includes("baselineIdentityFingerprint"));
+check("the route proves the upload baseline before creating the managed Storage object", route.indexOf("prepareCatalogUploadRegistration(actor.id)") < route.indexOf("await savePublicMediaUpload(folder, file)") && catalogSource.includes("MediaCatalogUploadReadinessProofError"));
+check("ambiguous Catalog registration is read back without blindly deleting Storage", catalogSource.includes("getCatalogAssetByIdentity") && catalogSource.includes("MediaCatalogUploadRegistrationUnprovenError") && route.includes("!(error instanceof MediaCatalogUploadRegistrationUnprovenError)"));
+check("readiness trusts only fully proven additive Admin uploads for the same identity baseline", readinessSource.includes("isTrustedManagedUploadDatasetExtension") && readinessSource.includes("provenUploadAssets.length !== catalogDelta") && readinessSource.includes("hasManagedUploadProofForBaseline") && readinessSource.includes("managedStorageKeys.has(storageKey)") && readinessSource.includes("getMediaIdentitySetFingerprint(baselineCatalogKeys)"));
 check("all upload and delete mutations stay on the Supabase managed adapter", source("src/lib/admin/media-library.ts").includes("getManagedMediaStorageAdapter") && source("src/lib/admin/media-storage-adapter.ts").includes('return "supabase"'));
 check("unknown Media API views, kinds, page sizes and query keys are rejected", ["invalid_media_view", "invalid_media_kind", "invalid_media_page_size", "invalid_media_query"].every((token) => route.includes(token)));
 check("catalog registration records checksum and supported image dimensions", source("src/lib/admin/media-catalog/catalog.ts").includes("readUploadBinaryMetadata") && source("src/lib/admin/media-catalog/binary-metadata.ts").includes('createHash("sha256")'));
@@ -446,6 +805,9 @@ check("PDF cards and the details panel provide a consistent document preview", c
 check("unknown Storage usage is never rendered as a false zero", core.includes('value === null ? "لم يكتمل فحص الارتباطات"') && core.includes("يعرض الفحص المباشر أدناه"));
 check("Smart Views are global and expose only implemented truth contracts", core.includes("setFolder(null)") && core.includes("عروض كل المكتبة") && core.includes("صور بلا وصف افتراضي") && !core.includes('id: "recent"') && !core.includes('id: "large"'));
 check("reference-dependent Smart Views show readiness truth instead of false empty results", core.includes("referenceViewUnavailable") && core.includes("غير جاهز حتى يكتمل فحص مواضع الاستخدام") && source("src/lib/admin/media-catalog/catalog.ts").includes('smartView === "used" || smartView === "unused"'));
+check("safe-delete blockers are visible, actionable, centrally owned and associated with the disabled control", core.includes("getMediaReadinessReasonPresentation") && core.includes("aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined}") && core.includes("id={safeDeleteStatusId}") && core.includes("السبب:") && core.includes("الإجراء المطلوب:") && core.includes('href={item.actionHref}') && core.includes("الأصل غير مسجل داخل Media Catalog."));
+const topicMediaCatalogSyncSignal = source("src/components/admin/content/editors/article/TopicMediaCatalogSyncSignal.tsx");
+check("returning to a visible Media Library refreshes both the asset dataset and live usage panel", core.includes('window.addEventListener("focus", refreshVisibleLibrary)') && core.includes('document.addEventListener("visibilitychange", refreshVisibleLibrary)') && core.includes('window.addEventListener("storage", refreshAfterTopicSave)') && core.includes("refreshToken={dataRevision}") && topicMediaCatalogSyncSignal.includes('form.addEventListener("admin-form-saved"') && topicMediaCatalogSyncSignal.includes("window.localStorage.setItem(") && source("src/components/admin/media-intelligence/MediaUsagePanel.tsx").includes('key={`${assetPath}:${refreshToken}`}'));
 const usageRoute = source("src/app/api/admin/media-usage/route.ts");
 check("Usage API scans live providers even without a Catalog row", usageRoute.includes("scanMediaUsageByPublicValue") && usageRoute.includes("entityIdentity: reference.entityIdentity") && !usageRoute.includes("media_asset_missing_from_catalog"));
 check("Usage API makes unregistered authoritative-unused impossible", usageRoute.includes("catalogRegistered &&") && usageRoute.includes("readiness.usageResultsAuthoritative") && usageRoute.includes("const unusedAuthoritative"));
