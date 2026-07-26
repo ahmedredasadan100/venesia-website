@@ -12,8 +12,9 @@ const files = {
   browser: resolve(ROOT, "scripts/qa-media-recovery-browser.mts"),
   example: resolve(ROOT, "scripts/fixtures/media-live-qa-authority.example.json"),
 };
+const normalizeLineEndings = (source) => source.replace(/\r\n?/g, "\n");
 const sources = Object.fromEntries(
-  Object.entries(files).map(([key, path]) => [key, readFileSync(path, "utf8")]),
+  Object.entries(files).map(([key, path]) => [key, normalizeLineEndings(readFileSync(path, "utf8"))]),
 );
 
 const checks = [];
