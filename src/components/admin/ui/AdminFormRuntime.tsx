@@ -424,15 +424,26 @@ function formFeedback(
   );
   if (state.status === "error" && hasFieldErrors) return null;
   return {
-    variant: state.status === "success" ? "success" : "danger",
+    variant:
+      state.status === "success"
+        ? "success"
+        : state.status === "warning"
+          ? "warning"
+          : "danger",
     title:
       state.title ??
-      (state.status === "success" ? "تم الحفظ" : "تعذر حفظ البيانات"),
+      (state.status === "success"
+        ? "تم الحفظ"
+        : state.status === "warning"
+          ? "تم الحفظ مع تنبيه"
+          : "تعذر حفظ البيانات"),
     message:
       state.message ??
       (state.status === "success"
         ? "تم حفظ البيانات بنجاح."
-        : "راجع البيانات وحاول مرة أخرى."),
+        : state.status === "warning"
+          ? "تم حفظ البيانات، لكن توجد خطوة تحتاج مراجعة."
+          : "راجع البيانات وحاول مرة أخرى."),
     layout: "inline",
     dismissible: true,
     lifecycle: "manual",
@@ -468,7 +479,7 @@ export default function AdminFormRuntime<TResult = unknown>({
     resolvedInitialState,
   );
   const handoffPending =
-    state.status === "success" &&
+    (state.status === "success" || state.status === "warning") &&
     state.mode === "create" &&
     Boolean(state.editHref);
   const pending = actionPending || handoffPending;
@@ -482,7 +493,10 @@ export default function AdminFormRuntime<TResult = unknown>({
     useAdminUnsavedChangesGuard({
       rootRef: formRef,
       pending,
-      resetKey: state.status === "success" ? state.savedRevision : undefined,
+      resetKey:
+        state.status === "success" || state.status === "warning"
+          ? state.savedRevision
+          : undefined,
       onNavigate: clearFormFeedback,
     });
   const requestClose = useCallback(

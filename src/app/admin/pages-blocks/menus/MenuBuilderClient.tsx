@@ -16,6 +16,7 @@ type MenuBuilderClientProps = {
   items: MenuItem[];
   databaseReady: boolean;
   message?: string | null;
+  messageWarning?: boolean;
 };
 
 export default function MenuBuilderClient({
@@ -23,6 +24,7 @@ export default function MenuBuilderClient({
   items,
   databaseReady,
   message,
+  messageWarning = false,
 }: MenuBuilderClientProps) {
   const tabs = [
     {
@@ -114,7 +116,13 @@ export default function MenuBuilderClient({
       </div>
 
       {message ? (
-        <div className="rounded-[22px] border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-5 py-4 text-sm text-[#F4D99A]">
+        <div
+          className={
+            messageWarning
+              ? "rounded-[22px] border border-amber-400/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-100"
+              : "rounded-[22px] border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-5 py-4 text-sm text-[#F4D99A]"
+          }
+        >
           {message}
         </div>
       ) : null}

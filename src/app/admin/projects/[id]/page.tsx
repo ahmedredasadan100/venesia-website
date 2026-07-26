@@ -11,6 +11,9 @@ export const dynamic = "force-dynamic";
 function getNoticeText(notice?: string) {
   if (notice === "updated") return "تم حفظ التعديلات بنجاح.";
   if (notice === "created") return "تم إنشاء المشروع. أكمل تفاصيله من النموذج أدناه.";
+  if (notice === "saved_with_media_sync_warning") {
+    return "تم حفظ بيانات المشروع، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا.";
+  }
   return null;
 }
 
@@ -69,7 +72,13 @@ export default async function ProjectEditPage({
         meta={`Type: ${project.type} / Featured: ${project.featured ? "Yes" : "No"}`}
       />
 
-      {notice ? <AdminNotice variant="success" message={notice} /> : null}
+      {notice ? (
+        <AdminNotice
+          variant={query?.notice === "saved_with_media_sync_warning" ? "warning" : "success"}
+          title={query?.notice === "saved_with_media_sync_warning" ? "تم الحفظ مع تنبيه للميديا" : undefined}
+          message={notice}
+        />
+      ) : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر حفظ التعديلات" message={errorMessage} /> : null}
 
       <ProjectEditForm bundle={bundle} />

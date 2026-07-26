@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import AdminNotice from "../../../../../components/admin/AdminNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_RULES,
@@ -43,6 +44,7 @@ type HeroRow = {
 
 type HeroManagerClientProps = {
   heroes: HeroRow[];
+  mediaSynchronizationWarning?: boolean;
 };
 
 function Icon({ label }: { label: string }) {
@@ -90,7 +92,10 @@ function resolveHeroPreviewPath(hero: HeroRow) {
   return anyAssignment?.path ?? null;
 }
 
-export default function HeroManagerClient({ heroes }: HeroManagerClientProps) {
+export default function HeroManagerClient({
+  heroes,
+  mediaSynchronizationWarning = false,
+}: HeroManagerClientProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const visibleIds = useMemo(() => heroes.map((hero) => hero.id), [heroes]);
   const selection = useAdminGridSelection<number>(visibleIds);
@@ -113,6 +118,13 @@ export default function HeroManagerClient({ heroes }: HeroManagerClientProps) {
           </button>
         )}
       />
+
+      {mediaSynchronizationWarning ? (
+        <AdminNotice
+          variant="warning"
+          message="تم حفظ بيانات الهيرو، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
+        />
+      ) : null}
 
       <div className="space-y-4">
         <AdminBulkActionBar

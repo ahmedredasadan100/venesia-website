@@ -102,7 +102,16 @@ export default function CompanyIdentityPanel({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5">
-          <p className={state.status === "error" ? "text-sm text-red-300" : "text-sm text-emerald-300"} role="status">
+          <p
+            className={
+              state.status === "error"
+                ? "text-sm text-red-300"
+                : state.status === "warning"
+                  ? "text-sm text-amber-300"
+                  : "text-sm text-emerald-300"
+            }
+            role="status"
+          >
             {state.message}
           </p>
           <button type="submit" disabled={pending} className="rounded-2xl bg-[var(--admin-accent)] px-5 py-3 text-sm font-bold text-[#05070B] transition hover:brightness-110 disabled:opacity-50">

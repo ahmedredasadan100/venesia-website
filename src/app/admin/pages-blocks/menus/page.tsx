@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function MenusPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ message?: string }> | { message?: string };
+  searchParams?: Promise<{ message?: string; notice?: string }> | { message?: string; notice?: string };
 }) {
   const query = searchParams ? await searchParams : {};
   const message = query?.message ? decodeURIComponent(query.message) : null;
@@ -37,5 +37,11 @@ export default async function MenusPage({
     item_count: counts.get(menu.id) ?? 0,
   }));
 
-  return <MenusTableClient menus={rows} message={message} />;
+  return (
+    <MenusTableClient
+      menus={rows}
+      message={message}
+      messageWarning={query.notice === "saved_with_media_sync_warning"}
+    />
+  );
 }

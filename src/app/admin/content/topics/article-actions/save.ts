@@ -7,7 +7,11 @@ import type {
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
-import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
+import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../../lib/admin/media-catalog/write-lease";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   buildTopicWritePayload,
@@ -338,49 +342,67 @@ export async function saveTopicForm(
     currentTopic,
   );
 
-  let entityId: number;
-  let savedSlug: string;
-
-  if (mode === "create") {
-    const { data, error } = await getSupabaseAdmin()
-      .from("topics")
-      .insert({
+  const leaseEntityIdentity = mode === "edit"
+    ? id
+    : `create:${crypto.randomUUID()}`;
+  let coordinated;
+  try {
+    coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "topics",
+      leaseEntityIdentity,
+      intendedRow: {
+        ...(currentTopic ?? {}),
         ...writePayload,
-        created_at: now,
-        created_by: actor.id,
-        updated_by: actor.id,
-        published_by: nextStatus === "published" ? actor.id : null,
-      })
-      .select("id, slug")
-      .single<{ id: number; slug: string }>();
-    if (error || !data) {
-      return formFailure(
-        error?.message ?? "تعذر إنشاء الموضوع. راجع قاعدة البيانات.",
-      );
+      },
+      actorId: actor.id,
+      requestIdentity: `topic-article:${mode}:${leaseEntityIdentity}`,
+      mutate: async () => {
+        if (mode === "create") {
+          const { data, error } = await getSupabaseAdmin()
+            .from("topics")
+            .insert({
+              ...writePayload,
+              created_at: now,
+              created_by: actor.id,
+              updated_by: actor.id,
+              published_by: nextStatus === "published" ? actor.id : null,
+            })
+            .select("id, slug")
+            .single<{ id: number; slug: string }>();
+          if (error || !data) {
+            throw new Error(error?.message ?? "تعذر إنشاء الموضوع. راجع قاعدة البيانات.");
+          }
+          return data;
+        } else {
+          const { data, error } = await getSupabaseAdmin()
+            .from("topics")
+            .update({
+              ...writePayload,
+              updated_by: actor.id,
+              ...(nextStatus === "published" && currentStatus !== "published"
+                ? { published_by: actor.id }
+                : {}),
+            })
+            .eq("id", id)
+            .select("id, slug")
+            .maybeSingle<{ id: number; slug: string }>();
+          if (error || !data) throw new Error(error?.message ?? "تعذر تحديث الموضوع.");
+          return data;
+        }
+      },
+      resolveEntityIdentity: (value) => String(value.id),
+    });
+  } catch (error) {
+    if (error instanceof MediaReferenceWriteLeaseError) {
+      return formFailure(getMediaReferenceWriteLeaseUserMessage(error.code), {
+        image: [getMediaReferenceWriteLeaseUserMessage(error.code)],
+      });
     }
-    entityId = data.id;
-    savedSlug = data.slug;
-  } else {
-    const { data, error } = await getSupabaseAdmin()
-      .from("topics")
-      .update({
-        ...writePayload,
-        updated_by: actor.id,
-        ...(nextStatus === "published" && currentStatus !== "published"
-          ? { published_by: actor.id }
-          : {}),
-      })
-      .eq("id", id)
-      .select("id, slug")
-      .maybeSingle<{ id: number; slug: string }>();
-    if (error || !data) {
-      return formFailure(error?.message ?? "تعذر تحديث الموضوع.");
-    }
-    entityId = data.id;
-    savedSlug = data.slug;
+    return formFailure(error instanceof Error ? error.message : "تعذر حفظ الموضوع.");
   }
-
-  await synchronizeMediaReferencesAfterDomainMutation("topics", entityId);
+  const entityId = coordinated.value.id;
+  const savedSlug = coordinated.value.slug;
+  const mediaSynchronization = coordinated.mediaSynchronization;
 
   revalidateTopicPaths({
     id: entityId,
@@ -403,12 +425,23 @@ export async function saveTopicForm(
   );
 
   return {
-    status: "success",
+    status:
+      mediaSynchronization.status === "saved_with_media_sync_warning"
+        ? "warning"
+        : "success",
     revision,
-    title: "تم الحفظ بنجاح",
-    message: successMessage(mode, nextStatus),
+    title:
+      mediaSynchronization.status === "saved_with_media_sync_warning"
+        ? "تم حفظ الموضوع مع تنبيه للميديا"
+        : "تم الحفظ بنجاح",
+    message:
+      mediaSynchronization.status === "saved_with_media_sync_warning"
+        ? "تم حفظ بيانات الموضوع، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
+        : successMessage(mode, nextStatus),
     code:
-      mode === "create"
+      mediaSynchronization.status === "saved_with_media_sync_warning"
+        ? "saved_with_media_sync_warning"
+        : mode === "create"
         ? nextStatus === "published"
           ? "published"
           : "created"
@@ -419,5 +452,6 @@ export async function saveTopicForm(
       ? { editHref: `/admin/content/topics/${entityId}` }
       : {}),
     savedRevision: `${entityId}:${now}`,
+    result: { mediaSynchronization },
   };
 }

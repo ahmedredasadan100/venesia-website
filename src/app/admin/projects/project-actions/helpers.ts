@@ -3,6 +3,7 @@ import type { ProjectCategory } from "../../../../config/projects-data";
 import { normalizeSlugInput, slugifyFromTitle } from "../../../../lib/admin/slug";
 import { parseJsonArray } from "../../../../lib/projects/types";
 import type { ProjectStatus } from "../../../../lib/projects/types";
+import type { MediaReferenceSynchronizationResult } from "../../../../lib/admin/media-catalog/synchronization";
 import type { PublicationStatus } from "./types";
 import { VALID_PUBLICATION_STATUSES } from "./types";
 
@@ -55,6 +56,33 @@ export function redirectWithError(type: ProjectCategory, message: string): never
 
 export function redirectEditWithNotice(id: number, notice: string): never {
   redirect(`/admin/projects/${id}?notice=${notice}`);
+}
+
+export function mediaSynchronizationNotice(
+  synchronization: MediaReferenceSynchronizationResult,
+) {
+  return synchronization.status === "saved_with_media_sync_warning"
+    ? "saved_with_media_sync_warning"
+    : null;
+}
+
+export function withProjectMediaSynchronization<
+  TResult extends { ok: true; message: string },
+>(
+  result: TResult,
+  synchronization: MediaReferenceSynchronizationResult,
+) {
+  if (synchronization.status !== "saved_with_media_sync_warning") {
+    return { ...result, feedbackStatus: "success" as const, mediaSynchronization: synchronization };
+  }
+  return {
+    ...result,
+    feedbackStatus: "warning" as const,
+    code: "saved_with_media_sync_warning" as const,
+    message:
+      "تم حفظ بيانات المشروع، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص.",
+    mediaSynchronization: synchronization,
+  };
 }
 
 export function redirectEditWithError(id: number, message: string): never {

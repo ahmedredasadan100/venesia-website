@@ -8,7 +8,7 @@ import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../../li
 import { DEFAULT_FOOTER_SLOTS } from "../../../../../lib/footer/defaults";
 import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidate-footer";
 import { FOOTER_SLOTS_SETTING_KEY } from "../../../../../lib/footer/types";
-import { syncBrandFromSlots, upsertSetting } from "./helpers";
+import { syncBrandFromSlots, upsertSettings } from "./helpers";
 
 export async function restoreDefaultFooterAction() {
   await requireAdminSession();
@@ -16,9 +16,11 @@ export async function restoreDefaultFooterAction() {
   const defaultSlots = structuredClone(DEFAULT_FOOTER_SLOTS);
   const brand = syncBrandFromSlots(defaultSlots);
 
-  await upsertSetting(FOOTER_SLOTS_SETTING_KEY, defaultSlots);
-  await upsertSetting("footer.brand", brand);
-  await Promise.all(
+  await upsertSettings([
+    { key: FOOTER_SLOTS_SETTING_KEY, value: defaultSlots },
+    { key: "footer.brand", value: brand },
+  ]);
+  const mediaSynchronizations = await Promise.all(
     [FOOTER_SLOTS_SETTING_KEY, "footer.brand"].map((key) =>
       synchronizeMediaReferencesAfterDomainMutation("site_settings", key),
     ),
@@ -37,5 +39,14 @@ export async function restoreDefaultFooterAction() {
     ok: true as const,
     slots: defaultSlots,
     brand,
+    status: mediaSynchronizations.some(
+      (item) => item.status === "saved_with_media_sync_warning",
+    )
+      ? ("warning" as const)
+      : ("success" as const),
+    mediaSynchronization:
+      mediaSynchronizations.find(
+        (item) => item.status === "saved_with_media_sync_warning",
+      ) ?? mediaSynchronizations[0],
   };
 }

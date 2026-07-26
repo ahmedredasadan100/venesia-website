@@ -5,16 +5,22 @@ import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
-import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
+import { coordinateMediaReferenceEntityMutation } from "../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../lib/admin/media-catalog/write-lease";
 import { setMaintenanceModeSetting } from "../../../../lib/maintenance/site-settings";
 import {
   parseAdminCompanyIdentity,
+  revalidateAdminCompanyConfig,
   saveAdminCompanyConfig,
 } from "../../../../lib/admin/shell/company-config";
 
 export type AdminCompanyActionState = {
-  status: "idle" | "success" | "error";
+  status: "idle" | "success" | "warning" | "error";
   message: string;
+  code?: string;
 };
 
 export const ADMIN_COMPANY_ACTION_INITIAL: AdminCompanyActionState = {
@@ -32,7 +38,7 @@ export async function updateAdminCompanyAction(
   formData: FormData,
 ): Promise<AdminCompanyActionState> {
   try {
-    await requireAdminSession();
+    const adminUser = await requireAdminSession();
     const candidate = {
       key: formString(formData, "key"),
       name: formString(formData, "name"),
@@ -53,8 +59,16 @@ export async function updateAdminCompanyAction(
       };
     }
 
-    await saveAdminCompanyConfig(parsed.data);
-    await synchronizeMediaReferencesAfterDomainMutation("site_settings", "admin.company");
+    const coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "site_settings",
+      leaseEntityIdentity: "admin.company",
+      intendedRow: { key: "admin.company", value: parsed.data },
+      actorId: adminUser.id,
+      requestIdentity: `site_settings:admin.company:update:${crypto.randomUUID()}`,
+      mutate: () => saveAdminCompanyConfig(parsed.data),
+      resolveEntityIdentity: () => "admin.company",
+    });
+    revalidateAdminCompanyConfig();
     await recordCmsAdminAudit({
       action: buildCmsAuditAction("site_settings", "update"),
       entityType: "site_settings",
@@ -62,11 +76,24 @@ export async function updateAdminCompanyAction(
       metadata: { companyKey: parsed.data.key },
     });
     revalidatePath("/admin", "layout");
+    if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
+      return {
+        status: "warning",
+        code: "saved_with_media_sync_warning",
+        message:
+          "تم حفظ هوية لوحة الإدارة، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا.",
+      };
+    }
     return { status: "success", message: "تم حفظ هوية لوحة الإدارة." };
   } catch (error) {
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "تعذر حفظ الهوية.",
+      message:
+        error instanceof MediaReferenceWriteLeaseError
+          ? getMediaReferenceWriteLeaseUserMessage(error.code)
+          : error instanceof Error
+            ? error.message
+            : "تعذر حفظ الهوية.",
     };
   }
 }

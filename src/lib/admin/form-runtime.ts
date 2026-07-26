@@ -1,7 +1,7 @@
 export type AdminFormMode = "create" | "edit";
 
 export type AdminFormActionState<TResult = unknown> = {
-  status: "idle" | "error" | "success";
+  status: "idle" | "error" | "warning" | "success";
   mode: AdminFormMode;
   revision: number;
   message?: string;

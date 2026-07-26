@@ -8,7 +8,6 @@ import {
 import { getSupabaseAdmin } from "../supabase-admin";
 import { MEDIA_CENTER_PUBLIC_PATHS } from "../media-center-page-config";
 import { normalizePath } from "../seo/seo-utils";
-import { synchronizeMediaReferenceProvidersAfterMutation } from "../admin/media-catalog/synchronization";
 
 import { ALL_ASSIGNMENT_TABLES } from "./block-module-registry";
 
@@ -73,17 +72,6 @@ export async function revalidatePublicPagesWithBlockAssignments() {
 }
 
 export async function revalidateBlockModulePaths(modulePath: string) {
-  const mediaProviderByModule: Record<string, string> = {
-    content: "content_block_templates",
-    cta: "cta_block_templates",
-    cards: "cards_block_templates",
-    breadcrumb: "breadcrumb_block_templates",
-    feed: "feed_module_templates",
-    "media-sidebar": "media_sidebar_module_templates",
-    "media-hub": "media_hub_module_templates",
-  };
-  const mediaProvider = mediaProviderByModule[modulePath];
-  if (mediaProvider) await synchronizeMediaReferenceProvidersAfterMutation(mediaProvider);
   revalidatePath("/admin/pages-blocks/pages", "layout");
   revalidateBlockModuleCache(modulePath);
   await revalidatePublicPagesWithBlockAssignments();

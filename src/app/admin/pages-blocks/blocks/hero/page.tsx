@@ -1,6 +1,10 @@
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import HeroManagerClient from "./HeroManagerClient";
 
+type PageProps = {
+  searchParams?: Promise<{ notice?: string }> | { notice?: string };
+};
+
 type HeroRow = {
   id: number;
   name: string;
@@ -14,7 +18,8 @@ type HeroRow = {
   }>;
 };
 
-export default async function HeroesManagerPage() {
+export default async function HeroesManagerPage({ searchParams }: PageProps) {
+  const resolvedSearch = searchParams ? await searchParams : {};
   const { data, error } = await getSupabaseAdmin()
     .from("hero_templates")
     .select("id,name,slug,description,is_visible,hero_assignments(id,path,is_active)")
@@ -29,5 +34,12 @@ export default async function HeroesManagerPage() {
     );
   }
 
-  return <HeroManagerClient heroes={(data ?? []) as HeroRow[]} />;
+  return (
+    <HeroManagerClient
+      heroes={(data ?? []) as HeroRow[]}
+      mediaSynchronizationWarning={
+        resolvedSearch.notice === "saved_with_media_sync_warning"
+      }
+    />
+  );
 }

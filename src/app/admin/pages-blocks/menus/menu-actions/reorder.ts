@@ -2,7 +2,7 @@
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { auditMenuAction, backToMenu, getNumber, revalidateNavigation } from "./helpers";
+import { auditMenuAction, backToMenu, getNumber, navigationMutationMessage, revalidateNavigation } from "./helpers";
 
 export async function moveMenuItemSortOrder(formData: FormData) {
   await requireAdminSession();
@@ -45,6 +45,6 @@ export async function moveMenuItemSortOrder(formData: FormData) {
     entityId: currentId,
     metadata: { menu_id: menuId, target_id: targetId },
   });
-  await revalidateNavigation();
-  backToMenu(menuId, "تم تحديث ترتيب العنصر.");
+  const mediaSynchronization = await revalidateNavigation();
+  backToMenu(menuId, navigationMutationMessage(mediaSynchronization, "تم تحديث ترتيب العنصر."));
 }

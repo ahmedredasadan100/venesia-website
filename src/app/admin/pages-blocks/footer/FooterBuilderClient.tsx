@@ -64,6 +64,7 @@ export default function FooterBuilderClient({
   );
 
   const [message, setMessage] = useState<string | null>(saved ? "تم حفظ إعدادات الفوتر بنجاح." : null);
+  const [messageWarning, setMessageWarning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -95,6 +96,7 @@ export default function FooterBuilderClient({
 
   function resetAlerts() {
     setMessage(null);
+    setMessageWarning(false);
     setError(null);
   }
 
@@ -102,13 +104,19 @@ export default function FooterBuilderClient({
     resetAlerts();
     startTransition(async () => {
       try {
-        await saveFooterBuilderAction({
+        const result = await saveFooterBuilderAction({
           slots: normalizeSlotsForSave(slots),
           contactItems,
           socialLinks,
           legal,
         });
-        setMessage("تم حفظ إعدادات الفوتر بنجاح.");
+        const warning = result.status === "warning";
+        setMessageWarning(warning);
+        setMessage(
+          warning
+            ? "تم حفظ إعدادات الفوتر، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا."
+            : "تم حفظ إعدادات الفوتر بنجاح.",
+        );
         router.refresh();
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : "تعذر حفظ إعدادات الفوتر.");
@@ -123,7 +131,13 @@ export default function FooterBuilderClient({
         const result = await restoreDefaultFooterAction();
         setSlots(structuredClone(result.slots.slots));
         setRestoreOpen(false);
-        setMessage("تمت استعادة تخطيط الفوتر الافتراضي بنجاح.");
+        const warning = result.status === "warning";
+        setMessageWarning(warning);
+        setMessage(
+          warning
+            ? "تمت استعادة التخطيط، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا."
+            : "تمت استعادة تخطيط الفوتر الافتراضي بنجاح.",
+        );
       } catch (restoreError) {
         setError(restoreError instanceof Error ? restoreError.message : "تعذر استعادة الفوتر الافتراضي.");
       }
@@ -233,7 +247,13 @@ export default function FooterBuilderClient({
       ) : null}
 
       {message ? (
-        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+        <div
+          className={
+            messageWarning
+              ? "rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+              : "rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
+          }
+        >
           {message}
         </div>
       ) : null}

@@ -32,6 +32,8 @@ assert(queries.includes("CHILD_LOAD_FAILED_AR") || queries.includes("تعذر ت
 assert(publicLoad.includes("floorPlansError"), "queryProjectBySlug must check child errors");
 assert(publicLoad.includes("throw new Error"), "public child failure must throw, not empty map");
 assert(sync.includes("plansError") && sync.includes("mediaError"), "sync pre-read must check errors");
+assert(!sync.includes("preserveImage"), "an explicitly cleared project child image must not fall back to the previous reference");
+assert(sync.includes('plan_image: (images[index] ?? "").trim()'), "floor-plan image removal must remain explicit in the Domain payload");
 assert(sync.includes("pre-read failed") || sync.includes("قبل الحفظ"), "sync must abort with clear message");
 assert(validation.includes("mediaError") || validation.includes("floorPlansError"), "publish input must check child errors");
 assert(validation.includes("throw new Error"), "publish load failure must not count as zero");

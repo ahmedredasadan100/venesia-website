@@ -1,0 +1,443 @@
+{
+  "schemaVersion": 1,
+  "capability": "media_reference_write_coordination",
+  "globalClosure": false,
+  "classifications": [
+    "adopted",
+    "neutral",
+    "explicit_exception",
+    "tooling_unadopted"
+  ],
+  "providerRegistry": [
+    { "domainKey": "topics", "table": "topics", "mediaFields": ["image", "excerpt", "content", "media_payload"] },
+    { "domainKey": "topic_categories", "table": "topic_categories", "mediaFields": ["image"] },
+    { "domainKey": "legacy_media_items", "table": "media_items", "mediaFields": ["image", "og_image", "content"] },
+    { "domainKey": "projects", "table": "projects", "mediaFields": ["image", "hero_image", "og_image", "district_image", "overview_video_image", "brochure_url"] },
+    { "domainKey": "project_media", "table": "project_media", "mediaFields": ["image"] },
+    { "domainKey": "project_floor_plans", "table": "project_floor_plans", "mediaFields": ["plan_image"] },
+    { "domainKey": "hero_templates", "table": "hero_templates", "mediaFields": ["config"] },
+    { "domainKey": "content_block_templates", "table": "content_block_templates", "mediaFields": ["config"] },
+    { "domainKey": "cta_block_templates", "table": "cta_block_templates", "mediaFields": ["config"] },
+    { "domainKey": "cards_block_templates", "table": "cards_block_templates", "mediaFields": ["config"] },
+    { "domainKey": "breadcrumb_block_templates", "table": "breadcrumb_block_templates", "mediaFields": ["config"] },
+    { "domainKey": "feed_module_templates", "table": "feed_module_templates", "mediaFields": ["config"] },
+    { "domainKey": "media_sidebar_module_templates", "table": "media_sidebar_module_templates", "mediaFields": ["config"] },
+    { "domainKey": "media_hub_module_templates", "table": "media_hub_module_templates", "mediaFields": ["config"] },
+    { "domainKey": "page_sections", "table": "page_sections", "mediaFields": ["config"] },
+    { "domainKey": "menu_items", "table": "menu_items", "mediaFields": ["href"] },
+    { "domainKey": "site_settings", "table": "site_settings", "mediaFields": ["value"] }
+  ],
+  "owners": [
+    {
+      "id": "topic-domain-writes",
+      "classification": "adopted",
+      "tables": ["topics"],
+      "mediaFields": ["topics.image", "topics.excerpt", "topics.content", "topics.media_payload"],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/content/topics/actions.ts",
+        "src/app/admin/content/topics/article-actions/save.ts",
+        "src/app/admin/content/topics/media-actions/create.ts",
+        "src/app/admin/content/topics/media-actions/update.ts"
+      ],
+      "rationale": "Topic create, update, and duplicate paths acquire a write lease from the provider-owned intended row before the Domain commit and synchronize under that lease."
+    },
+    {
+      "id": "taxonomy-media-neutral-writes",
+      "classification": "neutral",
+      "tables": ["topic_categories", "topics"],
+      "mediaFields": ["topic_categories.image"],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": [
+        "src/app/admin/content/categories/actions.ts",
+        "src/app/admin/content/taxonomy-form-actions.ts",
+        "src/app/admin/content/series/actions.ts"
+      ],
+      "rationale": "These commands change taxonomy state or create deliberately media-empty category records; they do not introduce or replace a registered provider value."
+    },
+    {
+      "id": "taxonomy-category-removal-command",
+      "classification": "explicit_exception",
+      "tables": ["topic_categories"],
+      "mediaFields": ["topic_categories.image"],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "requiresExplicitEmptyCleanup": true,
+      "sourceFiles": ["src/app/admin/content/categories/actions.ts"],
+      "rationale": "Category deletion is removal-only and atomic; after the committed delete it proves an explicit-empty entity synchronization and surfaces any failure as a structured warning."
+    },
+    {
+      "id": "project-domain-writes",
+      "classification": "adopted",
+      "tables": ["projects", "project_media", "project_floor_plans"],
+      "mediaFields": ["projects.image", "projects.hero_image", "projects.og_image", "projects.district_image", "projects.overview_video_image", "projects.brochure_url", "project_media.image", "project_floor_plans.plan_image"],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/projects/project-actions/update.ts",
+        "src/app/admin/projects/project-actions/duplicate.ts",
+        "src/lib/admin/projects/project-children-sync.ts"
+      ],
+      "rationale": "Project aggregate update and duplicate coordinate the intended parent and child provider scopes as one write operation."
+    },
+    {
+      "id": "project-media-empty-create",
+      "classification": "neutral",
+      "tables": ["projects"],
+      "mediaFields": ["projects.image", "projects.hero_image", "projects.og_image", "projects.district_image", "projects.overview_video_image", "projects.brochure_url"],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": ["src/app/admin/projects/project-actions/create.ts"],
+      "rationale": "Create writes a new project whose provider-owned media fields are all explicitly empty, so it cannot introduce a managed asset reference."
+    },
+    {
+      "id": "project-reference-neutral-commands",
+      "classification": "neutral",
+      "tables": ["projects"],
+      "mediaFields": [],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": [
+        "src/app/admin/projects/project-actions/bulk.ts",
+        "src/app/admin/projects/project-actions/status.ts"
+      ],
+      "rationale": "Status and bulk commands do not alter provider-owned media fields."
+    },
+    {
+      "id": "project-removal-command",
+      "classification": "explicit_exception",
+      "tables": ["projects"],
+      "mediaFields": [],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": ["src/app/admin/projects/project-actions/delete.ts"],
+      "rationale": "Domain deletion is removal-only; it captures parent and child identities before deletion and then proves explicit-empty entity synchronization for each removed provider row."
+    },
+    {
+      "id": "block-template-domain-writes",
+      "classification": "adopted",
+      "tables": [
+        "hero_templates",
+        "content_block_templates",
+        "cta_block_templates",
+        "cards_block_templates",
+        "breadcrumb_block_templates",
+        "feed_module_templates"
+      ],
+      "mediaFields": ["hero_templates.config", "content_block_templates.config", "cta_block_templates.config", "cards_block_templates.config", "breadcrumb_block_templates.config", "feed_module_templates.config"],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/blocks/hero/actions.ts",
+        "src/app/admin/pages-blocks/blocks/content/actions.ts",
+        "src/app/admin/pages-blocks/blocks/cta/actions.ts",
+        "src/app/admin/pages-blocks/blocks/cards/actions.ts",
+        "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
+        "src/app/admin/pages-blocks/blocks/feed/actions.ts"
+      ],
+      "rationale": "Template create, update, and duplicate commands derive write scopes from the final config and coordinate reference synchronization; status-only branches are reference-neutral."
+    },
+    {
+      "id": "block-template-removal-commands",
+      "classification": "explicit_exception",
+      "tables": [
+        "hero_templates",
+        "content_block_templates",
+        "cta_block_templates",
+        "cards_block_templates",
+        "breadcrumb_block_templates",
+        "feed_module_templates"
+      ],
+      "mediaFields": [],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "requiresExplicitEmptyCleanup": true,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/blocks/hero/actions.ts",
+        "src/app/admin/pages-blocks/blocks/content/actions.ts",
+        "src/app/admin/pages-blocks/blocks/cta/actions.ts",
+        "src/app/admin/pages-blocks/blocks/cards/actions.ts",
+        "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
+        "src/app/admin/pages-blocks/blocks/feed/actions.ts"
+      ],
+      "mutationPaths": [
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/hero/actions.ts", "exportName": "deleteHeroTemplate", "domainKey": "hero_templates", "contract": "explicit_empty_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/hero/actions.ts", "exportName": "bulkHeroTemplates", "domainKey": "hero_templates", "contract": "explicit_empty_bulk_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/content/actions.ts", "exportName": "deleteContentBlock", "domainKey": "content_block_templates", "contract": "explicit_empty_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/content/actions.ts", "exportName": "bulkContentBlocks", "domainKey": "content_block_templates", "contract": "explicit_empty_bulk_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/cta/actions.ts", "exportName": "deleteCtaBlock", "domainKey": "cta_block_templates", "contract": "explicit_empty_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/cta/actions.ts", "exportName": "bulkCtaBlocks", "domainKey": "cta_block_templates", "contract": "explicit_empty_bulk_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/cards/actions.ts", "exportName": "deleteCardsBlock", "domainKey": "cards_block_templates", "contract": "explicit_empty_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/cards/actions.ts", "exportName": "bulkCardsBlocks", "domainKey": "cards_block_templates", "contract": "explicit_empty_bulk_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts", "exportName": "deleteBreadcrumbBlock", "domainKey": "breadcrumb_block_templates", "contract": "explicit_empty_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts", "exportName": "bulkBreadcrumbBlocks", "domainKey": "breadcrumb_block_templates", "contract": "explicit_empty_bulk_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/feed/actions.ts", "exportName": "deleteFeedModule", "domainKey": "feed_module_templates", "contract": "explicit_empty_delete" },
+        { "sourceFile": "src/app/admin/pages-blocks/blocks/feed/actions.ts", "exportName": "bulkFeedModules", "domainKey": "feed_module_templates", "contract": "explicit_empty_bulk_delete" }
+      ],
+      "rationale": "Single and bulk removal commands capture provider identities before one atomic Domain delete, then perform retry-safe entity-scoped explicit-empty cleanup for every requested identity without a write lease; the shared cleanup owner marks non-empty or failed proof uncertain and each action surfaces a structured post-commit warning."
+    },
+    {
+      "id": "media-module-template-writes",
+      "classification": "adopted",
+      "tables": ["media_sidebar_module_templates", "media_hub_module_templates"],
+      "mediaFields": ["media_sidebar_module_templates.config", "media_hub_module_templates.config"],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/blocks/media-sidebar/actions.ts",
+        "src/app/admin/pages-blocks/blocks/media-hub/actions.ts"
+      ],
+      "rationale": "Media Hub and Media Sidebar template updates derive a write scope from the complete intended config and synchronize the final entity under the lease."
+    },
+    {
+      "id": "assigned-template-duplicate",
+      "classification": "adopted",
+      "tables": [
+        "hero_templates",
+        "content_block_templates",
+        "cta_block_templates",
+        "cards_block_templates",
+        "breadcrumb_block_templates",
+        "feed_module_templates",
+        "media_sidebar_module_templates",
+        "media_hub_module_templates"
+      ],
+      "mediaFields": [
+        "hero_templates.config",
+        "content_block_templates.config",
+        "cta_block_templates.config",
+        "cards_block_templates.config",
+        "breadcrumb_block_templates.config",
+        "feed_module_templates.config",
+        "media_sidebar_module_templates.config",
+        "media_hub_module_templates.config"
+      ],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": ["src/app/admin/pages-blocks/pages/page-actions/assignment-duplicate.ts"],
+      "rationale": "Duplicating any assigned media-capable template coordinates its complete copied config before insertion, then synchronizes the final template identity."
+    },
+    {
+      "id": "menu-item-media-writes",
+      "classification": "adopted",
+      "tables": ["menu_items"],
+      "mediaFields": ["menu_items.href"],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/menus/menu-actions/duplicate.ts",
+        "src/app/admin/pages-blocks/menus/menu-actions/import.ts",
+        "src/app/admin/pages-blocks/menus/menu-actions/items-save.ts"
+      ],
+      "rationale": "Menu item save, duplicate, and import coordinate managed href values at the menu-item entity boundary."
+    },
+    {
+      "id": "menu-reference-neutral-commands",
+      "classification": "neutral",
+      "tables": ["menu_items"],
+      "mediaFields": [],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/menus/menu-actions/bulk.ts",
+        "src/app/admin/pages-blocks/menus/menu-actions/items-status.ts",
+        "src/app/admin/pages-blocks/menus/menu-actions/reorder.ts"
+      ],
+      "rationale": "Visibility, status, and ordering commands do not alter href values."
+    },
+    {
+      "id": "menu-removal-commands",
+      "classification": "explicit_exception",
+      "tables": ["menu_items"],
+      "mediaFields": ["menu_items.href"],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "requiresExplicitEmptyCleanup": true,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/menus/menu-actions/bulk.ts",
+        "src/app/admin/pages-blocks/menus/menu-actions/delete.ts",
+        "src/app/admin/pages-blocks/menus/menu-actions/items-delete.ts"
+      ],
+      "rationale": "Menu and menu-item deletion capture every cascaded entity identity before the atomic Domain delete, then prove explicit-empty entity synchronization and surface any partial cleanup failure as a structured warning."
+    },
+    {
+      "id": "footer-setting-writes",
+      "classification": "adopted",
+      "tables": ["site_settings"],
+      "mediaFields": ["site_settings.value"],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/footer/footer-actions/helpers.ts",
+        "src/app/admin/pages-blocks/footer/footer-actions/save.ts"
+      ],
+      "rationale": "The footer aggregate save coordinates all changed media-capable setting keys as one operation; the helper is only the lower-level persistence owner."
+    },
+    {
+      "id": "footer-default-restore",
+      "classification": "neutral",
+      "tables": ["site_settings"],
+      "mediaFields": ["site_settings.value"],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": ["src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts"],
+      "rationale": "The canonical defaults restored by this command contain no managed media assets."
+    },
+    {
+      "id": "company-and-seo-setting-writes",
+      "classification": "adopted",
+      "tables": ["site_settings"],
+      "mediaFields": ["site_settings.value"],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/settings/general/actions.ts",
+        "src/lib/admin/shell/company-config.ts",
+        "src/app/admin/seo/meta-manager/actions.ts"
+      ],
+      "rationale": "Company identity and global SEO actions coordinate their intended singleton setting values; company-config is the lower-level persistence owner."
+    },
+    {
+      "id": "non-media-site-settings",
+      "classification": "neutral",
+      "tables": ["site_settings"],
+      "mediaFields": [],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": ["src/lib/maintenance/site-settings.ts"],
+      "rationale": "Maintenance mode writes a boolean-only setting outside the media-bearing site-setting keys."
+    },
+    {
+      "id": "media-capability-internal-settings",
+      "classification": "explicit_exception",
+      "tables": ["site_settings"],
+      "mediaFields": [],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/lib/admin/media-catalog/catalog.ts",
+        "src/lib/admin/media-catalog/settings.ts"
+      ],
+      "rationale": "These files own media capability policy and reconciliation state records, not Domain-provided asset references."
+    },
+    {
+      "id": "legacy-read-only-providers",
+      "classification": "explicit_exception",
+      "tables": ["media_items", "page_sections"],
+      "mediaFields": ["media_items.image", "media_items.og_image", "media_items.content", "page_sections.config"],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": [],
+      "rationale": "Legacy media_items and page_sections remain discovery-only providers with no active Admin mutation owner."
+    },
+    {
+      "id": "guarded-static-project-reimport",
+      "classification": "explicit_exception",
+      "tables": ["projects", "project_media", "project_floor_plans"],
+      "mediaFields": ["projects.image", "projects.hero_image", "projects.og_image", "projects.district_image", "projects.overview_video_image", "projects.brochure_url", "project_media.image", "project_floor_plans.plan_image"],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": ["src/lib/projects/seed-from-static-data.ts"],
+      "rationale": "The legacy static reimport is environment-gated and remains outside daily Admin mutations; it is not evidence of global write-coordination closure."
+    },
+    {
+      "id": "media-special-sagas",
+      "classification": "explicit_exception",
+      "tables": [],
+      "mediaFields": [],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/lib/admin/media-catalog/safe-delete.ts",
+        "src/lib/admin/media-catalog/physical-move.ts",
+        "src/lib/admin/media-catalog/synchronization.ts"
+      ],
+      "rationale": "Catalog rebind/replace and physical move use dedicated Write Lease coordination, while safe delete uses its fail-closed reservation Saga; these are capability-owned workflows rather than daily Domain mutations."
+    },
+    {
+      "id": "tooling-direct-provider-writes",
+      "classification": "tooling_unadopted",
+      "tables": [
+        "topics",
+        "topic_categories",
+        "projects",
+        "project_media",
+        "project_floor_plans",
+        "hero_templates",
+        "content_block_templates",
+        "cta_block_templates",
+        "breadcrumb_block_templates",
+        "feed_module_templates",
+        "media_sidebar_module_templates",
+        "media_hub_module_templates",
+        "menu_items",
+        "site_settings"
+      ],
+      "mediaFields": ["provider-owned fields vary by script; see providerRegistry"],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": [
+        "scripts/about-stability-test.mjs",
+        "scripts/apply-footer-settings-seed.mjs",
+        "scripts/apply-footer-slots-migration.mjs",
+        "scripts/apply-home-contact-seed.mjs",
+        "scripts/apply-home-main-sort-order.mjs",
+        "scripts/apply-home-projects-seed.mjs",
+        "scripts/apply-maintenance-mode-seed.mjs",
+        "scripts/apply-media-center-hub-modules-seed.mjs",
+        "scripts/apply-media-center-listing-modules-seed.mjs",
+        "scripts/apply-media-center-sidebar-modules-seed.mjs",
+        "scripts/apply-pre-launch-data-fixes.mjs",
+        "scripts/apply-track-your-project-seed.mjs",
+        "scripts/cleanup-e2e-test-data.mjs",
+        "scripts/e2e-topics-feed-test.mjs",
+        "scripts/fix-project-image-paths.mjs",
+        "scripts/footer-slots-fallback-test.mjs",
+        "scripts/home-hero-stabilization-test.mjs",
+        "scripts/home-projects-stabilization-test.mjs",
+        "scripts/media-center-admin-public-e2e.mjs",
+        "scripts/media-center-hub-modules-test.mjs",
+        "scripts/media-center-listing-blocks-test.mjs",
+        "scripts/media-center-sidebar-modules-test.mjs",
+        "scripts/projects-single-source-test.mjs",
+        "scripts/qa-admin-content-soft-delete-counts.mjs",
+        "scripts/qa-admin-data-engine-browser-corrections.mjs",
+        "scripts/qa-admin-data-engine-corrections.mjs",
+        "scripts/qa-admin-entity-list-consumers.mjs",
+        "scripts/qa-media-recovery-browser.mts",
+        "scripts/qa-production-media-storage.mjs",
+        "scripts/qa-topics-feedback-system.mjs",
+        "scripts/qa-topics-inline-notice.mjs",
+        "scripts/qa-topics-list-reference.mjs",
+        "scripts/verify-about-hero-independence.mjs",
+        "scripts/verify-unified-content-engine.mjs"
+      ],
+      "rationale": "Historical seed, repair, and QA tooling can write provider tables directly. It is intentionally visible debt and keeps global Media write-coordination closure false until each tool is retired or hardened."
+    }
+  ]
+}

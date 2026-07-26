@@ -1,6 +1,11 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  synchronizeMediaReferenceWriteScopesAfterDomainMutation,
+  type MediaReferenceSynchronizationResult,
+} from "../../../../../lib/admin/media-catalog/synchronization";
 
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
@@ -54,34 +59,47 @@ async function ensureUniqueSlug(slug: string, id?: number) {
 }
 
 export async function createFeedModule(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
   if (!name || !slug) throw new Error("اسم الموديول والـ slug مطلوبين.");
   if (!(await ensureUniqueSlug(slug))) throw new Error("الـ slug مستخدم بالفعل.");
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("feed_module_templates")
-    .insert({
-      name,
-      slug,
-      description: cleanText(formData.get("description")) || null,
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
-      feed_type: readFeedType(formData.get("feed_type")),
-      config: await sanitizeFeedModuleConfig(formData),
-    })
-    .select("id")
-    .single();
-
-  if (error) throw new Error(error.message);
+  const nextRow = {
+    name,
+    slug,
+    description: cleanText(formData.get("description")) || null,
+    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    feed_type: readFeedType(formData.get("feed_type")),
+    config: await sanitizeFeedModuleConfig(formData),
+  };
+  const provisionalIdentity = `create:${crypto.randomUUID()}`;
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "feed_module_templates",
+    leaseEntityIdentity: provisionalIdentity,
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `feed-module:create:${provisionalIdentity}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("feed_module_templates")
+        .insert(nextRow)
+        .select("id")
+        .single<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "Unable to create feed module.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
+  const data = coordinated.value;
 
   await revalidateBlockModulePaths("feed");
-  redirect(`/admin/pages-blocks/blocks/feed/${data.id}`);
+  redirect(`/admin/pages-blocks/blocks/feed/${data.id}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "?notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function updateFeedModule(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
@@ -89,25 +107,38 @@ export async function updateFeedModule(formData: FormData) {
   if (!id || !name || !slug) throw new Error("بيانات الموديول غير مكتملة.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
 
-  const { error } = await getSupabaseAdmin()
-    .from("feed_module_templates")
-    .update({
-      name,
-      slug,
-      description: cleanText(formData.get("description")) || null,
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
-      feed_type: readFeedType(formData.get("feed_type")),
-      config: await sanitizeFeedModuleConfig(formData),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) throw new Error(error.message);
+  const nextRow = {
+    name,
+    slug,
+    description: cleanText(formData.get("description")) || null,
+    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    feed_type: readFeedType(formData.get("feed_type")),
+    config: await sanitizeFeedModuleConfig(formData),
+    updated_at: new Date().toISOString(),
+  };
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "feed_module_templates",
+    leaseEntityIdentity: String(id),
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `feed-module:update:${id}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("feed_module_templates")
+        .update(nextRow)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "Unable to update feed module.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
 
   await syncBlockModulePageAssignments("feed", id, parsePageIdsFromForm(formData));
   await revalidateBlockModulePaths("feed");
   revalidatePath(`/admin/pages-blocks/blocks/feed/${id}`, "page");
-  redirect(`/admin/pages-blocks/blocks/feed/${id}?saved=1`);
+  redirect(`/admin/pages-blocks/blocks/feed/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function toggleFeedModuleStatus(formData: FormData) {
@@ -130,14 +161,38 @@ export async function deleteFeedModule(formData: FormData) {
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف الموديول مفقود.");
 
-  const { error } = await getSupabaseAdmin().from("feed_module_templates").delete().eq("id", id);
+  const { data: existing, error: lookupError } = await getSupabaseAdmin()
+    .from("feed_module_templates")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle<{ id: number }>();
+  if (lookupError) throw new Error(lookupError.message);
+  const cleanupIdentity = existing?.id ?? id;
+
+  const { error } = await getSupabaseAdmin()
+    .from("feed_module_templates")
+    .delete()
+    .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+    [],
+    null,
+    [{ domainKey: "feed_module_templates", entityIdentity: cleanupIdentity }],
+  );
+  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
+    try {
+      await revalidateBlockModulePaths("feed");
+    } catch (revalidationError) {
+      console.error("Feed module delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
+    }
+    redirect("/admin/pages-blocks/blocks/feed?notice=saved_with_media_sync_warning");
+  }
   await revalidateBlockModulePaths("feed");
 }
 
 export async function duplicateFeedModule(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف الموديول مفقود.");
 
@@ -149,7 +204,7 @@ export async function duplicateFeedModule(formData: FormData) {
 
   if (error || !source) throw new Error(error?.message || "الموديول غير موجود.");
 
-  const { error: insertError } = await getSupabaseAdmin().from("feed_module_templates").insert({
+  const nextRow = {
     name: `${source.name} - نسخة`,
     slug: `${source.slug}-copy-${Date.now()}`,
     description: source.description,
@@ -157,10 +212,29 @@ export async function duplicateFeedModule(formData: FormData) {
     feed_type: source.feed_type,
     config: source.config,
     sort_order: (source.sort_order ?? 0) + 1,
+  };
+  const provisionalIdentity = `duplicate:${id}:${crypto.randomUUID()}`;
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "feed_module_templates",
+    leaseEntityIdentity: provisionalIdentity,
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `feed-module:duplicate:${id}`,
+    mutate: async () => {
+      const { data, error: insertError } = await getSupabaseAdmin()
+        .from("feed_module_templates")
+        .insert(nextRow)
+        .select("id")
+        .single<{ id: number }>();
+      if (insertError || !data) throw new Error(insertError?.message ?? "Unable to duplicate feed module.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
   });
-
-  if (insertError) throw new Error(insertError.message);
   await revalidateBlockModulePaths("feed");
+  if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
+    redirect("/admin/pages-blocks/blocks/feed?notice=saved_with_media_sync_warning");
+  }
 }
 
 export async function bulkFeedModules(formData: FormData) {
@@ -185,10 +259,39 @@ export async function bulkFeedModules(formData: FormData) {
     if (error) throw new Error(error.message);
   }
 
+  let mediaSynchronization: MediaReferenceSynchronizationResult | null = null;
   if (action === "delete") {
-    const { error } = await getSupabaseAdmin().from("feed_module_templates").delete().in("id", ids);
+    const { data: existingRows, error: lookupError } = await getSupabaseAdmin()
+      .from("feed_module_templates")
+      .select("id")
+      .in("id", ids);
+    if (lookupError) throw new Error(lookupError.message);
+
+    const capturedIds = (existingRows ?? []).map((row) => Number(row.id));
+    const cleanupIds = [...new Set([...capturedIds, ...ids])];
+    const { error } = await getSupabaseAdmin()
+      .from("feed_module_templates")
+      .delete()
+      .in("id", cleanupIds);
     if (error) throw new Error(error.message);
+
+    mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+      [],
+      null,
+      cleanupIds.map((cleanupId) => ({
+        domainKey: "feed_module_templates",
+        entityIdentity: cleanupId,
+      })),
+    );
   }
 
+  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
+    try {
+      await revalidateBlockModulePaths("feed");
+    } catch (revalidationError) {
+      console.error("Feed module bulk delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
+    }
+    redirect("/admin/pages-blocks/blocks/feed?notice=saved_with_media_sync_warning");
+  }
   await revalidateBlockModulePaths("feed");
 }

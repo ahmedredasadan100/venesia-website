@@ -6,7 +6,6 @@ import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import { getProjectPublishValidationError } from "../../../../lib/admin/projects/project-publish-validation";
 import type { ProjectCategory } from "../../../../config/projects-data";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
-import { synchronizeProjectMediaReferencesAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import type { PublicationStatus } from "./types";
 import { loadProjectPublishInput } from "./validation";
 import { revalidateProjectPathsById } from "./revalidate";
@@ -55,7 +54,6 @@ export async function toggleProjectPublicationAjax(id: number, currentStatus: st
     entityId: id,
     metadata: { publication_status: nextStatus },
   });
-  await synchronizeProjectMediaReferencesAfterMutation(id);
   revalidateProjectPathsById(data.type, id);
   return {
     ok: true as const,
@@ -89,7 +87,6 @@ export async function archiveProjectAjax(id: number) {
     entityId: id,
     metadata: { publication_status: "archived" },
   });
-  await synchronizeProjectMediaReferencesAfterMutation(id);
   revalidateProjectPathsById(data.type, id);
   return {
     ok: true as const,
@@ -120,7 +117,6 @@ export async function restoreProjectAjax(id: number) {
     entityId: id,
     metadata: { publication_status: "draft" },
   });
-  await synchronizeProjectMediaReferencesAfterMutation(id);
   revalidateProjectPathsById(data.type, id);
   return {
     ok: true as const,

@@ -43,6 +43,7 @@ type HeroEditClientProps = {
   sourceOptions: [string, string][];
   variantOptions: [string, string][];
   saved?: boolean;
+  mediaSynchronizationWarning?: boolean;
   assignmentContext: ModuleAssignmentContext;
 };
 
@@ -56,6 +57,7 @@ export default function HeroEditClient({
   sourceOptions,
   variantOptions,
   saved,
+  mediaSynchronizationWarning = false,
   assignmentContext,
 }: HeroEditClientProps) {
   const primaryCtaLink = legacyHrefFromConfig(config, "primaryCtaLink", "primaryCtaHref");
@@ -264,7 +266,14 @@ export default function HeroEditClient({
         }
       />
 
-      {saved ? <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." /> : null}
+      {mediaSynchronizationWarning ? (
+        <AdminNotice
+          variant="warning"
+          message="تم حفظ بيانات الموديول، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
+        />
+      ) : saved ? (
+        <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
+      ) : null}
 
       <ModuleCrossPageUsageBanner moduleName={hero.name} assignments={assignmentContext.assignments} />
 

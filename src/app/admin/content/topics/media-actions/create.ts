@@ -4,7 +4,11 @@ import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
-import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
+import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../../lib/admin/media-catalog/write-lease";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   isMediaEditableContentType,
@@ -69,31 +73,53 @@ export async function createMediaContent(formData: FormData) {
   if (payload.seriesId && !series) redirectFormError(formPath, "السلسلة المختارة غير موجودة أو غير مفعلة.");
 
   const now = new Date().toISOString();
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .insert({
-      ...buildMediaWritePayload(
-        payload,
-        section.category,
-        section.contentType,
-        writePayload.mediaPayload,
-        now,
-        null,
-        series,
-      ),
-      created_at: now,
-      created_by: actor.id,
-      updated_by: actor.id,
-      published_by: payload.status === "published" ? actor.id : null,
-    })
-    .select("id")
-    .single<{ id: number }>();
-
-  if (error || !data) {
-    redirectFormError(formPath, error?.message || "تعذر إنشاء المحتوى.");
+  const domainPayload = buildMediaWritePayload(
+    payload,
+    section.category,
+    section.contentType,
+    writePayload.mediaPayload,
+    now,
+    null,
+    series,
+  );
+  const leaseEntityIdentity = `create:${crypto.randomUUID()}`;
+  let coordinated;
+  try {
+    coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "topics",
+      leaseEntityIdentity,
+      intendedRow: domainPayload,
+      actorId: actor.id,
+      requestIdentity: `media-topic:create:${leaseEntityIdentity}`,
+      mutate: async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from("topics")
+          .insert({
+            ...domainPayload,
+            created_at: now,
+            created_by: actor.id,
+            updated_by: actor.id,
+            published_by: payload.status === "published" ? actor.id : null,
+          })
+          .select("id")
+          .single<{ id: number }>();
+        if (error || !data) throw new Error(error?.message || "تعذر إنشاء المحتوى.");
+        return data;
+      },
+      resolveEntityIdentity: (value) => String(value.id),
+    });
+  } catch (error) {
+    redirectFormError(
+      formPath,
+      error instanceof MediaReferenceWriteLeaseError
+        ? getMediaReferenceWriteLeaseUserMessage(error.code)
+        : error instanceof Error
+          ? error.message
+          : "تعذر إنشاء المحتوى.",
+    );
   }
-
-  await synchronizeMediaReferencesAfterDomainMutation("topics", data.id);
+  const data = coordinated.value;
+  const mediaSynchronization = coordinated.mediaSynchronization;
   revalidateMediaContentPaths(data.id);
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic", payload.status === "published" ? "publish" : "create"),
@@ -102,5 +128,11 @@ export async function createMediaContent(formData: FormData) {
     entityLabel: payload.title,
     metadata: { slug: payload.slug, content_type: section.contentType, status: payload.status },
   });
-  redirect(`/admin/content/topics/${data.id}?notice=created`);
+  redirect(
+    `/admin/content/topics/${data.id}?notice=${
+      mediaSynchronization.status === "saved_with_media_sync_warning"
+        ? "saved_with_media_sync_warning"
+        : "created"
+    }`,
+  );
 }

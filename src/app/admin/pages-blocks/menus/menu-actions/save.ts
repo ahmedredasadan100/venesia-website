@@ -11,6 +11,7 @@ import {
   getBoolean,
   getNumber,
   getString,
+  navigationMutationMessage,
   revalidateNavigation,
 } from "./helpers";
 
@@ -34,8 +35,8 @@ export async function createMenu(formData: FormData) {
 
   if (error) backToMenus(error.message);
   await auditMenuAction("menu", "create", { entityId: data.id, entityLabel: name, metadata: { slug, location } });
-  await revalidateNavigation();
-  backToMenu(data.id, "تم إنشاء القائمة. ابدأ بإضافة عناصرها.");
+  const mediaSynchronization = await revalidateNavigation();
+  backToMenu(data.id, navigationMutationMessage(mediaSynchronization, "تم إنشاء القائمة. ابدأ بإضافة عناصرها."));
 }
 
 export async function updateMenu(formData: FormData) {
@@ -58,6 +59,6 @@ export async function updateMenu(formData: FormData) {
 
   if (error) backToMenus(error.message);
   await auditMenuAction("menu", "update", { entityId: id, entityLabel: name, metadata: { slug, location } });
-  await revalidateNavigation();
-  backToMenus("تم تحديث القائمة.");
+  const mediaSynchronization = await revalidateNavigation();
+  backToMenus(navigationMutationMessage(mediaSynchronization, "تم تحديث القائمة."));
 }

@@ -3,14 +3,26 @@
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
+import {
+  coordinateMediaReferenceDomainMutation,
+  MediaDomainMutationError,
+} from "../../../../lib/admin/media-catalog/domain-write-coordination";
+import { buildMediaReferenceWriteScope } from "../../../../lib/admin/media-catalog/reference-providers";
+import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../lib/admin/media-catalog/write-lease";
 import { getProjectPublishValidationError } from "../../../../lib/admin/projects/project-publish-validation";
-import { syncProjectChildren } from "../../../../lib/admin/projects/project-children-sync";
+import {
+  executePreparedProjectChildrenSync,
+  prepareProjectChildrenSync,
+} from "../../../../lib/admin/projects/project-children-sync";
 import type { ProjectCategory } from "../../../../config/projects-data";
 import { parseFormBoolean } from "../../../../lib/page-blocks/admin-utils";
 import type { ProjectRow, ProjectStatus } from "../../../../lib/projects/types";
 import { parseJsonArray } from "../../../../lib/projects/types";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
-import { synchronizeProjectMediaReferencesAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import {
   getAllStrings,
   getNumber,
@@ -18,6 +30,7 @@ import {
   getProjectStatus,
   getPublicationStatus,
   getString,
+  mediaSynchronizationNotice,
   parseQuickFacts,
   preserveBrochureUrl,
   preserveCategoryLabel,
@@ -32,7 +45,7 @@ import { loadProjectPublishInput } from "./validation";
 import { revalidateProjectPaths } from "./revalidate";
 
 export async function updateProject(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = getString(formData, "id");
   if (!validateId(id)) redirectEditWithError(Number(id) || 0, "معرف المشروع غير صالح.");
 
@@ -145,13 +158,70 @@ export async function updateProject(formData: FormData) {
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await getSupabaseAdmin().from("projects").update(payload).eq("id", numericId);
-  if (error) redirectEditWithError(numericId, error.message);
-
+  const operationIdentity = crypto.randomUUID();
+  let preparedChildren;
   try {
-    await syncProjectChildren(numericId, formData);
-  } catch (childError) {
-    const message = childError instanceof Error ? childError.message : "تعذر حفظ البيانات المرتبطة.";
+    preparedChildren = await prepareProjectChildrenSync(numericId, formData, operationIdentity);
+  } catch (preparationError) {
+    const message = preparationError instanceof Error
+      ? preparationError.message
+      : "تعذر تجهيز البيانات المرتبطة قبل الحفظ.";
+    redirectEditWithError(numericId, message);
+  }
+
+  let coordinated;
+  try {
+    coordinated = await coordinateMediaReferenceDomainMutation({
+      scopes: [
+        buildMediaReferenceWriteScope("projects", String(numericId), {
+          ...current,
+          ...payload,
+        }),
+        ...preparedChildren.scopes,
+      ],
+      actorId: actor.id,
+      requestIdentity: `project:update:${numericId}:${operationIdentity}`,
+      mutate: async () => {
+        const { data: updated, error } = await getSupabaseAdmin()
+          .from("projects")
+          .update(payload)
+          .eq("id", numericId)
+          .select("id")
+          .maybeSingle<{ id: number }>();
+        if (error || !updated) {
+          throw new Error(error?.message ?? "المشروع غير موجود.");
+        }
+        try {
+          return await executePreparedProjectChildrenSync(preparedChildren);
+        } catch (childError) {
+          throw new MediaDomainMutationError(
+            childError instanceof Error ? childError.message : "تعذر حفظ البيانات المرتبطة.",
+            true,
+            { cause: childError },
+          );
+        }
+      },
+      resolveEntityIdentity: () => String(numericId),
+      synchronize: ({ value, leaseToken }) =>
+        synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+          [
+            {
+              domainKey: "projects",
+              entityIdentity: numericId,
+              leaseEntityIdentity: String(numericId),
+            },
+            ...value.referenceTargets,
+          ],
+          leaseToken,
+          value.cleanupTargets,
+        ),
+    });
+  } catch (coordinationError) {
+    const message = coordinationError instanceof MediaReferenceWriteLeaseError
+      ? getMediaReferenceWriteLeaseUserMessage(coordinationError.code)
+      : coordinationError instanceof Error
+        ? coordinationError.message
+        : "تعذر حفظ المشروع.";
     redirectEditWithError(numericId, message);
   }
 
@@ -177,6 +247,8 @@ export async function updateProject(formData: FormData) {
       entityLabel: arabicName,
     });
   }
-  await synchronizeProjectMediaReferencesAfterMutation(numericId);
-  redirectEditWithNotice(numericId, "updated");
+  redirectEditWithNotice(
+    numericId,
+    mediaSynchronizationNotice(coordinated.mediaSynchronization) ?? "updated",
+  );
 }

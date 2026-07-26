@@ -54,7 +54,7 @@ export function getAdminFeedbackPolicy(kind: AdminActionFeedbackKind) {
 }
 
 export function mapAdminActionResultToFeedback(
-  result: Pick<AdminActionResult, "ok" | "title" | "message">,
+  result: Pick<AdminActionResult, "ok" | "feedbackStatus" | "title" | "message">,
   options: {
     kind?: AdminActionFeedbackKind;
     variant?: AdminFeedbackVariant;
@@ -63,7 +63,9 @@ export function mapAdminActionResultToFeedback(
 ): AdminActionFeedback {
   const kind = options.kind ?? (result.ok ? "transient_action" : "action_validation");
   return {
-    variant: options.variant ?? (result.ok ? "success" : "danger"),
+    variant:
+      options.variant ??
+      (result.feedbackStatus === "warning" ? "warning" : result.ok ? "success" : "danger"),
     title: result.title,
     message: result.message,
     ...feedbackKindDefaults[kind],

@@ -2,7 +2,7 @@
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { auditMenuAction, backToMenu, getBoolean, getMenuIdFromItem, getNumber, revalidateNavigation } from "./helpers";
+import { auditMenuAction, backToMenu, getBoolean, getMenuIdFromItem, getNumber, navigationMutationMessage, revalidateNavigation } from "./helpers";
 
 export async function toggleMenuItemVisibility(formData: FormData) {
   await requireAdminSession();
@@ -15,6 +15,6 @@ export async function toggleMenuItemVisibility(formData: FormData) {
   if (error) backToMenu(menuId, error.message);
 
   await auditMenuAction("menu_item", "update", { entityId: id, metadata: { menu_id: menuId, is_visible: isVisible } });
-  await revalidateNavigation();
-  backToMenu(menuId, "تم تغيير حالة العنصر.");
+  const mediaSynchronization = await revalidateNavigation();
+  backToMenu(menuId, navigationMutationMessage(mediaSynchronization, "تم تغيير حالة العنصر."));
 }

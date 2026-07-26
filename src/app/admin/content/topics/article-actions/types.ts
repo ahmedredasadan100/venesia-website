@@ -10,6 +10,7 @@ export type TopicRow = {
   content: string | null;
   image: string | null;
   image_alt: string | null;
+  media_payload?: unknown;
   show_title_on_page?: boolean | null;
   show_image_on_page?: boolean | null;
   show_excerpt_on_page?: boolean | null;

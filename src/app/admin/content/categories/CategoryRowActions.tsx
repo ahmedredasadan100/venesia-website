@@ -29,7 +29,11 @@ type CategoryRowActionsProps = {
   onDelete: (
     categoryId: number,
     transferToId: number | null,
-  ) => Promise<{ ok: boolean; message?: string }>;
+  ) => Promise<{
+    ok: boolean;
+    message?: string;
+    feedbackStatus?: "success" | "warning";
+  }>;
 };
 
 export default function CategoryRowActions({

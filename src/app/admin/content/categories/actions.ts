@@ -3,7 +3,6 @@
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
-import { synchronizeMediaReferenceProvidersAfterMutation } from "../../../../lib/admin/media-catalog/synchronization";
 
 import { revalidatePath } from "next/cache";
 import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
@@ -18,8 +17,10 @@ import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import {
   adminActionFailure,
   adminActionSuccess,
+  adminActionWarning,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
+import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import {
   getCategoryDeleteBlockMessage,
   loadCategoryDeleteDependencies,
@@ -30,7 +31,6 @@ import {
 } from "../../../../lib/admin/content/taxonomy-mutations";
 
 async function revalidateCategories() {
-  await synchronizeMediaReferenceProvidersAfterMutation("topic_categories");
   revalidateTopicsCache();
   revalidatePath("/admin/content/categories");
   revalidatePath("/admin/content/categories/new");
@@ -331,6 +331,18 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
     return { ok: false as const, message: "معرّف التصنيف غير صالح." };
   }
 
+  const { data: affectedCategory, error: categoryReadError } = await getSupabaseAdmin()
+    .from("topic_categories")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle<{ id: number }>();
+  if (categoryReadError) {
+    return { ok: false as const, message: "تعذر إثبات التصنيف المطلوب قبل الحذف." };
+  }
+  if (!affectedCategory) {
+    return { ok: false as const, message: "التصنيف غير موجود." };
+  }
+
   let mutation: Awaited<ReturnType<typeof deleteTopicCategoryAtomically>>;
   try {
     mutation = await deleteTopicCategoryAtomically({
@@ -360,6 +372,10 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
     return { ok: false as const, message: "تعذر حذف التصنيف. تحقق من العناصر المرتبطة به." };
   }
 
+  const mediaSynchronization = await synchronizeMediaReferencesAfterDomainMutation(
+    "topic_categories",
+    affectedCategory.id,
+  );
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic_category", "delete"),
     entityType: "topic_category",
@@ -370,7 +386,27 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
     },
   });
   await revalidateCategories();
-  return { ok: true as const, message: "تم حذف التصنيف بنجاح." };
+  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
+    return {
+      ...adminActionWarning(
+        "تم الحذف مع تنبيه",
+        "تم حذف التصنيف، لكن تعذر تأكيد إزالة مرجع صورته من فهرس الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الفحص.",
+        {
+          code: "saved_with_media_sync_warning",
+          entityId: affectedCategory.id,
+        },
+      ),
+      mediaSynchronization,
+    };
+  }
+  return {
+    ...adminActionSuccess(
+      "تم بنجاح",
+      "تم حذف التصنيف بنجاح.",
+      { code: "deleted", entityId: affectedCategory.id },
+    ),
+    mediaSynchronization,
+  };
 }
 
 export async function saveCategoriesTablePreferences(visibleColumns: string[]) {

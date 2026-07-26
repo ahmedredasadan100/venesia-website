@@ -5,6 +5,7 @@ import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-se
 import {
   adminActionFailure,
   adminActionSuccess,
+  adminActionWarning,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
@@ -30,7 +31,14 @@ import {
 } from "../../../../lib/admin/content/topics-list-config";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
-import { synchronizeMediaReferencesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
+import {
+  type MediaReferenceSynchronizationResult,
+} from "../../../../lib/admin/media-catalog/synchronization";
+import { coordinateMediaReferenceEntityMutation } from "../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../lib/admin/media-catalog/write-lease";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -74,6 +82,22 @@ function getPublishFocusTarget(
 
 function invalidMutation(message = "تعذر تنفيذ العملية."): AdminActionResult {
   return adminActionFailure("تعذر تنفيذ العملية", message);
+}
+
+function mediaAwareSuccess(
+  synchronization: MediaReferenceSynchronizationResult,
+  title: string,
+  message: string,
+  options: { code?: AdminActionResult["code"]; entityId?: number } = {},
+) {
+  if (synchronization.status === "saved_with_media_sync_warning") {
+    return adminActionWarning(
+      "تم حفظ المحتوى مع تنبيه للميديا",
+      "تم حفظ بيانات المحتوى، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص.",
+      { code: "saved_with_media_sync_warning", entityId: options.entityId },
+    );
+  }
+  return adminActionSuccess(title, message, options);
 }
 
 async function finishMutation(input: {
@@ -156,7 +180,6 @@ export async function setUnifiedContentStatus(
   const { error } = await getSupabaseAdmin().from("topics").update(payload).eq("id", id);
   if (error) return invalidMutation(error.message);
 
-  await synchronizeMediaReferencesAfterDomainMutation("topics", id);
   await finishMutation({
     actor,
     action: nextStatus === "published" ? "publish" : "unpublish",
@@ -164,17 +187,11 @@ export async function setUnifiedContentStatus(
     entityLabel: String(topic.title ?? ""),
     metadata: { status: nextStatus, content_type: topic.content_type },
   });
-  return nextStatus === "published"
-    ? adminActionSuccess(
-        "تم نشر المحتوى",
-        "أصبح المحتوى ظاهرًا للعامة.",
-        { code: "published", entityId: id },
-      )
-    : adminActionSuccess(
-        "تم إخفاء المحتوى",
-        "لم يعد المحتوى ظاهرًا للعامة.",
-        { code: "unpublished", entityId: id },
-      );
+  return adminActionSuccess(
+    nextStatus === "published" ? "تم نشر المحتوى" : "تم إخفاء المحتوى",
+    nextStatus === "published" ? "أصبح المحتوى ظاهرًا للعامة." : "لم يعد المحتوى ظاهرًا للعامة.",
+    { code: nextStatus === "published" ? "published" : "unpublished", entityId: id },
+  );
 }
 
 export async function toggleUnifiedContentFeatured(
@@ -248,27 +265,51 @@ export async function duplicateUnifiedContent(
   } = topic;
   void [_id, _createdAt, _updatedAt, _createdBy, _updatedBy, _publishedBy, _viewsCount];
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .insert({
-      ...copyable,
-      title: `${String(topic.title ?? "بدون عنوان")} - نسخة`,
-      slug,
-      status: "draft",
-      published_at: null,
-      published_by: null,
-      views_count: 0,
-      deleted_at: null,
-      created_at: now,
-      updated_at: now,
-      created_by: actor.id,
-      updated_by: actor.id,
-    })
-    .select("id")
-    .single<{ id: number }>();
-  if (error || !data) return invalidMutation(error?.message);
-
-  await synchronizeMediaReferencesAfterDomainMutation("topics", data.id);
+  const nextRow = {
+    ...copyable,
+    title: `${String(topic.title ?? "بدون عنوان")} - نسخة`,
+    slug,
+    status: "draft",
+    published_at: null,
+    published_by: null,
+    views_count: 0,
+    deleted_at: null,
+    created_at: now,
+    updated_at: now,
+    created_by: actor.id,
+    updated_by: actor.id,
+  };
+  const leaseEntityIdentity = `duplicate:${id}:${crypto.randomUUID()}`;
+  let coordinated;
+  try {
+    coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "topics",
+      leaseEntityIdentity,
+      intendedRow: nextRow,
+      actorId: actor.id,
+      requestIdentity: `topic-duplicate:${id}`,
+      mutate: async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from("topics")
+          .insert(nextRow)
+          .select("id")
+          .single<{ id: number }>();
+        if (error || !data) throw new Error(error?.message ?? "تعذر نسخ المحتوى.");
+        return data;
+      },
+      resolveEntityIdentity: (value) => String(value.id),
+    });
+  } catch (error) {
+    return invalidMutation(
+      error instanceof MediaReferenceWriteLeaseError
+        ? getMediaReferenceWriteLeaseUserMessage(error.code)
+        : error instanceof Error
+          ? error.message
+          : "تعذر نسخ المحتوى.",
+    );
+  }
+  const data = coordinated.value;
+  const mediaSynchronization = coordinated.mediaSynchronization;
   await finishMutation({
     actor,
     action: "duplicate",
@@ -276,7 +317,8 @@ export async function duplicateUnifiedContent(
     entityLabel: `${String(topic.title ?? "بدون عنوان")} - نسخة`,
     metadata: { source_topic_id: id, content_type: topic.content_type },
   });
-  return adminActionSuccess(
+  return mediaAwareSuccess(
+    mediaSynchronization,
     "تم نسخ المحتوى",
     "أُنشئت نسخة جديدة كمسودة.",
     { code: "created", entityId: data.id },
@@ -299,7 +341,6 @@ export async function softDeleteUnifiedContent(
     .eq("id", id);
   if (error) return invalidMutation(error.message);
 
-  await synchronizeMediaReferencesAfterDomainMutation("topics", id);
   await finishMutation({
     actor,
     action: "delete",
@@ -387,7 +428,6 @@ export async function bulkUpdateUnifiedContent(
     );
     const publishError = results.find((result) => result.error)?.error;
     if (publishError) return invalidMutation(publishError.message);
-    await Promise.all(ids.map((topicId) => synchronizeMediaReferencesAfterDomainMutation("topics", topicId)));
     await finishMutation({
       actor,
       action: "publish",
@@ -428,7 +468,6 @@ export async function bulkUpdateUnifiedContent(
   const { error } = await getSupabaseAdmin().from("topics").update(payload).in("id", ids);
   if (error) return invalidMutation(error.message);
 
-  await Promise.all(ids.map((topicId) => synchronizeMediaReferencesAfterDomainMutation("topics", topicId)));
   await finishMutation({
     actor,
     action: action === "publish" ? "publish" : action === "unpublish" ? "unpublish" : action === "delete" ? "delete" : "update",
