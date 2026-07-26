@@ -57,6 +57,7 @@ const providerSync = functionBody("replace_media_references_for_provider");
 check("write-lease table exists", migration.includes("create table if not exists public.media_reference_write_leases"));
 check("delete-reservation table exists", migration.includes("create table if not exists public.media_delete_reservations"));
 check("provider-domain revision fence table exists", migration.includes("create table if not exists public.media_reference_provider_revisions"));
+check("reference UUID validation remains PostgreSQL 15 compatible", !migration.includes("pg_input_is_valid") && entitySync.includes("^[0-9a-f]{8}") && providerSync.includes("^[0-9a-f]{8}"));
 check("lease acquisition locks assets in stable UUID order", acquire.includes("order by asset.id\n  for update"));
 check("lease batch tokens are collision-guarded while remaining shared by the batch", acquire.includes("pg_advisory_xact_lock(hashtextextended(created_token::text, 0))") && acquire.includes("where existing.lease_token = created_token"));
 check("reservation locks its catalog asset", reserve.includes("where id = p_asset_id\n  for update"));

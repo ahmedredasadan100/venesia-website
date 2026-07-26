@@ -1584,7 +1584,7 @@ begin
     from jsonb_array_elements(p_references) entry
     where jsonb_typeof(entry) <> 'object'
       or coalesce(trim(entry->>'assetId'), '') = ''
-      or not pg_input_is_valid(entry->>'assetId', 'uuid')
+      or entry->>'assetId' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       or coalesce(trim(entry->>'fieldKey'), '') = ''
   ) then
     raise exception using errcode = 'P0001', message = 'invalid_media_reference_entry';
@@ -1809,7 +1809,7 @@ begin
     from jsonb_array_elements(p_references) entry
     where jsonb_typeof(entry) <> 'object'
       or coalesce(trim(entry->>'assetId'), '') = ''
-      or not pg_input_is_valid(entry->>'assetId', 'uuid')
+      or entry->>'assetId' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       or coalesce(trim(entry->>'entityType'), '') = ''
       or coalesce(trim(entry->>'entityIdentity'), '') = ''
       or coalesce(trim(entry->>'fieldKey'), '') = ''
