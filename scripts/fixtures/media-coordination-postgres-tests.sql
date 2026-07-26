@@ -1044,11 +1044,13 @@ select media_coordination_test.assert_true(
 -- TTL is not a Domain-commit fence. Even an effectively expired active lease
 -- blocks provider reconciliation and safe delete until its owning workflow
 -- explicitly fails or completes it.
+-- Keep the provider reference on a different asset so the delete assertion
+-- below proves that the unresolved lease is the sole blocker for a7.
 insert into public.media_references (
   asset_id, domain_key, entity_type, entity_identity, field_key
 )
 values (
-  '00000000-0000-0000-0000-0000000000a7',
+  '00000000-0000-0000-0000-0000000000a6',
   'expired.provider',
   'topic',
   'expired-target',
