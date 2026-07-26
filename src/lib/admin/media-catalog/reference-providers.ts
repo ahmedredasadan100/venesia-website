@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isDeepStrictEqual } from "node:util";
+
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { getCanonicalMediaIdentityKey } from "./identity";
@@ -23,6 +25,16 @@ export type DiscoveredMediaReference = {
 
 export type DiscoveredMediaUsage = Omit<DiscoveredMediaReference, "identity">;
 
+export class MediaReferenceProviderRebindError extends Error {
+  readonly writeMayHaveCommitted: boolean;
+
+  constructor(code: string, writeMayHaveCommitted: boolean) {
+    super(code);
+    this.name = "MediaReferenceProviderRebindError";
+    this.writeMayHaveCommitted = writeMayHaveCommitted;
+  }
+}
+
 export type MediaReferenceProvider = {
   readonly domainKey: string;
   readonly table: string;
@@ -43,6 +55,7 @@ type ProviderConfig = {
   idField?: string;
   labelField?: string;
   fields: readonly string[];
+  jsonFields?: readonly string[];
   extraFields?: readonly string[];
   stateFields?: readonly string[];
   supportsRebind?: boolean;
@@ -260,7 +273,16 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
     },
     async rebind(reference, nextPublicValue) {
       if (config.supportsRebind === false) {
-        throw new Error(`media_reference_rebind_unsupported:${config.domainKey}`);
+        throw new MediaReferenceProviderRebindError(
+          `media_reference_rebind_unsupported:${config.domainKey}`,
+          false,
+        );
+      }
+      if (!config.fields.includes(reference.fieldKey)) {
+        throw new MediaReferenceProviderRebindError(
+          `media_reference_rebind_field_mismatch:${config.domainKey}`,
+          false,
+        );
       }
       const supabase = getSupabaseAdmin();
       const { data: row, error: readError } = await supabase
@@ -269,15 +291,52 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
         .eq(idField, reference.entityIdentity)
         .single();
       if (readError || !row) {
-        throw new Error(`media_reference_rebind_read_failed:${config.domainKey}`);
+        throw new MediaReferenceProviderRebindError(
+          `media_reference_rebind_read_failed:${config.domainKey}`,
+          false,
+        );
       }
       const currentValue = (row as unknown as Record<string, unknown>)[reference.fieldKey];
       const nextValue = replaceMediaValue(currentValue, reference.publicValue, nextPublicValue);
-      const { error: updateError } = await supabase
+      if (isDeepStrictEqual(currentValue, nextValue)) {
+        throw new MediaReferenceProviderRebindError(
+          `media_reference_rebind_compare_failed:${config.domainKey}`,
+          false,
+        );
+      }
+      const { data: updatedRow, error: updateError } = await supabase
         .from(config.table)
         .update({ [reference.fieldKey]: nextValue })
-        .eq(idField, reference.entityIdentity);
-      if (updateError) throw new Error(`media_reference_rebind_write_failed:${config.domainKey}`);
+        .eq(idField, reference.entityIdentity)
+        .eq(
+          reference.fieldKey,
+          config.jsonFields?.includes(reference.fieldKey)
+            ? JSON.stringify(currentValue)
+            : currentValue,
+        )
+        .select(idField)
+        .maybeSingle();
+      if (!updateError && updatedRow) return;
+
+      const { data: observedRow, error: verificationError } = await supabase
+        .from(config.table)
+        .select(`${idField}, ${reference.fieldKey}`)
+        .eq(idField, reference.entityIdentity)
+        .maybeSingle();
+      if (verificationError || !observedRow) {
+        throw new MediaReferenceProviderRebindError(
+          `media_reference_rebind_state_uncertain:${config.domainKey}`,
+          true,
+        );
+      }
+      const observedValue = (observedRow as unknown as Record<string, unknown>)[reference.fieldKey];
+      if (isDeepStrictEqual(observedValue, nextValue)) return;
+      throw new MediaReferenceProviderRebindError(
+        updateError
+          ? `media_reference_rebind_write_failed:${config.domainKey}`
+          : `media_reference_rebind_concurrent_change:${config.domainKey}`,
+        false,
+      );
     },
   };
 }
@@ -289,6 +348,7 @@ const PROVIDER_CONFIGS = [
     entityType: "topic",
     labelField: "title",
     fields: ["image", "excerpt", "content", "media_payload"],
+    jsonFields: ["media_payload"],
     extraFields: ["slug"],
     stateFields: ["status", "deleted_at"],
     editHref: (row) => `/admin/content/topics/${row.id}`,
@@ -346,6 +406,7 @@ const PROVIDER_CONFIGS = [
     entityType: "hero_template",
     labelField: "name",
     fields: ["config"],
+    jsonFields: ["config"],
     editHref: (row) => `/admin/pages-blocks/blocks/hero/${row.id}`,
   },
   {
@@ -354,6 +415,7 @@ const PROVIDER_CONFIGS = [
     entityType: "content_block_template",
     labelField: "name",
     fields: ["config"],
+    jsonFields: ["config"],
     stateFields: ["status"],
     editHref: (row) => `/admin/pages-blocks/blocks/content/${row.id}`,
   },
@@ -363,6 +425,7 @@ const PROVIDER_CONFIGS = [
     entityType: "cta_block_template",
     labelField: "name",
     fields: ["config"],
+    jsonFields: ["config"],
     stateFields: ["status"],
     editHref: (row) => `/admin/pages-blocks/blocks/cta/${row.id}`,
   },
@@ -372,6 +435,7 @@ const PROVIDER_CONFIGS = [
     entityType: "cards_block_template",
     labelField: "name",
     fields: ["config"],
+    jsonFields: ["config"],
     stateFields: ["status"],
     editHref: (row) => `/admin/pages-blocks/blocks/cards/${row.id}`,
   },
@@ -381,6 +445,7 @@ const PROVIDER_CONFIGS = [
     entityType: "breadcrumb_block_template",
     labelField: "name",
     fields: ["config"],
+    jsonFields: ["config"],
     stateFields: ["status"],
     editHref: (row) => `/admin/pages-blocks/blocks/breadcrumb/${row.id}`,
   },
@@ -390,6 +455,7 @@ const PROVIDER_CONFIGS = [
     entityType: "feed_module_template",
     labelField: "name",
     fields: ["config"],
+    jsonFields: ["config"],
     stateFields: ["status"],
     editHref: (row) => `/admin/pages-blocks/blocks/feed/${row.id}`,
   },
@@ -399,6 +465,7 @@ const PROVIDER_CONFIGS = [
     entityType: "media_sidebar_module_template",
     labelField: "name",
     fields: ["config"],
+    jsonFields: ["config"],
     stateFields: ["status"],
     editHref: (row) => `/admin/pages-blocks/blocks/media-sidebar/${row.id}`,
   },
@@ -408,6 +475,7 @@ const PROVIDER_CONFIGS = [
     entityType: "media_hub_module_template",
     labelField: "name",
     fields: ["config"],
+    jsonFields: ["config"],
     stateFields: ["status"],
     editHref: (row) => `/admin/pages-blocks/blocks/media-hub/${row.id}`,
   },
@@ -416,6 +484,7 @@ const PROVIDER_CONFIGS = [
     table: "page_sections",
     entityType: "legacy_page_section",
     fields: ["config"],
+    jsonFields: ["config"],
     extraFields: ["page_id"],
     editHref: () => "/admin/pages-blocks/pages",
   },
@@ -435,6 +504,7 @@ const PROVIDER_CONFIGS = [
     idField: "key",
     labelField: "key",
     fields: ["value"],
+    jsonFields: ["value"],
     editHref: (row) => {
       const key = valueText(row.key);
       if (key.startsWith("footer.")) return "/admin/pages-blocks/footer";
@@ -449,6 +519,21 @@ export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-provid
 
 export function getMediaReferenceProvider(domainKey: string) {
   return MEDIA_REFERENCE_PROVIDER_REGISTRY.find((provider) => provider.domainKey === domainKey) ?? null;
+}
+
+export function buildMediaReferenceWriteScope(
+  domainKey: string,
+  entityIdentity: string,
+  intendedRow: Record<string, unknown>,
+) {
+  const provider = getMediaReferenceProvider(domainKey);
+  if (!provider) throw new Error(`missing_media_reference_provider:${domainKey}`);
+  return {
+    domainKey: provider.domainKey,
+    entityType: provider.entityType,
+    entityIdentity,
+    values: provider.fields.map((field) => intendedRow[field]),
+  };
 }
 
 export function validateMediaReferenceProviderRegistry() {

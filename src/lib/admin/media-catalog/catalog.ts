@@ -706,6 +706,12 @@ export async function getMediaCatalogRuntimeState(): Promise<MediaCatalogRuntime
     lastScanAt: nullableText(value.lastScanAt),
     lastCatalogSync: nullableText(value.lastCatalogSync),
     lastDryRun: nullableText(value.lastDryRun),
+    lastSuccessfulReconciliationRunIdentity: nullableText(
+      value.lastSuccessfulReconciliationRunIdentity,
+    ),
+    lastSuccessfulReconciliationAt: nullableText(
+      value.lastSuccessfulReconciliationAt,
+    ),
     storageAssetCount: numberOrNull(value.storageAssetCount),
     catalogAssetCount: numberOrNull(value.catalogAssetCount),
     warnings: Array.isArray(value.warnings) ? value.warnings.map(text).filter(Boolean) : [],

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import * as nodePath from "node:path";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,6 +34,7 @@ function loadTypeScriptModule(relativePath, dependencies) {
 
 const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/reference-providers.ts", {
   "server-only": {},
+  "node:util": { isDeepStrictEqual },
   "../../storage/upload-cms-asset": {
     parseManagedStorageAsset(value) {
       const match = String(value).match(/\/storage\/v1\/object\/public\/(cms-images|cms-documents)\/(images|files)\/([^?#]+)/);
@@ -84,6 +86,7 @@ const usageSupabase = {
 };
 const usageProviderModule = loadTypeScriptModule("src/lib/admin/media-catalog/reference-providers.ts", {
   "server-only": {},
+  "node:util": { isDeepStrictEqual },
   "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
   "../../supabase-admin": { getSupabaseAdmin: () => usageSupabase },
   "./identity": {
@@ -398,12 +401,16 @@ const safeDelete = source("src/lib/admin/media-catalog/safe-delete.ts");
 check("safe delete requires a synced registry and live exhaustive provider scan", safeDelete.includes("MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION") && safeDelete.includes("scanAllMediaReferenceProviders"));
 check("safe delete requires the shared provider and environment readiness contract", safeDelete.includes("buildMediaCatalogReadiness") && safeDelete.includes("safeDeleteReady") && safeDelete.includes("context.provider"));
 check("safe delete checks persisted references and storage existence", safeDelete.includes("listCatalogReferences") && safeDelete.includes("verifyManagedStorageAssetExists"));
+check("safe delete reserves and mutates the exact canonical Storage identity", safeDelete.includes("expectedObjectKey: eligibility.asset.objectKey") && safeDelete.includes("reservation.publicValue") && source("src/lib/admin/media-catalog/delete-reservation.ts").includes("reserved_object_key"));
 check("safe delete never treats uncertainty as zero references", safeDelete.includes('state: "uncertain"') && safeDelete.includes('state: "safe_to_delete"'));
 check("used and unused views are suppressed while reference readiness is uncertain without blocking normal reads", source("src/lib/admin/media-catalog/catalog.ts").includes("لا يمكن تأكيد أن الملفات غير مستخدمة") && source("src/lib/admin/media-catalog/catalog.ts").includes("قائمة مكتملة للملفات المستخدمة") && source("src/lib/admin/media-catalog/catalog.ts").includes("MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION"));
 
 const synchronization = source("src/lib/admin/media-catalog/synchronization.ts");
 check("rebind proves live registry parity, retains the old asset and compensates failures", synchronization.includes("media_reference_rebind_drift") && synchronization.includes("scanAllMediaReferenceProviders") && synchronization.includes("compensationFailures") && synchronization.includes("previousAssetRetained: true"));
-check("projects synchronize parent and child media domains", synchronization.includes('"project_media"') && synchronization.includes('"project_floor_plans"'));
+const projectChildrenSync = source("src/lib/admin/projects/project-children-sync.ts");
+const projectUpdate = source("src/app/admin/projects/project-actions/update.ts");
+const projectDuplicate = source("src/app/admin/projects/project-actions/duplicate.ts");
+check("projects synchronize parent and child media domains", projectChildrenSync.includes('"project_media"') && projectChildrenSync.includes('"project_floor_plans"') && [projectUpdate, projectDuplicate].every((implementation) => implementation.includes("synchronizeMediaReferenceWriteScopesAfterDomainMutation")));
 check("Project aggregate providers remain explicit discovery-only boundaries", ["projects", "project_media", "project_floor_plans"].every((domain) => {
   const provider = providerModule.MEDIA_REFERENCE_PROVIDER_REGISTRY.find((item) => item.domainKey === domain);
   return provider && provider.supportsRebind === false;
@@ -417,7 +424,10 @@ check("all upload and delete mutations stay on the Supabase managed adapter", so
 check("unknown Media API views, kinds, page sizes and query keys are rejected", ["invalid_media_view", "invalid_media_kind", "invalid_media_page_size", "invalid_media_query"].every((token) => route.includes(token)));
 check("catalog registration records checksum and supported image dimensions", source("src/lib/admin/media-catalog/catalog.ts").includes("readUploadBinaryMetadata") && source("src/lib/admin/media-catalog/binary-metadata.ts").includes('createHash("sha256")'));
 check("replace-all uses the reference synchronization owner", route.includes("rebindAllSupportedMediaReferences") && route.includes('operation === "replace_all"'));
-check("Manage physical move uses live reference proof, Storage move, rebind and compensation", route.includes('operation === "move_asset"') && source("src/lib/admin/media-catalog/physical-move.ts").includes("scanAllMediaReferenceProviders") && source("src/lib/admin/media-catalog/physical-move.ts").includes("moveManagedStorageAsset") && source("src/lib/admin/media-catalog/physical-move.ts").includes("rollbackFailures"));
+const physicalMove = source("src/lib/admin/media-catalog/physical-move.ts");
+check("Manage physical move uses live reference proof, Storage move, rebind and compensation", route.includes('operation === "move_asset"') && physicalMove.includes("scanAllMediaReferenceProviders") && physicalMove.includes("moveManagedStorageAsset") && physicalMove.includes("rollbackFailures"));
+check("physical move acquires coordination before Storage mutation", physicalMove.indexOf("const moveLease = await acquireMediaReferenceWriteLease") < physicalMove.indexOf("await moveManagedStorageAsset(asset.publicUrl") && physicalMove.includes("PHYSICAL_MOVE_COORDINATION_DOMAIN"));
+check("physical move retains the new identity when Domain compensation is incomplete", physicalMove.includes("rebind.nextAssetRequired") && physicalMove.includes("retainMovedIdentity") && synchronization.includes("nextAssetRequired: domainCompensationFailures.length > 0"));
 
 const core = source("src/components/admin/media/MediaLibraryCore.tsx");
 const picker = source("src/components/admin/media/AdminMediaPickerModal.tsx");

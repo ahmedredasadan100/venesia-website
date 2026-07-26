@@ -74,6 +74,8 @@ function defaultRuntimeState(): MediaCatalogRuntimeState {
     lastScanAt: null,
     lastCatalogSync: null,
     lastDryRun: null,
+    lastSuccessfulReconciliationRunIdentity: null,
+    lastSuccessfulReconciliationAt: null,
     storageAssetCount: null,
     catalogAssetCount: null,
     warnings: [],
@@ -148,6 +150,7 @@ export async function reconcileMediaCatalog(options: {
   }
 
   const previousState = await currentRuntimeState();
+  const runIdentity = crypto.randomUUID();
   const scanStartedAt = new Date().toISOString();
   await setMediaCatalogRuntimeState({
     ...previousState,
@@ -168,51 +171,79 @@ export async function reconcileMediaCatalog(options: {
     }
 
     const supabase = getSupabaseAdmin();
+    const catalogBeforeByIdentity = new Map(
+      currentProviderCatalogBefore.map((asset) => [getCanonicalMediaIdentityKey(asset), asset]),
+    );
     for (const item of storageAssets) {
       const objectKey = item.storagePath!;
-      const { error } = await supabase.from("media_assets").upsert(
-        {
+      const nextAsset = {
+        provider: context.provider,
+        bucket: item.bucket,
+        object_key: objectKey,
+        public_url: item.path,
+        original_filename: item.filename,
+        display_name: item.filename,
+        media_kind: item.kind,
+        mime_type: item.contentType,
+        extension: item.extension,
+        byte_size: item.sizeBytes,
+        folder_path: path.posix.dirname(objectKey),
+        reconciliation_state: "synced",
+        missing_object: false,
+        updated_at: new Date().toISOString(),
+      };
+      const existing = catalogBeforeByIdentity.get(
+        getCanonicalMediaIdentityKey({
           provider: context.provider,
           bucket: item.bucket,
-          object_key: objectKey,
-          public_url: item.path,
-          original_filename: item.filename,
-          display_name: item.filename,
-          media_kind: item.kind,
-          mime_type: item.contentType,
-          extension: item.extension,
-          byte_size: item.sizeBytes,
-          folder_path: path.posix.dirname(objectKey),
-          status: "active",
-          reconciliation_state: "synced",
-          missing_object: false,
-          created_at: item.uploadedAt ?? new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "provider,bucket,object_key" },
+          objectKey,
+        }),
       );
-      if (error) {
-        throw new Error(`media_catalog_asset_upsert_failed:${error.code ?? "unknown"}`);
+      const result = existing
+        ? await supabase
+            .from("media_assets")
+            .update(nextAsset)
+            .eq("id", existing.id)
+            .eq("status", "active")
+            .select("id")
+            .maybeSingle<{ id: string }>()
+        : await supabase
+            .from("media_assets")
+            .insert({
+              ...nextAsset,
+              status: "active",
+              created_at: item.uploadedAt ?? new Date().toISOString(),
+            })
+            .select("id")
+            .single<{ id: string }>();
+      if (result.error || !result.data) {
+        throw new Error(`media_catalog_asset_upsert_failed:${result.error?.code ?? "coordination_conflict"}`);
       }
     }
 
     for (const asset of currentProviderCatalogBefore) {
       if (storageKeys.has(getCanonicalMediaIdentityKey(asset))) continue;
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("media_assets")
         .update({
           status: "missing",
           missing_object: true,
           reconciliation_state: "missing_object",
         })
-        .eq("id", asset.id);
-      if (error) {
-        throw new Error(`media_catalog_missing_mark_failed:${error.code ?? "unknown"}`);
+        .eq("id", asset.id)
+        .eq("status", "active")
+        .select("id")
+        .maybeSingle<{ id: string }>();
+      if (error || !data) {
+        throw new Error(`media_catalog_missing_mark_failed:${error?.code ?? "coordination_conflict"}`);
       }
     }
 
     const catalogMapAfter = await getAllCatalogAssetIdentityMap();
-    const referenceResult = await reconcileAllMediaReferences({ assetMap: catalogMapAfter });
+    const referenceResult = await reconcileAllMediaReferences({
+      assetMap: catalogMapAfter,
+      runIdentity,
+    });
     const uncertainties = [...referenceResult.uncertainties];
     if (missingObjectCount) {
       uncertainties.push(`catalog_missing_objects:${missingObjectCount}`);
@@ -244,6 +275,12 @@ export async function reconcileMediaCatalog(options: {
       lastScanAt: completedAt,
       lastCatalogSync: completed ? completedAt : previousState.lastCatalogSync,
       lastDryRun: previousState.lastDryRun,
+      lastSuccessfulReconciliationRunIdentity: completed
+        ? runIdentity
+        : previousState.lastSuccessfulReconciliationRunIdentity,
+      lastSuccessfulReconciliationAt: completed
+        ? completedAt
+        : previousState.lastSuccessfulReconciliationAt,
       storageAssetCount: storageAssets.length,
       catalogAssetCount: currentProviderCatalogAfter.length,
       warnings: [...new Set(uncertainties)].slice(-30),
@@ -261,6 +298,7 @@ export async function reconcileMediaCatalog(options: {
       missingObjectCount,
       uncertainties: [...new Set(uncertainties)],
       complete: completed,
+      reconciliationRunIdentity: completed ? runIdentity : null,
       generatedAt: completedAt,
     };
   } catch (error) {

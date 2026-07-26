@@ -349,10 +349,12 @@ check(
     routeSource.lastIndexOf("await requireAdminApi()") < routeSource.lastIndexOf("request.json()"),
 );
 check(
-  "delete API delegates to fail-closed catalog safety",
+  "delete API delegates to the fail-closed reservation Saga",
   routeSource.includes("safelyDeleteMediaAsset") &&
     routeSource.includes('result.eligibility.state === "in_use"') &&
-    routeSource.includes('result.eligibility.state === "uncertain" ? 503') &&
+    routeSource.includes("workflow?.repairRequired") &&
+    routeSource.includes("media_delete_post_reservation_reference") &&
+    routeSource.includes("media_delete_finalization_failed") &&
     routeSource.includes("تم منع العملية لحماية المحتوى"),
 );
 

@@ -325,7 +325,12 @@ export async function PATCH(request: Request) {
       ) {
         return mediaJson({ error: "لا يسمح النظام بالاستبدال إلى نفس Storage object." }, { status: 400 });
       }
-      const result = await rebindAllSupportedMediaReferences(previousAsset, nextAsset);
+      const result = await rebindAllSupportedMediaReferences(previousAsset, nextAsset, {
+        actorId: actor.id,
+        requestIdentity:
+          request.headers.get("x-request-id")?.trim() ||
+          `media-rebind:${previousAsset.id}:${nextAsset.id}`,
+      });
       if (!result.ok) {
         return mediaJson(
           { error: "لم يكتمل الاستبدال؛ بقي الأصل القديم ولم يُحذف.", ...result },
@@ -392,18 +397,99 @@ export async function DELETE(request: Request) {
     const asset = typeof body.asset === "string" ? body.asset.trim() : "";
     if (!asset) return mediaJson({ error: "حدد رابط الملف المطلوب حذفه." }, { status: 400 });
 
-    const result = await safelyDeleteMediaAsset(asset);
+    const result = await safelyDeleteMediaAsset(asset, {
+      actorId: actor.id,
+      requestIdentity: request.headers.get("x-request-id") ?? undefined,
+      onTransition: (transition) =>
+        recordCmsAdminAudit(
+          {
+            action: buildCmsAuditAction("media_asset", "update"),
+            entityType: "media_asset",
+            entityLabel: "Media delete coordination",
+            metadata: {
+              operation: `media_delete_${transition.operation}`,
+              assetId: transition.assetId,
+              reservationId: transition.reservationId,
+              failureCode: transition.failureCode ?? null,
+              storageState: transition.storageState ?? null,
+            },
+          },
+          actor,
+        ),
+    });
     if (!result.deleted) {
-      const status = result.eligibility.state === "unmanaged" ? 400 : result.eligibility.state === "uncertain" ? 503 : 409;
+      const workflow = "workflow" in result ? result.workflow : null;
+      const reservationFailureCode =
+        "reservationFailureCode" in result ? result.reservationFailureCode : null;
+      const status = result.eligibility.state === "unmanaged"
+        ? 400
+        : workflow?.repairRequired || result.eligibility.state === "uncertain"
+          ? 503
+          : 409;
       const message =
+        workflow?.code === "media_delete_post_reservation_reference" ||
+        reservationFailureCode === "media_delete_asset_in_use" ||
         result.eligibility.state === "in_use"
           ? "لا يمكن حذف الملف قبل فك جميع مراجعه الحالية."
+          : workflow?.code === "media_delete_post_reservation_scan_failed"
+            ? "تغيرت حالة فحص الارتباطات أثناء الحذف؛ أُلغي الحجز ولم يُحذف الملف."
+            : workflow?.code === "media_delete_storage_failed" && workflow.repairRequired
+              ? "تعذر إثبات نتيجة حذف الملف من التخزين. وُضع الأصل في حالة تحتاج إصلاحًا ولم يُعلن نجاح الحذف."
+              : workflow?.code === "media_delete_storage_failed"
+                ? "فشل حذف الملف من التخزين؛ أُلغي الحجز وعاد الأصل إلى حالته السابقة."
+                : workflow?.code === "media_delete_finalization_failed"
+                  ? "حُذف الملف من التخزين، لكن تعذر إنهاء سجل الحذف. الأصل يحتاج إصلاحًا ولا يمكن استخدامه."
           : result.eligibility.state === "unmanaged"
             ? "هذا الملف غير مُدار ولا يمكن حذفه عبر Media Library."
             : result.eligibility.state === "already_missing"
               ? "الملف مفقود من التخزين ويحتاج مراجعة حالته."
               : "تعذر إثبات أمان الحذف؛ تم منع العملية لحماية المحتوى.";
-      return mediaJson({ error: message, code: `media_delete_${result.eligibility.state}`, eligibility: result.eligibility }, { status });
+      const auditAsset = result.eligibility.asset;
+      if (workflow && auditAsset) {
+        await recordCmsAdminAudit(
+          {
+            action: buildCmsAuditAction("media_asset", "update"),
+            entityType: "media_asset",
+            entityLabel: auditAsset.displayName,
+            metadata: {
+              operation: "media_delete_saga_incomplete",
+              assetId: auditAsset.id,
+              reservationId: workflow.reservation.id,
+              stage: workflow.stage,
+              failureCode: workflow.code,
+              recoveryState: workflow.recoveryState,
+              repairRequired: workflow.repairRequired,
+            },
+          },
+          actor,
+        );
+      } else if (reservationFailureCode && auditAsset) {
+        await recordCmsAdminAudit(
+          {
+            action: buildCmsAuditAction("media_asset", "update"),
+            entityType: "media_asset",
+            entityLabel: auditAsset.displayName,
+            metadata: {
+              operation: "media_delete_reserve_blocked",
+              assetId: auditAsset.id,
+              failureCode: reservationFailureCode,
+            },
+          },
+          actor,
+        );
+      }
+      return mediaJson(
+        {
+          error: message,
+          code:
+            workflow?.code ??
+            reservationFailureCode ??
+            `media_delete_${result.eligibility.state}`,
+          eligibility: result.eligibility,
+          ...(workflow ? { workflow } : {}),
+        },
+        { status },
+      );
     }
 
     await recordCmsAdminAudit(
@@ -415,6 +501,7 @@ export async function DELETE(request: Request) {
           assetId: result.eligibility.asset.id,
           bucket: result.eligibility.asset.bucket,
           objectKey: result.eligibility.asset.objectKey,
+          reservationId: result.workflow.reservation.id,
         },
       },
       actor,

@@ -14,21 +14,61 @@ import {
   getMediaReferenceProvider,
   MEDIA_REFERENCE_PROVIDER_REGISTRY,
   MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
+  MediaReferenceProviderRebindError,
   scanAllMediaReferenceProviders,
   validateMediaReferenceProviderRegistry,
   type DiscoveredMediaReference,
 } from "./reference-providers";
 import type { MediaCatalogAsset } from "./types";
+import {
+  buildMediaReferenceSynchronizationWarning,
+  type MediaReferenceSynchronizationResult,
+} from "./reference-sync-contract";
+import {
+  acquireMediaReferenceWriteLease,
+  completeMediaReferenceWriteLease,
+  failMediaReferenceWriteLease,
+  MediaReferenceWriteLeaseError,
+  type MediaReferenceWriteLease,
+  type MediaReferenceWriteScope,
+} from "./write-lease";
+
+export type { MediaReferenceSynchronizationResult } from "./reference-sync-contract";
 
 export class MediaReferenceSynchronizationError extends Error {
-  readonly code = "media_reference_sync_failed";
+  readonly code: string;
   readonly uncertainties: string[];
 
-  constructor(message: string, uncertainties: string[]) {
+  constructor(
+    message: string,
+    uncertainties: string[],
+    code = "media_reference_sync_failed",
+  ) {
     super(message);
     this.name = "MediaReferenceSynchronizationError";
+    this.code = code;
     this.uncertainties = uncertainties;
   }
+}
+
+function synchronizationWarning(input: {
+  domainKey: string;
+  entityIdentity: string;
+  error: unknown;
+  uncertainties?: string[];
+}): MediaReferenceSynchronizationResult {
+  const failureReason = input.error instanceof Error
+    ? input.error.message
+    : "media_reference_sync_failed";
+  const uncertainties = input.error instanceof MediaReferenceSynchronizationError
+    ? input.error.uncertainties
+    : input.uncertainties ?? [failureReason];
+  return buildMediaReferenceSynchronizationWarning({
+    domainKey: input.domainKey,
+    entityIdentity: input.entityIdentity,
+    failureReason,
+    uncertainties: [...new Set(uncertainties)],
+  });
 }
 
 function serializedReference(reference: DiscoveredMediaReference, assetId: string) {
@@ -46,7 +86,24 @@ function serializedReference(reference: DiscoveredMediaReference, assetId: strin
   };
 }
 
-async function markRuntimeUncertain(warnings: string[]) {
+async function getMediaReferenceProviderRevision(domainKey: string) {
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "get_media_reference_provider_revision",
+    { p_domain_key: domainKey },
+  );
+  if (error) {
+    throw new Error(
+      `media_reference_provider_revision_read_failed:${domainKey}:${error.code ?? "unknown"}`,
+    );
+  }
+  const revision = typeof data === "number" ? data : Number(data);
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    throw new Error(`media_reference_provider_revision_invalid:${domainKey}`);
+  }
+  return revision;
+}
+
+export async function markMediaCatalogRuntimeUncertain(warnings: string[]) {
   const context = resolveMediaStorageRuntimeContext();
   let current: MediaCatalogRuntimeState = {
     state: "uncertain",
@@ -57,6 +114,8 @@ async function markRuntimeUncertain(warnings: string[]) {
     lastScanAt: null,
     lastCatalogSync: null,
     lastDryRun: null,
+    lastSuccessfulReconciliationRunIdentity: null,
+    lastSuccessfulReconciliationAt: null,
     storageAssetCount: null,
     catalogAssetCount: null,
     warnings: [],
@@ -75,23 +134,41 @@ async function markRuntimeUncertain(warnings: string[]) {
   });
 }
 
-export async function syncMediaReferencesForEntity(domainKey: string, entityIdentity: string) {
+export async function syncMediaReferencesForEntity(
+  domainKey: string,
+  entityIdentity: string,
+  options: { leaseToken?: string | null; leaseEntityIdentity?: string | null } = {},
+) {
   const provider = getMediaReferenceProvider(domainKey);
   if (!provider) {
     const warning = `missing_media_reference_provider:${domainKey}`;
-    await markRuntimeUncertain([warning]);
+    await markMediaCatalogRuntimeUncertain([warning]);
     throw new MediaReferenceSynchronizationError("مالك مراجع الوسائط المطلوب غير مسجل.", [warning]);
   }
 
-  const [references, assetMap] = await Promise.all([
-    provider.scanEntity(entityIdentity),
-    getAllCatalogAssetIdentityMap(),
-  ]);
+  let references: DiscoveredMediaReference[];
+  let assetMap: Map<string, MediaCatalogAsset>;
+  try {
+    [references, assetMap] = await Promise.all([
+      provider.scanEntity(entityIdentity),
+      getAllCatalogAssetIdentityMap(),
+    ]);
+  } catch (error) {
+    const warning = `media_reference_entity_scan_failed:${provider.domainKey}:${entityIdentity}`;
+    await markMediaCatalogRuntimeUncertain([
+      warning,
+      error instanceof Error ? error.message : "media_reference_entity_scan_failed",
+    ]);
+    throw new MediaReferenceSynchronizationError(
+      "تعذر إثبات حالة مراجع الوسائط بعد الحفظ. تم إيقاف الحذف الآمن حتى اكتمال الفحص.",
+      [warning],
+    );
+  }
   const missing = references
     .filter((reference) => !assetMap.has(getCanonicalMediaIdentityKey(reference.identity)))
     .map((reference) => `catalog_asset_missing:${provider.domainKey}:${reference.entityIdentity}:${reference.fieldKey}`);
   if (missing.length) {
-    await markRuntimeUncertain(missing);
+    await markMediaCatalogRuntimeUncertain(missing);
     throw new MediaReferenceSynchronizationError(
       "تم حفظ بيانات النطاق، لكن تعذر إثبات اتساق مراجع الوسائط. الحذف محجوب حتى reconciliation.",
       missing,
@@ -106,124 +183,173 @@ export async function syncMediaReferencesForEntity(domainKey: string, entityIden
     p_entity_type: provider.entityType,
     p_entity_identity: entityIdentity,
     p_references: payload,
+    p_lease_token: options.leaseToken ?? null,
+    p_lease_entity_identity: options.leaseEntityIdentity ?? entityIdentity,
   });
   if (error) {
     const warning = `media_reference_sync_rpc_failed:${provider.domainKey}:${error.code ?? "unknown"}`;
-    await markRuntimeUncertain([warning]);
+    await markMediaCatalogRuntimeUncertain([warning]);
     throw new MediaReferenceSynchronizationError(
       "تعذر مزامنة مراجع الوسائط. تم منع الحذف حتى reconciliation.",
       [warning],
     );
   }
 
-  return { domainKey, entityIdentity, referenceCount: payload.length };
-}
-
-export async function syncMediaReferencesForProvider(domainKey: string) {
-  const provider = getMediaReferenceProvider(domainKey);
-  if (!provider) {
-    const warning = `missing_media_reference_provider:${domainKey}`;
-    await markRuntimeUncertain([warning]);
-    throw new MediaReferenceSynchronizationError("مالك مراجع الوسائط المطلوب غير مسجل.", [warning]);
-  }
-  const [references, assetMap] = await Promise.all([
-    provider.scanAll(),
-    getAllCatalogAssetIdentityMap(),
-  ]);
-  const missing = references
-    .filter((reference) => !assetMap.has(getCanonicalMediaIdentityKey(reference.identity)))
-    .map((reference) => `catalog_asset_missing:${provider.domainKey}:${reference.entityIdentity}:${reference.fieldKey}`);
-  if (missing.length) {
-    await markRuntimeUncertain(missing);
-    throw new MediaReferenceSynchronizationError("تعذر إثبات اتساق مراجع الوسائط للنطاق.", missing);
-  }
-  const payload = references.map((reference) =>
-    serializedReference(reference, assetMap.get(getCanonicalMediaIdentityKey(reference.identity))!.id),
-  );
-  const { error } = await getSupabaseAdmin().rpc("replace_media_references_for_provider", {
-    p_domain_key: provider.domainKey,
-    p_references: payload,
-  });
-  if (error) {
-    const warning = `media_reference_provider_sync_failed:${provider.domainKey}:${error.code ?? "unknown"}`;
-    await markRuntimeUncertain([warning]);
-    throw new MediaReferenceSynchronizationError("تعذرت مزامنة provider مراجع الوسائط.", [warning]);
-  }
-  return { domainKey, referenceCount: payload.length };
+  return {
+    domainKey,
+    entityIdentity,
+    referenceCount: payload.length,
+    explicitEmpty: payload.length === 0,
+  };
 }
 
 export async function synchronizeMediaReferencesAfterDomainMutation(
   domainKey: string,
   entityIdentity: string | number,
+  options: { leaseToken?: string | null; leaseEntityIdentity?: string | null } = {},
 ) {
   try {
-    const result = await syncMediaReferencesForEntity(domainKey, String(entityIdentity));
-    return { state: "synced" as const, ...result };
-  } catch (error) {
-    console.error("Media reference synchronization requires reconciliation", {
-      domainKey,
-      entityIdentity: String(entityIdentity),
-      code: error instanceof Error && "code" in error ? error.code : "media_reference_sync_failed",
-    });
+    const result = await syncMediaReferencesForEntity(domainKey, String(entityIdentity), options);
     return {
-      state: "uncertain" as const,
+      status: "synced" as const,
+      code: "media_reference_sync_succeeded" as const,
+      domainKey: result.domainKey,
+      entityIdentity: result.entityIdentity,
+      failureReason: null,
+      requiresReconciliation: false,
+      mediaSynchronizationState: "synced" as const,
+      referenceCount: result.referenceCount,
+      explicitEmpty: result.explicitEmpty,
+      uncertainties: [],
+    } satisfies MediaReferenceSynchronizationResult;
+  } catch (error) {
+    const warning = synchronizationWarning({
       domainKey,
       entityIdentity: String(entityIdentity),
-      message: error instanceof Error ? error.message : "media_reference_sync_failed",
-    };
+      error,
+    });
+    console.error("Media reference synchronization requires reconciliation", {
+      domainKey: warning.domainKey,
+      entityIdentity: warning.entityIdentity,
+      code: error instanceof Error && "code" in error ? error.code : "media_reference_sync_failed",
+      failureReason: warning.failureReason,
+    });
+    return warning;
   }
 }
 
-export async function synchronizeMediaReferenceProvidersAfterMutation(...domainKeys: string[]) {
-  const results = await Promise.allSettled(domainKeys.map((domainKey) => syncMediaReferencesForProvider(domainKey)));
-  const failures = results.flatMap((result, index) =>
-    result.status === "rejected"
-      ? [`${domainKeys[index]}:${result.reason instanceof Error ? result.reason.message : "media_reference_sync_failed"}`]
+export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+  targets: readonly {
+    domainKey: string;
+    entityIdentity: string | number;
+    leaseEntityIdentity: string;
+  }[],
+  leaseToken: string | null,
+  cleanupTargets: readonly {
+    domainKey: string;
+    entityIdentity: string | number;
+  }[] = [],
+) {
+  const [writeResults, cleanupResults] = await Promise.all([
+    Promise.all(
+      targets.map((target) =>
+        synchronizeMediaReferencesAfterDomainMutation(
+          target.domainKey,
+          target.entityIdentity,
+          {
+            leaseToken,
+            leaseEntityIdentity: target.leaseEntityIdentity,
+          },
+        ),
+      ),
+    ),
+    Promise.all(
+      cleanupTargets.map((target) =>
+        synchronizeMediaReferencesAfterDomainMutation(
+          target.domainKey,
+          target.entityIdentity,
+        ),
+      ),
+    ),
+  ]);
+  const results = [...writeResults, ...cleanupResults];
+  const allTargets = [...targets, ...cleanupTargets];
+  const nonEmptyCleanupWarnings = cleanupResults.flatMap((result) =>
+    result.status === "synced" && result.explicitEmpty !== true
+      ? [`media_reference_cleanup_not_explicit_empty:${result.domainKey}:${result.entityIdentity}`]
       : [],
   );
-  if (failures.length) {
-    console.error("Media reference providers require reconciliation", { domainKeys, failures });
-    return { state: "uncertain" as const, failures };
-  }
-  return { state: "synced" as const, failures: [] };
-}
-
-export async function synchronizeProjectMediaReferencesAfterMutation(projectId: string | number) {
-  return synchronizeProjectsMediaReferencesAfterMutation([projectId]);
-}
-
-export async function synchronizeProjectsMediaReferencesAfterMutation(projectIds: Array<string | number>) {
-  const tasks = [
-    ...projectIds.map((projectId) => syncMediaReferencesForEntity("projects", String(projectId))),
-    syncMediaReferencesForProvider("project_media"),
-    syncMediaReferencesForProvider("project_floor_plans"),
+  const failedCleanupWarnings = cleanupResults.flatMap((result) =>
+    result.status === "saved_with_media_sync_warning"
+      ? (result.uncertainties.length > 0
+          ? result.uncertainties
+          : [result.failureReason ?? result.code])
+      : [],
+  );
+  const cleanupRuntimeWarnings = [
+    ...nonEmptyCleanupWarnings,
+    ...failedCleanupWarnings,
   ];
-  const results = await Promise.allSettled(tasks);
-  const failures = results.flatMap((result) =>
-    result.status === "rejected"
-      ? [result.reason instanceof Error ? result.reason.message : "project_media_reference_sync_failed"]
-      : [],
-  );
-  if (failures.length) {
-    console.error("Project media references require reconciliation", { projectIds: projectIds.map(String), failures });
-    return { state: "uncertain" as const, failures };
+  let cleanupRuntimeMarkFailure: string | null = null;
+  if (cleanupRuntimeWarnings.length > 0) {
+    try {
+      await markMediaCatalogRuntimeUncertain(cleanupRuntimeWarnings);
+    } catch (error) {
+      cleanupRuntimeMarkFailure = `media_catalog_runtime_uncertain_mark_failed:${error instanceof Error ? error.message : "unknown"}`;
+      console.error("Media cleanup could not persist the uncertain runtime state", {
+        warnings: cleanupRuntimeWarnings,
+        failure: cleanupRuntimeMarkFailure,
+      });
+    }
   }
-  return { state: "synced" as const, failures: [] };
+  const warning = results.find(
+    (result) => result.status === "saved_with_media_sync_warning",
+  );
+  if (warning || nonEmptyCleanupWarnings.length > 0) {
+    return buildMediaReferenceSynchronizationWarning({
+      domainKey: allTargets.map((target) => target.domainKey).join(","),
+      entityIdentity: allTargets.map((target) => String(target.entityIdentity)).join(","),
+      failureReason: warning?.failureReason ?? "تعذر إثبات إزالة جميع مراجع الميديا بعد الحذف.",
+      uncertainties: [
+        ...results.flatMap((result) => result.uncertainties),
+        ...nonEmptyCleanupWarnings,
+        ...failedCleanupWarnings,
+        ...(cleanupRuntimeMarkFailure ? [cleanupRuntimeMarkFailure] : []),
+      ],
+    });
+  }
+  return {
+    status: "synced" as const,
+    code: "media_reference_sync_succeeded" as const,
+    domainKey: allTargets.map((target) => target.domainKey).join(","),
+    entityIdentity: allTargets.map((target) => String(target.entityIdentity)).join(","),
+    failureReason: null,
+    requiresReconciliation: false,
+    mediaSynchronizationState: "synced" as const,
+    referenceCount: results.reduce((sum, result) => sum + (result.referenceCount ?? 0), 0),
+    explicitEmpty: results.every((result) => result.explicitEmpty === true),
+    uncertainties: [],
+  } satisfies MediaReferenceSynchronizationResult;
 }
 
 export async function reconcileAllMediaReferences(options: {
   dryRun?: boolean;
   assetMap?: Map<string, MediaCatalogAsset>;
+  runIdentity?: string;
 } = {}) {
   validateMediaReferenceProviderRegistry();
   const assetMap = options.assetMap ?? await getAllCatalogAssetIdentityMap();
   const uncertainties: string[] = [];
+  const runIdentity = options.runIdentity ?? crypto.randomUUID();
   let discoveredReferenceCount = 0;
   let scannedProviderCount = 0;
   let synchronizedProviderCount = 0;
 
   for (const provider of MEDIA_REFERENCE_PROVIDER_REGISTRY) {
     try {
+      const expectedProviderRevision = await getMediaReferenceProviderRevision(
+        provider.domainKey,
+      );
       const references = await provider.scanAll();
       scannedProviderCount += 1;
       discoveredReferenceCount += references.length;
@@ -242,6 +368,8 @@ export async function reconcileAllMediaReferences(options: {
       const { error } = await getSupabaseAdmin().rpc("replace_media_references_for_provider", {
         p_domain_key: provider.domainKey,
         p_references: payload,
+        p_reconciliation_run_identity: runIdentity,
+        p_expected_provider_revision: expectedProviderRevision,
       });
       if (error) {
         uncertainties.push(`provider_reconciliation_failed:${provider.domainKey}:${error.code ?? "unknown"}`);
@@ -264,12 +392,23 @@ export async function reconcileAllMediaReferences(options: {
     assetCount: assetMap.size,
     uncertainties: [...new Set(uncertainties)],
     complete: uncertainties.length === 0,
+    runIdentity,
   };
 }
 
 export async function rebindAllSupportedMediaReferences(
   previousAsset: MediaCatalogAsset,
   nextAsset: MediaCatalogAsset,
+  options: {
+    actorId?: number | null;
+    requestIdentity?: string;
+    externalLease?: MediaReferenceWriteLease;
+    synchronizationTargets?: readonly {
+      domainKey: string;
+      entityIdentity: string;
+      leaseEntityIdentity: string;
+    }[];
+  } = {},
 ) {
   const persisted = await listCatalogReferences(previousAsset.id);
   const runtimeState = await getMediaCatalogRuntimeState();
@@ -285,6 +424,7 @@ export async function rebindAllSupportedMediaReferences(
     return {
       ok: false as const,
       code: "media_reference_rebind_catalog_uncertain",
+      nextAssetRequired: false,
       references: persisted,
       appliedCount: 0,
       compensationFailures: [],
@@ -295,6 +435,7 @@ export async function rebindAllSupportedMediaReferences(
     return {
       ok: false as const,
       code: "media_reference_rebind_provider_uncertain",
+      nextAssetRequired: false,
       references: persisted,
       appliedCount: 0,
       compensationFailures: live.uncertainties,
@@ -310,6 +451,7 @@ export async function rebindAllSupportedMediaReferences(
     return {
       ok: false as const,
       code: "media_reference_rebind_drift",
+      nextAssetRequired: false,
       references: persisted,
       appliedCount: 0,
       compensationFailures: [],
@@ -323,14 +465,71 @@ export async function rebindAllSupportedMediaReferences(
     return {
       ok: false as const,
       code: "unsupported_media_references",
+      nextAssetRequired: false,
       references: unsupported,
       appliedCount: 0,
       compensationFailures: [],
     };
   }
 
+  const entityGroups = new Map<string, DiscoveredMediaReference[]>();
+  for (const reference of live.references) {
+    const key = `${reference.domainKey}\u0000${reference.entityType}\u0000${reference.entityIdentity}`;
+    entityGroups.set(key, [...(entityGroups.get(key) ?? []), reference]);
+  }
+  const affectedEntityKeys = new Set(
+    persisted.map(
+      (reference) => `${reference.domainKey}\u0000${reference.entityType}\u0000${reference.entityIdentity}`,
+    ),
+  );
+  const scopes: MediaReferenceWriteScope[] = [...affectedEntityKeys].map((key) => {
+    const [domainKey, entityType, entityIdentity] = key.split("\u0000");
+    const references = entityGroups.get(key) ?? [];
+    return {
+      domainKey,
+      entityType,
+      entityIdentity,
+      values: references.map((reference) =>
+        getCanonicalMediaIdentityKey(reference.identity) === identityKey
+          ? nextAsset.publicUrl
+          : reference.publicValue,
+      ),
+    };
+  });
+
+  const ownsLease = !options.externalLease;
+  let lease = options.externalLease;
+  if (!lease) {
+    try {
+      lease = await acquireMediaReferenceWriteLease({
+        scopes,
+        actorId: options.actorId,
+        requestIdentity:
+          options.requestIdentity?.trim() ||
+          `media-rebind:${previousAsset.id}:${nextAsset.id}`,
+      }) ?? undefined;
+    } catch (error) {
+      return {
+        ok: false as const,
+        code: "media_reference_rebind_write_lease_failed",
+        nextAssetRequired: false,
+        references: persisted,
+        appliedCount: 0,
+        compensationFailures: [
+          error instanceof MediaReferenceWriteLeaseError
+            ? error.code
+            : error instanceof Error
+              ? error.message
+              : "media_reference_rebind_write_lease_failed",
+        ],
+      };
+    }
+  }
+
   const applied: Array<{ reference: (typeof persisted)[number]; providerKey: string }> = [];
-  const compensationFailures: string[] = [];
+  const domainCompensationFailures: string[] = [];
+  const coordinationFailures: string[] = [];
+  let attemptedReference: { reference: (typeof persisted)[number]; providerKey: string } | null = null;
   try {
     for (const reference of persisted) {
       const provider = getMediaReferenceProvider(reference.domainKey)!;
@@ -347,27 +546,23 @@ export async function rebindAllSupportedMediaReferences(
         referenceState: reference.referenceState,
         restorable: reference.restorable,
       };
+      attemptedReference = { reference, providerKey: provider.domainKey };
       await provider.rebind(discovered, nextAsset.publicUrl);
-      applied.push({ reference, providerKey: provider.domainKey });
+      applied.push(attemptedReference);
+      attemptedReference = null;
     }
-
-    const entities = new Set(applied.map(({ reference }) => `${reference.domainKey}:${reference.entityIdentity}`));
-    for (const entity of entities) {
-      const separator = entity.indexOf(":");
-      await syncMediaReferencesForEntity(entity.slice(0, separator), entity.slice(separator + 1));
-    }
-
-    return {
-      ok: true as const,
-      appliedCount: applied.length,
-      previousReferenceCount: persisted.length,
-      previousAssetRetained: true,
-    };
   } catch (error) {
+    if (
+      attemptedReference &&
+      error instanceof MediaReferenceProviderRebindError &&
+      error.writeMayHaveCommitted
+    ) {
+      applied.push(attemptedReference);
+    }
     for (const appliedReference of [...applied].reverse()) {
       const provider = getMediaReferenceProvider(appliedReference.providerKey);
       if (!provider) {
-        compensationFailures.push(`missing_provider:${appliedReference.providerKey}`);
+        domainCompensationFailures.push(`missing_provider:${appliedReference.providerKey}`);
         continue;
       }
       try {
@@ -387,20 +582,114 @@ export async function rebindAllSupportedMediaReferences(
           },
           previousAsset.publicUrl,
         );
-      } catch {
-        compensationFailures.push(
-          `compensation_failed:${appliedReference.reference.domainKey}:${appliedReference.reference.entityIdentity}`,
+      } catch (compensationError) {
+        try {
+          const observed = await provider.scanEntity(appliedReference.reference.entityIdentity);
+          const stillUsesNext = observed.some(
+            (reference) =>
+              reference.fieldKey === appliedReference.reference.fieldKey &&
+              getCanonicalMediaIdentityKey(reference.identity) ===
+                getCanonicalMediaIdentityKey(nextAsset),
+          );
+          if (!stillUsesNext) continue;
+        } catch {}
+        domainCompensationFailures.push(
+          `compensation_failed:${appliedReference.reference.domainKey}:${appliedReference.reference.entityIdentity}:${compensationError instanceof Error ? compensationError.message : "unknown"}`,
         );
       }
     }
     const warning = error instanceof Error ? error.message : "media_reference_rebind_failed";
-    await markRuntimeUncertain([warning, ...compensationFailures]);
+    if (lease && ownsLease) {
+      try {
+        await failMediaReferenceWriteLease({
+          lease,
+          failureCode: "media_reference_rebind_failed",
+          reasons: [warning, ...domainCompensationFailures],
+          domainWriteCommitted: domainCompensationFailures.length > 0,
+        });
+      } catch (leaseFailure) {
+        coordinationFailures.push(
+          `media_rebind_lease_failure_record_failed:${leaseFailure instanceof Error ? leaseFailure.message : "unknown"}`,
+        );
+      }
+    }
+    if (domainCompensationFailures.length) {
+      await markMediaCatalogRuntimeUncertain([warning, ...domainCompensationFailures, ...coordinationFailures]);
+    }
     return {
       ok: false as const,
       code: "media_reference_rebind_failed",
+      nextAssetRequired: domainCompensationFailures.length > 0,
       references: persisted,
       appliedCount: applied.length,
-      compensationFailures,
+      compensationFailures: [...domainCompensationFailures, ...coordinationFailures],
     };
   }
+
+  const synchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+    options.synchronizationTargets ?? scopes.map((scope) => ({
+        domainKey: scope.domainKey,
+        entityIdentity: scope.entityIdentity,
+        leaseEntityIdentity: scope.entityIdentity,
+      })),
+    lease?.token ?? null,
+  );
+  if (synchronization.status === "saved_with_media_sync_warning") {
+    if (lease && ownsLease) {
+      try {
+        await failMediaReferenceWriteLease({
+          lease,
+          failureCode: synchronization.code,
+          reasons: synchronization.uncertainties,
+          domainWriteCommitted: true,
+        });
+      } catch (leaseFailure) {
+        coordinationFailures.push(
+          `media_rebind_lease_failure_record_failed:${leaseFailure instanceof Error ? leaseFailure.message : "unknown"}`,
+        );
+      }
+    }
+    return {
+      ok: false as const,
+      code: "media_reference_rebind_sync_failed",
+      nextAssetRequired: true,
+      references: persisted,
+      appliedCount: applied.length,
+      compensationFailures: [
+        ...synchronization.uncertainties,
+        ...coordinationFailures,
+      ],
+    };
+  }
+
+  if (lease && ownsLease) {
+    try {
+      await completeMediaReferenceWriteLease(lease);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "media_rebind_lease_completion_failed";
+      await failMediaReferenceWriteLease({
+        lease,
+        failureCode: "media_rebind_lease_completion_failed",
+        reasons: [reason],
+        domainWriteCommitted: true,
+      }).catch(() => undefined);
+      await markMediaCatalogRuntimeUncertain([reason]);
+      return {
+        ok: false as const,
+        code: "media_reference_rebind_lease_completion_failed",
+        nextAssetRequired: true,
+        references: persisted,
+        appliedCount: applied.length,
+        compensationFailures: [reason],
+      };
+    }
+  }
+
+  return {
+    ok: true as const,
+    nextAssetRequired: true,
+    appliedCount: applied.length,
+    previousReferenceCount: persisted.length,
+    previousAssetRetained: true,
+  };
 }
