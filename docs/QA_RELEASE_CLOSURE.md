@@ -126,6 +126,7 @@ npm run verify:admin-runtime
 npm run verify:migrations
 npm run verify:legacy-media-admin
 npm run verify:production-media-storage
+npm run verify:media-library-system
 npm run verify:unified-content
 npm run verify:unified-content-db
 npm run verify:topic-image-clear-persistence
@@ -152,6 +153,8 @@ npm run verify:projects-hub-readiness
 ```
 
 The package manifest is the authority for the exact current command set.
+
+For the Media Catalog foundation, a green static suite does not prove remote readiness. Report migration application, reconciliation, Admin authentication, Browser QA, and destructive-operation evidence independently. If no trusted Admin session exists, Browser QA is `Skipped`, not `Passed`.
 
 Do not run every command mechanically. Select targeted proof, then the final gate required by scope.
 

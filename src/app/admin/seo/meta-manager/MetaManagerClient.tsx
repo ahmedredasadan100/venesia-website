@@ -16,7 +16,7 @@ const inputClass =
 export default function MetaManagerClient({ initialSettings }: MetaManagerClientProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ message: string; warning: boolean } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -28,8 +28,15 @@ export default function MetaManagerClient({ initialSettings }: MetaManagerClient
 
     startTransition(async () => {
       try {
-        await saveGlobalSeoSettingsAction(formData);
-        setNotice("تم حفظ إعدادات SEO العامة.");
+        const result = await saveGlobalSeoSettingsAction(formData);
+        const warning =
+          result.mediaSynchronization.status === "saved_with_media_sync_warning";
+        setNotice({
+          warning,
+          message: warning
+            ? "تم حفظ إعدادات SEO، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا."
+            : "تم حفظ إعدادات SEO العامة.",
+        });
         router.refresh();
       } catch (submitError) {
         setError(submitError instanceof Error ? submitError.message : "تعذر حفظ الإعدادات.");
@@ -48,8 +55,14 @@ export default function MetaManagerClient({ initialSettings }: MetaManagerClient
       </section>
 
       {notice ? (
-        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-          {notice}
+        <div
+          className={
+            notice.warning
+              ? "rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+              : "rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
+          }
+        >
+          {notice.message}
         </div>
       ) : null}
       {error ? (

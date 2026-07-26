@@ -283,6 +283,7 @@ const expectedClassifications: Record<
     "footer-builder",
     "global-seo-settings",
     "company-identity-settings",
+    "media-library-settings",
     "security-settings",
     "users-and-roles",
   ],

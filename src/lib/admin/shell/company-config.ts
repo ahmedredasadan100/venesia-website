@@ -89,6 +89,9 @@ export async function saveAdminCompanyConfig(value: AdminCompanyIdentity) {
     { onConflict: "key" },
   );
   if (error) throw new Error(error.message);
-  revalidateTag(ADMIN_COMPANY_CONFIG_CACHE_TAG, { expire: 0 });
   return parsed;
+}
+
+export function revalidateAdminCompanyConfig() {
+  revalidateTag(ADMIN_COMPANY_CONFIG_CACHE_TAG, { expire: 0 });
 }

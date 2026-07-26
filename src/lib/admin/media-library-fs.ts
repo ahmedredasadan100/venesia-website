@@ -15,6 +15,7 @@ import {
   resolvePublicFolder,
   type MediaAssetItem,
   type PublicMediaFolderListing,
+  type PublicMediaInventory,
 } from "./media-library-paths";
 import {
   MediaStorageError,
@@ -50,25 +51,9 @@ function buildAssetItem(
     uploadedAt,
     managed: false,
     provider: "filesystem",
+    bucket: "public",
     storagePath: null,
   };
-}
-
-function resolveReplaceDestination(normalized: string, target: string, replacePath?: string | null) {
-  if (!replacePath?.trim()) return null;
-
-  const trimmed = replacePath.trim();
-  const relative = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
-  if (!relative.startsWith(`${normalized}/`)) return null;
-
-  const destination = path.join(process.cwd(), "public", relative);
-  const publicRoot = path.join(process.cwd(), "public");
-
-  if (!destination.startsWith(publicRoot) || !fs.existsSync(destination)) {
-    return null;
-  }
-
-  return destination;
 }
 
 export function listPublicMediaFolderFromFs(folder = "images"): PublicMediaFolderListing {
@@ -166,6 +151,30 @@ export function listPublicImagePathsFromFs(folder = "images", limit = 240) {
   return results.slice(0, limit).sort((a, b) => a.localeCompare(b));
 }
 
+export function listPublicMediaInventoryFromFs(): PublicMediaInventory {
+  const folders = new Set<string>(["images", "files"]);
+  const items: MediaAssetItem[] = [];
+  const queue = ["images", "files"];
+
+  while (queue.length) {
+    const folder = queue.shift()!;
+    const listing = listPublicMediaFolderFromFs(folder);
+    items.push(...listing.items);
+    for (const name of listing.subfolders) {
+      const child = path.posix.join(folder, name);
+      if (folders.has(child)) continue;
+      folders.add(child);
+      queue.push(child);
+    }
+  }
+
+  return {
+    provider: "filesystem",
+    folders: Array.from(folders).sort((left, right) => left.localeCompare(right)),
+    items: items.sort((left, right) => left.path.localeCompare(right.path)),
+  };
+}
+
 export async function savePublicMediaUploadToFs(
   folder: string,
   file: File,
@@ -180,11 +189,9 @@ export async function savePublicMediaUploadToFs(
     fs.mkdirSync(target, { recursive: true });
   }
 
-  const replaceDestination = resolveReplaceDestination(normalized, target, options?.replacePath);
-  const filename = replaceDestination
-    ? path.basename(replaceDestination)
-    : sanitizeCmsUploadFilename(file.name, IMAGE_EXTENSIONS, "image");
-  const destination = replaceDestination ?? path.join(target, filename);
+  void options?.replacePath;
+  const filename = sanitizeCmsUploadFilename(file.name, IMAGE_EXTENSIONS, "image");
+  const destination = path.join(target, filename);
   const bytes = Buffer.from(await file.arrayBuffer());
 
   fs.writeFileSync(destination, bytes);
@@ -209,11 +216,9 @@ export async function savePublicDocumentUploadToFs(
     fs.mkdirSync(target, { recursive: true });
   }
 
-  const replaceDestination = resolveReplaceDestination(normalized, target, options?.replacePath);
-  const filename = replaceDestination
-    ? path.basename(replaceDestination)
-    : sanitizeCmsUploadFilename(file.name, PDF_EXTENSIONS, "document");
-  const destination = replaceDestination ?? path.join(target, filename);
+  void options?.replacePath;
+  const filename = sanitizeCmsUploadFilename(file.name, PDF_EXTENSIONS, "document");
+  const destination = path.join(target, filename);
   const bytes = Buffer.from(await file.arrayBuffer());
 
   fs.writeFileSync(destination, bytes);
@@ -229,6 +234,9 @@ export function createFilesystemMediaStorageAdapter(): MediaStorageAdapter {
     provider: "filesystem",
     async listFolder(folder = "images") {
       return listPublicMediaFolderFromFs(folder);
+    },
+    async listInventory() {
+      return listPublicMediaInventoryFromFs();
     },
     async listImagePaths(folder = "images", limit = 240) {
       return listPublicImagePathsFromFs(folder, limit);

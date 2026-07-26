@@ -13,7 +13,7 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ message?: string }>;
+  searchParams?: Promise<{ message?: string; notice?: string }>;
 }) {
   const { id } = await params;
   const query = await searchParams;
@@ -39,7 +39,13 @@ export default async function Page({
         description="إدارة عناصر القائمة عبر تبويبات منظمة وجدول إداري موحّد مع بقية لوحة التحكم."
       />
 
-      <MenuBuilderClient menu={menu} items={items} databaseReady={databaseReady} message={query?.message} />
+      <MenuBuilderClient
+        menu={menu}
+        items={items}
+        databaseReady={databaseReady}
+        message={query?.message}
+        messageWarning={query?.notice === "saved_with_media_sync_warning"}
+      />
     </main>
   );
 }

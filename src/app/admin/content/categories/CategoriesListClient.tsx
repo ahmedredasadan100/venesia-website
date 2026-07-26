@@ -158,6 +158,10 @@ export default function CategoriesListClient({
             return {
               ok: true as const,
               message: actionResult.message,
+              feedbackStatus:
+                actionResult.feedbackStatus === "warning"
+                  ? "warning" as const
+                  : "success" as const,
               isActive: actionResult.isActive,
               status: actionResult.status,
               updatedAt: actionResult.updatedAt,
@@ -193,6 +197,7 @@ export default function CategoriesListClient({
           ok: true,
           title: "تم بنجاح",
           message: result.message,
+          feedbackStatus: result.feedbackStatus,
           code: nextActive ? "published" : "unpublished",
           entityId: category.id,
           isActive:
@@ -236,6 +241,10 @@ export default function CategoriesListClient({
             return {
               ok: true as const,
               message: actionResult.message,
+              feedbackStatus:
+                actionResult.feedbackStatus === "warning"
+                  ? "warning" as const
+                  : "success" as const,
               insertedId: actionResult.insertedId,
             };
           },
@@ -246,6 +255,7 @@ export default function CategoriesListClient({
           ok: true,
           title: "تم بنجاح",
           message: result.message,
+          feedbackStatus: result.feedbackStatus,
           code: "created",
           entityId: insertedId,
           insertedId,
@@ -280,6 +290,11 @@ export default function CategoriesListClient({
                   ok: true as const,
                   message:
                     actionResult.message ?? "تم حذف التصنيف بنجاح.",
+                  feedbackStatus:
+                    "feedbackStatus" in actionResult &&
+                    actionResult.feedbackStatus === "warning"
+                      ? "warning" as const
+                      : "success" as const,
                 }
               : {
                   ok: false as const,
@@ -288,7 +303,11 @@ export default function CategoriesListClient({
                 };
           },
         });
-        return { ok: true, message: result.message };
+        return {
+          ok: true,
+          message: result.message,
+          feedbackStatus: result.feedbackStatus,
+        };
       } catch (error) {
         return {
           ok: false,

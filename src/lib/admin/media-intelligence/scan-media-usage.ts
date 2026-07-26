@@ -1,192 +1,64 @@
 import "server-only";
 
-import { getSupabaseAdmin } from "../../supabase-admin";
+import {
+  getCatalogAssetByPublicValue,
+  getMediaCatalogRuntimeState,
+  listCatalogReferences,
+  listMediaCatalogSnapshot,
+} from "../media-catalog/catalog";
+import { buildMediaCatalogReadiness } from "../media-catalog/readiness";
+import { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION } from "../media-catalog/reference-providers";
+import {
+  listPublicMediaInventory,
+  resolveMediaStorageRuntimeContext,
+} from "../media-library";
 
 export type MediaUsageHit = {
   entityType: string;
   entityLabel: string;
   field: string;
   editHref: string | null;
+  referenceState: string;
 };
 
-type SearchNeedles = {
-  full: string;
-  path: string;
-  filename: string;
-};
-
-function tryParsePath(value: string) {
-  try {
-    if (value.startsWith("http://") || value.startsWith("https://")) {
-      return new URL(value).pathname;
-    }
-  } catch {
-    return value;
-  }
-  return value;
-}
-
-export function buildAssetSearchNeedles(assetUrl: string): SearchNeedles | null {
-  const full = assetUrl.trim();
-  if (!full) return null;
-
-  const path = tryParsePath(full);
-  const filename = path.split("/").pop() ?? full.split("/").pop() ?? "";
-  if (!filename || filename.length < 3) return null;
-
-  return { full, path, filename };
-}
-
-function haystackContains(haystack: string | null | undefined, needles: SearchNeedles) {
-  if (!haystack) return false;
-  const value = haystack.toLowerCase();
-  return (
-    value.includes(needles.full.toLowerCase()) ||
-    value.includes(needles.path.toLowerCase()) ||
-    value.includes(needles.filename.toLowerCase())
-  );
-}
-
-function pushHit(hits: MediaUsageHit[], hit: MediaUsageHit) {
-  const key = `${hit.entityType}:${hit.editHref}:${hit.field}`;
-  if (hits.some((existing) => `${existing.entityType}:${existing.editHref}:${existing.field}` === key)) {
-    return;
-  }
-  hits.push(hit);
-}
-
-function scanJsonValue(
-  hits: MediaUsageHit[],
-  needles: SearchNeedles,
-  entityType: string,
-  entityLabel: string,
-  editHref: string | null,
-  field: string,
-  value: unknown,
-) {
-  if (value == null) return;
-  const serialized = typeof value === "string" ? value : JSON.stringify(value);
-  if (haystackContains(serialized, needles)) {
-    pushHit(hits, { entityType, entityLabel, field, editHref });
-  }
-}
-
+/**
+ * Compatibility facade for existing usage consumers.
+ * Persisted media_references is authoritative; textual filename scanning is intentionally removed.
+ */
 export async function scanMediaAssetUsage(assetUrl: string): Promise<MediaUsageHit[]> {
-  const needles = buildAssetSearchNeedles(assetUrl);
-  if (!needles) return [];
-
-  const hits: MediaUsageHit[] = [];
-  const supabase = getSupabaseAdmin();
-
-  const [{ data: topics }, { data: projects }, { data: mediaItems }, { data: heroTemplates }, { data: contentBlocks }, { data: settings }] =
-    await Promise.all([
-      supabase
-        .from("topics")
-        .select("id, title, slug, content_type, image, image_alt, excerpt, content, media_payload")
-        .is("deleted_at", null)
-        .limit(500),
-      supabase
-        .from("projects")
-        .select(
-          "id, name, slug, image, hero_image, og_image, district_image, overview_video_image, brochure_url",
-        )
-        .limit(300),
-      supabase.from("media_items").select("id, title, slug, type, image").limit(300),
-      supabase.from("hero_templates").select("id, name, slug, config").limit(120),
-      supabase.from("content_block_templates").select("id, name, slug, config").limit(200),
-      supabase
-        .from("site_settings")
-        .select("key, value")
-        .in("key", ["footer_brand", "footer_slots", "footer_social_links"]),
-    ]);
-
-  for (const topic of topics ?? []) {
-    const editHref = `/admin/content/topics/${topic.id}`;
-    const entityType = "موضوع";
-
-    if (haystackContains(topic.image, needles)) {
-      pushHit(hits, {
-        entityType,
-        entityLabel: topic.title || topic.slug || `#${topic.id}`,
-        field: "image",
-        editHref,
-      });
-    }
-    if (haystackContains(topic.excerpt, needles)) {
-      pushHit(hits, { entityType, entityLabel: topic.title || `#${topic.id}`, field: "excerpt", editHref });
-    }
-    if (haystackContains(topic.content, needles)) {
-      pushHit(hits, { entityType, entityLabel: topic.title || `#${topic.id}`, field: "content", editHref });
-    }
-    scanJsonValue(hits, needles, entityType, topic.title || `#${topic.id}`, editHref, "media_payload", topic.media_payload);
+  const context = resolveMediaStorageRuntimeContext();
+  const [runtimeState, catalog, inventory] = await Promise.all([
+    getMediaCatalogRuntimeState(),
+    listMediaCatalogSnapshot(),
+    listPublicMediaInventory(),
+  ]);
+  const readiness = buildMediaCatalogReadiness(
+    catalog,
+    inventory,
+    runtimeState,
+    context,
+    MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
+  );
+  if (!readiness.usageResultsAuthoritative) {
+    throw new Error("media_reference_truth_uncertain");
   }
 
-  for (const project of projects ?? []) {
-    const editHref = `/admin/projects/${project.id}`;
-    const label = project.name || project.slug || `#${project.id}`;
-    const fields: Array<[string, string | null | undefined]> = [
-      ["image", project.image],
-      ["hero_image", project.hero_image],
-      ["og_image", project.og_image],
-      ["district_image", project.district_image],
-      ["overview_video_image", project.overview_video_image],
-      ["brochure_url", project.brochure_url],
-    ];
-
-    for (const [field, value] of fields) {
-      if (haystackContains(value, needles)) {
-        pushHit(hits, { entityType: "مشروع", entityLabel: label, field, editHref });
-      }
-    }
+  const asset = await getCatalogAssetByPublicValue(assetUrl);
+  if (
+    !asset ||
+    !asset.catalogRegistered ||
+    asset.provider !== context.provider ||
+    asset.reconciliationState !== "synced" ||
+    asset.missingObject
+  ) {
+    throw new Error("media_asset_missing_from_catalog");
   }
-
-  for (const item of mediaItems ?? []) {
-    if (haystackContains(item.image, needles)) {
-      pushHit(hits, {
-        entityType: "مركز إعلامي (قديم)",
-        entityLabel: item.title || item.slug || `#${item.id}`,
-        field: "image",
-        // Legacy media_items rows are read-only here; send editors to Unified Media Admin.
-        editHref: "/admin/content/topics",
-      });
-    }
-  }
-
-  for (const hero of heroTemplates ?? []) {
-    scanJsonValue(
-      hits,
-      needles,
-      "قالب Hero",
-      hero.name || hero.slug || `#${hero.id}`,
-      `/admin/pages-blocks/blocks/hero/${hero.id}`,
-      "config",
-      hero.config,
-    );
-  }
-
-  for (const block of contentBlocks ?? []) {
-    scanJsonValue(
-      hits,
-      needles,
-      "كتلة محتوى",
-      block.name || block.slug || `#${block.id}`,
-      `/admin/pages-blocks/blocks/content/${block.id}`,
-      "config",
-      block.config,
-    );
-  }
-
-  for (const setting of settings ?? []) {
-    scanJsonValue(
-      hits,
-      needles,
-      "إعدادات الموقع",
-      setting.key,
-      setting.key.startsWith("footer") ? "/admin/pages-blocks/footer" : "/admin/settings/general",
-      "value",
-      setting.value,
-    );
-  }
-
-  return hits;
+  const references = await listCatalogReferences(asset.id);
+  return references.map((reference) => ({
+    entityType: reference.entityType,
+    entityLabel: reference.entityLabel ?? `${reference.entityType} #${reference.entityIdentity}`,
+    field: reference.fieldKey,
+    editHref: reference.editHref,
+    referenceState: reference.referenceState,
+  }));
 }

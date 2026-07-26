@@ -13,7 +13,6 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   outputFileTracingExcludes: {
-    "/api/admin/media-browse": ["./qa-mobile-audit/**/*", "./public/**/*"],
     "/api/admin/media-library": ["./qa-mobile-audit/**/*", "./public/**/*"],
   },
   images: {

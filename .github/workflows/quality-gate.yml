@@ -42,6 +42,22 @@ jobs:
       - name: Verify legacy media admin closed
         run: npm run verify:legacy-media-admin
 
+      - name: Verify Media coordination SQL contracts
+        run: |
+          npm run verify:media-coordination-rpc-acl
+          npm run verify:media-coordination-sql
+
+      - name: Verify Media library and delete Saga
+        run: |
+          npm run verify:production-media-storage
+          npm run verify:media-library-system
+          npm run verify:media-delete-saga
+
+      - name: Verify Media write adoption and QA guards
+        run: |
+          npm run verify:media-write-adoption
+          npm run verify:media-live-qa-guards
+
       - name: Verify Unified Content Engine
         run: npm run verify:unified-content
 
@@ -53,3 +69,50 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  media-coordination-postgres:
+    name: Media Coordination · PostgreSQL 15
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: venesia_media_coordination_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d venesia_media_coordination_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
+
+    env:
+      MEDIA_COORDINATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/venesia_media_coordination_ci
+      MEDIA_COORDINATION_DATABASE_REQUIRED: "1"
+      MEDIA_COORDINATION_DATABASE_DISPOSABLE: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Verify Media coordination SQL contracts
+        run: |
+          npm run verify:media-coordination-rpc-acl
+          npm run verify:media-coordination-sql
+
+      - name: Verify Media coordination on isolated PostgreSQL 15
+        run: npm run verify:media-coordination-postgres

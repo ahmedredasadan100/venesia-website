@@ -1,6 +1,11 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  synchronizeMediaReferenceWriteScopesAfterDomainMutation,
+  type MediaReferenceSynchronizationResult,
+} from "../../../../../lib/admin/media-catalog/synchronization";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 
@@ -609,7 +614,7 @@ async function ensureUniqueSlug(slug: string, id?: number) {
 }
 
 export async function createContentBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
@@ -619,21 +624,34 @@ export async function createContentBlock(formData: FormData) {
   const variantInput = cleanText(formData.get("variant")) || null;
   const variant = resolveStructuredVariant(slug, variantInput);
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("content_block_templates")
-    .insert({
-      name,
-      slug,
-      description: readTemplateInternalDescription(formData),
-      variant,
-      style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
-      config: await buildContentConfig(formData, slug),
-    })
-    .select("id")
-    .single();
-
-  if (error) throw new Error(error.message);
+  const nextRow = {
+    name,
+    slug,
+    description: readTemplateInternalDescription(formData),
+    variant,
+    style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
+    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    config: await buildContentConfig(formData, slug),
+  };
+  const provisionalIdentity = `create:${crypto.randomUUID()}`;
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "content_block_templates",
+    leaseEntityIdentity: provisionalIdentity,
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `content-block:create:${provisionalIdentity}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("content_block_templates")
+        .insert(nextRow)
+        .select("id")
+        .single<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "Unable to create content block.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
+  const data = coordinated.value;
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("content_block_template", "create"),
@@ -644,11 +662,11 @@ export async function createContentBlock(formData: FormData) {
   });
 
   await revalidateBlockModulePaths("content");
-  redirect(`/admin/pages-blocks/blocks/content/${data.id}`);
+  redirect(`/admin/pages-blocks/blocks/content/${data.id}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "?notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function updateContentBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
 
@@ -677,21 +695,34 @@ export async function updateContentBlock(formData: FormData) {
   const variant = resolveStructuredVariant(slug, variantInput);
   const nextConfig = await buildContentConfig(formData, slug, existing.config);
 
-  const { error } = await getSupabaseAdmin()
-    .from("content_block_templates")
-    .update({
-      name,
-      slug,
-      description: readTemplateInternalDescription(formData),
-      variant,
-      style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
-      config: nextConfig,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) throw new Error(error.message);
+  const nextRow = {
+    name,
+    slug,
+    description: readTemplateInternalDescription(formData),
+    variant,
+    style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
+    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    config: nextConfig,
+    updated_at: new Date().toISOString(),
+  };
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "content_block_templates",
+    leaseEntityIdentity: String(id),
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `content-block:update:${id}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("content_block_templates")
+        .update(nextRow)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "Unable to update content block.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
 
   await syncBlockModulePageAssignments("content", id, parsePageIdsFromForm(formData));
   await recordCmsAdminAudit({
@@ -702,7 +733,7 @@ export async function updateContentBlock(formData: FormData) {
     metadata: { slug, variant, projects_hub: isProjectsHubTemplate(slug, variant) },
   });
   await revalidateBlockModulePaths("content");
-  redirect(`/admin/pages-blocks/blocks/content/${id}?saved=1`);
+  redirect(`/admin/pages-blocks/blocks/content/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function toggleContentBlockStatus(formData: FormData) {
@@ -725,14 +756,38 @@ export async function deleteContentBlock(formData: FormData) {
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
-  const { error } = await getSupabaseAdmin().from("content_block_templates").delete().eq("id", id);
+  const { data: existing, error: lookupError } = await getSupabaseAdmin()
+    .from("content_block_templates")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle<{ id: number }>();
+  if (lookupError) throw new Error(lookupError.message);
+  const cleanupIdentity = existing?.id ?? id;
+
+  const { error } = await getSupabaseAdmin()
+    .from("content_block_templates")
+    .delete()
+    .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+    [],
+    null,
+    [{ domainKey: "content_block_templates", entityIdentity: cleanupIdentity }],
+  );
+  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
+    try {
+      await revalidateBlockModulePaths("content");
+    } catch (revalidationError) {
+      console.error("Content block delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
+    }
+    redirect("/admin/pages-blocks/blocks/content?notice=saved_with_media_sync_warning");
+  }
   await revalidateBlockModulePaths("content");
 }
 
 export async function duplicateContentBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -741,7 +796,7 @@ export async function duplicateContentBlock(formData: FormData) {
 
   const copySlug = `${source.slug}-copy-${Date.now()}`;
 
-  const { error: insertError } = await getSupabaseAdmin().from("content_block_templates").insert({
+  const nextRow = {
     name: `${source.name} - نسخة`,
     slug: copySlug,
     description: source.description,
@@ -750,10 +805,29 @@ export async function duplicateContentBlock(formData: FormData) {
     status: "draft",
     config: source.config,
     sort_order: (source.sort_order ?? 0) + 1,
+  };
+  const provisionalIdentity = `duplicate:${id}:${crypto.randomUUID()}`;
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "content_block_templates",
+    leaseEntityIdentity: provisionalIdentity,
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `content-block:duplicate:${id}`,
+    mutate: async () => {
+      const { data, error: insertError } = await getSupabaseAdmin()
+        .from("content_block_templates")
+        .insert(nextRow)
+        .select("id")
+        .single<{ id: number }>();
+      if (insertError || !data) throw new Error(insertError?.message ?? "Unable to duplicate content block.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
   });
-
-  if (insertError) throw new Error(insertError.message);
   await revalidateBlockModulePaths("content");
+  if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
+    redirect("/admin/pages-blocks/blocks/content?notice=saved_with_media_sync_warning");
+  }
 }
 
 export async function bulkContentBlocks(formData: FormData) {
@@ -775,11 +849,40 @@ export async function bulkContentBlocks(formData: FormData) {
     if (error) throw new Error(error.message);
   }
 
+  let mediaSynchronization: MediaReferenceSynchronizationResult | null = null;
   if (action === "delete") {
-    const { error } = await getSupabaseAdmin().from("content_block_templates").delete().in("id", ids);
+    const { data: existingRows, error: lookupError } = await getSupabaseAdmin()
+      .from("content_block_templates")
+      .select("id")
+      .in("id", ids);
+    if (lookupError) throw new Error(lookupError.message);
+
+    const capturedIds = (existingRows ?? []).map((row) => Number(row.id));
+    const cleanupIds = [...new Set([...capturedIds, ...ids])];
+    const { error } = await getSupabaseAdmin()
+      .from("content_block_templates")
+      .delete()
+      .in("id", cleanupIds);
     if (error) throw new Error(error.message);
+
+    mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+      [],
+      null,
+      cleanupIds.map((cleanupId) => ({
+        domainKey: "content_block_templates",
+        entityIdentity: cleanupId,
+      })),
+    );
   }
 
+  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
+    try {
+      await revalidateBlockModulePaths("content");
+    } catch (revalidationError) {
+      console.error("Content block bulk delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
+    }
+    redirect("/admin/pages-blocks/blocks/content?notice=saved_with_media_sync_warning");
+  }
   await revalidateBlockModulePaths("content");
 }
 

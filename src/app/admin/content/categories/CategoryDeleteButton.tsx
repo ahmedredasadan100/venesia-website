@@ -29,7 +29,11 @@ type CategoryDeleteButtonProps = {
   onDelete: (
     categoryId: number,
     transferToId: number | null,
-  ) => Promise<{ ok: boolean; message?: string }>;
+  ) => Promise<{
+    ok: boolean;
+    message?: string;
+    feedbackStatus?: "success" | "warning";
+  }>;
 };
 
 export default function CategoryDeleteButton({
@@ -127,6 +131,7 @@ export default function CategoryDeleteButton({
       setOpen(false);
       onMutationResult?.({
         ok: true,
+        feedbackStatus: result.feedbackStatus,
         title: "تم بنجاح",
         message: result.message ?? "تم حذف التصنيف بنجاح.",
         code: "deleted",
@@ -174,6 +179,7 @@ export default function CategoryDeleteButton({
       setOpen(false);
       onMutationResult?.({
         ok: true,
+        feedbackStatus: result.feedbackStatus,
         title: "تم بنجاح",
         message: result.message ?? "تم حذف التصنيف بنجاح.",
         code: "deleted",

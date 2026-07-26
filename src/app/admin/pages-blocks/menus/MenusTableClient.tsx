@@ -45,6 +45,7 @@ export type MenuListRow = {
 type MenusTableClientProps = {
   menus: MenuListRow[];
   message?: string | null;
+  messageWarning?: boolean;
 };
 
 type MenuSortKey = "name" | "slug" | "item_count" | "status";
@@ -86,7 +87,11 @@ function menuStatusLabel(isActive: boolean) {
   return isActive ? "ظاهرة" : "مخفية";
 }
 
-export default function MenusTableClient({ menus, message }: MenusTableClientProps) {
+export default function MenusTableClient({
+  menus,
+  message,
+  messageWarning = false,
+}: MenusTableClientProps) {
   const sortAccessors = useMemo(
     () => ({
       name: (item: MenuListRow) => item.name,
@@ -121,7 +126,12 @@ export default function MenusTableClient({ menus, message }: MenusTableClientPro
         actions={<AddMenuPanelClient />}
       />
 
-      {message ? <AdminNotice variant="success" message={message} /> : null}
+      {message ? (
+        <AdminNotice
+          variant={messageWarning ? "warning" : "success"}
+          message={message}
+        />
+      ) : null}
 
       <form id="bulk-menu-form" action={bulkMenuAction} />
       <BulkMenuController />

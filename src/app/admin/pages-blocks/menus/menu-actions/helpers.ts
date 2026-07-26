@@ -13,6 +13,12 @@ import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidat
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { revalidatePath } from "next/cache";
+import type { MediaReferenceSynchronizationResult } from "../../../../../lib/admin/media-catalog/reference-sync-contract";
+import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../../lib/admin/media-catalog/write-lease";
 import { redirect } from "next/navigation";
 import type { ImportedMenuItem } from "./types";
 
@@ -52,19 +58,31 @@ export function createSlug(value: string) {
   return slugifyFromTitle(value);
 }
 
-export function menusPath(message?: string) {
-  return `/admin/pages-blocks/menus${message ? `?message=${encodeURIComponent(message)}` : ""}`;
+type NavigationMessage = string | { message: string; mediaWarning: true };
+
+function navigationQuery(message?: NavigationMessage) {
+  if (!message) return "";
+  const text = typeof message === "string" ? message : message.message;
+  const params = new URLSearchParams({ message: text });
+  if (typeof message !== "string" && message.mediaWarning) {
+    params.set("notice", "saved_with_media_sync_warning");
+  }
+  return `?${params.toString()}`;
 }
 
-export function menuPath(menuId: number | string, message?: string) {
-  return `/admin/pages-blocks/menus/${menuId}${message ? `?message=${encodeURIComponent(message)}` : ""}`;
+export function menusPath(message?: NavigationMessage) {
+  return `/admin/pages-blocks/menus${navigationQuery(message)}`;
 }
 
-export function backToMenus(message?: string): never {
+export function menuPath(menuId: number | string, message?: NavigationMessage) {
+  return `/admin/pages-blocks/menus/${menuId}${navigationQuery(message)}`;
+}
+
+export function backToMenus(message?: NavigationMessage): never {
   redirect(menusPath(message));
 }
 
-export function backToMenu(menuId: number | string | null | undefined, message?: string): never {
+export function backToMenu(menuId: number | string | null | undefined, message?: NavigationMessage): never {
   if (!menuId) backToMenus(message);
   redirect(menuPath(menuId, message));
 }
@@ -76,6 +94,48 @@ export function assertValidMenuSlug(slug: string) {
 
 export function sortParentsBeforeChildren<T extends { parent_id?: unknown }>(items: T[]) {
   return [...items].sort((a, b) => (a.parent_id ? 1 : 0) - (b.parent_id ? 1 : 0));
+}
+
+export function collectMenuItemDescendantIds(
+  rootId: number,
+  items: readonly { id: number | string; parent_id?: number | string | null }[],
+) {
+  const children = new Map<number, number[]>();
+  for (const item of items) {
+    const itemId = Number(item.id);
+    const parentId = item.parent_id == null ? null : Number(item.parent_id);
+    if (!Number.isInteger(itemId) || itemId <= 0 || !parentId) continue;
+    children.set(parentId, [...(children.get(parentId) ?? []), itemId]);
+  }
+
+  const affected = new Set<number>();
+  const pending = [rootId];
+  while (pending.length) {
+    const itemId = pending.pop();
+    if (!itemId || affected.has(itemId)) continue;
+    affected.add(itemId);
+    pending.push(...(children.get(itemId) ?? []));
+  }
+  return [...affected];
+}
+
+export async function synchronizeDeletedMenuItemReferences(
+  entityIds: readonly (number | string)[],
+) {
+  const uniqueIds = [...new Set(
+    entityIds
+      .map((entityId) => Number(entityId))
+      .filter((entityId) => Number.isInteger(entityId) && entityId > 0),
+  )];
+  if (!uniqueIds.length) return undefined;
+  return synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+    [],
+    null,
+    uniqueIds.map((entityId) => ({
+      domainKey: "menu_items",
+      entityIdentity: entityId,
+    })),
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -118,7 +178,9 @@ export async function resolveMenuItemLink(formData: FormData) {
   return adminLinkToMenuItemColumns(link, resolvedHref);
 }
 
-export function revalidateNavigation() {
+export async function revalidateNavigation(
+  mediaSynchronization?: MediaReferenceSynchronizationResult,
+) {
   revalidateNavigationCache();
   revalidateFooterPublicPaths();
   revalidatePath("/");
@@ -128,4 +190,24 @@ export function revalidateNavigation() {
   revalidateMediaCenterPublicPaths();
   revalidatePath("/contact");
   revalidatePath("/admin/pages-blocks/menus");
+  return mediaSynchronization;
+}
+
+export function navigationMutationMessage(
+  mediaSynchronization: MediaReferenceSynchronizationResult | undefined,
+  successMessage: string,
+) {
+  return mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? {
+        message: `${successMessage} لكن تعذرت مزامنة ارتباطات الميديا، لذلك يظل الحذف الآمن متوقفًا.`,
+        mediaWarning: true as const,
+      }
+    : successMessage;
+}
+
+export function mediaWriteMutationErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof MediaReferenceWriteLeaseError) {
+    return getMediaReferenceWriteLeaseUserMessage(error.code);
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
 }

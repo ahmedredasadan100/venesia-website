@@ -15,6 +15,10 @@ import {
   MEDIA_SIDEBAR_ASSIGNMENT_TABLE,
   MEDIA_SIDEBAR_TEMPLATE_TABLE,
 } from "../../../../../lib/media-sidebar-modules/registry";
+import {
+  coordinateMediaReferenceEntityMutation,
+  MediaDomainMutationError,
+} from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   assignmentTable,
@@ -52,7 +56,15 @@ async function bumpAssignmentSortOrders(table: string, pageId: number, afterSort
 }
 
 async function deleteTemplateOrphan(table: string, templateId: number) {
-  await getSupabaseAdmin().from(table).delete().eq("id", templateId);
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from(table).delete().eq("id", templateId);
+  if (!error) return true;
+  const { data, error: verificationError } = await supabase
+    .from(table)
+    .select("id")
+    .eq("id", templateId)
+    .maybeSingle();
+  return !verificationError && !data;
 }
 
 type DuplicateModuleParams = {
@@ -60,13 +72,30 @@ type DuplicateModuleParams = {
   assignmentId: number;
   moduleKind: PageModuleKind;
   templateId: number;
+  actorId: number;
 };
+
+function mutationError(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function moduleRedirectWithMediaSynchronization(
+  moduleKind: PageModuleKind,
+  templateId: number,
+  status: "synced" | "saved_with_media_sync_warning",
+) {
+  const href = moduleEditHref(moduleKind, templateId);
+  return status === "saved_with_media_sync_warning"
+    ? `${href}?notice=saved_with_media_sync_warning`
+    : href;
+}
 
 async function duplicateStandardBlockModule({
   pageId,
   assignmentId,
   moduleKind,
   templateId,
+  actorId,
 }: DuplicateModuleParams): Promise<PageBlockActionResult> {
   const blockType = moduleKind as PageBlockType;
   if (!(blockType in BLOCK_MODULE_REGISTRY)) {
@@ -113,55 +142,81 @@ async function duplicateStandardBlockModule({
     sort_order: Number(sourceTemplate.sort_order ?? 0) + 1,
   };
 
-  const { data: inserted, error: insertError } = await getSupabaseAdmin()
-    .from(tplTable)
-    .insert(insertPayload)
-    .select("id")
-    .single();
-
-  if (insertError || !inserted?.id) {
-    return failure(insertError?.message || "تعذر إنشاء نسخة القالب.");
-  }
-
-  const newTemplateId = Number(inserted.id);
   const sourceSort = Number(sourceAssignment.sort_order ?? 0);
   const newSort = sourceSort + 10;
+  const provisionalIdentity = `duplicate:${templateId}:${crypto.randomUUID()}`;
 
   try {
-    await bumpAssignmentSortOrders(asgTable, pageId, sourceSort);
+    const coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: tplTable,
+      leaseEntityIdentity: provisionalIdentity,
+      intendedRow: insertPayload,
+      actorId,
+      requestIdentity: `page-module:${moduleKind}:duplicate:${actorId}:${provisionalIdentity}`,
+      mutate: async () => {
+        const { data: inserted, error: insertError } = await getSupabaseAdmin()
+          .from(tplTable)
+          .insert(insertPayload)
+          .select("id")
+          .single();
 
-    const { data: newAssignment, error: linkError } = await getSupabaseAdmin()
-      .from(asgTable)
-      .insert({
-        page_id: pageId,
-        template_id: newTemplateId,
-        slot: sourceAssignment.slot,
-        sort_order: newSort,
-        is_visible: false,
-      })
-      .select("id")
-      .single();
+        if (insertError || !inserted?.id) {
+          throw new Error(insertError?.message || "تعذر إنشاء نسخة القالب.");
+        }
 
-    if (linkError || !newAssignment?.id) {
-      await deleteTemplateOrphan(tplTable, newTemplateId);
-      return failure(linkError?.message || "تعذر ربط النسخة بالصفحة.");
-    }
+        const newTemplateId = Number(inserted.id);
+        try {
+          await bumpAssignmentSortOrders(asgTable, pageId, sourceSort);
 
-    await auditPageBlockAssignment("duplicate", pageId, Number(newAssignment.id), {
+          const { data: newAssignment, error: linkError } = await getSupabaseAdmin()
+            .from(asgTable)
+            .insert({
+              page_id: pageId,
+              template_id: newTemplateId,
+              slot: sourceAssignment.slot,
+              sort_order: newSort,
+              is_visible: false,
+            })
+            .select("id")
+            .single();
+
+          if (linkError || !newAssignment?.id) {
+            throw new Error(linkError?.message || "تعذر ربط النسخة بالصفحة.");
+          }
+
+          return {
+            templateId: newTemplateId,
+            assignmentId: Number(newAssignment.id),
+          };
+        } catch (error) {
+          const compensated = await deleteTemplateOrphan(tplTable, newTemplateId);
+          throw new MediaDomainMutationError(
+            mutationError(error, "تعذر إكمال النسخ."),
+            !compensated,
+            { cause: error },
+          );
+        }
+      },
+      resolveEntityIdentity: (value) => String(value.templateId),
+    });
+
+    await auditPageBlockAssignment("duplicate", pageId, coordinated.value.assignmentId, {
       module_kind: moduleKind,
       source_template_id: templateId,
-      new_template_id: newTemplateId,
+      new_template_id: coordinated.value.templateId,
       source_assignment_id: assignmentId,
-      new_assignment_id: Number(newAssignment.id),
+      new_assignment_id: coordinated.value.assignmentId,
       slug: copySlug,
     });
-
     await revalidatePageBlocksPath(pageId);
     return success({
-      redirectTo: moduleEditHref(moduleKind, newTemplateId),
+      redirectTo: moduleRedirectWithMediaSynchronization(
+        moduleKind,
+        coordinated.value.templateId,
+        coordinated.mediaSynchronization.status,
+      ),
     });
   } catch (error) {
-    await deleteTemplateOrphan(tplTable, newTemplateId);
     return failure(error instanceof Error ? error.message : "تعذر إكمال النسخ.");
   }
 }
@@ -171,6 +226,7 @@ async function duplicateMediaModule({
   assignmentId,
   moduleKind,
   templateId,
+  actorId,
 }: DuplicateModuleParams): Promise<PageBlockActionResult> {
   const isHub = isMediaHubKind(moduleKind);
   const tplTable = isHub ? MEDIA_HUB_TEMPLATE_TABLE : MEDIA_SIDEBAR_TEMPLATE_TABLE;
@@ -216,54 +272,80 @@ async function duplicateMediaModule({
     insertPayload.widget_key = sourceTemplate.widget_key;
   }
 
-  const { data: inserted, error: insertError } = await getSupabaseAdmin()
-    .from(tplTable)
-    .insert(insertPayload)
-    .select("id")
-    .single();
-
-  if (insertError || !inserted?.id) {
-    return failure(insertError?.message || "تعذر إنشاء نسخة القالب.");
-  }
-
-  const newTemplateId = Number(inserted.id);
   const sourceSort = Number(sourceAssignment.sort_order ?? 0);
   const newSort = sourceSort + 10;
+  const provisionalIdentity = `duplicate:${templateId}:${crypto.randomUUID()}`;
 
   try {
-    await bumpAssignmentSortOrders(asgTable, pageId, sourceSort);
-    const { data: newAssignment, error: linkError } = await getSupabaseAdmin()
-      .from(asgTable)
-      .insert({
-        page_id: pageId,
-        template_id: newTemplateId,
-        slot: sourceAssignment.slot,
-        sort_order: newSort,
-        is_visible: false,
-      })
-      .select("id")
-      .single();
+    const coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: tplTable,
+      leaseEntityIdentity: provisionalIdentity,
+      intendedRow: insertPayload,
+      actorId,
+      requestIdentity: `page-module:${moduleKind}:duplicate:${actorId}:${provisionalIdentity}`,
+      mutate: async () => {
+        const { data: inserted, error: insertError } = await getSupabaseAdmin()
+          .from(tplTable)
+          .insert(insertPayload)
+          .select("id")
+          .single();
 
-    if (linkError || !newAssignment?.id) {
-      await deleteTemplateOrphan(tplTable, newTemplateId);
-      return failure(linkError?.message || "تعذر ربط النسخة بالصفحة.");
-    }
+        if (insertError || !inserted?.id) {
+          throw new Error(insertError?.message || "تعذر إنشاء نسخة القالب.");
+        }
 
-    await auditPageBlockAssignment("duplicate", pageId, Number(newAssignment.id), {
+        const newTemplateId = Number(inserted.id);
+        try {
+          await bumpAssignmentSortOrders(asgTable, pageId, sourceSort);
+          const { data: newAssignment, error: linkError } = await getSupabaseAdmin()
+            .from(asgTable)
+            .insert({
+              page_id: pageId,
+              template_id: newTemplateId,
+              slot: sourceAssignment.slot,
+              sort_order: newSort,
+              is_visible: false,
+            })
+            .select("id")
+            .single();
+
+          if (linkError || !newAssignment?.id) {
+            throw new Error(linkError?.message || "تعذر ربط النسخة بالصفحة.");
+          }
+
+          return {
+            templateId: newTemplateId,
+            assignmentId: Number(newAssignment.id),
+          };
+        } catch (error) {
+          const compensated = await deleteTemplateOrphan(tplTable, newTemplateId);
+          throw new MediaDomainMutationError(
+            mutationError(error, "تعذر إكمال النسخ."),
+            !compensated,
+            { cause: error },
+          );
+        }
+      },
+      resolveEntityIdentity: (value) => String(value.templateId),
+    });
+
+    await auditPageBlockAssignment("duplicate", pageId, coordinated.value.assignmentId, {
       module_kind: moduleKind,
       source_template_id: templateId,
-      new_template_id: newTemplateId,
+      new_template_id: coordinated.value.templateId,
       source_assignment_id: assignmentId,
-      new_assignment_id: Number(newAssignment.id),
+      new_assignment_id: coordinated.value.assignmentId,
       slug: copySlug,
     });
-
     await revalidatePageBlocksPath(pageId);
     return success({
-      redirectTo: moduleEditHref(moduleKind, newTemplateId),
+      redirectTo: moduleRedirectWithMediaSynchronization(
+        moduleKind,
+        coordinated.value.templateId,
+        coordinated.mediaSynchronization.status,
+      ),
     });
   } catch (error) {
-    await deleteTemplateOrphan(tplTable, newTemplateId);
     return failure(error instanceof Error ? error.message : "تعذر إكمال النسخ.");
   }
 }
@@ -272,6 +354,7 @@ async function duplicateHeroModule({
   pageId,
   assignmentId,
   templateId,
+  actorId,
 }: Omit<DuplicateModuleParams, "moduleKind">): Promise<PageBlockActionResult> {
   const { data: sourceAssignment, error: asgError } = await getSupabaseAdmin()
     .from("hero_assignments")
@@ -299,53 +382,72 @@ async function duplicateHeroModule({
   }
 
   const copySlug = uniqueCopySlug(String(hero.slug ?? "hero"));
-  const { data: inserted, error: insertError } = await getSupabaseAdmin()
-    .from("hero_templates")
-    .insert({
-      name: `${hero.name} - نسخة`,
-      slug: copySlug,
-      description: hero.description,
-      section_key: hero.section_key,
-      variant: hero.variant,
-      style_preset: hero.style_preset,
-      source_type: hero.source_type,
-      source_id: hero.source_id,
-      source_slug: hero.source_slug,
-      limit_count: hero.limit_count,
-      is_visible: false,
-      sort_order: Number(hero.sort_order ?? 0) + 1,
-      config: hero.config,
-    })
-    .select("id")
-    .single();
+  const insertPayload = {
+    name: `${hero.name} - نسخة`,
+    slug: copySlug,
+    description: hero.description,
+    section_key: hero.section_key,
+    variant: hero.variant,
+    style_preset: hero.style_preset,
+    source_type: hero.source_type,
+    source_id: hero.source_id,
+    source_slug: hero.source_slug,
+    limit_count: hero.limit_count,
+    is_visible: false,
+    sort_order: Number(hero.sort_order ?? 0) + 1,
+    config: hero.config,
+  };
+  const provisionalIdentity = `duplicate:${templateId}:${crypto.randomUUID()}`;
+  let coordinated;
+  try {
+    coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "hero_templates",
+      leaseEntityIdentity: provisionalIdentity,
+      intendedRow: insertPayload,
+      actorId,
+      requestIdentity: `page-module:hero:duplicate:${actorId}:${provisionalIdentity}`,
+      mutate: async () => {
+        const { data: inserted, error: insertError } = await getSupabaseAdmin()
+          .from("hero_templates")
+          .insert(insertPayload)
+          .select("id")
+          .single();
 
-  if (insertError || !inserted?.id) {
-    return failure(insertError?.message || "تعذر إنشاء نسخة الهيرو.");
+        if (insertError || !inserted?.id) {
+          throw new Error(insertError?.message || "تعذر إنشاء نسخة الهيرو.");
+        }
+
+        return { templateId: Number(inserted.id) };
+      },
+      resolveEntityIdentity: (value) => String(value.templateId),
+    });
+  } catch (error) {
+    return failure(error instanceof Error ? error.message : "تعذر إكمال نسخ الهيرو.");
   }
-
-  const newTemplateId = Number(inserted.id);
 
   await auditPageBlockAssignment("duplicate", pageId, null, {
     module_kind: "hero",
     source_template_id: templateId,
-    new_template_id: newTemplateId,
+    new_template_id: coordinated.value.templateId,
     source_assignment_id: assignmentId,
     new_assignment_id: null,
     slug: copySlug,
     note: "hero_copy_without_active_assignment",
   });
-
   await revalidatePageBlocksPath(pageId);
 
-  const editHref = moduleEditHref("hero", newTemplateId);
+  const editHref = moduleEditHref("hero", coordinated.value.templateId);
   const notice = encodeURIComponent(
     "تم نسخ قالب الهيرو كمسودة مخفية. لم يُستبدل هيرو الصفحة الحالي ولم يُنشأ ربط نشط ثانٍ.",
   );
+  const redirectTo = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
+    ? `${editHref}?notice=saved_with_media_sync_warning`
+    : `${editHref}?notice=${notice}`;
 
   return success({
     message:
       "تم نسخ قالب الهيرو كمسودة مخفية. لم يُستبدل هيرو الصفحة الحالي ولم يُنشأ ربط نشط ثانٍ.",
-    redirectTo: `${editHref}?notice=${notice}`,
+    redirectTo,
   });
 }
 
@@ -354,7 +456,7 @@ async function duplicateHeroModule({
  * hidden assignment on the same page, placed immediately after the source.
  */
 export async function duplicateAssignedPageModule(formData: FormData): Promise<PageBlockActionResult> {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
 
   const pageId = parseNumber(formData.get("page_id"));
   const assignmentId = parseNumber(formData.get("assignment_id"));
@@ -366,15 +468,15 @@ export async function duplicateAssignedPageModule(formData: FormData): Promise<P
   }
 
   if (moduleKind === "hero") {
-    return duplicateHeroModule({ pageId, assignmentId, templateId });
+    return duplicateHeroModule({ pageId, assignmentId, templateId, actorId: actor.id });
   }
 
   if (isMediaHubKind(moduleKind) || isMediaSidebarKind(moduleKind)) {
-    return duplicateMediaModule({ pageId, assignmentId, moduleKind, templateId });
+    return duplicateMediaModule({ pageId, assignmentId, moduleKind, templateId, actorId: actor.id });
   }
 
   if (moduleKind in BLOCK_MODULE_REGISTRY) {
-    return duplicateStandardBlockModule({ pageId, assignmentId, moduleKind, templateId });
+    return duplicateStandardBlockModule({ pageId, assignmentId, moduleKind, templateId, actorId: actor.id });
   }
 
   return failure("نوع الموديول غير مدعوم للنسخ.");

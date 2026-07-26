@@ -137,7 +137,15 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
           </>
         }
       />
-      {query?.notice ? <AdminNotice variant="success" message="تم حفظ التغييرات بنجاح." /> : null}
+      {query?.notice === "saved_with_media_sync_warning" ? (
+        <AdminNotice
+          variant="warning"
+          title="تم حفظ المحتوى مع تنبيه للميديا"
+          message="تم حفظ البيانات، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
+        />
+      ) : query?.notice ? (
+        <AdminNotice variant="success" message="تم حفظ التغييرات بنجاح." />
+      ) : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر حفظ المحتوى" message={errorMessage} /> : null}
       <TopicContentTypeControl value={topic.content_type} mode="edit" />
       <MediaContentForm

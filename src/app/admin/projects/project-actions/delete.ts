@@ -5,6 +5,8 @@ import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actio
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import type { ProjectCategory } from "../../../../config/projects-data";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
+import { withProjectMediaSynchronization } from "./helpers";
 import { revalidateProjectPaths } from "./revalidate";
 
 export async function deleteProjectAjax(id: number, confirmPermanent = false) {
@@ -31,11 +33,48 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     };
   }
 
+  const [floorPlans, projectMedia] = await Promise.all([
+    getSupabaseAdmin()
+      .from("project_floor_plans")
+      .select("id")
+      .eq("project_id", id),
+    getSupabaseAdmin()
+      .from("project_media")
+      .select("id")
+      .eq("project_id", id),
+  ]);
+  if (floorPlans.error || projectMedia.error) {
+    return {
+      ok: false as const,
+      code: "child_lookup_failed",
+      message:
+        floorPlans.error?.message ??
+        projectMedia.error?.message ??
+        "تعذر إثبات وسائط المشروع قبل الحذف.",
+    };
+  }
+
   const { error } = await getSupabaseAdmin().from("projects").delete().eq("id", id);
   if (error) {
     return { ok: false as const, code: "delete_failed", message: error.message };
   }
 
+  const mediaSynchronization =
+    await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+      [],
+      null,
+      [
+        { domainKey: "projects", entityIdentity: id },
+        ...(floorPlans.data ?? []).map((row) => ({
+          domainKey: "project_floor_plans",
+          entityIdentity: String(row.id),
+        })),
+        ...(projectMedia.data ?? []).map((row) => ({
+          domainKey: "project_media",
+          entityIdentity: String(row.id),
+        })),
+      ],
+    );
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("project", "delete"),
     entityType: "project",
@@ -43,5 +82,8 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     metadata: { permanent: true, slug: existing.slug },
   });
   revalidateProjectPaths(existing.type, undefined, existing.slug);
-  return { ok: true as const, message: "تم الحذف النهائي وإزالة المشروع من القائمة." };
+  return withProjectMediaSynchronization(
+    { ok: true as const, message: "تم الحذف النهائي وإزالة المشروع من القائمة." },
+    mediaSynchronization,
+  );
 }

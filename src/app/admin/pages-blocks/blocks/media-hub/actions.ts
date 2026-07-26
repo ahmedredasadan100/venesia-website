@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -18,7 +19,7 @@ import {
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 
 export async function updateMediaHubModule(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
 
@@ -32,22 +33,35 @@ export async function updateMediaHubModule(formData: FormData) {
     listLimit: parseNumber(formData.get("list_limit"), 0),
   });
 
-  const { error } = await getSupabaseAdmin()
-    .from("media_hub_module_templates")
-    .update({
-      name,
-      description: cleanText(formData.get("description")) || null,
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
-      section_key: sectionKey,
-      config,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) throw new Error(error.message);
+  const nextRow = {
+    name,
+    description: cleanText(formData.get("description")) || null,
+    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    section_key: sectionKey,
+    config,
+    updated_at: new Date().toISOString(),
+  };
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "media_hub_module_templates",
+    leaseEntityIdentity: String(id),
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `media-hub-module:update:${id}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("media_hub_module_templates")
+        .update(nextRow)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "Unable to update media hub module.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
 
   await syncMediaHubModulePageAssignments(id, parsePageIdsFromForm(formData));
   await revalidateBlockModulePaths("media-hub");
   revalidatePath(`/admin/pages-blocks/blocks/media-hub/${id}`, "page");
-  redirect(`/admin/pages-blocks/blocks/media-hub/${id}?saved=1`);
+  redirect(`/admin/pages-blocks/blocks/media-hub/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }

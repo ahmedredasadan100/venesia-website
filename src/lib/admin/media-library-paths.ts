@@ -14,6 +14,7 @@ export type MediaAssetItem = {
   uploadedAt: string | null;
   managed: boolean;
   provider: MediaStorageProvider;
+  bucket: string;
   storagePath: string | null;
 };
 
@@ -23,6 +24,15 @@ export type PublicMediaFolderListing = {
   subfolders: string[];
   images: string[];
   documents: string[];
+  items: MediaAssetItem[];
+};
+
+export type PublicMediaInventory = {
+  /** The authoritative managed provider represented by this inventory. */
+  provider: MediaStorageProvider;
+  providerAvailable?: boolean;
+  warning?: string | null;
+  folders: string[];
   items: MediaAssetItem[];
 };
 

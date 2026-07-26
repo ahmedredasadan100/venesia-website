@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import BlockModuleManagerClient from "../../../../../components/admin/page-blocks/BlockModuleManagerClient";
+import MediaSynchronizationWarningNotice from "../../../../../components/admin/media/MediaSynchronizationWarningNotice";
 import {
   bulkFeedModules,
   createFeedModule,
@@ -10,7 +11,10 @@ import {
   toggleFeedModuleStatus,
 } from "./actions";
 
-export default async function FeedModulesPage() {
+type PageProps = { searchParams?: Promise<{ notice?: string }> | { notice?: string } };
+
+export default async function FeedModulesPage({ searchParams }: PageProps) {
+  const query = searchParams ? await searchParams : {};
   const { data, error } = await getSupabaseAdmin()
     .from("feed_module_templates")
     .select("id,name,slug,description,feed_type,status,updated_at")
@@ -26,6 +30,8 @@ export default async function FeedModulesPage() {
   }
 
   return (
+    <>
+    <MediaSynchronizationWarningNotice visible={query.notice === "saved_with_media_sync_warning"} />
     <BlockModuleManagerClient
       moduleKey="feed"
       moduleTitle="إدارة Feed Modules"
@@ -51,5 +57,6 @@ export default async function FeedModulesPage() {
         ["series", "Series"],
       ]}
     />
+    </>
   );
 }

@@ -135,6 +135,12 @@ Owns:
 
 It does not own Topic, Project, Page, or form lifecycle.
 
+### Media Catalog and reference safety
+
+This is an extension of the existing Media capability, not a new Runtime or System. It owns canonical asset identity, catalog metadata, safe folder records, typed reference providers, reconciliation state, fail-closed deletion eligibility, and coordinated replace-all behavior. Domain owners remain responsible for their own writes and call the reference synchronization boundary afterward.
+
+The shared `MediaLibraryCore` is a UI capability surface with Manage and Select modes. It does not become a form, page-composition, or project lifecycle owner.
+
 ## 4. Capability model
 
 A Capability answers:
@@ -336,7 +342,7 @@ The Full Repository Audit completed on baseline `9e420620f4a802dc8f070334c7d8d21
 | Form Runtime | Reference consumers and Redirect adoption are established | Media Topic, Projects, and Page quick-create generic gaps | Active except Projects, which is **Deferred by Product Priority** |
 | Feedback Runtime | Shared owner is established | Browser placement/focus proof remains part of UX closure | Active supporting owner |
 | Confirmation Runtime | Shared accessible owner is established | Four declared native-confirm calls remain in three consumers | Active adoption gap |
-| Media System | Durable provider boundary is established | Reference scanning can fail open or miss stored references before deletion | First active implementation priority |
+| Media System | Durable provider boundary exists; the Media Catalog/reference-safety implementation remains provisional on the active branch | No accepted final head, merge, remote migration/reconciliation, physical folder/bulk move, project child rebind, or authenticated Browser QA | Active implementation in progress; no foundation closure; global closure false |
 | Taxonomy Domain | Atomic reference-consumer tranche is comparatively mature | No global content/capability closure follows from that tranche | Maintain scoped claims |
 | Page Composition and Menus | Valid specialized workflows | Delete and reorder operations require domain-level atomicity | Second active implementation priority |
 | Projects Domain | Valid project aggregate domain | Root/children save and duplicate atomicity, plus form adoption | **Deferred by Product Priority** until the final product stage |

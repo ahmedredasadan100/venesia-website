@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
+import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../../lib/admin/media-catalog/write-lease";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   isMediaEditableContentType,
@@ -44,7 +49,7 @@ export async function updateMediaContent(formData: FormData) {
     redirectEditError(id, error instanceof Error ? error.message : "تعذر رفع الصورة.");
   }
 
-  if (!payload.image.trim()) {
+  if (!formData.has("image")) {
     payload.image = String(currentTopic.image ?? "");
   }
 
@@ -93,28 +98,51 @@ export async function updateMediaContent(formData: FormData) {
 
   const now = new Date().toISOString();
   const becamePublished = payload.status === "published" && currentTopic.status !== "published";
-  const { error } = await getSupabaseAdmin()
-    .from("topics")
-    .update(
-      {
-        ...buildMediaWritePayload(
-          payload,
-          section.category,
-          section.contentType,
-          writePayload.mediaPayload,
-          now,
-          currentTopic,
-          series,
-        ),
-        updated_by: actor.id,
-        ...(becamePublished ? { published_by: actor.id } : {}),
+  const domainPayload = buildMediaWritePayload(
+    payload,
+    section.category,
+    section.contentType,
+    writePayload.mediaPayload,
+    now,
+    currentTopic,
+    series,
+  );
+  let coordinated;
+  try {
+    coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "topics",
+      leaseEntityIdentity: id,
+      intendedRow: { ...currentTopic, ...domainPayload },
+      actorId: actor.id,
+      requestIdentity: `media-topic:update:${id}`,
+      mutate: async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from("topics")
+          .update({
+            ...domainPayload,
+            updated_by: actor.id,
+            ...(becamePublished ? { published_by: actor.id } : {}),
+          })
+          .eq("id", id)
+          .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
+          .select("id")
+          .maybeSingle<{ id: number }>();
+        if (error || !data) throw new Error(error?.message ?? "تعذر تحديث المحتوى.");
+        return data;
       },
-    )
-    .eq("id", id)
-    .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES]);
-
-  if (error) redirectEditError(id, error.message);
-
+      resolveEntityIdentity: (value) => String(value.id),
+    });
+  } catch (error) {
+    redirectEditError(
+      id,
+      error instanceof MediaReferenceWriteLeaseError
+        ? getMediaReferenceWriteLeaseUserMessage(error.code)
+        : error instanceof Error
+          ? error.message
+          : "تعذر تحديث المحتوى.",
+    );
+  }
+  const mediaSynchronization = coordinated.mediaSynchronization;
   revalidateMediaContentPaths(id);
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic", becamePublished ? "publish" : "update"),
@@ -123,5 +151,11 @@ export async function updateMediaContent(formData: FormData) {
     entityLabel: payload.title,
     metadata: { slug: payload.slug, content_type: section.contentType, status: payload.status },
   });
-  redirect(`/admin/content/topics/${id}?notice=saved`);
+  redirect(
+    `/admin/content/topics/${id}?notice=${
+      mediaSynchronization.status === "saved_with_media_sync_warning"
+        ? "saved_with_media_sync_warning"
+        : "saved"
+    }`,
+  );
 }

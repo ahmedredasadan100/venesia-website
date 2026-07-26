@@ -5,7 +5,7 @@ import HeroEditClient from "./HeroEditClient";
 
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
-  searchParams?: Promise<{ saved?: string }> | { saved?: string };
+  searchParams?: Promise<{ saved?: string; notice?: string }> | { saved?: string; notice?: string };
 };
 
 const sourceOptions: [string, string][] = [
@@ -86,6 +86,9 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
       sourceOptions={sourceOptions}
       variantOptions={variantOptions}
       saved={Boolean(resolvedSearch.saved)}
+      mediaSynchronizationWarning={
+        resolvedSearch.notice === "saved_with_media_sync_warning"
+      }
       assignmentContext={assignmentContext}
     />
   );

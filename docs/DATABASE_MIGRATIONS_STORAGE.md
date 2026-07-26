@@ -202,13 +202,19 @@ Before deletion:
 1. authenticate Admin;
 2. verify the path is a managed asset;
 3. validate provider and bucket;
-4. check database references;
-5. reject unsafe, external, or unmanaged paths;
-6. delete through the adapter;
-7. reconcile or invalidate the consumer state;
-8. record audit where required.
+4. require synchronized catalog state and the exact provider-registry version;
+5. check persisted references;
+6. complete a fresh exhaustive provider scan and reject every query error, drift, or matching reference;
+7. verify that the exact managed Storage object exists;
+8. reject unsafe, external, unmanaged, missing, or uncertain assets;
+9. delete through the adapter;
+10. update catalog state and record audit.
 
-For replacement, secure the new state before removing the old object.
+Replacement always creates a new `(provider, bucket, object_key)`. Rebind supported references only after the new catalog row exists, compensate partial failures, and retain the old object. Same-path overwrite and automatic old-object deletion are prohibited.
+
+## 14.1 Media Catalog migration boundary
+
+`20260725090000_media_catalog_reference_foundation.sql` adds the catalog tables, service-role-only grants under RLS, read views, synchronization functions, root folders, and runtime settings keys. File presence is repository evidence only. Remote schema/grants/policies/function behavior and initial reconciliation require separate environment proof; no remote application is implied by this document.
 
 ## 15. Security boundaries
 
@@ -251,7 +257,7 @@ The Full Repository Audit completed on baseline `9e420620f4a802dc8f070334c7d8d21
 
 ### Confirmed Defects
 
-- **Media deletion safety:** the current reference scan is not proven exhaustive or fail-closed. A managed object must not be deleted when a reference query fails, is capped, uses an invalid field, or omits a supported reference owner. This is the first active implementation priority.
+- **Media deletion safety:** the defect remains open on official `main`. Typed providers, persisted references, exhaustive scans, and fail-closed deletion are under implementation on the active branch; no accepted foundation or global Media closure follows before review, merge, and remote proof.
 - **Page/Menu atomic operations:** multi-step delete and reorder operations can leave partial domain state. Domain transactions/RPCs must own required all-or-nothing behavior. This is the second active implementation priority.
 - **Projects aggregate atomicity:** root and child persistence can partially succeed. The finding remains confirmed but is **Deferred by Product Priority** until the final product stage.
 

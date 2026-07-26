@@ -5,6 +5,11 @@ import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
+import { coordinateMediaReferenceEntityMutation } from "../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../lib/admin/media-catalog/write-lease";
 import { revalidatePublicCacheTags } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { mergeGlobalSeoSettings } from "../../../../lib/seo/parse-global-seo";
@@ -57,25 +62,42 @@ function buildSettingsFromForm(formData: FormData): GlobalSeoSettingsInput {
 }
 
 export async function saveGlobalSeoSettingsAction(formData: FormData) {
-  await requireAdminSession();
+  const adminUser = await requireAdminSession();
 
   const payload = mergeGlobalSeoSettings(buildSettingsFromForm(formData));
   const now = new Date().toISOString();
 
-  const { error } = await getSupabaseAdmin()
-    .from("site_settings")
-    .upsert(
-      {
-        key: GLOBAL_SEO_SETTING_KEY,
-        value: payload,
-        updated_at: now,
-      },
-      { onConflict: "key" },
-    );
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const coordinated = await (async () => {
+    try {
+      return await coordinateMediaReferenceEntityMutation({
+        domainKey: "site_settings",
+        leaseEntityIdentity: GLOBAL_SEO_SETTING_KEY,
+        intendedRow: { key: GLOBAL_SEO_SETTING_KEY, value: payload },
+        actorId: adminUser.id,
+        requestIdentity: `site_settings:${GLOBAL_SEO_SETTING_KEY}:update:${crypto.randomUUID()}`,
+        mutate: async () => {
+          const { error } = await getSupabaseAdmin()
+            .from("site_settings")
+            .upsert(
+              {
+                key: GLOBAL_SEO_SETTING_KEY,
+                value: payload,
+                updated_at: now,
+              },
+              { onConflict: "key" },
+            );
+          if (error) throw new Error(error.message);
+          return payload;
+        },
+        resolveEntityIdentity: () => GLOBAL_SEO_SETTING_KEY,
+      });
+    } catch (error) {
+      if (error instanceof MediaReferenceWriteLeaseError) {
+        throw new Error(getMediaReferenceWriteLeaseUserMessage(error.code));
+      }
+      throw error;
+    }
+  })();
 
   revalidatePublicCacheTags(["seo-global", "site-settings"]);
   revalidatePath("/admin/seo/meta-manager");
@@ -87,4 +109,6 @@ export async function saveGlobalSeoSettingsAction(formData: FormData) {
     entityLabel: GLOBAL_SEO_SETTING_KEY,
     metadata: { keys: Object.keys(payload) },
   });
+
+  return { mediaSynchronization: coordinated.mediaSynchronization };
 }

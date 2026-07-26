@@ -2,7 +2,7 @@
 
 **Status:** Controlled work ledger
 **Updated:** 2026-07-25
-**Official baseline:** `9e420620f4a802dc8f070334c7d8d210a4a693f8`
+**Official baseline:** `47b662d0761adeae15ada412652fc8c92f5e3d53`
 
 This file records accepted, evidence-backed work. It is not a brainstorming dump and must not become a second project-state file.
 
@@ -61,7 +61,7 @@ Product priority controls sequence. It does not erase, resolve, or downgrade tec
 
 | ID | Priority | Classification | Evidence | Current behavior and risk | Correct owner | Product state | Required proof |
 |---|---|---|---|---|---|---|---|
-| AUD-01 | P0 | Confirmed Defect; Domain/Data Integrity Risk | Proven from code | Media usage scanning is capped, incomplete, and error-tolerant; a referenced managed asset can be treated as unreferenced and deleted | Media reference/deletion capability | Active; next implementation priority | Fail-closed scanner/registry tests covering query errors, pagination limits, project child media, and every supported reference field |
+| AUD-01 | P0 | Confirmed Defect; Domain/Data Integrity Risk | Active branch work in progress; not accepted or merged | Official `main` retains the deletion-safety defect while the branch develops Media Catalog, typed providers, exhaustive live scan, and fail-closed delete | Media reference/deletion capability | Active implementation in progress; no foundation closure | Exact-head review, merge, remote migration/reconciliation, and authenticated destructive failure-path proof before closure |
 | AUD-02 | P0 | Confirmed Defect; Domain/Data Integrity Risk | Proven from code | Project root save and duplicate can commit before child operations finish, leaving partial aggregate state | Projects domain transaction/RPC | **Deferred by Product Priority** | All-or-nothing root/children failure injection, concurrency, and retry proof |
 | AUD-03 | P0 | Confirmed Defect; Domain/Data Integrity Risk | Proven from code | Page/Menu delete and reorder flows use multiple independent mutations and can leave partial deletion or ordering | Page Composition and Menu domains | Active; second implementation priority | Transactional delete/reorder tests, parent failure, second-swap failure, and concurrent reorder proof |
 
@@ -73,7 +73,7 @@ Product priority controls sequence. It does not erase, resolve, or downgrade tec
 | AUD-05 | P1 | Architecture Violation; Security Risk | Privileged exports proven from code; exploitability unproven | Topic validation modules export privileged reads from `"use server"` modules without internal auth | **Deferred by Product Priority** | Build action manifest and controlled unauthenticated boundary tests before remediation |
 | AUD-06 | P1 | Security Risk; Product Decision Required | Proven from code | Admin login has no application rate limiting, throttling, or lockout policy | **Deferred by Product Priority** | Approved abuse policy, trusted-client identity model, and concurrency tests |
 | AUD-14 | P2 | Architecture Debt; Verification Blocker | Proven from test | Migration gate proves file presence, not applied order, checksums, registry provenance, or remote drift | Active proof requirement; no migration authorized | Read-only remote migration inventory and provenance contract |
-| AUD-15 | P2 | Security Risk; Improvement Proposal | Proven from app config; Needs Production evidence | Media routes lack the explicit private cache contract used by entity lists; CSP/HSTS behavior is not proven at the deployed edge | Security portion **Deferred by Product Priority** | Production response headers and cache behavior before policy changes |
+| AUD-15 | P2 | Security Risk; Improvement Proposal | Active branch private-cache correction is provisional; Needs Production evidence | Official behavior remains unchanged until merge; CSP/HSTS and deployed-edge behavior remain unproven | Security portion **Deferred by Product Priority** | Exact-head review and merge, then Production response headers and cache behavior |
 | AUD-19 | P2 | Product Decision Required | Proven from code | Roles are stored and editable, but active Admin users share the same real server-side access model | **Deferred by Product Priority** | Product authorization matrix before a Permissions capability is designed |
 
 Security/Users hardening is one deferred workstream containing RLS/Grants verification, Permissions/Roles, login rate limiting, and Server Action hardening. The required timing is before final launch or multi-user operation.
@@ -129,7 +129,7 @@ Projects-related Form adoption remains recorded but is **Deferred by Product Pri
 | DEC-03 | Maintenance dependency failure | Decision still required | Choose fail-open, fail-closed, or last-known-good behavior before changing runtime behavior |
 | DEC-04 | Redirect dependency failure | Decision still required | Choose outage and telemetry behavior before implementation |
 | DEC-05 | Audit durability | Current contract is non-blocking | Compliance-grade durable audit requires a new ADR/product decision |
-| DEC-06 | Media reference source | Decision required during AUD-01 | Choose authoritative registry/read model or proven exhaustive fail-closed scanning |
+| DEC-06 | Media reference source | Accepted in `ADR_MEDIA_CATALOG_REFERENCE_SAFETY.md` | Persist typed domain references, reconcile from exhaustive providers, and fail closed with a fresh live scan |
 | DEC-07 | Performance budgets | Decision required after measurement | Do not create arbitrary gates before baseline evidence |
 | DEC-08 | Legacy media retirement | Decision deferred | Do not remove compatibility without data and configuration proof |
 
@@ -144,8 +144,9 @@ Projects-related Form adoption remains recorded but is **Deferred by Product Pri
 ### Stage 1 — Media deletion safety
 
 - Owner: Media reference/deletion capability.
-- Scope: AUD-01 only, including fail-closed reference proof.
-- Stop conditions: unknown reference owners, data backfill, destructive cleanup, or unresolved registry architecture choice.
+- Scope: AUD-01 plus the approved catalog foundation required to make the reference source authoritative.
+- Repository state: implementation in progress on the active Media Library branch; no final head, foundation closure, or merge has been accepted, and remote migration, reconciliation, authenticated Browser QA, and declared adoption gaps remain open.
+- Stop conditions: unknown reference owners, unproven remote environment, destructive cleanup, or registry drift.
 
 ### Stage 2 — Page/Menu atomic operations
 

@@ -23,6 +23,14 @@ const CMS_PDF_MIME_TYPES = new Set(["application/pdf"]);
 
 export type CmsUploadKind = "image" | "pdf";
 
+export type CmsUploadValidationPolicy = {
+  maxImageBytes?: number;
+  maxPdfBytes?: number;
+  allowedImageExtensions?: readonly string[];
+  allowedPdfExtensions?: readonly string[];
+  mimeVerification?: boolean;
+};
+
 export function getExtension(filename: string) {
   const dot = filename.lastIndexOf(".");
   return dot >= 0 ? filename.slice(dot).toLowerCase() : "";
@@ -61,6 +69,7 @@ function validateMimeForExtension(ext: string, mimeType: string, kind: CmsUpload
 export function validateCmsUploadFile(
   file: Pick<File, "name" | "type" | "size">,
   kind?: CmsUploadKind,
+  policy: CmsUploadValidationPolicy = {},
 ): { ok: true; kind: CmsUploadKind } | { ok: false; message: string } {
   if (!file.size) {
     return { ok: false, message: "الملف فارغ — اختر ملفًا صالحًا." };
@@ -68,7 +77,11 @@ export function validateCmsUploadFile(
 
   const resolvedKind = kind ?? resolveCmsUploadKind(file.name, file.type);
   const ext = getExtension(file.name);
-  const allowedExtensions = resolvedKind === "pdf" ? CMS_PDF_EXTENSION_SET : CMS_IMAGE_EXTENSION_SET;
+  const allowedExtensions = new Set(
+    resolvedKind === "pdf"
+      ? (policy.allowedPdfExtensions ?? CMS_PDF_EXTENSIONS)
+      : (policy.allowedImageExtensions ?? CMS_IMAGE_EXTENSIONS),
+  );
 
   if (!allowedExtensions.has(ext)) {
     if (ext === ".svg") {
@@ -86,7 +99,10 @@ export function validateCmsUploadFile(
         };
   }
 
-  const maxBytes = resolvedKind === "pdf" ? CMS_MAX_PDF_BYTES : CMS_MAX_IMAGE_BYTES;
+  const maxBytes =
+    resolvedKind === "pdf"
+      ? (policy.maxPdfBytes ?? CMS_MAX_PDF_BYTES)
+      : (policy.maxImageBytes ?? CMS_MAX_IMAGE_BYTES);
   if (file.size > maxBytes) {
     return {
       ok: false,
@@ -94,7 +110,7 @@ export function validateCmsUploadFile(
     };
   }
 
-  const mimeError = validateMimeForExtension(ext, file.type, resolvedKind);
+  const mimeError = policy.mimeVerification === false ? null : validateMimeForExtension(ext, file.type, resolvedKind);
   if (mimeError) {
     return { ok: false, message: mimeError };
   }

@@ -3,8 +3,19 @@
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
+import {
+  coordinateMediaReferenceDomainMutation,
+  MediaDomainMutationError,
+} from "../../../../lib/admin/media-catalog/domain-write-coordination";
+import { buildMediaReferenceWriteScope } from "../../../../lib/admin/media-catalog/reference-providers";
+import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
+import {
+  getMediaReferenceWriteLeaseUserMessage,
+  MediaReferenceWriteLeaseError,
+} from "../../../../lib/admin/media-catalog/write-lease";
 import type { ProjectCategory } from "../../../../config/projects-data";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { withProjectMediaSynchronization } from "./helpers";
 import { revalidateProjectPaths } from "./revalidate";
 
 async function ensureUniqueProjectField(field: "code" | "slug", base: string) {
@@ -21,7 +32,7 @@ async function ensureUniqueProjectField(field: "code" | "slug", base: string) {
 }
 
 export async function duplicateProjectAjax(id: number) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   if (!Number.isFinite(id) || id <= 0) {
     return { ok: false as const, code: "invalid_id", message: "معرف المشروع غير صالح." };
   }
@@ -78,60 +89,148 @@ export async function duplicateProjectAjax(id: number) {
   void sourceId;
   void sourceCreatedAt;
   void sourceUpdatedAt;
+  const nextProjectRow = {
+    ...projectFields,
+    code: nextCode,
+    slug: nextSlug,
+    arabic_name: `${String(source.arabic_name ?? sourceCode)} - نسخة`,
+    publication_status: "draft",
+    featured: false,
+    show_on_homepage: false,
+    created_at: now,
+    updated_at: now,
+  };
+  const floorRows = [...(floorPlans ?? [])].sort(
+    (left, right) => Number(left.sort_order ?? 0) - Number(right.sort_order ?? 0),
+  );
+  const mediaRows = [...(media ?? [])].sort((left, right) => {
+    const collectionOrder = String(left.collection ?? "").localeCompare(String(right.collection ?? ""));
+    return collectionOrder || Number(left.sort_order ?? 0) - Number(right.sort_order ?? 0);
+  });
+  const operationIdentity = crypto.randomUUID();
+  const projectLeaseIdentity = `duplicate:${id}:${operationIdentity}`;
+  const floorLeaseIdentities = floorRows.map(
+    (_, index) => `duplicate:${id}:floor:${operationIdentity}:${index}`,
+  );
+  const mediaLeaseIdentities = mediaRows.map(
+    (_, index) => `duplicate:${id}:media:${operationIdentity}:${index}`,
+  );
 
-  const { data: inserted, error: insertError } = await supabase
-    .from("projects")
-    .insert({
-      ...projectFields,
-      code: nextCode,
-      slug: nextSlug,
-      arabic_name: `${String(source.arabic_name ?? sourceCode)} - نسخة`,
-      publication_status: "draft",
-      featured: false,
-      show_on_homepage: false,
-      created_at: now,
-      updated_at: now,
-    })
-    .select("id")
-    .maybeSingle<{ id: number }>();
+  let coordinated;
+  try {
+    coordinated = await coordinateMediaReferenceDomainMutation({
+      scopes: [
+        buildMediaReferenceWriteScope("projects", projectLeaseIdentity, nextProjectRow),
+        ...floorRows.map((row, index) =>
+          buildMediaReferenceWriteScope("project_floor_plans", floorLeaseIdentities[index], row),
+        ),
+        ...mediaRows.map((row, index) =>
+          buildMediaReferenceWriteScope("project_media", mediaLeaseIdentities[index], row),
+        ),
+      ],
+      actorId: actor.id,
+      requestIdentity: `project:duplicate:${id}:${operationIdentity}`,
+      mutate: async () => {
+        const { data: inserted, error: insertError } = await supabase
+          .from("projects")
+          .insert(nextProjectRow)
+          .select("id")
+          .maybeSingle<{ id: number }>();
+        if (insertError || !inserted) {
+          throw new Error(insertError?.message ?? "تعذر نسخ المشروع.");
+        }
 
-  if (insertError || !inserted) {
+        try {
+          const newProjectId = inserted.id;
+          let insertedFloorRows: { id: number; sort_order: number }[] = [];
+          if (floorRows.length) {
+            const { data, error: floorPlansError } = await supabase
+              .from("project_floor_plans")
+              .insert(floorRows.map((row) => ({ ...row, project_id: newProjectId })))
+              .select("id, sort_order");
+            if (floorPlansError) throw new Error(floorPlansError.message);
+            insertedFloorRows = ((data ?? []) as { id: number; sort_order: number }[]).sort(
+              (left, right) => left.sort_order - right.sort_order || left.id - right.id,
+            );
+            if (insertedFloorRows.length !== floorRows.length) {
+              throw new Error("project_floor_plan_duplicate_identity_mismatch");
+            }
+          }
+
+          if (deliveryItems?.length) {
+            const { error: deliveryError } = await supabase
+              .from("project_delivery_spec_items")
+              .insert(deliveryItems.map((row) => ({ ...row, project_id: newProjectId })));
+            if (deliveryError) throw new Error(deliveryError.message);
+          }
+
+          let insertedMediaRows: { id: number; collection: string; sort_order: number }[] = [];
+          if (mediaRows.length) {
+            const { data, error: mediaError } = await supabase
+              .from("project_media")
+              .insert(mediaRows.map((row) => ({ ...row, project_id: newProjectId })))
+              .select("id, collection, sort_order");
+            if (mediaError) throw new Error(mediaError.message);
+            insertedMediaRows = ((data ?? []) as {
+              id: number;
+              collection: string;
+              sort_order: number;
+            }[]).sort((left, right) => {
+              const collectionOrder = left.collection.localeCompare(right.collection);
+              return collectionOrder || left.sort_order - right.sort_order || left.id - right.id;
+            });
+            if (insertedMediaRows.length !== mediaRows.length) {
+              throw new Error("project_media_duplicate_identity_mismatch");
+            }
+          }
+
+          return { newProjectId, insertedFloorRows, insertedMediaRows };
+        } catch (childError) {
+          throw new MediaDomainMutationError(
+            childError instanceof Error ? childError.message : "تعذر نسخ بيانات المشروع المرتبطة.",
+            true,
+            { cause: childError },
+          );
+        }
+      },
+      resolveEntityIdentity: (value) => String(value.newProjectId),
+      synchronize: ({ value, leaseToken }) =>
+        synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+          [
+            {
+              domainKey: "projects",
+              entityIdentity: value.newProjectId,
+              leaseEntityIdentity: projectLeaseIdentity,
+            },
+            ...value.insertedFloorRows.map((row, index) => ({
+              domainKey: "project_floor_plans",
+              entityIdentity: row.id,
+              leaseEntityIdentity: floorLeaseIdentities[index],
+            })),
+            ...value.insertedMediaRows.map((row, index) => ({
+              domainKey: "project_media",
+              entityIdentity: row.id,
+              leaseEntityIdentity: mediaLeaseIdentities[index],
+            })),
+          ],
+          leaseToken,
+        ),
+    });
+  } catch (coordinationError) {
     return {
       ok: false as const,
-      code: "duplicate_insert_failed",
-      message: insertError?.message ?? "تعذر نسخ المشروع.",
+      code: coordinationError instanceof MediaReferenceWriteLeaseError
+        ? coordinationError.code
+        : "duplicate_failed",
+      message: coordinationError instanceof MediaReferenceWriteLeaseError
+        ? getMediaReferenceWriteLeaseUserMessage(coordinationError.code)
+        : coordinationError instanceof Error
+          ? coordinationError.message
+          : "تعذر نسخ المشروع.",
     };
   }
 
-  const newProjectId = inserted.id;
-
-  if (floorPlans?.length) {
-    const { error: floorPlansError } = await supabase.from("project_floor_plans").insert(
-      floorPlans.map((row) => ({ ...row, project_id: newProjectId })),
-    );
-    if (floorPlansError) {
-      return { ok: false as const, code: "duplicate_children_failed", message: floorPlansError.message };
-    }
-  }
-
-  if (deliveryItems?.length) {
-    const { error: deliveryError } = await supabase.from("project_delivery_spec_items").insert(
-      deliveryItems.map((row) => ({ ...row, project_id: newProjectId })),
-    );
-    if (deliveryError) {
-      return { ok: false as const, code: "duplicate_children_failed", message: deliveryError.message };
-    }
-  }
-
-  if (media?.length) {
-    const { error: mediaError } = await supabase.from("project_media").insert(
-      media.map((row) => ({ ...row, project_id: newProjectId })),
-    );
-    if (mediaError) {
-      return { ok: false as const, code: "duplicate_children_failed", message: mediaError.message };
-    }
-  }
-
+  const newProjectId = coordinated.value.newProjectId;
   revalidateProjectPaths(type, newProjectId, nextSlug);
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("project", "duplicate"),
@@ -139,5 +238,8 @@ export async function duplicateProjectAjax(id: number) {
     entityId: newProjectId,
     metadata: { source_project_id: id, slug: nextSlug, code: nextCode },
   });
-  return { ok: true as const, message: "أُنشئت نسخة جديدة كمسودة." };
+  return withProjectMediaSynchronization(
+    { ok: true as const, message: "أُنشئت نسخة جديدة كمسودة." },
+    coordinated.mediaSynchronization,
+  );
 }

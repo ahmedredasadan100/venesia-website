@@ -169,7 +169,6 @@ export default function AdminMediaGalleryField({
         onClose={() => setPickerOpen(false)}
         onSelect={handleSelect}
         initialFolder={browseFolder}
-        replacePath={replaceIndex !== null ? paths[replaceIndex] ?? null : null}
       />
     </div>
   );

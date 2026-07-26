@@ -10,10 +10,10 @@ This file contains current operational facts. It must remain short, evidence-bac
 ## Official baseline
 
 ```text
-9e420620f4a802dc8f070334c7d8d210a4a693f8
+47b662d0761adeae15ada412652fc8c92f5e3d53
 ```
 
-This is the official `main` baseline after PR #18.
+This is the official `main` baseline after PR #19 (Documentation Reset).
 
 ## PR #18 closure
 
@@ -48,9 +48,7 @@ The accepted audit:
 
 ## Current documentation state
 
-The canonical Documentation Reset is now being applied on branch `chore/documentation-reset` from the official baseline.
-
-The reset:
+The canonical Documentation Reset merged through PR #19 at the official baseline. It:
 
 - adds the canonical files listed in `docs/README.md`;
 - intentionally removes legacy reports, dated plans, generated QA evidence, and duplicate documentation owners;
@@ -58,13 +56,28 @@ The reset:
 - must not restore a deleted legacy document merely to repair a reference;
 - redirects local QA evidence to `.tmp-qa/` rather than tracked `docs/qa/`.
 
-Documentation Reset closure does not authorize implementation of an audit finding.
+Documentation Reset closure did not itself implement an audit finding.
+
+## Active Media Library implementation
+
+Implementation is still in progress on branch `codex/media-library-system`, created from the exact official baseline `47b662d0761adeae15ada412652fc8c92f5e3d53`.
+
+- No final HEAD or Commit has been accepted as official project state.
+- No Draft PR has been reviewed or accepted.
+- No remote migration application has been proven.
+- No authenticated Browser QA has been accepted.
+- No final Quality Gate has been accepted.
+- No Media foundation or Capability closure claim is valid yet.
+- Official behavior on `main` remains unchanged until verification and merge.
+- Global Media Capability closure remains false.
+
+All implementation and verification evidence on the active branch remains provisional until the required review, exact-head acceptance, and merge gates complete.
 
 ## Accepted finding groups
 
 ### Active Confirmed Defects
 
-- Media deletion reference safety is incomplete and must fail closed before broader Media closure.
+- Media deletion reference safety remains a confirmed defect on official `main`. A correction is in progress on `codex/media-library-system`, but it has not been accepted, merged, or closed.
 - Page/Menu destructive and reorder operations contain non-atomic multi-step behavior.
 
 ### Deferred Confirmed Defect
@@ -91,7 +104,7 @@ Documentation Reset closure does not authorize implementation of an audit findin
 
 After Documentation Reset closure, the approved sequence is:
 
-1. Media deletion safety.
+1. Media deletion safety and Media Catalog foundation — active implementation in progress; not yet closed or merged.
 2. Page/Menu atomic operations.
 3. Runtime and Capability adoption gaps.
 4. Performance measurement, then evidence-based optimization.

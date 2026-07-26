@@ -18,6 +18,7 @@ import TopicPublishingOptions from "./article/TopicPublishingOptions";
 import { TOPIC_FORM_NAVIGATION } from "./article/topic-form-definition";
 import { buildAdminContentPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
 import { createAdminFormErrorState } from "../../../../lib/admin/form-runtime";
+import TopicMediaCatalogSyncSignal from "./article/TopicMediaCatalogSyncSignal";
 
 type TopicFaqItem = { question?: string; answer?: string };
 export type ArticleEditorCategory = {
@@ -120,6 +121,8 @@ export default function ArticleEditor({
           </>
         }
       />
+
+      <TopicMediaCatalogSyncSignal formId="topic-edit-form" />
 
       <AdminFormRuntime
         key={topic.id}

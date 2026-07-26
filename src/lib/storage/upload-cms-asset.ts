@@ -19,6 +19,7 @@ import {
   normalizeMediaFolder,
   type MediaAssetItem,
   type PublicMediaFolderListing,
+  type PublicMediaInventory,
 } from "../admin/media-library-paths";
 import { getSupabaseStorageAdmin } from "../supabase-admin";
 
@@ -40,7 +41,20 @@ type StorageListEntry = {
   metadata?: Record<string, unknown> | null;
 };
 
-type ManagedStorageAsset = {
+export type DiscoveredManagedStorageAsset = {
+  provider: "supabase";
+  bucket: string;
+  objectKey: string;
+  publicUrl: string;
+  filename: string;
+  folderPath: string;
+  kind: "image" | "document";
+  sizeBytes: number | null;
+  contentType: string | null;
+  uploadedAt: string | null;
+};
+
+export type ManagedStorageAsset = {
   bucket: string;
   objectPath: string;
   kind: "image" | "document";
@@ -86,6 +100,7 @@ function stringMetadata(metadata: Record<string, unknown> | null | undefined, ke
 
 function buildAssetItem(
   publicPath: string,
+  bucket: string,
   storagePath: string,
   entry: StorageListEntry,
   kind: "image" | "document",
@@ -103,6 +118,7 @@ function buildAssetItem(
     uploadedAt: entry.created_at ?? entry.updated_at ?? null,
     managed: true,
     provider: "supabase",
+    bucket,
     storagePath,
   };
 }
@@ -233,32 +249,20 @@ async function uploadCmsAssetToStorage(
 
   const bucket = bucketForFolder(normalized);
   const allowedExtensions = kind === "pdf" ? PDF_EXTENSIONS : IMAGE_EXTENSIONS;
-  const replacement = options?.replacePath
-    ? parseManagedStorageAsset(options.replacePath, supabase)
-    : null;
-  const replacementExtension = replacement
-    ? path.posix.extname(replacement.objectPath).toLowerCase()
-    : "";
-  const incomingExtension = path.extname(file.name).toLowerCase();
-  const canReplaceInPlace = Boolean(
-    replacement &&
-      replacement.bucket === bucket &&
-      replacement.objectPath.startsWith(`${normalized}/`) &&
-      replacementExtension === incomingExtension,
-  );
-  const objectPath = canReplaceInPlace
-    ? replacement!.objectPath
-    : `${normalized}/${uniqueStorageFilename(
-        file,
-        allowedExtensions,
-        kind === "pdf" ? "document" : "image",
-      )}`;
+  // Replacement always creates a new canonical object. The Media capability
+  // coordinates reference rebinds and decides when the old object is deletable.
+  void options?.replacePath;
+  const objectPath = `${normalized}/${uniqueStorageFilename(
+    file,
+    allowedExtensions,
+    kind === "pdf" ? "document" : "image",
+  )}`;
 
   const bytes = Buffer.from(await file.arrayBuffer());
   const { error } = await supabase.storage.from(bucket).upload(objectPath, bytes, {
     contentType: file.type || (kind === "pdf" ? "application/pdf" : "application/octet-stream"),
     cacheControl: "3600",
-    upsert: canReplaceInPlace,
+    upsert: false,
   });
 
   if (error) {
@@ -278,6 +282,39 @@ async function uploadCmsAssetToStorage(
     path: publicUrlForObject(supabase, bucket, objectPath),
     filename: path.posix.basename(objectPath),
     storagePath: objectPath,
+    provider: "supabase" as const,
+    bucket,
+    objectKey: objectPath,
+    kind: kind === "pdf" ? ("document" as const) : ("image" as const),
+    contentType: file.type || null,
+    sizeBytes: file.size,
+  };
+}
+
+export async function verifyManagedStorageAssetExists(
+  value: string,
+  supabase: SupabaseAdminClient = getSupabaseStorageAdmin(),
+) {
+  const managed = parseManagedStorageAsset(value, supabase);
+  if (!managed) return { managed: false as const, exists: false as const };
+  const folder = path.posix.dirname(managed.objectPath);
+  const filename = path.posix.basename(managed.objectPath);
+  const { data, error } = await supabase.storage.from(managed.bucket).list(folder, {
+    limit: 100,
+    search: filename,
+  });
+  if (error) {
+    throw new MediaStorageError(
+      "media_storage_verification_failed",
+      "تعذر التحقق من وجود الملف في التخزين الدائم.",
+      503,
+    );
+  }
+  return {
+    managed: true as const,
+    exists: (data ?? []).some((entry) => entry.name === filename),
+    bucket: managed.bucket,
+    objectPath: managed.objectPath,
   };
 }
 
@@ -366,10 +403,10 @@ async function listCmsFolderFromStorageClient(
     const publicPath = publicUrlForObject(supabase, bucket, entryPath);
     if (isImageFile(entry.name)) {
       images.push(publicPath);
-      items.push(buildAssetItem(publicPath, entryPath, entry, "image"));
+      items.push(buildAssetItem(publicPath, bucket, entryPath, entry, "image"));
     } else if (isPdfFile(entry.name)) {
       documents.push(publicPath);
-      items.push(buildAssetItem(publicPath, entryPath, entry, "document"));
+      items.push(buildAssetItem(publicPath, bucket, entryPath, entry, "document"));
     }
   }
 
@@ -390,6 +427,26 @@ export function createSupabaseCmsMediaStorageAdapter(
     provider: "supabase",
     listFolder(folder = "images") {
       return listCmsFolderFromStorageClient(supabase, folder);
+    },
+    async listInventory(): Promise<PublicMediaInventory> {
+      const inventory = await listAllSupabaseManagedStorageAssets(supabase);
+      return {
+        provider: "supabase",
+        folders: inventory.folders,
+        items: inventory.assets.map((asset) => ({
+          path: asset.publicUrl,
+          filename: asset.filename,
+          extension: path.posix.extname(asset.filename).toLowerCase(),
+          kind: asset.kind,
+          sizeBytes: asset.sizeBytes,
+          contentType: asset.contentType,
+          uploadedAt: asset.uploadedAt,
+          managed: true,
+          provider: "supabase",
+          bucket: asset.bucket,
+          storagePath: asset.objectKey,
+        })),
+      };
     },
     listImagePaths(folder = "images", limit = 240) {
       return listPublicImagePathsFromStorageClient(supabase, folder, limit);
@@ -426,6 +483,131 @@ export function createSupabaseCmsMediaStorageAdapter(
 
       return { path: value, storagePath: managed.objectPath };
     },
+  };
+}
+
+async function listStoragePrefixFully(
+  supabase: SupabaseAdminClient,
+  bucket: string,
+  prefix: string,
+) {
+  const entries: StorageListEntry[] = [];
+  const pageSize = 1000;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+      limit: pageSize,
+      offset,
+      sortBy: { column: "name", order: "asc" },
+    });
+    if (error) {
+      throw new MediaStorageError(
+        "media_inventory_list_failed",
+        "تعذر إكمال سرد أصول التخزين.",
+        503,
+      );
+    }
+    const page = (data ?? []) as StorageListEntry[];
+    entries.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+  return entries;
+}
+
+export async function listAllSupabaseManagedStorageAssets(
+  supabase: SupabaseAdminClient = getSupabaseStorageAdmin(),
+) {
+  const folders = new Set<string>(["images", "files"]);
+  const assets: DiscoveredManagedStorageAsset[] = [];
+  const queue: Array<{ bucket: string; prefix: string; kind: "image" | "document" }> = [
+    { bucket: CMS_IMAGES_BUCKET, prefix: "images", kind: "image" },
+    { bucket: CMS_DOCUMENTS_BUCKET, prefix: "files", kind: "document" },
+  ];
+
+  while (queue.length) {
+    const batch = queue.splice(0, 6);
+    const results = await Promise.all(
+      batch.map(async (item) => ({ item, entries: await listStoragePrefixFully(supabase, item.bucket, item.prefix) })),
+    );
+
+    for (const { item, entries } of results) {
+      for (const entry of entries) {
+        if (!entry.name) continue;
+        const objectKey = `${item.prefix}/${entry.name}`;
+        const isFolder = entry.id == null && !entry.metadata;
+        if (isFolder) {
+          folders.add(objectKey);
+          queue.push({ ...item, prefix: objectKey });
+          continue;
+        }
+        const supported = item.kind === "image" ? isImageFile(entry.name) : isPdfFile(entry.name);
+        if (!supported) continue;
+        assets.push({
+          provider: "supabase",
+          bucket: item.bucket,
+          objectKey,
+          publicUrl: publicUrlForObject(supabase, item.bucket, objectKey),
+          filename: entry.name,
+          folderPath: item.prefix,
+          kind: item.kind,
+          sizeBytes:
+            numberMetadata(entry.metadata, "size") ?? numberMetadata(entry.metadata, "contentLength"),
+          contentType: stringMetadata(entry.metadata, ["mimetype", "contentType"]),
+          uploadedAt: entry.created_at ?? entry.updated_at ?? null,
+        });
+      }
+    }
+  }
+
+  return {
+    folders: [...folders].sort((a, b) => a.localeCompare(b)),
+    assets: assets.sort((a, b) => a.objectKey.localeCompare(b.objectKey)),
+  };
+}
+
+export async function moveManagedStorageAsset(
+  publicValue: string,
+  targetObjectKey: string,
+  supabase: SupabaseAdminClient = getSupabaseStorageAdmin(),
+) {
+  const managed = parseManagedStorageAsset(publicValue, supabase);
+  if (!managed) {
+    throw new MediaStorageError("media_move_unmanaged", "لا يمكن نقل أصل غير مُدار.", 400);
+  }
+  const normalizedTarget = targetObjectKey.replace(/\\/g, "/").replace(/^\/+/, "").trim();
+  const expectedRoot = managed.kind === "document" ? "files" : "images";
+  if (!hasSafeObjectPath(normalizedTarget, expectedRoot)) {
+    throw new MediaStorageError("media_move_invalid_target", "مسار النقل أو إعادة التسمية غير صالح.", 400);
+  }
+  if (normalizedTarget === managed.objectPath) {
+    throw new MediaStorageError("media_move_same_path", "المسار الجديد مطابق للمسار الحالي.", 400);
+  }
+  const targetBucket = bucketForFolder(path.posix.dirname(normalizedTarget));
+  if (targetBucket !== managed.bucket) {
+    throw new MediaStorageError("media_move_cross_bucket", "النقل بين حاويات مختلفة غير مدعوم في هذه العملية.", 400);
+  }
+  const targetFolder = path.posix.dirname(normalizedTarget);
+  const targetFilename = path.posix.basename(normalizedTarget);
+  const { data: targetEntries, error: targetCheckError } = await supabase.storage.from(managed.bucket).list(targetFolder, {
+    search: targetFilename,
+    limit: 100,
+  });
+  if (targetCheckError) {
+    throw new MediaStorageError("media_move_target_check_failed", "تعذر إثبات خلو مسار الوجهة.", 503);
+  }
+  if ((targetEntries ?? []).some((entry) => entry.name === targetFilename)) {
+    throw new MediaStorageError("media_move_collision", "يوجد أصل فعلي في مسار الوجهة.", 409);
+  }
+  const { error } = await supabase.storage.from(managed.bucket).move(managed.objectPath, normalizedTarget);
+  if (error) {
+    throw new MediaStorageError("media_move_failed", "تعذر نقل الأصل داخل التخزين؛ لم يتم إعلان نجاح.", 503);
+  }
+  return {
+    provider: "supabase" as const,
+    bucket: managed.bucket,
+    objectKey: normalizedTarget,
+    publicUrl: publicUrlForObject(supabase, managed.bucket, normalizedTarget),
   };
 }
 

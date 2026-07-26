@@ -1,6 +1,11 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  synchronizeMediaReferenceWriteScopesAfterDomainMutation,
+  type MediaReferenceSynchronizationResult,
+} from "../../../../../lib/admin/media-catalog/synchronization";
 
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
@@ -69,35 +74,48 @@ async function ensureUniqueSlug(slug: string, id?: number) {
 }
 
 export async function createCardsBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
   if (!name || !slug) throw new Error("اسم البلوك والـ slug مطلوبين.");
   if (!(await ensureUniqueSlug(slug))) throw new Error("الـ slug مستخدم بالفعل.");
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("cards_block_templates")
-    .insert({
-      name,
-      slug,
-      description: cleanText(formData.get("description")) || null,
-      variant: cleanText(formData.get("variant")) || "glass",
-      style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
-      config: buildCardsConfig(formData),
-    })
-    .select("id")
-    .single();
-
-  if (error) throw new Error(error.message);
+  const nextRow = {
+    name,
+    slug,
+    description: cleanText(formData.get("description")) || null,
+    variant: cleanText(formData.get("variant")) || "glass",
+    style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
+    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    config: buildCardsConfig(formData),
+  };
+  const provisionalIdentity = `create:${crypto.randomUUID()}`;
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "cards_block_templates",
+    leaseEntityIdentity: provisionalIdentity,
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `cards-block:create:${provisionalIdentity}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("cards_block_templates")
+        .insert(nextRow)
+        .select("id")
+        .single<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "Unable to create cards block.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
+  const data = coordinated.value;
 
   await revalidateBlockModulePaths("cards");
-  redirect(`/admin/pages-blocks/blocks/cards/${data.id}`);
+  redirect(`/admin/pages-blocks/blocks/cards/${data.id}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "?notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function updateCardsBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
@@ -105,25 +123,38 @@ export async function updateCardsBlock(formData: FormData) {
   if (!id || !name || !slug) throw new Error("بيانات البلوك غير مكتملة.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
 
-  const { error } = await getSupabaseAdmin()
-    .from("cards_block_templates")
-    .update({
-      name,
-      slug,
-      description: cleanText(formData.get("description")) || null,
-      variant: cleanText(formData.get("variant")) || "glass",
-      style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
-      config: buildCardsConfig(formData),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) throw new Error(error.message);
+  const nextRow = {
+    name,
+    slug,
+    description: cleanText(formData.get("description")) || null,
+    variant: cleanText(formData.get("variant")) || "glass",
+    style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
+    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    config: buildCardsConfig(formData),
+    updated_at: new Date().toISOString(),
+  };
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "cards_block_templates",
+    leaseEntityIdentity: String(id),
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `cards-block:update:${id}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("cards_block_templates")
+        .update(nextRow)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "Unable to update cards block.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
 
   await syncBlockModulePageAssignments("cards", id, parsePageIdsFromForm(formData));
   await revalidateBlockModulePaths("cards");
-  redirect(`/admin/pages-blocks/blocks/cards/${id}?saved=1`);
+  redirect(`/admin/pages-blocks/blocks/cards/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function toggleCardsBlockStatus(formData: FormData) {
@@ -146,21 +177,45 @@ export async function deleteCardsBlock(formData: FormData) {
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
-  const { error } = await getSupabaseAdmin().from("cards_block_templates").delete().eq("id", id);
+  const { data: existing, error: lookupError } = await getSupabaseAdmin()
+    .from("cards_block_templates")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle<{ id: number }>();
+  if (lookupError) throw new Error(lookupError.message);
+  const cleanupIdentity = existing?.id ?? id;
+
+  const { error } = await getSupabaseAdmin()
+    .from("cards_block_templates")
+    .delete()
+    .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+    [],
+    null,
+    [{ domainKey: "cards_block_templates", entityIdentity: cleanupIdentity }],
+  );
+  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
+    try {
+      await revalidateBlockModulePaths("cards");
+    } catch (revalidationError) {
+      console.error("Cards block delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
+    }
+    redirect("/admin/pages-blocks/blocks/cards?notice=saved_with_media_sync_warning");
+  }
   await revalidateBlockModulePaths("cards");
 }
 
 export async function duplicateCardsBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
   const { data: source, error } = await getSupabaseAdmin().from("cards_block_templates").select("*").eq("id", id).single();
   if (error || !source) throw new Error(error?.message || "البلوك غير موجود.");
 
-  const { error: insertError } = await getSupabaseAdmin().from("cards_block_templates").insert({
+  const nextRow = {
     name: `${source.name} - نسخة`,
     slug: `${source.slug}-copy-${Date.now()}`,
     description: source.description,
@@ -169,10 +224,29 @@ export async function duplicateCardsBlock(formData: FormData) {
     status: "draft",
     config: source.config,
     sort_order: (source.sort_order ?? 0) + 1,
+  };
+  const provisionalIdentity = `duplicate:${id}:${crypto.randomUUID()}`;
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "cards_block_templates",
+    leaseEntityIdentity: provisionalIdentity,
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `cards-block:duplicate:${id}`,
+    mutate: async () => {
+      const { data, error: insertError } = await getSupabaseAdmin()
+        .from("cards_block_templates")
+        .insert(nextRow)
+        .select("id")
+        .single<{ id: number }>();
+      if (insertError || !data) throw new Error(insertError?.message ?? "Unable to duplicate cards block.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
   });
-
-  if (insertError) throw new Error(insertError.message);
   await revalidateBlockModulePaths("cards");
+  if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
+    redirect("/admin/pages-blocks/blocks/cards?notice=saved_with_media_sync_warning");
+  }
 }
 
 export async function bulkCardsBlocks(formData: FormData) {
@@ -194,11 +268,40 @@ export async function bulkCardsBlocks(formData: FormData) {
     if (error) throw new Error(error.message);
   }
 
+  let mediaSynchronization: MediaReferenceSynchronizationResult | null = null;
   if (action === "delete") {
-    const { error } = await getSupabaseAdmin().from("cards_block_templates").delete().in("id", ids);
+    const { data: existingRows, error: lookupError } = await getSupabaseAdmin()
+      .from("cards_block_templates")
+      .select("id")
+      .in("id", ids);
+    if (lookupError) throw new Error(lookupError.message);
+
+    const capturedIds = (existingRows ?? []).map((row) => Number(row.id));
+    const cleanupIds = [...new Set([...capturedIds, ...ids])];
+    const { error } = await getSupabaseAdmin()
+      .from("cards_block_templates")
+      .delete()
+      .in("id", cleanupIds);
     if (error) throw new Error(error.message);
+
+    mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+      [],
+      null,
+      cleanupIds.map((cleanupId) => ({
+        domainKey: "cards_block_templates",
+        entityIdentity: cleanupId,
+      })),
+    );
   }
 
+  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
+    try {
+      await revalidateBlockModulePaths("cards");
+    } catch (revalidationError) {
+      console.error("Cards block bulk delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
+    }
+    redirect("/admin/pages-blocks/blocks/cards?notice=saved_with_media_sync_warning");
+  }
   await revalidateBlockModulePaths("cards");
 }
 

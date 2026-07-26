@@ -23,6 +23,7 @@ export type AdminEntityMutationError = {
 export type AdminEntityMutationSuccess<Payload = Record<string, never>> = Payload & {
   ok: true;
   message: string;
+  feedbackStatus?: "success" | "warning";
 };
 
 type PendingAction = { rowId: number | string; action: string } | null;

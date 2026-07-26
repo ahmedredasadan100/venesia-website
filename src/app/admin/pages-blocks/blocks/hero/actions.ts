@@ -1,6 +1,11 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  synchronizeMediaReferenceWriteScopesAfterDomainMutation,
+  type MediaReferenceSynchronizationResult,
+} from "../../../../../lib/admin/media-catalog/synchronization";
 import { parseAdminLinkFromFormData } from "../../../../../lib/admin/links/form-fields";
 import { serializeAdminLink } from "../../../../../lib/admin/links/serialize";
 import { isAdminLinkEmpty } from "../../../../../lib/admin/links/validate";
@@ -134,8 +139,16 @@ async function revalidateHeroAdmin() {
   revalidatePath("/track-your-project");
 }
 
+function mediaSynchronizationNotice(
+  synchronization: MediaReferenceSynchronizationResult,
+) {
+  return synchronization.status === "saved_with_media_sync_warning"
+    ? "saved_with_media_sync_warning"
+    : null;
+}
+
 export async function createHeroTemplate(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const rawSlug = cleanText(formData.get("slug"));
   const slug = slugify(rawSlug || name);
@@ -154,26 +167,40 @@ export async function createHeroTemplate(formData: FormData) {
     throw new Error("الـ slug مستخدم بالفعل في Hero آخر.");
   }
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("hero_templates")
-    .insert({
-      name,
-      slug,
-      description: cleanText(formData.get("template_description")) || null,
-      variant: cleanText(formData.get("variant")) || "internal-page",
-      style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
-      source_type: cleanText(formData.get("source_type")) || "manual",
-      limit_count: parseNumber(formData.get("limit_count"), 1),
-      is_visible: formData.get("is_visible") === "on",
-      config: buildHeroConfig(formData),
-    })
-    .select("id")
-    .single();
-
-  if (error) throw new Error(error.message);
-
+  const nextRow = {
+    name,
+    slug,
+    description: cleanText(formData.get("template_description")) || null,
+    variant: cleanText(formData.get("variant")) || "internal-page",
+    style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
+    source_type: cleanText(formData.get("source_type")) || "manual",
+    limit_count: parseNumber(formData.get("limit_count"), 1),
+    is_visible: formData.get("is_visible") === "on",
+    config: buildHeroConfig(formData),
+  };
+  const provisionalIdentity = `create:${crypto.randomUUID()}`;
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "hero_templates",
+    leaseEntityIdentity: provisionalIdentity,
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `hero-template:create:${provisionalIdentity}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("hero_templates")
+        .insert(nextRow)
+        .select("id")
+        .single<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء Hero.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
   await revalidateHeroAdmin();
-  redirect(`/admin/pages-blocks/blocks/hero/${data.id}`);
+  const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);
+  redirect(
+    `/admin/pages-blocks/blocks/hero/${coordinated.value.id}${notice ? `?notice=${notice}` : ""}`,
+  );
 }
 
 export async function toggleHeroTemplate(formData: FormData) {
@@ -197,14 +224,38 @@ export async function deleteHeroTemplate(formData: FormData) {
   const id = parseNumber(formData.get("id"), 0);
   if (!id) throw new Error("Hero id is missing.");
 
-  const { error } = await getSupabaseAdmin().from("hero_templates").delete().eq("id", id);
+  const { data: existing, error: lookupError } = await getSupabaseAdmin()
+    .from("hero_templates")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle<{ id: number }>();
+  if (lookupError) throw new Error(lookupError.message);
+  const cleanupIdentity = existing?.id ?? id;
+
+  const { error } = await getSupabaseAdmin()
+    .from("hero_templates")
+    .delete()
+    .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+    [],
+    null,
+    [{ domainKey: "hero_templates", entityIdentity: cleanupIdentity }],
+  );
+  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
+    try {
+      await revalidateHeroAdmin();
+    } catch (revalidationError) {
+      console.error("Hero delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
+    }
+    redirect("/admin/pages-blocks/blocks/hero?notice=saved_with_media_sync_warning");
+  }
   await revalidateHeroAdmin();
 }
 
 export async function duplicateHeroTemplate(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
   if (!id) throw new Error("Hero id is missing.");
 
@@ -218,7 +269,7 @@ export async function duplicateHeroTemplate(formData: FormData) {
 
   const copySlug = `${hero.slug}-copy-${Date.now()}`;
 
-  const { error: insertError } = await getSupabaseAdmin().from("hero_templates").insert({
+  const nextRow = {
     name: `${hero.name} - نسخة`,
     slug: copySlug,
     description: hero.description,
@@ -232,11 +283,29 @@ export async function duplicateHeroTemplate(formData: FormData) {
     is_visible: false,
     sort_order: hero.sort_order + 1,
     config: hero.config,
+  };
+  const provisionalIdentity = `duplicate:${id}:${crypto.randomUUID()}`;
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "hero_templates",
+    leaseEntityIdentity: provisionalIdentity,
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `hero-template:duplicate:${id}`,
+    mutate: async () => {
+      const { data, error: insertError } = await getSupabaseAdmin()
+        .from("hero_templates")
+        .insert(nextRow)
+        .select("id")
+        .single<{ id: number }>();
+      if (insertError || !data) throw new Error(insertError?.message ?? "تعذر نسخ Hero.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
   });
 
-  if (insertError) throw new Error(insertError.message);
-
   await revalidateHeroAdmin();
+  const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);
+  if (notice) redirect(`/admin/pages-blocks/blocks/hero?notice=${notice}`);
 }
 
 export async function bulkHeroTemplates(formData: FormData) {
@@ -258,16 +327,45 @@ export async function bulkHeroTemplates(formData: FormData) {
     if (error) throw new Error(error.message);
   }
 
+  let mediaSynchronization: MediaReferenceSynchronizationResult | null = null;
   if (action === "delete") {
-    const { error } = await getSupabaseAdmin().from("hero_templates").delete().in("id", ids);
+    const { data: existingRows, error: lookupError } = await getSupabaseAdmin()
+      .from("hero_templates")
+      .select("id")
+      .in("id", ids);
+    if (lookupError) throw new Error(lookupError.message);
+
+    const capturedIds = (existingRows ?? []).map((row) => Number(row.id));
+    const cleanupIds = [...new Set([...capturedIds, ...ids])];
+    const { error } = await getSupabaseAdmin()
+      .from("hero_templates")
+      .delete()
+      .in("id", cleanupIds);
     if (error) throw new Error(error.message);
+
+    mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+      [],
+      null,
+      cleanupIds.map((cleanupId) => ({
+        domainKey: "hero_templates",
+        entityIdentity: cleanupId,
+      })),
+    );
   }
 
+  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
+    try {
+      await revalidateHeroAdmin();
+    } catch (revalidationError) {
+      console.error("Hero bulk delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
+    }
+    redirect("/admin/pages-blocks/blocks/hero?notice=saved_with_media_sync_warning");
+  }
   await revalidateHeroAdmin();
 }
 
 export async function updateHeroTemplateDetails(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
   const name = cleanText(formData.get("name"));
   const rawSlug = cleanText(formData.get("slug"));
@@ -288,24 +386,37 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     throw new Error("الـ slug مستخدم بالفعل في Hero آخر.");
   }
 
-  const { error } = await getSupabaseAdmin()
-    .from("hero_templates")
-    .update({
-      name,
-      slug,
-      description: cleanText(formData.get("template_description")) || null,
-      variant: cleanText(formData.get("variant")) || "internal-page",
-      style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
-      source_type: cleanText(formData.get("source_type")) || "manual",
-      source_slug: cleanText(formData.get("source_slug")) || null,
-      limit_count: parseNumber(formData.get("limit_count"), 1),
-      is_visible: formData.get("is_visible") === "on",
-      config: buildHeroConfig(formData),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) throw new Error(error.message);
+  const nextRow = {
+    name,
+    slug,
+    description: cleanText(formData.get("template_description")) || null,
+    variant: cleanText(formData.get("variant")) || "internal-page",
+    style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
+    source_type: cleanText(formData.get("source_type")) || "manual",
+    source_slug: cleanText(formData.get("source_slug")) || null,
+    limit_count: parseNumber(formData.get("limit_count"), 1),
+    is_visible: formData.get("is_visible") === "on",
+    config: buildHeroConfig(formData),
+    updated_at: new Date().toISOString(),
+  };
+  const coordinated = await coordinateMediaReferenceEntityMutation({
+    domainKey: "hero_templates",
+    leaseEntityIdentity: String(id),
+    intendedRow: nextRow,
+    actorId: actor.id,
+    requestIdentity: `hero-template:update:${id}`,
+    mutate: async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("hero_templates")
+        .update(nextRow)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle<{ id: number }>();
+      if (error || !data) throw new Error(error?.message ?? "تعذر تحديث Hero.");
+      return data;
+    },
+    resolveEntityIdentity: (value) => String(value.id),
+  });
 
   const pageIds = formData.getAll("page_ids").map((value) => Number(value)).filter(Boolean);
 
@@ -339,5 +450,8 @@ export async function updateHeroTemplateDetails(formData: FormData) {
 
   await revalidateHeroAdmin();
   revalidatePath(`/admin/pages-blocks/blocks/hero/${id}`);
-  redirect(`/admin/pages-blocks/blocks/hero/${id}?saved=1`);
+  const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);
+  redirect(
+    `/admin/pages-blocks/blocks/hero/${id}?saved=1${notice ? `&notice=${notice}` : ""}`,
+  );
 }

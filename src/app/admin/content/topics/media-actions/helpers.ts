@@ -14,7 +14,6 @@ import {
 } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { validateSlugFormat } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
 import { resolveTopicPublishedAt } from "../../../../../lib/content-dates";
-import { savePublicMediaUpload } from "../../../../../lib/admin/media-library";
 import type { MediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 import type { MediaStatus, MediaTopicRow } from "./types";
 import { VALID_STATUSES } from "./types";
@@ -109,13 +108,13 @@ function getFile(formData: FormData, key: string) {
 }
 
 export async function uploadMediaImage(formData: FormData, _slug: string) {
-  void _slug; // The storage adapter owns sanitized, collision-resistant object names.
+  void _slug;
   const imageFile = getFile(formData, "image_file");
   const currentImage = getString(formData, "image");
-
-  if (!imageFile) return currentImage;
-  const saved = await savePublicMediaUpload("images/topics", imageFile);
-  return saved.path;
+  if (imageFile) {
+    throw new Error("الرفع المباشر من نموذج المحتوى متوقف. استخدم مكتبة الصور المشتركة.");
+  }
+  return currentImage;
 }
 
 export function getPayload(formData: FormData) {

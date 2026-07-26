@@ -162,9 +162,11 @@ function projectActionFeedback(
   action: string,
   ok: boolean,
   message: string,
+  feedbackStatus?: "success" | "warning",
 ): AdminActionFeedback {
   return mapAdminActionResultToFeedback({
     ok,
+    feedbackStatus,
     title: projectActionTitle(action, ok),
     message,
   });
@@ -292,7 +294,12 @@ export default function ProjectsTableClient({
       const result = await instant.mutateAsync(request);
       if (request.bulk) selection.clearSelection();
       showFeedback(
-        projectActionFeedback(request.action, true, result.message),
+        projectActionFeedback(
+          request.action,
+          true,
+          result.message,
+          result.feedbackStatus,
+        ),
       );
       return true;
     } catch (error) {

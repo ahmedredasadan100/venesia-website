@@ -13,19 +13,26 @@ import {
 import type { FooterBrand, FooterContactItem, FooterSocialLink } from "../../../../../lib/footer/types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 
-export async function upsertSetting(key: string, value: unknown) {
+export async function upsertSettings(
+  settings: readonly { key: string; value: unknown }[],
+) {
+  const updatedAt = new Date().toISOString();
   const { error } = await getSupabaseAdmin()
     .from("site_settings")
     .upsert(
-      {
-        key,
-        value,
-        updated_at: new Date().toISOString(),
-      },
+      settings.map((setting) => ({
+        key: setting.key,
+        value: setting.value,
+        updated_at: updatedAt,
+      })),
       { onConflict: "key" },
     );
 
   if (error) throw new Error(error.message);
+}
+
+export async function upsertSetting(key: string, value: unknown) {
+  await upsertSettings([{ key, value }]);
 }
 
 export function syncBrandFromSlots(slots: FooterSlotsConfig): FooterBrand {

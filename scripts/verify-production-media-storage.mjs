@@ -68,8 +68,13 @@ check(
   }) === "supabase",
 );
 check(
-  "local development retains an explicit legacy filesystem adapter",
-  storageContract.resolveMediaStorageProvider({ NODE_ENV: "development" }) === "filesystem",
+  "local development uses Supabase for every managed mutation",
+  storageContract.resolveMediaStorageProvider({ NODE_ENV: "development" }) === "supabase",
+);
+check(
+  "local development keeps filesystem as read-only browse-through only",
+  storageContract.shouldIncludeLocalFilesystemReadThrough({ NODE_ENV: "development" }) === true &&
+    storageContract.shouldIncludeLocalFilesystemReadThrough({ NODE_ENV: "production" }) === false,
 );
 
 assert.equal(mediaPaths.normalizeMediaFolder("images/topics"), "images/topics");
@@ -213,7 +218,12 @@ const replacement = await adapter.uploadImage(
   mockFile("replacement.png", "image/png", Buffer.concat([pngBytes, Buffer.from([1])])),
   { replacePath: uploaded.path },
 );
-check("managed same-type replacement keeps the stable URL", replacement.path === uploaded.path);
+check(
+  "replacement creates a distinct canonical object without same-path overwrite",
+  replacement.path !== uploaded.path &&
+    adapter.isManagedAsset(replacement.path) &&
+    (await adapter.listImagePaths("images", 20)).includes(uploaded.path),
+);
 check(
   "recursive image listing returns the managed public URL",
   (await adapter.listImagePaths("images", 20)).includes(uploaded.path),
@@ -304,10 +314,13 @@ const mediaHelperSource = source(
   "src/app/admin/content/topics/media-actions/helpers.ts",
 );
 check(
-  "production facade resolves the provider before the dynamic filesystem import",
-  facadeSource.indexOf("resolveMediaStorageProvider(environment)") >= 0 &&
-    facadeSource.indexOf("resolveMediaStorageProvider(environment)") <
-      facadeSource.indexOf('import("./media-library-fs")'),
+  "media facade isolates filesystem behind local read-only list paths",
+  facadeSource.includes("shouldIncludeLocalFilesystemReadThrough") &&
+    facadeSource.includes('import("./media-library-fs")') &&
+    facadeSource.includes("getManagedMediaStorageAdapter") &&
+    facadeSource.includes("savePublicMediaUpload") &&
+    facadeSource.includes("deletePublicMediaAsset") &&
+    !source("src/lib/admin/media-library-fs.ts").includes("registerCatalogUpload"),
 );
 check(
   "Storage uses a dedicated request timeout without changing database queries",
@@ -320,26 +333,29 @@ check(
     ),
 );
 check(
-  "topic upload actions contain no direct public filesystem writes",
+  "topic forms use the shared picker and reject legacy direct file payloads",
   !/(fs\/promises|mkdir\(|writeFile\(|public["',\s]+["']images)/.test(
     `${articleHelperSource}\n${mediaHelperSource}`,
   ) &&
-    articleHelperSource.includes("savePublicMediaUpload") &&
-    mediaHelperSource.includes("savePublicMediaUpload"),
+    articleHelperSource.includes("الرفع المباشر من نموذج الموضوع متوقف") &&
+    mediaHelperSource.includes("الرفع المباشر من نموذج المحتوى متوقف"),
 );
 
 const routeSource = source("src/app/api/admin/media-library/route.ts");
 check(
   "upload and delete API handlers authenticate before reading request data",
-  routeSource.indexOf("await requireAdminApi()") >= 0 &&
+  (routeSource.match(/await requireAdminApi\(\)/g) ?? []).length === 4 &&
     routeSource.indexOf("await requireAdminApi()") < routeSource.indexOf("request.formData()") &&
-    routeSource.lastIndexOf("await requireAdminApi()") < routeSource.indexOf("request.json()"),
+    routeSource.lastIndexOf("await requireAdminApi()") < routeSource.lastIndexOf("request.json()"),
 );
 check(
-  "delete API blocks referenced and unmanaged assets",
-  routeSource.includes("isManagedPublicMediaAsset") &&
-    routeSource.includes("scanMediaAssetUsage") &&
-    routeSource.includes("media_asset_in_use"),
+  "delete API delegates to the fail-closed reservation Saga",
+  routeSource.includes("safelyDeleteMediaAsset") &&
+    routeSource.includes('result.eligibility.state === "in_use"') &&
+    routeSource.includes("workflow?.repairRequired") &&
+    routeSource.includes("media_delete_post_reservation_reference") &&
+    routeSource.includes("media_delete_finalization_failed") &&
+    routeSource.includes("تم منع العملية لحماية المحتوى"),
 );
 
 const nextConfigSource = source("next.config.ts");
