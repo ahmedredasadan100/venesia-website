@@ -20,35 +20,24 @@ import type {
 
 export type { ProjectEntityListMetrics, ProjectEntityListRow };
 
-export const projectEntityListRowSchema = z.object({
-  id: z.number().int().positive(),
-  code: z.string(),
-  slug: z.string().nullable(),
-  arabic_name: z.string(),
-  location_label: z.string().nullable(),
-  map_area: z.string().nullable(),
-  featured: z.boolean(),
-  publication_status: z.string().nullable(),
-  status: z.string().nullable(),
+const projectEntityListRowSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  type: z.enum(["residential", "commercial"]),
+  slug: z.string().min(1),
+  arabic_name: z.string().min(1),
+  english_name: z.string().min(1),
+  location_label: z.string(),
   updated_at: z.string(),
 });
 
-export const projectEntityListMetricsSchema = z.object({
-  published: z.number().int().nonnegative(),
-  featured: z.number().int().nonnegative(),
+const projectEntityListMetricsSchema = z.object({
+  total: z.number().int().nonnegative(),
 });
 
 export const projectsEntityListResultSchema = createAdminEntityListResultSchema(
   projectEntityListRowSchema,
   projectEntityListMetricsSchema,
 );
-
-const projectsReadModelSchema = z.object({
-  rows: z.array(projectEntityListRowSchema),
-  total_count: z.coerce.number().int().nonnegative().finite(),
-  page: z.number().int().positive(),
-  metrics: projectEntityListMetricsSchema,
-});
 
 export class ProjectsEntityListDatabaseError extends Error {
   readonly code: string;
@@ -57,48 +46,92 @@ export class ProjectsEntityListDatabaseError extends Error {
 
   constructor(error: {
     message: string;
-    code: string;
-    details: string;
-    hint: string;
+    code?: string;
+    details?: string;
+    hint?: string;
   }) {
     super(error.message);
     this.name = "ProjectsEntityListDatabaseError";
-    this.code = error.code;
-    this.details = error.details;
-    this.hint = error.hint;
+    this.code = error.code ?? "projects_list_failed";
+    this.details = error.details ?? "";
+    this.hint = error.hint ?? "";
   }
+}
+
+function sanitizeProjectSearch(value: string) {
+  return value
+    .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function loadProjectsPage(
+  query: AdminEntityListQuery<ProjectFilters, ProjectSortField>,
+  page: number,
+) {
+  const from = (page - 1) * query.pageSize;
+  const to = from + query.pageSize - 1;
+  const search = sanitizeProjectSearch(query.search);
+  const ascending = query.sort.direction === "asc";
+
+  let request = getSupabaseAdmin()
+    .from("projects")
+    .select(
+      "id, type, slug, arabic_name, english_name, location_label, updated_at",
+      { count: "exact" },
+    )
+    .eq("type", query.filters.projectType);
+
+  if (search) {
+    const pattern = `%${search}%`;
+    request = request.or(
+      [
+        `arabic_name.ilike.${pattern}`,
+        `english_name.ilike.${pattern}`,
+        `slug.ilike.${pattern}`,
+      ].join(","),
+    );
+  }
+
+  const { data, error, count } = await request
+    .order(query.sort.field, { ascending, nullsFirst: false })
+    .order("id", { ascending })
+    .range(from, to);
+
+  if (error) throw new ProjectsEntityListDatabaseError(error);
+
+  return {
+    rows: z.array(projectEntityListRowSchema).parse(data ?? []),
+    totalRows: count ?? 0,
+  };
 }
 
 export async function loadProjectsEntityListResult(
   query: AdminEntityListQuery<ProjectFilters, ProjectSortField>,
 ) {
-  // One database list operation: filters, search, sort, count, paging, and
-  // summary metrics share a single stable snapshot.
-  const { data, error } = await getSupabaseAdmin().rpc("admin_list_projects", {
-    p_page: query.page,
-    p_page_size: query.pageSize,
-    p_sort_field: query.sort.field,
-    p_sort_direction: query.sort.direction,
-    p_project_type: query.filters.projectType,
-    p_search: query.search,
-    p_publication_status: query.filters.publicationStatus,
-    p_implementation_status: query.filters.implementationStatus,
-    p_featured: query.filters.featured,
-    p_list_mode: query.filters.listMode,
+  let page = query.page;
+  let loaded = await loadProjectsPage(query, page);
+  const totalPages = Math.max(1, Math.ceil(loaded.totalRows / query.pageSize));
+
+  if (page > totalPages) {
+    page = totalPages;
+    loaded = await loadProjectsPage(query, page);
+  }
+
+  return projectsEntityListResultSchema.parse({
+    rows: loaded.rows,
+    pagination: {
+      page,
+      pageSize: query.pageSize,
+      totalRows: loaded.totalRows,
+      totalPages,
+    },
+    metrics: { total: loaded.totalRows },
+    meta: {
+      generatedAt: new Date().toISOString(),
+      mode: query.mode,
+    },
   });
-  if (error) throw new ProjectsEntityListDatabaseError(error);
-
-  const readModel = projectsReadModelSchema.parse(data);
-  const totalRows = readModel.total_count;
-  const totalPages = Math.max(1, Math.ceil(totalRows / query.pageSize));
-  const page = readModel.page;
-
-  return {
-    rows: readModel.rows,
-    pagination: { page, pageSize: query.pageSize, totalRows, totalPages },
-    metrics: readModel.metrics,
-    meta: { generatedAt: new Date().toISOString(), mode: query.mode },
-  };
 }
 
 export const projectsEntityListAdapter: AdminEntityListAdapter<

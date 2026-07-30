@@ -47,7 +47,7 @@ import { mapTopicsInsightCtaBlock, mapTopicsIntroBlock } from "../topics/topics-
 import { mapAboutCtaBlock, mapLegacyProjectsCtaBlock } from "../modules/about-cta-mappers";
 import { mapLegacyPrinciplesCardsBlock } from "../modules/about-principles-mappers";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
-import type { HomepageProjectCard } from "../../lib/projects/types";
+import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import { mapVisionGoalsBlock } from "../modules/vision-goals-mappers";
 import {
   asBreadcrumbConfig,

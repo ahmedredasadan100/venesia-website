@@ -23,6 +23,8 @@ type AdminMediaImageFieldProps = {
   showLabel?: boolean;
   onValueChange?: (value: string) => void;
   compactAspectClassName?: string;
+  previewLoading?: "lazy" | "eager";
+  appearance?: "dark" | "light";
 };
 
 export default function AdminMediaImageField({
@@ -36,6 +38,8 @@ export default function AdminMediaImageField({
   showLabel = true,
   onValueChange,
   compactAspectClassName = "aspect-[4/3]",
+  previewLoading,
+  appearance = "dark",
 }: AdminMediaImageFieldProps) {
   const [value, setValue] = useState(defaultValue);
   const [prevDefaultValue, setPrevDefaultValue] = useState(defaultValue);
@@ -58,12 +62,20 @@ export default function AdminMediaImageField({
     onValueChange?.(next);
   }
 
+  const light = appearance === "light";
+  const compactFrameClass = light
+    ? "border-slate-200 bg-slate-50"
+    : "border-white/10 bg-black/30";
+  const emptyCompactClass = light
+    ? "text-slate-500 hover:bg-amber-50 hover:text-[#9a6815]"
+    : "text-white/40 hover:text-[#D8B87A]";
+
   if (variant === "compact") {
     return (
       <>
         <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
-        <div className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-black/30 ${compactAspectClassName}`}>
+        <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
           {value ? (
             <>
               <Image
@@ -71,6 +83,7 @@ export default function AdminMediaImageField({
                 alt=""
                 fill
                 className="object-cover"
+                loading={previewLoading}
                 sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
               />
               <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-1 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-2 pt-8">
@@ -94,7 +107,7 @@ export default function AdminMediaImageField({
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-xs text-white/40 transition hover:text-[#D8B87A]"
+              className={`flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-xs transition ${emptyCompactClass}`}
             >
               <span className="text-lg leading-none">+</span>
               <span>اختيار صورة</span>
@@ -118,7 +131,7 @@ export default function AdminMediaImageField({
 
       {showLabel ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-xs font-semibold text-white/55">{label}</span>
+          <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{label}</span>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -131,7 +144,7 @@ export default function AdminMediaImageField({
               <button
                 type="button"
                 onClick={() => updateValue("")}
-                className="cursor-pointer rounded-2xl border border-white/10 px-4 py-2 text-sm text-white/55 hover:bg-white/5 hover:text-white"
+                className={`cursor-pointer rounded-2xl border px-4 py-2 text-sm ${light ? "border-red-200 text-red-600 hover:bg-red-50" : "border-white/10 text-white/55 hover:bg-white/5 hover:text-white"}`}
               >
                 إزالة
               </button>
@@ -141,16 +154,16 @@ export default function AdminMediaImageField({
       ) : null}
 
       {dimensionHint ? (
-        <p className="text-xs leading-6 text-[#D8B87A]/65">{DIMENSION_HINTS[dimensionHint]}</p>
+        <p className={`text-xs leading-6 ${light ? "text-[#9a6815]" : "text-[#D8B87A]/65"}`}>{DIMENSION_HINTS[dimensionHint]}</p>
       ) : null}
-      {helperText ? <p className="text-xs leading-6 text-white/42">{helperText}</p> : null}
+      {helperText ? <p className={`text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{helperText}</p> : null}
 
       {value ? (
-        <div className="relative max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+        <div className={`relative max-w-sm overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}>
           <div className="relative h-44">
-            <Image src={value} alt="" fill className="object-cover" sizes="360px" />
+            <Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" />
           </div>
-          <p className="truncate px-3 py-2 font-mono text-[11px] text-white/45" dir="ltr">
+          <p className={`truncate px-3 py-2 font-mono text-[11px] ${light ? "text-slate-500" : "text-white/45"}`} dir="ltr">
             {value}
           </p>
         </div>
@@ -158,7 +171,7 @@ export default function AdminMediaImageField({
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          className={`flex h-40 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-[#05070B] text-sm text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70 ${showLabel ? "max-w-sm" : ""}`}
+          className={`flex h-40 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed text-sm ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"} ${showLabel ? "max-w-sm" : ""}`}
         >
           لا توجد صورة محددة
         </button>

@@ -49,6 +49,18 @@ export type AdminEntityListControllerOptions<
   staleTimeMs: number;
 };
 
+export function useAdminEntityListInvalidation(entity: string) {
+  const queryClient = useQueryClient();
+
+  return useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: adminEntityListQueryKeys.entity(entity),
+      }),
+    [entity, queryClient],
+  );
+}
+
 export function useAdminEntityListController<
   Entity extends string,
   Filters extends Record<string, unknown>,
@@ -69,6 +81,7 @@ export function useAdminEntityListController<
   Metrics
 >) {
   const queryClient = useQueryClient();
+  const invalidate = useAdminEntityListInvalidation(entity);
   const [bootstrap] = useState(() => {
     const query =
       initialResult.pagination.page === initialQuery.page
@@ -265,13 +278,6 @@ export function useAdminEntityListController<
       "push",
     );
   }, [commitQuery, contract]);
-  const invalidate = useCallback(
-    () =>
-      queryClient.invalidateQueries({
-        queryKey: adminEntityListQueryKeys.entity(entity),
-      }),
-    [entity, queryClient],
-  );
   /**
    * Deterministic targeted update for mutations whose outcome is known
    * (e.g. featured toggle). Applies to every cached page of this entity;

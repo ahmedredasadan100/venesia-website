@@ -383,11 +383,11 @@ function focusTarget(targetIdOrName: string) {
         block: "center",
       });
       const focusable = target.matches(
-        "input, textarea, select, button, [tabindex]",
+        'input, textarea, select, button, [contenteditable="true"], [tabindex]',
       )
         ? target
         : target.querySelector<HTMLElement>(
-            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
           );
       focusable?.focus({ preventScroll: true });
     });
@@ -563,6 +563,7 @@ export default function AdminFormRuntime<TResult = unknown>({
       submittedBaselineRef.current = null;
       submittedControlsRef.current = null;
       markClean(submittedBaseline);
+      onSuccess?.(state);
       router.replace(editHref, { scroll: false });
       return;
     }

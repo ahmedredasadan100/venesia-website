@@ -15,6 +15,7 @@ export type AdminListboxSelectOption = {
   value: string;
   label: string;
   depth?: number;
+  disabled?: boolean;
 };
 
 export type AdminListboxSelectProps = {
@@ -122,6 +123,10 @@ export default function AdminListboxSelect({
       option.label.toLocaleLowerCase("ar").includes(query),
     );
   }, [options, search]);
+  const selectableOptions = useMemo(
+    () => visibleOptions.filter((option) => !option.disabled),
+    [visibleOptions],
+  );
 
   const selected = useMemo(
     () => options.find((option) => option.value === value),
@@ -130,9 +135,12 @@ export default function AdminListboxSelect({
   const displayValue = selected?.label ?? placeholder ?? "اختر";
   const activeIndex = Math.max(
     0,
-    visibleOptions.findIndex((option) => option.value === activeValue),
+    selectableOptions.findIndex((option) => option.value === activeValue),
   );
-  const resolvedActiveValue = visibleOptions[activeIndex]?.value ?? "";
+  const resolvedActiveValue = selectableOptions[activeIndex]?.value ?? "";
+  const inlineTabStopValue =
+    selectableOptions.find((option) => option.value === value)?.value ??
+    selectableOptions[0]?.value;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -171,13 +179,28 @@ export default function AdminListboxSelect({
     return () => window.cancelAnimationFrame(frame);
   }, [isOpen, menuPosition, searchable]);
 
+  useEffect(() => {
+    if (!isOpen || !resolvedActiveValue) return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(`${controlId}-option-${resolvedActiveValue}`)
+        ?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [controlId, isOpen, resolvedActiveValue]);
+
   function handleSelect(next: string) {
+    if (options.find((option) => option.value === next)?.disabled) return;
     onChange(next);
     setOpen(false);
     triggerRef.current?.focus();
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Tab" && isOpen) {
+      setOpen(false);
+      return;
+    }
     if (event.key === "Escape" && isOpen) {
       event.preventDefault();
       setOpen(false);
@@ -185,7 +208,7 @@ export default function AdminListboxSelect({
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      if (!visibleOptions.length) return;
+      if (!selectableOptions.length) return;
       if (!isOpen) {
         setActiveValue(value);
         setOpen(true);
@@ -193,19 +216,33 @@ export default function AdminListboxSelect({
       }
       const direction = event.key === "ArrowDown" ? 1 : -1;
       const nextIndex =
-        (activeIndex + direction + visibleOptions.length) %
-        visibleOptions.length;
-      setActiveValue(visibleOptions[nextIndex].value);
+        (activeIndex + direction + selectableOptions.length) %
+        selectableOptions.length;
+      setActiveValue(selectableOptions[nextIndex].value);
+      return;
+    }
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      if (!selectableOptions.length) return;
+      setActiveValue(
+        selectableOptions[event.key === "Home" ? 0 : selectableOptions.length - 1].value,
+      );
+      if (!isOpen) setOpen(true);
       return;
     }
     if ((event.key === "Enter" || event.key === " ") && isOpen) {
       event.preventDefault();
-      if (!visibleOptions.length) return;
-      handleSelect(visibleOptions[activeIndex].value);
+      if (!selectableOptions.length) return;
+      handleSelect(selectableOptions[activeIndex].value);
     }
   }
 
   function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Tab") {
+      setOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       setOpen(false);
@@ -214,39 +251,51 @@ export default function AdminListboxSelect({
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      if (!visibleOptions.length) return;
+      if (!selectableOptions.length) return;
       const direction = event.key === "ArrowDown" ? 1 : -1;
       const nextIndex =
-        (activeIndex + direction + visibleOptions.length) %
-        visibleOptions.length;
-      setActiveValue(visibleOptions[nextIndex].value);
+        (activeIndex + direction + selectableOptions.length) %
+        selectableOptions.length;
+      setActiveValue(selectableOptions[nextIndex].value);
+      return;
+    }
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      if (!selectableOptions.length) return;
+      setActiveValue(
+        selectableOptions[event.key === "Home" ? 0 : selectableOptions.length - 1].value,
+      );
       return;
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      if (!visibleOptions.length) return;
-      handleSelect(visibleOptions[activeIndex].value);
+      if (!selectableOptions.length) return;
+      handleSelect(selectableOptions[activeIndex].value);
     }
   }
 
   function handleInlineKeyDown(
     event: React.KeyboardEvent<HTMLButtonElement>,
-    index: number,
+    optionValue: string,
   ) {
-    if (!visibleOptions.length) return;
+    if (!selectableOptions.length) return;
+    const index = selectableOptions.findIndex(
+      (option) => option.value === optionValue,
+    );
+    if (index < 0) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const direction = event.key === "ArrowDown" ? 1 : -1;
       onChange(
-        visibleOptions[
-          (index + direction + visibleOptions.length) % visibleOptions.length
+        selectableOptions[
+          (index + direction + selectableOptions.length) % selectableOptions.length
         ].value,
       );
       return;
     }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      handleSelect(visibleOptions[index].value);
+      handleSelect(selectableOptions[index].value);
     }
   }
 
@@ -277,7 +326,7 @@ export default function AdminListboxSelect({
               aria-label={searchPlaceholder}
               aria-controls={`${controlId}-listbox`}
               aria-activedescendant={
-                visibleOptions.length
+                resolvedActiveValue
                   ? `${controlId}-option-${resolvedActiveValue}`
                   : undefined
               }
@@ -304,14 +353,19 @@ export default function AdminListboxSelect({
                   id={`${controlId}-option-${option.value}`}
                   role="option"
                   aria-selected={selectedOption}
+                  aria-disabled={option.disabled || undefined}
+                  tabIndex={-1}
+                  disabled={option.disabled}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => handleSelect(option.value)}
-                  className={`block w-full cursor-pointer rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
-                    selectedOption
+                  className={`block w-full rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+                    option.disabled
+                      ? "cursor-not-allowed bg-white/[0.02] text-white/28"
+                      : selectedOption
                       ? "bg-[#D8B87A]/14 font-medium text-[#E6C882]"
                       : active
-                        ? "bg-white/[0.07] text-white"
-                        : "text-white/78 hover:bg-white/[0.05]"
+                        ? "bg-[#D8B87A]/[0.09] text-[#F2D99B]"
+                        : "cursor-pointer text-white/78 hover:bg-[#D8B87A]/[0.07] hover:text-[#F2D99B]"
                   }`}
                 >
                   <span className="flex min-w-0 items-center">
@@ -356,6 +410,11 @@ export default function AdminListboxSelect({
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
               aria-controls={`${controlId}-listbox`}
+              aria-activedescendant={
+                resolvedActiveValue
+                  ? `${controlId}-option-${resolvedActiveValue}`
+                  : undefined
+              }
               data-admin-listbox-search=""
               className="mb-2 h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-[#D8B87A]/45"
             />
@@ -370,7 +429,7 @@ export default function AdminListboxSelect({
             className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto p-0.5`}
           >
             {visibleOptions.length ? (
-              visibleOptions.map((option, index) => {
+              visibleOptions.map((option) => {
                 const selectedOption = option.value === value;
                 return (
                   <button
@@ -379,13 +438,17 @@ export default function AdminListboxSelect({
                     id={`${controlId}-option-${option.value}`}
                     role="option"
                     aria-selected={selectedOption}
-                    tabIndex={selectedOption ? 0 : -1}
+                    aria-disabled={option.disabled || undefined}
+                    disabled={option.disabled}
+                    tabIndex={option.value === inlineTabStopValue ? 0 : -1}
                     onClick={() => handleSelect(option.value)}
-                    onKeyDown={(event) => handleInlineKeyDown(event, index)}
-                    className={`block w-full cursor-pointer rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
-                      selectedOption
+                    onKeyDown={(event) => handleInlineKeyDown(event, option.value)}
+                    className={`block w-full rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+                      option.disabled
+                        ? "cursor-not-allowed bg-white/[0.02] text-white/28"
+                        : selectedOption
                         ? "bg-[#D8B87A]/14 font-medium text-[#E6C882]"
-                        : "text-white/78 hover:bg-white/[0.05]"
+                        : "cursor-pointer text-white/78 hover:bg-[#D8B87A]/[0.07] hover:text-[#F2D99B]"
                     }`}
                   >
                     <span className="flex min-w-0 items-center">
@@ -424,7 +487,7 @@ export default function AdminListboxSelect({
           aria-expanded={isOpen}
           aria-controls={`${controlId}-listbox`}
           aria-activedescendant={
-            isOpen && visibleOptions.length
+            isOpen && resolvedActiveValue
               ? `${controlId}-option-${resolvedActiveValue}`
               : undefined
           }
@@ -436,7 +499,9 @@ export default function AdminListboxSelect({
           onKeyDown={handleKeyDown}
           className="flex h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/28 px-4 text-sm text-white outline-none transition hover:border-white/18 focus:border-[#D8B87A]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-55"
         >
-          <span className="truncate">{displayValue}</span>
+          <span className={`truncate ${selected ? "text-white/78" : "text-white/35"}`}>
+            {displayValue}
+          </span>
           <span
             className={`shrink-0 text-white/45 transition ${isOpen ? "rotate-180" : ""}`}
           >

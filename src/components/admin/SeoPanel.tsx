@@ -16,6 +16,8 @@ import {
   useOptionalAdminFormRuntime,
 } from "./ui/AdminFormRuntime";
 
+export { default as AdminEntitySeoPanel } from "./seo/AdminEntitySeoPanel";
+
 type SeoPanelProps = {
   title: string;
   excerpt: string;

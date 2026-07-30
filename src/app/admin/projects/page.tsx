@@ -1,4 +1,3 @@
-import Link from "next/link";
 import AdminNotice from "../../../components/admin/AdminNotice";
 import { AdminInfoBar, AdminPageContextHeader, AdminPageHeader } from "../../../components/admin/ui";
 import { countProjectsByType } from "../../../lib/projects/queries";
@@ -7,24 +6,7 @@ import ProjectsHubCard from "./projects-table/ProjectsHubCard";
 
 export const dynamic = "force-dynamic";
 
-function getNoticeText(notice?: string) {
-  if (!notice) return null;
-  try {
-    return decodeURIComponent(notice);
-  } catch {
-    return notice;
-  }
-}
-
-export default async function ProjectsHubPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ notice?: string; error?: string }>;
-}) {
-  const params = await searchParams;
-  const notice = getNoticeText(params?.notice);
-  const errorMessage = params?.error ? decodeURIComponent(params.error) : null;
-
+export default async function ProjectsHubPage() {
   const tableStatus = await getProjectsTableReady();
   let counts = { residential: 0, commercial: 0, residentialError: null as string | null, commercialError: null as string | null };
 
@@ -37,12 +19,12 @@ export default async function ProjectsHubPage({
       <main className="space-y-7">
         <AdminPageHeader
           title="المشاريع"
-          description="مركز إدارة المشاريع السكنية والتجارية — Projects CMS Core."
+          description="مركز إدخال وتعديل المشاريع السكنية والتجارية."
         />
         <AdminNotice
           variant="danger"
           title="جداول المشاريع غير جاهزة"
-          message={`نفّذ ملف SQL: sql/migrations/20250620000000_projects_cms_core.sql — ${tableStatus.error}`}
+          message={`المخطط النظيف غير متاح بعد. الهجرة المحلية المقترحة: sql/migrations/20260728090000_rebuild_project_admin_data_entry.sql — ${tableStatus.error}`}
         />
       </main>
     );
@@ -53,17 +35,14 @@ export default async function ProjectsHubPage({
       <AdminPageContextHeader
         eyebrow="PROJECTS CONTROL"
         title="إدارة المشاريع"
-        description="اختر نوع المشاريع لإدارتها. الواجهة العامة تقرأ من Supabase Projects — المصدر الرسمي للمحتوى بعد الإطلاق."
+        description="اختر نوع المشاريع لإدارة بيانات الإدخال بالمخطط النظيف."
       />
 
       <AdminInfoBar
-        label="Projects CMS Core"
-        description="Phase 1 — بناء نواة CMS فقط. رحلة التنفيذ لم تُنقل بعد."
+        label="Project Admin Data Entry"
+        description="الإدخال والتعديل فقط؛ النشر والمراجعة والتحديثات التنفيذية خارج هذه المرحلة."
         meta={`${counts.residential} Residential / ${counts.commercial} Commercial / ${tableStatus.count} Total`}
       />
-
-      {notice ? <AdminNotice variant="success" message={notice} /> : null}
-      {errorMessage ? <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={errorMessage} /> : null}
 
       {tableStatus.count === 0 ? (
         <AdminNotice
@@ -89,16 +68,6 @@ export default async function ProjectsHubPage({
           count={counts.commercial}
         />
       </section>
-
-      <div className="rounded-[22px] border border-white/10 bg-white/[0.02] px-5 py-4 text-sm text-white/45">
-        <p>
-          المصدر الوحيد للواجهة العامة:{" "}
-          <Link href="/admin/projects/residential" className="text-[#D8B87A] hover:underline">
-            Supabase projects
-          </Link>
-          .
-        </p>
-      </div>
     </main>
   );
 }

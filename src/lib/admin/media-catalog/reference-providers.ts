@@ -377,8 +377,7 @@ const PROVIDER_CONFIGS = [
     table: "projects",
     entityType: "project",
     labelField: "arabic_name",
-    fields: ["image", "hero_image", "og_image", "district_image", "overview_video_image", "brochure_url"],
-    stateFields: ["publication_status"],
+    fields: ["image", "hero_image", "small_box_image", "overview_main_image", "og_image"],
     editHref: (row) => `/admin/projects/${row.id}`,
     supportsRebind: false,
   },
@@ -395,7 +394,16 @@ const PROVIDER_CONFIGS = [
     domainKey: "project_floor_plans",
     table: "project_floor_plans",
     entityType: "project_floor_plan",
-    fields: ["plan_image"],
+    fields: ["architectural_image", "furnishing_image"],
+    extraFields: ["project_id"],
+    editHref: (row) => `/admin/projects/${row.project_id}`,
+    supportsRebind: false,
+  },
+  {
+    domainKey: "project_videos",
+    table: "project_videos",
+    entityType: "project_video",
+    fields: ["poster_image"],
     extraFields: ["project_id"],
     editHref: (row) => `/admin/projects/${row.project_id}`,
     supportsRebind: false,
@@ -515,7 +523,7 @@ const PROVIDER_CONFIGS = [
 ] satisfies ProviderConfig[];
 
 export const MEDIA_REFERENCE_PROVIDER_REGISTRY = PROVIDER_CONFIGS.map(createProvider);
-export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v1";
+export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v2-project-entry";
 
 export function getMediaReferenceProvider(domainKey: string) {
   return MEDIA_REFERENCE_PROVIDER_REGISTRY.find((provider) => provider.domainKey === domainKey) ?? null;

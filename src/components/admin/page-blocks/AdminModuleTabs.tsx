@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 type AdminModuleTab = {
   id: string;
@@ -17,8 +17,9 @@ type AdminModuleTabsProps = {
    * Safe default remains wrap for existing editors.
    */
   nowrap?: boolean;
-  variant?: "pills" | "segmented";
+  variant?: "pills" | "segmented" | "underline";
   navigationEventName?: string;
+  ariaLabel?: string;
 };
 
 type AdminModuleNavigationDetail =
@@ -41,17 +42,19 @@ function focusNavigationTarget(targetId: string) {
         behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
       });
-      const focusTarget = target.matches("input, textarea, select, button, [tabindex]")
+      const focusTarget = target.matches('input, textarea, select, button, [contenteditable="true"], [tabindex]')
         ? target
         : target.querySelector<HTMLElement>(
-            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
           );
       focusTarget?.focus({ preventScroll: true });
     });
   });
 }
 
-export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, variant = "pills", navigationEventName }: AdminModuleTabsProps) {
+export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, variant = "pills", navigationEventName, ariaLabel = "أقسام المحرر" }: AdminModuleTabsProps) {
+  const instanceId = useId();
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const fallbackId = tabs[0]?.id ?? "";
   const resolvedInitial =
     initialTabId && tabs.some((tab) => tab.id === initialTabId) ? initialTabId : fallbackId;
@@ -74,39 +77,67 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
 
   if (!tabs.length) return null;
 
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (index + 1) % tabs.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = tabs.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const next = tabs[nextIndex];
+    if (!next) return;
+    setActiveId(next.id);
+    tabRefs.current[nextIndex]?.focus();
+  }
+
   return (
     <div className="space-y-5" data-admin-module-tabs={variant}>
       <div
         className={[
           variant === "segmented"
             ? "grid grid-cols-2 overflow-hidden rounded-2xl border border-white/12 bg-[#090D12]/88 sm:grid-cols-4"
+            : variant === "underline"
+              ? "flex border-b border-white/10 bg-[#080B10]/92 px-2"
             : "flex gap-2 border-b border-white/10 pb-3",
           variant !== "segmented" && nowrap ? "flex-nowrap overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "",
           variant !== "segmented" && !nowrap ? "flex-wrap" : "",
         ].join(" ")}
         role="tablist"
-        aria-label="أقسام محرر الصفحة"
+        aria-label={ariaLabel}
       >
-        {tabs.map((tab) => {
+        {tabs.map((tab, index) => {
           const isActive = tab.id === activeId;
           return (
             <button
               key={tab.id}
+              ref={(node) => { tabRefs.current[index] = node; }}
+              id={`${instanceId}-tab-${tab.id}`}
               type="button"
               role="tab"
               aria-selected={isActive}
+              aria-controls={`${instanceId}-panel-${tab.id}`}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveId(tab.id)}
+              onKeyDown={(event) => handleTabKeyDown(event, index)}
               data-topic-tab={tab.id}
+              data-admin-tab-id={tab.id}
               className={[
                 variant === "segmented"
                   ? "min-h-12 cursor-pointer border-b border-e border-white/10 px-3 py-3 text-sm font-semibold transition sm:border-b-0"
+                  : variant === "underline"
+                    ? "min-h-14 shrink-0 cursor-pointer border-b-2 px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#D8B87A]/70"
                   : "cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition",
                 nowrap && variant !== "segmented" ? "shrink-0 whitespace-nowrap" : "",
                 isActive
                   ? variant === "segmented"
                     ? "bg-[linear-gradient(135deg,rgba(201,148,42,0.34),rgba(104,71,20,0.35))] text-[#F2CB69] shadow-[inset_0_0_24px_rgba(226,174,59,0.10)]"
+                    : variant === "underline"
+                      ? "border-[#D8B87A] bg-[#D8B87A]/[0.06] text-[#F2D99B]"
                     : "bg-[#D8B87A]/15 text-[#D8B87A] ring-1 ring-[#D8B87A]/35"
-                  : "text-white/50 hover:bg-white/[0.04] hover:text-white",
+                  : variant === "underline"
+                    ? "border-transparent text-white/52 hover:border-[#D8B87A]/35 hover:bg-white/[0.035] hover:text-white"
+                    : "text-white/50 hover:bg-white/[0.04] hover:text-white",
               ].join(" ")}
             >
               {isActive && variant === "segmented" ? <span aria-hidden className="me-2">✓</span> : null}
@@ -119,7 +150,9 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
       {tabs.map((tab) => (
         <div
           key={tab.id}
+          id={`${instanceId}-panel-${tab.id}`}
           role="tabpanel"
+          aria-labelledby={`${instanceId}-tab-${tab.id}`}
           hidden={tab.id !== activeId}
           className={tab.id === activeId ? "block" : "hidden"}
         >

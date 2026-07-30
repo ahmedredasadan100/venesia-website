@@ -16,12 +16,12 @@ export async function saveProjectsTablePreferences(
   return saveAdminColumnPreferences({
     viewKey: getProjectsListViewKey(type),
     visibleColumns,
-    allowedColumns: getProjectsPreferenceColumnKeys(type),
+    allowedColumns: getProjectsPreferenceColumnKeys(),
   });
 }
 
 export async function restoreProjectsTablePreferences(type: ProjectCategory) {
   return saveProjectsTablePreferences(type, [
-    ...getProjectsDefaultColumnKeys(type),
+    ...getProjectsDefaultColumnKeys(),
   ] as ProjectColumnKey[]);
 }

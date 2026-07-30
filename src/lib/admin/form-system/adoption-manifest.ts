@@ -97,22 +97,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "Generic create/edit form still owns its local form lifecycle and must be migrated in a later adoption phase.",
   },
   {
-    id: "projects-create",
-    label: "Project create",
-    classification: "legacy_generic_gap",
-    sourceFiles: ["src/app/admin/projects/AddProjectPanelClient.tsx"],
-    surfaces: ["residential:create", "commercial:create"],
+    id: "projects-create-edit",
+    label: "Project create and edit",
+    classification: "shared_adopter",
+    sourceFiles: [
+      "src/app/admin/projects/ProjectEditForm.tsx",
+    ],
+    surfaces: [
+      "residential:create",
+      "residential:edit",
+      "commercial:create",
+      "commercial:edit",
+    ],
     rationale:
-      "Generic entity create form remains on a local client submission lifecycle.",
-  },
-  {
-    id: "projects-edit",
-    label: "Project edit",
-    classification: "legacy_generic_gap",
-    sourceFiles: ["src/app/admin/projects/ProjectEditForm.tsx"],
-    surfaces: ["residential:edit", "commercial:edit"],
-    rationale:
-      "Generic entity edit form remains outside the shared runtime.",
+      "One Project form delegates create and edit lifecycle ownership, dirty protection, feedback, validation focus, and Create-to-Edit handoff to AdminFormRuntime.",
   },
   {
     id: "pages-quick-create",

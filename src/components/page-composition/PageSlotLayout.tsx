@@ -8,7 +8,7 @@ import { getSlotBlocks, getSlotEntries } from "../../lib/page-blocks/page-compos
 import { PAGE_LAYOUT_SLOT_ORDER, type PageLayoutSlot } from "../../lib/page-blocks/layout-slots";
 import { asBreadcrumbConfig } from "../../lib/page-blocks/configs";
 import { getHeroConfig } from "../../lib/page-sections";
-import type { HomepageProjectCard } from "../../lib/projects/types";
+import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import { buildSlotRenderPlan } from "./build-slot-render-plan";
 
 type HeroSlotContentProps = {

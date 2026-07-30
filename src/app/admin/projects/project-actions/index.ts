@@ -1,10 +1,5 @@
-export { checkProjectFieldsAvailable } from "./validation";
-export { createProject } from "./create";
-export { updateProject } from "./update";
-export { toggleProjectPublicationAjax, archiveProjectAjax, restoreProjectAjax } from "./status";
+export { saveProjectEntry } from "./save-entry";
 export { deleteProjectAjax } from "./delete";
-export { duplicateProjectAjax } from "./duplicate";
-export { bulkProjectsActionAjax } from "./bulk";
 export {
   saveProjectsTablePreferences,
   restoreProjectsTablePreferences,

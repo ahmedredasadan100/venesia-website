@@ -1,17 +1,15 @@
+import type { ProjectListType } from "./entity-list-contract";
+
 export type ProjectEntityListRow = {
   id: number;
-  code: string;
-  slug: string | null;
+  type: ProjectListType;
+  slug: string;
   arabic_name: string;
-  location_label: string | null;
-  map_area: string | null;
-  featured: boolean;
-  publication_status: string | null;
-  status: string | null;
+  english_name: string;
+  location_label: string;
   updated_at: string;
 };
 
 export type ProjectEntityListMetrics = {
-  published: number;
-  featured: number;
+  total: number;
 };

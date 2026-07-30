@@ -4,13 +4,27 @@ type AdminFormLayoutProps = {
   children: ReactNode;
   aside?: ReactNode;
   className?: string;
+  asideClassName?: string;
+  mobileAsideFirst?: boolean;
 };
 
-export function AdminFormLayout({ children, aside, className = "" }: AdminFormLayoutProps) {
+export function AdminFormLayout({
+  children,
+  aside,
+  className = "",
+  asideClassName = "",
+  mobileAsideFirst = false,
+}: AdminFormLayoutProps) {
   return (
     <section className={`grid gap-7 xl:grid-cols-[minmax(0,1fr)_380px] ${className}`.trim()}>
       <div className="space-y-7">{children}</div>
-      {aside ? <aside className="space-y-7">{aside}</aside> : null}
+      {aside ? (
+        <aside
+          className={`space-y-7 ${mobileAsideFirst ? "order-first xl:order-none" : ""} ${asideClassName}`.trim()}
+        >
+          {aside}
+        </aside>
+      ) : null}
     </section>
   );
 }

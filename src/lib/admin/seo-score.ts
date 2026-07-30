@@ -32,6 +32,20 @@ export type SeoIssue = {
   hint: string;
 };
 
+export type EntitySeoScoreInput = {
+  title: string;
+  description: string;
+  content: string;
+  slug: string;
+  image: string;
+  imageAlt: string;
+  seoTitle: string;
+  seoDescription: string;
+  seoKeywords: string[];
+  focusKeyword: string;
+  canonicalUrl?: string;
+};
+
 function hasValue(value?: string | null) {
   return Boolean(value && value.trim().length > 0);
 }
@@ -524,5 +538,147 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
       content: contentIssues,
       readiness: readinessIssues,
     },
+  };
+}
+
+/**
+ * Entity-neutral subset of the accepted SEO Capability. Topic-specific FAQ,
+ * heading and publishing signals intentionally stay in analyzeTopicSeo.
+ */
+export function analyzeEntitySeo(input: EntitySeoScoreInput) {
+  const issues: SeoIssue[] = [];
+  const effectiveTitle = input.seoTitle.trim() || input.title.trim();
+  const effectiveDescription =
+    input.seoDescription.trim() || input.description.trim();
+  const keyword = input.focusKeyword.trim();
+  const combinedContent = `${input.title} ${input.description} ${input.content}`
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&(?:nbsp|amp|quot|lt|gt);/gi, " ");
+  const wordCount = countWords(combinedContent);
+  const keywordMatches = countMatches(combinedContent, keyword);
+  const keywordDensity =
+    wordCount > 0 && keywordMatches > 0
+      ? Number(((keywordMatches / wordCount) * 100).toFixed(1))
+      : 0;
+  let score = 0;
+
+  score += addLengthScore(
+    issues,
+    assessSeoLength(input.seoTitle, SEO_LENGTH_STANDARDS.title),
+    "طول عنوان SEO مناسب",
+    "راجع طول عنوان SEO",
+    12,
+  );
+  score += addLengthScore(
+    issues,
+    assessSeoLength(input.seoDescription, SEO_LENGTH_STANDARDS.description),
+    "طول وصف Meta مناسب",
+    "راجع طول وصف Meta",
+    12,
+  );
+  score += addScore(
+    issues,
+    Boolean(keyword),
+    "الكلمة المفتاحية الرئيسية محددة",
+    "أضف الكلمة المفتاحية الرئيسية",
+    12,
+    "استخدم عبارة بحث رئيسية واضحة لهذا الكيان.",
+    "error",
+  );
+  score += addScore(
+    issues,
+    includesText(effectiveTitle, keyword),
+    "الكلمة المفتاحية مستخدمة في العنوان",
+    "استخدم الكلمة المفتاحية في العنوان",
+    10,
+    "يفضل ظهور العبارة الرئيسية طبيعيًا داخل عنوان SEO.",
+  );
+  score += addScore(
+    issues,
+    includesText(effectiveDescription, keyword),
+    "الكلمة المفتاحية مستخدمة في الوصف",
+    "استخدم الكلمة المفتاحية في وصف Meta",
+    10,
+    "أدرج العبارة مرة واحدة دون حشو.",
+  );
+  score += addScore(
+    issues,
+    includesText(input.content, keyword),
+    "الكلمة المفتاحية موجودة في المحتوى",
+    "استخدم الكلمة المفتاحية في المحتوى",
+    10,
+    "ينبغي أن تدعم بيانات الكيان العبارة الرئيسية.",
+  );
+  score += addScore(
+    issues,
+    Boolean(input.image.trim()),
+    "صورة المشاركة متاحة",
+    "أضف صورة مشاركة",
+    10,
+    "صورة المشاركة تحسن بطاقة Open Graph.",
+  );
+  score += addScore(
+    issues,
+    !input.image.trim() || Boolean(input.imageAlt.trim()),
+    "النص البديل للصورة متاح",
+    "أضف النص البديل للصورة",
+    8,
+    "صف صورة المشاركة نصيًا.",
+  );
+  score += addScore(
+    issues,
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) && input.slug.length <= 80,
+    "الرابط يدعم الكلمة المفتاحية",
+    "حسّن الرابط قبل الحفظ الأول",
+    8,
+    "حافظ على Slug قصير ومقروء.",
+  );
+  score += addScore(
+    issues,
+    input.seoKeywords.length > 0,
+    "الكلمات الداعمة موجودة",
+    "أضف كلمات SEO داعمة",
+    8,
+    "استخدم كلمات مرتبطة مباشرة بالمحتوى.",
+  );
+
+  const ids = [
+    "seo-title-length",
+    "meta-description-length",
+    "focus-keyword",
+    "keyword-title",
+    "keyword-description",
+    "keyword-content",
+    "image",
+    "image-alt",
+    "slug",
+    "seo-keywords",
+  ] as const;
+  assignIssueIds(issues, ids);
+  if (!keyword) {
+    for (const issue of issues) {
+      if (["keyword-title", "keyword-description", "keyword-content"].includes(issue.id ?? "")) {
+        issue.type = "muted";
+        issue.label = "أضف الكلمة المفتاحية أولًا لإكمال هذا الفحص";
+      }
+    }
+  }
+  const overallScore = clampScore(score);
+
+  return {
+    overallScore,
+    label:
+      overallScore >= 80
+        ? "جيد جدًا"
+        : overallScore >= 60
+          ? "جيد"
+          : overallScore >= 40
+            ? "يحتاج تحسين"
+            : "غير مكتمل",
+    wordCount,
+    keywordMatches,
+    keywordDensity,
+    blockingErrors: issues.filter((issue) => issue.type === "error").length,
+    issues,
   };
 }

@@ -258,15 +258,15 @@ function ProjectRow({
           <div className="relative w-full shrink-0 pb-3.5 md:min-h-[150px] md:pb-0">
             <div className="relative h-52 w-full overflow-hidden sm:h-56 md:absolute md:inset-0 md:h-auto">
               <Image
-                src={project.image}
-                alt={project.code}
+                src={project.cardImage.src}
+                alt={project.cardImage.alt}
                 fill
                 sizes="(max-width: 768px) 100vw, 250px"
                 className="object-cover transition duration-700 group-hover:scale-105 md:absolute md:inset-0"
               />
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/10 to-transparent md:hidden" />
-              {display.showProjectCode ? <ProjectCodeBadge code={project.code} /> : null}
+              {display.showProjectCode ? <ProjectCodeBadge code={project.englishName} /> : null}
 
               <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-l from-transparent via-[#05070B]/20 to-[#05070B]/78 md:block" />
               <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-16 bg-gradient-to-r from-[#05070B] to-transparent md:block" />
@@ -286,13 +286,13 @@ function ProjectRow({
           <div className="min-w-0">
             {display.showProjectCode ? (
               <p className="hidden font-en text-2xl font-semibold leading-none text-[#D8B87A] md:block md:text-3xl">
-                {project.code}
+                {project.englishName}
               </p>
             ) : null}
 
             {display.showProjectLocation ? (
               <span className="mt-3 hidden rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111] md:inline-flex">
-                {project.locationLabel}
+                {project.location.label}
               </span>
             ) : null}
 
@@ -338,15 +338,15 @@ function ProjectCard({
         <div className="relative shrink-0 pb-3.5 md:pb-0">
           <div className="relative h-52 overflow-hidden sm:h-60">
             <Image
-              src={project.image}
-              alt={project.code}
+              src={project.cardImage.src}
+              alt={project.cardImage.alt}
               fill
               sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
               className="object-cover transition duration-700 group-hover:scale-105"
             />
 
             <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent md:hidden" />
-            {display.showProjectCode ? <ProjectCodeBadge code={project.code} /> : null}
+            {display.showProjectCode ? <ProjectCodeBadge code={project.englishName} /> : null}
           </div>
 
           {(display.showProjectLocation || display.showProjectType) ? (
@@ -362,13 +362,13 @@ function ProjectCard({
       <div className="min-w-0 px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5 md:pt-4">
         {display.showProjectCode ? (
           <p className="hidden font-en text-2xl font-semibold text-[#D8B87A] md:block md:text-3xl">
-            {project.code}
+            {project.englishName}
           </p>
         ) : null}
 
         {display.showProjectLocation ? (
           <span className="mt-2 hidden rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111] md:inline-flex">
-            {project.locationLabel}
+            {project.location.label}
           </span>
         ) : null}
 

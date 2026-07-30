@@ -34,9 +34,8 @@ export default function ProjectsHubHero({
 
     sourceProjects
       .filter((project) => project.category === "residential")
-      .filter((project) => project.heroImage || project.image)
       .forEach((project) => {
-        uniqueProjects.set(project.code, project);
+        uniqueProjects.set(project.slug, project);
       });
 
     return Array.from(uniqueProjects.values());
@@ -104,13 +103,13 @@ export default function ProjectsHubHero({
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         {heroSlides.map((project, index) => (
           <div
-            key={project.code}
+            key={project.slug}
             className={`absolute inset-0 transition-opacity duration-[1200ms] ease-in-out ${
               index === boundedSlide ? "opacity-55" : "opacity-0"
             }`}
           >
             <Image
-              src={project.heroImage || project.image}
+              src={project.heroImage.src}
               alt=""
               fill
               priority={index === 0}
@@ -135,12 +134,12 @@ export default function ProjectsHubHero({
         <div className="grid w-full items-end gap-12 lg:grid-cols-[0.95fr_1.05fr]">
           <div>
             <p className="mb-5 text-center font-en text-[11px] uppercase tracking-[0.28em] text-[#D8B87A]/70 lg:text-right">
-              {activeProject.locationLabel}
+              {activeProject.location.label}
             </p>
 
             <div className="text-center lg:text-right">
               <h1 className="font-en text-5xl font-semibold leading-none text-[#D8B87A] sm:text-6xl md:text-8xl">
-                {activeProject.code}
+                {activeProject.englishName}
               </h1>
 
               <h2 className="mt-3 text-2xl font-semibold leading-tight text-white sm:text-3xl md:text-4xl">
@@ -159,8 +158,8 @@ export default function ProjectsHubHero({
             <div className="w-[420px] rounded-[28px] border border-[#D8B87A]/20 bg-black/24 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)] backdrop-blur-md">
               <div className="relative overflow-hidden rounded-[22px]">
                 <Image
-                  src={activeProject.image}
-                  alt={activeProject.code}
+                  src={activeProject.heroBoxImage.src}
+                  alt={activeProject.heroBoxImage.alt}
                   width={420}
                   height={280}
                   className="h-[280px] w-full object-cover"
@@ -170,7 +169,7 @@ export default function ProjectsHubHero({
 
                 <div className="absolute bottom-5 right-5">
                   <p className="font-en text-4xl font-semibold text-[#D8B87A]">
-                    {activeProject.code}
+                    {activeProject.englishName}
                   </p>
 
                   <p className="mt-1 text-sm text-white/75">

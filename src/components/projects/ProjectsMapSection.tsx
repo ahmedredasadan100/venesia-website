@@ -29,7 +29,8 @@ export default function ProjectsMapSection({
 
   const grouped = residentialProjects.reduce<Record<string, number>>(
     (acc, project) => {
-      acc[project.mapArea] = (acc[project.mapArea] ?? 0) + 1;
+      const area = project.location.subArea?.nameAr ?? project.location.mainArea?.nameAr ?? project.location.label;
+      acc[area] = (acc[area] ?? 0) + 1;
       return acc;
     },
     {}
@@ -73,7 +74,7 @@ export default function ProjectsMapSection({
 
           {mapPins.map((pin) => {
             const project = residentialProjects.find(
-              (item) => item.code === pin.code
+              (item) => item.englishName === pin.code
             );
 
             if (!project) return null;
@@ -110,11 +111,11 @@ function MapProjectPin({
       href={getProjectHref(project)}
       className="group absolute z-10 -translate-x-1/2 -translate-y-1/2"
       style={{ right, top }}
-      title={`${project.code} - ${district}`}
+      title={`${project.englishName} - ${district}`}
     >
       <div className="flex flex-col items-center">
         <span className="mb-2 rounded-full border border-[#D8B87A]/45 bg-[#05070B]/85 px-3 py-1 text-xs font-semibold text-[#D8B87A] shadow-[0_12px_30px_rgba(0,0,0,0.35)] backdrop-blur-md transition duration-300 group-hover:bg-[#D8B87A] group-hover:text-[#111]">
-          {project.code}
+          {project.englishName}
         </span>
 
         <span className="h-5 w-5 rounded-full border-4 border-[#05070B] bg-[#D8B87A] shadow-[0_0_24px_rgba(216,184,122,0.55)] transition duration-300 group-hover:scale-125" />

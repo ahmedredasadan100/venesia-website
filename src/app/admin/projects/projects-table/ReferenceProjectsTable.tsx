@@ -1,40 +1,33 @@
+"use client";
+
 import Link from "next/link";
+import { useRef, useState } from "react";
+
 import {
-  AdminDataGrid,
+  AdminConfirmDialog,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
-  AdminDataGridActionsHeaderCell,
-  AdminDataGridCheckbox,
-  AdminDataGridCheckboxCell,
-  AdminDataGridEmpty,
-  AdminDataGridHeader,
-  AdminDataGridRow,
-  AdminDataGridSortLabel,
+  getAdminDataGridActionsColumnWidth,
 } from "../../../../components/admin/ui";
-import AdminStatusPill from "../../../../components/admin/ui/AdminStatusPill";
-import type { ProjectCategory } from "../../../../config/projects-data";
-import type { ProjectResidentialColumnKey } from "../../../../lib/admin/projects/projects-list-config";
-import {
-  featuredLabel,
-  formatDate,
-  isProjectColumnVisible,
-  publicationMeta,
-} from "./projects-table-utils";
-import type {
-  ProjectGridRow,
-  ProjectRowActionHandlers,
-  ProjectTableSelection,
-  ProjectTableSortState,
-} from "./projects-table-types";
+import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
+import type { ProjectSortField } from "../../../../lib/admin/projects/entity-list-contract";
+import type { ProjectColumnKey } from "../../../../lib/admin/projects/projects-list-config";
+import { formatDate } from "./projects-table-utils";
+import type { ProjectGridRow } from "./projects-table-types";
 
-export type ReferenceProjectSortKey =
-  | "arabic_name"
-  | "code"
-  | "featured"
-  | "publication_status"
-  | "updated_at";
+export const PROJECT_ACTIONS_COLUMN_WIDTH = getAdminDataGridActionsColumnWidth(
+  2,
+  "default",
+  12,
+);
 
-function ProjectIcon({ type }: { type: ProjectCategory }) {
+export type ProjectRowActionHandlers = {
+  rowPendingAction: (id: number) => string | null;
+  onDelete: (row: ProjectGridRow) => Promise<AdminActionResult>;
+};
+
+function ProjectIcon({ type }: Pick<ProjectGridRow, "type">) {
   return (
     <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/16 bg-[#D8B87A]/8 text-[#D8B87A]">
       {type === "commercial" ? (
@@ -46,269 +39,160 @@ function ProjectIcon({ type }: { type: ProjectCategory }) {
         </svg>
       ) : (
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          <path d="M8 7h8M8 11h8M8 15h5" strokeLinecap="round" />
+          <path d="M3 11.5 12 4l9 7.5" />
+          <path d="M5.5 10.5V21h13V10.5M9.5 21v-6h5v6" />
         </svg>
       )}
     </span>
   );
 }
 
-type ReferenceProjectsTableProps = {
-  type: ProjectCategory;
-  rows: ProjectGridRow[];
-  columns: string;
-  visibleColumns: readonly ProjectResidentialColumnKey[];
-  sort: ProjectTableSortState;
-  onSort: (field: ReferenceProjectSortKey) => void;
-  selection: ProjectTableSelection;
-  handlers: ProjectRowActionHandlers;
-};
-
-export default function ReferenceProjectsTable({
-  type,
-  rows,
-  columns,
-  visibleColumns,
-  sort,
-  onSort,
-  selection,
+function ProjectRowActions({
+  row,
   handlers,
-}: ReferenceProjectsTableProps) {
-  function sortProps(key: ReferenceProjectSortKey) {
-    return {
-      active: sort.field === key,
-      direction: sort.field === key ? sort.direction : ("asc" as const),
-      onClick: () => onSort(key),
-    } as const;
+  onMutationResult,
+}: {
+  row: ProjectGridRow;
+  handlers: ProjectRowActionHandlers;
+  onMutationResult?: (result: AdminActionResult) => void;
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const pending = handlers.rowPendingAction(row.id) === "delete";
+
+  async function deleteProject() {
+    const result = await handlers.onDelete(row);
+    onMutationResult?.(result);
+    if (result.ok) setDeleteOpen(false);
   }
 
-  const show = (key: ProjectResidentialColumnKey) =>
-    isProjectColumnVisible(visibleColumns, key);
-
-  const actionsDisabled = handlers.isMutationBusy;
-
   return (
-    <AdminDataGrid scrollLabel="جدول المشاريع السكنية">
-      <AdminDataGridHeader columns={columns} horizontalScroll flushInlineEnd>
-        {show("selection") ? (
-          <AdminDataGridCheckboxCell>
-            <AdminDataGridCheckbox
-              inputRef={selection.selectAllRef}
-              checked={selection.allSelected}
-              onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
-              label="تحديد الكل"
-            />
-          </AdminDataGridCheckboxCell>
-        ) : null}
-        {show("project") ? (
-          <div className="min-w-0 text-right">
-            <AdminDataGridSortLabel {...sortProps("arabic_name")} className="justify-end">
-              المشروع
-            </AdminDataGridSortLabel>
-          </div>
-        ) : null}
-        {show("code") ? (
-          <div className="text-center">
-            <AdminDataGridSortLabel {...sortProps("code")} className="justify-center">
-              الكود
-            </AdminDataGridSortLabel>
-          </div>
-        ) : null}
-        {show("featured") ? (
-          <div className="text-center">
-            <AdminDataGridSortLabel {...sortProps("featured")} className="justify-center">
-              مميز
-            </AdminDataGridSortLabel>
-          </div>
-        ) : null}
-        {show("publication_status") ? (
-          <div className="text-center">
-            <AdminDataGridSortLabel {...sortProps("publication_status")} className="justify-center">
-              حالة النشر
-            </AdminDataGridSortLabel>
-          </div>
-        ) : null}
-        {show("updated_at") ? (
-          <div className="text-center">
-            <AdminDataGridSortLabel {...sortProps("updated_at")} className="justify-center">
-              التحديث
-            </AdminDataGridSortLabel>
-          </div>
-        ) : null}
-        {show("actions") ? (
-          <AdminDataGridActionsHeaderCell sticky>الإجراءات</AdminDataGridActionsHeaderCell>
-        ) : null}
-      </AdminDataGridHeader>
+    <>
+      <AdminDataGridActionsCell>
+        <AdminDataGridActionButton
+          action="edit"
+          href={`/admin/projects/${row.id}`}
+          title="تعديل المشروع"
+        />
+        <AdminDataGridActionButton
+          buttonRef={deleteTriggerRef}
+          action="delete"
+          title="حذف نهائي — يتطلب تأكيدًا"
+          disabled={pending}
+          pending={pending}
+          onClick={() => setDeleteOpen(true)}
+        />
+      </AdminDataGridActionsCell>
 
-      {rows.length ? (
-        rows.map((item) => {
-          const published = publicationMeta(item.publication_status);
-          const isPublished = item.publication_status === "published";
-          const isArchived = item.publication_status === "archived";
-          const previewPath = item.slug ? `/projects/${item.slug}` : null;
-          const pendingAction = handlers.rowPendingAction(item.id);
-
-          return (
-            <AdminDataGridRow
-              key={item.id}
-              columns={columns}
-              horizontalScroll
-              flushInlineEnd
-              divided
-            >
-              {show("selection") ? (
-                <AdminDataGridCheckboxCell>
-                  <AdminDataGridCheckbox
-                    checked={selection.selectedSet.has(item.id)}
-                    onChange={(event) =>
-                      selection.toggleOne(item.id, event.currentTarget.checked)
-                    }
-                    label={`تحديد ${item.arabic_name}`}
-                  />
-                </AdminDataGridCheckboxCell>
-              ) : null}
-
-              {show("project") ? (
-                <div className="flex min-w-0 items-center gap-3">
-                  <ProjectIcon type={type} />
-                  <div className="min-w-0 text-right">
-                    <Link
-                      href={`/admin/projects/${item.id}`}
-                      className="block truncate font-semibold text-white transition hover:text-[#D8B87A]"
-                      title={`تعديل ${item.arabic_name}`}
-                    >
-                      {item.arabic_name}
-                    </Link>
-                  </div>
-                </div>
-              ) : null}
-
-              {show("code") ? (
-                <div className="min-w-0 text-center">
-                  <span
-                    className="font-en block truncate text-sm font-medium text-[#D8B87A]/85"
-                    title={item.code}
-                  >
-                    {item.code}
-                  </span>
-                </div>
-              ) : null}
-
-              {show("featured") ? (
-                <div className="flex justify-center">
-                  <AdminStatusPill tone={item.featured ? "green" : "muted"}>
-                    {featuredLabel(item)}
-                  </AdminStatusPill>
-                </div>
-              ) : null}
-
-              {show("publication_status") ? (
-                <div className="flex justify-center">
-                  <AdminStatusPill tone={published.tone}>{published.label}</AdminStatusPill>
-                </div>
-              ) : null}
-
-              {show("updated_at") ? (
-                <div className="text-center font-en text-xs tabular-nums text-white/55">
-                  {formatDate(item.updated_at)}
-                </div>
-              ) : null}
-
-              {show("actions") ? (
-                <AdminDataGridActionsCell compact sticky>
-                  <AdminDataGridActionButton
-                    action="edit"
-                    href={`/admin/projects/${item.id}`}
-                    size="compact"
-                    title="تعديل المشروع"
-                  />
-
-                  {previewPath ? (
-                    <AdminDataGridActionButton
-                      action="preview"
-                      href={previewPath}
-                      target="_blank"
-                      title="معاينة الصفحة العامة"
-                      size="compact"
-                    />
-                  ) : (
-                    <AdminDataGridActionButton
-                      action="preview"
-                      disabled
-                      title="لا يوجد معرّف رابط للمعاينة"
-                      size="compact"
-                    />
-                  )}
-
-                  {!isArchived ? (
-                    <AdminDataGridActionButton
-                      action="visibility"
-                      size="compact"
-                      isCurrentlyHidden={!isPublished}
-                      title={isPublished ? "إخفاء من الموقع" : "نشر في الموقع"}
-                      disabled={actionsDisabled}
-                      pending={pendingAction === "status"}
-                      onClick={() =>
-                        handlers.onTogglePublication(item.id, item.publication_status)
-                      }
-                    />
-                  ) : (
-                    <AdminDataGridActionButton
-                      action="restore"
-                      size="compact"
-                      title="استعادة كمسودة"
-                      disabled={actionsDisabled}
-                      pending={pendingAction === "restore"}
-                      onClick={() => handlers.onRestore(item.id)}
-                    />
-                  )}
-
-                  <AdminDataGridActionButton
-                    action="duplicate"
-                    size="compact"
-                    title="نسخ المشروع"
-                    disabled={actionsDisabled || !handlers.onDuplicate}
-                    pending={pendingAction === "duplicate"}
-                    onClick={() => handlers.onDuplicate?.(item.id)}
-                  />
-
-                  {!isArchived ? (
-                    <AdminDataGridActionButton
-                      action="archive"
-                      size="compact"
-                      title="أرشفة المشروع"
-                      disabled={actionsDisabled}
-                      pending={pendingAction === "archive"}
-                      onClick={() => handlers.onArchive(item.id)}
-                    />
-                  ) : null}
-
-                  <AdminDataGridActionButton
-                    action="delete"
-                    size="compact"
-                    title="حذف نهائي — يتطلب تأكيدًا"
-                    disabled={actionsDisabled}
-                    pending={pendingAction === "delete"}
-                    onClick={() => handlers.onRequestPermanentDelete(item)}
-                  />
-                </AdminDataGridActionsCell>
-              ) : null}
-            </AdminDataGridRow>
-          );
-        })
-      ) : (
-        <AdminDataGridEmpty>
-          <p className="text-base font-semibold text-white">
-            لا توجد مشاريع سكنية في هذه القائمة
-          </p>
-          <p className="mt-2 text-sm leading-7 text-white/45">
-            أضف مشروعًا سكنيًا جديدًا من زر «إضافة مشروع» أعلى الصفحة، أو راجع مركز المشروعات إن كنت تبحث عن مشروع
-            تجاري.
-          </p>
-        </AdminDataGridEmpty>
-      )}
-    </AdminDataGrid>
+      <AdminConfirmDialog
+        open={deleteOpen}
+        title="حذف نهائي للمشروع"
+        description={`سيُحذف «${row.arabic_name}» وكل بياناته التابعة من المخطط النظيف. لا يمكن التراجع عن هذا الإجراء.`}
+        confirmLabel="تأكيد الحذف النهائي"
+        pending={pending}
+        returnFocusRef={deleteTriggerRef}
+        onCancel={() => {
+          if (!pending) setDeleteOpen(false);
+        }}
+        onConfirm={deleteProject}
+      />
+    </>
   );
+}
+
+function singleLine(value: string, className = "") {
+  return (
+    <span className={`block truncate text-sm text-white/65 ${className}`.trim()} title={value}>
+      {value}
+    </span>
+  );
+}
+
+export function createProjectColumns(
+  handlers: ProjectRowActionHandlers,
+): AdminEntityColumnDef<ProjectGridRow, ProjectColumnKey, ProjectSortField>[] {
+  return [
+    {
+      key: "project",
+      label: "المشروع",
+      defaultVisible: true,
+      hideable: false,
+      sortable: true,
+      sortKey: "arabic_name",
+      minWidth: 260,
+      width: 320,
+      sticky: "start",
+      primary: true,
+      renderCell: ({ row }) => (
+        <Link
+          href={`/admin/projects/${row.id}`}
+          className="flex min-w-0 items-center gap-3 text-right transition hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+          title={`تعديل ${row.arabic_name}`}
+        >
+          <ProjectIcon type={row.type} />
+          <span className="min-w-0 truncate font-semibold text-white">{row.arabic_name}</span>
+        </Link>
+      ),
+    },
+    {
+      key: "english_name",
+      label: "الاسم بالإنجليزية",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "english_name",
+      minWidth: 190,
+      width: 210,
+      renderCell: ({ row }) => singleLine(row.english_name, "font-en text-center"),
+    },
+    {
+      key: "slug",
+      label: "الرابط المختصر",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "slug",
+      minWidth: 170,
+      width: 190,
+      renderCell: ({ row }) => singleLine(row.slug, "font-en text-center text-[#D8B87A]/85"),
+    },
+    {
+      key: "location",
+      label: "الموقع",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "location_label",
+      minWidth: 190,
+      width: 210,
+      renderCell: ({ row }) => singleLine(row.location_label || "—", "text-center"),
+    },
+    {
+      key: "updated_at",
+      label: "آخر تحديث",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "updated_at",
+      minWidth: 140,
+      width: 150,
+      renderCell: ({ row }) => singleLine(formatDate(row.updated_at), "font-en text-center tabular-nums"),
+    },
+    {
+      key: "actions",
+      label: "الإجراءات",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: PROJECT_ACTIONS_COLUMN_WIDTH,
+      width: PROJECT_ACTIONS_COLUMN_WIDTH,
+      sticky: "end",
+      renderCell: ({ row, onMutationResult }) => (
+        <ProjectRowActions
+          row={row}
+          handlers={handlers}
+          onMutationResult={onMutationResult}
+        />
+      ),
+    },
+  ];
 }

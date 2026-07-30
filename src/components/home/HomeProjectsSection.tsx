@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import type { HomepageProjectCard } from "../../lib/projects/types";
+import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import type { HomeProjectsButtonAlignment, HomeProjectsContent } from "./home-projects-mappers";
 import PlainTextContent from "../content/PlainTextContent";
 import RichTextContent from "../content/RichTextContent";
@@ -194,8 +194,8 @@ function HomeProjectCard({
 
         <div className="relative h-[360px] overflow-hidden">
           <Image
-            src={project.image}
-            alt={`${project.code} - ${project.englishName}`}
+            src={project.cardImage.src}
+            alt={project.cardImage.alt}
             fill
             sizes="(max-width: 768px) 100vw, 33vw"
             className="home-project-card__image transform-gpu object-cover opacity-80 transition-transform duration-[1400ms] ease-out will-change-transform group-hover:scale-[1.035]"
@@ -213,7 +213,7 @@ function HomeProjectCard({
 
           <div className="absolute inset-x-0 bottom-0 z-30 p-6">
             <p className="mb-2 text-xl font-semibold tracking-[0.16em] text-[#D8B87A]">
-              {project.code}
+              {project.englishName}
             </p>
 
             <span className="mt-1 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">

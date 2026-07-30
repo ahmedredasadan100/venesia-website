@@ -91,7 +91,7 @@ export default async function ResidentialProjectsPage({
 
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
-    : [...getProjectsDefaultColumnKeys("residential")];
+    : [...getProjectsDefaultColumnKeys()];
 
   return (
     <main className="space-y-7">
@@ -105,12 +105,6 @@ export default async function ResidentialProjectsPage({
             <AddProjectPanelClient type="residential" />
             <AdminActionButton href="/admin/projects/commercial" variant="dark">
               المشاريع التجارية
-            </AdminActionButton>
-            <AdminActionButton
-              href="/admin/projects/construction-updates"
-              variant="dark"
-            >
-              عرض التحديثات
             </AdminActionButton>
             <AdminActionButton href="/admin/projects" variant="dark">
               مركز المشروعات
@@ -134,8 +128,6 @@ export default async function ResidentialProjectsPage({
           initialQuery={initialQuery}
           initialResult={listResult.data}
           initialVisibleColumns={visibleColumns}
-          withDuplicateAction
-          referenceLayout
           notice={notice}
           errorMessage={errorMessage}
         />

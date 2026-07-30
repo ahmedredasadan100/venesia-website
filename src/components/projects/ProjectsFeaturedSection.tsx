@@ -138,7 +138,7 @@ export default function ProjectsFeaturedSection({
                 key={project.id}
                 type="button"
                 onClick={() => setActiveIndex(index)}
-                aria-label={`عرض ${project.code}`}
+                aria-label={`عرض ${project.englishName}`}
                 className={`h-1.5 cursor-pointer rounded-full transition-all ${
                   index === activeIndex
                     ? "w-8 bg-[#D8B87A]"
@@ -174,8 +174,8 @@ function MainFeaturedCard({
           <div className="relative w-full shrink-0 pb-3.5 lg:min-h-[320px] lg:pb-0">
             <div className="relative h-56 w-full overflow-hidden sm:h-64 lg:absolute lg:inset-0 lg:h-auto">
               <Image
-                src={project.image}
-                alt={project.code}
+                src={project.cardImage.src}
+                alt={project.cardImage.alt}
                 fill
                 priority
                 sizes="(max-width: 1024px) 100vw, 58vw"
@@ -183,7 +183,7 @@ function MainFeaturedCard({
               />
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/10 to-transparent lg:hidden" />
-              {display.showProjectCode ? <ProjectCodeBadge code={project.code} hideFrom="lg" /> : null}
+              {display.showProjectCode ? <ProjectCodeBadge code={project.englishName} hideFrom="lg" /> : null}
 
               <div className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(to_left,rgba(5,7,11,0.80)_0%,rgba(5,7,11,0.38)_42%,rgba(5,7,11,0.04)_100%)] lg:block" />
 
@@ -207,13 +207,13 @@ function MainFeaturedCard({
         <div className="relative z-10 flex min-w-0 flex-col justify-center p-5 pt-4 sm:p-6 sm:pt-5 lg:pt-6">
           {display.showProjectCode ? (
             <p className="hidden font-en text-2xl font-semibold leading-none text-[#D8B87A] lg:block lg:text-3xl">
-              {project.code}
+              {project.englishName}
             </p>
           ) : null}
 
           {display.showProjectLocation ? (
             <span className="mt-3 hidden w-fit rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111] lg:inline-flex">
-              {project.locationLabel}
+              {project.location.label}
             </span>
           ) : null}
 
@@ -261,8 +261,8 @@ function SideFeaturedCard({
       {display.showProjectImage ? (
         <div className="relative h-[175px] overflow-hidden">
           <Image
-            src={project.image}
-            alt={project.code}
+            src={project.cardImage.src}
+            alt={project.cardImage.alt}
             fill
             sizes="(max-width: 1024px) 100vw, 20vw"
             className="object-cover transition duration-700 group-hover:scale-105"
@@ -272,7 +272,7 @@ function SideFeaturedCard({
 
           {display.showProjectCode ? (
             <p className="absolute bottom-4 right-4 font-en text-3xl font-semibold leading-none text-[#D8B87A]">
-              {project.code}
+              {project.englishName}
             </p>
           ) : null}
         </div>

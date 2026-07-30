@@ -272,7 +272,6 @@ const expectedConsumers = [
   "src/app/admin/pages-blocks/menus/AddMenuPanelClient.tsx",
   "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
   "src/app/admin/pages-blocks/pages/CreatePageModal.tsx",
-  "src/app/admin/projects/AddProjectPanelClient.tsx",
   "src/app/admin/seo/redirects/RedirectDeleteButton.tsx",
   "src/app/admin/seo/redirects/RedirectFormModal.tsx",
   "src/app/admin/users-roles/UsersManagementClient.tsx",
