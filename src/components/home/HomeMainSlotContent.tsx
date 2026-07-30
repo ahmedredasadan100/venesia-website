@@ -1,5 +1,5 @@
 import SlotModulesRenderer from "../page-composition/SlotModulesRenderer";
-import type { HomepageProjectCard } from "../../lib/projects/types";
+import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import type { PageComposition } from "../../lib/page-blocks/page-composition-types";
 import { buildHomeMainRenderPlan } from "./build-home-main-render-plan";
 import type { HomeMainRenderPlanEntry } from "./build-home-main-render-plan";

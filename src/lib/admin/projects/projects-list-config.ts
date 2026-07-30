@@ -1,134 +1,59 @@
-/** Projects list config — safe for server (no React). */
+/** Project list config for the clean Project Admin schema. */
 
 export const PROJECTS_RESIDENTIAL_LIST_VIEW_KEY = "projects-residential";
 export const PROJECTS_COMMERCIAL_LIST_VIEW_KEY = "projects-commercial";
 
-export type ProjectResidentialColumnKey =
-  | "selection"
-  | "project"
-  | "code"
-  | "featured"
-  | "publication_status"
-  | "updated_at"
-  | "actions";
-
-export type ProjectCommercialColumnKey =
-  | "selection"
-  | "code"
-  | "location"
-  | "featured"
-  | "publication_status"
-  | "updated_at"
-  | "actions";
-
 export type ProjectColumnKey =
-  | ProjectResidentialColumnKey
-  | ProjectCommercialColumnKey;
+  | "project"
+  | "english_name"
+  | "slug"
+  | "location"
+  | "updated_at"
+  | "actions";
 
-export type ProjectColumnMeta<Key extends ProjectColumnKey = ProjectColumnKey> = {
-  key: Key;
+export type ProjectColumnMeta = {
+  key: ProjectColumnKey;
   label: string;
   defaultVisible: boolean;
   hideable: boolean;
-  /** CSS grid track — preserves the existing projects table layout contract. */
   gridTrack: string;
 };
 
-export const PROJECTS_RESIDENTIAL_COLUMNS = [
-  {
-    key: "selection",
-    label: "تحديد",
-    defaultVisible: true,
-    hideable: false,
-    gridTrack: "44px",
-  },
+export const PROJECTS_LIST_COLUMNS = [
   {
     key: "project",
     label: "المشروع",
     defaultVisible: true,
     hideable: false,
-    gridTrack: "minmax(280px, 1fr)",
+    gridTrack: "minmax(260px,1.3fr)",
   },
   {
-    key: "code",
-    label: "الكود",
+    key: "english_name",
+    label: "الاسم بالإنجليزية",
     defaultVisible: true,
     hideable: true,
-    gridTrack: "104px",
+    gridTrack: "minmax(190px,1fr)",
   },
   {
-    key: "featured",
-    label: "مميز",
+    key: "slug",
+    label: "الرابط المختصر",
     defaultVisible: true,
     hideable: true,
-    gridTrack: "80px",
-  },
-  {
-    key: "publication_status",
-    label: "حالة النشر",
-    defaultVisible: true,
-    hideable: true,
-    gridTrack: "104px",
-  },
-  {
-    key: "updated_at",
-    label: "التحديث",
-    defaultVisible: true,
-    hideable: true,
-    gridTrack: "124px",
-  },
-  {
-    key: "actions",
-    label: "الإجراءات",
-    defaultVisible: true,
-    hideable: false,
-    // Track width is resolved at render time from action-button count presets.
-    gridTrack: "actions",
-  },
-] as const satisfies readonly ProjectColumnMeta<ProjectResidentialColumnKey>[];
-
-export const PROJECTS_COMMERCIAL_COLUMNS = [
-  {
-    key: "selection",
-    label: "تحديد",
-    defaultVisible: true,
-    hideable: false,
-    gridTrack: "44px",
-  },
-  {
-    key: "code",
-    label: "الكود",
-    defaultVisible: true,
-    hideable: false,
-    gridTrack: "minmax(96px,110px)",
+    gridTrack: "minmax(170px,0.9fr)",
   },
   {
     key: "location",
-    label: "الموقع / المنطقة",
+    label: "الموقع",
     defaultVisible: true,
     hideable: true,
-    gridTrack: "minmax(200px,1.2fr)",
-  },
-  {
-    key: "featured",
-    label: "مميز",
-    defaultVisible: true,
-    hideable: true,
-    gridTrack: "90px",
-  },
-  {
-    key: "publication_status",
-    label: "حالة النشر",
-    defaultVisible: true,
-    hideable: true,
-    gridTrack: "110px",
+    gridTrack: "minmax(190px,1fr)",
   },
   {
     key: "updated_at",
     label: "آخر تحديث",
     defaultVisible: true,
     hideable: true,
-    gridTrack: "150px",
+    gridTrack: "140px",
   },
   {
     key: "actions",
@@ -137,26 +62,15 @@ export const PROJECTS_COMMERCIAL_COLUMNS = [
     hideable: false,
     gridTrack: "actions",
   },
-] as const satisfies readonly ProjectColumnMeta<ProjectCommercialColumnKey>[];
+] as const satisfies readonly ProjectColumnMeta[];
 
-export const PROJECTS_RESIDENTIAL_DEFAULT_COLUMN_KEYS =
-  PROJECTS_RESIDENTIAL_COLUMNS.filter((column) => column.defaultVisible).map(
-    (column) => column.key,
-  ) as ProjectResidentialColumnKey[];
+export const PROJECTS_DEFAULT_COLUMN_KEYS = PROJECTS_LIST_COLUMNS.filter(
+  (column) => column.defaultVisible,
+).map((column) => column.key) as ProjectColumnKey[];
 
-export const PROJECTS_COMMERCIAL_DEFAULT_COLUMN_KEYS =
-  PROJECTS_COMMERCIAL_COLUMNS.filter((column) => column.defaultVisible).map(
-    (column) => column.key,
-  ) as ProjectCommercialColumnKey[];
-
-/** Persistable (hideable) keys only — locked columns are never stored. */
-export const PROJECTS_RESIDENTIAL_PREFERENCE_COLUMN_KEYS = PROJECTS_RESIDENTIAL_COLUMNS.filter(
+export const PROJECTS_PREFERENCE_COLUMN_KEYS = PROJECTS_LIST_COLUMNS.filter(
   (column) => column.hideable,
-).map((column) => column.key) as ProjectResidentialColumnKey[];
-
-export const PROJECTS_COMMERCIAL_PREFERENCE_COLUMN_KEYS = PROJECTS_COMMERCIAL_COLUMNS.filter(
-  (column) => column.hideable,
-).map((column) => column.key) as ProjectCommercialColumnKey[];
+).map((column) => column.key) as ProjectColumnKey[];
 
 export function getProjectsListViewKey(
   type: "residential" | "commercial",
@@ -166,24 +80,14 @@ export function getProjectsListViewKey(
     : PROJECTS_COMMERCIAL_LIST_VIEW_KEY;
 }
 
-export function getProjectsColumnMeta(type: "residential" | "commercial") {
-  return type === "residential"
-    ? PROJECTS_RESIDENTIAL_COLUMNS
-    : PROJECTS_COMMERCIAL_COLUMNS;
+export function getProjectsColumnMeta() {
+  return PROJECTS_LIST_COLUMNS;
 }
 
-export function getProjectsDefaultColumnKeys(
-  type: "residential" | "commercial",
-): readonly ProjectColumnKey[] {
-  return type === "residential"
-    ? PROJECTS_RESIDENTIAL_DEFAULT_COLUMN_KEYS
-    : PROJECTS_COMMERCIAL_DEFAULT_COLUMN_KEYS;
+export function getProjectsDefaultColumnKeys(): readonly ProjectColumnKey[] {
+  return PROJECTS_DEFAULT_COLUMN_KEYS;
 }
 
-export function getProjectsPreferenceColumnKeys(
-  type: "residential" | "commercial",
-): readonly ProjectColumnKey[] {
-  return type === "residential"
-    ? PROJECTS_RESIDENTIAL_PREFERENCE_COLUMN_KEYS
-    : PROJECTS_COMMERCIAL_PREFERENCE_COLUMN_KEYS;
+export function getProjectsPreferenceColumnKeys(): readonly ProjectColumnKey[] {
+  return PROJECTS_PREFERENCE_COLUMN_KEYS;
 }

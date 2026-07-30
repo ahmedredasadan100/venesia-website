@@ -13,10 +13,10 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
   return (
     <section className="relative isolate min-h-[620px] overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]">
       <Image
-        src={project.heroImage}
-        alt=""
+        src={project.heroImage.src}
+        alt={project.heroImage.alt}
         fill
-        priority
+        loading="eager"
         sizes="100vw"
         className="object-cover opacity-55"
       />
@@ -35,12 +35,12 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
         <div className="grid w-full items-end gap-x-12 gap-y-9 lg:grid-cols-[0.95fr_1.05fr]">
           <div>
             <p className="mb-5 text-center font-en text-[11px] uppercase tracking-[0.28em] text-[#D8B87A]/70 lg:text-right">
-              {project.locationLabel}
+              {project.location.label}
             </p>
 
             <div className="text-center lg:text-right">
               <h1 className="font-en text-6xl font-semibold leading-none text-[#D8B87A] md:text-8xl">
-                {project.code}
+                {project.englishName}
               </h1>
 
               <h2 className="mt-3 text-3xl font-semibold leading-tight text-white md:text-4xl">
@@ -57,20 +57,20 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
 
           <div className="hidden lg:row-span-2 lg:flex lg:justify-end">
             <div className="w-[420px] rounded-[28px] border border-[#D8B87A]/20 bg-black/24 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)] backdrop-blur-md">
-              <div className="relative overflow-hidden rounded-[22px]">
+              <div className="relative h-[280px] overflow-hidden rounded-[22px]">
                 <Image
-                  src={project.image}
-                  alt={project.code}
-                  width={420}
-                  height={280}
-                  className="h-[280px] w-full object-cover"
+                  src={project.heroBoxImage.src}
+                  alt={project.heroBoxImage.alt}
+                  fill
+                  sizes="420px"
+                  className="object-cover"
                 />
 
                 <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/90 via-transparent to-transparent" />
 
                 <div className="absolute bottom-5 right-5">
                   <p className="font-en text-4xl font-semibold text-[#D8B87A]">
-                    {project.code}
+                    {project.englishName}
                   </p>
 
                   <p className="mt-1 text-sm text-white/75">
@@ -99,21 +99,14 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
 function ProjectHeroActions({ project }: { project: PublicProject }) {
   return (
     <div className="grid w-full max-w-full grid-cols-3 items-stretch gap-1 sm:gap-2 md:gap-3 lg:col-span-2 lg:gap-4">
-      {project.brochureUrl ? (
-        <Link href={project.brochureUrl} className={primaryActionClassName}>
-          <DownloadIcon className={actionIconClassName} />
-          <span className={actionLabelClassName}>حمّل ملف المشروع</span>
-        </Link>
-      ) : (
-        <button
-          type="button"
-          disabled
-          className={`${primaryActionClassName} cursor-not-allowed bg-[#D8B87A]/55 text-[#111]/70`}
-        >
-          <DownloadIcon className={actionIconClassName} />
-          <span className={actionLabelClassName}>حمّل ملف المشروع</span>
-        </button>
-      )}
+      <button
+        type="button"
+        disabled
+        className={`${primaryActionClassName} cursor-not-allowed bg-[#D8B87A]/55 text-[#111]/70`}
+      >
+        <DownloadIcon className={actionIconClassName} />
+        <span className={actionLabelClassName}>حمّل ملف المشروع</span>
+      </button>
 
       <Link href={getProjectTrackHref(project)} className={secondaryActionClassName}>
         <TrackIcon className={actionIconClassName} />

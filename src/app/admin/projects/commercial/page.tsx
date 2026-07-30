@@ -91,7 +91,7 @@ export default async function CommercialProjectsPage({
 
   const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
     ? preference.preferences.visibleColumns
-    : [...getProjectsDefaultColumnKeys("commercial")];
+    : [...getProjectsDefaultColumnKeys()];
 
   return (
     <main className="space-y-7">

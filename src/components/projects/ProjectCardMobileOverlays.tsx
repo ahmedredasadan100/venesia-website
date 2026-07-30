@@ -46,7 +46,7 @@ export function ProjectImageBottomBadges({
     >
       {showLocation ? (
         <span className="inline-flex max-w-full rounded-lg bg-[#D8B87A] px-2.5 py-1 text-[11px] font-medium leading-snug text-[#111]">
-          {project.locationLabel}
+          {project.location.label}
         </span>
       ) : null}
 

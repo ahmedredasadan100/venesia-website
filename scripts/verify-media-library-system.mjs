@@ -72,7 +72,7 @@ const usageSupabase = {
       ? [{
           id: 7,
           arabic_name: "Project 7",
-          brochure_url: `https://venesia.example${legacyDocument}?download=1`,
+          image: `https://venesia.example${legacyDocument}?download=1`,
           publication_status: "published",
         }]
       : [];
@@ -97,7 +97,7 @@ const liveLegacyUsage = await usageProviderModule.scanMediaUsageByPublicValue(le
 assert.equal(liveLegacyUsage.uncertainties.length, 0);
 assert.equal(liveLegacyUsage.references.length, 1);
 assert.equal(liveLegacyUsage.references[0].domainKey, "projects");
-assert.equal(liveLegacyUsage.references[0].fieldKey, "brochure_url");
+assert.equal(liveLegacyUsage.references[0].fieldKey, "image");
 check("live Usage Scan matches an absolute legacy asset URL without a Catalog row", true);
 
 const readinessModule = loadTypeScriptModule("src/lib/admin/media-catalog/readiness.ts", {});
@@ -759,11 +759,10 @@ check("used and unused views are suppressed while reference readiness is uncerta
 
 const synchronization = source("src/lib/admin/media-catalog/synchronization.ts");
 check("rebind proves live registry parity, retains the old asset and compensates failures", synchronization.includes("media_reference_rebind_drift") && synchronization.includes("scanAllMediaReferenceProviders") && synchronization.includes("compensationFailures") && synchronization.includes("previousAssetRetained: true"));
-const projectChildrenSync = source("src/lib/admin/projects/project-children-sync.ts");
-const projectUpdate = source("src/app/admin/projects/project-actions/update.ts");
-const projectDuplicate = source("src/app/admin/projects/project-actions/duplicate.ts");
-check("projects synchronize parent and child media domains", projectChildrenSync.includes('"project_media"') && projectChildrenSync.includes('"project_floor_plans"') && [projectUpdate, projectDuplicate].every((implementation) => implementation.includes("synchronizeMediaReferenceWriteScopesAfterDomainMutation")));
-check("Project aggregate providers remain explicit discovery-only boundaries", ["projects", "project_media", "project_floor_plans"].every((domain) => {
+const projectEntryCoordination = source("src/lib/admin/projects/project-entry-media-coordination.ts");
+const projectEntrySave = source("src/app/admin/projects/project-actions/save-entry.ts");
+check("projects synchronize parent and child media domains", ["project_media", "project_floor_plans", "project_videos"].every((domain) => projectEntryCoordination.includes(`"${domain}"`)) && projectEntrySave.includes("coordinateProjectEntrySave") && projectEntryCoordination.includes("synchronizeMediaReferenceWriteScopesAfterDomainMutation"));
+check("Project aggregate providers remain explicit discovery-only boundaries", ["projects", "project_media", "project_floor_plans", "project_videos"].every((domain) => {
   const provider = providerModule.MEDIA_REFERENCE_PROVIDER_REGISTRY.find((item) => item.domainKey === domain);
   return provider && provider.supportsRebind === false;
 }));

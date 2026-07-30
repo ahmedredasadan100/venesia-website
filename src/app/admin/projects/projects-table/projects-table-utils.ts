@@ -1,7 +1,4 @@
-import {
-  adminDataGridActionsColumn,
-  ADMIN_DATA_GRID_ACTION_COLUMNS,
-} from "../../../../components/admin/ui";
+import { adminDataGridActionsColumn } from "../../../../components/admin/ui";
 import {
   getDefaultVisibleColumnKeys,
   sanitizeVisibleColumnKeys,
@@ -13,29 +10,11 @@ import {
 } from "../../../../lib/admin/projects/projects-list-config";
 import type { ProjectGridRow } from "./projects-table-types";
 
-function resolveActionsTrack(
-  withDuplicateAction: boolean,
-  referenceLayout: boolean,
-) {
-  if (referenceLayout) {
-    // Reference rows expose 6 compact actions (edit, preview, publish, duplicate, archive, delete).
-    return adminDataGridActionsColumn(6, "compact");
-  }
-  // Legacy rows expose edit, publish/restore, archive, and delete; duplication
-  // adds a fifth default-size action.
-  return withDuplicateAction
-    ? adminDataGridActionsColumn(5, "default")
-    : ADMIN_DATA_GRID_ACTION_COLUMNS.four;
-}
-
-/**
- * Shared-core compatible column defs for sanitize/default helpers.
- * Projects keep custom DataGrid rendering; renderCell is intentionally unused.
- */
-export function getProjectsColumnDefs(
-  type: "residential" | "commercial",
-): AdminEntityColumnDef<ProjectGridRow, ProjectColumnKey>[] {
-  return getProjectsColumnMeta(type).map((column) => ({
+export function getProjectsColumnDefs(): AdminEntityColumnDef<
+  ProjectGridRow,
+  ProjectColumnKey
+>[] {
+  return getProjectsColumnMeta().map((column) => ({
     key: column.key,
     label: column.label,
     defaultVisible: column.defaultVisible,
@@ -46,10 +25,9 @@ export function getProjectsColumnDefs(
 }
 
 export function resolveProjectsVisibleColumns(
-  type: "residential" | "commercial",
   initialVisibleColumns?: readonly string[] | null,
 ): ProjectColumnKey[] {
-  const columns = getProjectsColumnDefs(type);
+  const columns = getProjectsColumnDefs();
   return sanitizeVisibleColumnKeys(
     columns,
     initialVisibleColumns == null
@@ -58,18 +36,14 @@ export function resolveProjectsVisibleColumns(
   );
 }
 
-export function buildColumns(
-  type: "residential" | "commercial",
-  visibleColumns: readonly ProjectColumnKey[],
-  withDuplicateAction: boolean,
-  referenceLayout: boolean,
-) {
-  const actionsTrack = resolveActionsTrack(withDuplicateAction, referenceLayout);
+export function buildColumns(visibleColumns: readonly ProjectColumnKey[]) {
   const visible = new Set(visibleColumns);
-  return getProjectsColumnMeta(type)
+  return getProjectsColumnMeta()
     .filter((column) => visible.has(column.key))
     .map((column) =>
-      column.gridTrack === "actions" ? actionsTrack : column.gridTrack,
+      column.gridTrack === "actions"
+        ? adminDataGridActionsColumn(2)
+        : column.gridTrack,
     )
     .join(" ");
 }
@@ -92,19 +66,4 @@ export function formatDate(value?: string | null) {
   } catch {
     return "—";
   }
-}
-
-export function publicationMeta(status?: string | null) {
-  if (status === "published") return { label: "منشور", tone: "green" as const };
-  if (status === "unpublished") return { label: "مخفي", tone: "gold" as const };
-  if (status === "archived") return { label: "أرشيف", tone: "muted" as const };
-  return { label: "مسودة", tone: "muted" as const };
-}
-
-export function locationLabel(item: ProjectGridRow) {
-  return item.location_label || item.map_area || "—";
-}
-
-export function featuredLabel(item: ProjectGridRow) {
-  return item.featured ? "نعم" : "لا";
 }

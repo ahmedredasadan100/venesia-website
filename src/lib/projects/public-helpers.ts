@@ -42,20 +42,19 @@ export function getHubFilterOptionsFromProjects(projects: PublicProject[]): HubF
   return options;
 }
 
-export function sortProjectsByHomepageOrder(projects: PublicProject[]) {
-  return [...projects].sort(
-    (a, b) => a.homepageOrder - b.homepageOrder || a.code.localeCompare(b.code),
-  );
+export function preservePublicProjectOrder(projects: PublicProject[]) {
+  return [...projects];
 }
 
 export function getProjectsByFilter(projects: PublicProject[], filterId: ProjectHubFilterId) {
-  const sorted = sortProjectsByHomepageOrder(projects);
+  const sorted = preservePublicProjectOrder(projects);
   if (filterId === "all") return sorted;
   return sorted.filter((project) => project.category === filterId);
 }
 
 export function getFeaturedProjects(projects: PublicProject[]) {
-  return sortProjectsByHomepageOrder(projects).filter((project) => project.featured);
+  void projects;
+  return [];
 }
 
 export function getProjectStats(projects: PublicProject[]) {

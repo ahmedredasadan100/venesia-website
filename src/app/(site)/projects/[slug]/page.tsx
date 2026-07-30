@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import CommercialProjectDetails from "../../../../components/projects/details/CommercialProjectDetails";
 import ResidentialProjectDetails from "../../../../components/projects/details/ResidentialProjectDetails";
 import JsonLd from "../../../../components/seo/JsonLd";
-import { loadProjectBySlug } from "../../../../lib/projects/load-published-projects";
+import { loadProjectBySlugResult } from "../../../../lib/projects/load-published-projects";
 import { stripHtml } from "../../../../lib/rich-text/html-utils";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { generatePublicMetadata, loadResolvedGlobalSeo } from "../../../../lib/seo/generate-public-metadata";
@@ -22,7 +22,8 @@ export async function generateMetadata({
   params,
 }: ProjectDetailsPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const project = await loadProjectBySlug(slug);
+  const result = await loadProjectBySlugResult(slug);
+  const project = result.project;
 
   if (!project) {
     return generatePublicMetadata({
@@ -40,17 +41,20 @@ export async function generateMetadata({
   return generatePublicMetadata({
     path: pagePath,
     entitySeo: {
-      title: project.seoTitle,
-      description: project.seoDescription,
-      keywords: project.seoKeywords,
-      ogImage: project.ogImage,
-      image: project.ogImage || project.heroImage || project.image,
-      imageAlt: project.arabicName,
+      title: project.seo.title,
+      description: project.seo.description,
+      keywords: project.seo.keywords,
+      ogImage: project.seo.ogImage?.src,
+      image: project.seo.ogImage?.src ?? project.heroImage.src,
+      imageAlt: project.seo.ogImage?.alt || project.heroImage.alt,
+      canonical: project.seo.canonicalUrl,
+      robotsIndex: project.seo.robotsIndex,
+      robotsFollow: project.seo.robotsFollow,
     },
-    title: project.seoTitle || `${project.arabicName} | فينيسيا للتطوير العقاري`,
-    description: project.seoDescription || fallbackDescription,
-    image: project.ogImage || project.heroImage || project.image,
-    imageAlt: project.arabicName,
+    title: project.seo.title || `${project.arabicName} | فينيسيا للتطوير العقاري`,
+    description: project.seo.description || fallbackDescription,
+    image: project.seo.ogImage?.src ?? project.heroImage.src,
+    imageAlt: project.seo.ogImage?.alt || project.heroImage.alt,
     type: "website",
     includePageSeo: false,
   });
@@ -60,7 +64,8 @@ export default async function ProjectDetailsPage({
   params,
 }: ProjectDetailsPageProps) {
   const { slug } = await params;
-  const project = await loadProjectBySlug(slug);
+  const result = await loadProjectBySlugResult(slug);
+  const project = result.project;
 
   if (!project) {
     notFound();
@@ -68,19 +73,19 @@ export default async function ProjectDetailsPage({
 
   const globalSeo = await loadResolvedGlobalSeo();
   const pagePath = `/projects/${project.slug}`;
-  const description = stripHtml(project.seoDescription || project.shortDescription);
+  const description = stripHtml(project.seo.description || project.shortDescription);
 
   const pageJsonLd = buildPageJsonLd(
     {
       path: pagePath,
-      title: project.seoTitle || project.arabicName,
+      title: project.seo.title || project.arabicName,
       description,
-      image: project.ogImage || project.heroImage || project.image,
+      image: project.seo.ogImage?.src ?? project.heroImage.src,
       project: {
         name: project.arabicName,
         description,
-        image: project.ogImage || project.heroImage || project.image,
-        locationLabel: project.locationLabel,
+        image: project.seo.ogImage?.src ?? project.heroImage.src,
+        locationLabel: project.location.label,
       },
     },
     globalSeo,

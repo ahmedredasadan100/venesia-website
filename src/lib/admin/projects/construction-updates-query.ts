@@ -5,13 +5,8 @@ import { getSupabaseAdmin } from "../../supabase-admin";
 
 export type ConstructionProjectRow = {
   id: number;
-  code: string;
   slug: string;
   arabic_name: string;
-  status: string;
-  status_label: string;
-  progress: number;
-  publication_status: string;
   updated_at: string;
 };
 
@@ -36,7 +31,7 @@ export async function getConstructionUpdatesPlanningData(): Promise<Construction
   ] = await Promise.all([
     getSupabaseAdmin()
       .from("projects")
-      .select("id, code, slug, arabic_name, status, status_label, progress, publication_status, updated_at")
+      .select("id, slug, arabic_name, updated_at")
       .eq("type", "residential")
       .order("updated_at", { ascending: false }),
     getSupabaseAdmin()

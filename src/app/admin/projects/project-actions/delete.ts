@@ -33,7 +33,7 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     };
   }
 
-  const [floorPlans, projectMedia] = await Promise.all([
+  const [floorPlans, projectMedia, projectVideos] = await Promise.all([
     getSupabaseAdmin()
       .from("project_floor_plans")
       .select("id")
@@ -42,23 +42,30 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
       .from("project_media")
       .select("id")
       .eq("project_id", id),
+    getSupabaseAdmin()
+      .from("project_videos")
+      .select("id")
+      .eq("project_id", id),
   ]);
-  if (floorPlans.error || projectMedia.error) {
+  if (floorPlans.error || projectMedia.error || projectVideos.error) {
     return {
       ok: false as const,
       code: "child_lookup_failed",
       message:
         floorPlans.error?.message ??
         projectMedia.error?.message ??
+        projectVideos.error?.message ??
         "تعذر إثبات وسائط المشروع قبل الحذف.",
     };
   }
 
-  const { error } = await getSupabaseAdmin().from("projects").delete().eq("id", id);
+  const { error } = await getSupabaseAdmin().rpc(
+    "delete_project_admin_entry",
+    { p_project_id: id },
+  );
   if (error) {
     return { ok: false as const, code: "delete_failed", message: error.message };
   }
-
   const mediaSynchronization =
     await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
       [],
@@ -71,6 +78,10 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
         })),
         ...(projectMedia.data ?? []).map((row) => ({
           domainKey: "project_media",
+          entityIdentity: String(row.id),
+        })),
+        ...(projectVideos.data ?? []).map((row) => ({
+          domainKey: "project_videos",
           entityIdentity: String(row.id),
         })),
       ],

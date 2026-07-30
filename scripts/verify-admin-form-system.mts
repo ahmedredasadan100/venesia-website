@@ -269,11 +269,9 @@ const expectedClassifications: Record<
     "topic-category-create-edit",
     "topic-series-create-edit",
   ],
-  shared_adopter: ["redirects-create-edit"],
+  shared_adopter: ["redirects-create-edit", "projects-create-edit"],
   legacy_generic_gap: [
     "topic-media-create-edit",
-    "projects-create",
-    "projects-edit",
     "pages-quick-create",
   ],
   specialized_exception: [
@@ -370,6 +368,17 @@ const topicSeriesSelect = read(
 const adminListboxSelect = read(
   "src/components/admin/ui/AdminListboxSelect.tsx",
 );
+const inlineListboxHandlerStart = adminListboxSelect.indexOf(
+  "function handleInlineKeyDown",
+);
+const inlineListboxHandlerEnd = adminListboxSelect.indexOf(
+  "\n  const menu =",
+  inlineListboxHandlerStart,
+);
+const inlineListboxHandler = adminListboxSelect.slice(
+  inlineListboxHandlerStart,
+  inlineListboxHandlerEnd,
+);
 check(
   "Topic Article create and edit share the unified action and mode contract",
   articleCreate.includes("action={saveTopicForm}") &&
@@ -393,6 +402,30 @@ check(
     topicSeriesSelect.includes('id="topic-series"') &&
     adminListboxSelect.includes('id={`${controlId}-listbox`}') &&
     adminListboxSelect.includes('role="listbox"'),
+);
+check(
+  "Shared inline listbox skips disabled options and exposes only selectable active descendants",
+  inlineListboxHandlerStart >= 0 &&
+    inlineListboxHandlerEnd > inlineListboxHandlerStart &&
+    inlineListboxHandler.includes("if (!selectableOptions.length) return") &&
+    inlineListboxHandler.includes("selectableOptions.findIndex") &&
+    !inlineListboxHandler.includes("visibleOptions") &&
+    adminListboxSelect.includes(
+      "onKeyDown={(event) => handleInlineKeyDown(event, option.value)}",
+    ) &&
+    adminListboxSelect.includes("const inlineTabStopValue =") &&
+    adminListboxSelect.includes("selectableOptions[0]?.value") &&
+    adminListboxSelect.includes(
+      "tabIndex={option.value === inlineTabStopValue ? 0 : -1}",
+    ) &&
+    occurrenceCount(adminListboxSelect, /aria-activedescendant=\{/g) === 3 &&
+    occurrenceCount(
+      adminListboxSelect,
+      /aria-activedescendant=\{[\s\S]{0,120}resolvedActiveValue/g,
+    ) === 3 &&
+    !/aria-activedescendant=\{[\s\S]{0,120}visibleOptions/.test(
+      adminListboxSelect,
+    ),
 );
 check(
   "CategoryForm wires create and edit modes to their correct shared-runtime actions",

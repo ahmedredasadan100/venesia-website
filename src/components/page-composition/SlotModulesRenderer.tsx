@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
-import type { HomepageProjectCard } from "../../lib/projects/types";
+import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import { buildSlotModuleNodes } from "./slot-module-nodes";
 
 export { buildSlotModuleNodes } from "./slot-module-nodes";

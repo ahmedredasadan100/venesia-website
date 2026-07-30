@@ -1,21 +1,20 @@
 import "server-only";
 
 import { loadPublishedProjects } from "./load-published-projects";
-import type { HomepageProjectCard } from "./types";
+import type { HomepageProjectCard } from "./public-types";
 
 /**
  * Published homepage carousel projects — single source of truth: projects table.
  */
 export async function loadHomepageProjects(): Promise<HomepageProjectCard[]> {
-  const projects = await loadPublishedProjects({ showOnHomepageOnly: true });
+  const projects = await loadPublishedProjects();
 
   return projects.map((project) => ({
     id: Number(project.id),
     slug: project.slug,
-    code: project.code,
     englishName: project.englishName,
-    locationLabel: project.locationLabel,
+    locationLabel: project.location.label,
     shortDescription: project.shortDescription,
-    image: project.image,
+    cardImage: project.cardImage,
   }));
 }

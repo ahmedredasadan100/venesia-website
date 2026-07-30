@@ -12,9 +12,10 @@
     { "domainKey": "topics", "table": "topics", "mediaFields": ["image", "excerpt", "content", "media_payload"] },
     { "domainKey": "topic_categories", "table": "topic_categories", "mediaFields": ["image"] },
     { "domainKey": "legacy_media_items", "table": "media_items", "mediaFields": ["image", "og_image", "content"] },
-    { "domainKey": "projects", "table": "projects", "mediaFields": ["image", "hero_image", "og_image", "district_image", "overview_video_image", "brochure_url"] },
+    { "domainKey": "projects", "table": "projects", "mediaFields": ["image", "hero_image", "small_box_image", "overview_main_image", "og_image"] },
     { "domainKey": "project_media", "table": "project_media", "mediaFields": ["image"] },
-    { "domainKey": "project_floor_plans", "table": "project_floor_plans", "mediaFields": ["plan_image"] },
+    { "domainKey": "project_floor_plans", "table": "project_floor_plans", "mediaFields": ["architectural_image", "furnishing_image"] },
+    { "domainKey": "project_videos", "table": "project_videos", "mediaFields": ["poster_image"] },
     { "domainKey": "hero_templates", "table": "hero_templates", "mediaFields": ["config"] },
     { "domainKey": "content_block_templates", "table": "content_block_templates", "mediaFields": ["config"] },
     { "domainKey": "cta_block_templates", "table": "cta_block_templates", "mediaFields": ["config"] },
@@ -74,42 +75,16 @@
     {
       "id": "project-domain-writes",
       "classification": "adopted",
-      "tables": ["projects", "project_media", "project_floor_plans"],
-      "mediaFields": ["projects.image", "projects.hero_image", "projects.og_image", "projects.district_image", "projects.overview_video_image", "projects.brochure_url", "project_media.image", "project_floor_plans.plan_image"],
+      "tables": ["projects", "project_media", "project_floor_plans", "project_videos"],
+      "mediaFields": ["projects.image", "projects.hero_image", "projects.small_box_image", "projects.overview_main_image", "projects.og_image", "project_media.image", "project_floor_plans.architectural_image", "project_floor_plans.furnishing_image", "project_videos.poster_image"],
       "acquiresWriteLease": true,
       "completesReferenceSync": true,
       "structuredWarning": true,
       "sourceFiles": [
-        "src/app/admin/projects/project-actions/update.ts",
-        "src/app/admin/projects/project-actions/duplicate.ts",
-        "src/lib/admin/projects/project-children-sync.ts"
+        "src/app/admin/projects/project-actions/save-entry.ts",
+        "src/lib/admin/projects/project-entry-media-coordination.ts"
       ],
-      "rationale": "Project aggregate update and duplicate coordinate the intended parent and child provider scopes as one write operation."
-    },
-    {
-      "id": "project-media-empty-create",
-      "classification": "neutral",
-      "tables": ["projects"],
-      "mediaFields": ["projects.image", "projects.hero_image", "projects.og_image", "projects.district_image", "projects.overview_video_image", "projects.brochure_url"],
-      "acquiresWriteLease": false,
-      "completesReferenceSync": false,
-      "structuredWarning": false,
-      "sourceFiles": ["src/app/admin/projects/project-actions/create.ts"],
-      "rationale": "Create writes a new project whose provider-owned media fields are all explicitly empty, so it cannot introduce a managed asset reference."
-    },
-    {
-      "id": "project-reference-neutral-commands",
-      "classification": "neutral",
-      "tables": ["projects"],
-      "mediaFields": [],
-      "acquiresWriteLease": false,
-      "completesReferenceSync": false,
-      "structuredWarning": false,
-      "sourceFiles": [
-        "src/app/admin/projects/project-actions/bulk.ts",
-        "src/app/admin/projects/project-actions/status.ts"
-      ],
-      "rationale": "Status and bulk commands do not alter provider-owned media fields."
+      "rationale": "The unified Project Create/Edit aggregate action coordinates root, plan, image and video-poster scopes before the atomic domain RPC and synchronizes the persisted stable identities under the same lease."
     },
     {
       "id": "project-removal-command",
@@ -355,8 +330,8 @@
     {
       "id": "guarded-static-project-reimport",
       "classification": "explicit_exception",
-      "tables": ["projects", "project_media", "project_floor_plans"],
-      "mediaFields": ["projects.image", "projects.hero_image", "projects.og_image", "projects.district_image", "projects.overview_video_image", "projects.brochure_url", "project_media.image", "project_floor_plans.plan_image"],
+      "tables": ["projects", "project_media", "project_floor_plans", "project_videos"],
+      "mediaFields": ["projects.image", "projects.hero_image", "projects.small_box_image", "projects.overview_main_image", "projects.og_image", "project_media.image", "project_floor_plans.architectural_image", "project_floor_plans.furnishing_image", "project_videos.poster_image"],
       "acquiresWriteLease": false,
       "completesReferenceSync": false,
       "structuredWarning": false,

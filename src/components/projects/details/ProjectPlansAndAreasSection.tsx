@@ -4,24 +4,17 @@ import { useCallback, useMemo, useState } from "react";
 import Image from "next/image";
 
 import { useSwipeSlider } from "../../../hooks/use-swipe-slider";
-
-type ResidentialAreaOption = {
-  area: string;
-  label?: string;
-  planImage: string;
-  specs: string[];
-  featured?: boolean;
-};
+import type { PublicProjectImage, PublicProjectPlan } from "../../../lib/projects/public-types";
 
 type ProjectPlansAndAreasSectionProps = {
-  areas: ResidentialAreaOption[];
+  areas: PublicProjectPlan[];
 };
 
 export default function ProjectPlansAndAreasSection({
   areas,
 }: ProjectPlansAndAreasSectionProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<PublicProjectImage | null>(null);
 
   const isSlider = areas.length > 3;
 
@@ -104,7 +97,7 @@ export default function ProjectPlansAndAreasSection({
         >
           {visibleAreas.map((area, index) => (
             <AreaCard
-              key={`${area.area}-${index}`}
+              key={`${area.id}-${index}`}
               area={area}
               onOpenImage={setSelectedImage}
             />
@@ -127,8 +120,8 @@ export default function ProjectPlansAndAreasSection({
           </button>
 
           <Image
-            src={selectedImage}
-            alt="مخطط الوحدة"
+            src={selectedImage.src}
+            alt={selectedImage.alt}
             width={1200}
             height={900}
             onClick={(event) => event.stopPropagation()}
@@ -144,9 +137,10 @@ function AreaCard({
   area,
   onOpenImage,
 }: {
-  area: ResidentialAreaOption;
-  onOpenImage: (image: string) => void;
+  area: PublicProjectPlan;
+  onOpenImage: (image: PublicProjectImage) => void;
 }) {
+  const primaryImage = area.architecturalImage ?? area.furnishingImage;
   return (
     <article
       className={`relative overflow-hidden rounded-[28px] border bg-[#05070B]/70 p-5 transition ${
@@ -155,41 +149,37 @@ function AreaCard({
           : "border-white/10 hover:border-[#D8B87A]/35"
       }`}
     >
-      {area.label ? (
-        <span className="absolute left-5 top-5 z-20 rounded-full bg-[#D8B87A] px-3 py-1 text-xs font-semibold text-[#111]">
-          {area.label}
-        </span>
+      {primaryImage ? (
+        <button
+          type="button"
+          onClick={() => onOpenImage(primaryImage)}
+          className="group relative block h-56 w-full overflow-hidden rounded-2xl border border-[#D8B87A]/15 bg-black/25 text-right"
+        >
+          <Image
+            src={primaryImage.src}
+            alt={primaryImage.alt}
+            fill
+            sizes="(max-width: 768px) 100vw, 33vw"
+            className="cursor-zoom-in object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
+          />
+        </button>
       ) : null}
-
-      <button
-        type="button"
-        onClick={() => onOpenImage(area.planImage)}
-        className="group relative block h-56 w-full overflow-hidden rounded-2xl border border-[#D8B87A]/15 bg-black/25 text-right"
-      >
-        <Image
-          src={area.planImage}
-          alt={area.area}
-          fill
-          sizes="(max-width: 768px) 100vw, 33vw"
-          className="cursor-zoom-in object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
-        />
-      </button>
 
       <div className="relative -mt-3 mb-4 flex justify-center">
         <div className="rounded-full border border-[#D8B87A]/35 bg-[#05070B] px-4 py-1 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
           <span className="font-en text-sm font-semibold text-[#D8B87A]">
-            {area.area}
+            {area.areaText || area.name}
           </span>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {area.specs.map((spec) => (
+        {area.details.map((spec) => (
           <span
-            key={spec}
+            key={spec.id}
             className="rounded-full border border-white/10 bg-white/[0.035] px-4 py-2 text-xs text-white/65"
           >
-            {spec}
+            {spec.label}: {spec.value}
           </span>
         ))}
       </div>

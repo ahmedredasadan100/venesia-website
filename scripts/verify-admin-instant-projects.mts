@@ -1,978 +1,294 @@
-import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { QueryClient } from "@tanstack/react-query";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import {
-  AdminEntityListQueryValidationError,
-  isSameAdminEntityListScope,
   normalizeAdminEntityListQuery,
   parseAdminEntityListRequestQuery,
-  serializeAdminEntityListQuery,
   writeAdminEntityListQuery,
-  type AdminEntityListQuery,
-  type AdminEntityListResult,
 } from "../src/lib/admin/entity-list/data-engine/contracts.ts";
-import { adminEntityListQueryKeys } from "../src/lib/admin/entity-list/data-engine/query-keys.ts";
-import {
-  removeAdminEntityRows,
-  setAdminEntityListCachesInScope,
-} from "../src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts";
-import { cacheNormalizedAdminEntityListResult } from "../src/lib/admin/entity-list/data-engine/normalized-result-cache.ts";
 import {
   projectsQueryContract,
   withLockedProjectType,
-  type ProjectFilters,
-  type ProjectSortField,
 } from "../src/lib/admin/projects/entity-list-contract.ts";
-import type { ProjectEntityListRow } from "../src/lib/admin/projects/entity-list-types.ts";
-import {
-  applyProjectPublicationMutation,
-  projectRowMatchesDataset,
-} from "../src/lib/admin/projects/instant-mutation-membership.ts";
-import {
-  filterPersistableColumnKeys,
-  getDefaultVisibleColumnKeys,
-  sanitizeVisibleColumnKeys,
-} from "../src/lib/admin/entity-list/column-preferences.ts";
-import {
-  getProjectsColumnMeta,
-  getProjectsDefaultColumnKeys,
-  getProjectsPreferenceColumnKeys,
-  PROJECTS_COMMERCIAL_COLUMNS,
-  PROJECTS_RESIDENTIAL_COLUMNS,
-} from "../src/lib/admin/projects/projects-list-config.ts";
 
-const read = (path: string) =>
-  readFile(new URL(`../${path}`, import.meta.url), "utf8");
+const root = resolve(process.cwd());
+let passed = 0;
+const failures: string[] = [];
 
-let assertions = 0;
+function read(relativePath: string) {
+  const absolutePath = resolve(root, relativePath);
+  if (!existsSync(absolutePath)) {
+    failures.push(`Missing file: ${relativePath}`);
+    return "";
+  }
+  return readFileSync(absolutePath, "utf8");
+}
+
 function check(condition: unknown, label: string) {
-  assert.ok(condition, label);
-  assertions += 1;
+  if (condition) {
+    passed += 1;
+    return;
+  }
+  failures.push(label);
 }
 
-const [
-  registry,
-  residentialPage,
-  commercialPage,
-  client,
-  referenceTable,
-  legacyTable,
-  tableUtils,
-  listConfig,
-  columnPreferencesAction,
-  adapter,
-  types,
-  migration,
-  mutation,
-  mutationCache,
-  controller,
-  normalizedCache,
-  statusActions,
-  bulkActions,
-  deleteActions,
-  actionsFacade,
-  auditActions,
-  dataGrid,
-  adminCheckbox,
-] = await Promise.all([
-  read("src/lib/admin/entity-list/data-engine/registry.ts"),
-  read("src/app/admin/projects/residential/page.tsx"),
-  read("src/app/admin/projects/commercial/page.tsx"),
-  read("src/app/admin/projects/ProjectsTableClient.tsx"),
-  read("src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx"),
-  read("src/app/admin/projects/projects-table/LegacyProjectsTable.tsx"),
-  read("src/app/admin/projects/projects-table/projects-table-utils.ts"),
-  read("src/lib/admin/projects/projects-list-config.ts"),
-  read("src/app/admin/projects/project-actions/column-preferences.ts"),
-  read("src/lib/admin/projects/entity-list-adapter.ts"),
-  read("src/lib/admin/projects/entity-list-types.ts"),
-  read("sql/migrations/20260721030000_admin_projects_list_read_model.sql"),
-  read("src/lib/admin/entity-list/data-engine/instant-mutation.ts"),
-  read("src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts"),
-  read("src/lib/admin/entity-list/data-engine/client-controller.ts"),
-  read("src/lib/admin/entity-list/data-engine/normalized-result-cache.ts"),
-  read("src/app/admin/projects/project-actions/status.ts"),
-  read("src/app/admin/projects/project-actions/bulk.ts"),
-  read("src/app/admin/projects/project-actions/delete.ts"),
-  read("src/app/admin/projects/actions.ts"),
-  read("src/lib/admin/audit/cms-audit-actions.ts"),
-  read("src/components/admin/ui/AdminDataGrid.tsx"),
-  read("src/components/admin/ui/AdminCheckbox.tsx"),
-]);
-check(registry.includes("projects: projectsEntityListAdapter"), "registry registers projects");
-check(residentialPage.includes("loadProjectsEntityListResult"), "residential RSC hydrates");
-check(commercialPage.includes("loadProjectsEntityListResult"), "commercial RSC hydrates");
-check(residentialPage.includes('withLockedProjectType'), "residential locks project type");
-check(commercialPage.includes('withLockedProjectType'), "commercial locks project type");
-check(client.includes("useAdminEntityListController"), "client uses shared controller");
-check(client.includes("useAdminEntityInstantMutation"), "client uses instant mutations");
-check(client.includes('entity: "projects"'), "client binds projects entity");
-check(client.includes("AdminNotice"), "client uses AdminNotice");
-check(client.includes("AdminEntityListFilters"), "client uses shared filters");
-check(client.includes("AdminTablePagination"), "client uses shared pagination");
-check(!client.includes("useAdminTable"), "client does not use useAdminTable");
-check(!client.includes("getProjectsTableRows"), "client does not full-list refresh");
-check(!client.includes("router.refresh"), "client has no router.refresh");
-check(!client.includes("window.location"), "client has no window.location reload");
-check(!referenceTable.includes("useAdminTable"), "reference table detached from useAdminTable");
-check(!legacyTable.includes("useAdminTable"), "legacy table detached from useAdminTable");
-check(adapter.includes('.rpc("admin_list_projects"'), "adapter calls admin_list_projects");
-check((adapter.match(/\.rpc\(/g) ?? []).length === 1, "adapter uses exactly one rpc");
-check(adapter.includes("ProjectsEntityListDatabaseError"), "adapter typed db errors");
-check(adapter.includes("z.coerce.number().int().nonnegative().finite()"), "adapter coerces total_count safely");
-check(migration.includes("create or replace function public.admin_list_projects"), "migration adds read model");
-check(migration.includes("normalized_state"), "migration normalizes out-of-range pages");
-check(migration.includes("'page', (select page from normalized_state)"), "migration returns normalized page");
-check(migration.includes("p_project_type"), "migration filters project type");
-check(migration.includes("p_search"), "migration supports search");
-check(migration.includes("p_publication_status"), "migration supports publication filter");
-check(migration.includes("p_implementation_status"), "migration supports implementation filter");
-check(migration.includes("p_featured"), "migration supports featured filter");
-check(migration.includes("p_list_mode"), "migration supports active/archive mode");
-for (const input of [
-  "p_page",
-  "p_page_size",
-  "p_sort_field",
-  "p_sort_direction",
-  "p_project_type",
-  "p_publication_status",
-  "p_implementation_status",
-  "p_featured",
-  "p_list_mode",
-]) {
-  check(
-    migration.includes(`if ${input} is null`) &&
-      migration.includes(`message = '${input}`),
-    `database validates ${input}`,
-  );
-}
-for (const sortField of [
-  "homepage_order",
-  "arabic_name",
-  "code",
-  "featured",
-  "publication_status",
-  "location",
-  "updated_at",
-]) {
-  check(migration.includes(`'${sortField}'`), `database allows sort ${sortField}`);
-}
-for (const value of ["residential", "commercial"]) {
-  check(migration.includes(`'${value}'`), `database allows project type ${value}`);
-}
-for (const value of ["all", "draft", "published", "unpublished", "archived"]) {
-  check(migration.includes(`'${value}'`), `database allows publication ${value}`);
-}
-for (const value of [
-  "all",
-  "under-construction",
-  "excavation",
-  "near-delivery",
-  "delivered",
-]) {
-  check(migration.includes(`'${value}'`), `database allows implementation ${value}`);
-}
-check(
-  migration.includes("p_page_size not in (10, 20, 30)"),
-  "database page-size allowlist is explicit",
-);
-check(
-  migration.includes("p_sort_direction not in ('asc', 'desc')"),
-  "database sort-direction allowlist is explicit",
-);
-check(
-  migration.includes("p_featured not in ('all', 'yes', 'no')"),
-  "database featured allowlist is explicit",
-);
-check(
-  migration.includes("p_list_mode not in ('all', 'active', 'archived')"),
-  "database list-mode allowlist is explicit",
-);
-check(migration.includes("grant execute") && migration.includes("service_role"), "migration grants service_role only");
-check(!migration.includes("drop table"), "migration is non-destructive");
-check(mutation.includes("cancelQueries"), "mutation cancels in-flight queries");
-check(mutation.includes("snapshot.forEach"), "mutation restores snapshots");
-check(mutation.includes("reconcileSuccess"), "mutation core supports deterministic success reconciliation");
-check(mutation.includes("restoreSnapshot"), "mutation core exposes exact snapshot restoration");
-check(mutationCache.includes("matchesAdminEntityListScope"), "cache patches by dataset scope");
-check(controller.includes("cacheNormalizedAdminEntityListResult"), "controller out-of-range one-request");
-check(normalizedCache.includes("setQueryData(normalizedKey, result)"), "normalized cache transfer");
-check(statusActions.includes('code: "publish_validation"'), "status mutations return typed codes");
-check(bulkActions.includes(".eq(\"type\", type)"), "bulk actions scoped by project type");
-check(deleteActions.includes('code: "confirm_required"'), "delete returns typed codes");
-check(!actionsFacade.includes("getProjectsTableRows"), "actions facade no longer exports full-list loader");
-check(!statusActions.includes("getProjectsTableRows"), "status module no longer full-list reloads");
-check(client.includes("isBulkPending"), "client separates bulk pending");
-check(client.includes("rowPendingAction"), "client exposes row-local pending action");
-check(!client.includes("const isBusy ="), "client has no global row busy state");
-check(client.includes("mutationLockRef"), "client retains single-flight mutation safety");
-check(client.includes("isMutationBusy"), "client exposes explicit mutation busy flag");
-check(
-  client.includes("انتظر انتهاء العملية الحالية قبل تنفيذ إجراء آخر"),
-  "client surfaces busy feedback instead of silent click drops",
-);
-check(
-  referenceTable.includes('pending={pendingAction === "status"}') &&
-    legacyTable.includes('pending={pendingAction === "status"}'),
-  "row pending presentation is action-local",
-);
-check(
-  referenceTable.includes("handlers.isMutationBusy") &&
-    legacyTable.includes("handlers.isMutationBusy"),
-  "all row actions disable while any mutation is in flight",
-);
-check(
-  !referenceTable.includes("pending || handlers.isBulkPending") &&
-    !legacyTable.includes("pending || handlers.isBulkPending"),
-  "row actions no longer leave sibling rows visually enabled under single-flight lock",
-);
-
-// Shared column management wiring (residential + commercial).
-check(client.includes("AdminFloatingLayerProvider"), "projects wrap shared floating layer for filters/columns");
-check(client.includes("saveProjectsTablePreferences"), "client persists columns via shared preferences");
-check(client.includes("restoreProjectsTablePreferences"), "client restores defaults via shared preferences");
-check(client.includes("sanitizeVisibleColumnKeys"), "client sanitizes column keys via shared core");
-check(columnPreferencesAction.includes("saveAdminColumnPreferences"), "projects preferences use shared persistence");
-check(
-  listConfig.includes('PROJECTS_RESIDENTIAL_LIST_VIEW_KEY = "projects-residential"') &&
-    listConfig.includes('PROJECTS_COMMERCIAL_LIST_VIEW_KEY = "projects-commercial"'),
-  "residential and commercial use distinct preference view keys",
-);
-check(
-  listConfig.includes('key: "project"') && listConfig.includes('key: "location"'),
-  "residential/commercial column sets differ without sharing one layout",
-);
-check(
-  listConfig.includes('key: "selection"') &&
-    listConfig.includes('key: "actions"') &&
-    listConfig.includes("hideable: false"),
-  "selection/actions remain locked in projects column config",
-);
-check(
-  residentialPage.includes("initialVisibleColumns") &&
-    commercialPage.includes("initialVisibleColumns"),
-  "pages hydrate column preferences into shared client menu",
-);
-check(
-  residentialPage.includes("PROJECTS_RESIDENTIAL_LIST_VIEW_KEY") &&
-    commercialPage.includes("PROJECTS_COMMERCIAL_LIST_VIEW_KEY"),
-  "pages load preferences from the shared view-key contract",
-);
-check(
-  tableUtils.includes("sanitizeVisibleColumnKeys") &&
-    tableUtils.includes("getDefaultVisibleColumnKeys"),
-  "projects column utils reuse shared sanitize/default helpers",
-);
-check(
-  tableUtils.includes("initialVisibleColumns == null"),
-  "projects distinguish an empty saved preference from no preference",
-);
-check(
-  referenceTable.includes("horizontalScroll") &&
-    legacyTable.includes("horizontalScroll") &&
-    referenceTable.includes("sticky") &&
-    legacyTable.includes("sticky"),
-  "projects opt into reachable RTL scrolling with sticky actions",
-);
-check(
-  dataGrid.includes("data-admin-data-grid-scroll") &&
-    dataGrid.includes("w-max min-w-full"),
-  "shared grid contract exposes intentional horizontal scrolling",
-);
-check(
-  adminCheckbox.includes('caretColor: "transparent"'),
-  "admin checkbox renders deterministic caret style during hydration",
-);
-for (const englishCopy of [
-  "Residential Projects Manager",
-  "Commercial Projects Manager",
-  "Location / Area",
-  "Last Updated",
-  ">Code<",
-  ">Actions<",
-  ">DEL<",
-]) {
-  check(
-    !client.includes(englishCopy) &&
-      !referenceTable.includes(englishCopy) &&
-      !legacyTable.includes(englishCopy) &&
-      !listConfig.includes(englishCopy),
-    `projects list UI removes English copy: ${englishCopy}`,
-  );
+function checkAbsent(relativePath: string, label: string) {
+  check(!existsSync(resolve(root, relativePath)), label);
 }
 
-// Critical-path readiness: no preflight projects count before list RPC.
+const adapter = read("src/lib/admin/projects/entity-list-adapter.ts");
+const contract = read("src/lib/admin/projects/entity-list-contract.ts");
+const types = read("src/lib/admin/projects/entity-list-types.ts");
+const client = read("src/app/admin/projects/ProjectsTableClient.tsx");
+const table = read(
+  "src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx",
+);
+const config = read("src/lib/admin/projects/projects-list-config.ts");
+const actions = read("src/app/admin/projects/actions.ts");
+const actionIndex = read(
+  "src/app/admin/projects/project-actions/index.ts",
+);
+const deletion = read(
+  "src/app/admin/projects/project-actions/delete.ts",
+);
+const residentialPage = read(
+  "src/app/admin/projects/residential/page.tsx",
+);
+const commercialPage = read(
+  "src/app/admin/projects/commercial/page.tsx",
+);
+const migration = read(
+  "sql/migrations/20260728090000_rebuild_project_admin_data_entry.sql",
+);
+const deleteProjectRpc = ["delete", "project", "admin", "entry"].join("_");
+const directProjectDelete = [".fr", 'om("projects")', ".del", "ete()"].join("");
+
 check(
-  !residentialPage.includes("getProjectsTableReady") &&
-    !commercialPage.includes("getProjectsTableReady"),
-  "list pages do not call getProjectsTableReady on the critical path",
+  adapter.includes('.from("projects")') &&
+    adapter.includes('{ count: "exact" }'),
+  "Project list reads the clean projects table with an exact count",
 );
 check(
-  residentialPage.includes("loadProjectsEntityListResult") &&
-    commercialPage.includes("loadProjectsEntityListResult"),
-  "list pages still RSC-hydrate through loadProjectsEntityListResult",
+  !adapter.includes('rpc("admin_list_projects"'),
+  "Project list does not recreate or call the removed compatibility RPC",
 );
 check(
-  residentialPage.includes("listResult.error") &&
-    commercialPage.includes("تعذر تحميل قائمة المشاريع"),
-  "list pages show explicit error state when read model fails",
+  [
+    "english_name",
+    "location_label",
+    "updated_at",
+  ].every((field) => adapter.includes(field)),
+  "Project list selects clean-schema identity and display fields",
 );
 check(
-  !adapter.includes("getProjectsTableReady") &&
-    (adapter.match(/\.from\("projects"\)/g) ?? []).length === 0,
-  "adapter has no separate projects table preflight query",
+  [
+    "publication_status",
+    "featured",
+    "homepage_order",
+    "map_area",
+    "status",
+  ].every((field) => !adapter.includes(field)),
+  "Project list adapter has no removed legacy-column dependency",
+);
+check(
+  adapter.includes('.eq("type", query.filters.projectType)'),
+  "Project type remains server-scoped in the adapter",
+);
+check(
+  adapter.includes("sanitizeProjectSearch") &&
+    adapter.includes("arabic_name.ilike") &&
+    adapter.includes("english_name.ilike") &&
+    adapter.includes("slug.ilike"),
+  "Search is sanitized and limited to clean identity fields",
+);
+check(
+  adapter.includes("if (page > totalPages)") &&
+    adapter.includes("loadProjectsPage(query, page)"),
+  "Out-of-range pages are clamped and reloaded",
+);
+check(
+  adapter.includes(".order(query.sort.field") &&
+    adapter.includes('.order("id"'),
+  "Sorting has a deterministic id tie-breaker",
+);
+check(
+  contract.includes('"updated_at", direction: "desc"') &&
+    !contract.includes("publication_status") &&
+    !contract.includes("implementation_status") &&
+    !contract.includes("list_mode"),
+  "Project query contract exposes only clean-schema filters and sorts",
+);
+check(
+  types.includes("english_name: string") &&
+    types.includes("location_label: string") &&
+    !types.includes("publication_status"),
+  "Project list row type matches the clean schema",
+);
+check(
+  client.includes("useAdminEntityListController") &&
+    client.includes("useAdminEntityInstantMutation"),
+  "The list keeps the shared Collection and Instant Data owners",
+);
+check(
+  client.includes("<AdminEntityList") &&
+    client.includes('consumer="projects"') &&
+    !client.includes("feedbackState") &&
+    !client.includes("setVisibleColumns") &&
+    !client.includes("<AdminNotice"),
+  "ProjectsTableClient has no parallel Collection column or Feedback owner",
+);
+check(
+  client.includes("deleteProjectAjax") &&
+    !client.includes("bulkProjectsActionAjax") &&
+    !client.includes("duplicateProjectAjax") &&
+    !client.includes("toggleProjectPublicationAjax"),
+  "The client keeps explicit delete while excluding legacy bulk, duplicate, and publication commands",
+);
+check(
+  !client.includes("AdminBulkActionBar") &&
+    !client.includes("publication_status") &&
+    !client.includes("implementation_status") &&
+    !client.includes("list_mode"),
+  "Legacy bulk and publication filters are absent from the list UI",
+);
+check(
+  table.includes('action="edit"') &&
+    table.includes('action="delete"') &&
+    !table.includes('action="visibility"') &&
+    !table.includes('action="duplicate"') &&
+    !table.includes('action="archive"') &&
+    !table.includes('action="restore"'),
+  "Rows expose only edit and explicit delete actions",
+);
+check(
+  client.includes("<AdminEntityList") &&
+    table.includes("AdminEntityColumnDef") &&
+    table.includes("AdminConfirmDialog") &&
+    !table.includes("window.confirm") &&
+    !client.includes("window.confirm"),
+  "Project list delegates Data Grid, column state, feedback, and confirmation to shared owners",
+);
+check(
+  [
+    '"project"',
+    '"english_name"',
+    '"slug"',
+    '"location"',
+    '"updated_at"',
+    '"actions"',
+  ].every((column) => config.includes(column)) &&
+    !config.includes("publication_status") &&
+    !config.includes("featured"),
+  "Column preferences contain only clean list columns",
+);
+check(
+  residentialPage.includes("loadProjectsEntityListResult(initialQuery)") &&
+    residentialPage.includes("requireAdminSession()"),
+  "Residential RSC authenticates and hydrates the shared list",
+);
+check(
+  commercialPage.includes("loadProjectsEntityListResult(initialQuery)") &&
+    commercialPage.includes("requireAdminSession()"),
+  "Commercial RSC authenticates and hydrates the shared list",
+);
+check(
+  !residentialPage.includes("/admin/projects/construction-updates"),
+  "Construction updates are excluded from the clean list navigation",
+);
+check(
+  !actions.includes("bulkProjectsActionAjax") &&
+    !actions.includes("duplicateProjectAjax") &&
+    !actions.includes("toggleProjectPublicationAjax") &&
+    !actionIndex.includes("bulkProjectsActionAjax") &&
+    !actionIndex.includes("duplicateProjectAjax") &&
+    !actionIndex.includes("toggleProjectPublicationAjax"),
+  "Legacy project commands are not exported from either action boundary",
+);
+checkAbsent(
+  "src/app/admin/projects/project-actions/status.ts",
+  "Legacy status action owner is removed",
+);
+checkAbsent(
+  "src/app/admin/projects/project-actions/bulk.ts",
+  "Legacy bulk action owner is removed",
+);
+checkAbsent(
+  "src/app/admin/projects/project-actions/duplicate.ts",
+  "Legacy duplicate action owner is removed",
+);
+checkAbsent(
+  "src/app/admin/projects/projects-table/LegacyProjectsTable.tsx",
+  "The second legacy Project table renderer is removed",
+);
+check(
+  deletion.includes("requireAdminSession") &&
+    deletion.includes(`"${deleteProjectRpc}"`) &&
+    !deletion.includes(directProjectDelete) &&
+    deletion.includes('.from("project_videos")') &&
+    deletion.includes('domainKey: "project_videos"'),
+  "Explicit deletion is RPC-owned, authenticated, and synchronizes clean video identities",
+);
+check(
+  migration.includes(`function public.${deleteProjectRpc}`) &&
+    migration.includes(`grant execute on function public.${deleteProjectRpc}(bigint) to service_role`),
+  "Aggregate delete RPC is service-role-only",
+);
+checkAbsent(
+  "scripts/qa-admin-instant-projects.mjs",
+  "Obsolete destructive legacy Project QA surface is removed",
+);
+check(
+  migration.includes("drop function if exists public.admin_list_projects") &&
+    !migration.includes("create or replace function public.admin_list_projects"),
+  "The clean migration drops rather than replaces the legacy list RPC",
 );
 
-// Audit: archive is not delete.
-check(auditActions.includes('archive: "archive"'), "shared audit vocabulary includes archive");
-check(
-  statusActions.includes('buildCmsAuditAction("project", "archive")') &&
-    !statusActions.includes('buildCmsAuditAction("project", "delete")'),
-  "single archive audits as archive, not delete",
-);
-check(
-  bulkActions.includes('action === "archive" ? "archive"') &&
-    !bulkActions.includes('action === "archive" ? "delete"'),
-  "bulk archive audits as archive, not delete",
-);
-check(
-  deleteActions.includes('buildCmsAuditAction("project", "delete")'),
-  "permanent delete still audits as delete",
-);
-
-const residential = normalizeAdminEntityListQuery(
+const normalized = normalizeAdminEntityListQuery(
   projectsQueryContract,
-  "type=residential&page=2&limit=20&sort=code_desc&q=tower&publication_status=published&featured=yes&list_mode=active",
+  "type=commercial&q=  Nile   Tower  &page=2&limit=20&sort=english_name_asc",
 );
-const commercial = withLockedProjectType(
-  normalizeAdminEntityListQuery(projectsQueryContract, "type=commercial").filters,
-  "commercial",
-);
-check(residential.filters.projectType === "residential", "residential type parsed");
-check(commercial.projectType === "commercial", "commercial type locked");
 check(
-  serializeAdminEntityListQuery(residential) !==
-    serializeAdminEntityListQuery({
-      ...residential,
-      filters: { ...residential.filters, projectType: "commercial" },
-    }),
-  "project-type isolation changes dataset identity",
+  normalized.filters.projectType === "commercial" &&
+    normalized.search === "Nile Tower" &&
+    normalized.page === 2 &&
+    normalized.pageSize === 20 &&
+    normalized.sort.field === "english_name" &&
+    normalized.sort.direction === "asc",
+  "Clean Project URL state normalizes search, paging, type, and sort",
 );
-
-assert.throws(
-  () => parseAdminEntityListRequestQuery(projectsQueryContract, "type=warehouse"),
-  AdminEntityListQueryValidationError,
+check(
+  withLockedProjectType(normalized.filters, "residential").projectType ===
+    "residential",
+  "Page ownership can lock the Project type",
 );
-assertions += 1;
-assert.throws(
-  () => parseAdminEntityListRequestQuery(projectsQueryContract, "sort=unsafe_desc"),
-  AdminEntityListQueryValidationError,
-);
-assertions += 1;
-assert.throws(
-  () => parseAdminEntityListRequestQuery(projectsQueryContract, "publication_status=bogus"),
-  AdminEntityListQueryValidationError,
-);
-assertions += 1;
-assert.throws(
-  () => parseAdminEntityListRequestQuery(projectsQueryContract, "list_mode=trash"),
-  AdminEntityListQueryValidationError,
-);
-assertions += 1;
-assert.throws(
-  () => parseAdminEntityListRequestQuery(projectsQueryContract, "limit=15"),
-  AdminEntityListQueryValidationError,
-);
-assertions += 1;
-
-const valid = parseAdminEntityListRequestQuery(
+const written = writeAdminEntityListQuery(
   projectsQueryContract,
-  "type=residential&page=2&limit=20&sort=arabic_name_asc&q=alpha&publication_status=draft&implementation_status=delivered&featured=no&list_mode=archived",
+  normalized,
 );
-check(valid.filters.projectType === "residential", "strict parse keeps project type");
-check(valid.filters.publicationStatus === "draft", "strict parse keeps publication filter");
-check(valid.filters.implementationStatus === "delivered", "strict parse keeps implementation filter");
-check(valid.filters.featured === "no", "strict parse keeps featured filter");
-check(valid.filters.listMode === "archived", "strict parse keeps list mode");
 check(
-  writeAdminEntityListQuery(projectsQueryContract, valid).get("type") === "residential",
-  "URL writer always emits project type",
+  written.get("type") === "commercial" &&
+    written.get("q") === "Nile Tower" &&
+    written.get("publication_status") === null,
+  "Clean Project URL serialization never emits legacy publication state",
+);
+let oldParamRejected = false;
+try {
+  parseAdminEntityListRequestQuery(
+    projectsQueryContract,
+    "type=residential&publication_status=published",
+  );
+} catch {
+  oldParamRejected = true;
+}
+check(
+  oldParamRejected,
+  "Strict Project request boundary rejects removed publication parameters",
 );
 
-check(adapter.includes("projectEntityListRowSchema"), "adapter defines row schema");
-check(adapter.includes("projectsEntityListResultSchema"), "adapter defines result schema");
-check(adapter.includes("createAdminEntityListResultSchema"), "adapter uses shared result schema factory");
-check(types.includes("export type ProjectEntityListRow"), "shared client-safe row type exists");
-check(types.includes("export type ProjectEntityListMetrics"), "shared client-safe metrics type exists");
-
-const membershipRow = (
-  publication_status: string,
-  overrides: Partial<ProjectEntityListRow> = {},
-): ProjectEntityListRow => ({
-  id: 1,
-  code: "R-1",
-  slug: "r-1",
-  arabic_name: "برج القاهرة",
-  location_label: "القاهرة",
-  map_area: "وسط البلد",
-  featured: false,
-  publication_status,
-  status: "under-construction",
-  updated_at: "2026-07-21T00:00:00.000Z",
-  ...overrides,
-});
-
-function membershipHarness(rows: ProjectEntityListRow[]) {
-  let current = rows.map((row) => ({ ...row }));
-  let removed = new Set<number | string>();
-  return {
-    cache: {
-      patchRows(updater: (row: ProjectEntityListRow) => ProjectEntityListRow) {
-        current = current.map(updater);
-      },
-      removeRows(ids: ReadonlySet<number | string>) {
-        removed = new Set([...removed, ...ids]);
-        current = current.filter((row) => !ids.has(row.id));
-      },
-      upsertRows() {},
-    },
-    rows: () => current,
-    removed: () => removed,
-    restore(rowsToRestore: ProjectEntityListRow[]) {
-      current = rowsToRestore.map((row) => ({ ...row }));
-      removed = new Set();
-    },
-  };
+if (failures.length > 0) {
+  console.error("verify-admin-instant-projects FAILED:");
+  for (const failure of failures) console.error(` - ${failure}`);
+  process.exit(1);
 }
 
-const filters = (
-  overrides: Partial<ProjectFilters> = {},
-): ProjectFilters => ({
-  projectType: "residential",
-  publicationStatus: "all",
-  implementationStatus: "all",
-  featured: "all",
-  listMode: "all",
-  ...overrides,
-});
-
-check(
-  projectRowMatchesDataset(
-    membershipRow("published"),
-    "برج القاهرة",
-    filters({
-      publicationStatus: "published",
-      implementationStatus: "under-construction",
-      featured: "no",
-      listMode: "active",
-    }),
-  ),
-  "complete matching dataset membership keeps row",
-);
-
-function verifyPublicationTransition(
-  label: string,
-  sourceStatus: string,
-  nextStatus: string,
-  activeFilters: ProjectFilters,
-  expectedRemoval: boolean,
-) {
-  const source = membershipRow(sourceStatus);
-  const harness = membershipHarness([source]);
-  applyProjectPublicationMutation(
-    harness.cache,
-    [source],
-    new Set([source.id]),
-    nextStatus,
-    "",
-    activeFilters,
-  );
-  check(
-    harness.removed().has(source.id) === expectedRemoval,
-    `${label}: removal matches membership`,
-  );
-  check(
-    expectedRemoval ||
-      harness.rows()[0]?.publication_status === nextStatus,
-    `${label}: matching row is patched`,
-  );
-}
-
-verifyPublicationTransition(
-  "published to unpublished in published filter",
-  "published",
-  "unpublished",
-  filters({ publicationStatus: "published" }),
-  true,
-);
-verifyPublicationTransition(
-  "unpublished to published in unpublished filter",
-  "unpublished",
-  "published",
-  filters({ publicationStatus: "unpublished" }),
-  true,
-);
-verifyPublicationTransition(
-  "draft to published in draft filter",
-  "draft",
-  "published",
-  filters({ publicationStatus: "draft" }),
-  true,
-);
-verifyPublicationTransition(
-  "archive in active mode",
-  "published",
-  "archived",
-  filters({ listMode: "active" }),
-  true,
-);
-verifyPublicationTransition(
-  "archive in non-all publication filter",
-  "published",
-  "archived",
-  filters({ publicationStatus: "published" }),
-  true,
-);
-verifyPublicationTransition(
-  "restore in archived mode",
-  "archived",
-  "draft",
-  filters({ listMode: "archived" }),
-  true,
-);
-verifyPublicationTransition(
-  "restore in archived publication filter",
-  "archived",
-  "draft",
-  filters({ publicationStatus: "archived" }),
-  true,
-);
-verifyPublicationTransition(
-  "publication change in unfiltered dataset",
-  "draft",
-  "published",
-  filters(),
-  false,
-);
-
-const bulkHideRows = [
-  membershipRow("published", { id: 21 }),
-  membershipRow("published", { id: 22 }),
-];
-const bulkHideHarness = membershipHarness(bulkHideRows);
-applyProjectPublicationMutation(
-  bulkHideHarness.cache,
-  bulkHideRows,
-  new Set([21, 22]),
-  "unpublished",
-  "",
-  filters({ publicationStatus: "published" }),
-);
-check(
-  bulkHideHarness.removed().size === 2,
-  "bulk hide removes every row leaving publication dataset",
-);
-
-const bulkArchiveRows = [
-  membershipRow("published", { id: 31 }),
-  membershipRow("draft", { id: 32 }),
-];
-const bulkArchiveHarness = membershipHarness(bulkArchiveRows);
-applyProjectPublicationMutation(
-  bulkArchiveHarness.cache,
-  bulkArchiveRows,
-  new Set([31, 32]),
-  "archived",
-  "",
-  filters({ listMode: "active" }),
-);
-check(
-  bulkArchiveHarness.removed().size === 2,
-  "bulk archive removes every row leaving active dataset",
-);
-
-const mixedRows = [
-  membershipRow("draft", { id: 11, code: "VALID" }),
-  membershipRow("draft", { id: 12, code: "SKIPPED" }),
-];
-const mixedHarness = membershipHarness(mixedRows);
-applyProjectPublicationMutation(
-  mixedHarness.cache,
-  mixedRows,
-  new Set([11, 12]),
-  "published",
-  "",
-  filters(),
-);
-check(
-  mixedHarness.rows().every((row) => row.publication_status === "published"),
-  "bulk publish applies optimistic state to selected rows",
-);
-// Mirrors reconcileSuccess: exact snapshot first, then only authoritative IDs.
-mixedHarness.restore(mixedRows);
-applyProjectPublicationMutation(
-  mixedHarness.cache,
-  mixedRows,
-  new Set([11]),
-  "published",
-  "",
-  filters(),
-);
-check(
-  mixedHarness.rows().find((row) => row.id === 11)?.publication_status ===
-    "published",
-  "partial bulk publish keeps affected ID published",
-);
-check(
-  mixedHarness.rows().find((row) => row.id === 12)?.publication_status ===
-    "draft",
-  "partial bulk publish restores skipped ID exactly",
-);
-
-const baseQuery = normalizeAdminEntityListQuery(
-  projectsQueryContract,
-  "type=residential",
-);
-const pageOneQuery: AdminEntityListQuery<ProjectFilters, ProjectSortField> = {
-  ...baseQuery,
-  page: 1,
-  pageSize: 3,
-};
-const pageTwoQuery: AdminEntityListQuery<ProjectFilters, ProjectSortField> = {
-  ...baseQuery,
-  page: 2,
-  pageSize: 3,
-};
-const differentSortQuery: AdminEntityListQuery<ProjectFilters, ProjectSortField> = {
-  ...baseQuery,
-  page: 1,
-  pageSize: 3,
-  sort: { field: "code", direction: "desc" },
-};
-const differentPageSizeQuery: AdminEntityListQuery<ProjectFilters, ProjectSortField> = {
-  ...baseQuery,
-  page: 1,
-  pageSize: 2,
-};
-const differentSearchQuery: AdminEntityListQuery<ProjectFilters, ProjectSortField> = {
-  ...baseQuery,
-  search: "other",
-  page: 1,
-  pageSize: 3,
-};
-const differentTypeQuery: AdminEntityListQuery<ProjectFilters, ProjectSortField> = {
-  ...baseQuery,
-  filters: { ...baseQuery.filters, projectType: "commercial" },
-  page: 1,
-  pageSize: 3,
-};
-const differentModeQuery: AdminEntityListQuery<ProjectFilters, ProjectSortField> = {
-  ...baseQuery,
-  filters: { ...baseQuery.filters, listMode: "archived" },
-  page: 1,
-  pageSize: 3,
-};
-
-check(isSameAdminEntityListScope(pageOneQuery, pageTwoQuery), "page excluded from dataset identity");
-check(isSameAdminEntityListScope(pageOneQuery, differentSortQuery), "sort excluded from dataset identity");
-check(
-  isSameAdminEntityListScope(pageOneQuery, differentPageSizeQuery),
-  "pageSize excluded from dataset identity",
-);
-check(!isSameAdminEntityListScope(pageOneQuery, differentSearchQuery), "search defines dataset identity");
-check(!isSameAdminEntityListScope(pageOneQuery, differentTypeQuery), "project type defines dataset identity");
-check(!isSameAdminEntityListScope(pageOneQuery, differentModeQuery), "list mode filter defines dataset identity");
-
-type ScopeRow = {
-  id: number;
-  code: string;
-  slug: string | null;
-  arabic_name: string;
-  location_label: string | null;
-  map_area: string | null;
-  featured: boolean;
-  publication_status: string | null;
-  status: string | null;
-  updated_at: string;
-};
-type ScopeMetrics = { published: number; featured: number };
-const scopeMeta = {
-  generatedAt: "2026-07-21T00:00:00.000Z",
-  mode: "server-page" as const,
-};
-const scopeClient = new QueryClient({
-  defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
-});
-const sample = (id: number, code: string): ScopeRow => ({
-  id,
-  code,
-  slug: code.toLowerCase(),
-  arabic_name: code,
-  location_label: "Cairo",
-  map_area: null,
-  featured: false,
-  publication_status: "published",
-  status: "delivered",
-  updated_at: "2026-07-21T00:00:00.000Z",
-});
-scopeClient.setQueryData(
-  adminEntityListQueryKeys.query("projects", pageOneQuery),
-  {
-    rows: [sample(1, "A"), sample(2, "B"), sample(3, "C")],
-    pagination: { page: 1, pageSize: 3, totalRows: 4, totalPages: 2 },
-    metrics: { published: 4, featured: 1 },
-    meta: scopeMeta,
-  } satisfies AdminEntityListResult<ScopeRow, ScopeMetrics>,
-);
-scopeClient.setQueryData(
-  adminEntityListQueryKeys.query("projects", pageTwoQuery),
-  {
-    rows: [sample(4, "D")],
-    pagination: { page: 2, pageSize: 3, totalRows: 4, totalPages: 2 },
-    metrics: { published: 4, featured: 1 },
-    meta: scopeMeta,
-  } satisfies AdminEntityListResult<ScopeRow, ScopeMetrics>,
-);
-scopeClient.setQueryData(
-  adminEntityListQueryKeys.query("projects", differentSortQuery),
-  {
-    rows: [sample(4, "D"), sample(3, "C"), sample(2, "B")],
-    pagination: { page: 1, pageSize: 3, totalRows: 4, totalPages: 2 },
-    metrics: { published: 4, featured: 1 },
-    meta: scopeMeta,
-  } satisfies AdminEntityListResult<ScopeRow, ScopeMetrics>,
-);
-scopeClient.setQueryData(
-  adminEntityListQueryKeys.query("projects", differentPageSizeQuery),
-  {
-    rows: [sample(1, "A"), sample(2, "B")],
-    pagination: { page: 1, pageSize: 2, totalRows: 4, totalPages: 2 },
-    metrics: { published: 4, featured: 1 },
-    meta: scopeMeta,
-  } satisfies AdminEntityListResult<ScopeRow, ScopeMetrics>,
-);
-scopeClient.setQueryData(
-  adminEntityListQueryKeys.query("projects", differentSearchQuery),
-  {
-    rows: [sample(9, "Z")],
-    pagination: { page: 1, pageSize: 3, totalRows: 1, totalPages: 1 },
-    metrics: { published: 1, featured: 0 },
-    meta: scopeMeta,
-  } satisfies AdminEntityListResult<ScopeRow, ScopeMetrics>,
-);
-scopeClient.setQueryData(
-  adminEntityListQueryKeys.query("projects", differentTypeQuery),
-  {
-    rows: [sample(8, "X")],
-    pagination: { page: 1, pageSize: 3, totalRows: 1, totalPages: 1 },
-    metrics: { published: 1, featured: 0 },
-    meta: scopeMeta,
-  } satisfies AdminEntityListResult<ScopeRow, ScopeMetrics>,
-);
-
-const snapshot = scopeClient.getQueriesData<AdminEntityListResult<ScopeRow, ScopeMetrics>>({
-  queryKey: adminEntityListQueryKeys.queries("projects"),
-  predicate: (query) =>
-    isSameAdminEntityListScope(
-      JSON.parse(String(query.queryKey[3])) as AdminEntityListQuery<
-        Record<string, unknown>,
-        string
-      >,
-      pageOneQuery,
-    ),
-});
-check(snapshot.length === 4, "snapshot covers same-dataset cached views");
-
-setAdminEntityListCachesInScope<ScopeRow, ScopeMetrics>(
-  scopeClient,
-  "projects",
-  pageOneQuery,
-  (data) => removeAdminEntityRows(data, new Set([4])),
-);
-const readScoped = (
-  query: AdminEntityListQuery<ProjectFilters, ProjectSortField>,
-) =>
-  scopeClient.getQueryData<AdminEntityListResult<ScopeRow, ScopeMetrics>>(
-    adminEntityListQueryKeys.query("projects", query),
-  )?.pagination;
-const readScopedRows = (
-  query: AdminEntityListQuery<ProjectFilters, ProjectSortField>,
-) =>
-  scopeClient.getQueryData<AdminEntityListResult<ScopeRow, ScopeMetrics>>(
-    adminEntityListQueryKeys.query("projects", query),
-  )?.rows;
-check(readScoped(pageOneQuery)?.totalRows === 3, "cross-page totalRows patched");
-check(readScoped(pageTwoQuery)?.totalRows === 3, "page-two totalRows patched");
-check(readScoped(differentSortQuery)?.totalRows === 3, "cross-sort totalRows patched");
-check(readScoped(differentPageSizeQuery)?.totalRows === 3, "cross-page-size totalRows patched");
-check(readScoped(pageOneQuery)?.totalPages === 1, "totalPages stays consistent for pageSize 3");
-check(readScoped(differentPageSizeQuery)?.totalPages === 2, "totalPages stays consistent for pageSize 2");
-check(readScoped(differentSearchQuery)?.totalRows === 1, "search dataset isolated from patch");
-check(readScoped(differentTypeQuery)?.totalRows === 1, "project-type dataset isolated from patch");
-
-snapshot.forEach(([key, value]) => scopeClient.setQueryData(key, value));
-check(readScoped(pageOneQuery)?.totalRows === 4, "deterministic rollback restores page one");
-check(readScoped(pageTwoQuery)?.totalRows === 4, "deterministic rollback restores page two");
-check(readScoped(differentSortQuery)?.totalRows === 4, "deterministic rollback restores sort view");
-check(readScoped(differentPageSizeQuery)?.totalRows === 4, "deterministic rollback restores page-size view");
-check(
-  JSON.stringify(readScopedRows(pageTwoQuery)) ===
-    JSON.stringify([sample(4, "D")]),
-  "deterministic rollback restores exact row values",
-);
-scopeClient.clear();
-
-const controllerQueryClient = new QueryClient({
-  defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
-});
-const requestedOutOfRangeQuery: AdminEntityListQuery<
-  ProjectFilters,
-  ProjectSortField
-> = { ...baseQuery, page: 999 };
-const normalizedResult = {
-  rows: [sample(4, "D")],
-  pagination: { page: 2, pageSize: 10, totalRows: 11, totalPages: 2 },
-  metrics: { published: 8, featured: 2 },
-  meta: scopeMeta,
-} satisfies AdminEntityListResult<ScopeRow, ScopeMetrics>;
-let clientEndpointRequests = 0;
-let reconciledPage: number | null = null;
-await controllerQueryClient.fetchQuery({
-  queryKey: adminEntityListQueryKeys.query("projects", requestedOutOfRangeQuery),
-  queryFn: async () => {
-    clientEndpointRequests += 1;
-    const reconciledQuery = cacheNormalizedAdminEntityListResult(
-      controllerQueryClient,
-      "projects",
-      requestedOutOfRangeQuery,
-      normalizedResult,
-    );
-    reconciledPage = reconciledQuery?.page ?? null;
-    return normalizedResult;
-  },
-});
-check(reconciledPage === 2, "out-of-range normalizes to last page");
-const normalizedCacheResult = await controllerQueryClient.fetchQuery({
-  queryKey: adminEntityListQueryKeys.query("projects", {
-    ...requestedOutOfRangeQuery,
-    page: 2,
-  }),
-  queryFn: async () => {
-    clientEndpointRequests += 1;
-    throw new Error("Normalized query must reuse the transferred result.");
-  },
-});
-check(clientEndpointRequests === 1, "out-of-range requires only one list request");
-check(
-  (normalizedCacheResult as AdminEntityListResult<ScopeRow, ScopeMetrics>)
-    .pagination.page === 2,
-  "normalized cache keeps totalRows/totalPages contract",
-);
-controllerQueryClient.clear();
-
-// Behavioral shared-core column contracts for projects.
-function toColumnDefs(
-  meta: readonly {
-    key: string;
-    label: string;
-    defaultVisible: boolean;
-    hideable: boolean;
-  }[],
-) {
-  return meta.map((column) => ({
-    key: column.key,
-    label: column.label,
-    defaultVisible: column.defaultVisible,
-    hideable: column.hideable,
-    minWidth: 44,
-    renderCell: () => null,
-  }));
-}
-
-const residentialDefs = toColumnDefs(PROJECTS_RESIDENTIAL_COLUMNS);
-const commercialDefs = toColumnDefs(PROJECTS_COMMERCIAL_COLUMNS);
-const residentialDefaults = getDefaultVisibleColumnKeys(residentialDefs);
-const commercialDefaults = getDefaultVisibleColumnKeys(commercialDefs);
-check(
-  residentialDefaults.includes("selection") &&
-    residentialDefaults.includes("actions") &&
-    residentialDefaults.includes("project"),
-  "residential defaults keep locked identity columns",
-);
-check(
-  commercialDefaults.includes("selection") &&
-    commercialDefaults.includes("actions") &&
-    commercialDefaults.includes("code") &&
-    commercialDefaults.includes("location"),
-  "commercial defaults keep locked identity columns and location",
-);
-check(
-  !residentialDefaults.includes("location") &&
-    !commercialDefaults.includes("project"),
-  "residential/commercial defaults stay layout-specific",
-);
-
-const residentialHidden = sanitizeVisibleColumnKeys(residentialDefs, [
-  "selection",
-  "project",
-  "actions",
-]);
-check(
-  residentialHidden.includes("selection") &&
-    residentialHidden.includes("project") &&
-    residentialHidden.includes("actions") &&
-    !residentialHidden.includes("code"),
-  "residential sanitize allows hiding hideable columns",
-);
-const residentialMissingLocked = sanitizeVisibleColumnKeys(residentialDefs, [
-  "code",
-  "featured",
-]);
-check(
-  residentialMissingLocked.includes("selection") &&
-    residentialMissingLocked.includes("project") &&
-    residentialMissingLocked.includes("actions"),
-  "residential sanitize restores locked columns when omitted",
-);
-const commercialMissingLocked = sanitizeVisibleColumnKeys(commercialDefs, [
-  "featured",
-]);
-check(
-  commercialMissingLocked.includes("selection") &&
-    commercialMissingLocked.includes("code") &&
-    commercialMissingLocked.includes("actions"),
-  "commercial sanitize restores locked columns when omitted",
-);
-
-const residentialPersisted = filterPersistableColumnKeys(
-  [...getProjectsDefaultColumnKeys("residential"), "selection", "actions", "bogus"],
-  getProjectsPreferenceColumnKeys("residential"),
-);
-check(
-  !residentialPersisted.includes("selection") &&
-    !residentialPersisted.includes("actions") &&
-    !residentialPersisted.includes("bogus") &&
-    residentialPersisted.includes("code"),
-  "residential persistence allowlist excludes locked/unknown keys",
-);
-const commercialPersisted = filterPersistableColumnKeys(
-  [...getProjectsDefaultColumnKeys("commercial"), "selection", "project"],
-  getProjectsPreferenceColumnKeys("commercial"),
-);
-check(
-  !commercialPersisted.includes("selection") &&
-    !commercialPersisted.includes("project") &&
-    commercialPersisted.includes("location"),
-  "commercial persistence allowlist excludes locked/foreign keys",
-);
-check(
-  getProjectsColumnMeta("residential").some((column) => column.key === "project") &&
-    getProjectsColumnMeta("commercial").some((column) => column.key === "location"),
-  "column meta APIs expose layout-specific columns",
-);
-
-console.log(
-  `verify:admin-instant-projects passed (${assertions} structural/runtime assertions)`,
-);
-console.log(`out-of-range client endpoint request count: ${clientEndpointRequests}`);
+console.log(`verify-admin-instant-projects OK (${passed} checks)`);

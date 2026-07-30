@@ -8,6 +8,7 @@ type AdminTagsFieldProps = {
   defaultTags?: string[];
   placeholder?: string;
   helperText?: string;
+  appearance?: "dark" | "light";
 };
 
 const TAG_SPLIT_PATTERN = /[,;،؛]+/;
@@ -41,6 +42,7 @@ export default function AdminTagsField({
   defaultTags = [],
   placeholder = "اكتب كلمة مفتاحية ثم Enter أو , أو ;",
   helperText = "يمكن أن تحتوي الكلمة على مسافات، مثل: بيت الوطن",
+  appearance = "dark",
 }: AdminTagsFieldProps) {
   const [tags, setTags] = useState<string[]>(() => defaultTags.filter(Boolean));
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -155,6 +157,7 @@ export default function AdminTagsField({
   function cancelEdit() {
     setEditingIndex(null);
     setEditingValue("");
+    syncHiddenValue(tagsRef.current);
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -202,18 +205,20 @@ export default function AdminTagsField({
     }
   }
 
-  function stopComposeInputBubble(event: React.SyntheticEvent<HTMLInputElement>) {
+  function handleComposeInput(event: React.SyntheticEvent<HTMLInputElement>) {
     event.stopPropagation();
     event.nativeEvent.stopImmediatePropagation();
+    const pending = normalizeTag(event.currentTarget.value);
+    syncHiddenValue(pending ? [...tagsRef.current, pending] : tagsRef.current);
   }
 
   return (
     <div ref={rootRef} data-admin-tags-field className="mt-6">
       <input ref={hiddenRef} type="hidden" name={name} defaultValue={tags.join(", ")} />
 
-      <span className="text-sm font-medium text-white/75">{label}</span>
+      <span className={`text-sm font-medium ${appearance === "light" ? "text-slate-700" : "text-white/75"}`}>{label}</span>
 
-      <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 px-3 py-3 focus-within:border-[#D8B87A]/45">
+      <div className={`mt-3 rounded-2xl border px-3 py-3 focus-within:border-[#D8B87A]/45 ${appearance === "light" ? "border-slate-200 bg-white" : "border-white/10 bg-black/30"}`}>
         {tags.length ? (
           <div className="mb-2 flex flex-wrap gap-2">
             {tags.map((tag, index) =>
@@ -222,20 +227,26 @@ export default function AdminTagsField({
                   key={`${tag}-${index}-edit`}
                   autoFocus
                   value={editingValue}
-                  onChange={(event) => setEditingValue(event.target.value)}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setEditingValue(nextValue);
+                    const nextTags = [...tagsRef.current];
+                    nextTags[index] = normalizeTag(nextValue);
+                    syncHiddenValue(nextTags.filter(Boolean));
+                  }}
                   onBlur={commitEdit}
                   onKeyDown={handleEditKeyDown}
-                  className="min-w-[140px] rounded-full border border-[#D8B87A]/35 bg-black/40 px-3 py-1.5 text-sm text-white outline-none"
+                  className={`min-w-[140px] rounded-full border border-[#D8B87A]/35 px-3 py-1.5 text-sm outline-none ${appearance === "light" ? "bg-white text-slate-800" : "bg-black/40 text-white"}`}
                 />
               ) : (
                 <span
                   key={`${tag}-${index}`}
-                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1.5 text-sm text-[#F2D99B]"
+                  className={`inline-flex max-w-full items-center gap-1 rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1.5 text-sm ${appearance === "light" ? "text-[#8a5b12]" : "text-[#F2D99B]"}`}
                 >
                   <button
                     type="button"
                     onClick={() => startEditing(index)}
-                    className="cursor-pointer truncate text-right hover:text-white"
+                    className={`cursor-pointer truncate text-right ${appearance === "light" ? "hover:text-slate-950" : "hover:text-white"}`}
                     title="انقر للتعديل"
                   >
                     {tag}
@@ -243,7 +254,7 @@ export default function AdminTagsField({
                   <button
                     type="button"
                     onClick={() => removeTag(index)}
-                    className="cursor-pointer rounded-full px-1 text-xs text-white/45 transition hover:bg-white/10 hover:text-white"
+                    className={`cursor-pointer rounded-full px-1 text-xs transition ${appearance === "light" ? "text-slate-500 hover:bg-slate-100 hover:text-slate-950" : "text-white/45 hover:bg-white/10 hover:text-white"}`}
                     aria-label={`حذف ${tag}`}
                   >
                     ×
@@ -261,16 +272,15 @@ export default function AdminTagsField({
           onKeyDown={handleInputKeyDown}
           onPaste={handlePaste}
           onBlur={handleComposeBlur}
-          onInput={stopComposeInputBubble}
-          onChange={stopComposeInputBubble}
+          onInput={handleComposeInput}
           placeholder={placeholder}
-          className="w-full bg-transparent px-1 py-1 text-sm text-white outline-none placeholder:text-white/30"
+          className={`w-full bg-transparent px-1 py-1 text-sm outline-none ${appearance === "light" ? "text-slate-900 placeholder:text-slate-400" : "text-white placeholder:text-white/30"}`}
           autoComplete="off"
           spellCheck={false}
         />
       </div>
 
-      <p className="mt-2 text-xs text-white/35">
+      <p className={`mt-2 text-xs ${appearance === "light" ? "text-slate-500" : "text-white/35"}`}>
         {helperText} — عدد الكلمات الحالية: {tags.length}
       </p>
     </div>
