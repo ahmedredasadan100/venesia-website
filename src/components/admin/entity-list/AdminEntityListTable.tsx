@@ -11,6 +11,7 @@ import {
   AdminDataGridStickyActionsCell,
   AdminDataGridStickyActionsHeaderCell,
   ADMIN_DATA_GRID_HEADER_CLASSES,
+  getAdminDataGridFixedColumnStyle,
 } from "../ui/AdminDataGrid";
 import type { AdminGridId } from "../ui/useAdminGridSelection";
 
@@ -87,7 +88,41 @@ export default function AdminEntityListTable<
   rowClassName,
   onMutationResult,
 }: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>) {
+  const selectionColumnWidth = 46;
   const showSelection = Boolean(selection);
+  const flexibleColumnKey = columns.find(
+    (column) =>
+      !column.primary &&
+      column.sticky !== "start" &&
+      column.sticky !== "end",
+  )?.key;
+
+  function getColumnBaseWidth(
+    column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
+  ) {
+    return column.sticky === "end"
+      ? actionsColumnWidth
+      : Math.max(column.minWidth, column.width ?? column.minWidth);
+  }
+
+  const tableMinWidth =
+    (showSelection ? selectionColumnWidth : 0) +
+    columns.reduce(
+      (total, column) => total + getColumnBaseWidth(column),
+      0,
+    );
+
+  function getColumnTrackStyle(
+    column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
+  ) {
+    if (column.sticky === "end") {
+      return getAdminDataGridFixedColumnStyle(actionsColumnWidth);
+    }
+
+    return column.key === flexibleColumnKey
+      ? undefined
+      : getAdminDataGridFixedColumnStyle(getColumnBaseWidth(column));
+  }
 
   function renderHeaderLabel(column: AdminEntityColumnDef<TRow, TKey, TSortKey>) {
     if (!column.sortable || !column.sortKey || !sortMode) {
@@ -124,13 +159,23 @@ export default function AdminEntityListTable<
 
   return (
     <AdminDataGrid className={`max-w-full overflow-hidden ${className}`.trim()}>
-      <table className="w-max min-w-full table-fixed border-separate border-spacing-0 text-right">
+      <table
+        style={{
+          width: flexibleColumnKey === undefined ? tableMinWidth : "100%",
+          minWidth: tableMinWidth,
+        }}
+        className="w-full table-fixed border-separate border-spacing-0 text-right"
+      >
         <colgroup>
-          {showSelection ? <col style={{ width: 46 }} /> : null}
+          {showSelection ? (
+            <col
+              style={getAdminDataGridFixedColumnStyle(selectionColumnWidth)}
+            />
+          ) : null}
           {columns.map((column) => (
             <col
               key={column.key}
-              style={{ width: column.width ?? column.minWidth }}
+              style={getColumnTrackStyle(column)}
             />
           ))}
         </colgroup>
@@ -164,17 +209,14 @@ export default function AdminEntityListTable<
               const stickyPrimary =
                 column.primary || column.sticky === "start"
                   ? showSelection
-                    ? "sticky start-[46px] z-40 bg-[#10151C] text-right"
-                    : "sticky start-0 z-40 bg-[#10151C] text-right"
+                    ? "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-[46px] min-[641px]:z-40 bg-[#10151C] text-right"
+                    : "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-0 min-[641px]:z-40 bg-[#10151C] text-right"
                   : "";
 
               return (
                 <th
                   key={column.key}
-                  style={{
-                    minWidth: column.minWidth,
-                    width: column.width,
-                  }}
+                  style={getColumnTrackStyle(column)}
                   className={`whitespace-nowrap px-4 py-4 text-center ${stickyPrimary}`}
                 >
                   {content}
@@ -228,16 +270,15 @@ export default function AdminEntityListTable<
                   const stickyPrimary =
                     column.primary || column.sticky === "start"
                       ? showSelection
-                        ? "sticky start-[46px] z-30 bg-[#080B10] text-right transition group-hover:bg-[#0D1117]"
-                        : "sticky start-0 z-30 bg-[#080B10] text-right transition group-hover:bg-[#0D1117]"
+                        ? "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-[46px] min-[641px]:z-30 bg-[#080B10] text-right transition group-hover:bg-[#0D1117]"
+                        : "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-0 min-[641px]:z-30 bg-[#080B10] text-right transition group-hover:bg-[#0D1117]"
                       : "";
 
                   return (
                     <td
                       key={column.key}
                       style={{
-                        minWidth: column.minWidth,
-                        width: column.width,
+                        ...(getColumnTrackStyle(column) ?? {}),
                         ...(column.primary && depth > 0
                           ? { paddingInlineStart: undefined }
                           : {}),

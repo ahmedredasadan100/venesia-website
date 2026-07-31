@@ -3,14 +3,15 @@
 import Link from "next/link";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import {
-  AdminActivityPopover,
-  AdminConfirmDialog,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
-  AdminEntityPreviewActions,
+  AdminDataGridRowActions,
   AdminStatusPill,
-  getAdminDataGridActionsColumnWidth,
+  type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
+import {
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+} from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import {
   formatAdminDateTime,
@@ -18,7 +19,7 @@ import {
 } from "../../../../lib/content-dates";
 import type { SeriesListRow } from "../../../../lib/admin/content/load-series-list";
 import { buildAdminSeriesCollectionPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
-import { useRef, useState } from "react";
+import { resolveAdminEntityPreviewActions } from "../../../../lib/admin/interaction-system/entity-preview-capability";
 
 export type SeriesColumnKey =
   | "name"
@@ -43,11 +44,9 @@ export type SeriesSortKey =
   | "created_at"
   | "updated_at";
 
-export const SERIES_ACTIONS_COLUMN_WIDTH = getAdminDataGridActionsColumnWidth(
-  6,
-  "compact",
-  12,
-);
+export {
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH as SERIES_ACTIONS_COLUMN_WIDTH,
+} from "../../../../components/admin/ui/AdminDataGrid";
 
 function SeriesIcon() {
   return (
@@ -91,116 +90,146 @@ function SeriesRowActions({
   onMutationResult?: (result: AdminActionResult) => void;
   handlers: SeriesRowActionHandlers;
 }) {
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const pendingAction = handlers.rowPendingAction(row.id);
   const isHidden = row.status !== "published";
   const previewCapability = buildAdminSeriesCollectionPreviewCapability({
     id: row.id,
   });
+  const preview = resolveAdminEntityPreviewActions(previewCapability)[0];
 
-  async function run(
-    action: () => Promise<AdminActionResult>,
-  ) {
+  async function run(action: () => Promise<AdminActionResult>) {
     try {
       const result = await action();
       onMutationResult?.(result);
       return result;
     } catch {
-      onMutationResult?.({
+      const result: AdminActionResult = {
         ok: false,
         title: "تعذر تنفيذ العملية",
         message: "حدث خطأ غير متوقع. حاول مرة أخرى.",
-      });
-      return { ok: false as const };
+        entityId: row.id,
+      };
+      onMutationResult?.(result);
+      return result;
     }
   }
 
-  return (
-    <>
-      <AdminDataGridActionsCell compact>
-        <AdminDataGridActionButton
-          action="edit"
-          href={`/admin/content/series/${row.id}`}
-          size="compact"
-        />
-        <AdminEntityPreviewActions
-          capability={previewCapability}
-          presentation="data-grid-compact"
-        />
-        <AdminDataGridActionButton
-          action="visibility"
-          size="compact"
-          isCurrentlyHidden={isHidden}
-          visibilityEntityLabel="السلسلة"
-          pending={pendingAction === "visibility"}
-          disabled={pendingAction === "visibility"}
-          onClick={() =>
-            void run(() => handlers.onToggle(row))
-          }
-        />
-        <AdminDataGridActionButton
-          action="duplicate"
-          size="compact"
-          pending={pendingAction === "duplicate"}
-          disabled={pendingAction === "duplicate"}
-          onClick={() => void run(() => handlers.onDuplicate(row))}
-        />
-        <AdminDataGridActionButton
-          buttonRef={deleteTriggerRef}
-          action="delete"
-          size="compact"
-          pending={pendingAction === "delete"}
-          disabled={pendingAction === "delete"}
-          onClick={() => setDeleteOpen(true)}
-        />
-        <AdminActivityPopover
-          title={`نشاط السلسلة: ${row.name}`}
-          triggerLabel="معلومات النشاط"
-          items={[
-            {
-              label: "تاريخ الإنشاء",
-              value: row.created_at
-                ? formatAdminDateTime(row.created_at)
-                : "—",
-            },
-            {
-              label: "آخر تعديل",
-              value: row.updated_at
-                ? formatAdminDateTime(row.updated_at)
-                : "—",
-            },
-            {
-              label: "التصنيف",
-              value: row.category_name?.trim() || "—",
-            },
-            {
-              label: "الموضوعات",
-              value: String(row.topics_count),
-            },
-          ]}
-        />
-      </AdminDataGridActionsCell>
+  const pendingReason = "انتظر انتهاء الإجراء الحالي.";
+  const capability: AdminRowActionsCapability = {
+    entityType: "series",
+    entityId: row.id,
+    entityLabel: row.name,
+    actions: {
+      edit: {
+        access: "allowed",
+        href: `/admin/content/series/${row.id}`,
+      },
+      preview: preview
+        ? preview.disabled
+          ? {
+              access: "disabled",
+              disabledReason: "المعاينة غير متاحة لهذه السلسلة.",
+            }
+          : {
+              access: "allowed",
+              href: preview.href,
+              target: "_blank",
+              rel: "noopener noreferrer",
+            }
+        : { access: "hidden" },
+      information: {
+        access: "allowed",
+        title: `معلومات السلسلة: ${row.name}`,
+        items: [
+          {
+            label: "تاريخ الإنشاء",
+            value: row.created_at
+              ? formatAdminDateTime(row.created_at)
+              : "—",
+          },
+          {
+            label: "آخر تعديل",
+            value: row.updated_at
+              ? formatAdminDateTime(row.updated_at)
+              : "—",
+          },
+          {
+            label: "التصنيف",
+            value: row.category_name?.trim() || "—",
+          },
+          { label: "الموضوعات", value: String(row.topics_count) },
+        ],
+      },
+      copyPublicLink: { access: "hidden" },
+      visibility:
+        pendingAction === "visibility"
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+              isVisible: !isHidden,
+            }
+          : handlers.mutationBusy
+            ? {
+                access: "disabled",
+                disabledReason: pendingReason,
+                isVisible: !isHidden,
+              }
+            : {
+                access: "allowed",
+                isVisible: !isHidden,
+                onSelect: async () => {
+                  await run(() => handlers.onToggle(row));
+                },
+              },
+      featured: { access: "hidden" },
+      duplicate:
+        pendingAction === "duplicate"
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+            }
+          : handlers.mutationBusy
+            ? { access: "disabled", disabledReason: pendingReason }
+            : {
+                access: "allowed",
+                onSelect: async () => {
+                  await run(() => handlers.onDuplicate(row));
+                },
+              },
+      archive: { access: "hidden" },
+      delete:
+        pendingAction === "delete"
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+            }
+          : handlers.mutationBusy
+            ? { access: "disabled", disabledReason: pendingReason }
+            : {
+                access: "allowed",
+                confirmation: {
+                  mode: "shared",
+                  title: "حذف السلسلة",
+                  description: `هل تريد حذف سلسلة «${row.name}»؟ لا يمكن التراجع عن هذا الإجراء.`,
+                  confirmLabel: "حذف",
+                },
+                onSelect: async () => {
+                  const result = await run(() => handlers.onDelete(row));
+                  if (!result.ok) throw new Error(result.message);
+                },
+              },
+    },
+  };
 
-      <AdminConfirmDialog
-        open={deleteOpen}
-        title="حذف السلسلة"
-        description={`هل تريد حذف سلسلة «${row.name}»؟ لا يمكن التراجع عن هذا الإجراء.`}
-        confirmLabel="حذف"
-        pending={pendingAction === "delete"}
-        returnFocusRef={deleteTriggerRef}
-        onCancel={() => setDeleteOpen(false)}
-        onConfirm={async () => {
-          const result = await run(() => handlers.onDelete(row));
-          if (result?.ok) setDeleteOpen(false);
-        }}
-      />
-    </>
-  );
+  return <AdminDataGridRowActions capability={capability} size="compact" />;
 }
 
 export type SeriesRowActionHandlers = {
   rowPendingAction: (id: number) => string | null;
+  mutationBusy: boolean;
   onToggle: (row: SeriesListRow) => Promise<AdminActionResult>;
   onDuplicate: (row: SeriesListRow) => Promise<AdminActionResult>;
   onDelete: (row: SeriesListRow) => Promise<AdminActionResult>;
@@ -217,8 +246,8 @@ export function createSeriesColumns(
       hideable: false,
       sortable: true,
       sortKey: "name",
-      minWidth: 320,
-      width: 420,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
+      width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -227,7 +256,13 @@ export function createSeriesColumns(
           className="flex min-w-0 cursor-pointer items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
         >
           <SeriesIcon />
-          <span className="min-w-0 truncate text-sm font-bold text-white">
+          <span
+            className="min-w-0 truncate text-sm font-bold text-white"
+            style={{
+              maxWidth:
+                ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx,
+            }}
+          >
             {row.name}
           </span>
         </Link>
@@ -345,8 +380,8 @@ export function createSeriesColumns(
       defaultVisible: true,
       hideable: false,
       sortable: false,
-      minWidth: SERIES_ACTIONS_COLUMN_WIDTH,
-      width: SERIES_ACTIONS_COLUMN_WIDTH,
+      minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
       renderCell: ({ row, onMutationResult }) => (
         <SeriesRowActions

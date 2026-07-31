@@ -2,7 +2,12 @@ export type { PagesTableRow, PagesTableResult } from "./types";
 export { checkPagePathAvailable, createPage } from "./create-page";
 export { togglePageStatus } from "./page-status";
 export { bulkDeletePagesAjax, deletePage, deletePages } from "./page-delete";
-export { duplicatePage } from "./page-duplicate";
+export { duplicatePageAjax } from "./page-duplicate";
+export type { PageDuplicateResult } from "./page-duplicate";
+export {
+  restorePagesTablePreferences,
+  savePagesTablePreferences,
+} from "./column-preferences";
 export {
   assignHeroModule,
   assignMediaHubModule,

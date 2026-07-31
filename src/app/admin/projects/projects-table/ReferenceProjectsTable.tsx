@@ -1,30 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
 
 import {
-  AdminConfirmDialog,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
-  getAdminDataGridActionsColumnWidth,
+  AdminDataGridRowActions,
+  type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
+import {
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+} from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import type { ProjectSortField } from "../../../../lib/admin/projects/entity-list-contract";
 import type { ProjectColumnKey } from "../../../../lib/admin/projects/projects-list-config";
+import { getProjectHref } from "../../../../lib/projects/public-helpers";
 import { formatDate } from "./projects-table-utils";
 import type { ProjectGridRow } from "./projects-table-types";
 
-export const PROJECT_ACTIONS_COLUMN_WIDTH = getAdminDataGridActionsColumnWidth(
-  2,
-  "default",
-  12,
-);
+export {
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH as PROJECT_ACTIONS_COLUMN_WIDTH,
+} from "../../../../components/admin/ui/AdminDataGrid";
 
 export type ProjectRowActionHandlers = {
   rowPendingAction: (id: number) => string | null;
+  mutationBusy: boolean;
+  onCopyPublicLink: (row: ProjectGridRow) => Promise<AdminActionResult>;
   onDelete: (row: ProjectGridRow) => Promise<AdminActionResult>;
+  onDuplicate: (row: ProjectGridRow) => Promise<AdminActionResult>;
+  onToggleFeatured: (row: ProjectGridRow) => Promise<AdminActionResult>;
 };
 
 function ProjectIcon({ type }: Pick<ProjectGridRow, "type">) {
@@ -56,47 +61,99 @@ function ProjectRowActions({
   handlers: ProjectRowActionHandlers;
   onMutationResult?: (result: AdminActionResult) => void;
 }) {
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const pending = handlers.rowPendingAction(row.id) === "delete";
+  const pendingAction = handlers.rowPendingAction(row.id);
+  const pendingState = {
+    access: "disabled" as const,
+    disabledReason: "انتظر انتهاء الإجراء الحالي.",
+    pending: true,
+  };
+  const busyState = {
+    access: "disabled" as const,
+    disabledReason: "انتظر انتهاء الإجراء الحالي.",
+  };
 
-  async function deleteProject() {
-    const result = await handlers.onDelete(row);
+  async function run(
+    handler: (project: ProjectGridRow) => Promise<AdminActionResult>,
+  ) {
+    const result = await handler(row);
     onMutationResult?.(result);
-    if (result.ok) setDeleteOpen(false);
+    if (!result.ok) throw new Error(result.message);
   }
 
-  return (
-    <>
-      <AdminDataGridActionsCell>
-        <AdminDataGridActionButton
-          action="edit"
-          href={`/admin/projects/${row.id}`}
-          title="تعديل المشروع"
-        />
-        <AdminDataGridActionButton
-          buttonRef={deleteTriggerRef}
-          action="delete"
-          title="حذف نهائي — يتطلب تأكيدًا"
-          disabled={pending}
-          pending={pending}
-          onClick={() => setDeleteOpen(true)}
-        />
-      </AdminDataGridActionsCell>
+  const capability: AdminRowActionsCapability = {
+    entityType: "project",
+    entityId: row.id,
+    entityLabel: row.arabic_name,
+    actions: {
+      edit: {
+        access: "allowed",
+        href: `/admin/projects/${row.id}`,
+      },
+      preview: {
+        access: "allowed",
+        href: getProjectHref(row),
+        target: "_blank",
+        rel: "noopener noreferrer",
+      },
+      information: {
+        access: "allowed",
+        title: "معلومات المشروع",
+        items: [
+          { label: "المعرف", value: String(row.id) },
+          { label: "الرابط المختصر", value: row.slug },
+          {
+            label: "النوع",
+            value: row.type === "commercial" ? "تجاري" : "سكني",
+          },
+          { label: "الموقع", value: row.location_label || "—" },
+          { label: "التمييز", value: row.featured ? "مميز" : "عادي" },
+          { label: "آخر تحديث", value: formatDate(row.updated_at) },
+        ],
+      },
+      copyPublicLink: {
+        access: "allowed",
+        onSelect: () => run(handlers.onCopyPublicLink),
+      },
+      visibility: { access: "hidden" },
+      featured:
+        pendingAction === "featured"
+          ? { ...pendingState, isFeatured: row.featured }
+          : handlers.mutationBusy
+            ? { ...busyState, isFeatured: row.featured }
+            : {
+                access: "allowed",
+                isFeatured: row.featured,
+                onSelect: () => run(handlers.onToggleFeatured),
+              },
+      duplicate:
+        pendingAction === "duplicate"
+          ? pendingState
+          : handlers.mutationBusy
+            ? busyState
+            : {
+                access: "allowed",
+                onSelect: () => run(handlers.onDuplicate),
+              },
+      archive: { access: "hidden" },
+      delete: pendingAction === "delete"
+        ? pendingState
+        : handlers.mutationBusy
+          ? busyState
+          : {
+              access: "allowed",
+              onSelect: () => run(handlers.onDelete),
+              confirmation: {
+                mode: "shared",
+                title: "حذف نهائي للمشروع",
+                description: `سيُحذف «${row.arabic_name}» وكل بياناته التابعة من المخطط النظيف. لا يمكن التراجع عن هذا الإجراء.`,
+                confirmLabel: "تأكيد الحذف النهائي",
+              },
+            },
+    },
+  };
 
-      <AdminConfirmDialog
-        open={deleteOpen}
-        title="حذف نهائي للمشروع"
-        description={`سيُحذف «${row.arabic_name}» وكل بياناته التابعة من المخطط النظيف. لا يمكن التراجع عن هذا الإجراء.`}
-        confirmLabel="تأكيد الحذف النهائي"
-        pending={pending}
-        returnFocusRef={deleteTriggerRef}
-        onCancel={() => {
-          if (!pending) setDeleteOpen(false);
-        }}
-        onConfirm={deleteProject}
-      />
-    </>
+  return (
+    <AdminDataGridRowActions capability={capability} size="compact" />
   );
 }
 
@@ -119,8 +176,8 @@ export function createProjectColumns(
       hideable: false,
       sortable: true,
       sortKey: "arabic_name",
-      minWidth: 260,
-      width: 320,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
+      width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -130,7 +187,15 @@ export function createProjectColumns(
           title={`تعديل ${row.arabic_name}`}
         >
           <ProjectIcon type={row.type} />
-          <span className="min-w-0 truncate font-semibold text-white">{row.arabic_name}</span>
+          <span
+            className="min-w-0 truncate font-semibold text-white"
+            style={{
+              maxWidth:
+                ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx,
+            }}
+          >
+            {row.arabic_name}
+          </span>
         </Link>
       ),
     },
@@ -183,8 +248,8 @@ export function createProjectColumns(
       label: "الإجراءات",
       defaultVisible: true,
       hideable: false,
-      minWidth: PROJECT_ACTIONS_COLUMN_WIDTH,
-      width: PROJECT_ACTIONS_COLUMN_WIDTH,
+      minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
       renderCell: ({ row, onMutationResult }) => (
         <ProjectRowActions

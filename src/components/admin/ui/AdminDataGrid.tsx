@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type {
   ChangeEventHandler,
+  KeyboardEventHandler,
   MouseEventHandler,
   ReactNode,
   Ref,
@@ -30,13 +31,15 @@ type GridLineProps = BaseProps & {
   horizontalScroll?: boolean;
 };
 
-type DataGridAction =
+export type AdminDataGridAction =
   | "activity"
   | "archive"
+  | "copy-link"
   | "delete"
   | "duplicate"
   | "edit"
   | "feature"
+  | "more"
   | "preview"
   | "restore"
   | "visibility";
@@ -54,11 +57,12 @@ type ActionButtonProps = {
   rel?: string;
   type?: "button" | "submit";
   tone?: "gold" | "green" | "blue" | "red" | "dark";
-  action?: DataGridAction;
+  action?: AdminDataGridAction;
   isCurrentlyHidden?: boolean;
   visibilityEntityLabel?: string;
   className?: string;
   onClick?: MouseEventHandler<HTMLButtonElement>;
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
   disabled?: boolean;
   pending?: boolean;
   active?: boolean;
@@ -81,13 +85,15 @@ const actionTones: Record<NonNullable<ActionButtonProps["tone"]>, string> = {
   dark: "border-white/8 bg-white/[0.075] text-white transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A]",
 };
 
-const actionDefaults: Record<DataGridAction, { tone: NonNullable<ActionButtonProps["tone"]>; title: string }> = {
+const actionDefaults: Record<AdminDataGridAction, { tone: NonNullable<ActionButtonProps["tone"]>; title: string }> = {
   edit: { tone: "gold", title: "تعديل" },
   preview: { tone: "dark", title: "معاينة" },
   visibility: { tone: "green", title: "إظهار / إخفاء" },
   feature: { tone: "gold", title: "تمييز" },
   duplicate: { tone: "blue", title: "نسخ" },
+  more: { tone: "dark", title: "المزيد" },
   archive: { tone: "dark", title: "أرشفة" },
+  "copy-link": { tone: "dark", title: "نسخ الرابط العام" },
   restore: { tone: "dark", title: "استعادة" },
   delete: { tone: "red", title: "حذف" },
   activity: { tone: "dark", title: "معلومات النشاط" },
@@ -112,8 +118,106 @@ export function resolveAdminDataGridVisibilityAction(
       };
 }
 
+export const ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT = {
+  buttonCount: 3,
+  buttonPx: 40,
+  gapPx: 4,
+  cellInlinePaddingPx: 6,
+  borderSafetyPx: 4,
+} as const;
+
+export const ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH =
+  ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.buttonPx *
+    ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.buttonCount +
+  ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.gapPx *
+    (ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.buttonCount - 1) +
+  ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx * 2 +
+  ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.borderSafetyPx;
+
+export const ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT = {
+  textBudgetPx: 200,
+  cellInlinePaddingPx: 16,
+  itemGapPx: 12,
+  hierarchyDepthStepPx: 28,
+  hierarchyRootIconPx: 36,
+  hierarchyChildIconPx: 24,
+  hierarchyConnectorPx: 28,
+  hierarchyLinkInlinePaddingPx: 6,
+  hierarchyLabelInlinePaddingPx: 10,
+  hierarchyLabelBorderPx: 1,
+} as const;
+
+type AdminDataGridPrimaryColumnWidthOptions = {
+  iconPx: number;
+  gapCount?: number;
+  extraDecorationPx?: number;
+  maxVisibleDepth?: number;
+};
+
+function normalizeAdminDataGridHierarchyDepth(depth: number) {
+  return Number.isFinite(depth) ? Math.max(0, Math.trunc(depth)) : 0;
+}
+
+export function getAdminDataGridPrimaryColumnWidth({
+  iconPx,
+  gapCount = 1,
+  extraDecorationPx = 0,
+  maxVisibleDepth = 0,
+}: AdminDataGridPrimaryColumnWidthOptions) {
+  const contract = ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT;
+  return (
+    contract.textBudgetPx +
+    contract.cellInlinePaddingPx * 2 +
+    iconPx +
+    contract.itemGapPx * gapCount +
+    extraDecorationPx +
+    contract.hierarchyDepthStepPx *
+      normalizeAdminDataGridHierarchyDepth(maxVisibleDepth)
+  );
+}
+
+const hierarchyLabelChromePx =
+  (ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.hierarchyLinkInlinePaddingPx +
+    ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.hierarchyLabelInlinePaddingPx +
+    ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.hierarchyLabelBorderPx) *
+  2;
+
+export const ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH =
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx +
+  hierarchyLabelChromePx;
+
+export function getAdminDataGridHierarchyPrimaryColumnWidth(
+  maxVisibleDepth: number,
+) {
+  // One width is derived from the deepest row in the current visible tree
+  // snapshot; rows never calculate or mutate their own column width.
+  const depth = normalizeAdminDataGridHierarchyDepth(maxVisibleDepth);
+  const contract = ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT;
+
+  if (depth === 0) {
+    return getAdminDataGridPrimaryColumnWidth({
+      iconPx: contract.hierarchyRootIconPx,
+      extraDecorationPx: hierarchyLabelChromePx,
+    });
+  }
+
+  return getAdminDataGridPrimaryColumnWidth({
+    iconPx: contract.hierarchyChildIconPx,
+    gapCount: 2,
+    extraDecorationPx:
+      contract.hierarchyConnectorPx + hierarchyLabelChromePx,
+    maxVisibleDepth: depth,
+  });
+}
+
+export const ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS = {
+  textOnly: ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx,
+  compactIcon: getAdminDataGridPrimaryColumnWidth({ iconPx: 28 }),
+  standardIcon: getAdminDataGridPrimaryColumnWidth({ iconPx: 40 }),
+} as const;
+
 export const ADMIN_DATA_GRID_RULES = {
-  actionOrder: ["edit", "preview", "visibility", "duplicate", "delete"],
+  actionOrder: ["edit", "preview", "more"],
   actionButton: "h-11 w-11 rounded-[8px] cursor-pointer shrink-0",
   actionButtonCompact: "h-10 w-10 rounded-[8px] cursor-pointer shrink-0",
   actionIcon: "h-4 w-4 shrink-0",
@@ -122,9 +226,10 @@ export const ADMIN_DATA_GRID_RULES = {
   bulkBarTrigger: "selectedIds.length > 0",
   /** Default gap between action buttons (Tailwind gap-1.5 = 6px). */
   actionGapPx: 6,
-  actionGapCompactPx: 4,
+  actionGapCompactPx: ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.gapPx,
   actionButtonPx: 44,
-  actionButtonCompactPx: 40,
+  actionButtonCompactPx: ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.buttonPx,
+  actionCellInlinePadding: "px-1.5",
   /** Official row separator — opt-in via `AdminDataGridRow divided` (matches Topics divide-y). */
   rowDivider: "border-t border-white/8",
 } as const;
@@ -137,7 +242,8 @@ export const ADMIN_DATA_GRID_HEADER_CLASSES =
 export function getAdminDataGridActionsColumnWidth(
   buttonCount: number,
   size: "default" | "compact" = buttonCount > 4 ? "compact" : "default",
-  cellInlinePaddingPx = 0,
+  cellInlinePaddingPx =
+    ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx,
 ) {
   const buttonPx =
     size === "compact" ? ADMIN_DATA_GRID_RULES.actionButtonCompactPx : ADMIN_DATA_GRID_RULES.actionButtonPx;
@@ -145,7 +251,11 @@ export function getAdminDataGridActionsColumnWidth(
   const contentWidth = buttonPx * buttonCount + gapPx * Math.max(0, buttonCount - 1);
 
   // Small buffer so borders never clip at the cell edge.
-  return contentWidth + cellInlinePaddingPx * 2 + 4;
+  return (
+    contentWidth +
+    cellInlinePaddingPx * 2 +
+    ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.borderSafetyPx
+  );
 }
 
 export function adminDataGridActionsColumn(
@@ -161,6 +271,8 @@ export const ADMIN_DATA_GRID_ACTION_COLUMNS = {
   four: adminDataGridActionsColumn(4, "default"),
   /** 3 standard actions. */
   three: adminDataGridActionsColumn(3, "default"),
+  /** Canonical Row Actions track — edit, preview, more. */
+  threeCompact: `${ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}px`,
   /** 5 compact actions — reorder + CRUD rows. */
   fiveCompact: adminDataGridActionsColumn(5, "compact"),
   /** 6 compact actions — reorder + edit + visibility + duplicate + delete. */
@@ -193,12 +305,12 @@ export const ADMIN_DATA_GRID_COLUMNS = {
   slugCompact: "120px",
 } as const;
 
-function GridIcon({
+export function AdminDataGridActionIcon({
   action,
   isCurrentlyHidden = false,
   active = false,
 }: {
-  action: DataGridAction;
+  action: AdminDataGridAction;
   isCurrentlyHidden?: boolean;
   active?: boolean;
 }) {
@@ -260,6 +372,30 @@ function GridIcon({
         <path d="M14 3h7v7" />
         <path d="M10 14 21 3" />
         <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
+      </svg>
+    );
+  }
+
+  if (action === "copy-link") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M10.6 13.4a4 4 0 0 0 5.66 0l2.14-2.14a4 4 0 0 0-5.66-5.66l-1.22 1.22" />
+        <path d="M13.4 10.6a4 4 0 0 0-5.66 0L5.6 12.74a4 4 0 0 0 5.66 5.66l1.22-1.22" />
+      </svg>
+    );
+  }
+
+  if (action === "more") {
+    return (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className={ADMIN_DATA_GRID_RULES.actionIcon}
+        fill="currentColor"
+      >
+        <circle cx="5" cy="12" r="1.7" />
+        <circle cx="12" cy="12" r="1.7" />
+        <circle cx="19" cy="12" r="1.7" />
       </svg>
     );
   }
@@ -368,8 +504,31 @@ export function AdminDataGridRow({ children, columns, flushInlineEnd = false, ho
  */
 
 /** Checkbox cell — the only allowed wrapper for header/row checkboxes. */
-export function AdminDataGridCheckboxCell({ children, className = "" }: BaseProps) {
-  return <div className={`flex items-center justify-center ${className}`}>{children}</div>;
+export function AdminDataGridCheckboxCell({
+  children,
+  className = "",
+  sticky = false,
+  surface = "body",
+}: BaseProps & {
+  sticky?: boolean;
+  surface?: "header" | "body";
+}) {
+  return (
+    <div
+      data-admin-grid-sticky={sticky ? "inline-start" : undefined}
+      className={`flex items-center justify-center ${
+        sticky
+          ? `sticky start-0 ${
+              surface === "header"
+                ? "z-30 bg-[#10151C]"
+                : "z-20 bg-[#080B10]"
+            }`
+          : ""
+      } ${className}`.trim()}
+    >
+      {children}
+    </div>
+  );
 }
 
 /** Primary column cell — content-heavy, right-aligned (RTL), truncate-safe. */
@@ -461,7 +620,7 @@ export function AdminDataGridActionsCell({ children, className = "", compact = f
   return (
     <div
       data-admin-grid-actions={sticky ? "sticky" : undefined}
-      className={`min-w-0 w-full overflow-hidden ${sticky ? "sticky end-0 z-20 bg-[#080B10]" : ""} ${className}`}
+      className={`min-w-0 w-full overflow-hidden ${ADMIN_DATA_GRID_RULES.actionCellInlinePadding} ${sticky ? "sticky end-0 z-20 bg-[#080B10]" : ""} ${className}`}
     >
       <AdminDataGridActions compact={compact}>{children}</AdminDataGridActions>
     </div>
@@ -472,7 +631,7 @@ export function AdminDataGridActionsHeaderCell({ children, className = "", stick
   return (
     <div
       data-admin-grid-actions-header={sticky ? "sticky" : undefined}
-      className={`min-w-0 text-center ${sticky ? "sticky end-0 z-30 bg-[#10151C]" : ""} ${className}`}
+      className={`min-w-0 text-center ${ADMIN_DATA_GRID_RULES.actionCellInlinePadding} ${sticky ? "sticky end-0 z-30 bg-[#10151C]" : ""} ${className}`}
     >
       {children}
     </div>
@@ -483,7 +642,7 @@ type StickyActionsTableCellProps = BaseProps & {
   width: number | string;
 };
 
-const stickyActionsWidth = (width: number | string) => ({
+export const getAdminDataGridFixedColumnStyle = (width: number | string) => ({
   width,
   minWidth: width,
   maxWidth: width,
@@ -499,8 +658,8 @@ export function AdminDataGridStickyActionsHeaderCell({
     <th
       scope="col"
       data-admin-grid-sticky="inline-end"
-      style={stickyActionsWidth(width)}
-      className={`sticky end-0 z-40 whitespace-nowrap border-s border-[#D8B87A]/18 bg-[#10151C] px-3 py-4 text-center ${className}`}
+      style={getAdminDataGridFixedColumnStyle(width)}
+      className={`sticky end-0 z-40 whitespace-nowrap border-s border-[#D8B87A]/18 bg-[#10151C] ${ADMIN_DATA_GRID_RULES.actionCellInlinePadding} py-4 text-center ${className}`}
     >
       {children}
     </th>
@@ -516,8 +675,8 @@ export function AdminDataGridStickyActionsCell({
   return (
     <td
       data-admin-grid-sticky="inline-end"
-      style={stickyActionsWidth(width)}
-      className={`sticky end-0 z-30 whitespace-nowrap border-s border-white/8 bg-[#080B10] px-3 py-3 transition group-hover:bg-[#0D1117] ${className}`}
+      style={getAdminDataGridFixedColumnStyle(width)}
+      className={`sticky end-0 z-30 whitespace-nowrap border-s border-white/8 bg-[#080B10] p-0 transition group-hover:bg-[#0D1117] ${className}`}
     >
       {children}
     </td>
@@ -542,6 +701,7 @@ export function AdminDataGridActionButton({
   visibilityEntityLabel,
   className = "",
   onClick,
+  onKeyDown,
   disabled = false,
   pending = false,
   active = false,
@@ -570,7 +730,7 @@ export function AdminDataGridActionButton({
   const content = pending ? (
     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
   ) : action ? (
-    <GridIcon
+    <AdminDataGridActionIcon
       action={action}
       isCurrentlyHidden={isCurrentlyHidden}
       active={active}
@@ -629,6 +789,7 @@ export function AdminDataGridActionButton({
           : undefined
       }
       onClick={onClick}
+      onKeyDown={onKeyDown}
       disabled={disabled || pending}
       className={`${classes} disabled:cursor-not-allowed disabled:opacity-50`}
     >

@@ -268,7 +268,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/components/admin/AdminRowActions.tsx",
       "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
       "src/app/admin/seo/redirects/RedirectsClient.tsx",
-      "src/app/admin/seo/redirects/RedirectDeleteButton.tsx",
+      "src/components/admin/content/TopicsListClient.tsx",
       "src/components/admin/content/UnifiedContentList.tsx",
       "src/components/admin/content/UnifiedContentRowActions.tsx",
     ],

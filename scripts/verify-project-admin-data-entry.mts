@@ -6,7 +6,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
+const read = (path: string) =>
+  readFileSync(join(ROOT, path), "utf8").replace(/\r\n/g, "\n");
 let passed = 0;
 
 function check(label: string, condition: unknown) {
@@ -21,7 +22,11 @@ const schemaParityForwardFixPath =
   "sql/migrations/20260729150000_project_admin_schema_parity_forward_fix.sql";
 const saveRpcConflictArbiterFixPath =
   "sql/migrations/20260730100000_project_admin_save_rpc_conflict_arbiter_fix.sql";
+const projectRowActionsMigrationPath =
+  "sql/migrations/20260731100000_project_row_actions_capability.sql";
 const fixturePath = "scripts/fixtures/project-admin-entry-postgres-tests.sql";
+const projectRowActionsFixturePath =
+  "scripts/fixtures/project-row-actions-postgres-tests.sql";
 const aclAuditPath = "scripts/audit-project-admin-entry-acl.mjs";
 const schemaParityAuditPath = "scripts/audit-project-admin-schema-parity.mjs";
 const formPath = "src/app/admin/projects/ProjectEditForm.tsx";
@@ -48,7 +53,9 @@ for (const path of [
   aclCorrectionPath,
   schemaParityForwardFixPath,
   saveRpcConflictArbiterFixPath,
+  projectRowActionsMigrationPath,
   fixturePath,
+  projectRowActionsFixturePath,
   aclAuditPath,
   schemaParityAuditPath,
   formPath,
@@ -76,7 +83,9 @@ const migration = read(migrationPath);
 const aclCorrection = read(aclCorrectionPath);
 const schemaParityForwardFix = read(schemaParityForwardFixPath);
 const saveRpcConflictArbiterFix = read(saveRpcConflictArbiterFixPath);
+const projectRowActionsMigration = read(projectRowActionsMigrationPath);
 const fixture = read(fixturePath);
+const projectRowActionsFixture = read(projectRowActionsFixturePath);
 const aclAudit = read(aclAuditPath);
 const schemaParityAudit = read(schemaParityAuditPath);
 const schemaParityBeginReadOnlyIndex = schemaParityAudit.indexOf(
@@ -382,6 +391,16 @@ check(
     schemaParityAudit.includes('function_signature_security_owner_and_search_path'),
 );
 check(
+  "schema parity final contract includes the additive Project Row Actions owner",
+  schemaParityAudit.includes("20260731100000_project_row_actions_capability.sql") &&
+    schemaParityAudit.includes('"set_project_featured_admin_entry"') &&
+    schemaParityAudit.includes('"duplicate_project_admin_entry"') &&
+    schemaParityAudit.includes("columns: 115") &&
+    schemaParityAudit.includes("indexes: 45") &&
+    schemaParityAudit.includes("functions: 8") &&
+    schemaParityAudit.includes('["projects.featured", "false"]'),
+);
+check(
   "schema parity audit begins read-only before catalog reads and always rolls back before evaluating its gate",
   schemaParityBeginReadOnlyIndex >= 0 &&
     schemaParityFirstCollectIndex > schemaParityBeginReadOnlyIndex &&
@@ -412,11 +431,11 @@ check(
 const expectedDefaultBlock = sliceBetween(
   schemaParityAudit,
   "const expectedColumnDefaults = new Map([",
-  "]);\nconst knownLegacyDefaultColumnKeys",
+  "const knownLegacyDefaultColumnKeys",
 );
 check(
   "schema parity audit has the exact final-default and allowed pre-fix counts",
-  (expectedDefaultBlock.match(/^\s*\["[a-z_]+\.[a-z_]+",/gm) ?? []).length === 42 &&
+  (expectedDefaultBlock.match(/^\s*\["[a-z_]+\.[a-z_]+",/gm) ?? []).length === 43 &&
     provenMissingChecks.length === 24 &&
     schemaParityAudit.includes("knownLegacyDefaultColumnKeys") &&
     schemaParityAudit.includes("legacyDefaultAllowed"),
@@ -482,8 +501,10 @@ check(
 );
 check(
   "schema parity gate names final parity, ACL, drift, and data-integrity requirements explicitly",
-  schemaParityAudit.includes("column_storage_inheritance_acl_and_comment_defaults:\n") &&
-    schemaParityAudit.includes("existing_constraint_metadata:\n") &&
+  /column_storage_inheritance_acl_and_comment_defaults:\r?\n/.test(
+    schemaParityAudit,
+  ) &&
+    /existing_constraint_metadata:\r?\n/.test(schemaParityAudit) &&
     schemaParityAudit.includes("final_parity_gate") &&
     schemaParityAudit.includes("data_integrity_pass") &&
     schemaParityAudit.includes("acl_pass") &&
@@ -499,8 +520,8 @@ check(
     schemaParityAudit.includes(
       'const preFixGateRequested = process.argv.includes("--expect-pre-fix")',
     ) &&
-    schemaParityAudit.includes(
-      "paritySummary.schema_drift_remaining =\n      buildSchemaDriftRemaining(paritySummary)",
+    /paritySummary\.schema_drift_remaining =\r?\n      buildSchemaDriftRemaining\(paritySummary\)/.test(
+      schemaParityAudit,
     ) &&
     schemaParityAudit.includes("paritySummary.acl_pass = aclResult.passed") &&
     schemaParityAudit.includes(
@@ -512,8 +533,8 @@ check(
     schemaParityAudit.includes(
       "paritySummary.final_parity_gate = buildFinalParityGate(paritySummary)",
     ) &&
-    schemaParityAudit.includes(
-      "if (preFixGateRequested) {\n      paritySummary.expected_pre_fix_gate =",
+    /if \(preFixGateRequested\) \{\r?\n      paritySummary\.expected_pre_fix_gate =/.test(
+      schemaParityAudit,
     ) &&
     schemaParityAudit.includes("const activeGate = preFixGateRequested") &&
     schemaParityAudit.includes(": paritySummary?.final_parity_gate") &&
@@ -1007,6 +1028,66 @@ check(
   /^begin;/im.test(fixture) &&
     fixture.includes("always rolls it back") &&
     fixture.includes("must never target Remote/Production"),
+);
+
+check(
+  "Project Row Actions migration is additive, local-only, and owns authoritative featured state",
+  projectRowActionsMigration.includes("add column if not exists featured boolean") &&
+    projectRowActionsMigration.includes("set featured = false") &&
+    projectRowActionsMigration.includes("alter column featured set default false") &&
+    projectRowActionsMigration.includes("alter column featured set not null") &&
+    projectRowActionsMigration.includes("does not retain an atthasmissing representation") &&
+    projectRowActionsMigration.includes("MUST NOT be applied to Remote/Production") &&
+    !/\bdrop\s+table\b/i.test(projectRowActionsMigration),
+);
+check(
+  "Project Row Actions RPCs are fixed-search-path service-role-only domain commands",
+  [
+    "set_project_featured_admin_entry",
+    "duplicate_project_admin_entry",
+  ].every((functionName) =>
+    projectRowActionsMigration.includes(`function public.${functionName}`),
+  ) &&
+    (projectRowActionsMigration.match(/security definer/g) ?? []).length === 2 &&
+    (projectRowActionsMigration.match(/set search_path = pg_catalog, pg_temp/g) ?? []).length === 2 &&
+    projectRowActionsMigration.includes(
+      "grant execute on function public.set_project_featured_admin_entry(bigint, boolean) to service_role",
+    ) &&
+    projectRowActionsMigration.includes(
+      "grant execute on function public.duplicate_project_admin_entry(bigint) to service_role",
+    ) &&
+    ["public", "anon", "authenticated"].every((role) =>
+      projectRowActionsMigration.includes(
+        `revoke all on function public.duplicate_project_admin_entry(bigint) from ${role}`,
+      ),
+    ),
+);
+check(
+  "duplicate RPC copies every clean Project aggregate child with fresh identities in one transaction",
+  [
+    "public.project_location_points",
+    "public.project_features",
+    "public.project_floor_plans",
+    "public.project_floor_plan_details",
+    "public.project_delivery_items",
+    "public.project_media",
+    "public.project_videos",
+  ].every((table) => projectRowActionsMigration.includes(`insert into ${table}`)) &&
+    (projectRowActionsMigration.match(/pg_catalog\.gen_random_uuid\(\)/g) ?? []).length >= 7 &&
+    projectRowActionsMigration.includes("for update") &&
+    projectRowActionsMigration.includes("exception") &&
+    projectRowActionsMigration.trimEnd().toLowerCase().endsWith("commit;"),
+);
+check(
+  "Project Row Actions PostgreSQL fixture proves success, forced child rollback, non-mutating failures, authoritative featured writes, and ACL",
+  projectRowActionsFixture.includes("forced duplicate child failure left a partial Project root") &&
+    projectRowActionsFixture.includes("duplicate Project child counts are incomplete") &&
+    projectRowActionsFixture.includes("duplicate floor-plan detail count is incomplete") &&
+    projectRowActionsFixture.includes("missing-source duplicate failure mutated Project data") &&
+    projectRowActionsFixture.includes("authoritative featured RPC did not persist true") &&
+    projectRowActionsFixture.includes("Project Row Actions RPC ACL is broader than service_role") &&
+    /^begin;/im.test(projectRowActionsFixture) &&
+    projectRowActionsFixture.trimEnd().toLowerCase().endsWith("rollback;"),
 );
 
 console.log(`OK: Project Admin Data Entry verifier passed ${passed} checks.`);

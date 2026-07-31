@@ -1,17 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
 import {
-  AdminDataGridActionButton,
+  AdminConfirmDialog,
   AdminListboxSelect,
-  AdminModalCancelButton,
-  AdminModalPrimaryButton,
-  VenesiaModal,
   adminFormLabelClassName,
 } from "../../../../components/admin/ui";
-import { getCategoryDeletePreviewAjax } from "./actions";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import { getCategoryDeletePreviewAjax } from "./actions";
 
 type TransferTarget = {
   id: number;
@@ -19,12 +16,19 @@ type TransferTarget = {
   level: number;
 };
 
-type ModalMode = "confirm" | "transfer" | "blocked-relations" | "no-targets" | "error";
+type DialogMode =
+  | "confirm"
+  | "transfer"
+  | "blocked-relations"
+  | "no-targets"
+  | "error";
 
 type CategoryDeleteButtonProps = {
   categoryId: number;
-  disabled?: boolean;
+  open: boolean;
   mutationPending?: boolean;
+  returnFocusRef?: RefObject<HTMLElement | null>;
+  onOpenChange: (open: boolean) => void;
   onMutationResult?: (result: AdminActionResult) => void;
   onDelete: (
     categoryId: number,
@@ -36,17 +40,22 @@ type CategoryDeleteButtonProps = {
   }>;
 };
 
+/**
+ * Category-specific delete preparation adapter. Relation checks and transfer
+ * selection remain in the Category domain; the shared Confirmation Runtime
+ * owns the dialog, focus lifecycle, pending lock, and duplicate invocation.
+ */
 export default function CategoryDeleteButton({
   categoryId,
-  disabled = false,
+  open,
   mutationPending = false,
+  returnFocusRef,
+  onOpenChange,
   onMutationResult,
   onDelete,
 }: CategoryDeleteButtonProps) {
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [mode, setMode] = useState<ModalMode>("confirm");
+  const [mode, setMode] = useState<DialogMode>("confirm");
   const [categoryName, setCategoryName] = useState("");
   const [topicCount, setTopicCount] = useState(0);
   const [transferTargets, setTransferTargets] = useState<TransferTarget[]>([]);
@@ -55,19 +64,28 @@ export default function CategoryDeleteButton({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [blockMessage, setBlockMessage] = useState<string | null>(null);
 
-  function loadDeletePreview() {
-    setLoading(true);
-    setPending(false);
-    setValidationError(null);
-    setErrorMessage(null);
-    setBlockMessage(null);
-    setTransferToId("");
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
 
-    void getCategoryDeletePreviewAjax(categoryId)
+    void Promise.resolve()
+      .then(() => {
+        if (!active) return null;
+        setLoading(true);
+        setMode("confirm");
+        setValidationError(null);
+        setErrorMessage(null);
+        setBlockMessage(null);
+        setTransferToId("");
+        return getCategoryDeletePreviewAjax(categoryId);
+      })
       .then((preview) => {
+        if (!active || !preview) return;
         if (!preview.ok) {
           setMode("error");
-          setErrorMessage(preview.message ?? "تعذر تحميل بيانات الحذف.");
+          setErrorMessage(
+            preview.message ?? "تعذر تحميل بيانات الحذف.",
+          );
           return;
         }
 
@@ -78,57 +96,55 @@ export default function CategoryDeleteButton({
 
         if (preview.blockMessage) {
           setMode("blocked-relations");
-          return;
+        } else if (preview.topicCount > 0) {
+          setMode(
+            preview.validTransferTargets.length > 0
+              ? "transfer"
+              : "no-targets",
+          );
+        } else {
+          setMode("confirm");
         }
-
-        if (preview.topicCount > 0) {
-          if (preview.validTransferTargets.length === 0) {
-            setMode("no-targets");
-            return;
-          }
-          setMode("transfer");
-          return;
-        }
-
-        setMode("confirm");
       })
       .catch(() => {
+        if (!active) return;
         setMode("error");
         setErrorMessage("تعذر تحميل بيانات الحذف.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [categoryId, open]);
+
+  function closeDialog() {
+    if (!mutationPending) onOpenChange(false);
   }
 
-  function openModal() {
-    if (disabled) return;
-    setOpen(true);
-    loadDeletePreview();
-  }
-
-  function closeModal() {
-    if (pending) return;
-    setOpen(false);
-  }
-
-  async function handleConfirmDelete() {
-    setPending(true);
+  async function executeDelete(transferTargetId: number | null) {
     setValidationError(null);
     try {
-      const result = await onDelete(
-        categoryId,
-        null,
-      );
+      const result = await onDelete(categoryId, transferTargetId);
       if (!result.ok) {
-        setValidationError(result.message ?? "تعذر حذف التصنيف.");
+        const message =
+          result.message ??
+          (transferTargetId
+            ? "تعذر نقل الموضوعات وحذف التصنيف."
+            : "تعذر حذف التصنيف.");
+        setValidationError(message);
         onMutationResult?.({
           ok: false,
           title: "تعذر حذف التصنيف",
-          message: result.message ?? "تعذر حذف التصنيف.",
+          message,
           entityId: categoryId,
         });
         return;
       }
-      setOpen(false);
+
+      onOpenChange(false);
       onMutationResult?.({
         ok: true,
         feedbackStatus: result.feedbackStatus,
@@ -138,67 +154,20 @@ export default function CategoryDeleteButton({
         entityId: categoryId,
       });
     } catch {
-      setValidationError("تعذر حذف التصنيف.");
+      const message = transferTargetId
+        ? "تعذر نقل الموضوعات وحذف التصنيف."
+        : "تعذر حذف التصنيف.";
+      setValidationError(message);
       onMutationResult?.({
         ok: false,
         title: "تعذر حذف التصنيف",
-        message: "تعذر حذف التصنيف.",
+        message,
         entityId: categoryId,
       });
-    } finally {
-      setPending(false);
     }
   }
 
-  async function handleTransferAndDelete() {
-    setValidationError(null);
-
-    if (!transferToId) {
-      setValidationError("اختر تصنيفًا لنقل الموضوعات إليه.");
-      return;
-    }
-
-    setPending(true);
-    try {
-      const result = await onDelete(
-        categoryId,
-        Number(transferToId),
-      );
-      if (!result.ok) {
-        setValidationError(
-          result.message ?? "تعذر نقل الموضوعات وحذف التصنيف.",
-        );
-        onMutationResult?.({
-          ok: false,
-          title: "تعذر حذف التصنيف",
-          message: result.message ?? "تعذر نقل الموضوعات وحذف التصنيف.",
-          entityId: categoryId,
-        });
-        return;
-      }
-      setOpen(false);
-      onMutationResult?.({
-        ok: true,
-        feedbackStatus: result.feedbackStatus,
-        title: "تم بنجاح",
-        message: result.message ?? "تم حذف التصنيف بنجاح.",
-        code: "deleted",
-        entityId: categoryId,
-      });
-    } catch {
-      setValidationError("تعذر نقل الموضوعات وحذف التصنيف.");
-      onMutationResult?.({
-        ok: false,
-        title: "تعذر حذف التصنيف",
-        message: "تعذر نقل الموضوعات وحذف التصنيف.",
-        entityId: categoryId,
-      });
-    } finally {
-      setPending(false);
-    }
-  }
-
-  const modalTitle =
+  const dialogTitle =
     mode === "transfer"
       ? "نقل الموضوعات قبل الحذف"
       : mode === "blocked-relations"
@@ -209,100 +178,82 @@ export default function CategoryDeleteButton({
             ? "تعذر تنفيذ الحذف"
             : "تأكيد حذف التصنيف";
 
-  const modalDescription =
-    mode === "transfer"
+  const dialogDescription = loading
+    ? "جارٍ التحقق من بيانات التصنيف..."
+    : mode === "transfer"
       ? `لا يمكن حذف هذا التصنيف لأنه يحتوي على ${topicCount} موضوعات.`
       : mode === "blocked-relations"
-        ? blockMessage ?? "لا يمكن حذف التصنيف لوجود عناصر مرتبطة به."
+        ? blockMessage ??
+          "لا يمكن حذف التصنيف لوجود عناصر مرتبطة به."
         : mode === "no-targets"
           ? "لا يمكن حذف هذا التصنيف لأنه يحتوي موضوعات ولا يوجد تصنيف آخر صالح لنقلها."
           : mode === "error"
             ? errorMessage ?? "حاول مرة أخرى."
             : `هل أنت متأكد من حذف «${categoryName}»؟ لا يمكن التراجع عن هذا الإجراء.`;
 
+  const canConfirm = !loading && (mode === "confirm" || mode === "transfer");
+  const confirmLabel =
+    mode === "transfer"
+      ? "نقل الموضوعات ثم حذف التصنيف"
+      : "حذف التصنيف";
+
   return (
-    <>
-      <AdminDataGridActionButton
-        action="delete"
-        size="compact"
-        title="حذف التصنيف"
-        pending={mutationPending}
-        disabled={disabled || mutationPending}
-        onClick={openModal}
-      />
-
-      <VenesiaModal
-        open={open}
-        title={modalTitle}
-        description={loading ? "جار التحقق من بيانات التصنيف..." : modalDescription}
-        size="md"
-        onClose={closeModal}
-        footer={
-          loading ? (
-            <AdminModalCancelButton onClick={closeModal} disabled={pending}>
-              إغلاق
-            </AdminModalCancelButton>
-          ) : mode === "confirm" ? (
-            <>
-              <AdminModalCancelButton onClick={closeModal} disabled={pending}>
-                إلغاء
-              </AdminModalCancelButton>
-              <AdminModalPrimaryButton onClick={handleConfirmDelete} disabled={pending}>
-                {pending ? "جار الحذف..." : "حذف التصنيف"}
-              </AdminModalPrimaryButton>
-            </>
-          ) : mode === "transfer" ? (
-            <>
-              <AdminModalCancelButton onClick={closeModal} disabled={pending}>
-                إلغاء
-              </AdminModalCancelButton>
-              <AdminModalPrimaryButton onClick={handleTransferAndDelete} disabled={pending}>
-                {pending ? "جار التنفيذ..." : "نقل الموضوعات ثم حذف التصنيف"}
-              </AdminModalPrimaryButton>
-            </>
-          ) : (
-            <AdminModalCancelButton onClick={closeModal} disabled={pending}>
-              إغلاق
-            </AdminModalCancelButton>
-          )
-        }
-      >
-        {!loading && mode === "transfer" ? (
-          <div className="space-y-4">
-            {validationError ? (
-              <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">
-                {validationError}
-              </div>
-            ) : null}
-
-            <div className={adminFormLabelClassName()}>
-              <span>نقل الموضوعات إلى</span>
-              <AdminListboxSelect
-                id={`category-${categoryId}-transfer-target`}
-                value={transferToId}
-                onChange={(value) => {
-                  setTransferToId(value);
-                  setValidationError(null);
-                }}
-                placeholder="اختر تصنيفًا..."
-                options={transferTargets.map((target) => ({
-                  value: String(target.id),
-                  label: target.name,
-                  depth: target.level,
-                }))}
-                disabled={pending}
-                className="mt-2 w-full"
-              />
+    <AdminConfirmDialog
+      open={open}
+      title={dialogTitle}
+      description={dialogDescription}
+      confirmLabel={confirmLabel}
+      cancelLabel={canConfirm ? "إلغاء" : "إغلاق"}
+      pending={mutationPending}
+      showConfirm={canConfirm}
+      confirmDisabled={mode === "transfer" && !transferToId}
+      returnFocusRef={returnFocusRef}
+      onCancel={closeDialog}
+      onConfirm={() =>
+        executeDelete(mode === "transfer" ? Number(transferToId) : null)
+      }
+    >
+      {!loading && mode === "transfer" ? (
+        <div className="space-y-4">
+          {validationError ? (
+            <div
+              role="alert"
+              className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100"
+            >
+              {validationError}
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {!loading && mode === "confirm" && validationError ? (
-          <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">
-            {validationError}
+          <div className={adminFormLabelClassName()}>
+            <span>نقل الموضوعات إلى</span>
+            <AdminListboxSelect
+              id={`category-${categoryId}-transfer-target`}
+              value={transferToId}
+              onChange={(value) => {
+                setTransferToId(value);
+                setValidationError(null);
+              }}
+              placeholder="اختر تصنيفًا..."
+              options={transferTargets.map((target) => ({
+                value: String(target.id),
+                label: target.name,
+                depth: target.level,
+              }))}
+              disabled={mutationPending}
+              className="mt-2 w-full"
+            />
           </div>
-        ) : null}
-      </VenesiaModal>
-    </>
+        </div>
+      ) : null}
+
+      {!loading && mode === "confirm" && validationError ? (
+        <div
+          role="alert"
+          className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100"
+        >
+          {validationError}
+        </div>
+      ) : null}
+    </AdminConfirmDialog>
   );
 }

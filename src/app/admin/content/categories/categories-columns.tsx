@@ -8,8 +8,13 @@ import { formatAdminListDate } from "../../../../lib/content-dates";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 import {
   AdminStatusPill,
-  getAdminDataGridActionsColumnWidth,
 } from "../../../../components/admin/ui";
+import {
+  ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH,
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+  getAdminDataGridHierarchyPrimaryColumnWidth,
+} from "../../../../components/admin/ui/AdminDataGrid";
 import CategoryRowActions from "./CategoryRowActions";
 import type {
   CategoryDuplicateMutationResult,
@@ -37,11 +42,9 @@ export type CategorySortKey =
   | "created_at"
   | "updated_at";
 
-export const CATEGORIES_ACTIONS_COLUMN_WIDTH = getAdminDataGridActionsColumnWidth(
-  6,
-  "compact",
-  12,
-);
+export {
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH as CATEGORIES_ACTIONS_COLUMN_WIDTH,
+} from "../../../../components/admin/ui/AdminDataGrid";
 
 function FolderIcon({
   large = false,
@@ -94,11 +97,17 @@ function singleLine(value: string) {
   );
 }
 
+export type CategoryColumnLayoutOptions = {
+  /** Deepest row in the current visible tree snapshot, not a product depth cap. */
+  maxVisibleDepth?: number;
+};
+
 export function createCategoryColumns(
   tree: {
     isExpanded: (categoryId: number) => boolean;
     onToggle: (categoryId: number) => void;
     rowPendingAction: (categoryId: number) => string | null;
+    mutationBusy: boolean;
     onToggleStatus: (
       category: CategoryListRow,
     ) => Promise<CategoryStatusMutationResult>;
@@ -110,7 +119,11 @@ export function createCategoryColumns(
       transferToId: number | null,
     ) => Promise<{ ok: boolean; message?: string }>;
   },
+  { maxVisibleDepth = 0 }: CategoryColumnLayoutOptions = {},
 ): AdminEntityColumnDef<CategoryListRow, CategoryColumnKey, CategorySortKey>[] {
+  const primaryColumnWidth =
+    getAdminDataGridHierarchyPrimaryColumnWidth(maxVisibleDepth);
+
   return [
     {
       key: "name",
@@ -119,8 +132,8 @@ export function createCategoryColumns(
       hideable: false,
       sortable: true,
       sortKey: "name",
-      minWidth: 320,
-      width: 360,
+      minWidth: primaryColumnWidth,
+      width: primaryColumnWidth,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => {
@@ -128,7 +141,11 @@ export function createCategoryColumns(
         return (
           <div
             className="relative flex w-full min-w-0 items-center justify-start gap-3 py-1 text-right"
-            style={{ paddingInlineStart: row.depth ? `${row.depth * 28}px` : 0 }}
+            style={{
+              paddingInlineStart: row.depth
+                ? `${row.depth * ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.hierarchyDepthStepPx}px`
+                : 0,
+            }}
           >
             {row.depth > 0 ? (
               <span
@@ -156,7 +173,8 @@ export function createCategoryColumns(
             <Link
               href={`/admin/content/categories/${row.id}`}
               data-category-edit-link=""
-              className="min-w-0 cursor-pointer rounded-[8px] px-1.5 py-1 text-right transition hover:bg-white/[0.04] hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+              className="min-w-0 flex-1 cursor-pointer rounded-[8px] px-1.5 py-1 text-right transition hover:bg-white/[0.04] hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+              style={{ maxWidth: ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH }}
               title={`تعديل ${row.name}`}
             >
               <AdminCategoryBadge
@@ -273,14 +291,15 @@ export function createCategoryColumns(
       defaultVisible: true,
       hideable: false,
       sortable: false,
-      minWidth: CATEGORIES_ACTIONS_COLUMN_WIDTH,
-      width: CATEGORIES_ACTIONS_COLUMN_WIDTH,
+      minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
       renderCell: ({ row, onMutationResult }) => (
         <CategoryRowActions
           category={row}
           onMutationResult={onMutationResult}
           pendingAction={tree.rowPendingAction(row.id)}
+          mutationBusy={tree.mutationBusy}
           onToggle={tree.onToggleStatus}
           onDuplicate={tree.onDuplicate}
           onDelete={tree.onDelete}

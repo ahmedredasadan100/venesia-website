@@ -7,10 +7,16 @@ import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-
 import type { AdminEntityColumnDef } from "../../../lib/admin/entity-list";
 import {
   AdminStatusPill,
-  getAdminDataGridActionsColumnWidth,
 } from "../ui";
+import {
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+} from "../ui/AdminDataGrid";
 import AdminCategoryBadge from "./AdminCategoryBadge";
-import UnifiedContentRowActions from "./UnifiedContentRowActions";
+import UnifiedContentRowActions, {
+  type UnifiedContentRowActionHandlers,
+} from "./UnifiedContentRowActions";
 
 export type UnifiedContentColumnKey =
   | "title"
@@ -43,8 +49,9 @@ export type UnifiedContentColumn = AdminEntityColumnDef<
   UnifiedContentSortKey
 >;
 
-export const UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH =
-  getAdminDataGridActionsColumnWidth(7, "compact", 12);
+export {
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH as UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH,
+} from "../ui/AdminDataGrid";
 
 export {
   TOPICS_LIST_VIEW_KEY,
@@ -62,7 +69,7 @@ function singleLine(value?: string | null, fallback = "—") {
 
 export function createUnifiedContentColumns(
   currentListPath: string,
-  options?: { deferRefresh?: boolean },
+  rowActionHandlers?: UnifiedContentRowActionHandlers,
 ): UnifiedContentColumn[] {
   return [
     {
@@ -72,8 +79,8 @@ export function createUnifiedContentColumns(
       hideable: false,
       sortable: true,
       sortKey: "title",
-      minWidth: 360,
-      width: 360,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.compactIcon,
+      width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.compactIcon,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -100,6 +107,10 @@ export function createUnifiedContentColumns(
           <Link
             href={adminContentTopicPath(row.id, { returnTo: currentListPath })}
             className="block min-w-0 flex-1 cursor-pointer truncate whitespace-nowrap text-right text-sm font-bold text-white transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+            style={{
+              maxWidth:
+                ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx,
+            }}
             title={row.title || "بدون عنوان"}
           >
             {row.title || "بدون عنوان"}
@@ -241,17 +252,18 @@ export function createUnifiedContentColumns(
       defaultVisible: true,
       hideable: false,
       sortable: false,
-      minWidth: UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH,
-      width: UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH,
+      minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
-      renderCell: ({ row, onMutationResult }) => (
-        <UnifiedContentRowActions
-          row={row}
-          currentListPath={currentListPath}
-          onMutationResult={onMutationResult}
-          deferRefresh={options?.deferRefresh}
-        />
-      ),
+      renderCell: ({ row, onMutationResult }) =>
+        rowActionHandlers ? (
+          <UnifiedContentRowActions
+            row={row}
+            currentListPath={currentListPath}
+            onMutationResult={onMutationResult}
+            handlers={rowActionHandlers}
+          />
+        ) : null,
     },
   ];
 }

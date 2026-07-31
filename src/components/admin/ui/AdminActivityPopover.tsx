@@ -7,11 +7,9 @@ import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext"
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 import { AdminDataGridActionButton } from "./AdminDataGrid";
 import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
+import type { AdminRowActionInformationItem } from "../../../lib/admin/interaction-system/admin-row-actions-capability";
 
-export type AdminActivityItem = {
-  label: string;
-  value: string;
-};
+export type AdminActivityItem = AdminRowActionInformationItem;
 
 export type AdminActivityPopoverProps = {
   title: string;
@@ -22,6 +20,55 @@ export type AdminActivityPopoverProps = {
   errorMessage?: string;
   emptyMessage?: string;
 };
+
+export type AdminActivityContentProps = Pick<
+  AdminActivityPopoverProps,
+  "items" | "loading" | "errorMessage" | "emptyMessage"
+>;
+
+/** Canonical metadata presentation reused by the legacy trigger and Row Actions. */
+export function AdminActivityContent({
+  items,
+  loading = false,
+  errorMessage,
+  emptyMessage = "لا توجد بيانات متاحة.",
+}: AdminActivityContentProps) {
+  if (loading) {
+    return (
+      <p role="status" className="py-4 text-sm text-white/45">
+        جارٍ تحميل المعلومات…
+      </p>
+    );
+  }
+  if (errorMessage) {
+    return (
+      <p role="alert" className="py-4 text-sm text-red-200">
+        {errorMessage}
+      </p>
+    );
+  }
+  if (!items.length) {
+    return <p className="py-4 text-sm text-white/45">{emptyMessage}</p>;
+  }
+  return (
+    <dl className="space-y-3">
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className="rounded-xl border border-white/8 bg-black/20 px-3 py-2.5"
+        >
+          <dt className="text-[11px] text-white/42">{item.label}</dt>
+          <dd
+            className="mt-1 truncate text-sm font-medium text-white/78"
+            title={item.value}
+          >
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 export default function AdminActivityPopover({
   title,
@@ -108,34 +155,12 @@ export default function AdminActivityPopover({
             className={`overflow-y-auto overflow-x-hidden overscroll-contain rounded-[18px] border border-[#D8B87A]/22 bg-[#080B10]/98 p-4 text-right shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
           >
             <p className="mb-3 text-sm font-bold text-white">{title}</p>
-            {loading ? (
-              <p role="status" className="py-4 text-sm text-white/45">
-                جارٍ تحميل النشاط…
-              </p>
-            ) : errorMessage ? (
-              <p role="alert" className="py-4 text-sm text-red-200">
-                {errorMessage}
-              </p>
-            ) : items.length ? (
-              <dl className="space-y-3">
-                {items.map((item) => (
-                  <div
-                    key={item.label}
-                    className="rounded-xl border border-white/8 bg-black/20 px-3 py-2.5"
-                  >
-                    <dt className="text-[11px] text-white/42">{item.label}</dt>
-                    <dd
-                      className="mt-1 truncate text-sm font-medium text-white/78"
-                      title={item.value}
-                    >
-                      {item.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            ) : (
-              <p className="py-4 text-sm text-white/45">{emptyMessage}</p>
-            )}
+            <AdminActivityContent
+              items={items}
+              loading={loading}
+              errorMessage={errorMessage}
+              emptyMessage={emptyMessage}
+            />
           </div>,
           document.body,
         )

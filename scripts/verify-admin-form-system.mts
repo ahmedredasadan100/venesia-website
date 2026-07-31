@@ -820,16 +820,16 @@ const seriesTableClient = read(
   "src/app/admin/content/series/SeriesTableClient.tsx",
 );
 check(
-  "Category and Series collection Preview/Public actions use the shared entry point",
-  categoryRowActions.includes("AdminEntityPreviewActions") &&
+  "Category and Series collection Preview/Public actions resolve through the shared capability before Row Actions presentation",
+  categoryRowActions.includes("AdminDataGridRowActions") &&
     categoryRowActions.includes(
       "buildAdminCategoryCollectionPreviewCapability",
     ) &&
-    seriesColumns.includes("AdminEntityPreviewActions") &&
+    seriesColumns.includes("AdminDataGridRowActions") &&
     seriesColumns.includes("buildAdminSeriesCollectionPreviewCapability") &&
     [categoryRowActions, seriesColumns].every(
       (source) =>
-        source.includes('presentation="data-grid-compact"') &&
+        source.includes("resolveAdminEntityPreviewActions") &&
         !source.includes("previewHref") &&
         !source.includes("topicsPreviewHref"),
     ),
@@ -840,7 +840,7 @@ check(
     (source) =>
       source.includes("rowPendingAction:") &&
       source.includes("instant.rowPending?.rowId ===") &&
-      !source.includes(
+      source.includes(
         "instant.rowPending !== null || instant.bulkPending !== null",
       ) &&
       !source.includes("router.refresh"),

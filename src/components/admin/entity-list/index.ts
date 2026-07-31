@@ -8,7 +8,11 @@ export type {
 } from "./AdminEntityListTable";
 export { default as AdminEntityListFilters } from "./AdminEntityListFilters";
 export type { AdminEntityListFiltersProps } from "./AdminEntityListFilters";
-export { default as AdminEntityListSurface } from "./AdminEntityListSurface";
+export {
+  default as AdminEntityListSurface,
+  AdminEntityListPageLayout,
+  AdminEntityListPrimarySection,
+} from "./AdminEntityListSurface";
 export {
   AdminFloatingLayerProvider,
   useAdminFloatingLayer,

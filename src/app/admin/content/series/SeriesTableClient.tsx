@@ -6,6 +6,7 @@ import {
   AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../../components/admin/entity-list";
+import { AdminEntityListPrimarySection } from "../../../../components/admin/entity-list/AdminEntityListSurface";
 import {
   AdminMetricCardsGrid,
   AdminTablePagination,
@@ -248,6 +249,8 @@ export default function SeriesTableClient({
         instant.rowPending?.rowId === seriesId
           ? instant.rowPending.action
           : null,
+      mutationBusy:
+        instant.rowPending !== null || instant.bulkPending !== null,
       onToggle: toggleSeries,
       onDuplicate: duplicateSeries,
       onDelete: deleteSeries,
@@ -255,6 +258,7 @@ export default function SeriesTableClient({
     [
       deleteSeries,
       duplicateSeries,
+      instant.bulkPending,
       instant.rowPending,
       toggleSeries,
     ],
@@ -338,69 +342,73 @@ export default function SeriesTableClient({
   );
 
   return (
-    <AdminEntityListSurface className="space-y-4" consumer="series">
-      <AdminMetricCardsGrid
-        items={[
-          { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true },
-          { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true },
-          { label: "الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
-        ]}
-      />
+    <AdminEntityListSurface consumer="series">
+      <AdminEntityListPrimarySection>
+        <AdminMetricCardsGrid
+          items={[
+            { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true },
+            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true },
+            { label: "الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
+          ]}
+        />
+      </AdminEntityListPrimarySection>
 
-      <AdminEntityListFilters
-        basePath={BASE_PATH}
-        search={{
-          placeholder: "ابحث في السلاسل",
-          value: controller.query.search,
-          className: "max-w-[330px]",
-        }}
-        filters={filters}
-        values={{
-          status: controller.query.filters.status,
-          category: controller.query.filters.categoryId
-            ? String(controller.query.filters.categoryId)
-            : "all",
-        }}
-        onQueryPatch={(patch) => {
-          const search =
-            "q" in patch
-              ? (patch.q ?? "").trim()
-              : controller.query.search;
-          const statusValue =
-            "status" in patch
-              ? patch.status
-              : controller.query.filters.status;
-          const categoryValue =
-            "category" in patch
-              ? patch.category
-              : controller.query.filters.categoryId
-                ? String(controller.query.filters.categoryId)
+      <AdminEntityListPrimarySection>
+        <AdminEntityListFilters
+          basePath={BASE_PATH}
+          search={{
+            placeholder: "ابحث في السلاسل",
+            value: controller.query.search,
+            className: "max-w-[330px]",
+          }}
+          filters={filters}
+          values={{
+            status: controller.query.filters.status,
+            category: controller.query.filters.categoryId
+              ? String(controller.query.filters.categoryId)
+              : "all",
+          }}
+          onQueryPatch={(patch) => {
+            const search =
+              "q" in patch
+                ? (patch.q ?? "").trim()
+                : controller.query.search;
+            const statusValue =
+              "status" in patch
+                ? patch.status
+                : controller.query.filters.status;
+            const categoryValue =
+              "category" in patch
+                ? patch.category
+                : controller.query.filters.categoryId
+                  ? String(controller.query.filters.categoryId)
+                  : "all";
+            const status =
+              statusValue === "published" ||
+              statusValue === "unpublished" ||
+              statusValue === "draft" ||
+              statusValue === "archived"
+                ? statusValue
                 : "all";
-          const status =
-            statusValue === "published" ||
-            statusValue === "unpublished" ||
-            statusValue === "draft" ||
-            statusValue === "archived"
-              ? statusValue
-              : "all";
-          const categoryId = Number(categoryValue);
-          controller.setSearchAndFilters(
-            search,
-            {
-              status,
-              categoryId:
-                Number.isInteger(categoryId) && categoryId > 0
-                  ? categoryId
-                  : null,
-            },
-            "q" in patch && !("status" in patch) && !("category" in patch)
-              ? "replace"
-              : "push",
-          );
-        }}
-      />
+            const categoryId = Number(categoryValue);
+            controller.setSearchAndFilters(
+              search,
+              {
+                status,
+                categoryId:
+                  Number.isInteger(categoryId) && categoryId > 0
+                    ? categoryId
+                    : null,
+              },
+              "q" in patch && !("status" in patch) && !("category" in patch)
+                ? "replace"
+                : "push",
+            );
+          }}
+        />
+      </AdminEntityListPrimarySection>
 
-      <div
+      <AdminEntityListPrimarySection
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }
@@ -477,7 +485,7 @@ export default function SeriesTableClient({
           onBulkExecute={executeBulkMutation}
           initialFeedback={initialFeedback}
         />
-      </div>
+      </AdminEntityListPrimarySection>
 
       <AdminTablePagination
         basePath={BASE_PATH}

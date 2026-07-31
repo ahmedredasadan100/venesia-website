@@ -1,10 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+
+import {
+  duplicateUnifiedContent,
+  setUnifiedContentStatus,
+  softDeleteUnifiedContent,
+  toggleUnifiedContentFeatured,
+} from "../../../app/admin/content/topics/actions";
 
 import { AdminEntityListSurface } from "../entity-list";
+import { AdminEntityListPrimarySection } from "../entity-list/AdminEntityListSurface";
 import { AdminMetricCardsGrid, AdminTablePagination } from "../ui";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
+import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
 import {
   topicsQueryContract,
@@ -21,10 +30,12 @@ import type {
   AdminEntityListResult,
 } from "../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
+import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { ADMIN_CONTENT_ROUTES } from "../../../lib/admin/content-routes";
 import type { TopicMetrics } from "../../../lib/admin/content/entity-list-adapters/topics";
 import UnifiedContentFilters from "./UnifiedContentFilters";
 import UnifiedContentList from "./UnifiedContentList";
+import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions";
 
 type SeriesOption = {
   id: number;
@@ -32,6 +43,51 @@ type SeriesOption = {
   status: string;
   deleted_at: string | null;
 };
+
+function toInstantMutationResult(
+  result: AdminActionResult,
+  failureCode: string,
+) {
+  if (!result.ok) {
+    return {
+      ok: false as const,
+      code: result.code ?? failureCode,
+      message: result.message,
+    };
+  }
+
+  return {
+    ok: true as const,
+    message: result.message,
+    feedbackStatus:
+      result.feedbackStatus === "warning"
+        ? ("warning" as const)
+        : ("success" as const),
+  };
+}
+
+function unexpectedMutationFailure(
+  error: unknown,
+  input: { title: string; fallbackMessage: string; entityId: number },
+): AdminActionResult {
+  return {
+    ok: false,
+    feedbackStatus: "error",
+    title: input.title,
+    message: error instanceof Error ? error.message : input.fallbackMessage,
+    entityId: input.entityId,
+  };
+}
+
+function topicActionFormData(
+  id: number,
+  values: Record<string, string> = {},
+) {
+  const formData = new FormData();
+  formData.set("id", String(id));
+  Object.entries(values).forEach(([key, value]) => formData.set(key, value));
+  return formData;
+}
 
 function positiveId(value: string) {
   const parsed = Number(value);
@@ -94,6 +150,237 @@ export default function TopicsListClient({
     initialResult,
     staleTimeMs: 30_000,
   });
+  const instant = useAdminEntityInstantMutation<UnifiedContentRow, TopicMetrics>(
+    "topics",
+    controller.query,
+  );
+
+  const toggleVisibility = useCallback(
+    async (
+      row: UnifiedContentRow,
+      nextStatus: "published" | "unpublished",
+    ): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
+
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "visibility",
+          optimistic: (cache) => {
+            if (controller.query.filters.status !== "all") {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((current) =>
+              current.id === row.id
+                ? { ...current, status: nextStatus }
+                : current,
+            );
+          },
+          execute: async () => {
+            actionResult = await setUnifiedContentStatus(
+              topicActionFormData(row.id, { next_status: nextStatus }),
+            );
+            return toInstantMutationResult(
+              actionResult,
+              "topic_visibility_failed",
+            );
+          },
+          reconcileSuccess: (_mutationResult, { cache }) => {
+            if (controller.query.filters.status !== "all") return;
+            const confirmedStatus =
+              actionResult?.code === "published"
+                ? "published"
+                : actionResult?.code === "unpublished"
+                  ? "unpublished"
+                  : nextStatus;
+            cache.patchRows((current) =>
+              current.id === row.id
+                ? { ...current, status: confirmedStatus }
+                : current,
+            );
+          },
+        });
+        if (actionResult) return actionResult;
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return unexpectedMutationFailure(error, {
+          title: "تعذر تنفيذ العملية",
+          fallbackMessage: "تعذر تحديث ظهور المحتوى.",
+          entityId: row.id,
+        });
+      }
+
+      return unexpectedMutationFailure(null, {
+        title: "تعذر تنفيذ العملية",
+        fallbackMessage: "تعذر إثبات نتيجة تحديث ظهور المحتوى.",
+        entityId: row.id,
+      });
+    },
+    [controller.query.filters.status, instant],
+  );
+
+  const toggleFeatured = useCallback(
+    async (row: UnifiedContentRow): Promise<AdminActionResult> => {
+      const nextFeatured = !Boolean(row.is_featured);
+      let actionResult: AdminActionResult | null = null;
+
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "featured",
+          optimistic: (cache) => {
+            if (controller.query.filters.featured !== "all") {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((current) =>
+              current.id === row.id
+                ? { ...current, is_featured: nextFeatured }
+                : current,
+            );
+          },
+          execute: async () => {
+            actionResult = await toggleUnifiedContentFeatured(
+              topicActionFormData(row.id),
+            );
+            return toInstantMutationResult(
+              actionResult,
+              "topic_featured_failed",
+            );
+          },
+          reconcileSuccess: (_mutationResult, { cache }) => {
+            if (controller.query.filters.featured !== "all") return;
+            const confirmedFeatured =
+              actionResult?.code === "featured"
+                ? true
+                : actionResult?.code === "unfeatured"
+                  ? false
+                  : nextFeatured;
+            cache.patchRows((current) =>
+              current.id === row.id
+                ? { ...current, is_featured: confirmedFeatured }
+                : current,
+            );
+          },
+        });
+        if (actionResult) return actionResult;
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return unexpectedMutationFailure(error, {
+          title: "تعذر تحديث التمييز",
+          fallbackMessage: "تعذر تحديث تمييز المحتوى.",
+          entityId: row.id,
+        });
+      }
+
+      return unexpectedMutationFailure(null, {
+        title: "تعذر تحديث التمييز",
+        fallbackMessage: "تعذر إثبات نتيجة تحديث تمييز المحتوى.",
+        entityId: row.id,
+      });
+    },
+    [controller.query.filters.featured, instant],
+  );
+
+  const duplicateTopic = useCallback(
+    async (row: UnifiedContentRow): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
+
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "duplicate",
+          optimistic: () => undefined,
+          execute: async () => {
+            actionResult = await duplicateUnifiedContent(
+              topicActionFormData(row.id),
+            );
+            return toInstantMutationResult(
+              actionResult,
+              "topic_duplicate_failed",
+            );
+          },
+        });
+        if (actionResult) return actionResult;
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return unexpectedMutationFailure(error, {
+          title: "تعذر نسخ المحتوى",
+          fallbackMessage: "تعذر نسخ المحتوى.",
+          entityId: row.id,
+        });
+      }
+
+      return unexpectedMutationFailure(null, {
+        title: "تعذر نسخ المحتوى",
+        fallbackMessage: "تعذر إثبات نتيجة نسخ المحتوى.",
+        entityId: row.id,
+      });
+    },
+    [instant],
+  );
+
+  const deleteTopic = useCallback(
+    async (row: UnifiedContentRow): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
+
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "delete",
+          optimistic: (cache) => cache.removeRows(new Set([row.id])),
+          execute: async () => {
+            actionResult = await softDeleteUnifiedContent(
+              topicActionFormData(row.id),
+            );
+            return toInstantMutationResult(
+              actionResult,
+              "topic_delete_failed",
+            );
+          },
+        });
+        if (actionResult) return actionResult;
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return unexpectedMutationFailure(error, {
+          title: "تعذر حذف المحتوى",
+          fallbackMessage: "تعذر حذف المحتوى.",
+          entityId: row.id,
+        });
+      }
+
+      return unexpectedMutationFailure(null, {
+        title: "تعذر حذف المحتوى",
+        fallbackMessage: "تعذر إثبات نتيجة حذف المحتوى.",
+        entityId: row.id,
+      });
+    },
+    [instant],
+  );
+
+  const rowActionHandlers = useMemo<UnifiedContentRowActionHandlers>(
+    () => ({
+      rowPendingAction: (rowId) =>
+        instant.rowPending?.rowId === rowId
+          ? instant.rowPending.action
+          : null,
+      mutationBusy:
+        instant.rowPending !== null || instant.bulkPending !== null,
+      onVisibility: toggleVisibility,
+      onFeatured: toggleFeatured,
+      onDuplicate: duplicateTopic,
+      onDelete: deleteTopic,
+    }),
+    [
+      deleteTopic,
+      duplicateTopic,
+      instant.bulkPending,
+      instant.rowPending,
+      toggleFeatured,
+      toggleVisibility,
+    ],
+  );
 
   const sort =
     `${controller.query.sort.field}_${controller.query.sort.direction}` as ContentSortValue;
@@ -142,55 +429,59 @@ export default function TopicsListClient({
     : 0;
 
   return (
-    <AdminEntityListSurface className="space-y-4" consumer="topics">
-      <AdminMetricCardsGrid
-        items={[
-          { label: "إجمالي الموضوعات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", compact: true },
-          { label: "منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", compact: true },
-          { label: "مسودات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.draft ?? 0), tone: "amber", compact: true },
-          { label: "مخفي", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", compact: true },
-          { label: "أرشيف", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.archived ?? 0), tone: "cyan", compact: true },
-          { label: "متوسط SEO", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.seoAverage ?? 0), suffix: controller.result.metrics?.error ? undefined : "/100", tone: "blue", compact: true },
-        ]}
-      />
+    <AdminEntityListSurface consumer="topics">
+      <AdminEntityListPrimarySection>
+        <AdminMetricCardsGrid
+          items={[
+            { label: "إجمالي الموضوعات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", compact: true },
+            { label: "منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", compact: true },
+            { label: "مسودات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.draft ?? 0), tone: "amber", compact: true },
+            { label: "مخفي", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", compact: true },
+            { label: "أرشيف", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.archived ?? 0), tone: "cyan", compact: true },
+            { label: "متوسط SEO", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.seoAverage ?? 0), suffix: controller.result.metrics?.error ? undefined : "/100", tone: "blue", compact: true },
+          ]}
+        />
+      </AdminEntityListPrimarySection>
 
-      <UnifiedContentFilters
-        initial={{
-          q: controller.query.search,
-          contentType: controller.query.filters.contentType,
-          category: controller.query.filters.categoryId
-            ? String(controller.query.filters.categoryId)
-            : "all",
-          series: controller.query.filters.seriesId
-            ? String(controller.query.filters.seriesId)
-            : "all",
-          status: controller.query.filters.status,
-          featured: controller.query.filters.featured,
-        }}
-        categories={categories}
-        series={series}
-        onNavigate={(state) => {
-          const trimmed = state.q.trim();
-          const search = trimmed.length >= 2 ? trimmed : "";
-          const onlySearch =
-            state.contentType === controller.query.filters.contentType &&
-            state.category ===
-              (controller.query.filters.categoryId
-                ? String(controller.query.filters.categoryId)
-                : "all") &&
-            state.series ===
-              (controller.query.filters.seriesId
-                ? String(controller.query.filters.seriesId)
-                : "all") &&
-            state.status === controller.query.filters.status &&
-            state.featured === controller.query.filters.featured;
-          controller.setSearchAndFilters(
-            search,
-            toFilters(state),
-            onlySearch ? "replace" : "push",
-          );
-        }}
-      />
+      <AdminEntityListPrimarySection>
+        <UnifiedContentFilters
+          initial={{
+            q: controller.query.search,
+            contentType: controller.query.filters.contentType,
+            category: controller.query.filters.categoryId
+              ? String(controller.query.filters.categoryId)
+              : "all",
+            series: controller.query.filters.seriesId
+              ? String(controller.query.filters.seriesId)
+              : "all",
+            status: controller.query.filters.status,
+            featured: controller.query.filters.featured,
+          }}
+          categories={categories}
+          series={series}
+          onNavigate={(state) => {
+            const trimmed = state.q.trim();
+            const search = trimmed.length >= 2 ? trimmed : "";
+            const onlySearch =
+              state.contentType === controller.query.filters.contentType &&
+              state.category ===
+                (controller.query.filters.categoryId
+                  ? String(controller.query.filters.categoryId)
+                  : "all") &&
+              state.series ===
+                (controller.query.filters.seriesId
+                  ? String(controller.query.filters.seriesId)
+                  : "all") &&
+              state.status === controller.query.filters.status &&
+              state.featured === controller.query.filters.featured;
+            controller.setSearchAndFilters(
+              search,
+              toFilters(state),
+              onlySearch ? "replace" : "push",
+            );
+          }}
+        />
+      </AdminEntityListPrimarySection>
 
       {controller.error ? (
         <p
@@ -203,7 +494,7 @@ export default function TopicsListClient({
 
       {/* Quiet pending indicator only; aria-busy is reserved for the row
           action that owns the in-flight mutation. */}
-      <div
+      <AdminEntityListPrimarySection
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }
@@ -216,6 +507,7 @@ export default function TopicsListClient({
           sort={sort}
           initialVisibleColumns={initialVisibleColumns}
           initialFeedback={initialFeedback}
+          rowActionHandlers={rowActionHandlers}
           onSortChange={(next, options) =>
             controller.setSort(
               {
@@ -226,23 +518,14 @@ export default function TopicsListClient({
             )
           }
           onSuccessfulMutation={(result) => {
-            // Deterministic featured toggle: patch the cached row first so
-            // the star reflects server truth immediately, then reconcile.
-            if (
-              result?.entityId != null &&
-              (result.code === "featured" || result.code === "unfeatured")
-            ) {
-              const isFeatured = result.code === "featured";
-              controller.patchRows((row) =>
-                row.id === result.entityId
-                  ? { ...row, is_featured: isFeatured }
-                  : row,
-              );
+            // Row actions already reconcile through Instant Mutation. Bulk
+            // actions and column preferences still require list invalidation.
+            if (!result || result.entityId == null) {
+              return controller.invalidate();
             }
-            return controller.invalidate();
           }}
         />
-      </div>
+      </AdminEntityListPrimarySection>
 
       <AdminTablePagination
         basePath={ADMIN_CONTENT_ROUTES.topics}

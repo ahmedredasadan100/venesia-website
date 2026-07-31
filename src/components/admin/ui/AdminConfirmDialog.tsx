@@ -5,6 +5,7 @@ import {
   useId,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
@@ -18,14 +19,19 @@ import {
 export type AdminConfirmDialogProps = {
   open: boolean;
   title: string;
-  description: string;
+  description: ReactNode;
   confirmLabel: string;
   cancelLabel?: string;
   tone?: "danger";
   pending?: boolean;
+  confirmDisabled?: boolean;
+  showConfirm?: boolean;
+  children?: ReactNode;
   onCancel: () => void;
   onConfirm: () => void | Promise<void>;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  fallbackFocusRef?: RefObject<HTMLElement | null>;
+  resolveReturnFocus?: () => HTMLElement | null;
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -45,9 +51,14 @@ export default function AdminConfirmDialog({
   cancelLabel = "إلغاء",
   tone = "danger",
   pending = false,
+  confirmDisabled = false,
+  showConfirm = true,
+  children,
   onCancel,
   onConfirm,
   returnFocusRef,
+  fallbackFocusRef,
+  resolveReturnFocus,
 }: AdminConfirmDialogProps) {
   const mounted = useClientMounted();
   const titleId = useId();
@@ -56,6 +67,7 @@ export default function AdminConfirmDialog({
   const cancelRef = useRef(onCancel);
   const confirmRef = useRef(onConfirm);
   const pendingRef = useRef(pending);
+  const resolveReturnFocusRef = useRef(resolveReturnFocus);
   const invokingRef = useRef(false);
   const [invoking, setInvoking] = useState(false);
   const busy = pending || invoking;
@@ -64,12 +76,15 @@ export default function AdminConfirmDialog({
     cancelRef.current = onCancel;
     confirmRef.current = onConfirm;
     pendingRef.current = pending;
-  }, [onCancel, onConfirm, pending]);
+    resolveReturnFocusRef.current = resolveReturnFocus;
+  }, [onCancel, onConfirm, pending, resolveReturnFocus]);
 
   useEffect(() => {
     if (!open) return;
 
     const configuredFocusTarget = returnFocusRef?.current ?? null;
+    const fallbackFocusTarget = fallbackFocusRef?.current ?? null;
+    const configuredReturnFocusResolver = resolveReturnFocusRef.current;
     const previouslyFocused =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -117,22 +132,38 @@ export default function AdminConfirmDialog({
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
-      const focusTarget = configuredFocusTarget ?? previouslyFocused;
+      const focusTarget =
+        (configuredFocusTarget?.isConnected ? configuredFocusTarget : null) ??
+        configuredReturnFocusResolver?.() ??
+        (fallbackFocusTarget?.isConnected ? fallbackFocusTarget : null) ??
+        (previouslyFocused?.isConnected ? previouslyFocused : null);
       if (focusTarget?.isConnected) {
         window.requestAnimationFrame(() => focusTarget.focus());
       }
     };
-  }, [open, returnFocusRef]);
+  }, [fallbackFocusRef, open, returnFocusRef]);
 
   async function handleConfirm() {
     if (pendingRef.current || invokingRef.current) return;
     invokingRef.current = true;
     setInvoking(true);
+    let failed = false;
     try {
       await confirmRef.current();
+    } catch {
+      failed = true;
+      // The command owner publishes the failure through Feedback Runtime.
+      // Keep the dialog open so the user may retry or cancel safely.
     } finally {
       invokingRef.current = false;
       setInvoking(false);
+      if (failed) {
+        window.requestAnimationFrame(() => {
+          panelRef.current
+            ?.querySelector<HTMLElement>("[data-admin-confirm-submit]")
+            ?.focus();
+        });
+      }
     }
   }
 
@@ -170,12 +201,15 @@ export default function AdminConfirmDialog({
             {title}
           </h2>
         </header>
-        <p
-          id={descriptionId}
-          className="px-6 py-5 text-sm leading-7 text-white/62"
-        >
-          {description}
-        </p>
+        <div className="space-y-4 px-6 py-5">
+          <p
+            id={descriptionId}
+            className="text-sm leading-7 text-white/62"
+          >
+            {description}
+          </p>
+          {children}
+        </div>
         <footer className={ADMIN_MODAL.footer}>
           <AdminModalCancelButton
             data-admin-confirm-cancel=""
@@ -185,25 +219,28 @@ export default function AdminConfirmDialog({
           >
             {cancelLabel}
           </AdminModalCancelButton>
-          <AdminModalDangerButton
-            type="button"
-            disabled={busy}
-            aria-busy={busy || undefined}
-            onClick={handleConfirm}
-            className="min-w-[132px] justify-center disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {busy ? (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="me-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-                />
-                جارٍ التنفيذ…
-              </>
-            ) : (
-              confirmLabel
-            )}
-          </AdminModalDangerButton>
+          {showConfirm ? (
+            <AdminModalDangerButton
+              type="button"
+              disabled={busy || confirmDisabled}
+              aria-busy={busy || undefined}
+              data-admin-confirm-submit=""
+              onClick={handleConfirm}
+              className="min-w-[132px] justify-center disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy ? (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="me-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                  />
+                  جارٍ التنفيذ…
+                </>
+              ) : (
+                confirmLabel
+              )}
+            </AdminModalDangerButton>
+          ) : null}
         </footer>
       </section>
     </div>,

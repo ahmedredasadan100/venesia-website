@@ -51,6 +51,12 @@ const actionIndex = read(
 const deletion = read(
   "src/app/admin/projects/project-actions/delete.ts",
 );
+const duplication = read(
+  "src/app/admin/projects/project-actions/duplicate.ts",
+);
+const featuredAction = read(
+  "src/app/admin/projects/project-actions/featured.ts",
+);
 const residentialPage = read(
   "src/app/admin/projects/residential/page.tsx",
 );
@@ -60,6 +66,12 @@ const commercialPage = read(
 const migration = read(
   "sql/migrations/20260728090000_rebuild_project_admin_data_entry.sql",
 );
+const rowActionsMigration = read(
+  "sql/migrations/20260731100000_project_row_actions_capability.sql",
+);
+const publicLoader = read("src/lib/projects/load-published-projects.ts");
+const publicMapper = read("src/lib/projects/map-public-project.ts");
+const publicHelpers = read("src/lib/projects/public-helpers.ts");
 const deleteProjectRpc = ["delete", "project", "admin", "entry"].join("_");
 const directProjectDelete = [".fr", 'om("projects")', ".del", "ete()"].join("");
 
@@ -76,6 +88,7 @@ check(
   [
     "english_name",
     "location_label",
+    "featured",
     "updated_at",
   ].every((field) => adapter.includes(field)),
   "Project list selects clean-schema identity and display fields",
@@ -83,7 +96,6 @@ check(
 check(
   [
     "publication_status",
-    "featured",
     "homepage_order",
     "map_area",
     "status",
@@ -121,6 +133,7 @@ check(
 check(
   types.includes("english_name: string") &&
     types.includes("location_label: string") &&
+    types.includes("featured: boolean") &&
     !types.includes("publication_status"),
   "Project list row type matches the clean schema",
 );
@@ -139,10 +152,12 @@ check(
 );
 check(
   client.includes("deleteProjectAjax") &&
+    client.includes("duplicateProjectAjax") &&
+    client.includes("setProjectFeaturedAjax") &&
+    client.includes("navigator.clipboard.writeText") &&
     !client.includes("bulkProjectsActionAjax") &&
-    !client.includes("duplicateProjectAjax") &&
     !client.includes("toggleProjectPublicationAjax"),
-  "The client keeps explicit delete while excluding legacy bulk, duplicate, and publication commands",
+  "The shared Project client binds copy, duplicate, featured, and delete without legacy bulk/publication commands",
 );
 check(
   !client.includes("AdminBulkActionBar") &&
@@ -152,21 +167,26 @@ check(
   "Legacy bulk and publication filters are absent from the list UI",
 );
 check(
-  table.includes('action="edit"') &&
-    table.includes('action="delete"') &&
-    !table.includes('action="visibility"') &&
-    !table.includes('action="duplicate"') &&
-    !table.includes('action="archive"') &&
-    !table.includes('action="restore"'),
-  "Rows expose only edit and explicit delete actions",
+    table.includes("AdminDataGridRowActions") &&
+    table.includes('href: `/admin/projects/${row.id}`') &&
+    table.includes("getProjectHref(row)") &&
+    table.includes('title: "معلومات المشروع"') &&
+    table.includes("copyPublicLink:") &&
+    table.includes('visibility: { access: "hidden" }') &&
+    table.includes("onToggleFeatured") &&
+    table.includes("onDuplicate") &&
+    table.includes('archive: { access: "hidden" }'),
+  "Rows expose one shared Edit, Preview, Information, Copy Link, Featured, Duplicate, and Delete declaration",
 );
 check(
   client.includes("<AdminEntityList") &&
     table.includes("AdminEntityColumnDef") &&
-    table.includes("AdminConfirmDialog") &&
+    table.includes("AdminDataGridRowActions") &&
+    table.includes('mode: "shared"') &&
+    !table.includes("AdminConfirmDialog") &&
     !table.includes("window.confirm") &&
     !client.includes("window.confirm"),
-  "Project list delegates Data Grid, column state, feedback, and confirmation to shared owners",
+  "Project list delegates Data Grid, row actions, column state, feedback, and confirmation to shared owners",
 );
 check(
   [
@@ -197,12 +217,14 @@ check(
 );
 check(
   !actions.includes("bulkProjectsActionAjax") &&
-    !actions.includes("duplicateProjectAjax") &&
+    actions.includes("duplicateProjectAjax") &&
+    actions.includes("setProjectFeaturedAjax") &&
     !actions.includes("toggleProjectPublicationAjax") &&
     !actionIndex.includes("bulkProjectsActionAjax") &&
-    !actionIndex.includes("duplicateProjectAjax") &&
+    actionIndex.includes("duplicateProjectAjax") &&
+    actionIndex.includes("setProjectFeaturedAjax") &&
     !actionIndex.includes("toggleProjectPublicationAjax"),
-  "Legacy project commands are not exported from either action boundary",
+  "Project action boundary exports only approved row commands and excludes legacy bulk/publication commands",
 );
 checkAbsent(
   "src/app/admin/projects/project-actions/status.ts",
@@ -211,10 +233,6 @@ checkAbsent(
 checkAbsent(
   "src/app/admin/projects/project-actions/bulk.ts",
   "Legacy bulk action owner is removed",
-);
-checkAbsent(
-  "src/app/admin/projects/project-actions/duplicate.ts",
-  "Legacy duplicate action owner is removed",
 );
 checkAbsent(
   "src/app/admin/projects/projects-table/LegacyProjectsTable.tsx",
@@ -232,6 +250,40 @@ check(
   migration.includes(`function public.${deleteProjectRpc}`) &&
     migration.includes(`grant execute on function public.${deleteProjectRpc}(bigint) to service_role`),
   "Aggregate delete RPC is service-role-only",
+);
+check(
+  duplication.includes("requireAdminSession") &&
+    duplication.includes('rpc(\n    "duplicate_project_admin_entry"') &&
+    duplication.includes('buildCmsAuditAction("project", "duplicate")') &&
+    duplication.includes("synchronizeDuplicatedProjectMedia") &&
+    duplication.includes("revalidateProjectPaths"),
+  "Duplicate command is authenticated, atomic-RPC-owned, audited, media-synchronized, and revalidated",
+);
+check(
+  featuredAction.includes("requireAdminSession") &&
+    featuredAction.includes('rpc(\n    "set_project_featured_admin_entry"') &&
+    featuredAction.includes('buildCmsAuditAction("project", "update")') &&
+    featuredAction.includes("revalidateProjectPaths"),
+  "Featured command writes desired authoritative state through the authenticated audited Project boundary",
+);
+check(
+  rowActionsMigration.includes("add column if not exists featured boolean") &&
+    rowActionsMigration.includes("alter column featured set default false") &&
+    rowActionsMigration.includes("alter column featured set not null") &&
+    rowActionsMigration.includes("function public.duplicate_project_admin_entry") &&
+    rowActionsMigration.includes("function public.set_project_featured_admin_entry") &&
+    rowActionsMigration.includes("for update") &&
+    rowActionsMigration.includes("public.project_floor_plan_details") &&
+    rowActionsMigration.includes("grant execute on function public.duplicate_project_admin_entry(bigint) to service_role"),
+  "Additive migration owns featured truth and transaction-complete aggregate duplication",
+);
+check(
+  publicLoader.includes('"slug", "featured"') &&
+    publicMapper.includes("featured: project.featured === true") &&
+    publicHelpers.includes("projects.filter((project) => project.featured)") &&
+    publicHelpers.includes("return `/projects/${project.slug}`") &&
+    publicHelpers.includes("return absoluteUrlWithBase(getProjectHref(project))"),
+  "Public Project loader, mapper, featured selection, and absolute public-link route share authoritative Project data",
 );
 checkAbsent(
   "scripts/qa-admin-instant-projects.mjs",

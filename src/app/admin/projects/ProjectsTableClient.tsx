@@ -7,9 +7,13 @@ import {
   AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../components/admin/entity-list";
+import { AdminEntityListPrimarySection } from "../../../components/admin/entity-list/AdminEntityListSurface";
 import { AdminInfoBar, AdminTablePagination } from "../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-feedback";
-import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
+import {
+  adminActionFailure,
+  type AdminActionResult,
+} from "../../../lib/admin/admin-action-result";
 import type { ProjectCategory } from "../../../config/projects-data";
 import type {
   AdminEntityListQuery,
@@ -29,10 +33,13 @@ import type {
 } from "../../../lib/admin/projects/entity-list-types";
 import { getProjectsDefaultColumnKeys } from "../../../lib/admin/projects/projects-list-config";
 import type { ProjectColumnKey } from "../../../lib/admin/projects/projects-list-config";
+import { getProjectPublicUrl } from "../../../lib/projects/public-helpers";
 import {
   deleteProjectAjax,
+  duplicateProjectAjax,
   restoreProjectsTablePreferences,
   saveProjectsTablePreferences,
+  setProjectFeaturedAjax,
 } from "./actions";
 import {
   createProjectColumns,
@@ -63,6 +70,7 @@ function toGridRow(row: ProjectEntityListRow): ProjectGridRow {
     arabic_name: row.arabic_name,
     english_name: row.english_name,
     location_label: row.location_label,
+    featured: row.featured,
     updated_at: row.updated_at,
   };
 }
@@ -125,6 +133,116 @@ export default function ProjectsTableClient({
     [instant],
   );
 
+  const duplicateProject = useCallback(
+    async (item: ProjectGridRow): Promise<AdminActionResult> => {
+      try {
+        const result = await instant.mutateAsync({
+          rowId: item.id,
+          action: "duplicate",
+          // A new row cannot be inserted safely into arbitrary sorted or
+          // paginated caches. Pending state is immediate; success invalidates.
+          optimistic: () => undefined,
+          execute: () => duplicateProjectAjax(item.id),
+        });
+        return {
+          ok: true,
+          feedbackStatus: result.feedbackStatus,
+          title: "تم نسخ المشروع",
+          message: result.message,
+          code: "created",
+          entityId:
+            typeof result.projectId === "number"
+              ? result.projectId
+              : undefined,
+        };
+      } catch (error) {
+        return adminActionFailure(
+          "تعذر نسخ المشروع",
+          error instanceof Error
+            ? error.message
+            : "تعذر نسخ Project Aggregate.",
+          { entityId: item.id },
+        );
+      }
+    },
+    [instant],
+  );
+
+  const toggleProjectFeatured = useCallback(
+    async (item: ProjectGridRow): Promise<AdminActionResult> => {
+      const nextFeatured = !item.featured;
+      try {
+        const result = await instant.mutateAsync({
+          rowId: item.id,
+          action: "featured",
+          optimistic: (cache) =>
+            cache.patchRows((row) =>
+              row.id === item.id
+                ? { ...row, featured: nextFeatured }
+                : row,
+            ),
+          execute: () => setProjectFeaturedAjax(item.id, nextFeatured),
+          reconcileSuccess: (confirmed, tools) => {
+            if (typeof confirmed.featured !== "boolean") return;
+            tools.cache.patchRows((row) =>
+              row.id === item.id
+                ? { ...row, featured: confirmed.featured as boolean }
+                : row,
+            );
+          },
+        });
+        const confirmedFeatured =
+          typeof result.featured === "boolean"
+            ? result.featured
+            : nextFeatured;
+        return {
+          ok: true,
+          feedbackStatus: result.feedbackStatus,
+          title: confirmedFeatured
+            ? "تم تمييز المشروع"
+            : "تم إلغاء تمييز المشروع",
+          message: result.message,
+          code: confirmedFeatured ? "featured" : "unfeatured",
+          entityId: item.id,
+        };
+      } catch (error) {
+        return adminActionFailure(
+          "تعذر تحديث تمييز المشروع",
+          error instanceof Error
+            ? error.message
+            : "تعذر تحديث القيمة المحفوظة.",
+          { entityId: item.id },
+        );
+      }
+    },
+    [instant],
+  );
+
+  const copyProjectPublicLink = useCallback(
+    async (item: ProjectGridRow): Promise<AdminActionResult> => {
+      try {
+        if (!navigator.clipboard?.writeText) {
+          throw new Error("Clipboard API is unavailable");
+        }
+        await navigator.clipboard.writeText(getProjectPublicUrl(item));
+        return {
+          ok: true,
+          feedbackStatus: "success",
+          title: "تم نسخ الرابط العام",
+          message: "تم نسخ رابط صفحة المشروع العامة إلى الحافظة.",
+          entityId: item.id,
+        };
+      } catch {
+        return adminActionFailure(
+          "تعذر نسخ الرابط تلقائيًا",
+          `انسخ الرابط يدويًا: ${getProjectPublicUrl(item)}`,
+          { entityId: item.id },
+        );
+      }
+    },
+    [],
+  );
+
   const columns = useMemo(
     () =>
       createProjectColumns({
@@ -132,9 +250,21 @@ export default function ProjectsTableClient({
           instant.rowPending?.rowId === id
             ? instant.rowPending.action
             : null,
+        mutationBusy:
+          instant.rowPending !== null || instant.bulkPending !== null,
+        onCopyPublicLink: copyProjectPublicLink,
         onDelete: deleteProject,
+        onDuplicate: duplicateProject,
+        onToggleFeatured: toggleProjectFeatured,
       }),
-    [deleteProject, instant.rowPending],
+    [
+      copyProjectPublicLink,
+      deleteProject,
+      duplicateProject,
+      instant.bulkPending,
+      instant.rowPending,
+      toggleProjectFeatured,
+    ],
   );
   const initialFeedback = useMemo(
     () =>
@@ -163,8 +293,8 @@ export default function ProjectsTableClient({
     : 0;
 
   return (
-    <AdminEntityListSurface className="space-y-4" consumer="projects">
-      <div data-admin-projects-type={type}>
+    <AdminEntityListSurface consumer="projects">
+      <AdminEntityListPrimarySection data-admin-projects-type={type}>
         <AdminInfoBar
           label={
             type === "residential"
@@ -174,31 +304,33 @@ export default function ProjectsTableClient({
           description="قائمة إدخال المشاريع بالمخطط النظيف. النشر والمراجعة والتحديثات التنفيذية ليست جزءًا من هذه المرحلة."
           meta={`${controller.result.pagination.totalRows} مشروع`}
         />
-      </div>
+      </AdminEntityListPrimarySection>
 
-      <AdminEntityListFilters
-        basePath={basePath}
-        search={{
-          placeholder: "ابحث بالاسم أو الرابط المختصر",
-          value: controller.query.search,
-          className: "max-w-[360px]",
-        }}
-        filters={[]}
-        values={{}}
-        onQueryPatch={(patch) => {
-          const search =
-            "q" in patch
-              ? (patch.q ?? "").trim()
-              : controller.query.search;
-          controller.setSearchAndFilters(
-            search,
-            { projectType: type },
-            "q" in patch ? "replace" : "push",
-          );
-        }}
-      />
+      <AdminEntityListPrimarySection>
+        <AdminEntityListFilters
+          basePath={basePath}
+          search={{
+            placeholder: "ابحث بالاسم أو الرابط المختصر",
+            value: controller.query.search,
+            className: "max-w-[360px]",
+          }}
+          filters={[]}
+          values={{}}
+          onQueryPatch={(patch) => {
+            const search =
+              "q" in patch
+                ? (patch.q ?? "").trim()
+                : controller.query.search;
+            controller.setSearchAndFilters(
+              search,
+              { projectType: type },
+              "q" in patch ? "replace" : "push",
+            );
+          }}
+        />
+      </AdminEntityListPrimarySection>
 
-      <div
+      <AdminEntityListPrimarySection
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }
@@ -271,7 +403,7 @@ export default function ProjectsTableClient({
           }}
           initialFeedback={initialFeedback}
         />
-      </div>
+      </AdminEntityListPrimarySection>
 
       <AdminTablePagination
         basePath={basePath}

@@ -28,10 +28,17 @@ import AdminEntityListTable, {
   type AdminEntityListTableProps,
   type AdminEntitySortState,
 } from "./AdminEntityListTable";
+import { AdminEntityListPrimarySection } from "./AdminEntityListSurface";
 import {
   AdminFloatingLayerProvider,
+  type AdminEntityListConfirmationSnapshot,
   useAdminFloatingLayer,
 } from "./AdminFloatingLayerContext";
+
+export type AdminEntityListBulkConfirmation = Pick<
+  AdminEntityListConfirmationSnapshot,
+  "title" | "description" | "confirmLabel" | "cancelLabel"
+>;
 
 export type AdminEntityListProps<
   TRow,
@@ -56,6 +63,10 @@ export type AdminEntityListProps<
   bulkOptions?: readonly AdminEntityBulkOption[];
   bulkEntityLabel?: string;
   onBulkExecute?: (action: string, ids: TId[]) => Promise<AdminActionResult>;
+  getBulkConfirmation?: (
+    action: string,
+    ids: TId[],
+  ) => AdminEntityListBulkConfirmation | null;
   bulkAdditionalControls?: (ctx: {
     bulkAction: string;
     setBulkAction: (value: string) => void;
@@ -112,6 +123,7 @@ function AdminEntityListInner<
     bulkOptions = [],
     bulkEntityLabel = "عنصر",
     onBulkExecute,
+    getBulkConfirmation,
     bulkAdditionalControls,
     onSuccessfulMutation,
     mapResultToFeedback,
@@ -244,29 +256,64 @@ function AdminEntityListInner<
     }
   }
 
+  function requestBulkExecution(action: string, ids: TId[]) {
+    const confirmation = getBulkConfirmation?.(action, ids) ?? null;
+    if (!confirmation) {
+      void executeBulk(action, ids);
+      return;
+    }
+    if (!floating) {
+      showFeedback(
+        {
+          ok: false,
+          title: "تعذر فتح التأكيد",
+          message: "لم يبدأ الإجراء لأن طبقة التأكيد المشتركة غير متاحة.",
+        },
+        { bulk: true },
+      );
+      return;
+    }
+
+    floating.openConfirmation({
+      ...confirmation,
+      onConfirm: () => executeBulk(action, ids),
+    });
+  }
+
   const openLayerId = floating?.openLayerId ?? null;
   const setOpenLayerId = floating?.setOpenLayerId ?? (() => undefined);
+  const showToolbar = Boolean(
+    toolbarStart || (enableColumnManagement && onPersistColumns),
+  );
 
   return (
-    <section id={listId} className="scroll-mt-6 space-y-3" data-admin-entity-list="">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">{toolbarStart}</div>
-        {enableColumnManagement && onPersistColumns ? (
-          <AdminColumnVisibilityMenu
-            columns={columns}
-            visibleColumns={visibleColumns}
-            defaultColumns={resolvedDefaultVisibleColumns}
-            onChange={handleVisibleColumnsChange}
-            onPersist={onPersistColumns}
-            onRestore={onRestoreColumns}
-            onPersisted={() => {
-              if (onSuccessfulMutation) void onSuccessfulMutation();
-              else router.refresh();
-            }}
-            scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
-          />
-        ) : null}
-      </div>
+    <section
+      id={listId}
+      className="scroll-mt-6 flex flex-col gap-7"
+      data-admin-entity-list=""
+    >
+      {showToolbar ? (
+        <AdminEntityListPrimarySection>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">{toolbarStart}</div>
+            {enableColumnManagement && onPersistColumns ? (
+              <AdminColumnVisibilityMenu
+                columns={columns}
+                visibleColumns={visibleColumns}
+                defaultColumns={resolvedDefaultVisibleColumns}
+                onChange={handleVisibleColumnsChange}
+                onPersist={onPersistColumns}
+                onRestore={onRestoreColumns}
+                onPersisted={() => {
+                  if (onSuccessfulMutation) void onSuccessfulMutation();
+                  else router.refresh();
+                }}
+                scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
+              />
+            ) : null}
+          </div>
+        </AdminEntityListPrimarySection>
+      ) : null}
 
       {enableSelection && bulkOptions.length && onBulkExecute ? (
         <AdminBulkActionBar
@@ -274,7 +321,7 @@ function AdminEntityListInner<
           entityLabel={bulkEntityLabel}
           options={[...bulkOptions]}
           onClearSelection={selection.clearSelection}
-          onExecute={executeBulk}
+          onExecute={requestBulkExecution}
           isBusy={bulkPending}
           actionValue={bulkAction}
           actionControl={
@@ -305,22 +352,24 @@ function AdminEntityListInner<
         label={`إشعارات ${listId}`}
       />
 
-      <AdminEntityListTable
-        key={visibleColumnDefs.map((column) => column.key).join("|")}
-        rows={rows}
-        columns={visibleColumnDefs}
-        getRowId={getRowId}
-        getRowLabel={getRowLabel}
-        sort={sort}
-        sortMode={sortMode}
-        selection={enableSelection ? selection : null}
-        selectionLabel={selectionLabel}
-        actionsColumnWidth={actionsColumnWidth}
-        empty={resolveAdminEntityListEmptyState(emptyState)}
-        getRowDepth={getRowDepth}
-        rowClassName={rowClassName}
-        onMutationResult={handleMutationResult}
-      />
+      <AdminEntityListPrimarySection>
+        <AdminEntityListTable
+          key={visibleColumnDefs.map((column) => column.key).join("|")}
+          rows={rows}
+          columns={visibleColumnDefs}
+          getRowId={getRowId}
+          getRowLabel={getRowLabel}
+          sort={sort}
+          sortMode={sortMode}
+          selection={enableSelection ? selection : null}
+          selectionLabel={selectionLabel}
+          actionsColumnWidth={actionsColumnWidth}
+          empty={resolveAdminEntityListEmptyState(emptyState)}
+          getRowDepth={getRowDepth}
+          rowClassName={rowClassName}
+          onMutationResult={handleMutationResult}
+        />
+      </AdminEntityListPrimarySection>
     </section>
   );
 }

@@ -54,6 +54,7 @@ export type PublicProject = {
   category: ProjectCategory;
   arabicName: string;
   englishName: string;
+  featured: boolean;
   /** @deprecated Track Your Project is outside this tranche; clean public UI uses englishName. */
   code: string;
   generalDescription: string;

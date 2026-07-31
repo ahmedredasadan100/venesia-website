@@ -74,11 +74,19 @@ export type { AdminFormSwitchProps } from "./AdminFormSwitch";
 
 export {
   ADMIN_DATA_GRID_RULES,
+  ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT,
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
+  ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH,
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
   ADMIN_DATA_GRID_HEADER_CLASSES,
   adminDataGridActionsColumn,
   getAdminDataGridActionsColumnWidth,
+  getAdminDataGridFixedColumnStyle,
+  getAdminDataGridHierarchyPrimaryColumnWidth,
+  getAdminDataGridPrimaryColumnWidth,
   AdminDataGrid,
   AdminDataGridHeader,
   AdminDataGridRow,
@@ -95,15 +103,39 @@ export {
   AdminDataGridStickyActionsHeaderCell,
   AdminDataGridStickyActionsCell,
   AdminDataGridActionButton,
+  AdminDataGridActionIcon,
   AdminDataGridEmpty,
 } from "./AdminDataGrid";
+export type { AdminDataGridAction } from "./AdminDataGrid";
 export { default as AdminDataGridRowActions } from "./AdminDataGridRowActions";
-export type { AdminDataGridRowActionsProps } from "./AdminDataGridRowActions";
+export {
+  ADMIN_ROW_ACTION_MORE_ORDER,
+  ADMIN_ROW_ACTION_PRIMARY_ORDER,
+} from "./AdminDataGridRowActions";
+export type {
+  AdminDataGridRowActionsProps,
+  AdminRowActionAllowed,
+  AdminRowActionArchive,
+  AdminRowActionDisabled,
+  AdminRowActionFeatured,
+  AdminRowActionHidden,
+  AdminRowActionInformation,
+  AdminRowActionInformationItem,
+  AdminRowActionMoreKind,
+  AdminRowActionPrimaryKind,
+  AdminRowActionsCapability,
+  AdminRowActionTarget,
+  AdminRowActionVisibility,
+} from "./AdminDataGridRowActions";
 export { default as AdminDuplicateResourceModal } from "./AdminDuplicateResourceModal";
 export { default as AdminConfirmDialog } from "./AdminConfirmDialog";
 export type { AdminConfirmDialogProps } from "./AdminConfirmDialog";
-export { default as AdminActivityPopover } from "./AdminActivityPopover";
+export {
+  default as AdminActivityPopover,
+  AdminActivityContent,
+} from "./AdminActivityPopover";
 export type {
+  AdminActivityContentProps,
   AdminActivityItem,
   AdminActivityPopoverProps,
 } from "./AdminActivityPopover";
