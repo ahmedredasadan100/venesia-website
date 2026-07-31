@@ -25,6 +25,7 @@ import {
   type UnifiedContentColumnKey,
   type UnifiedContentSortKey,
 } from "./unified-content-columns";
+import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions";
 
 const BULK_OPTIONS = [
   { value: "publish", label: "نشر" },
@@ -74,6 +75,7 @@ export default function UnifiedContentList({
   sort,
   initialVisibleColumns,
   initialFeedback,
+  rowActionHandlers,
   onSortChange,
   onSuccessfulMutation,
 }: {
@@ -83,6 +85,7 @@ export default function UnifiedContentList({
   sort: ContentSortValue;
   initialVisibleColumns: string[];
   initialFeedback?: AdminActionFeedback | null;
+  rowActionHandlers: UnifiedContentRowActionHandlers;
   onSortChange?: (
     sort: {
       key: UnifiedContentSortKey;
@@ -97,11 +100,8 @@ export default function UnifiedContentList({
   const router = useRouter();
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const columns = useMemo(
-    () =>
-      createUnifiedContentColumns(currentListPath, {
-        deferRefresh: Boolean(onSuccessfulMutation),
-      }),
-    [currentListPath, onSuccessfulMutation],
+    () => createUnifiedContentColumns(currentListPath, rowActionHandlers),
+    [currentListPath, rowActionHandlers],
   );
   const parsedSort = parseSort(sort);
   const categoryOptions = useMemo(

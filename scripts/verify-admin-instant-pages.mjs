@@ -17,6 +17,8 @@ const [
   company,
   settings,
   contracts,
+  pageColumns,
+  pageColumnActions,
 ] = await Promise.all([
   read("src/lib/admin/entity-list/data-engine/registry.ts"),
   read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx"),
@@ -32,14 +34,29 @@ const [
   read("src/lib/admin/shell/company-config.ts"),
   read("src/app/admin/settings/general/actions.ts"),
   read("src/lib/admin/entity-list/data-engine/contracts.ts"),
+  read("src/lib/admin/pages/pages-list-config.ts"),
+  read("src/app/admin/pages-blocks/pages/page-actions/column-preferences.ts"),
 ]);
 assert.match(registry, /pages:\s*pagesEntityListAdapter/);
 assert.match(client, /useAdminEntityListController/);
 assert.match(client, /useAdminEntityInstantMutation/);
 assert.match(client, /controller\.query/);
-assert.match(client, /import AdminNotice/);
-assert.match(client, /<AdminNotice/);
-assert.doesNotMatch(client, /feedback \? <div role="status"/);
+assert.match(client, /<AdminEntityList</);
+assert.match(client, /enableColumnManagement/);
+assert.match(client, /mapAdminActionResultToFeedback/);
+assert.doesNotMatch(client, /<AdminNotice\b|\bsetFeedback\b|\buseAdminFeedback\b/);
+assert.match(client, /AdminDataGridRowActions/);
+assert.match(client, /duplicatePageAjax/);
+assert.match(
+  client,
+  /action:\s*"duplicate"[\s\S]*?optimistic:\s*\(\)\s*=>\s*undefined/,
+);
+assert.match(client, /confirmation:\s*\{[\s\S]*?mode:\s*"shared"/);
+assert.match(client, /getBulkConfirmation/);
+assert.equal((client.match(/<AdminConfirmDialog/g) ?? []).length, 0);
+assert.match(pageColumns, /PAGES_PREFERENCE_COLUMN_KEYS/);
+assert.match(pageColumnActions, /saveAdminColumnPreferences/);
+assert.match(page, /readAdminColumnPreferences/);
 assert.doesNotMatch(client, /router\.refresh|window\.confirm|useAdminTable/);
 assert.doesNotMatch(actions, /redirect\(|loadPagesTableRows/);
 assert.doesNotMatch(actions, /rows\s*:/);

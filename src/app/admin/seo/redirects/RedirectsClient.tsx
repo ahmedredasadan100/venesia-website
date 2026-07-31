@@ -1,31 +1,44 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
+  AdminEntityList,
+  AdminEntityListPageLayout,
+  AdminEntityListPrimarySection,
+  AdminEntityListSurface,
+} from "../../../../components/admin/entity-list";
+import {
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   AdminActionButton,
-  AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridCenterCell,
-  AdminDataGridEmpty,
-  AdminDataGridHeader,
-  AdminDataGridPrimaryCell,
-  AdminDataGridRow,
-  AdminDataGridStatusCell,
-  AdminListEmptyState,
+  AdminDataGridRowActions,
   AdminPageContextHeader,
   AdminStatusPill,
+  type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
+import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
+import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import type { UrlRedirectRecord } from "../../../../lib/redirects/redirect-types";
 
-import RedirectDeleteButton from "./RedirectDeleteButton";
 import RedirectFormModal from "./RedirectFormModal";
 import RedirectsListFilters from "./RedirectsListFilters";
-import { toggleRedirectStatusAction } from "./actions";
+import {
+  deleteRedirectAction,
+  toggleRedirectStatusAction,
+} from "./actions";
 
-const columns =
-  "minmax(180px,1.1fr) minmax(180px,1.1fr) 96px 96px minmax(140px,0.9fr) minmax(150px,0.9fr) minmax(150px,0.9fr) 132px";
+type RedirectColumnKey =
+  | "source"
+  | "destination"
+  | "type"
+  | "status"
+  | "note"
+  | "created"
+  | "updated"
+  | "actions";
+
+type RedirectSortKey = "fixed";
 
 type RedirectsClientProps = {
   redirects: UrlRedirectRecord[];
@@ -62,17 +75,200 @@ function getNoticeText(notice?: string | null) {
   return null;
 }
 
+function redirectFormData(id: number) {
+  const formData = new FormData();
+  formData.set("id", String(id));
+  return formData;
+}
+
+function createRedirectColumns(input: {
+  pendingRowId: number | null;
+  onEdit: (row: UrlRedirectRecord) => void;
+  onToggle: (row: UrlRedirectRecord) => Promise<void>;
+  onDelete: (row: UrlRedirectRecord) => Promise<void>;
+}): AdminEntityColumnDef<
+  UrlRedirectRecord,
+  RedirectColumnKey,
+  RedirectSortKey
+>[] {
+  return [
+    {
+      key: "source",
+      label: "المصدر",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: 210,
+      width: 210,
+      sticky: "start",
+      primary: true,
+      renderCell: ({ row }) => (
+        <span className="block break-all text-right font-en text-sm text-white">
+          {row.source_path}
+        </span>
+      ),
+    },
+    {
+      key: "destination",
+      label: "الوجهة",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: 220,
+      width: 220,
+      renderCell: ({ row }) => (
+        <span className="block break-all text-right font-en text-sm text-white/88">
+          {row.destination_path}
+        </span>
+      ),
+    },
+    {
+      key: "type",
+      label: "النوع",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: 96,
+      width: 96,
+      renderCell: ({ row }) => (
+        <span className="font-en text-sm">{row.redirect_type}</span>
+      ),
+    },
+    {
+      key: "status",
+      label: "الحالة",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: 112,
+      width: 112,
+      renderCell: ({ row }) => (
+        <AdminStatusPill tone={row.status === "active" ? "green" : "gold"}>
+          {row.status === "active" ? "نشط" : "غير نشط"}
+        </AdminStatusPill>
+      ),
+    },
+    {
+      key: "note",
+      label: "ملاحظة",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: 150,
+      width: 150,
+      renderCell: ({ row }) => (
+        <span className="block truncate text-right text-sm text-white/70">
+          {row.note || "—"}
+        </span>
+      ),
+    },
+    {
+      key: "created",
+      label: "أُنشئ",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: 164,
+      width: 164,
+      renderCell: ({ row }) => (
+        <span className="block text-right text-sm text-white/62">
+          {formatDate(row.created_at)}
+        </span>
+      ),
+    },
+    {
+      key: "updated",
+      label: "آخر تحديث",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: 164,
+      width: 164,
+      renderCell: ({ row }) => (
+        <span className="block text-right text-sm text-white/62">
+          {formatDate(row.updated_at)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "الإجراءات",
+      defaultVisible: true,
+      hideable: false,
+      minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+      sticky: "end",
+      renderCell: ({ row }) => {
+        const pending = input.pendingRowId === row.id;
+        const capability: AdminRowActionsCapability = {
+          entityType: "redirect",
+          entityId: row.id,
+          entityLabel: row.source_path,
+          actions: {
+            edit: pending
+              ? {
+                  access: "disabled",
+                  disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                }
+              : { access: "allowed", onSelect: () => input.onEdit(row) },
+            preview: { access: "hidden" },
+            information: {
+              access: "allowed",
+              title: "معلومات التحويل",
+              items: [
+                { label: "المعرف", value: String(row.id) },
+                { label: "المصدر", value: row.source_path },
+                { label: "الوجهة", value: row.destination_path },
+                { label: "النوع", value: row.redirect_type },
+                {
+                  label: "الحالة",
+                  value: row.status === "active" ? "نشط" : "غير نشط",
+                },
+              ],
+            },
+            copyPublicLink: { access: "hidden" },
+            visibility: pending
+              ? {
+                  access: "disabled",
+                  disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                  pending: true,
+                  isVisible: row.status === "active",
+                }
+              : {
+                  access: "allowed",
+                  isVisible: row.status === "active",
+                  onSelect: () => input.onToggle(row),
+                },
+            featured: { access: "hidden" },
+            duplicate: { access: "hidden" },
+            archive: { access: "hidden" },
+            delete: pending
+              ? {
+                  access: "disabled",
+                  disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                  pending: true,
+                }
+              : {
+                  access: "allowed",
+                  onSelect: () => input.onDelete(row),
+                  confirmation: {
+                    mode: "shared",
+                    title: "تأكيد حذف التحويل",
+                    description: `هل أنت متأكد من حذف التحويل من ${row.source_path}؟ لا يمكن التراجع عن هذا الإجراء.`,
+                    confirmLabel: "حذف التحويل",
+                  },
+                },
+          },
+        };
+        return <AdminDataGridRowActions capability={capability} size="compact" />;
+      },
+    },
+  ];
+}
+
 export default function RedirectsClient({
   redirects,
   notice,
   error,
   initialFilters,
 }: RedirectsClientProps) {
-  const [isPending, startTransition] = useTransition();
   const [rows, setRows] = useState(redirects);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRedirect, setEditingRedirect] = useState<UrlRedirectRecord | null>(null);
-
+  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const noticeText = getNoticeText(notice);
 
   const filteredRedirects = useMemo(() => {
@@ -104,117 +300,114 @@ export default function RedirectsClient({
     });
   }
 
-  function handleToggleStatus(redirect: UrlRedirectRecord) {
-    const formData = new FormData();
-    formData.set("id", String(redirect.id));
-    startTransition(async () => {
-      await toggleRedirectStatusAction(formData);
-    });
+  async function runRowAction(
+    row: UrlRedirectRecord,
+    action: (formData: FormData) => Promise<unknown>,
+  ) {
+    if (pendingRowId !== null) return;
+    setPendingRowId(row.id);
+    try {
+      await action(redirectFormData(row.id));
+    } finally {
+      setPendingRowId(null);
+    }
   }
 
+  const columns = useMemo(
+    () =>
+      createRedirectColumns({
+        pendingRowId,
+        onEdit: setEditingRedirect,
+        onToggle: (row) => runRowAction(row, toggleRedirectStatusAction),
+        onDelete: (row) => runRowAction(row, deleteRedirectAction),
+      }),
+    // Server actions navigate after success; only the pending row changes locally.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pendingRowId],
+  );
+  const hasFilters =
+    Boolean(initialFilters.q.trim()) ||
+    initialFilters.status !== "all" ||
+    initialFilters.redirectType !== "all";
+
   return (
-    <main className="space-y-7" dir="rtl">
-      <AdminPageContextHeader
-        eyebrow="SEO REDIRECTS"
-        title="إدارة التحويلات"
-        description="أنشئ تحويلات URL عامة لتغييرات المسارات بعد الإطلاق. التحويلات النشطة تُطبَّق فورًا على الطلبات العامة."
-        actions={
-          <AdminActionButton variant="primary" onClick={() => setCreateOpen(true)}>
-            إضافة تحويل
-          </AdminActionButton>
-        }
-      />
-
-      {noticeText ? <AdminNotice variant="success" message={noticeText} /> : null}
-      {error ? (
-        <AdminNotice variant="danger" title="تعذر تنفيذ العملية" message={decodeURIComponent(error)} />
-      ) : null}
-
-      <section className="rounded-[18px] border border-[#D8B87A]/12 bg-[linear-gradient(180deg,rgba(10,15,21,0.92),rgba(6,9,13,0.96))] p-4 shadow-[0_30px_100px_rgba(0,0,0,0.34)]">
-        <div className="mb-4">
-          <RedirectsListFilters
-            q={initialFilters.q}
-            status={initialFilters.status}
-            redirectType={initialFilters.redirectType}
-          />
-        </div>
-
-        {rows.length === 0 ? (
-          <AdminListEmptyState
-            title="لا توجد تحويلات بعد"
-            description="أنشئ أول تحويل URL لإدارة تغييرات المسارات العامة بعد الإطلاق."
-          >
-            <button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className="mt-6 inline-flex rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
-            >
+    <>
+      <AdminEntityListPageLayout className="pb-10" dir="rtl">
+        <AdminPageContextHeader
+          eyebrow="SEO REDIRECTS"
+          title="إدارة التحويلات"
+          description="أنشئ تحويلات URL عامة لتغييرات المسارات بعد الإطلاق. التحويلات النشطة تُطبَّق فورًا على الطلبات العامة."
+          actions={
+            <AdminActionButton variant="primary" onClick={() => setCreateOpen(true)}>
               إضافة تحويل
-            </button>
-          </AdminListEmptyState>
-        ) : (
-          <AdminDataGrid summary={`${filteredRedirects.length} تحويل`}>
-            <AdminDataGridHeader columns={columns}>
-              <span>المصدر</span>
-              <span>الوجهة</span>
-              <span className="text-center">النوع</span>
-              <span className="text-center">الحالة</span>
-              <span>ملاحظة</span>
-              <span>أُنشئ</span>
-              <span>آخر تحديث</span>
-              <span className="text-center">الإجراءات</span>
-            </AdminDataGridHeader>
+            </AdminActionButton>
+          }
+        />
 
-            {filteredRedirects.length === 0 ? (
-              <AdminDataGridEmpty>لا توجد نتائج مطابقة للبحث أو الفلتر.</AdminDataGridEmpty>
-            ) : (
-              filteredRedirects.map((row) => (
-                <AdminDataGridRow key={row.id} columns={columns} divided>
-                  <AdminDataGridPrimaryCell>
-                    <span className="font-en text-sm text-white">{row.source_path}</span>
-                  </AdminDataGridPrimaryCell>
-                  <AdminDataGridPrimaryCell>
-                    <span className="font-en text-sm text-white/88 break-all">{row.destination_path}</span>
-                  </AdminDataGridPrimaryCell>
-                  <AdminDataGridCenterCell>
-                    <span className="font-en text-sm">{row.redirect_type}</span>
-                  </AdminDataGridCenterCell>
-                  <AdminDataGridStatusCell>
-                    <AdminStatusPill tone={row.status === "active" ? "green" : "gold"}>
-                      {row.status === "active" ? "نشط" : "غير نشط"}
-                    </AdminStatusPill>
-                  </AdminDataGridStatusCell>
-                  <AdminDataGridPrimaryCell>
-                    <span className="text-sm text-white/70">{row.note || "—"}</span>
-                  </AdminDataGridPrimaryCell>
-                  <AdminDataGridPrimaryCell>
-                    <span className="text-sm text-white/62">{formatDate(row.created_at)}</span>
-                  </AdminDataGridPrimaryCell>
-                  <AdminDataGridPrimaryCell>
-                    <span className="text-sm text-white/62">{formatDate(row.updated_at)}</span>
-                  </AdminDataGridPrimaryCell>
-                  <div className="flex items-center justify-center gap-1.5">
-                    <AdminDataGridActionButton
-                      action="edit"
-                      size="compact"
-                      title="تعديل التحويل"
-                      onClick={() => setEditingRedirect(row)}
-                    />
-                    <AdminDataGridActionButton
-                      action="visibility"
-                      size="compact"
-                      title={row.status === "active" ? "إيقاف التحويل" : "تفعيل التحويل"}
-                      disabled={isPending}
-                      onClick={() => handleToggleStatus(row)}
-                    />
-                    <RedirectDeleteButton redirect={row} />
+        {noticeText ? <AdminNotice variant="success" message={noticeText} /> : null}
+        {error ? (
+          <AdminNotice
+            variant="danger"
+            title="تعذر تنفيذ العملية"
+            message={decodeURIComponent(error)}
+          />
+        ) : null}
+
+        <AdminEntityListSurface consumer="redirects">
+          <AdminEntityListPrimarySection>
+            <RedirectsListFilters
+              q={initialFilters.q}
+              status={initialFilters.status}
+              redirectType={initialFilters.redirectType}
+            />
+          </AdminEntityListPrimarySection>
+
+          <AdminEntityListPrimarySection>
+            <AdminEntityList<
+              UrlRedirectRecord,
+              RedirectColumnKey,
+              RedirectSortKey,
+              number
+            >
+              listId="redirects-table"
+              rows={filteredRedirects}
+              columns={columns}
+              getRowId={(row) => row.id}
+              getRowLabel={(row) => row.source_path}
+              enableColumnManagement={false}
+              enableSelection={false}
+              mapResultToFeedback={mapAdminActionResultToFeedback}
+              sort={null}
+              actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
+              emptyState={{
+                mode: rows.length === 0 && !hasFilters ? "system" : "filtered",
+                systemEmpty: (
+                  <div>
+                    <p className="text-base font-semibold text-white">
+                      لا توجد تحويلات بعد
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-white/45">
+                      أنشئ أول تحويل URL لإدارة تغييرات المسارات العامة بعد الإطلاق.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setCreateOpen(true)}
+                      className="mt-6 inline-flex rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
+                    >
+                      إضافة تحويل
+                    </button>
                   </div>
-                </AdminDataGridRow>
-              ))
-            )}
-          </AdminDataGrid>
-        )}
-      </section>
+                ),
+                filteredEmpty: (
+                  <p className="text-base font-semibold text-white">
+                    لا توجد نتائج مطابقة للبحث أو الفلتر
+                  </p>
+                ),
+              }}
+            />
+          </AdminEntityListPrimarySection>
+        </AdminEntityListSurface>
+      </AdminEntityListPageLayout>
 
       <RedirectFormModal
         open={createOpen}
@@ -229,6 +422,6 @@ export default function RedirectsClient({
         onClose={() => setEditingRedirect(null)}
         onSaved={handleRedirectSaved}
       />
-    </main>
+    </>
   );
 }

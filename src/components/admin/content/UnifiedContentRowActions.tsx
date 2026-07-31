@@ -1,197 +1,190 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
-  duplicateUnifiedContent,
-  setUnifiedContentStatus,
-  softDeleteUnifiedContent,
-  toggleUnifiedContentFeatured,
-} from "../../../app/admin/content/topics/actions";
-import {
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
-} from "../ui/AdminDataGrid";
-import AdminConfirmDialog from "../ui/AdminConfirmDialog";
+  AdminDataGridRowActions,
+  type AdminRowActionsCapability,
+} from "../ui";
 import {
   adminContentTopicPath,
   adminContentTopicPreviewPath,
 } from "../../../lib/admin/content-routes";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 import { getContentPublicVisibilityState } from "../../../lib/content-public-visibility";
-import AdminContentActivityPopover from "./AdminContentActivityPopover";
 
-type RowMutationKey = "delete" | "duplicate" | "feature" | "visibility";
-type RowMutation = (formData: FormData) => Promise<AdminActionResult>;
+export type UnifiedContentRowActionHandlers = {
+  rowPendingAction: (rowId: number) => string | null;
+  mutationBusy: boolean;
+  onVisibility: (
+    row: UnifiedContentRow,
+    nextStatus: "published" | "unpublished",
+  ) => Promise<AdminActionResult>;
+  onFeatured: (row: UnifiedContentRow) => Promise<AdminActionResult>;
+  onDuplicate: (row: UnifiedContentRow) => Promise<AdminActionResult>;
+  onDelete: (row: UnifiedContentRow) => Promise<AdminActionResult>;
+};
 
 export default function UnifiedContentRowActions({
   row,
   currentListPath,
   onMutationResult,
-  deferRefresh = false,
+  handlers,
 }: {
   row: UnifiedContentRow;
   currentListPath: string;
   onMutationResult?: (result: AdminActionResult) => void;
-  /** When true, the parent controller refreshes/invalidates instead of router.refresh(). */
-  deferRefresh?: boolean;
+  handlers: UnifiedContentRowActionHandlers;
 }) {
-  const router = useRouter();
-  const pendingRef = useRef<RowMutationKey | null>(null);
-  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const [pendingAction, setPendingAction] = useState<RowMutationKey | null>(
-    null,
-  );
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [, startTransition] = useTransition();
   const visibility = getContentPublicVisibilityState({
     status: row.status,
     deletedAt: row.deleted_at,
   });
+  const nextStatus = visibility.nextStatus;
+  const pendingAction = handlers.rowPendingAction(row.id);
 
-  /**
-   * Mutation state is owned per {row, action} and settles deterministically:
-   * pending starts when the server action fires and always ends in `finally`,
-   * never by waiting for a refetched row value to arrive.
-   */
-  function runMutation(
-    key: RowMutationKey,
-    action: RowMutation,
-    values: Record<string, string>,
-    onSettled?: () => void,
-  ): Promise<void> {
-    if (pendingRef.current) return Promise.resolve();
-    pendingRef.current = key;
-    setPendingAction(key);
-    const formData = new FormData();
-    Object.entries(values).forEach(([name, value]) => formData.set(name, value));
-
-    return new Promise((resolve) => {
-      startTransition(async () => {
-        try {
-          const result = await action(formData);
-          // Engine consumers patch/invalidate their query cache from this
-          // result before we settle, so the row reflects server truth.
-          onMutationResult?.(result);
-          if (result.ok && !deferRefresh) router.refresh();
-        } catch {
-          onMutationResult?.({
-            ok: false,
-            title: "تعذر تنفيذ العملية",
-            message: "حدث خطأ غير متوقع. حاول مرة أخرى.",
-          });
-        } finally {
-          onSettled?.();
-          pendingRef.current = null;
-          setPendingAction(null);
-          resolve();
-        }
-      });
-    });
+  async function publishResult(result: Promise<AdminActionResult>) {
+    const resolved = await result;
+    onMutationResult?.(resolved);
+    return resolved;
   }
 
-  const mutationBusy = pendingAction !== null;
-  const editHref = adminContentTopicPath(row.id, {
-    returnTo: currentListPath,
-  });
+  const pendingReason = "انتظر انتهاء الإجراء الحالي.";
 
-  return (
-    <AdminDataGridActionsCell compact>
-      <AdminDataGridActionButton
-        action="edit"
-        href={editHref}
-        size="compact"
-        title="تعديل"
-      />
-      <AdminDataGridActionButton
-        action="preview"
-        href={adminContentTopicPreviewPath(row.id)}
-        target="_blank"
-        rel="noreferrer"
-        size="compact"
-        title="معاينة"
-      />
-      <AdminDataGridActionButton
-        action="visibility"
-        size="compact"
-        isCurrentlyHidden={!visibility.isPubliclyVisible}
-        pending={pendingAction === "visibility"}
-        disabled={mutationBusy || !visibility.nextStatus}
-        title={visibility.tooltip}
-        ariaLabel={visibility.ariaLabel}
-        tone={visibility.isPubliclyVisible ? "green" : "dark"}
-        onClick={() => {
-          if (!visibility.nextStatus) return;
-          runMutation("visibility", setUnifiedContentStatus, {
-            id: String(row.id),
-            next_status: visibility.nextStatus,
-          });
-        }}
-      />
-      <AdminDataGridActionButton
-        action="feature"
-        size="compact"
-        active={Boolean(row.is_featured)}
-        ariaPressed={Boolean(row.is_featured)}
-        pending={pendingAction === "feature"}
-        disabled={mutationBusy}
-        title={row.is_featured ? "إلغاء التمييز" : "تعيين كمميز"}
-        tone={row.is_featured ? "gold" : "dark"}
-        onClick={() =>
-          runMutation("feature", toggleUnifiedContentFeatured, {
-            id: String(row.id),
-          })
-        }
-      />
-      <AdminDataGridActionButton
-        action="duplicate"
-        size="compact"
-        pending={pendingAction === "duplicate"}
-        disabled={mutationBusy}
-        title="نسخ"
-        onClick={() =>
-          runMutation("duplicate", duplicateUnifiedContent, {
-            id: String(row.id),
-          })
-        }
-      />
-      <AdminDataGridActionButton
-        action="delete"
-        buttonRef={deleteTriggerRef}
-        size="compact"
-        pending={pendingAction === "delete"}
-        disabled={mutationBusy}
-        title="حذف آمن"
-        ariaHasPopup="dialog"
-        ariaExpanded={deleteDialogOpen}
-        onClick={() => setDeleteDialogOpen(true)}
-      />
-      <AdminConfirmDialog
-        open={deleteDialogOpen}
-        title="هل أنت متأكد من حذف المحتوى؟"
-        description="سيتم حذف المحتوى حذفًا آمنًا وإزالته من القائمة."
-        confirmLabel="تأكيد الحذف"
-        tone="danger"
-        pending={pendingAction === "delete"}
-        returnFocusRef={deleteTriggerRef}
-        onCancel={() => setDeleteDialogOpen(false)}
-        onConfirm={() =>
-          runMutation(
-            "delete",
-            softDeleteUnifiedContent,
-            { id: String(row.id) },
-            () => setDeleteDialogOpen(false),
-          )
-        }
-      />
-      <AdminContentActivityPopover
-        publishedBy={row.published_by_display}
-        publishedAt={row.published_at}
-        updatedBy={row.updated_by_display}
-        updatedAt={row.updated_at}
-        viewsCount={row.views_count}
-      />
-    </AdminDataGridActionsCell>
-  );
+  const capability: AdminRowActionsCapability = {
+    entityType: "topic",
+    entityId: row.id,
+    entityLabel: row.title || `الموضوع ${row.id}`,
+    actions: {
+      edit: {
+        access: "allowed",
+        href: adminContentTopicPath(row.id, { returnTo: currentListPath }),
+      },
+      preview: {
+        access: "allowed",
+        href: adminContentTopicPreviewPath(row.id),
+        target: "_blank",
+        rel: "noopener noreferrer",
+      },
+      information: {
+        access: "allowed",
+        title: "معلومات نشاط المحتوى",
+        items: [
+          {
+            label: "تم النشر بواسطة:",
+            value: row.published_at
+              ? row.published_by_display?.trim() || "غير مسجل"
+              : "لم يُنشر بعد",
+          },
+          {
+            label: "تاريخ النشر:",
+            value: formatAdminDateTime(row.published_at),
+          },
+          {
+            label: "تم آخر تعديل بواسطة:",
+            value: row.updated_by_display?.trim() || "غير مسجل",
+          },
+          {
+            label: "آخر تعديل:",
+            value: formatAdminDateTime(row.updated_at),
+          },
+          {
+            label: "عدد المشاهدات:",
+            value: `${new Intl.NumberFormat("ar-EG").format(row.views_count ?? 0)} مشاهدة`,
+          },
+        ],
+      },
+      copyPublicLink: { access: "hidden" },
+      visibility: nextStatus
+        ? pendingAction === "visibility"
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+              isVisible: visibility.isPubliclyVisible,
+            }
+          : handlers.mutationBusy
+            ? {
+                access: "disabled",
+                disabledReason: pendingReason,
+                isVisible: visibility.isPubliclyVisible,
+              }
+            : {
+                access: "allowed",
+                isVisible: visibility.isPubliclyVisible,
+                onSelect: async () => {
+                  await publishResult(handlers.onVisibility(row, nextStatus));
+                },
+              }
+        : {
+            access: "disabled",
+            isVisible: visibility.isPubliclyVisible,
+            disabledReason: visibility.tooltip,
+          },
+      featured:
+        pendingAction === "featured"
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+              isFeatured: Boolean(row.is_featured),
+            }
+          : handlers.mutationBusy
+            ? {
+                access: "disabled",
+                disabledReason: pendingReason,
+                isFeatured: Boolean(row.is_featured),
+              }
+            : {
+                access: "allowed",
+                isFeatured: Boolean(row.is_featured),
+                onSelect: async () => {
+                  await publishResult(handlers.onFeatured(row));
+                },
+              },
+      duplicate:
+        pendingAction === "duplicate"
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+            }
+          : handlers.mutationBusy
+            ? { access: "disabled", disabledReason: pendingReason }
+            : {
+                access: "allowed",
+                onSelect: async () => {
+                  await publishResult(handlers.onDuplicate(row));
+                },
+              },
+      archive: { access: "hidden" },
+      delete:
+        pendingAction === "delete"
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+            }
+          : handlers.mutationBusy
+            ? { access: "disabled", disabledReason: pendingReason }
+            : {
+                access: "allowed",
+                // AdminDataGridRowActions delegates this declaration to
+                // AdminConfirmDialog, the existing Confirmation Runtime owner.
+                confirmation: {
+                  mode: "shared",
+                  title: "هل أنت متأكد من حذف المحتوى؟",
+                  description:
+                    "سيتم حذف المحتوى حذفًا آمنًا وإزالته من القائمة.",
+                  confirmLabel: "تأكيد الحذف",
+                },
+                onSelect: async () => {
+                  const result = await publishResult(handlers.onDelete(row));
+                  if (!result.ok) throw new Error(result.message);
+                },
+              },
+    },
+  };
+
+  return <AdminDataGridRowActions capability={capability} size="compact" />;
 }

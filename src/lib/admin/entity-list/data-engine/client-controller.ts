@@ -278,21 +278,6 @@ export function useAdminEntityListController<
       "push",
     );
   }, [commitQuery, contract]);
-  /**
-   * Deterministic targeted update for mutations whose outcome is known
-   * (e.g. featured toggle). Applies to every cached page of this entity;
-   * callers should still invalidate afterwards to reconcile server truth.
-   */
-  const patchRows = useCallback(
-    (updater: (row: Row) => Row) => {
-      queryClient.setQueriesData<AdminEntityListResult<Row, Metrics>>(
-        { queryKey: adminEntityListQueryKeys.queries(entity) },
-        (data) =>
-          data ? { ...data, rows: data.rows.map(updater) } : data,
-      );
-    },
-    [entity, queryClient],
-  );
   const cancel = useCallback(
     () =>
       queryClient.cancelQueries({
@@ -316,7 +301,6 @@ export function useAdminEntityListController<
     setPageSize,
     resetFilters,
     invalidate,
-    patchRows,
     cancel,
   };
 }

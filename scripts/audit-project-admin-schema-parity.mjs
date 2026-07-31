@@ -12,6 +12,14 @@ const finalRebuildMigration = readFileSync(finalRebuildMigrationUrl, "utf8").rep
   /\r\n?/gu,
   "\n",
 );
+const rowActionsMigrationUrl = new URL(
+  "../sql/migrations/20260731100000_project_row_actions_capability.sql",
+  import.meta.url,
+);
+const rowActionsMigration = readFileSync(rowActionsMigrationUrl, "utf8").replace(
+  /\r\n?/gu,
+  "\n",
+);
 
 function sha256(value) {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -23,22 +31,25 @@ function md5(value) {
 
 function extractExpectedFunctionSource(functionName) {
   const startMarker = `create or replace function public.${functionName}(`;
-  const functionStart = finalRebuildMigration.indexOf(startMarker);
+  const ownerMigration = rowActionsMigration.includes(startMarker)
+    ? rowActionsMigration
+    : finalRebuildMigration;
+  const functionStart = ownerMigration.indexOf(startMarker);
 
   if (functionStart < 0) {
     throw new Error(`Missing ${functionName}() in the final rebuild migration.`);
   }
 
   const bodyMarker = "as $function$";
-  const bodyMarkerStart = finalRebuildMigration.indexOf(bodyMarker, functionStart);
+  const bodyMarkerStart = ownerMigration.indexOf(bodyMarker, functionStart);
   const bodyStart = bodyMarkerStart + bodyMarker.length;
-  const bodyEnd = finalRebuildMigration.indexOf("$function$;", bodyStart);
+  const bodyEnd = ownerMigration.indexOf("$function$;", bodyStart);
 
   if (bodyMarkerStart < 0 || bodyEnd < 0) {
     throw new Error(`Could not extract ${functionName}() from the final rebuild migration.`);
   }
 
-  return finalRebuildMigration.slice(bodyStart, bodyEnd);
+  return ownerMigration.slice(bodyStart, bodyEnd);
 }
 
 const schemaName = "public";
@@ -58,6 +69,8 @@ const aggregateSequences = aggregateTables.map((table) => `${table}_id_seq`);
 const aggregateFunctionNames = [
   "save_project_admin_entry",
   "delete_project_admin_entry",
+  "set_project_featured_admin_entry",
+  "duplicate_project_admin_entry",
   "validate_project_location_parent",
   "prevent_project_type_change",
   "validate_project_location_selection",
@@ -78,6 +91,8 @@ const expectedFunctionSourceMd5s = Object.fromEntries(
 const expectedFunctionSignatures = [
   "public.save_project_admin_entry(bigint,jsonb)",
   "public.delete_project_admin_entry(bigint)",
+  "public.set_project_featured_admin_entry(bigint,boolean)",
+  "public.duplicate_project_admin_entry(bigint)",
   "public.validate_project_location_parent()",
   "public.prevent_project_type_change()",
   "public.validate_project_location_selection()",
@@ -86,6 +101,8 @@ const expectedFunctionSignatures = [
 const aggregateRpcSignatures = [
   "public.save_project_admin_entry(bigint,jsonb)",
   "public.delete_project_admin_entry(bigint)",
+  "public.set_project_featured_admin_entry(bigint,boolean)",
+  "public.duplicate_project_admin_entry(bigint)",
 ];
 const forbiddenLegacyFunctionSignatures = [
   "public.sync_project_children(bigint,jsonb,jsonb,jsonb,jsonb,jsonb)",
@@ -242,6 +259,7 @@ const expectedColumnDefaults = new Map([
   ["projects.focus_keyword", "''::text"],
   ["projects.seo_keywords", "'{}'::text[]"],
   ["projects.og_image_alt", "''::text"],
+  ["projects.featured", "false"],
   ["projects.created_at", "now()"],
   ["projects.updated_at", "now()"],
   ["project_location_points.client_key", "gen_random_uuid()"],
@@ -722,15 +740,16 @@ const report = {
     fixture_text_marker_pattern: fixtureTextMarkerPattern,
     expected_catalog_counts: {
       tables: 9,
-      columns: 114,
+      columns: 115,
       constraints: 99,
-      indexes: 44,
+      indexes: 45,
       rls_policies: 0,
       user_triggers: 4,
-      functions: 6,
+      functions: 8,
       sequences: 9,
     },
     final_rebuild_sha256: sha256(finalRebuildMigration),
+    row_actions_migration_sha256: sha256(rowActionsMigration),
     expected_function_source_sha256: expectedFunctionSourceHashes,
     expected_function_source_md5: expectedFunctionSourceMd5s,
   },
@@ -1362,6 +1381,8 @@ function buildParitySummary(fullReport) {
   const expectedFunctionProperties = new Map([
     ["save_project_admin_entry(bigint,jsonb)", { securityDefiner: true, returnType: "record", returnsSet: true, defaultArguments: 2 }],
     ["delete_project_admin_entry(bigint)", { securityDefiner: true, returnType: "record", returnsSet: true, defaultArguments: 0 }],
+    ["set_project_featured_admin_entry(bigint,boolean)", { securityDefiner: true, returnType: "record", returnsSet: true, defaultArguments: 0 }],
+    ["duplicate_project_admin_entry(bigint)", { securityDefiner: true, returnType: "record", returnsSet: true, defaultArguments: 0 }],
     ["validate_project_location_parent()", { securityDefiner: false, returnType: "trigger", returnsSet: false, defaultArguments: 0 }],
     ["prevent_project_type_change()", { securityDefiner: false, returnType: "trigger", returnsSet: false, defaultArguments: 0 }],
     ["validate_project_location_selection()", { securityDefiner: false, returnType: "trigger", returnsSet: false, defaultArguments: 0 }],
@@ -1551,6 +1572,7 @@ function buildParitySummary(fullReport) {
       parallel_safety: functionRecord.parallel_safety,
       search_path_setting: functionRecord.search_path_setting,
     })),
+    effective_runtime_function_grants: effectiveRuntimeFunctionGrants,
     matched_invariants: {
       exact_catalog_counts:
         JSON.stringify(actualCatalogCounts) ===
@@ -1571,7 +1593,8 @@ function buildParitySummary(fullReport) {
             !table.is_partition,
         ),
       column_storage_inheritance_acl_and_comment_defaults:
-        columnPropertyDiagnostics.semanticRows.length === 114 &&
+        columnPropertyDiagnostics.semanticRows.length === fullReport.columns.length &&
+        fullReport.columns.length > 0 &&
         columnPropertyDiagnostics.semanticRows.every(
           (column) =>
             column.collation_matches &&
@@ -1585,7 +1608,7 @@ function buildParitySummary(fullReport) {
         ),
       column_defaults_and_not_null_match_final_rebuild: columnDrift.length === 0,
       index_inventory_valid_ready:
-        fullReport.indexes.length === 44 &&
+        fullReport.indexes.length === 45 &&
         fullReport.indexes.every(
           (index) => index.is_valid && index.is_ready && index.is_live,
         ),
@@ -1659,7 +1682,9 @@ function buildParitySummary(fullReport) {
         JSON.stringify(effectiveRuntimeFunctionGrants) ===
         JSON.stringify([
           "service_role:delete_project_admin_entry(bigint)",
+          "service_role:duplicate_project_admin_entry(bigint)",
           "service_role:save_project_admin_entry(bigint,jsonb)",
+          "service_role:set_project_featured_admin_entry(bigint,boolean)",
         ]),
       forbidden_legacy_functions_absent:
         fullReport.forbidden_legacy_function_presence.every(
@@ -1770,7 +1795,11 @@ function buildExpectedPreFixGate(summary) {
       summary.matched_invariants.no_direct_column_grants === true &&
       summary.matched_invariants.runtime_table_acl_is_service_select_only === true &&
       summary.matched_invariants.runtime_sequence_acl_empty === true &&
-      summary.matched_invariants.runtime_function_acl_is_service_rpc_only === true,
+      JSON.stringify(summary.effective_runtime_function_grants) ===
+        JSON.stringify([
+          "service_role:delete_project_admin_entry(bigint)",
+          "service_role:save_project_admin_entry(bigint,jsonb)",
+        ]),
     all_non_drift_invariants_match:
       summary.all_non_drift_invariants_match === true,
     aggregate_is_empty:
@@ -1999,6 +2028,7 @@ function allNonDriftInvariantsMatch(summary) {
     "column_defaults_and_not_null_match_final_rebuild",
     "existing_constraint_metadata",
     "trigger_definitions_match_final_rebuild",
+    "function_signature_security_owner_and_search_path",
     "function_bodies_match_final_rebuild",
     "reference_locations_match_final_rebuild",
   ]);

@@ -72,6 +72,7 @@ const paths = {
   seriesClient: "src/app/admin/content/series/SeriesTableClient.tsx",
   seriesColumns: "src/app/admin/content/series/series-columns.tsx",
   dataGrid: "src/components/admin/ui/AdminDataGrid.tsx",
+  rowActions: "src/components/admin/ui/AdminDataGridRowActions.tsx",
   previewActions: "src/components/admin/ui/AdminEntityPreviewActions.tsx",
   previewAdapters: "src/lib/admin/content/entity-preview-capabilities.ts",
   interactionManifest:
@@ -115,6 +116,7 @@ const seriesEdit = read(paths.seriesEdit);
 const seriesClient = read(paths.seriesClient);
 const seriesColumns = read(paths.seriesColumns);
 const dataGrid = read(paths.dataGrid);
+const rowActions = read(paths.rowActions);
 const previewActions = read(paths.previewActions);
 const previewAdapters = read(paths.previewAdapters);
 const interactionManifest = read(paths.interactionManifest);
@@ -549,12 +551,12 @@ check(
 );
 check(
   "collection-interaction",
-  "pending presentation is scoped to rowId plus action without local pending owners",
+  "pending presentation identifies rowId plus action and applies the shared global mutation lock",
   [categoryClient, seriesClient].every(
     (source) =>
       source.includes("rowPendingAction:") &&
       source.includes("instant.rowPending?.rowId ===") &&
-      !source.includes(
+      source.includes(
         "instant.rowPending !== null || instant.bulkPending !== null",
       ),
   ) &&
@@ -563,6 +565,7 @@ check(
         source.includes('pendingAction === "visibility"') &&
         source.includes('pendingAction === "duplicate"') &&
         source.includes('pendingAction === "delete"') &&
+        source.includes("mutationBusy") &&
         !source.includes("localPending"),
     ),
 );
@@ -575,11 +578,14 @@ check(
     dataGrid.includes('tone: "green" as const') &&
     dataGrid.includes("resolvedAriaPressed") &&
     dataGrid.includes("data-admin-visibility-state") &&
+    rowActions.includes('dataGridAction: "visibility"') &&
+    rowActions.includes('label: isVisible ? "إخفاء" : "إظهار"') &&
+    rowActions.includes("isCurrentlyHidden: !isVisible") &&
+    rowActions.includes("aria-busy={target.pending || undefined}") &&
     [categoryRowActions, seriesColumns].every(
       (source) =>
-        source.includes('action="visibility"') &&
-        source.includes("isCurrentlyHidden=") &&
-        source.includes("visibilityEntityLabel=") &&
+        source.includes("AdminDataGridRowActions") &&
+        source.includes("isVisible:") &&
         !source.includes("title={isHidden") &&
         !source.includes("title={isActive") &&
         !source.includes("tone={isHidden") &&

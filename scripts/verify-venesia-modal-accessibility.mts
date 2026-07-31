@@ -265,14 +265,12 @@ const actualConsumers = collectTsxFiles(join(ROOT, "src"))
   )
   .sort();
 const expectedConsumers = [
-  "src/app/admin/content/categories/CategoryDeleteButton.tsx",
   "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
   "src/app/admin/pages-blocks/footer/FooterBuilderEditors.tsx",
   "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
   "src/app/admin/pages-blocks/menus/AddMenuPanelClient.tsx",
   "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
   "src/app/admin/pages-blocks/pages/CreatePageModal.tsx",
-  "src/app/admin/seo/redirects/RedirectDeleteButton.tsx",
   "src/app/admin/seo/redirects/RedirectFormModal.tsx",
   "src/app/admin/users-roles/UsersManagementClient.tsx",
   "src/components/admin/content-workflow/BulkPublishValidationModal.tsx",

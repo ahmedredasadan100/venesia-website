@@ -309,7 +309,9 @@ const list = read("src/components/admin/content/UnifiedContentList.tsx");
 const preferences = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx");
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const rowActions = read("src/components/admin/content/UnifiedContentRowActions.tsx");
-const activity = read("src/components/admin/content/AdminContentActivityPopover.tsx");
+const sharedRowActions = read(
+  "src/components/admin/ui/AdminDataGridRowActions.tsx",
+);
 const activityCore = read("src/components/admin/ui/AdminActivityPopover.tsx");
 const actions = read("src/app/admin/content/topics/actions.ts");
 const topicsFeedback = read("src/lib/admin/content/topics-action-feedback.ts");
@@ -350,15 +352,17 @@ check(
 );
 check(
   "Actions must use the shared row action shell and sticky grid capability",
-  rowActions.includes("<AdminDataGridActionsCell compact>") &&
+  rowActions.includes("<AdminDataGridRowActions") &&
+    sharedRowActions.includes("<AdminDataGridActionsCell") &&
     entityListTable.includes("AdminDataGridStickyActionsCell"),
 );
 check(
-  "Activity must be click-only",
-  activity.includes("<AdminActivityPopover") &&
-    activityCore.includes("onClick={toggleOpen}") &&
-    !activityCore.includes("onMouseEnter") &&
-    !activityCore.includes("onMouseLeave"),
+  "Information metadata must be click-only through the shared More menu",
+  rowActions.includes("information:") &&
+    sharedRowActions.includes('selectedItem.kind === "information"') &&
+    sharedRowActions.includes("<AdminActivityContent") &&
+    !sharedRowActions.includes("onMouseEnter") &&
+    !sharedRowActions.includes("onMouseLeave"),
 );
 check(
   "Column management must use a viewport-colliding fixed portal",
@@ -396,7 +400,8 @@ check(
 );
 check(
   "Topics deletion must use the shared accessible confirmation dialog",
-  rowActions.includes("<AdminConfirmDialog") &&
+  rowActions.includes('mode: "shared"') &&
+    sharedRowActions.includes("<AdminConfirmDialog") &&
     !rowActions.includes("window.confirm") &&
     confirmDialog.includes('role="dialog"') &&
     confirmDialog.includes('aria-modal="true"') &&

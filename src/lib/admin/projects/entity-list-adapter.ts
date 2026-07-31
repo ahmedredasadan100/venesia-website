@@ -27,6 +27,7 @@ const projectEntityListRowSchema = z.object({
   arabic_name: z.string().min(1),
   english_name: z.string().min(1),
   location_label: z.string(),
+  featured: z.boolean(),
   updated_at: z.string(),
 });
 
@@ -77,7 +78,7 @@ async function loadProjectsPage(
   let request = getSupabaseAdmin()
     .from("projects")
     .select(
-      "id, type, slug, arabic_name, english_name, location_label, updated_at",
+      "id, type, slug, arabic_name, english_name, location_label, featured, updated_at",
       { count: "exact" },
     )
     .eq("type", query.filters.projectType);

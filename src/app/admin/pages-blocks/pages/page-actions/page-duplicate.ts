@@ -1,19 +1,28 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
-import { parseNumber } from "../../../../../lib/page-blocks/admin-utils";
 import { buildDuplicatePageIdentity } from "../../../../../lib/pages/page-admin-policy";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { copyPageHeroAssignments, copyPageModuleAssignments, pagesListPath } from "./helpers";
+import { copyPageHeroAssignments, copyPageModuleAssignments } from "./helpers";
 
-export async function duplicatePage(formData: FormData) {
+export type PageDuplicateResult =
+  | { ok: true; message: string; pageId: number }
+  | { ok: false; code: string; message: string };
+
+export async function duplicatePageAjax(
+  pageId: number,
+): Promise<PageDuplicateResult> {
   await requireAdminSession();
-  const pageId = parseNumber(formData.get("id"));
-  if (!pageId) redirect(pagesListPath({ error: "الصفحة غير موجودة." }));
+  if (!Number.isInteger(pageId) || pageId <= 0) {
+    return {
+      ok: false,
+      code: "invalid_page",
+      message: "الصفحة غير موجودة.",
+    };
+  }
 
   const { data: page, error: loadError } = await getSupabaseAdmin()
     .from("pages")
@@ -22,7 +31,11 @@ export async function duplicatePage(formData: FormData) {
     .maybeSingle<{ title: string; slug: string; path: string; page_type: string; status: string }>();
 
   if (loadError || !page) {
-    redirect(pagesListPath({ error: loadError?.message ?? "الصفحة غير موجودة." }));
+    return {
+      ok: false,
+      code: "page_not_found",
+      message: loadError?.message ?? "الصفحة غير موجودة.",
+    };
   }
 
   const suffix = Date.now().toString().slice(-5);
@@ -41,7 +54,11 @@ export async function duplicatePage(formData: FormData) {
     .single<{ id: number }>();
 
   if (insertError || !copiedPage) {
-    redirect(pagesListPath({ error: insertError?.message ?? "تعذر نسخ الصفحة." }));
+    return {
+      ok: false,
+      code: "page_duplicate_failed",
+      message: insertError?.message ?? "تعذر نسخ الصفحة.",
+    };
   }
 
   try {
@@ -49,7 +66,14 @@ export async function duplicatePage(formData: FormData) {
     await copyPageHeroAssignments(pageId, copiedPage.id, identity.slug, identity.path);
   } catch (error) {
     await getSupabaseAdmin().from("pages").delete().eq("id", copiedPage.id);
-    redirect(pagesListPath({ error: error instanceof Error ? error.message : "تعذر نسخ موديولات الصفحة." }));
+    return {
+      ok: false,
+      code: "page_duplicate_assignments_failed",
+      message:
+        error instanceof Error
+          ? error.message
+          : "تعذر نسخ موديولات الصفحة.",
+    };
   }
 
   await recordCmsAdminAudit({
@@ -61,5 +85,9 @@ export async function duplicatePage(formData: FormData) {
   });
 
   await revalidatePageBlocksPath(copiedPage.id);
-  redirect(`/admin/pages-blocks/pages/${copiedPage.id}?notice=duplicated`);
+  return {
+    ok: true,
+    message: "تم نسخ الصفحة وموديولاتها بنجاح.",
+    pageId: copiedPage.id,
+  };
 }

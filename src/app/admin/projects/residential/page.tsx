@@ -1,4 +1,5 @@
 import { AdminActionButton, AdminPageHeader } from "../../../../components/admin/ui";
+import { AdminEntityListPageLayout } from "../../../../components/admin/entity-list";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
@@ -78,14 +79,14 @@ export default async function ResidentialProjectsPage({
 
   if (listResult.error) {
     return (
-      <main className="space-y-7">
+      <AdminEntityListPageLayout>
         <AdminPageHeader title="المشاريع السكنية" description="مدير المشاريع السكنية." />
         <AdminNotice
           variant="danger"
           title="تعذر تحميل قائمة المشاريع"
           message={listResult.error.message}
         />
-      </main>
+      </AdminEntityListPageLayout>
     );
   }
 
@@ -94,7 +95,7 @@ export default async function ResidentialProjectsPage({
     : [...getProjectsDefaultColumnKeys()];
 
   return (
-    <main className="space-y-7">
+    <AdminEntityListPageLayout>
       <AdminPageHeader
         variant="context"
         title="المشاريع السكنية"
@@ -132,6 +133,6 @@ export default async function ResidentialProjectsPage({
           errorMessage={errorMessage}
         />
       ) : null}
-    </main>
+    </AdminEntityListPageLayout>
   );
 }

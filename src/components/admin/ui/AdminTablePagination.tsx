@@ -300,7 +300,7 @@ export default function AdminTablePagination({
   if (!shouldShowFooter) return null;
 
   return (
-    <div className={`mt-4 rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES} ${className}`.trim()}>
+    <div className={`rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES} ${className}`.trim()}>
       <div
         dir="ltr"
         className="grid grid-cols-1 items-center gap-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-3"

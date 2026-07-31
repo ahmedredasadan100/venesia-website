@@ -7,6 +7,7 @@ export type ProjectEntityListRow = {
   arabic_name: string;
   english_name: string;
   location_label: string;
+  featured: boolean;
   updated_at: string;
 };
 

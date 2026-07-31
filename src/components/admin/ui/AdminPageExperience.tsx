@@ -15,7 +15,7 @@ export default function AdminPageExperience({
 }: AdminPageExperienceProps) {
   return (
     <Component
-      className={`space-y-7 ${className}`.trim()}
+      className={`flex flex-col gap-7 ${className}`.trim()}
       data-admin-page-experience={state}
     >
       {children}

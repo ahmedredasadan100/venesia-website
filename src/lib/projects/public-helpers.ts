@@ -1,7 +1,14 @@
 import type { ProjectCategory, ProjectHubFilterId, PublicProject } from "./public-types";
+import { absoluteUrlWithBase } from "../seo/seo-utils";
 
 export function getProjectHref(project: Pick<PublicProject, "slug">) {
   return `/projects/${project.slug}`;
+}
+
+export function getProjectPublicUrl(
+  project: Pick<PublicProject, "slug">,
+) {
+  return absoluteUrlWithBase(getProjectHref(project));
 }
 
 export function getProjectTrackHref(project: Pick<PublicProject, "slug">) {
@@ -53,8 +60,7 @@ export function getProjectsByFilter(projects: PublicProject[], filterId: Project
 }
 
 export function getFeaturedProjects(projects: PublicProject[]) {
-  void projects;
-  return [];
+  return projects.filter((project) => project.featured);
 }
 
 export function getProjectStats(projects: PublicProject[]) {

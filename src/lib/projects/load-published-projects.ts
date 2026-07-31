@@ -16,7 +16,7 @@ import type { ProjectHubFilterId, PublicProject } from "./public-types";
 import { getProjectStats, getProjectsByFilter } from "./public-helpers";
 
 const PUBLIC_PROJECT_COLUMNS = [
-  "id", "type", "arabic_name", "english_name", "slug",
+  "id", "type", "arabic_name", "english_name", "slug", "featured",
   "general_description", "short_description",
   "image", "image_alt", "hero_image", "hero_image_alt",
   "small_box_image", "small_box_image_alt",
@@ -210,9 +210,8 @@ export async function loadProjectBySlug(slug: string): Promise<PublicProject | n
   return (await loadProjectBySlugResult(slug)).project;
 }
 
-/** No clean-schema featured flag exists; callers receive no invented selection. */
 export async function loadFeaturedProjects(): Promise<PublicProject[]> {
-  return [];
+  return (await loadPublishedProjects()).filter((project) => project.featured);
 }
 
 export async function loadProjectsHubData(filterId: ProjectHubFilterId = "all") {
@@ -220,7 +219,7 @@ export async function loadProjectsHubData(filterId: ProjectHubFilterId = "all") 
   return {
     projects: getProjectsByFilter(projects, filterId),
     allProjects: [...projects],
-    featuredProjects: [],
+    featuredProjects: projects.filter((project) => project.featured),
     stats: getProjectStats(projects),
   };
 }

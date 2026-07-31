@@ -134,6 +134,7 @@ export function mapProjectAggregateToPublicProject(
     category: category as ProjectCategory,
     arabicName: requiredString(project, "arabic_name"),
     englishName: requiredString(project, "english_name"),
+    featured: project.featured === true,
     code: requiredString(project, "english_name"),
     generalDescription: requiredString(project, "general_description"),
     shortDescription: requiredString(project, "short_description"),

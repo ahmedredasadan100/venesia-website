@@ -6,6 +6,7 @@ import {
   AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../../components/admin/entity-list";
+import { AdminEntityListPrimarySection } from "../../../../components/admin/entity-list/AdminEntityListSurface";
 import {
   AdminMetricCardsGrid,
   AdminTablePagination,
@@ -319,29 +320,6 @@ export default function CategoriesListClient({
     [instant],
   );
 
-  const columns = useMemo(
-    () =>
-      createCategoryColumns({
-        isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
-        onToggle: toggleCategory,
-        rowPendingAction: (categoryId) =>
-          instant.rowPending?.rowId === categoryId
-            ? instant.rowPending.action
-            : null,
-        onToggleStatus: toggleStatus,
-        onDuplicate: duplicate,
-        onDelete: removeCategory,
-      }),
-    [
-      collapsedCategoryIds,
-      duplicate,
-      instant.rowPending,
-      removeCategory,
-      toggleCategory,
-      toggleStatus,
-    ],
-  );
-
   const pageRows = rows.filter((row) => {
     let parentId = row.parent_id;
     const visited = new Set<number>();
@@ -352,6 +330,40 @@ export default function CategoriesListClient({
     }
     return true;
   });
+  const maxVisibleDepth = pageRows.reduce(
+    (maximum, row) => Math.max(maximum, row.depth),
+    0,
+  );
+
+  const columns = useMemo(
+    () =>
+      createCategoryColumns(
+        {
+          isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
+          onToggle: toggleCategory,
+          rowPendingAction: (categoryId) =>
+            instant.rowPending?.rowId === categoryId
+              ? instant.rowPending.action
+              : null,
+          mutationBusy:
+            instant.rowPending !== null || instant.bulkPending !== null,
+          onToggleStatus: toggleStatus,
+          onDuplicate: duplicate,
+          onDelete: removeCategory,
+        },
+        { maxVisibleDepth },
+      ),
+    [
+      collapsedCategoryIds,
+      duplicate,
+      instant.rowPending,
+      instant.bulkPending,
+      maxVisibleDepth,
+      removeCategory,
+      toggleCategory,
+      toggleStatus,
+    ],
+  );
 
   const sort =
     controller.query.sort.field === "tree"
@@ -362,47 +374,51 @@ export default function CategoriesListClient({
         };
 
   return (
-    <AdminEntityListSurface className="space-y-4" consumer="categories">
-      <AdminMetricCardsGrid
-        items={[
-          { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true },
-          { label: "نشط", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true },
-          { label: "الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
-        ]}
-      />
+    <AdminEntityListSurface consumer="categories">
+      <AdminEntityListPrimarySection>
+        <AdminMetricCardsGrid
+          items={[
+            { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true },
+            { label: "نشط", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true },
+            { label: "الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
+          ]}
+        />
+      </AdminEntityListPrimarySection>
 
-      <AdminEntityListFilters
-        basePath={BASE_PATH}
-        search={{
-          placeholder: "ابحث في التصنيفات",
-          value: controller.query.search,
-          className: "max-w-[330px]",
-        }}
-        filters={filters}
-        values={{ status: controller.query.filters.status }}
-        onQueryPatch={(patch) => {
-          const search =
-            "q" in patch
-              ? (patch.q ?? "").trim()
-              : controller.query.search;
-          // Engine path: only accepted status tokens reach the controller.
-          // Unknown/null status resets to the shared "all" sentinel so the
-          // trigger returns to "كل الحالات" without a duplicate option.
-          const status =
-            "status" in patch
-              ? patch.status === "published" || patch.status === "hidden"
-                ? patch.status
-                : "all"
-              : controller.query.filters.status;
-          controller.setSearchAndFilters(
-            search,
-            { status },
-            "q" in patch && !("status" in patch) ? "replace" : "push",
-          );
-        }}
-      />
+      <AdminEntityListPrimarySection>
+        <AdminEntityListFilters
+          basePath={BASE_PATH}
+          search={{
+            placeholder: "ابحث في التصنيفات",
+            value: controller.query.search,
+            className: "max-w-[330px]",
+          }}
+          filters={filters}
+          values={{ status: controller.query.filters.status }}
+          onQueryPatch={(patch) => {
+            const search =
+              "q" in patch
+                ? (patch.q ?? "").trim()
+                : controller.query.search;
+            // Engine path: only accepted status tokens reach the controller.
+            // Unknown/null status resets to the shared "all" sentinel so the
+            // trigger returns to "كل الحالات" without a duplicate option.
+            const status =
+              "status" in patch
+                ? patch.status === "published" || patch.status === "hidden"
+                  ? patch.status
+                  : "all"
+                : controller.query.filters.status;
+            controller.setSearchAndFilters(
+              search,
+              { status },
+              "q" in patch && !("status" in patch) ? "replace" : "push",
+            );
+          }}
+        />
+      </AdminEntityListPrimarySection>
 
-      <div
+      <AdminEntityListPrimarySection
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }
@@ -465,7 +481,7 @@ export default function CategoriesListClient({
           rowClassName={(row) => (row.depth === 0 ? "bg-white/[0.015]" : "")}
           initialFeedback={initialFeedback}
         />
-      </div>
+      </AdminEntityListPrimarySection>
 
       <AdminTablePagination
         basePath={BASE_PATH}

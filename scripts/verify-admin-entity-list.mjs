@@ -82,6 +82,9 @@ const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const activity = read("src/components/admin/ui/AdminActivityPopover.tsx");
 const emptyStateCore = read("src/lib/admin/entity-list/empty-state.ts");
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const rowActions = read(
+  "src/components/admin/ui/AdminDataGridRowActions.tsx",
+);
 
 const topicsList = read("src/components/admin/content/UnifiedContentList.tsx");
 const topicsFilters = read("src/components/admin/content/UnifiedContentFilters.tsx");
@@ -308,7 +311,7 @@ check(
 );
 
 check(
-  "Categories enable column management + real pagination + activity",
+  "Categories enable column management + real pagination + shared information",
   categoriesClient.includes("enableColumnManagement") &&
     !categoriesClient.includes("enableColumnManagement={false}") &&
     categoriesClient.includes("useAdminEntityListController") &&
@@ -317,7 +320,8 @@ check(
     !categoriesClient.includes("totalPages={1}") &&
     categoriesColumns.includes('label: "الموضوعات"') &&
     !categoriesColumns.includes('label: "العدد"') &&
-    categoriesActions.includes("AdminActivityPopover") &&
+    categoriesActions.includes("AdminDataGridRowActions") &&
+    categoriesActions.includes("information:") &&
     categoriesListOwner.includes("created_at") &&
     categoriesListOwner.includes("updated_at") &&
     read("src/lib/admin/content/categories-list-config.ts").includes(
@@ -347,8 +351,9 @@ check(
     seriesColumns.includes('key: "slug"') &&
     seriesColumns.includes('key: "category"') &&
     seriesColumns.includes('key: "created_at"') &&
-    seriesColumns.includes("AdminActivityPopover") &&
-    seriesColumns.includes("AdminEntityPreviewActions") &&
+    seriesColumns.includes("AdminDataGridRowActions") &&
+    seriesColumns.includes("information:") &&
+    seriesColumns.includes("resolveAdminEntityPreviewActions") &&
     read("src/lib/admin/content/entity-preview-capabilities.ts").includes(
       "/admin/content/topics?series=",
     ) &&
@@ -389,8 +394,9 @@ check(
 );
 
 check(
-  "Series delete uses AdminConfirmDialog",
-  seriesColumns.includes("AdminConfirmDialog"),
+  "Series delete delegates to shared AdminConfirmDialog",
+  seriesColumns.includes('mode: "shared"') &&
+    rowActions.includes("AdminConfirmDialog"),
 );
 
 const prefsModule = loadPureTypeScriptModule(
