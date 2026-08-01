@@ -5,7 +5,6 @@ import { useCallback, useMemo, useState } from "react";
 import {
   AdminEntityList,
   AdminEntityListPageLayout,
-  AdminEntityListPrimarySection,
   AdminEntityListSurface,
   AdminEntityListTableRegion,
 } from "../../../../components/admin/entity-list";
@@ -45,7 +44,7 @@ import {
 } from "../../../../lib/admin/redirects/list-config";
 
 import RedirectFormModal from "./RedirectFormModal";
-import RedirectsListFilters from "./RedirectsListFilters";
+import { createRedirectsCollectionToolbar } from "./RedirectsListFilters";
 import {
   deleteRedirectAction,
   restoreRedirectsTablePreferences,
@@ -421,42 +420,6 @@ export default function RedirectsClient({
         />
 
         <AdminEntityListSurface consumer="redirects">
-          <AdminEntityListPrimarySection>
-            <RedirectsListFilters
-              search={controller.query.search}
-              status={controller.query.filters.status}
-              redirectType={controller.query.filters.redirectType}
-              onQueryPatch={(patch) => {
-                const search =
-                  "q" in patch
-                    ? (patch.q ?? "").trim()
-                    : controller.query.search;
-                const status =
-                  "status" in patch
-                    ? patch.status === "active" ||
-                      patch.status === "inactive"
-                      ? patch.status
-                      : "all"
-                    : controller.query.filters.status;
-                const redirectType =
-                  "type" in patch
-                    ? patch.type === "301" || patch.type === "302"
-                      ? patch.type
-                      : "all"
-                    : controller.query.filters.redirectType;
-                controller.setSearchAndFilters(
-                  search,
-                  { status, redirectType },
-                  "q" in patch &&
-                    !("status" in patch) &&
-                    !("type" in patch)
-                    ? "replace"
-                    : "push",
-                );
-              }}
-            />
-          </AdminEntityListPrimarySection>
-
           <AdminEntityListTableRegion
             data-admin-entity-list-pending={
               controller.isFetching ? "true" : "false"
@@ -469,6 +432,35 @@ export default function RedirectsClient({
               number
             >
               listId="redirects-table"
+              toolbar={createRedirectsCollectionToolbar({
+                search: controller.query.search,
+                status: controller.query.filters.status,
+                redirectType: controller.query.filters.redirectType,
+                pending: controller.isFetching,
+                onQueryPatch: (patch, behavior = "push") => {
+                  const search =
+                    "q" in patch
+                      ? (patch.q ?? "").trim()
+                      : controller.query.search;
+                  const status =
+                    "status" in patch
+                      ? patch.status === "active" || patch.status === "inactive"
+                        ? patch.status
+                        : "all"
+                      : controller.query.filters.status;
+                  const redirectType =
+                    "type" in patch
+                      ? patch.type === "301" || patch.type === "302"
+                        ? patch.type
+                        : "all"
+                      : controller.query.filters.redirectType;
+                  controller.setSearchAndFilters(
+                    search,
+                    { status, redirectType },
+                    behavior,
+                  );
+                },
+              })}
               rows={controller.result.rows}
               columns={columns}
               getRowId={(row) => row.id}

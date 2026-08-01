@@ -14,6 +14,8 @@ export type {
   AdminEntityNoticeCodeMap,
   AdminEntityPersistResult,
   AdminEntitySearchConfig,
+  AdminEntitySearchSuggestion,
+  AdminEntitySearchSuggestionsConfig,
 } from "./types";
 
 export {
@@ -46,6 +48,10 @@ export {
   type AdminBoundedClientPaginationUrlState,
   type AdminEntityUrlPatch,
 } from "./url-state";
+export {
+  adminCollectionSearchIncludes,
+  normalizeAdminCollectionSearchText,
+} from "./search-normalization";
 
 export {
   useAdminBoundedClientPagination,

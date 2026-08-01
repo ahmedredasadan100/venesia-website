@@ -24,6 +24,7 @@
     "verify:unified-content": "node scripts/verify-unified-content-engine.mjs",
     "verify:unified-content-db": "node scripts/verify-unified-content-database.mjs",
     "verify:admin-entity-list": "node scripts/verify-admin-entity-list.mjs",
+    "verify:admin-collection-toolbar": "node scripts/verify-admin-collection-toolbar-system.mjs",
     "qa:admin-entity-list-consumers": "node scripts/qa-admin-entity-list-consumers.mjs",
     "qa:topics-list-reference": "node scripts/qa-topics-list-reference.mjs",
     "qa:admin-content-soft-delete-counts": "node scripts/qa-admin-content-soft-delete-counts.mjs",
@@ -68,7 +69,7 @@
     "verify:route-slot-policy": "node scripts/verify-route-slot-policy.mjs",
     "verify:project-child-fail-closed": "node scripts/verify-project-child-fail-closed.mjs",
     "verify:projects-hub-readiness": "node scripts/verify-projects-hub-readiness.mjs",
-    "verify:admin-runtime": "npm run verify:admin-entity-list && npm run verify:admin-shell-system && npm run verify:admin-data-engine-contracts && npm run verify:admin-row-actions && npm run verify:content-taxonomy && npm run verify:admin-instant-pages && npm run qa:admin-instant-pages && npm run verify:admin-instant-projects",
+    "verify:admin-runtime": "npm run verify:admin-entity-list && npm run verify:admin-collection-toolbar && npm run verify:admin-shell-system && npm run verify:admin-data-engine-contracts && npm run verify:admin-row-actions && npm run verify:content-taxonomy && npm run verify:admin-instant-pages && npm run qa:admin-instant-pages && npm run verify:admin-instant-projects",
     "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:media-library-system && npm run verify:media-delete-saga && npm run verify:media-write-adoption && npm run verify:media-coordination-rpc-acl && npm run verify:media-coordination-sql && npm run verify:media-coordination-postgres && npm run verify:media-live-qa-guards && npm run verify:unified-content && npm run verify:topic-image-clear-persistence && npm run verify:admin-form-system && npm run verify:project-admin-data-entry && npm run verify:venesia-modal-accessibility && npm run verify:seo-redirect-form-runtime && npm run verify:admin-runtime && npm run verify:audit-coverage",
     "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:media-library-system && npm run verify:media-delete-saga && npm run verify:media-write-adoption && npm run verify:media-coordination-rpc-acl && npm run verify:media-coordination-sql && npm run verify:media-coordination-postgres && npm run verify:media-live-qa-guards && npm run verify:unified-content && npm run verify:topic-image-clear-persistence && npm run verify:admin-form-system && npm run verify:project-admin-data-entry && npm run verify:venesia-modal-accessibility && npm run verify:seo-redirect-form-runtime && npm run verify:audit-coverage && npm run verify:admin-runtime && npm run build"
   },

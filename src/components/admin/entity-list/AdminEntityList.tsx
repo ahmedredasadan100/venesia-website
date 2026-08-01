@@ -28,6 +28,9 @@ import AdminEntityListTable, {
   type AdminEntityListTableProps,
   type AdminEntitySortState,
 } from "./AdminEntityListTable";
+import AdminEntityListFilters, {
+  type AdminEntityListFiltersProps,
+} from "./AdminEntityListFilters";
 import { AdminEntityListPrimarySection } from "./AdminEntityListSurface";
 import {
   AdminFloatingLayerProvider,
@@ -89,6 +92,12 @@ export type AdminEntityListProps<
   emptyState: AdminEntityListEmptyState;
   getRowDepth?: (row: TRow) => number;
   rowClassName?: (row: TRow) => string;
+  /** Shared Collection toolbar/search/filter contract. */
+  toolbar?: Omit<
+    AdminEntityListFiltersProps,
+    "columnsControl" | "contextOverride" | "contextOverrideActive"
+  >;
+  /** @deprecated Use toolbar. Kept only for classified legacy consumers. */
   toolbarStart?: ReactNode;
   initialFeedback?: AdminActionFeedback | null;
 };
@@ -136,6 +145,7 @@ function AdminEntityListInner<
     emptyState,
     getRowDepth,
     rowClassName,
+    toolbar,
     toolbarStart,
     initialFeedback = null,
   } = props;
@@ -284,70 +294,84 @@ function AdminEntityListInner<
 
   const openLayerId = floating?.openLayerId ?? null;
   const setOpenLayerId = floating?.setOpenLayerId ?? (() => undefined);
-  const showToolbar = Boolean(
-    toolbarStart || (enableColumnManagement && onPersistColumns),
+  const columnsControl =
+    enableColumnManagement && onPersistColumns ? (
+      <AdminColumnVisibilityMenu
+        columns={columns}
+        visibleColumns={visibleColumns}
+        defaultColumns={resolvedDefaultVisibleColumns}
+        onChange={handleVisibleColumnsChange}
+        onPersist={onPersistColumns}
+        onRestore={onRestoreColumns}
+        onPersisted={() => {
+          if (onSuccessfulMutation) void onSuccessfulMutation();
+          else router.refresh();
+        }}
+        scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
+      />
+    ) : null;
+  const bulkBar =
+    enableSelection && bulkOptions.length && onBulkExecute ? (
+      <AdminBulkActionBar
+        selectedIds={selection.selectedIds}
+        entityLabel={bulkEntityLabel}
+        options={[...bulkOptions]}
+        onClearSelection={selection.clearSelection}
+        onExecute={requestBulkExecution}
+        isBusy={bulkPending}
+        actionValue={bulkAction}
+        actionControl={
+          <AdminListboxSelect
+            id={`${listId}-bulk-action`}
+            layerId={`${listId}-bulk-action`}
+            openLayerId={openLayerId}
+            onOpenLayer={setOpenLayerId}
+            value={bulkAction}
+            onChange={setBulkAction}
+            disabled={bulkPending}
+            options={bulkOptions}
+            className="w-[180px]"
+          />
+        }
+        additionalControls={bulkAdditionalControls?.({
+          bulkAction,
+          setBulkAction,
+          pending: bulkPending,
+          openLayerId,
+          setOpenLayerId,
+        })}
+      />
+    ) : null;
+  const selectionActive = selection.selectedIds.length > 0;
+  const showLegacyToolbar = Boolean(
+    !toolbar && (toolbarStart || columnsControl),
   );
 
   return (
     <section
       id={listId}
-      className="scroll-mt-6 flex flex-col gap-7"
+      className={`scroll-mt-6 flex flex-col ${toolbar ? "gap-0" : "gap-7"}`}
       data-admin-entity-list=""
     >
-      {showToolbar ? (
+      {toolbar ? (
+        <AdminEntityListFilters
+          {...toolbar}
+          columnsControl={columnsControl}
+          contextOverride={bulkBar}
+          contextOverrideActive={selectionActive}
+        />
+      ) : null}
+
+      {showLegacyToolbar ? (
         <AdminEntityListPrimarySection>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex-1">{toolbarStart}</div>
-            {enableColumnManagement && onPersistColumns ? (
-              <AdminColumnVisibilityMenu
-                columns={columns}
-                visibleColumns={visibleColumns}
-                defaultColumns={resolvedDefaultVisibleColumns}
-                onChange={handleVisibleColumnsChange}
-                onPersist={onPersistColumns}
-                onRestore={onRestoreColumns}
-                onPersisted={() => {
-                  if (onSuccessfulMutation) void onSuccessfulMutation();
-                  else router.refresh();
-                }}
-                scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
-              />
-            ) : null}
+            {columnsControl}
           </div>
         </AdminEntityListPrimarySection>
       ) : null}
 
-      {enableSelection && bulkOptions.length && onBulkExecute ? (
-        <AdminBulkActionBar
-          selectedIds={selection.selectedIds}
-          entityLabel={bulkEntityLabel}
-          options={[...bulkOptions]}
-          onClearSelection={selection.clearSelection}
-          onExecute={requestBulkExecution}
-          isBusy={bulkPending}
-          actionValue={bulkAction}
-          actionControl={
-            <AdminListboxSelect
-              id={`${listId}-bulk-action`}
-              layerId={`${listId}-bulk-action`}
-              openLayerId={openLayerId}
-              onOpenLayer={setOpenLayerId}
-              value={bulkAction}
-              onChange={setBulkAction}
-              disabled={bulkPending}
-              options={bulkOptions}
-              className="w-[180px]"
-            />
-          }
-          additionalControls={bulkAdditionalControls?.({
-            bulkAction,
-            setBulkAction,
-            pending: bulkPending,
-            openLayerId,
-            setOpenLayerId,
-          })}
-        />
-      ) : null}
+      {!toolbar ? bulkBar : null}
 
       <AdminFeedbackChannelViewport
         channel={feedbackChannel}
@@ -370,6 +394,7 @@ function AdminEntityListInner<
           empty={resolveAdminEntityListEmptyState(emptyState)}
           getRowDepth={getRowDepth}
           rowClassName={rowClassName}
+          className={toolbar ? "!rounded-t-none !border-t-0" : undefined}
           onMutationResult={handleMutationResult}
         />
       </AdminEntityListPrimarySection>

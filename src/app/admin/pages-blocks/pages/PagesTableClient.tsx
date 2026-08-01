@@ -492,6 +492,18 @@ export default function PagesTableClient({
             number
           >
             listId="pages-table"
+            toolbar={{
+              basePath: "/admin/pages-blocks/pages",
+              search: {
+                placeholder: "البحث غير متاح قبل تحديث Read Model",
+                value: controller.query.search,
+                minLength: pagesQueryContract.searchMinLength,
+                pending: controller.isFetching,
+                disabled: true,
+              },
+              filters: [],
+              values: {},
+            }}
             rows={pages}
             columns={columns}
             getRowId={(row) => row.id}

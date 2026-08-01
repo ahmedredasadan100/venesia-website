@@ -4,18 +4,14 @@ import { useMemo } from "react";
 
 import {
   AdminEntityList,
-  AdminEntityListFilters,
   AdminEntityListPageLayout,
-  AdminEntityListPrimarySection,
   AdminEntityListSurface,
   AdminEntityListTableRegion,
 } from "../../../components/admin/entity-list";
 import {
-  AdminActionButton,
   AdminPageHeader,
   AdminTablePagination,
 } from "../../../components/admin/ui";
-import { adminFormFieldClassName } from "../../../components/admin/VenesiaModal";
 import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-feedback";
 import { adminActionFailure } from "../../../lib/admin/admin-action-result";
 import {
@@ -231,27 +227,52 @@ export default function ActivityLogClient({
       {
         id: "activity-actor",
         paramKey: "actor",
+        label: "المستخدم",
         placeholder: "كل المستخدمين",
+        type: "entity_select",
+        searchable: true,
         allValue: "",
         options: actorOptions.map((actor) => ({ value: actor, label: actor })),
       },
       {
         id: "activity-action",
         paramKey: "action",
+        label: "نوع العملية",
         placeholder: "كل العمليات",
+        type: "entity_select",
+        searchable: true,
         allValue: "",
         options: actionOptions,
       },
       {
         id: "activity-entity-type",
         paramKey: "entityType",
+        label: "نوع الكيان",
         placeholder: "كل أنواع الكيانات",
+        type: "entity_select",
+        searchable: true,
         allValue: "",
         options: entityTypes.map((entityType) => ({
           value: entityType,
           label: entityType,
-        })),
-      },
+          })),
+        },
+        {
+          id: "activity-date-from",
+          paramKey: "dateFrom",
+          label: "تاريخ النشاط من",
+          placeholder: "تاريخ البداية",
+          allValue: "",
+          type: "date",
+        },
+        {
+          id: "activity-date-to",
+          paramKey: "dateTo",
+          label: "تاريخ النشاط إلى",
+          placeholder: "تاريخ النهاية",
+          allValue: "",
+          type: "date",
+        },
     ],
     [actionOptions, actorOptions, entityTypes],
   );
@@ -269,7 +290,10 @@ export default function ActivityLogClient({
     [controller.error],
   );
 
-  function applyQueryPatch(patch: Record<string, string | null>) {
+  function applyQueryPatch(
+    patch: Record<string, string | null>,
+    behavior: "push" | "replace" = "push",
+  ) {
     const current = controller.query;
     const nextFilters = { ...current.filters };
     const nextSearch =
@@ -286,7 +310,7 @@ export default function ActivityLogClient({
     controller.setSearchAndFilters(
       nextSearch,
       nextFilters,
-      Object.keys(patch).length === 1 && "q" in patch ? "replace" : "push",
+      behavior,
     );
   }
 
@@ -300,69 +324,6 @@ export default function ActivityLogClient({
       />
 
       <AdminEntityListSurface consumer="activity-log">
-        <AdminEntityListPrimarySection>
-          <AdminEntityListFilters
-            basePath="/admin/activity-log"
-            search={{
-              value: controller.query.search,
-              placeholder: "بحث في المستخدم أو الكيان...",
-              debounceMs: 350,
-            }}
-            filters={filterDefinitions}
-            values={{
-              actor: controller.query.filters.actorUsername,
-              action: controller.query.filters.action,
-              entityType: controller.query.filters.entityType,
-              dateFrom: controller.query.filters.dateFrom,
-              dateTo: controller.query.filters.dateTo,
-            }}
-            clearableFilterKeys={[
-              "actor",
-              "action",
-              "entityType",
-              "dateFrom",
-              "dateTo",
-            ]}
-            onQueryPatch={applyQueryPatch}
-            trailing={
-              <div className="flex flex-wrap items-center gap-2">
-                <label>
-                  <span className="sr-only">من تاريخ</span>
-                  <input
-                    type="date"
-                    value={controller.query.filters.dateFrom}
-                    aria-label="من تاريخ"
-                    onChange={(event) =>
-                      applyQueryPatch({ dateFrom: event.currentTarget.value || null })
-                    }
-                    className={adminFormFieldClassName("w-[170px] font-en")}
-                  />
-                </label>
-                <label>
-                  <span className="sr-only">إلى تاريخ</span>
-                  <input
-                    type="date"
-                    value={controller.query.filters.dateTo}
-                    aria-label="إلى تاريخ"
-                    onChange={(event) =>
-                      applyQueryPatch({ dateTo: event.currentTarget.value || null })
-                    }
-                    className={adminFormFieldClassName("w-[170px] font-en")}
-                  />
-                </label>
-                {controller.query.filters.dateFrom || controller.query.filters.dateTo ? (
-                  <AdminActionButton
-                    variant="dark"
-                    onClick={() => applyQueryPatch({ dateFrom: null, dateTo: null })}
-                  >
-                    مسح التاريخ
-                  </AdminActionButton>
-                ) : null}
-              </div>
-            }
-          />
-        </AdminEntityListPrimarySection>
-
         <AdminEntityListTableRegion
           data-admin-entity-list-pending={controller.isFetching ? "true" : "false"}
         >
@@ -373,6 +334,31 @@ export default function ActivityLogClient({
             number
           >
             listId="activity-log-table"
+            toolbar={{
+              basePath: "/admin/activity-log",
+              search: {
+                value: controller.query.search,
+                placeholder: "بحث في المستخدم أو الكيان...",
+                debounceMs: 350,
+                pending: controller.isFetching,
+              },
+              filters: filterDefinitions,
+              values: {
+                actor: controller.query.filters.actorUsername,
+                action: controller.query.filters.action,
+                entityType: controller.query.filters.entityType,
+                dateFrom: controller.query.filters.dateFrom,
+                dateTo: controller.query.filters.dateTo,
+              },
+              clearableFilterKeys: [
+                "actor",
+                "action",
+                "entityType",
+                "dateFrom",
+                "dateTo",
+              ],
+              onQueryPatch: applyQueryPatch,
+            }}
             rows={controller.result.rows}
             columns={ACTIVITY_LOG_COLUMNS}
             getRowId={(row) => row.id}

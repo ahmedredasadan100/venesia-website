@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
+import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   AdminFeedbackRegion,
   useAdminFeedback,
@@ -38,6 +40,12 @@ import {
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
+import {
+  adminCollectionSearchIncludes,
+  applyAdminEntityUrlPatch,
+  useAdminBoundedClientPagination,
+  type AdminEntityFilterDef,
+} from "../../../../../lib/admin/entity-list";
 import { statusMeta } from "../../../../../lib/page-blocks/admin-utils";
 import {
   bulkContentBlocks,
@@ -87,10 +95,9 @@ export default function ContentBlocksTableClient({
   mediaSynchronizationWarning = false,
 }: ContentBlocksTableClientProps) {
   const feedbackChannel = "block-manager:content";
+  const searchParams = useSearchParams();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
 
   const sortAccessors = useMemo(
     () => ({
@@ -109,12 +116,52 @@ export default function ContentBlocksTableClient({
     sortAccessors,
     refresh: getContentBlockRows,
   });
-  const totalPages = Math.max(1, Math.ceil(table.rows.length / pageSize));
-  const resolvedCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedRows = useMemo(
-    () => table.rows.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
-    [pageSize, resolvedCurrentPage, table.rows],
+  const search = searchParams.get("q") ?? "";
+  const status = searchParams.get("status") ?? "all";
+  const variant = searchParams.get("variant") ?? "all";
+  const filters = useMemo<readonly AdminEntityFilterDef[]>(() => [
+    {
+      id: "content-blocks-status",
+      paramKey: "status",
+      label: "الحالة",
+      type: "status",
+      allValue: "all",
+      placeholder: "الحالة",
+      options: [...new Set(rows.map((row) => row.status))].map((value) => ({
+        value,
+        label: statusMeta(value).label,
+      })),
+    },
+    {
+      id: "content-blocks-variant",
+      paramKey: "variant",
+      label: "Variant",
+      type: "single_select",
+      allValue: "all",
+      placeholder: "Variant",
+      options: VARIANT_OPTIONS.map(([value, label]) => ({ value, label })),
+    },
+  ], [rows]);
+  const filteredRows = useMemo(
+    () => table.rows.filter((row) => {
+      if (
+        search &&
+        !adminCollectionSearchIncludes(
+          `${row.name} ${row.slug} ${row.description ?? ""}`,
+          search,
+        )
+      ) return false;
+      if (status !== "all" && row.status !== status) return false;
+      return variant === "all" || row.variant === variant;
+    }),
+    [search, status, table.rows, variant],
   );
+  const pagination = useAdminBoundedClientPagination({
+    rows: filteredRows,
+    datasetKey: `${search}|${status}|${variant}|${filteredRows.map((row) => row.id).sort().join("|")}`,
+    defaultPageSize: PAGE_SIZE,
+  });
+  const paginatedRows = pagination.rows;
   const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
   const selection = useAdminGridSelection<number>(visibleIds);
   const loadFeedback = useMemo(
@@ -199,54 +246,62 @@ export default function ContentBlocksTableClient({
 
         {mediaWarningNotice}
 
-        <AdminBulkActionBar
-          selectedIds={selection.selectedIds}
-          entityLabel="بلوك"
-          options={[
-            { value: "publish", label: "نشر" },
-            { value: "hide", label: "إخفاء" },
-            { value: "draft", label: "مسودة" },
-            { value: "delete", label: "حذف" },
-          ]}
-          onClearSelection={selection.clearSelection}
-          isBusy={table.isPending}
-          onExecute={async (action, ids) => {
-            clearFeedback(feedbackChannel);
-            const result = await table.runAction(async () => {
-              const formData = new FormData();
-              formData.set("bulk_action", action);
-              ids.forEach((id) => formData.append("ids", String(id)));
-              await bulkContentBlocks(formData);
-              const nextRows = await getContentBlockRows();
-              return { ok: true, message: "تم تنفيذ العملية الجماعية بنجاح.", rows: nextRows };
-            });
-            publishFeedback(
-              {
-                variant: result.ok ? "success" : "danger",
-                title: result.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
-                message:
-                  result.message ??
-                  (result.ok
-                    ? "تم تنفيذ العملية بنجاح."
-                    : "تعذر تنفيذ العملية."),
-                layout: "inline",
-                dismissible: true,
-                lifecycle: "manual",
-              },
-              {
-                channel: feedbackChannel,
-                placement: "inline",
-                reveal: !result.ok,
-              },
+        <AdminEntityListFilters
+          basePath={MODULE_PATH}
+          search={{ value: search, placeholder: "ابحث باسم البلوك أو المعرّف الداخلي…", minLength: 1, pending: table.isPending }}
+          filters={filters}
+          values={{ status, variant }}
+          contextOverrideActive={selection.selectedIds.length > 0}
+          contextOverride={
+            <AdminBulkActionBar
+              selectedIds={selection.selectedIds}
+              entityLabel="بلوك"
+              options={[
+                { value: "publish", label: "نشر" },
+                { value: "hide", label: "إخفاء" },
+                { value: "draft", label: "مسودة" },
+                { value: "delete", label: "حذف" },
+              ]}
+              onClearSelection={selection.clearSelection}
+              isBusy={table.isPending}
+              onExecute={async (action, ids) => {
+                clearFeedback(feedbackChannel);
+                const result = await table.runAction(async () => {
+                  const formData = new FormData();
+                  formData.set("bulk_action", action);
+                  ids.forEach((id) => formData.append("ids", String(id)));
+                  await bulkContentBlocks(formData);
+                  const nextRows = await getContentBlockRows();
+                  return { ok: true, message: "تم تنفيذ العملية الجماعية بنجاح.", rows: nextRows };
+                });
+                publishFeedback(
+                  {
+                    variant: result.ok ? "success" : "danger",
+                    title: result.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
+                    message: result.message ?? (result.ok ? "تم تنفيذ العملية بنجاح." : "تعذر تنفيذ العملية."),
+                    layout: "inline",
+                    dismissible: true,
+                    lifecycle: "manual",
+                  },
+                  { channel: feedbackChannel, placement: "inline", reveal: !result.ok },
+                );
+                if (!result.ok && action === "delete") throw new Error(result.message ?? "bulk delete failed");
+                selection.clearSelection();
+              }}
+            />
+          }
+          onQueryPatch={(patch, behavior = "push") => {
+            const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
+            const query = next.toString();
+            window.history[behavior === "replace" ? "replaceState" : "pushState"](
+              window.history.state,
+              "",
+              `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
             );
-            if (!result.ok && action === "delete") {
-              throw new Error(result.message ?? "bulk delete failed");
-            }
-            selection.clearSelection();
           }}
         />
 
-        <AdminDataGrid summary={`${table.rows.length} بلوك`}>
+        <AdminDataGrid className="!rounded-t-none !border-t-0" summary={`${filteredRows.length} بلوك`}>
           <AdminDataGridHeader columns={columns}>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
@@ -401,15 +456,12 @@ export default function ContentBlocksTableClient({
 
         <AdminTablePagination
           basePath={MODULE_PATH}
-          currentPage={resolvedCurrentPage}
-          totalPages={totalPages}
-          totalCount={table.rows.length}
-          pageSize={String(pageSize)}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(nextPageSize) => {
-            setPageSize(nextPageSize);
-            setCurrentPage(1);
-          }}
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalCount={pagination.totalCount}
+          pageSize={String(pagination.pageSize)}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
           pending={table.isPending}
         />
       </div>

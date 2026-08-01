@@ -6,6 +6,7 @@ import {
   useTransition,
   type ReactNode,
 } from "react";
+import { useSearchParams } from "next/navigation";
 
 import VenesiaModal, {
   ADMIN_FORM,
@@ -18,6 +19,7 @@ import {
   AdminFeedbackChannelViewport,
   useAdminFeedback,
 } from "../../../components/admin/AdminFeedbackProvider";
+import { AdminEntityListFilters } from "../../../components/admin/entity-list";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   AdminActionButton,
@@ -34,9 +36,11 @@ import {
 } from "../../../components/admin/ui";
 import { ADMIN_LIST_PAGE } from "../../../lib/admin/admin-ui-styles";
 import {
-  resolveClientPagination,
-  slicePageRows,
-} from "../../../lib/admin/entity-list/pagination";
+  adminCollectionSearchIncludes,
+  applyAdminEntityUrlPatch,
+  useAdminBoundedClientPagination,
+  type AdminEntityFilterDef,
+} from "../../../lib/admin/entity-list";
 import type { AdminUserListItem } from "../../../lib/admin/users/admin-users-management";
 import {
   hasAdminUserCreateFieldErrors,
@@ -66,6 +70,19 @@ type StatusFilter = "all" | "active" | "inactive";
 
 const FEEDBACK_CHANNEL = "users-roles";
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50] as const;
+const USER_FILTERS: readonly AdminEntityFilterDef[] = [
+  {
+    id: "users-status",
+    paramKey: "status",
+    label: "الحالة",
+    placeholder: "الحالة",
+    type: "status",
+    options: [
+      { value: "active", label: "نشط" },
+      { value: "inactive", label: "موقوف" },
+    ],
+  },
+];
 
 const columns = `minmax(140px,1.4fr) 90px 100px minmax(120px,1fr) ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 
@@ -112,11 +129,15 @@ export default function UsersManagementClient({
   currentUsername,
 }: UsersManagementClientProps) {
   const { clearFeedback, publishFeedback } = useAdminFeedback();
+  const searchParams = useSearchParams();
   const [users, setUsers] = useState(initialUsers);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const search = searchParams.get("q") ?? "";
+  const statusFilter: StatusFilter =
+    searchParams.get("status") === "active" ||
+    searchParams.get("status") === "inactive"
+      ? (searchParams.get("status") as StatusFilter)
+      : "all";
+  const roleFilter = searchParams.get("role") ?? "all";
   const [rowPending, setRowPending] = useState<string | null>(null);
   const [editPending, setEditPending] = useState(false);
   const [confirmEditStatus, setConfirmEditStatus] = useState(false);
@@ -146,32 +167,45 @@ export default function UsersManagementClient({
     confirmPassword: "",
   });
   const [editPasswordErrors, setEditPasswordErrors] = useState<AdminUserEditPasswordFieldErrors>({});
+  const userFilters = useMemo<readonly AdminEntityFilterDef[]>(
+    () => [
+      ...USER_FILTERS,
+      {
+        id: "users-role",
+        paramKey: "role",
+        label: "الدور",
+        placeholder: "الدور",
+        type: "single_select",
+        options: [...new Set(users.map((user) => user.role))].map((role) => ({
+          value: role,
+          label: roleLabel(role),
+        })),
+      },
+    ],
+    [users],
+  );
 
   const filteredUsers = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = search.trim();
     return users.filter((user) => {
       if (statusFilter === "active" && !user.is_active) return false;
       if (statusFilter === "inactive" && user.is_active) return false;
+      if (roleFilter !== "all" && user.role !== roleFilter) return false;
       if (!query) return true;
       return (
-        user.username.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
-        (user.full_name ?? "").toLowerCase().includes(query)
+        adminCollectionSearchIncludes(user.username, query) ||
+        adminCollectionSearchIncludes(user.email, query) ||
+        adminCollectionSearchIncludes(user.full_name ?? "", query)
       );
     });
-  }, [users, search, statusFilter]);
-  const pagination = resolveClientPagination(
-    filteredUsers.length,
-    page,
-    pageSize,
-    PAGE_SIZE_OPTIONS,
-    10,
-  );
-  const visibleUsers = slicePageRows(
-    filteredUsers,
-    pagination.page,
-    pagination.pageSize,
-  );
+  }, [roleFilter, search, statusFilter, users]);
+  const pagination = useAdminBoundedClientPagination({
+    rows: filteredUsers,
+    datasetKey: `users:${search}:${statusFilter}:${roleFilter}`,
+    pageSizeOptions: PAGE_SIZE_OPTIONS,
+    defaultPageSize: 10,
+  });
+  const visibleUsers = pagination.rows;
 
   function resetFeedback() {
     clearFeedback(FEEDBACK_CHANNEL);
@@ -395,15 +429,6 @@ export default function UsersManagementClient({
       setUsers((current) =>
         current.filter((item) => item.id !== deleted.id),
       );
-      setPage(
-        resolveClientPagination(
-          Math.max(0, filteredUsers.length - 1),
-          page,
-          pageSize,
-          PAGE_SIZE_OPTIONS,
-          10,
-        ).page,
-      );
       announce(
         "success",
         "تم حذف المستخدم",
@@ -545,47 +570,34 @@ export default function UsersManagementClient({
         label="نتيجة إجراءات المستخدمين والصلاحيات"
       />
 
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-4 md:p-6">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            placeholder="بحث باسم المستخدم أو البريد..."
-            className={adminFormFieldClassName("max-w-xl")}
-          />
-
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["all", "الكل"],
-                ["active", "نشط"],
-                ["inactive", "موقوف"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => {
-                  setStatusFilter(value);
-                  setPage(1);
-                }}
-                className={`rounded-2xl border px-4 py-2 text-sm font-semibold transition ${
-                  statusFilter === value
-                    ? "border-[#D8B87A]/35 bg-[#D8B87A]/12 text-[#D8B87A]"
-                    : "border-white/10 text-white/55 hover:border-[#D8B87A]/25 hover:text-[#D8B87A]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <section>
+        <AdminEntityListFilters
+          basePath="/admin/users-roles"
+          search={{
+            value: search,
+            placeholder: "بحث باسم المستخدم أو البريد أو الاسم الكامل...",
+            minLength: 1,
+          }}
+          filters={userFilters}
+          values={{ status: statusFilter, role: roleFilter }}
+          onQueryPatch={(patch, behavior = "push") => {
+            const next = applyAdminEntityUrlPatch(
+              new URLSearchParams(window.location.search),
+              patch,
+            );
+            const query = next.toString();
+            window.history[
+              behavior === "replace" ? "replaceState" : "pushState"
+            ](
+              window.history.state,
+              "",
+              `${window.location.pathname}${query ? `?${query}` : ""}`,
+            );
+          }}
+        />
 
         <AdminDataGrid
+          className="!rounded-t-none !border-t-0"
           summary={`${filteredUsers.length} نتيجة`}
           scrollLabel="جدول المستخدمين والصلاحيات"
         >
@@ -631,12 +643,8 @@ export default function UsersManagementClient({
           pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
           emptySummaryText="لا يوجد مستخدمون مطابقون"
           pending={rowPending !== null}
-          className="mt-4"
-          onPageChange={setPage}
-          onPageSizeChange={(nextPageSize) => {
-            setPageSize(nextPageSize);
-            setPage(1);
-          }}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
         />
       </section>
 

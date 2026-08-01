@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import VenesiaModal from "../../../../components/admin/VenesiaModal";
+import AdminEntityListFilters from "../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
@@ -15,6 +17,12 @@ import {
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
+import {
+  adminCollectionSearchIncludes,
+  applyAdminEntityUrlPatch,
+  useAdminBoundedClientPagination,
+  type AdminEntityFilterDef,
+} from "../../../../lib/admin/entity-list";
 import { resolvePublicPreviewHref } from "../../../../lib/admin/links/validate";
 
 import {
@@ -24,7 +32,7 @@ import {
 } from "./actions";
 import MenuItemForm from "./MenuItemForm";
 import type { Menu, MenuItem } from "./menu-builder-shared";
-import { flattenMenuItemsForTable } from "./menu-builder-shared";
+import { flattenMenuItemsForTable, getMenuItemTypeLabel } from "./menu-builder-shared";
 
 const TREE_UNIT = 18;
 const columns = `48px minmax(0,1fr) 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
@@ -164,17 +172,59 @@ type MenuItemsTableClientProps = {
 };
 
 export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClientProps) {
+  const searchParams = useSearchParams();
   const rows = useMemo(() => flattenMenuItemsForTable(items), [items]);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const resolvedCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedRows = useMemo(
-    () => rows.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
-    [pageSize, resolvedCurrentPage, rows],
+  const search = searchParams.get("q") ?? "";
+  const visibility = searchParams.get("visibility") ?? "all";
+  const itemType = searchParams.get("item_type") ?? "all";
+  const filters = useMemo<readonly AdminEntityFilterDef[]>(() => [
+    {
+      id: "menu-items-visibility",
+      paramKey: "visibility",
+      label: "الظهور",
+      type: "status",
+      allValue: "all",
+      placeholder: "الظهور",
+      options: [
+        { value: "visible", label: "ظاهر" },
+        { value: "hidden", label: "مخفي" },
+      ],
+    },
+    {
+      id: "menu-items-type",
+      paramKey: "item_type",
+      label: "نوع العنصر",
+      type: "single_select",
+      allValue: "all",
+      placeholder: "نوع العنصر",
+      options: [...new Set(items.map((item) => item.item_type))].map((value) => ({
+        value,
+        label: getMenuItemTypeLabel(value),
+      })),
+    },
+  ], [items]);
+  const filteredRows = useMemo(
+    () => rows.filter(({ item, parentLabel }) => {
+      if (
+        search &&
+        !adminCollectionSearchIncludes(
+          `${item.label} ${item.href ?? ""} ${parentLabel ?? ""} ${item.linked_type ?? ""} ${item.linked_id ?? ""}`,
+          search,
+        )
+      ) return false;
+      if (visibility !== "all" && (item.is_visible ? "visible" : "hidden") !== visibility) return false;
+      return itemType === "all" || item.item_type === itemType;
+    }),
+    [itemType, rows, search, visibility],
   );
+  const pagination = useAdminBoundedClientPagination({
+    rows: filteredRows,
+    datasetKey: `${menu.id}|${search}|${visibility}|${itemType}|${filteredRows.map(({ item }) => item.id).sort().join("|")}`,
+    defaultPageSize: PAGE_SIZE,
+  });
+  const paginatedRows = pagination.rows;
 
   async function runMenuItemMutation(itemId: number, action: () => Promise<void>) {
     setPendingRowId(itemId);
@@ -199,7 +249,23 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
         </span>
       </div>
 
-      <AdminDataGrid>
+      <AdminEntityListFilters
+        basePath={`/admin/pages-blocks/menus/${menu.id}`}
+        search={{ value: search, placeholder: "ابحث بعنوان العنصر أو الرابط أو الكيان المرتبط…", minLength: 1 }}
+        filters={filters}
+        values={{ visibility, item_type: itemType }}
+        onQueryPatch={(patch, behavior = "push") => {
+          const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
+          const query = next.toString();
+          window.history[behavior === "replace" ? "replaceState" : "pushState"](
+            window.history.state,
+            "",
+            `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+          );
+        }}
+      />
+
+      <AdminDataGrid className="!rounded-t-none !border-t-0">
         <AdminDataGridHeader columns={columns} className="gap-3">
           <span className="text-center">#</span>
           <span className="text-right">اسم العنصر</span>
@@ -304,15 +370,12 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
 
       <AdminTablePagination
         basePath={`/admin/pages-blocks/menus/${menu.id}`}
-        currentPage={resolvedCurrentPage}
-        totalPages={totalPages}
-        totalCount={rows.length}
-        pageSize={String(pageSize)}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(nextPageSize) => {
-          setPageSize(nextPageSize);
-          setCurrentPage(1);
-        }}
+        currentPage={pagination.page}
+        totalPages={pagination.totalPages}
+        totalCount={pagination.totalCount}
+        pageSize={String(pagination.pageSize)}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
         pending={pendingRowId !== null}
       />
 

@@ -73,6 +73,9 @@ export type AdminEntityPersistResult = {
 export type AdminEntityFilterOption = {
   value: string;
   label: string;
+  secondaryLabel?: string;
+  searchText?: string;
+  disabled?: boolean;
   /** Generic tree presentation metadata. */
   depth?: number;
   parentValue?: string;
@@ -87,15 +90,54 @@ export type AdminEntityFilterDef = {
   id: string;
   /** URL query param key for this filter. */
   paramKey: string;
+  /** Visible field/chip label. Falls back to placeholder. */
+  label?: string;
   placeholder: string;
+  type?:
+    | "single_select"
+    | "multi_select"
+    | "boolean"
+    | "status"
+    | "date"
+    | "date_range"
+    | "entity_select"
+    | "hierarchical_entity_select";
+  selectionMode?: "single" | "multi";
   /** Sentinel value meaning "no filter" (default: "all"). */
   allValue?: string;
+  defaultValue?: string;
   options?: AdminEntityFilterOption[];
   groups?: AdminEntityFilterGroup[];
+  searchable?: boolean;
+  optionSearchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
   /** Optional display override for the closed trigger. */
   getDisplayValue?: (value: string) => string | undefined;
+  /** Optional active-chip formatter. */
+  getAppliedLabel?: (value: string) => string | undefined;
+  /** Multi-select values may count as one active filter or per selected value. */
+  activeCountBehavior?: "filter" | "value";
+};
+
+export type AdminEntitySearchSuggestion = {
+  id: string | number;
+  primaryText: string;
+  secondaryText?: string;
+  typeLabel?: string;
+  searchValue?: string;
+};
+
+export type AdminEntitySearchSuggestionsConfig = {
+  enabled: boolean;
+  minLength?: number;
+  maxResults?: number;
+  load: (
+    query: string,
+    context: { signal: AbortSignal },
+  ) => Promise<readonly AdminEntitySearchSuggestion[]>;
+  selectionAction?: "set_query" | "navigate_to_entity" | "set_query_and_select";
+  onSelect?: (suggestion: AdminEntitySearchSuggestion) => void;
 };
 
 export type AdminEntitySearchConfig = {
@@ -108,6 +150,8 @@ export type AdminEntitySearchConfig = {
   debounceMs?: number;
   className?: string;
   disabled?: boolean;
+  pending?: boolean;
+  suggestions?: AdminEntitySearchSuggestionsConfig;
 };
 
 export type AdminEntityFilterValues = Record<string, string>;

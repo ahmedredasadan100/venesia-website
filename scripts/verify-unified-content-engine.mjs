@@ -263,14 +263,19 @@ check(
 );
 
 const filters = read("src/components/admin/content/UnifiedContentFilters.tsx");
+const sharedCollectionToolbar = read(
+  "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+);
+const sharedSearchInput = read("src/components/admin/ui/AdminSearchInput.tsx");
+const sharedUrlState = read("src/lib/admin/entity-list/url-state.ts");
 const searchRoute = read("src/app/admin/content/topics/search/route.ts");
-check("Search debounce must be 300–400ms", filters.includes("}, 350)"));
-check("Autocomplete requests must be abortable", filters.includes("new AbortController()"));
-check("Enter must apply search immediately", filters.includes("onEnter={() => navigate({}, values.q)}"));
-check("Autocomplete must support keyboard navigation", containsAll(filters, ['event.key === "ArrowDown"', 'event.key === "ArrowUp"', 'event.key === "Enter"']));
-check("Escape must close autocomplete", filters.includes("onEscape={() =>"));
-check("Filters must auto-apply and reset pagination", filters.includes('params.delete("page")'));
-check("Reset must clear every unified filter", containsAll(filters, ['"q"', '"content_type"', '"category"', '"series"', '"status"', '"featured"', '"page"']));
+check("Search debounce must be 300–400ms", filters.includes("debounceMs: 350"));
+check("Autocomplete requests must be abortable", sharedCollectionToolbar.includes("new AbortController()") && filters.includes("{ signal"));
+check("Enter must apply search immediately", sharedCollectionToolbar.includes("commitSearch(draftSearch)"));
+check("Autocomplete must support keyboard navigation", containsAll(sharedCollectionToolbar, ['event.key === "ArrowDown"', 'event.key === "ArrowUp"']) && sharedSearchInput.includes('event.key === "Enter"'));
+check("Escape must close autocomplete", sharedCollectionToolbar.includes("onEscape={() =>") && sharedSearchInput.includes('event.key === "Escape"'));
+check("Filters apply once and reset pagination", sharedCollectionToolbar.includes('navigate(patch, "push")') && sharedUrlState.includes("next.delete(resetPageParam)"));
+check("Topics delegates every unified filter to the shared owner", containsAll(filters, ['"content_type"', '"category"', '"series"', '"status"', '"featured"']) && !filters.includes("<AdminSearchInput"));
 check(
   "Autocomplete payload must not expose slugs",
   searchRoute.includes('.select("id,title,category_name")') && !searchRoute.includes("slug,"),

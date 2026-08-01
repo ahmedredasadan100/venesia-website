@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
+import AdminEntityListFilters from "../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
-  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminBulkActionBar,
   AdminDataGridCheckbox,
   AdminDataGrid,
@@ -28,6 +29,12 @@ import {
   useAdminGridSelection,
 } from "../../../../components/admin/ui";
 import { useAdminTable } from "../../../../components/admin/table-engine";
+import {
+  adminCollectionSearchIncludes,
+  applyAdminEntityUrlPatch,
+  useAdminBoundedClientPagination,
+  type AdminEntityFilterDef,
+} from "../../../../lib/admin/entity-list";
 import AddMenuPanelClient from "./AddMenuPanelClient";
 import {
   bulkMenuAction,
@@ -58,8 +65,6 @@ type MenuSortKey = "name" | "slug" | "item_count" | "status";
  * RTL table: القائمة (1fr, يمين) → … → الإجراءات (ثابت، شمال).
  */
 const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.count} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
-const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
-
 function mutationFormData(fields: Record<string, string | number | boolean>) {
   const formData = new FormData();
   for (const [key, value] of Object.entries(fields)) formData.set(key, String(value));
@@ -87,8 +92,7 @@ export default function MenusTableClient({
   messageWarning = false,
   loadError = null,
 }: MenusTableClientProps) {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const searchParams = useSearchParams();
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const sortAccessors = useMemo(
     () => ({
@@ -105,12 +109,54 @@ export default function MenusTableClient({
     getRowId: (item) => item.id,
     sortAccessors,
   });
-  const totalPages = Math.max(1, Math.ceil(table.rows.length / pageSize));
-  const resolvedCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedRows = useMemo(
-    () => table.rows.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
-    [pageSize, resolvedCurrentPage, table.rows],
+  const search = searchParams.get("q") ?? "";
+  const status = searchParams.get("status") ?? "all";
+  const location = searchParams.get("location") ?? "all";
+  const filters = useMemo<readonly AdminEntityFilterDef[]>(() => [
+    {
+      id: "menus-status",
+      paramKey: "status",
+      label: "الحالة",
+      type: "status",
+      allValue: "all",
+      placeholder: "الحالة",
+      options: [
+        { value: "active", label: "ظاهرة" },
+        { value: "inactive", label: "مخفية" },
+      ],
+    },
+    {
+      id: "menus-location",
+      paramKey: "location",
+      label: "الموقع",
+      type: "single_select",
+      allValue: "all",
+      placeholder: "الموقع",
+      options: [...new Set(menus.map((menu) => menu.location))].map((value) => ({
+        value,
+        label: locationLabel(value),
+      })),
+    },
+  ], [menus]);
+  const filteredRows = useMemo(
+    () => table.rows.filter((menu) => {
+      if (
+        search &&
+        !adminCollectionSearchIncludes(
+          `${menu.name} ${menu.slug} ${menu.location} ${locationLabel(menu.location)}`,
+          search,
+        )
+      ) return false;
+      if (status !== "all" && (menu.is_active ? "active" : "inactive") !== status) return false;
+      return location === "all" || menu.location === location;
+    }),
+    [location, search, status, table.rows],
   );
+  const pagination = useAdminBoundedClientPagination({
+    rows: filteredRows,
+    datasetKey: `${search}|${status}|${location}|${filteredRows.map((row) => row.id).sort().join("|")}`,
+  });
+  const paginatedRows = pagination.rows;
   const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
   const selection = useAdminGridSelection<number>(visibleIds);
 
@@ -169,20 +215,38 @@ export default function MenusTableClient({
       />
 
       <div className="space-y-4">
-        <AdminBulkActionBar
-          selectedIds={selection.selectedIds}
-          entityLabel="قائمة"
-          action={bulkMenuAction}
-          options={[
-            { value: "show", label: "إظهار" },
-            { value: "hide", label: "إخفاء" },
-            { value: "delete", label: "حذف" },
-          ]}
-          idsFieldName="menu_ids"
-          onClearSelection={selection.clearSelection}
+        <AdminEntityListFilters
+          basePath="/admin/pages-blocks/menus"
+          search={{ value: search, placeholder: "ابحث باسم القائمة أو المفتاح أو الموقع…", minLength: 1 }}
+          filters={filters}
+          values={{ status, location }}
+          contextOverrideActive={selection.selectedIds.length > 0}
+          contextOverride={
+            <AdminBulkActionBar
+              selectedIds={selection.selectedIds}
+              entityLabel="قائمة"
+              action={bulkMenuAction}
+              options={[
+                { value: "show", label: "إظهار" },
+                { value: "hide", label: "إخفاء" },
+                { value: "delete", label: "حذف" },
+              ]}
+              idsFieldName="menu_ids"
+              onClearSelection={selection.clearSelection}
+            />
+          }
+          onQueryPatch={(patch, behavior = "push") => {
+            const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
+            const query = next.toString();
+            window.history[behavior === "replace" ? "replaceState" : "pushState"](
+              window.history.state,
+              "",
+              `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+            );
+          }}
         />
 
-        <AdminDataGrid summary={`${table.rows.length} قائمة`}>
+        <AdminDataGrid className="!rounded-t-none !border-t-0" summary={`${filteredRows.length} قائمة`}>
           <AdminDataGridHeader columns={columns}>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
@@ -322,15 +386,12 @@ export default function MenusTableClient({
 
         <AdminTablePagination
           basePath="/admin/pages-blocks/menus"
-          currentPage={resolvedCurrentPage}
-          totalPages={totalPages}
-          totalCount={table.rows.length}
-          pageSize={String(pageSize)}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(nextPageSize) => {
-            setPageSize(nextPageSize);
-            setCurrentPage(1);
-          }}
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalCount={pagination.totalCount}
+          pageSize={String(pagination.pageSize)}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
           pending={pendingRowId !== null}
         />
       </div>

@@ -36,7 +36,7 @@ import { useAdminEntityListController } from "../../../lib/admin/entity-list/dat
 import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { ADMIN_CONTENT_ROUTES } from "../../../lib/admin/content-routes";
 import type { TopicMetrics } from "../../../lib/admin/content/entity-list-adapters/topics";
-import UnifiedContentFilters from "./UnifiedContentFilters";
+import { useUnifiedContentToolbar } from "./UnifiedContentFilters";
 import UnifiedContentList from "./UnifiedContentList";
 import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions";
 
@@ -417,6 +417,31 @@ export default function TopicsListClient({
       ? `${ADMIN_CONTENT_ROUTES.topics}?${query}`
       : ADMIN_CONTENT_ROUTES.topics;
   }, [controller.query, sort]);
+  const toolbar = useUnifiedContentToolbar({
+    values: {
+      q: controller.query.search,
+      contentType: controller.query.filters.contentType,
+      category: controller.query.filters.categoryId
+        ? String(controller.query.filters.categoryId)
+        : "all",
+      series: controller.query.filters.seriesId
+        ? String(controller.query.filters.seriesId)
+        : "all",
+      status: controller.query.filters.status,
+      featured: controller.query.filters.featured,
+    },
+    categories,
+    series,
+    pending: controller.isFetching,
+    onNavigate: (state, behavior) => {
+      const trimmed = state.q.trim();
+      controller.setSearchAndFilters(
+        trimmed.length >= 2 ? trimmed : "",
+        toFilters(state),
+        behavior,
+      );
+    },
+  });
 
   return (
     <AdminEntityListSurface consumer="topics">
@@ -430,46 +455,6 @@ export default function TopicsListClient({
             { label: "أرشيف", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.archived ?? 0), tone: "cyan", compact: true },
             { label: "متوسط SEO", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.seoAverage ?? 0), suffix: controller.result.metrics?.error ? undefined : "/100", tone: "blue", compact: true },
           ]}
-        />
-      </AdminEntityListPrimarySection>
-
-      <AdminEntityListPrimarySection>
-        <UnifiedContentFilters
-          initial={{
-            q: controller.query.search,
-            contentType: controller.query.filters.contentType,
-            category: controller.query.filters.categoryId
-              ? String(controller.query.filters.categoryId)
-              : "all",
-            series: controller.query.filters.seriesId
-              ? String(controller.query.filters.seriesId)
-              : "all",
-            status: controller.query.filters.status,
-            featured: controller.query.filters.featured,
-          }}
-          categories={categories}
-          series={series}
-          onNavigate={(state) => {
-            const trimmed = state.q.trim();
-            const search = trimmed.length >= 2 ? trimmed : "";
-            const onlySearch =
-              state.contentType === controller.query.filters.contentType &&
-              state.category ===
-                (controller.query.filters.categoryId
-                  ? String(controller.query.filters.categoryId)
-                  : "all") &&
-              state.series ===
-                (controller.query.filters.seriesId
-                  ? String(controller.query.filters.seriesId)
-                  : "all") &&
-              state.status === controller.query.filters.status &&
-              state.featured === controller.query.filters.featured;
-            controller.setSearchAndFilters(
-              search,
-              toFilters(state),
-              onlySearch ? "replace" : "push",
-            );
-          }}
         />
       </AdminEntityListPrimarySection>
 
@@ -497,6 +482,7 @@ export default function TopicsListClient({
           sort={sort}
           initialVisibleColumns={initialVisibleColumns}
           initialFeedback={initialFeedback}
+          toolbar={toolbar}
           rowActionHandlers={rowActionHandlers}
           onSortChange={(next, options) =>
             controller.setSort(

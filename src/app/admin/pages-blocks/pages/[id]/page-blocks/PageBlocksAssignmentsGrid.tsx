@@ -65,7 +65,7 @@ export default function PageBlocksAssignmentsGrid({
   }
 
   return (
-    <AdminDataGrid summary={`${totalCount} موديول`}>
+    <AdminDataGrid className="!rounded-t-none !border-t-0" summary={`${totalCount} موديول`}>
       <AdminDataGridHeader columns={gridColumns}>
         <AdminDataGridCheckboxCell>
           <AdminDataGridCheckbox

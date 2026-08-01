@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   AdminFeedbackRegion,
   useAdminFeedback,
@@ -37,6 +38,12 @@ import {
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
+import {
+  adminCollectionSearchIncludes,
+  applyAdminEntityUrlPatch,
+  useAdminBoundedClientPagination,
+  type AdminEntityFilterDef,
+} from "../../../../../lib/admin/entity-list";
 import {
   bulkHeroTemplates,
   createHeroTemplate,
@@ -81,6 +88,20 @@ const sourceLabels: Record<string, string> = {
  */
 const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
+const HERO_FILTERS: readonly AdminEntityFilterDef[] = [
+  {
+    id: "hero-visibility",
+    paramKey: "visibility",
+    label: "الظهور",
+    type: "status",
+    allValue: "all",
+    placeholder: "الظهور",
+    options: [
+      { value: "visible", label: "ظاهر" },
+      { value: "hidden", label: "مخفي" },
+    ],
+  },
+];
 
 function mutationFormData(fields: Record<string, string | number | boolean>) {
   const formData = new FormData();
@@ -101,19 +122,33 @@ export default function HeroManagerClient({
   loadError = null,
 }: HeroManagerClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const feedbackChannel = "block-manager:hero";
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const [isRefreshPending, startRefreshTransition] = useTransition();
-  const totalPages = Math.max(1, Math.ceil(heroes.length / pageSize));
-  const resolvedCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedHeroes = useMemo(
-    () => heroes.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
-    [heroes, pageSize, resolvedCurrentPage],
+  const search = searchParams.get("q") ?? "";
+  const visibility = searchParams.get("visibility") ?? "all";
+  const filteredHeroes = useMemo(
+    () => heroes.filter((hero) => {
+      if (
+        search &&
+        !adminCollectionSearchIncludes(
+          `${hero.name} ${hero.slug} ${hero.description ?? ""}`,
+          search,
+        )
+      ) return false;
+      return visibility === "all" || (hero.is_visible ? "visible" : "hidden") === visibility;
+    }),
+    [heroes, search, visibility],
   );
+  const pagination = useAdminBoundedClientPagination({
+    rows: filteredHeroes,
+    datasetKey: `${search}|${visibility}|${filteredHeroes.map((hero) => hero.id).sort().join("|")}`,
+    defaultPageSize: PAGE_SIZE,
+  });
+  const paginatedHeroes = pagination.rows;
   const visibleIds = useMemo(() => paginatedHeroes.map((hero) => hero.id), [paginatedHeroes]);
   const selection = useAdminGridSelection<number>(visibleIds);
   const isBusy = pendingRowId !== null || isRefreshPending;
@@ -205,30 +240,48 @@ export default function HeroManagerClient({
       />
 
       <div className="space-y-4">
-        <AdminBulkActionBar
-          selectedIds={selection.selectedIds}
-          entityLabel="هيرو"
-          options={[
-            { value: "show", label: "إظهار" },
-            { value: "hide", label: "إخفاء" },
-            { value: "delete", label: "حذف" },
-          ]}
-          onClearSelection={selection.clearSelection}
-          isBusy={isBusy}
-          onExecute={async (action, ids) => {
-            const formData = new FormData();
-            formData.set("bulk_action", action);
-            ids.forEach((id) => formData.append("ids", String(id)));
-            const succeeded = await runMutation(null, () => bulkHeroTemplates(formData), "تم تنفيذ الإجراء الجماعي على الهيروهات المحددة.");
-            if (!succeeded) {
-              if (action === "delete") throw new Error("bulk hero delete failed");
-              return;
-            }
-            selection.clearSelection();
+        <AdminEntityListFilters
+          basePath="/admin/pages-blocks/blocks/hero"
+          search={{ value: search, placeholder: "ابحث باسم الهيرو أو المعرّف الداخلي…", minLength: 1, pending: isBusy }}
+          filters={HERO_FILTERS}
+          values={{ visibility }}
+          contextOverrideActive={selection.selectedIds.length > 0}
+          contextOverride={
+            <AdminBulkActionBar
+              selectedIds={selection.selectedIds}
+              entityLabel="هيرو"
+              options={[
+                { value: "show", label: "إظهار" },
+                { value: "hide", label: "إخفاء" },
+                { value: "delete", label: "حذف" },
+              ]}
+              onClearSelection={selection.clearSelection}
+              isBusy={isBusy}
+              onExecute={async (action, ids) => {
+                const formData = new FormData();
+                formData.set("bulk_action", action);
+                ids.forEach((id) => formData.append("ids", String(id)));
+                const succeeded = await runMutation(null, () => bulkHeroTemplates(formData), "تم تنفيذ الإجراء الجماعي على الهيروهات المحددة.");
+                if (!succeeded) {
+                  if (action === "delete") throw new Error("bulk hero delete failed");
+                  return;
+                }
+                selection.clearSelection();
+              }}
+            />
+          }
+          onQueryPatch={(patch, behavior = "push") => {
+            const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
+            const query = next.toString();
+            window.history[behavior === "replace" ? "replaceState" : "pushState"](
+              window.history.state,
+              "",
+              `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+            );
           }}
         />
 
-        <AdminDataGrid summary={heroes.length ? `${heroes.length} هيرو إجمال` : undefined}>
+        <AdminDataGrid className="!rounded-t-none !border-t-0" summary={filteredHeroes.length ? `${filteredHeroes.length} هيرو إجمال` : undefined}>
           <AdminDataGridHeader columns={gridColumns}>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
@@ -348,20 +401,17 @@ export default function HeroManagerClient({
             );
           })}
 
-          {!heroes.length ? <AdminDataGridEmpty>لا توجد هيروهات بعد.</AdminDataGridEmpty> : null}
+          {!filteredHeroes.length ? <AdminDataGridEmpty>لا توجد هيروهات مطابقة.</AdminDataGridEmpty> : null}
         </AdminDataGrid>
 
         <AdminTablePagination
           basePath="/admin/pages-blocks/blocks/hero"
-          currentPage={resolvedCurrentPage}
-          totalPages={totalPages}
-          totalCount={heroes.length}
-          pageSize={String(pageSize)}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(nextPageSize) => {
-            setPageSize(nextPageSize);
-            setCurrentPage(1);
-          }}
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalCount={pagination.totalCount}
+          pageSize={String(pagination.pageSize)}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
           pending={isBusy}
         />
       </div>

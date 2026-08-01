@@ -710,7 +710,7 @@ check(
   ),
 );
 check(
-  "shared list parents own 28px sections and the 16px table-footer cadence",
+  "shared list parents attach Toolbar to Grid while preserving outer 28px and table-footer 16px cadence",
   entityListSurfaceSource.includes("AdminEntityListPrimarySection") &&
     entityListSurfaceSource.includes('SURFACE_LAYOUT_CLASSES = "flex flex-col gap-7"') &&
     entityListSurfaceSource.includes("AdminEntityListTableRegion") &&
@@ -724,7 +724,9 @@ check(
     entityListSurfaceSource.includes("AdminEntityListPageLayout") &&
     entityListSurfaceSource.includes("gap-7") &&
     entityListSource.includes("AdminEntityListPrimarySection") &&
-    entityListSource.includes('className="scroll-mt-6 flex flex-col gap-7"') &&
+    entityListSource.includes('toolbar ? "gap-0" : "gap-7"') &&
+    entityListSource.includes("<AdminEntityListFilters") &&
+    entityListSource.includes('toolbar ? "!rounded-t-none !border-t-0" : undefined') &&
     !entityListSource.includes("primary-section]:mt-") &&
     !read(paths.pagination).includes('className={`mt-4') &&
     read(paths.pagination).includes('data-admin-table-pagination=""') &&
@@ -1340,8 +1342,12 @@ check(
   read(paths.dataController).includes('addEventListener("popstate"') &&
     activitySource.includes("controller.query") &&
     reportSource.includes("controller.query") &&
-    redirectsClientSource.includes("search={controller.query.search}") &&
-    redirectsClientSource.includes("status={controller.query.filters.status}"),
+    redirectsClientSource.includes("createRedirectsCollectionToolbar") &&
+    redirectsClientSource.includes("search: controller.query.search") &&
+    redirectsClientSource.includes("status: controller.query.filters.status") &&
+    redirectsClientSource.includes(
+      "redirectType: controller.query.filters.redirectType",
+    ),
 );
 check(
   "route-locked Project queries reapply their invariant on every transition and Back or Forward restoration",
