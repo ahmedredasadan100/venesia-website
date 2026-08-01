@@ -88,6 +88,9 @@ function toGridRow(row: ProjectEntityListRow): ProjectGridRow {
     arabic_name: row.arabic_name,
     english_name: row.english_name,
     location_label: row.location_label,
+    city_name: row.city_name,
+    main_area_name: row.main_area_name,
+    sub_area_name: row.sub_area_name,
     featured: row.featured,
     updated_at: row.updated_at,
   };

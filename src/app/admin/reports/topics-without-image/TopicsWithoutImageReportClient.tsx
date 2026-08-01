@@ -50,6 +50,9 @@ import {
   type TopicsWithoutImageSortField,
 } from "../../../../lib/admin/media-catalog/topics-without-image-entity-list-contract";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
+import { TOPICS_WITHOUT_IMAGE_DEFAULT_COLUMN_KEYS } from "../../../../lib/admin/media-catalog/topics-without-image-list-config";
+
+import { saveTopicsWithoutImageColumnPreferences } from "./column-preferences";
 
 type ReportColumnKey =
   | "topic"
@@ -164,6 +167,8 @@ function createReportColumns(): AdminEntityColumnDef<
       label: "الموضوع",
       defaultVisible: true,
       hideable: false,
+      sortable: false,
+      align: "start",
       minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
       sticky: "start",
@@ -195,7 +200,9 @@ function createReportColumns(): AdminEntityColumnDef<
       key: "content_type",
       label: "نوع المحتوى",
       defaultVisible: true,
-      hideable: false,
+      hideable: true,
+      sortable: false,
+      align: "center",
       minWidth: 138,
       width: 138,
       renderCell: ({ row }) => (
@@ -208,7 +215,9 @@ function createReportColumns(): AdminEntityColumnDef<
       key: "status",
       label: "الحالة",
       defaultVisible: true,
-      hideable: false,
+      hideable: true,
+      sortable: false,
+      align: "center",
       minWidth: 118,
       width: 118,
       renderCell: ({ row }) => {
@@ -220,7 +229,9 @@ function createReportColumns(): AdminEntityColumnDef<
       key: "category",
       label: "التصنيف",
       defaultVisible: true,
-      hideable: false,
+      hideable: true,
+      sortable: false,
+      align: "center",
       minWidth: 144,
       width: 144,
       renderCell: ({ row }) => (
@@ -233,9 +244,10 @@ function createReportColumns(): AdminEntityColumnDef<
       key: "updated_at",
       label: "آخر تحديث",
       defaultVisible: true,
-      hideable: false,
+      hideable: true,
       sortable: true,
       sortKey: "updated_at",
+      align: "center",
       minWidth: 190,
       width: 190,
       renderCell: ({ row }) => (
@@ -249,6 +261,8 @@ function createReportColumns(): AdminEntityColumnDef<
       label: "الإجراءات",
       defaultVisible: true,
       hideable: false,
+      sortable: false,
+      align: "center",
       minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
@@ -265,12 +279,14 @@ function createReportColumns(): AdminEntityColumnDef<
 export default function TopicsWithoutImageReportClient({
   initialQuery,
   initialResult,
+  initialVisibleColumns,
 }: {
   initialQuery: AdminEntityListQuery<
     TopicsWithoutImageFilters,
     TopicsWithoutImageSortField
   >;
   initialResult: AdminEntityListResult<TopicWithoutImageRow>;
+  initialVisibleColumns: string[] | null;
 }) {
   const controller = useAdminEntityListController({
     entity: "topics_without_image",
@@ -353,7 +369,16 @@ export default function TopicsWithoutImageReportClient({
           columns={columns}
           getRowId={(row) => row.id}
           getRowLabel={(row) => row.title || `الموضوع ${row.id}`}
-          enableColumnManagement={false}
+          initialVisibleColumns={
+            initialVisibleColumns ?? [
+              ...TOPICS_WITHOUT_IMAGE_DEFAULT_COLUMN_KEYS,
+            ]
+          }
+          defaultVisibleColumns={[
+            ...TOPICS_WITHOUT_IMAGE_DEFAULT_COLUMN_KEYS,
+          ]}
+          onPersistColumns={saveTopicsWithoutImageColumnPreferences}
+          enableColumnManagement
           enableSelection={false}
           scrollLabel="جدول الموضوعات بلا صورة"
           mapResultToFeedback={mapAdminActionResultToFeedback}

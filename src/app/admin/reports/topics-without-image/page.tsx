@@ -5,6 +5,8 @@ import {
 import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { loadTopicsWithoutImageEntityListResult } from "../../../../lib/admin/media-catalog/topics-without-image-entity-list-adapter";
 import { topicsWithoutImageQueryContract } from "../../../../lib/admin/media-catalog/topics-without-image-entity-list-contract";
+import { TOPICS_WITHOUT_IMAGE_LIST_VIEW_KEY } from "../../../../lib/admin/media-catalog/topics-without-image-list-config";
+import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 
 import TopicsWithoutImageReportClient from "./TopicsWithoutImageReportClient";
 
@@ -24,7 +26,10 @@ export default async function TopicsWithoutImageReportPage({
     topicsWithoutImageQueryContract,
     params,
   );
-  const result = await loadTopicsWithoutImageEntityListResult(query);
+  const [result, columnPreferences] = await Promise.all([
+    loadTopicsWithoutImageEntityListResult(query),
+    readAdminColumnPreferences(TOPICS_WITHOUT_IMAGE_LIST_VIEW_KEY),
+  ]);
 
   return (
     <AdminPageExperience className="pb-10">
@@ -36,6 +41,7 @@ export default async function TopicsWithoutImageReportPage({
       <TopicsWithoutImageReportClient
         initialQuery={query}
         initialResult={result}
+        initialVisibleColumns={columnPreferences.visibleColumns}
       />
     </AdminPageExperience>
   );

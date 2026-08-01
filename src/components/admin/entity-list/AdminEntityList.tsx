@@ -60,6 +60,7 @@ export type AdminEntityListProps<
     columns: string[],
   ) => Promise<AdminEntityPersistResult>;
   onRestoreColumns?: () => Promise<AdminEntityPersistResult>;
+  /** @deprecated The official control is always rendered when persistence is declared. */
   enableColumnManagement?: boolean;
   enableSelection?: boolean;
   selectionLabel?: string;
@@ -127,7 +128,6 @@ function AdminEntityListInner<
     defaultVisibleColumns,
     onPersistColumns,
     onRestoreColumns,
-    enableColumnManagement = Boolean(onPersistColumns),
     enableSelection = Boolean(props.bulkOptions?.length),
     selectionLabel,
     scrollLabel,
@@ -295,7 +295,7 @@ function AdminEntityListInner<
   const openLayerId = floating?.openLayerId ?? null;
   const setOpenLayerId = floating?.setOpenLayerId ?? (() => undefined);
   const columnsControl =
-    enableColumnManagement && onPersistColumns ? (
+    onPersistColumns ? (
       <AdminColumnVisibilityMenu
         columns={columns}
         visibleColumns={visibleColumns}

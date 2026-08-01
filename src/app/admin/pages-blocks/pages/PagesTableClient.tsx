@@ -23,6 +23,7 @@ import {
   adminActionFailure,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
+import { getContentStatusMetadata } from "../../../../lib/admin/content/content-status-metadata";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
 import type {
@@ -70,10 +71,9 @@ const PAGE_DELETE_CONFIRM =
 const MUTATION_PENDING_REASON = "انتظر انتهاء العملية الحالية ثم حاول مرة أخرى.";
 
 function statusMeta(status: string) {
-  if (status === "published") return { label: "منشورة", tone: "green" as const };
-  if (status === "hidden") return { label: "مخفية", tone: "gold" as const };
-  if (status === "archived") return { label: "أرشيف", tone: "muted" as const };
-  return { label: "مسودة", tone: "muted" as const };
+  return getContentStatusMetadata(
+    status === "hidden" ? "unpublished" : status,
+  );
 }
 
 type PageRowActionHandlers = {
@@ -218,32 +218,6 @@ function createPageColumns(
       ),
     },
     {
-      key: "modules",
-      label: "الموديولات",
-      defaultVisible: true,
-      hideable: true,
-      minWidth: 112,
-      width: 112,
-      renderCell: ({ row }) => (
-        <span className="font-en text-sm tabular-nums text-white/60">
-          {row.block_count}
-        </span>
-      ),
-    },
-    {
-      key: "type",
-      label: "النوع",
-      defaultVisible: true,
-      hideable: true,
-      minWidth: 160,
-      width: 160,
-      renderCell: ({ row }) => (
-        <span className="block truncate text-sm text-white/55">
-          {formatPageTypeLabel(row.page_type)}
-        </span>
-      ),
-    },
-    {
       key: "status",
       label: "الحالة",
       defaultVisible: true,
@@ -258,10 +232,40 @@ function createPageColumns(
       },
     },
     {
+      key: "modules",
+      label: "الموديولات",
+      defaultVisible: true,
+      hideable: true,
+      sortable: false,
+      minWidth: 112,
+      width: 112,
+      renderCell: ({ row }) => (
+        <span className="font-en text-sm tabular-nums text-white/60">
+          {row.block_count}
+        </span>
+      ),
+    },
+    {
+      key: "type",
+      label: "النوع",
+      defaultVisible: true,
+      hideable: true,
+      sortable: false,
+      minWidth: 160,
+      width: 160,
+      renderCell: ({ row }) => (
+        <span className="block truncate text-sm text-white/55">
+          {formatPageTypeLabel(row.page_type)}
+        </span>
+      ),
+    },
+    {
       key: "actions",
       label: "الإجراءات",
       defaultVisible: true,
       hideable: false,
+      sortable: false,
+      align: "center",
       minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",

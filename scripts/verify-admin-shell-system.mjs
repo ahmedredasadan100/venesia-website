@@ -105,11 +105,14 @@ check(
     confirmOwner.includes("resolveReturnFocus"),
 );
 check(
-  "Shared Data Grid alone owns the edge-flush full-height actions track",
+  "Shared Data Grid alone owns the compact full-height divided cell track",
   dataGridOwner.includes("stickyActions = true") &&
     dataGridOwner.match(/\[&>\*:last-child\]:sticky/g)?.length === 2 &&
     dataGridOwner.includes("[&>*]:self-stretch") &&
-    dataGridOwner.includes("[&>*:last-child]:px-1.5") &&
+    dataGridOwner.includes("[&>*]:px-1.5") &&
+    dataGridOwner.includes("[&>*+*]:border-s") &&
+    dataGridOwner.includes("ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES") &&
+    dataGridOwner.includes("ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES") &&
     dataGridOwner.includes("columnGap: 0") &&
     rowActionsOwner.includes("sticky = false") &&
     rowActionsOwner.includes("sticky={sticky}"),

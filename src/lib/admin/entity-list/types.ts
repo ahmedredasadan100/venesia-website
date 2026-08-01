@@ -6,6 +6,7 @@ import type { AdminActionFeedbackKind } from "../admin-action-feedback";
 
 /** Portable column contract — no entity or project names. */
 export type AdminEntityColumnSticky = "start" | "end";
+export type AdminEntityColumnAlignment = "start" | "center" | "end";
 
 export type AdminEntityColumnDef<
   TRow,
@@ -20,6 +21,8 @@ export type AdminEntityColumnDef<
   sortKey?: TSortKey;
   minWidth: number;
   width?: number;
+  /** Logical alignment; defaults to start for the primary column and center otherwise. */
+  align?: AdminEntityColumnAlignment;
   sticky?: AdminEntityColumnSticky;
   /** When true, cell is treated as the primary identity cell (sticky start after selection). */
   primary?: boolean;

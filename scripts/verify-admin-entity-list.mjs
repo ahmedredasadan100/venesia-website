@@ -14,6 +14,14 @@ function read(path) {
   return readFileSync(resolve(ROOT, path), "utf8");
 }
 
+function appearsInOrder(source, tokens) {
+  let cursor = -1;
+  return tokens.every((token) => {
+    cursor = source.indexOf(token, cursor + 1);
+    return cursor >= 0;
+  });
+}
+
 function check(label, condition) {
   assertionCount += 1;
   if (!condition) failures.push(label);
@@ -104,6 +112,41 @@ const seriesClient = read("src/app/admin/content/series/SeriesTableClient.tsx");
 const seriesPage = read("src/app/admin/content/series/page.tsx");
 const seriesListOwner = read("src/lib/admin/content/load-series-list.ts");
 const seriesColumns = read("src/app/admin/content/series/series-columns.tsx");
+const unifiedContentColumns = read(
+  "src/components/admin/content/unified-content-columns.tsx",
+);
+const categoriesListConfig = read(
+  "src/lib/admin/content/categories-list-config.ts",
+);
+const seriesListConfig = read("src/lib/admin/content/series-list-config.ts");
+const pagesListConfig = read("src/lib/admin/pages/pages-list-config.ts");
+const projectsListConfig = read(
+  "src/lib/admin/projects/projects-list-config.ts",
+);
+const projectsListAdapter = read(
+  "src/lib/admin/projects/entity-list-adapter.ts",
+);
+const activityLogClient = read("src/app/admin/activity-log/ActivityLogClient.tsx");
+const activityLogPage = read("src/app/admin/activity-log/page.tsx");
+const activityLogPreferences = read(
+  "src/app/admin/activity-log/column-preferences.ts",
+);
+const topicsWithoutImageClient = read(
+  "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+);
+const topicsWithoutImagePage = read(
+  "src/app/admin/reports/topics-without-image/page.tsx",
+);
+const topicsWithoutImagePreferences = read(
+  "src/app/admin/reports/topics-without-image/column-preferences.ts",
+);
+const collectionAdoptionManifest = read(
+  "src/lib/admin/interaction-system/adoption-manifest.ts",
+);
+const pageBlockAdminUtils = read("src/lib/page-blocks/admin-utils.ts");
+const pagesClient = read(
+  "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
+);
 
 check(
   "Topics/Categories/Series must consume AdminEntityList",
@@ -228,6 +271,42 @@ check(
     entityTable.includes("scrollLabel?: string") &&
     entityTable.includes("scrollLabel={scrollLabel}") &&
     !entityTable.includes("max-w-full overflow-hidden"),
+);
+
+check(
+  "Shared DataGrid owns compact cell geometry and default logical dividers once",
+  dataGrid.includes(
+    "cellInlinePaddingPx: ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx",
+  ) &&
+    dataGrid.includes('cellInlinePadding: "px-1.5"') &&
+    dataGrid.includes("ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES") &&
+    dataGrid.includes("ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES") &&
+    dataGrid.includes("[&>*+*]:border-s") &&
+    dataGrid.includes("[&>*+*]:border-[#D8B87A]/18") &&
+    dataGrid.includes("[&>*+*]:border-white/8") &&
+    entityTable.includes("ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES") &&
+    entityTable.includes("ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES") &&
+    !entityTable.includes("whitespace-nowrap px-4 py-4") &&
+    !entityTable.includes("border-b border-white/8 px-4 py-4"),
+);
+
+check(
+  "Columns control is official whenever persistence is declared",
+  entityList.includes("onPersistColumns ? (") &&
+    !entityList.includes("enableColumnManagement && onPersistColumns") &&
+    entityList.includes("official control is always rendered") &&
+    columnMenu.includes('label = "الأعمدة"') &&
+    columnMenu.includes("data-default-columns={defaultColumns.join(\",\")}"),
+);
+
+check(
+  "Declarative columns expose logical alignment without entity coupling",
+  read("src/lib/admin/entity-list/types.ts").includes(
+    'AdminEntityColumnAlignment = "start" | "center" | "end"',
+  ) &&
+    entityTable.includes(
+      "column.align ?? (column.primary ? \"start\" : \"center\")",
+    ),
 );
 
 check(
@@ -449,6 +528,117 @@ check(
   read("src/lib/admin/content/series-list-config.ts").includes(
     "SERIES_DEFAULT_COLUMN_KEYS",
   ) && seriesClient.includes("onPersistColumns"),
+);
+
+check(
+  "Requested Entity List consumers declare their default column order",
+  appearsInOrder(unifiedContentColumns, [
+    'key: "title"',
+    'key: "status"',
+    'key: "content_type"',
+    'key: "category"',
+    'key: "series"',
+    'key: "featured"',
+    'key: "actions"',
+  ]) &&
+    appearsInOrder(categoriesListConfig, [
+      '"name"',
+      '"status"',
+      '"parent"',
+      '"count"',
+      '"sort_order"',
+      '"created_at"',
+      '"actions"',
+    ]) &&
+    appearsInOrder(seriesListConfig, [
+      '"name"',
+      '"status"',
+      '"category"',
+      '"topics_count"',
+      '"sort_order"',
+      '"actions"',
+    ]) &&
+    appearsInOrder(pagesListConfig, [
+      'key: "page"',
+      'key: "status"',
+      'key: "modules"',
+      'key: "type"',
+      'key: "actions"',
+    ]) &&
+    appearsInOrder(projectsListConfig, [
+      'key: "project"',
+      'key: "featured"',
+      'key: "city"',
+      'key: "main_area"',
+      'key: "sub_area"',
+      'key: "actions"',
+    ]),
+);
+
+check(
+  "Entity List headers are Arabic and shared publication terminology is reused",
+  [
+    unifiedContentColumns,
+    categoriesColumns,
+    seriesColumns,
+    pagesClient,
+    activityLogClient,
+    topicsWithoutImageClient,
+  ].every(
+    (source) =>
+      !/label:\s*"(?:ID|Slug|Variant|IP|Name|Status|Type|Actions|Created|Updated|Order|Title)"/.test(
+        source,
+      ),
+  ) &&
+    unifiedContentColumns.includes('label: "المحتوى"') &&
+    unifiedContentColumns.includes('label: "مميز"') &&
+    seriesColumns.includes('label: "الرابط"') &&
+    activityLogClient.includes('label: "عنوان IP"') &&
+    pageBlockAdminUtils.includes("getContentStatusMetadata(status)") &&
+    pagesClient.includes(
+      'status === "hidden" ? "unpublished" : status',
+    ),
+);
+
+check(
+  "Activity and media-quality report adopt existing column preference owner",
+  [activityLogClient, topicsWithoutImageClient].every(
+    (source) =>
+      source.includes("onPersistColumns=") &&
+      !source.includes("enableColumnManagement={false}"),
+  ) &&
+    [activityLogPage, topicsWithoutImagePage].every((source) =>
+      source.includes("readAdminColumnPreferences"),
+    ) &&
+    [activityLogPreferences, topicsWithoutImagePreferences].every(
+      (source) =>
+        source.includes("saveAdminColumnPreferences") &&
+        source.includes("allowedColumns:"),
+    ),
+);
+
+check(
+  "Project list reads existing location relations and fails closed on absent status",
+  projectsListAdapter.includes("projects_city_id_fkey") &&
+    projectsListAdapter.includes("projects_main_area_id_fkey") &&
+    projectsListAdapter.includes("projects_sub_area_id_fkey") &&
+    projectsListAdapter.includes('city_name: city?.name_ar ?? "—"') &&
+    !projectsListConfig.includes('| "status"') &&
+    collectionAdoptionManifest.includes(
+      "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
+    ),
+);
+
+check(
+  "Specialized DataGrid consumers declare adapter ownership gaps instead of local preference patches",
+  [
+    "PAGE_COMPOSITION_TEMPLATE_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
+    "MENU_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
+    "MENU_ITEM_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
+    "PAGE_COMPOSITION_ASSIGNMENT_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
+    "IDENTITY_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
+  ].every((gap) => collectionAdoptionManifest.includes(gap)) &&
+    collectionAdoptionManifest.includes("globalClosed: false"),
 );
 
 check(

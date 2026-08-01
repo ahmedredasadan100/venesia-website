@@ -3,8 +3,10 @@ export const SERIES_LIST_VIEW_KEY = "content-series";
 
 export const SERIES_DEFAULT_COLUMN_KEYS = [
   "name",
-  "topics_count",
   "status",
+  "category",
+  "topics_count",
+  "sort_order",
   "actions",
 ] as const;
 

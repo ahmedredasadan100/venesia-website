@@ -141,7 +141,7 @@ export const ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH =
 
 export const ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT = {
   textBudgetPx: 200,
-  cellInlinePaddingPx: 16,
+  cellInlinePaddingPx: ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx,
   itemGapPx: 12,
   hierarchyDepthStepPx: 28,
   hierarchyRootIconPx: 36,
@@ -227,7 +227,8 @@ export const ADMIN_DATA_GRID_RULES = {
   actionButtonCompact: "h-10 w-10 rounded-[8px] cursor-pointer shrink-0",
   actionIcon: "h-4 w-4 shrink-0",
   checkbox: "h-4 w-4 accent-[#D8B87A] cursor-pointer",
-  cellInlinePadding: "px-4",
+  /** Shared cell inset matches the compact Row Actions column. */
+  cellInlinePadding: "px-1.5",
   cellBlockPadding: "py-4",
   bulkBarTrigger: "selectedIds.length > 0",
   /** Default gap between action buttons (Tailwind gap-1.5 = 6px). */
@@ -240,8 +241,16 @@ export const ADMIN_DATA_GRID_RULES = {
   rowDivider: "border-t border-white/8",
 } as const;
 
-const ADMIN_DATA_GRID_LINE_CELL_CLASSES =
-  "[&>*]:min-w-0 [&>*]:self-stretch [&>*]:px-4 [&>*]:py-4 [&>*]:content-center [&>*:last-child]:px-1.5";
+const ADMIN_DATA_GRID_CELL_BASE_CLASSES =
+  "[&>*]:min-w-0 [&>*]:self-stretch [&>*]:px-1.5 [&>*]:py-4 [&>*]:content-center [&>*+*]:border-s";
+
+/** Shared header-cell geometry for CSS Grid rows and semantic table rows. */
+export const ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES =
+  `${ADMIN_DATA_GRID_CELL_BASE_CLASSES} [&>*+*]:border-[#D8B87A]/18`;
+
+/** Shared body-cell geometry for CSS Grid rows and semantic table rows. */
+export const ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES =
+  `${ADMIN_DATA_GRID_CELL_BASE_CLASSES} [&>*+*]:border-white/8`;
 
 /** Shared table header surface — Admin Data Grid + manual grid headers (Topics list, Categories tree). */
 export const ADMIN_DATA_GRID_HEADER_CLASSES =
@@ -498,7 +507,7 @@ export function AdminDataGridHeader({
 }: GridActionLineProps) {
   return (
     <div
-      className={`grid gap-0 ${ADMIN_DATA_GRID_LINE_CELL_CLASSES} ${horizontalScroll ? "w-max min-w-full" : "max-xl:hidden"} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-40 [&>*:last-child]:border-s [&>*:last-child]:border-[#D8B87A]/18 [&>*:last-child]:bg-[#10151C]" : ""} ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
+      className={`grid gap-0 ${ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES} ${horizontalScroll ? "w-max min-w-full" : "max-xl:hidden"} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-40 [&>*:last-child]:bg-[#10151C]" : ""} ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
       style={{ gridTemplateColumns: columns, columnGap: 0 }}
     >
       {children}
@@ -516,7 +525,7 @@ export function AdminDataGridRow({
 }: GridActionLineProps & { divided?: boolean }) {
   return (
     <article
-      className={`grid gap-0 ${ADMIN_DATA_GRID_LINE_CELL_CLASSES} transition hover:bg-white/[0.035] ${horizontalScroll ? "w-max min-w-full" : ""} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-30 [&>*:last-child]:border-s [&>*:last-child]:border-white/8 [&>*:last-child]:bg-[#080B10] hover:[&>*:last-child]:bg-[#0D1117]" : ""} ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
+      className={`grid gap-0 ${ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES} transition hover:bg-white/[0.035] ${horizontalScroll ? "w-max min-w-full" : ""} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-30 [&>*:last-child]:bg-[#080B10] hover:[&>*:last-child]:bg-[#0D1117]" : ""} ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
       style={{ gridTemplateColumns: columns, columnGap: 0 }}
     >
       {children}
@@ -647,7 +656,7 @@ export function AdminDataGridActionsCell({ children, className = "", compact = f
   return (
     <div
       data-admin-grid-actions={sticky ? "sticky" : undefined}
-      className={`min-w-0 w-full overflow-hidden ${ADMIN_DATA_GRID_RULES.actionCellInlinePadding} ${sticky ? "sticky end-0 z-20 bg-[#080B10]" : ""} ${className}`}
+      className={`min-w-0 w-full overflow-hidden ${sticky ? "sticky end-0 z-20 bg-[#080B10]" : ""} ${className}`}
     >
       <AdminDataGridActions compact={compact}>{children}</AdminDataGridActions>
     </div>
@@ -658,7 +667,7 @@ export function AdminDataGridActionsHeaderCell({ children, className = "", stick
   return (
     <div
       data-admin-grid-actions-header={sticky ? "sticky" : undefined}
-      className={`min-w-0 text-center ${ADMIN_DATA_GRID_RULES.actionCellInlinePadding} ${sticky ? "sticky end-0 z-30 bg-[#10151C]" : ""} ${className}`}
+      className={`min-w-0 text-center ${sticky ? "sticky end-0 z-30 bg-[#10151C]" : ""} ${className}`}
     >
       {children}
     </div>
@@ -703,7 +712,7 @@ export function AdminDataGridStickyActionsCell({
     <td
       data-admin-grid-sticky="inline-end"
       style={getAdminDataGridFixedColumnStyle(width)}
-      className={`sticky end-0 z-30 whitespace-nowrap border-s border-white/8 bg-[#080B10] p-0 transition group-hover:bg-[#0D1117] ${className}`}
+      className={`sticky end-0 z-30 whitespace-nowrap border-s border-white/8 bg-[#080B10] ${ADMIN_DATA_GRID_RULES.cellInlinePadding} ${ADMIN_DATA_GRID_RULES.cellBlockPadding} transition group-hover:bg-[#0D1117] ${className}`}
     >
       {children}
     </td>

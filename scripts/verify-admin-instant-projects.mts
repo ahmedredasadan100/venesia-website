@@ -210,15 +210,19 @@ check(
 check(
   [
     '"project"',
+    '"featured"',
+    '"city"',
+    '"main_area"',
+    '"sub_area"',
     '"english_name"',
     '"slug"',
-    '"location"',
     '"updated_at"',
     '"actions"',
   ].every((column) => config.includes(column)) &&
     !config.includes("publication_status") &&
-    !config.includes("featured"),
-  "Column preferences contain only clean list columns",
+    !config.includes('| "status"') &&
+    !config.includes('| "location"'),
+  "Column preferences contain only supported Project read-model columns",
 );
 check(
   residentialPage.includes("loadProjectsEntityListResult(initialQuery)") &&

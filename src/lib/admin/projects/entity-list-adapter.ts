@@ -31,8 +31,29 @@ const projectEntityListRowSchema = z.object({
   arabic_name: z.string().min(1),
   english_name: z.string().min(1),
   location_label: z.string(),
+  city_name: z.string(),
+  main_area_name: z.string(),
+  sub_area_name: z.string(),
   featured: z.boolean(),
   updated_at: z.string(),
+});
+
+const projectLocationRelationSchema = z
+  .object({ name_ar: z.string().min(1) })
+  .nullable();
+
+const projectEntityListDatabaseRowSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  type: z.enum(["residential", "commercial"]),
+  slug: z.string().min(1),
+  arabic_name: z.string().min(1),
+  english_name: z.string().min(1),
+  location_label: z.string(),
+  featured: z.boolean(),
+  updated_at: z.string(),
+  city: projectLocationRelationSchema,
+  main_area: projectLocationRelationSchema,
+  sub_area: projectLocationRelationSchema,
 });
 
 const projectEntityListMetricsSchema = z.object({
@@ -78,7 +99,7 @@ async function loadProjectsPage(
   let request = getSupabaseAdmin()
     .from("projects")
     .select(
-      "id, type, slug, arabic_name, english_name, location_label, featured, updated_at",
+      "id, type, slug, arabic_name, english_name, location_label, featured, updated_at, city:project_locations!projects_city_id_fkey(name_ar), main_area:project_locations!projects_main_area_id_fkey(name_ar), sub_area:project_locations!projects_sub_area_id_fkey(name_ar)",
       { count: "exact" },
     )
     .eq("type", query.filters.projectType);
@@ -96,8 +117,19 @@ async function loadProjectsPage(
 
   if (error) throw new ProjectsEntityListDatabaseError(error);
 
+  const databaseRows = z
+    .array(projectEntityListDatabaseRowSchema)
+    .parse(data ?? []);
+
   return {
-    rows: z.array(projectEntityListRowSchema).parse(data ?? []),
+    rows: databaseRows.map(({ city, main_area, sub_area, ...row }) =>
+      projectEntityListRowSchema.parse({
+        ...row,
+        city_name: city?.name_ar ?? "—",
+        main_area_name: main_area?.name_ar ?? "—",
+        sub_area_name: sub_area?.name_ar ?? "—",
+      }),
+    ),
     totalRows: count ?? 0,
   };
 }

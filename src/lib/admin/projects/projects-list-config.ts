@@ -5,9 +5,12 @@ export const PROJECTS_COMMERCIAL_LIST_VIEW_KEY = "projects-commercial";
 
 export type ProjectColumnKey =
   | "project"
+  | "featured"
+  | "city"
+  | "main_area"
+  | "sub_area"
   | "english_name"
   | "slug"
-  | "location"
   | "updated_at"
   | "actions";
 
@@ -22,36 +25,57 @@ export type ProjectColumnMeta = {
 export const PROJECTS_LIST_COLUMNS = [
   {
     key: "project",
-    label: "المشروع",
+    label: "اسم المشروع (العربي)",
     defaultVisible: true,
     hideable: false,
     gridTrack: "minmax(260px,1.3fr)",
   },
   {
+    key: "featured",
+    label: "مميز",
+    defaultVisible: true,
+    hideable: true,
+    gridTrack: "96px",
+  },
+  {
+    key: "city",
+    label: "المدينة",
+    defaultVisible: true,
+    hideable: true,
+    gridTrack: "160px",
+  },
+  {
+    key: "main_area",
+    label: "المنطقة الرئيسية",
+    defaultVisible: true,
+    hideable: true,
+    gridTrack: "180px",
+  },
+  {
+    key: "sub_area",
+    label: "المنطقة الفرعية",
+    defaultVisible: true,
+    hideable: true,
+    gridTrack: "180px",
+  },
+  {
     key: "english_name",
     label: "الاسم بالإنجليزية",
-    defaultVisible: true,
+    defaultVisible: false,
     hideable: true,
     gridTrack: "minmax(190px,1fr)",
   },
   {
     key: "slug",
-    label: "الرابط المختصر",
-    defaultVisible: true,
+    label: "الرابط",
+    defaultVisible: false,
     hideable: true,
     gridTrack: "minmax(170px,0.9fr)",
   },
   {
-    key: "location",
-    label: "الموقع",
-    defaultVisible: true,
-    hideable: true,
-    gridTrack: "minmax(190px,1fr)",
-  },
-  {
     key: "updated_at",
     label: "آخر تحديث",
-    defaultVisible: true,
+    defaultVisible: false,
     hideable: true,
     gridTrack: "140px",
   },

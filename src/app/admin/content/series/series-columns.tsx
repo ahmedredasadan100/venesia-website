@@ -269,21 +269,6 @@ export function createSeriesColumns(
       ),
     },
     {
-      key: "topics_count",
-      label: "الموضوعات",
-      defaultVisible: true,
-      hideable: true,
-      sortable: true,
-      sortKey: "topics_count",
-      minWidth: 120,
-      width: 120,
-      renderCell: ({ row }) => (
-        <span className="font-en text-sm font-semibold tabular-nums text-white/72">
-          {row.topics_count}
-        </span>
-      ),
-    },
-    {
       key: "status",
       label: "الحالة",
       defaultVisible: true,
@@ -300,8 +285,35 @@ export function createSeriesColumns(
       },
     },
     {
+      key: "category",
+      label: "التصنيف",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "category",
+      minWidth: 160,
+      width: 180,
+      renderCell: ({ row }) =>
+        singleLine(row.category_name?.trim() ? row.category_name : "—"),
+    },
+    {
+      key: "topics_count",
+      label: "الموضوعات",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "topics_count",
+      minWidth: 120,
+      width: 120,
+      renderCell: ({ row }) => (
+        <span className="font-en text-sm font-semibold tabular-nums text-white/72">
+          {row.topics_count}
+        </span>
+      ),
+    },
+    {
       key: "id",
-      label: "ID",
+      label: "المعرف",
       defaultVisible: false,
       hideable: true,
       sortable: true,
@@ -314,7 +326,7 @@ export function createSeriesColumns(
     },
     {
       key: "slug",
-      label: "Slug",
+      label: "الرابط",
       defaultVisible: false,
       hideable: true,
       sortable: true,
@@ -324,21 +336,9 @@ export function createSeriesColumns(
       renderCell: ({ row }) => singleLine(row.slug || "—"),
     },
     {
-      key: "category",
-      label: "التصنيف",
-      defaultVisible: false,
-      hideable: true,
-      sortable: true,
-      sortKey: "category",
-      minWidth: 160,
-      width: 180,
-      renderCell: ({ row }) =>
-        singleLine(row.category_name?.trim() ? row.category_name : "—"),
-    },
-    {
       key: "sort_order",
       label: "الترتيب",
-      defaultVisible: false,
+      defaultVisible: true,
       hideable: true,
       sortable: true,
       sortKey: "sort_order",

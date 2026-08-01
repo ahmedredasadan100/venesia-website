@@ -3,8 +3,11 @@ export const CATEGORIES_LIST_VIEW_KEY = "content-categories";
 
 export const CATEGORIES_DEFAULT_COLUMN_KEYS = [
   "name",
-  "count",
   "status",
+  "parent",
+  "count",
+  "sort_order",
+  "created_at",
   "actions",
 ] as const;
 

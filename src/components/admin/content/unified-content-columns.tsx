@@ -119,6 +119,31 @@ export function createUnifiedContentColumns(
       ),
     },
     {
+      key: "status",
+      label: "الحالة",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "status",
+      minWidth: 104,
+      renderCell: ({ row }) => {
+        const status = getContentStatusMetadata(row.status);
+        return (
+          <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+        );
+      },
+    },
+    {
+      key: "content_type",
+      label: "المحتوى",
+      defaultVisible: true,
+      hideable: true,
+      sortable: false,
+      minWidth: 130,
+      renderCell: ({ row }) =>
+        singleLine(getContentTypeLabel(row.content_type)),
+    },
+    {
       key: "category",
       label: "التصنيف",
       defaultVisible: true,
@@ -134,8 +159,27 @@ export function createUnifiedContentColumns(
       ),
     },
     {
+      key: "series",
+      label: "السلسلة",
+      defaultVisible: true,
+      hideable: true,
+      sortable: false,
+      minWidth: 170,
+      renderCell: ({ row }) => singleLine(row.series_name),
+    },
+    {
+      key: "featured",
+      label: "مميز",
+      defaultVisible: true,
+      hideable: true,
+      sortable: false,
+      minWidth: 100,
+      renderCell: ({ row }) =>
+        singleLine(row.is_featured ? "مميز" : "غير مميز"),
+    },
+    {
       key: "id",
-      label: "ID",
+      label: "المعرف",
       defaultVisible: false,
       hideable: true,
       sortable: true,
@@ -189,50 +233,6 @@ export function createUnifiedContentColumns(
       minWidth: 180,
       renderCell: ({ row }) =>
         singleLine(row.created_by_display, "غير مسجل"),
-    },
-    {
-      key: "content_type",
-      label: "نوع المحتوى",
-      defaultVisible: false,
-      hideable: true,
-      sortable: false,
-      minWidth: 130,
-      renderCell: ({ row }) =>
-        singleLine(getContentTypeLabel(row.content_type)),
-    },
-    {
-      key: "series",
-      label: "السلسلة",
-      defaultVisible: false,
-      hideable: true,
-      sortable: false,
-      minWidth: 170,
-      renderCell: ({ row }) => singleLine(row.series_name),
-    },
-    {
-      key: "status",
-      label: "الحالة",
-      defaultVisible: true,
-      hideable: true,
-      sortable: true,
-      sortKey: "status",
-      minWidth: 104,
-      renderCell: ({ row }) => {
-        const status = getContentStatusMetadata(row.status);
-        return (
-          <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-        );
-      },
-    },
-    {
-      key: "featured",
-      label: "التمييز",
-      defaultVisible: false,
-      hideable: true,
-      sortable: false,
-      minWidth: 100,
-      renderCell: ({ row }) =>
-        singleLine(row.is_featured ? "مميز" : "غير مميز"),
     },
     {
       key: "published_at",
