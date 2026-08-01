@@ -1,8 +1,16 @@
 import Link from "next/link";
 
 import AssignTemplateUsageWarning from "../../../../../../components/admin/page-blocks/AssignTemplateUsageWarning";
+import {
+  ADMIN_FORM,
+  AdminModalCancelButton,
+  AdminModalPrimaryButton,
+  VenesiaModal,
+  adminFormFieldClassName,
+  adminFormLabelClassName,
+} from "../../../../../../components/admin/ui";
 import type { PageBlockActionResult } from "../../../../../../lib/page-blocks/action-result";
-import { blockModuleListHref, fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
+import { blockModuleListHref } from "../../../../../../lib/page-blocks/admin-utils";
 import { LAYOUT_SLOT_LABELS_AR, type PageLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import type { PageBlockType } from "../../../../../../lib/page-blocks/types";
 import type { AssignableModuleKind } from "./use-page-blocks-assign-modal";
@@ -10,14 +18,6 @@ import type { AssignableModuleKind } from "./use-page-blocks-assign-modal";
 type TemplateOption = { id: number; name: string; slug: string; status: string };
 
 const slotLabels = LAYOUT_SLOT_LABELS_AR;
-
-function CloseButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="cursor-pointer rounded-xl border border-white/10 p-2 text-white/50 hover:text-white">
-      ×
-    </button>
-  );
-}
 
 type PageBlocksAssignModalProps = {
   pageId: number;
@@ -65,17 +65,27 @@ export default function PageBlocksAssignModal({
   assignMediaHubAction,
 }: PageBlocksAssignModalProps) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={onClose}>
-      <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[#080B10] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.5)]" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-white">ربط بلوك بالصفحة</h3>
-            <p className="mt-1 text-sm text-white/45">اختر قالبًا موجودًا — لن يُنشأ صف فارغ.</p>
-          </div>
-          <CloseButton onClick={onClose} />
-        </div>
-
+    <VenesiaModal
+      open
+      title="ربط بلوك بالصفحة"
+      description="اختر قالبًا موجودًا — لن يُنشأ صف فارغ."
+      size="lg"
+      onClose={onClose}
+      footer={(
+        <>
+          <AdminModalCancelButton onClick={onClose}>إلغاء</AdminModalCancelButton>
+          <AdminModalPrimaryButton
+            type="submit"
+            form="assign-page-block-form"
+            disabled={!assignableTemplates.length || assignPending}
+          >
+            ربط البلوك
+          </AdminModalPrimaryButton>
+        </>
+      )}
+    >
         <form
+          id="assign-page-block-form"
           action={
             assignModuleKind === "hero"
               ? assignHeroAction
@@ -85,7 +95,7 @@ export default function PageBlocksAssignModal({
                   ? assignMediaHubAction
                   : assignBlockAction
           }
-          className="mt-5 grid gap-4 md:grid-cols-2"
+          className={ADMIN_FORM.gridTwoCol}
         >
           <input type="hidden" name="page_id" value={pageId} />
           {assignModuleKind !== "hero" &&
@@ -95,15 +105,15 @@ export default function PageBlocksAssignModal({
           ) : null}
           <input type="hidden" name="is_visible" value={assignVisible ? "true" : "false"} />
 
-          <label className="space-y-2 md:col-span-2">
-            <span className="text-xs font-semibold text-white/55">نوع الموديول</span>
+          <label className={`${adminFormLabelClassName()} md:col-span-2`}>
+            نوع الموديول
             <select
               value={assignModuleKind}
               onChange={(event) => {
                 onAssignModuleKindChange(event.target.value as AssignableModuleKind);
                 onAssignTemplateIdChange(null);
               }}
-              className={fieldClassName()}
+              className={adminFormFieldClassName()}
             >
               <option value="hero">Hero</option>
               <option value="breadcrumb">Breadcrumb</option>
@@ -116,12 +126,12 @@ export default function PageBlocksAssignModal({
             </select>
           </label>
 
-          <label className="space-y-2 md:col-span-2">
-            <span className="text-xs font-semibold text-white/55">القالب</span>
+          <label className={`${adminFormLabelClassName()} md:col-span-2`}>
+            القالب
             <select
               name="template_id"
               required
-              className={fieldClassName()}
+              className={adminFormFieldClassName()}
               defaultValue=""
               onChange={(event) => {
                 const value = Number(event.currentTarget.value);
@@ -166,8 +176,8 @@ export default function PageBlocksAssignModal({
             ) : null}
           </label>
 
-          <label className="space-y-2">
-            <span className="text-xs font-semibold text-white/55">Slot</span>
+          <label className={adminFormLabelClassName()}>
+            Slot
             <select
               name="slot"
               defaultValue={
@@ -179,7 +189,7 @@ export default function PageBlocksAssignModal({
                       ? "main"
                       : "main"
               }
-              className={fieldClassName()}
+              className={adminFormFieldClassName()}
               disabled={assignModuleKind === "hero"}
             >
               {slotOptions.map((slot) => (
@@ -188,18 +198,18 @@ export default function PageBlocksAssignModal({
             </select>
           </label>
 
-          <label className="space-y-2">
-            <span className="text-xs font-semibold text-white/55">Order</span>
-            <input name="sort_order" type="number" min={0} step={10} placeholder="تلقائي" className={fieldClassName()} />
+          <label className={adminFormLabelClassName()}>
+            Order
+            <input name="sort_order" type="number" min={0} step={10} placeholder="تلقائي" className={adminFormFieldClassName()} />
           </label>
 
-          <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70 md:col-span-2">
+          <label className={`${ADMIN_FORM.checkboxRow} md:col-span-2`}>
             <span>ظاهر على الموقع</span>
             <input
               type="checkbox"
               checked={assignVisible}
               onChange={(event) => onAssignVisibleChange(event.target.checked)}
-              className="accent-[#D8B87A]"
+              className="h-4 w-4 accent-[#D8B87A]"
             />
           </label>
 
@@ -220,16 +230,7 @@ export default function PageBlocksAssignModal({
             <p className="text-sm text-red-300 md:col-span-2">{assignMediaHubState.message}</p>
           ) : null}
 
-          <div className="flex justify-end gap-3 md:col-span-2">
-            <button type="button" onClick={onClose} className="cursor-pointer rounded-2xl border border-white/10 px-5 py-3 text-sm text-white/60 hover:bg-white/5 hover:text-white">
-              إلغاء
-            </button>
-            <button disabled={!assignableTemplates.length || assignPending} className="cursor-pointer rounded-2xl bg-[#D8B87A] px-5 py-3 text-sm font-bold text-[#06101C] hover:bg-[#e5c98d] disabled:cursor-not-allowed disabled:opacity-40">
-              ربط البلوك
-            </button>
-          </div>
         </form>
-      </div>
-    </div>
+    </VenesiaModal>
   );
 }

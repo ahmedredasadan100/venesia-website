@@ -5,27 +5,36 @@ import { useMemo, useState } from "react";
 import VenesiaModal from "../../../../components/admin/VenesiaModal";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
+  AdminDataGridRowActions,
   AdminStatusPill,
+  AdminTablePagination,
+  type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
+import { resolvePublicPreviewHref } from "../../../../lib/admin/links/validate";
 
 import {
   deleteMenuItem,
-  moveMenuItemSortOrder,
   toggleMenuItemVisibility,
   updateMenuItem,
 } from "./actions";
 import MenuItemForm from "./MenuItemForm";
 import type { Menu, MenuItem } from "./menu-builder-shared";
-import { flattenMenuItemsForTable, getSiblingIds } from "./menu-builder-shared";
+import { flattenMenuItemsForTable } from "./menu-builder-shared";
 
 const TREE_UNIT = 18;
-const columns = `48px minmax(0,1fr) 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+const columns = `48px minmax(0,1fr) 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
+const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
+
+function mutationFormData(fields: Record<string, string | number | boolean>) {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(fields)) formData.set(key, String(value));
+  return formData;
+}
 
 function MenuFolderIcon() {
   return (
@@ -157,6 +166,24 @@ type MenuItemsTableClientProps = {
 export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClientProps) {
   const rows = useMemo(() => flattenMenuItemsForTable(items), [items]);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const resolvedCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedRows = useMemo(
+    () => rows.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
+    [pageSize, resolvedCurrentPage, rows],
+  );
+
+  async function runMenuItemMutation(itemId: number, action: () => Promise<void>) {
+    setPendingRowId(itemId);
+    try {
+      await action();
+    } finally {
+      setPendingRowId(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -164,7 +191,7 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
         <div>
           <h3 className="text-lg font-semibold text-white">القائمة الرئيسية</h3>
           <p className="mt-1 text-sm text-white/45">
-            الهرمية والرابط داخل اسم العنصر. الترتيب بين الإخوة فقط (↑ ↓).
+            الهرمية والرابط داخل اسم العنصر. إعادة الترتيب متوقفة حتى يتوفر عقد حفظ ذري.
           </p>
         </div>
         <span className="rounded-full border border-[#D8B87A]/20 px-4 py-2 text-xs text-[#D8B87A]">
@@ -180,11 +207,72 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
           <span className="text-center">الإجراءات</span>
         </AdminDataGridHeader>
 
-        {rows.length ? (
-          rows.map(({ item, level, isLastSibling, ancestorLines }) => {
-            const siblingsUp = getSiblingIds(items, item, "up");
-            const siblingsDown = getSiblingIds(items, item, "down");
+        {paginatedRows.length ? (
+          paginatedRows.map(({ item, level, isLastSibling, ancestorLines }) => {
             const hasChildren = items.some((row) => row.parent_id === item.id);
+            const previewHref = resolvePublicPreviewHref(item.href);
+            const hidden = { access: "hidden" as const };
+            const rowPending = pendingRowId === item.id;
+            const capability: AdminRowActionsCapability = {
+              entityType: "menu_item",
+              entityId: item.id,
+              entityLabel: item.label,
+              actions: {
+                edit: {
+                  access: "allowed",
+                  pending: rowPending,
+                  onSelect: () => setEditingItem(item),
+                },
+                preview: previewHref
+                  ? { access: "allowed", href: previewHref, target: "_blank", rel: "noreferrer" }
+                  : { access: "disabled", disabledReason: "لا يملك العنصر مسارًا عامًا مستقلاً يمكن معاينته من هنا." },
+                information: {
+                  access: "allowed",
+                  title: `معلومات ${item.label}`,
+                  items: [
+                    { label: "الرابط", value: item.href ?? "بدون رابط" },
+                    { label: "المستوى", value: String(level) },
+                    { label: "الحالة", value: item.is_visible ? "ظاهر" : "مخفي" },
+                  ],
+                },
+                copyPublicLink: hidden,
+                visibility: {
+                  access: "allowed",
+                  isVisible: item.is_visible,
+                  pending: rowPending,
+                  onSelect: () =>
+                    runMenuItemMutation(
+                      item.id,
+                      () =>
+                        toggleMenuItemVisibility(
+                          mutationFormData({
+                            id: item.id,
+                            menu_id: menu.id,
+                            is_visible: !item.is_visible,
+                          }),
+                        ),
+                    ),
+                },
+                featured: hidden,
+                duplicate: hidden,
+                archive: hidden,
+                delete: {
+                  access: "allowed",
+                  pending: rowPending,
+                  onSelect: () =>
+                    runMenuItemMutation(
+                      item.id,
+                      () => deleteMenuItem(mutationFormData({ id: item.id, menu_id: menu.id })),
+                    ),
+                  confirmation: {
+                    mode: "shared",
+                    title: "تأكيد حذف عنصر القائمة",
+                    description: `حذف العنصر «${item.label}» من ${menu.name}؟`,
+                    confirmLabel: "حذف العنصر",
+                  },
+                },
+              },
+            };
 
             return (
               <AdminDataGridRow key={item.id} columns={columns} className="gap-3">
@@ -205,80 +293,7 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
                   </AdminStatusPill>
                 </span>
 
-                <AdminDataGridActionsCell compact>
-                  <AdminDataGridActionButton
-                    tone="dark"
-                    title="تحريك لأعلى"
-                    disabled={!siblingsUp}
-                    size="compact"
-                    onClick={() => {
-                      if (!siblingsUp) return;
-                      const form = document.getElementById(`move-up-${item.id}`) as HTMLFormElement | null;
-                      form?.requestSubmit();
-                    }}
-                  >
-                    <span className="text-sm">↑</span>
-                  </AdminDataGridActionButton>
-                  <AdminDataGridActionButton
-                    tone="dark"
-                    title="تحريك لأسفل"
-                    disabled={!siblingsDown}
-                    size="compact"
-                    onClick={() => {
-                      if (!siblingsDown) return;
-                      const form = document.getElementById(`move-down-${item.id}`) as HTMLFormElement | null;
-                      form?.requestSubmit();
-                    }}
-                  >
-                    <span className="text-sm">↓</span>
-                  </AdminDataGridActionButton>
-                  <AdminDataGridActionButton
-                    action="edit"
-                    title="تعديل"
-                    size="compact"
-                    onClick={() => setEditingItem(item)}
-                  />
-                  <form action={toggleMenuItemVisibility} className="contents">
-                    <input type="hidden" name="id" value={item.id} />
-                    <input type="hidden" name="menu_id" value={menu.id} />
-                    <input type="hidden" name="is_visible" value={item.is_visible ? "false" : "true"} />
-                    <AdminDataGridActionButton
-                      action="visibility"
-                      type="submit"
-                      size="compact"
-                      isCurrentlyHidden={!item.is_visible}
-                      title={item.is_visible ? "إخفاء" : "إظهار"}
-                    />
-                  </form>
-                  <form
-                    action={deleteMenuItem}
-                    className="contents"
-                    onSubmit={(event) => {
-                      if (!window.confirm(`حذف العنصر «${item.label}»؟`)) {
-                        event.preventDefault();
-                      }
-                    }}
-                  >
-                    <input type="hidden" name="id" value={item.id} />
-                    <input type="hidden" name="menu_id" value={menu.id} />
-                    <AdminDataGridActionButton action="delete" type="submit" title="حذف" size="compact" />
-                  </form>
-
-                  {siblingsUp ? (
-                    <form id={`move-up-${item.id}`} action={moveMenuItemSortOrder} className="hidden">
-                      <input type="hidden" name="menu_id" value={menu.id} />
-                      <input type="hidden" name="current_id" value={siblingsUp.currentId} />
-                      <input type="hidden" name="target_id" value={siblingsUp.targetId} />
-                    </form>
-                  ) : null}
-                  {siblingsDown ? (
-                    <form id={`move-down-${item.id}`} action={moveMenuItemSortOrder} className="hidden">
-                      <input type="hidden" name="menu_id" value={menu.id} />
-                      <input type="hidden" name="current_id" value={siblingsDown.currentId} />
-                      <input type="hidden" name="target_id" value={siblingsDown.targetId} />
-                    </form>
-                  ) : null}
-                </AdminDataGridActionsCell>
+                <AdminDataGridRowActions capability={capability} size="compact" />
               </AdminDataGridRow>
             );
           })
@@ -286,6 +301,20 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
           <AdminDataGridEmpty>القائمة فارغة. أضف أول عنصر من تاب «إضافة عنصر جديد».</AdminDataGridEmpty>
         )}
       </AdminDataGrid>
+
+      <AdminTablePagination
+        basePath={`/admin/pages-blocks/menus/${menu.id}`}
+        currentPage={resolvedCurrentPage}
+        totalPages={totalPages}
+        totalCount={rows.length}
+        pageSize={String(pageSize)}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(nextPageSize) => {
+          setPageSize(nextPageSize);
+          setCurrentPage(1);
+        }}
+        pending={pendingRowId !== null}
+      />
 
       <VenesiaModal
         open={Boolean(editingItem)}

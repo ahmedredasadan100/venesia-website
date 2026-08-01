@@ -26,17 +26,10 @@ export default async function HeroesManagerPage({ searchParams }: PageProps) {
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 
-  if (error) {
-    return (
-      <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
-        حدث خطأ أثناء قراءة الهيروهات: {error.message}
-      </div>
-    );
-  }
-
   return (
     <HeroManagerClient
       heroes={(data ?? []) as HeroRow[]}
+      loadError={error ? `حدث خطأ أثناء قراءة الهيروهات: ${error.message}` : null}
       mediaSynchronizationWarning={
         resolvedSearch.notice === "saved_with_media_sync_warning"
       }

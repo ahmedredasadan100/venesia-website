@@ -40,9 +40,8 @@ export default async function EditTopicCategoryPage({
     <AdminPageExperience>
       <AdminPageContextHeader
         eyebrow="CATEGORIES CONTROL"
-        contextLine="تعديل تصنيف:"
         title={truncateWords(category.name || "بدون اسم")}
-        description="حدّث بيانات التصنيف مع الحفاظ على Slug الثابت وروابط المحتوى الحالية."
+        description="تعديل تصنيف — حدّث بيانات التصنيف مع الحفاظ على Slug الثابت وروابط المحتوى الحالية."
         actions={
           <>
             <AdminActionButton href="/admin/content/categories" variant="dark">

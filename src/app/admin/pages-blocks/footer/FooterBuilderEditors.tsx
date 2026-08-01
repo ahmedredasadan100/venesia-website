@@ -1,6 +1,6 @@
 "use client";
 
-import VenesiaModal, { adminFormFieldClassName } from "../../../../components/admin/VenesiaModal";
+import { adminFormFieldClassName } from "../../../../components/admin/VenesiaModal";
 import { AdminActionButton } from "../../../../components/admin/ui";
 import { ADMIN_FORM, adminFormHintClassName, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import type { FooterContactItem, FooterLegal, FooterSocialLink } from "../../../../lib/footer/types";
@@ -282,40 +282,5 @@ export function LegalFields({ legal, onChange }: LegalFieldsProps) {
         />
       </label>
     </div>
-  );
-}
-
-type RestoreConfirmModalProps = {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  pending: boolean;
-};
-
-export function RestoreConfirmModal({ open, onClose, onConfirm, pending }: RestoreConfirmModalProps) {
-  return (
-    <VenesiaModal
-      open={open}
-      title="استعادة الفوتر الافتراضي"
-      description="سيتم استبدال تخطيط الأعمدة الأربعة والعناوين المرتبطة بالقيم الافتراضية. لن تُحذف بيانات التواصل أو السوشيال أو الحقوق."
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="rounded-2xl border border-white/10 px-4 py-2.5 text-sm text-white/70">
-            إلغاء
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={onConfirm}
-            className="rounded-2xl border border-red-400/30 bg-red-500/15 px-4 py-2.5 text-sm font-semibold text-red-100 disabled:opacity-50"
-          >
-            تأكيد الاستعادة
-          </button>
-        </>
-      }
-    >
-      <p className="text-sm text-white/60">هل تريد المتابعة؟</p>
-    </VenesiaModal>
   );
 }

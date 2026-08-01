@@ -8,8 +8,6 @@ export type AdminPageContextHeaderProps = {
   meta?: ReactNode;
   breadcrumb?: ReactNode;
   className?: string;
-  /** Small contextual line above the title (e.g. edit screens). */
-  contextLine?: ReactNode;
   /** Optional status badge shown above the title (placeholder / draft screens). */
   badge?: ReactNode;
   /** Semantic state used by loading, error and empty experiences. */
@@ -38,7 +36,6 @@ export default function AdminPageContextHeader({
   meta,
   breadcrumb,
   className = "",
-  contextLine,
   badge,
   status = "ready",
   variant = "default",
@@ -67,10 +64,6 @@ export default function AdminPageContextHeader({
             <p className={`text-xs font-semibold uppercase tracking-[0.22em] text-[var(--admin-accent)]/70${badge ? " mt-5" : ""}`}>
               {eyebrow}
             </p>
-          ) : null}
-
-          {contextLine ? (
-            <p className="mt-2 text-sm font-medium text-white/55">{contextLine}</p>
           ) : null}
 
           <h1 className={`${badge ? "mt-5" : "mt-2"} text-2xl font-semibold text-white md:text-3xl break-words [text-wrap:balance]`}>

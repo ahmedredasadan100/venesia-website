@@ -1,8 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 
 import { AdminMediaImageField } from "../../../../components/admin/media";
+import {
+  AdminFeedbackChannelViewport,
+  useAdminFeedback,
+} from "../../../../components/admin/AdminFeedbackProvider";
 import type { ResolvedAdminCompanyConfig } from "../../../../lib/admin/shell/contracts";
 import {
   ADMIN_COMPANY_ACTION_INITIAL,
@@ -11,6 +15,7 @@ import {
 
 const inputClass =
   "w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[var(--admin-accent)]/45";
+const FEEDBACK_CHANNEL = "settings-general-company";
 
 function TextField({
   name,
@@ -42,14 +47,47 @@ export default function CompanyIdentityPanel({
 }: {
   company: ResolvedAdminCompanyConfig;
 }) {
+  const { clearFeedback, publishFeedback } = useAdminFeedback();
   const [state, formAction, pending] = useActionState(
     updateAdminCompanyAction,
     ADMIN_COMPANY_ACTION_INITIAL,
   );
 
+  useEffect(() => {
+    if (state.status === "idle") return;
+    clearFeedback(FEEDBACK_CHANNEL);
+    const variant =
+      state.status === "error"
+        ? "danger"
+        : state.status === "warning"
+          ? "warning"
+          : "success";
+    publishFeedback(
+      {
+        variant,
+        title:
+          variant === "danger"
+            ? "تعذر حفظ هوية لوحة الإدارة"
+            : variant === "warning"
+              ? "تم الحفظ مع تنبيه"
+              : "تم حفظ هوية لوحة الإدارة",
+        message: state.message,
+        layout: "inline",
+        dismissible: true,
+        lifecycle: variant === "danger" ? "persistent" : "manual",
+      },
+      {
+        channel: FEEDBACK_CHANNEL,
+        placement: "inline",
+        critical: variant === "danger",
+        reveal: variant === "danger",
+      },
+    );
+  }, [clearFeedback, publishFeedback, state]);
+
   return (
-    <section className="admin-premium-card rounded-[28px] p-5" data-admin-company-settings>
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <section className="admin-premium-card space-y-5 rounded-[28px] p-5" data-admin-company-settings>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-white">هوية لوحة الإدارة</h2>
           <p className="mt-1 text-sm leading-7 text-white/50">
@@ -60,6 +98,11 @@ export default function CompanyIdentityPanel({
           المصدر: {company.source}
         </span>
       </div>
+
+      <AdminFeedbackChannelViewport
+        channel={FEEDBACK_CHANNEL}
+        label="نتيجة حفظ هوية لوحة الإدارة"
+      />
 
       <form action={formAction} className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2">
@@ -101,19 +144,7 @@ export default function CompanyIdentityPanel({
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5">
-          <p
-            className={
-              state.status === "error"
-                ? "text-sm text-red-300"
-                : state.status === "warning"
-                  ? "text-sm text-amber-300"
-                  : "text-sm text-emerald-300"
-            }
-            role="status"
-          >
-            {state.message}
-          </p>
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-white/10 pt-5">
           <button type="submit" disabled={pending} className="rounded-2xl bg-[var(--admin-accent)] px-5 py-3 text-sm font-bold text-[#05070B] transition hover:brightness-110 disabled:opacity-50">
             {pending ? "جارٍ الحفظ…" : "حفظ هوية الإدارة"}
           </button>

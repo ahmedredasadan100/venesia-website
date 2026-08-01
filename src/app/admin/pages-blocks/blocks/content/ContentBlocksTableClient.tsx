@@ -4,27 +4,39 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
 import {
+  AdminFeedbackRegion,
+  useAdminFeedback,
+} from "../../../../../components/admin/AdminFeedbackProvider";
+import MediaSynchronizationWarningNotice from "../../../../../components/admin/media/MediaSynchronizationWarningNotice";
+import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
-  ADMIN_DATA_GRID_RULES,
+  ADMIN_DATA_GRID_COLUMNS,
   ADMIN_FORM,
+  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminBulkActionBar,
   AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
   AdminDataGridCheckbox,
+  AdminDataGridCheckboxCell,
+  AdminDataGridCenterCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
   AdminDataGridRow,
+  AdminDataGridRowActions,
   AdminDataGridSortLabel,
+  AdminDataGridStatusCell,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
+  AdminPageExperience,
   AdminPageHeader,
   AdminStatusPill,
+  AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
   adminFormLabelClassName,
+  type AdminRowActionsCapability,
+  useAdminGridSelection,
 } from "../../../../../components/admin/ui";
-import { ADMIN_LIST_PAGE } from "../../../../../lib/admin/admin-ui-styles";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
 import { statusMeta } from "../../../../../lib/page-blocks/admin-utils";
 import {
@@ -50,28 +62,14 @@ type ContentSortKey = "name" | "slug" | "variant" | "status" | "updated_at";
 /**
  * RTL table: الاسم (1fr, يمين) → … → الإجراءات (ثابت، شمال).
  */
-const columns = `44px minmax(260px, 1fr) 120px 96px 96px 120px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} 96px ${ADMIN_DATA_GRID_COLUMNS.statusStandard} 120px ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
+const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
 
 type ContentBlocksTableClientProps = {
   rows: ContentBlockRow[];
+  loadError?: string | null;
+  mediaSynchronizationWarning?: boolean;
 };
-
-function PublicPreviewIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={ADMIN_DATA_GRID_RULES.actionIcon}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
-      <path d="M14 3h7v7" />
-      <path d="M10 14 21 3" />
-      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
-    </svg>
-  );
-}
 
 function variantLabel(variant: string) {
   return VARIANT_OPTIONS.find(([value]) => value === variant)?.[1] ?? variant;
@@ -83,8 +81,16 @@ function formatUpdatedAt(value: string) {
   return date.toLocaleDateString("ar-EG", { year: "numeric", month: "short", day: "numeric" });
 }
 
-export default function ContentBlocksTableClient({ rows }: ContentBlocksTableClientProps) {
+export default function ContentBlocksTableClient({
+  rows,
+  loadError = null,
+  mediaSynchronizationWarning = false,
+}: ContentBlocksTableClientProps) {
+  const feedbackChannel = "block-manager:content";
+  const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
 
   const sortAccessors = useMemo(
     () => ({
@@ -103,6 +109,58 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
     sortAccessors,
     refresh: getContentBlockRows,
   });
+  const totalPages = Math.max(1, Math.ceil(table.rows.length / pageSize));
+  const resolvedCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedRows = useMemo(
+    () => table.rows.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
+    [pageSize, resolvedCurrentPage, table.rows],
+  );
+  const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
+  const selection = useAdminGridSelection<number>(visibleIds);
+  const loadFeedback = useMemo(
+    () =>
+      loadError
+        ? {
+            variant: "danger" as const,
+            title: "تعذر تحميل مكتبة بلوكات المحتوى",
+            message: loadError,
+            layout: "inline" as const,
+            dismissible: true,
+            lifecycle: "persistent" as const,
+          }
+        : null,
+    [loadError],
+  );
+  const mediaWarningNotice = useMemo(
+    () => <MediaSynchronizationWarningNotice visible={mediaSynchronizationWarning} />,
+    [mediaSynchronizationWarning],
+  );
+
+  async function runRowMutation(
+    action: () => Promise<void>,
+    successMessage: string,
+  ) {
+    clearFeedback(feedbackChannel);
+    const result = await table.runAction(async () => {
+      await action();
+      return { ok: true, message: successMessage };
+    });
+    publishFeedback(
+      {
+        variant: result.ok ? "success" : "danger",
+        title: result.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
+        message: result.message ?? (result.ok ? successMessage : "تعذر تنفيذ العملية. حاول مرة أخرى."),
+        layout: "inline",
+        dismissible: true,
+        lifecycle: "manual",
+      },
+      {
+        channel: feedbackChannel,
+        placement: "inline",
+        reveal: !result.ok,
+      },
+    );
+  }
 
   function sortProps(key: ContentSortKey) {
     return {
@@ -113,7 +171,7 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
   }
 
   return (
-    <div className={ADMIN_LIST_PAGE.wrapper} dir="rtl">
+    <AdminPageExperience dir="rtl">
       <AdminPageHeader
         eyebrow="Admin Panel"
         title="إدارة بلوكات المحتوى"
@@ -123,6 +181,7 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
+            disabled={Boolean(loadError)}
             className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
           >
             <PlusIcon />
@@ -132,20 +191,16 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
       />
 
       <div className="space-y-4">
-        {table.feedback ? (
-          <div
-            className={`rounded-[16px] border px-4 py-3 text-sm font-semibold ${
-              table.feedback.type === "success"
-                ? "border-emerald-400/18 bg-emerald-500/10 text-emerald-100"
-                : "border-red-400/18 bg-red-500/10 text-red-100"
-            }`}
-          >
-            {table.feedback.message}
-          </div>
-        ) : null}
+        <AdminFeedbackRegion
+          channel={feedbackChannel}
+          label="نتائج إجراءات بلوكات المحتوى"
+          feedback={loadFeedback}
+        />
+
+        {mediaWarningNotice}
 
         <AdminBulkActionBar
-          selectedIds={table.selection.selectedIds}
+          selectedIds={selection.selectedIds}
           entityLabel="بلوك"
           options={[
             { value: "publish", label: "نشر" },
@@ -153,75 +208,163 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
             { value: "draft", label: "مسودة" },
             { value: "delete", label: "حذف" },
           ]}
-          onClearSelection={table.selection.clearSelection}
+          onClearSelection={selection.clearSelection}
           isBusy={table.isPending}
-          onExecute={(action, ids) =>
-            table.runAction(async () => {
+          onExecute={async (action, ids) => {
+            clearFeedback(feedbackChannel);
+            const result = await table.runAction(async () => {
               const formData = new FormData();
               formData.set("bulk_action", action);
               ids.forEach((id) => formData.append("ids", String(id)));
               await bulkContentBlocks(formData);
               const nextRows = await getContentBlockRows();
               return { ok: true, message: "تم تنفيذ العملية الجماعية بنجاح.", rows: nextRows };
-            })
-          }
+            });
+            publishFeedback(
+              {
+                variant: result.ok ? "success" : "danger",
+                title: result.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
+                message:
+                  result.message ??
+                  (result.ok
+                    ? "تم تنفيذ العملية بنجاح."
+                    : "تعذر تنفيذ العملية."),
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "manual",
+              },
+              {
+                channel: feedbackChannel,
+                placement: "inline",
+                reveal: !result.ok,
+              },
+            );
+            if (!result.ok && action === "delete") {
+              throw new Error(result.message ?? "bulk delete failed");
+            }
+            selection.clearSelection();
+          }}
         />
 
         <AdminDataGrid summary={`${table.rows.length} بلوك`}>
           <AdminDataGridHeader columns={columns}>
-            <div className="flex justify-center">
+            <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
-                inputRef={table.selection.selectAllRef}
-                checked={table.selection.allSelected}
-                onChange={(event) => table.selection.toggleAll(event.currentTarget.checked)}
+                inputRef={selection.selectAllRef}
+                checked={selection.allSelected}
+                onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
                 label="تحديد الكل"
               />
-            </div>
-            <div className="min-w-0 text-right">
+            </AdminDataGridCheckboxCell>
+            <AdminDataGridPrimaryCell>
               <AdminDataGridSortLabel {...sortProps("name")} className="justify-end">
                 الاسم
               </AdminDataGridSortLabel>
-            </div>
-            <div className="text-center">
+            </AdminDataGridPrimaryCell>
+            <AdminDataGridCenterCell>
               <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
                 Slug
               </AdminDataGridSortLabel>
-            </div>
-            <div className="text-center">
+            </AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
               <AdminDataGridSortLabel {...sortProps("variant")} className="justify-center">
                 Variant
               </AdminDataGridSortLabel>
-            </div>
-            <div className="text-center">
+            </AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
               <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
                 الحالة
               </AdminDataGridSortLabel>
-            </div>
-            <div className="text-center">
+            </AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
               <AdminDataGridSortLabel {...sortProps("updated_at")} className="justify-center">
                 التحديث
               </AdminDataGridSortLabel>
-            </div>
+            </AdminDataGridCenterCell>
             <div className="text-center">الإجراءات</div>
           </AdminDataGridHeader>
 
-          {table.rows.length ? (
-            table.rows.map((row) => {
+          {paginatedRows.length ? (
+            paginatedRows.map((row) => {
               const status = statusMeta(row.status);
               const nextStatus = row.status === "published" ? "unpublished" : "published";
               const isPublished = row.status === "published";
+              const hidden = { access: "hidden" as const };
+              const capability: AdminRowActionsCapability = {
+                entityType: "content_block_template",
+                entityId: row.id,
+                entityLabel: row.name,
+                actions: {
+                  edit: { access: "allowed", href: `${MODULE_PATH}/${row.id}` },
+                  preview: {
+                    access: "disabled",
+                    disabledReason: "المعاينة العامة تتطلب ربط القالب بصفحة عامة.",
+                  },
+                  information: {
+                    access: "allowed",
+                    title: `معلومات ${row.name}`,
+                    items: [
+                      { label: "Slug", value: row.slug },
+                      { label: "Variant", value: variantLabel(row.variant) },
+                      { label: "الحالة", value: status.label },
+                      { label: "آخر تحديث", value: formatUpdatedAt(row.updated_at) },
+                    ],
+                  },
+                  copyPublicLink: hidden,
+                  visibility: {
+                    access: "allowed",
+                    isVisible: isPublished,
+                    pending: table.isPending,
+                    onSelect: () =>
+                      runRowMutation(async () => {
+                        const formData = new FormData();
+                        formData.set("id", String(row.id));
+                        formData.set("next_status", nextStatus);
+                        await toggleContentBlockStatus(formData);
+                      }, isPublished ? "تم إخفاء البلوك." : "تم نشر البلوك."),
+                  },
+                  featured: hidden,
+                  duplicate: {
+                    access: "allowed",
+                    pending: table.isPending,
+                    onSelect: () =>
+                      runRowMutation(async () => {
+                        const formData = new FormData();
+                        formData.set("id", String(row.id));
+                        await duplicateContentBlock(formData);
+                      }, "تم إنشاء نسخة من البلوك."),
+                  },
+                  archive: hidden,
+                  delete: {
+                    access: "allowed",
+                    pending: table.isPending,
+                    onSelect: () =>
+                      runRowMutation(async () => {
+                        const formData = new FormData();
+                        formData.set("id", String(row.id));
+                        await deleteContentBlock(formData);
+                      }, "تم حذف البلوك."),
+                    confirmation: {
+                      mode: "shared",
+                      title: "تأكيد حذف البلوك",
+                      description: `حذف البلوك «${row.name}» نهائيًا؟`,
+                      confirmLabel: "حذف البلوك",
+                    },
+                  },
+                },
+              };
 
               return (
                 <AdminDataGridRow key={row.id} columns={columns}>
-                  <div className="flex justify-center">
+                  <AdminDataGridCheckboxCell>
                     <AdminDataGridCheckbox
-                      checked={table.selection.selectedSet.has(row.id)}
-                      onChange={(event) => table.selection.toggleOne(row.id, event.currentTarget.checked)}
+                      checked={selection.selectedSet.has(row.id)}
+                      onChange={(event) => selection.toggleOne(row.id, event.currentTarget.checked)}
                       label={`تحديد ${row.name}`}
                     />
-                  </div>
+                  </AdminDataGridCheckboxCell>
 
-                  <div className="min-w-0 text-right">
+                  <AdminDataGridPrimaryCell>
                     <Link
                       href={`${MODULE_PATH}/${row.id}`}
                       className="block truncate font-semibold text-white transition hover:text-[#D8B87A]"
@@ -231,62 +374,23 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
                     {row.description ? (
                       <p className="mt-1 truncate text-xs text-white/36">{row.description}</p>
                     ) : null}
-                  </div>
+                  </AdminDataGridPrimaryCell>
 
-                  <div className="min-w-0 text-center">
+                  <AdminDataGridCenterCell>
                     <span className="font-en block truncate text-xs text-white/42">{row.slug}</span>
-                  </div>
+                  </AdminDataGridCenterCell>
 
-                  <div className="truncate text-center text-sm text-white/55">{variantLabel(row.variant)}</div>
+                  <AdminDataGridCenterCell className="truncate text-sm text-white/55">{variantLabel(row.variant)}</AdminDataGridCenterCell>
 
-                  <div className="flex justify-center">
+                  <AdminDataGridStatusCell>
                     <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-                  </div>
+                  </AdminDataGridStatusCell>
 
-                  <div className="text-center font-en text-xs tabular-nums text-white/55">
+                  <AdminDataGridCenterCell className="font-en text-xs tabular-nums text-white/55">
                     {formatUpdatedAt(row.updated_at)}
-                  </div>
+                  </AdminDataGridCenterCell>
 
-                  <AdminDataGridActionsCell compact>
-                    <AdminDataGridActionButton
-                      action="edit"
-                      href={`${MODULE_PATH}/${row.id}`}
-                      size="compact"
-                      title="تعديل البلوك"
-                    />
-
-                    <AdminDataGridActionButton
-                      href="/"
-                      target="_blank"
-                      tone="dark"
-                      title="معاينة الموقع العام"
-                      size="compact"
-                    >
-                      <PublicPreviewIcon />
-                    </AdminDataGridActionButton>
-
-                    <form action={toggleContentBlockStatus} className="contents">
-                      <input type="hidden" name="id" value={row.id} />
-                      <input type="hidden" name="next_status" value={nextStatus} />
-                      <AdminDataGridActionButton
-                        type="submit"
-                        action="visibility"
-                        size="compact"
-                        isCurrentlyHidden={!isPublished}
-                        title={isPublished ? "إخفاء" : "نشر"}
-                      />
-                    </form>
-
-                    <form action={duplicateContentBlock} className="contents">
-                      <input type="hidden" name="id" value={row.id} />
-                      <AdminDataGridActionButton type="submit" action="duplicate" size="compact" title="نسخ" />
-                    </form>
-
-                    <form action={deleteContentBlock} className="contents">
-                      <input type="hidden" name="id" value={row.id} />
-                      <AdminDataGridActionButton type="submit" action="delete" size="compact" title="حذف" />
-                    </form>
-                  </AdminDataGridActionsCell>
+                  <AdminDataGridRowActions capability={capability} size="compact" />
                 </AdminDataGridRow>
               );
             })
@@ -294,6 +398,20 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
             <AdminDataGridEmpty>لا توجد بلوكات بعد.</AdminDataGridEmpty>
           )}
         </AdminDataGrid>
+
+        <AdminTablePagination
+          basePath={MODULE_PATH}
+          currentPage={resolvedCurrentPage}
+          totalPages={totalPages}
+          totalCount={table.rows.length}
+          pageSize={String(pageSize)}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(nextPageSize) => {
+            setPageSize(nextPageSize);
+            setCurrentPage(1);
+          }}
+          pending={table.isPending}
+        />
       </div>
 
       <VenesiaModal
@@ -334,6 +452,6 @@ export default function ContentBlocksTableClient({ rows }: ContentBlocksTableCli
           <input type="hidden" name="style_preset" value="premium-dark" />
         </form>
       </VenesiaModal>
-    </div>
+    </AdminPageExperience>
   );
 }

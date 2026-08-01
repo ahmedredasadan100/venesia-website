@@ -8,6 +8,11 @@ import {
   ADMIN_ROW_ACTION_PRIMARY_ORDER,
 } from "../src/lib/admin/interaction-system/admin-row-actions-capability.ts";
 import {
+  resolveClientPagination,
+  slicePageRows,
+} from "../src/lib/admin/entity-list/pagination.ts";
+import { writeAdminBoundedClientPaginationParams } from "../src/lib/admin/entity-list/url-state.ts";
+import {
   ADMIN_INTERACTION_MODULES,
   ADMIN_INTERACTION_SYSTEM,
   ADMIN_COLLECTION_SURFACE_ADOPTION,
@@ -70,14 +75,25 @@ function extractRegistryEntities(source: string) {
   );
 }
 
-const expectedEntities = [
+const expectedDataEntities = [
   "topics",
   "categories",
   "series",
   "pages",
   "projects",
+  "redirects",
+  "activity_log",
+  "topics_without_image",
 ] as const;
-const expectedRowActionEntities = [...expectedEntities, "redirects"] as const;
+const expectedRowActionEntities = [
+  "topics",
+  "categories",
+  "series",
+  "pages",
+  "projects",
+  "redirects",
+  "topics_without_image",
+] as const;
 const expectedPrimaryOrder = ["edit", "preview", "more"] as const;
 const expectedMoreOrder = [
   "information",
@@ -106,6 +122,7 @@ const dangerousActions = [
 ] as const satisfies readonly AdminRowActionsGovernedAction[];
 
 const paths = {
+  manifest: "src/lib/admin/interaction-system/adoption-manifest.ts",
   registry: "src/lib/admin/entity-list/data-engine/registry.ts",
   capability:
     "src/lib/admin/interaction-system/admin-row-actions-capability.ts",
@@ -123,6 +140,10 @@ const paths = {
     "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
   instantMutation:
     "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
+  dataAdapter: "src/lib/admin/entity-list/data-engine/adapter.ts",
+  dataController:
+    "src/lib/admin/entity-list/data-engine/client-controller.ts",
+  adminListSearch: "src/lib/admin/admin-list-search.ts",
   topics: "src/components/admin/content/UnifiedContentRowActions.tsx",
   topicsList: "src/components/admin/content/TopicsListClient.tsx",
   topicsColumns: "src/components/admin/content/unified-content-columns.tsx",
@@ -137,12 +158,55 @@ const paths = {
   projectsList: "src/app/admin/projects/ProjectsTableClient.tsx",
   projects:
     "src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx",
+  projectsAdapter: "src/lib/admin/projects/entity-list-adapter.ts",
   redirects: "src/app/admin/seo/redirects/RedirectsClient.tsx",
   pagesConfig: "src/lib/admin/pages/pages-list-config.ts",
   pagesPreferences:
     "src/app/admin/pages-blocks/pages/page-actions/column-preferences.ts",
   pagination: "src/components/admin/ui/AdminTablePagination.tsx",
+  boundedPagination:
+    "src/lib/admin/entity-list/bounded-client-pagination.ts",
+  pageAssignments:
+    "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+  pageAssignmentsGrid:
+    "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx",
+  pageAssignmentRow:
+    "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
+  pageActions: "src/app/admin/pages-blocks/pages/actions.ts",
+  pageActionIndex:
+    "src/app/admin/pages-blocks/pages/page-actions/index.ts",
+  menuItems:
+    "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+  menuActions: "src/app/admin/pages-blocks/menus/actions.ts",
+  menuActionIndex:
+    "src/app/admin/pages-blocks/menus/menu-actions/index.ts",
+  footerLinks:
+    "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
+  blockModuleManager:
+    "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+  contentBlockManager:
+    "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+  heroBlockManager:
+    "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+  blockTemplateSummary:
+    "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
   pageExperience: "src/components/admin/ui/AdminPageExperience.tsx",
+  pageHeader: "src/components/admin/ui/AdminPageContextHeader.tsx",
+  shell: "src/components/admin/AdminShell.tsx",
+  activityLog: "src/app/admin/activity-log/ActivityLogClient.tsx",
+  topicsWithoutImage:
+    "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+  redirectsFilters: "src/app/admin/seo/redirects/RedirectsListFilters.tsx",
+  redirectsActions: "src/app/admin/seo/redirects/actions.ts",
+  redirectsAdapter: "src/lib/admin/redirects/entity-list-adapter.ts",
+  activityAdapter: "src/lib/admin/audit/entity-list-adapter.ts",
+  activityLoader: "src/lib/admin/audit/list-admin-audit-logs.ts",
+  reportAdapter:
+    "src/lib/admin/media-catalog/topics-without-image-entity-list-adapter.ts",
+  reportQuery: "src/lib/admin/media-catalog/reports.ts",
+  mediaRecovery:
+    "src/app/admin/settings/media/MediaRecoveryCenter.tsx",
+  usersRoles: "src/app/admin/users-roles/UsersManagementClient.tsx",
 } as const;
 
 for (const [id, sourceFile] of Object.entries(paths)) {
@@ -166,24 +230,25 @@ check(
   "Admin Interaction System records truthful Collection adoption blockers",
   ADMIN_INTERACTION_SYSTEM.globalClosed === false &&
     ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.includes(
-      "Full Collection Runtime adoption remains incomplete outside the current reference consumers.",
+      "Authenticated Browser acceptance on the final working tree is still required.",
     ) &&
-    !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
-      blocker.includes(
-        "Category and Series collection interactions still have declared Collection Runtime gaps",
-      ),
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
+      blocker.includes("Atomic reorder contracts"),
+    ) &&
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.includes(
+      "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
     ),
 );
 
 check(
-  "Entity List registry contains exactly the five Foundation entities",
-  sameValueSet(registryEntities, expectedEntities),
+  "Entity List registry contains every declared generic Data Runtime adopter",
+  sameValueSet(registryEntities, expectedDataEntities),
 );
 check(
-  "Row Actions adoption ledger covers Entity List plus the generic Redirect collection",
+  "Row Actions adoption ledger covers only generic collections with row commands",
   sameValueSet(manifestEntities, expectedRowActionEntities) &&
-    registryEntities.every((entity) =>
-      new Set<string>(manifestEntities).has(entity),
+    manifestEntities.every((entity) =>
+      new Set<string>(registryEntities).has(entity),
     ),
 );
 check(
@@ -320,6 +385,7 @@ const expectedConsumerFiles = new Map<string, string>([
   ["pages", paths.pages],
   ["projects", paths.projects],
   ["redirects", paths.redirects],
+  ["topics_without_image", paths.topicsWithoutImage],
 ]);
 
 for (const entry of manifestEntries) {
@@ -330,7 +396,7 @@ for (const entry of manifestEntries) {
   );
   check(
     `${entry.entity} relevant sources all exist`,
-    entry.sourceFiles.length >= (entry.entity === "redirects" ? 2 : 3) &&
+    entry.sourceFiles.length >= (entry.auditedActions.length > 0 ? 3 : 1) &&
       entry.sourceFiles.every((sourceFile) =>
         existsSync(join(ROOT, sourceFile)),
       ),
@@ -363,8 +429,7 @@ for (const entry of manifestEntries) {
     `${entry.entity} delegates to the existing shared owners`,
     entry.owners.presentation ===
       ADMIN_ROW_ACTIONS_EXISTING_OWNERS.presentation &&
-      (entry.owners.data === ADMIN_ROW_ACTIONS_EXISTING_OWNERS.data ||
-        entry.owners.data === "domain_action_adapter") &&
+      entry.owners.data === ADMIN_ROW_ACTIONS_EXISTING_OWNERS.data &&
       entry.owners.feedback === ADMIN_ROW_ACTIONS_EXISTING_OWNERS.feedback &&
       entry.owners.confirmation ===
         ADMIN_ROW_ACTIONS_EXISTING_OWNERS.confirmation &&
@@ -388,10 +453,6 @@ for (const entry of manifestEntries) {
   );
 
   const relevantSource = entry.sourceFiles.map(read).join("\n");
-  check(
-    `${entry.entity} retains server-side Audit integration in its domain sources`,
-    relevantSource.includes("recordCmsAdminAudit"),
-  );
   const sharedConfirmationDeclaration =
     /confirmation\s*:\s*\{[\s\S]{0,240}?mode\s*:\s*["']shared["']/.test(
       consumer,
@@ -400,30 +461,29 @@ for (const entry of manifestEntries) {
     /confirmation\s*:\s*\{[\s\S]{0,240}?mode\s*:\s*["']delegated["'][\s\S]{0,240}?owner\s*:\s*["']confirmation_runtime["']/.test(
       consumer,
     );
-  check(
-    `${entry.entity} uses the shared Confirmation owner and no native confirm`,
-    (sharedConfirmationDeclaration || delegatedConfirmationDeclaration) &&
-      !relevantSource.includes("window.confirm"),
-  );
-  check(
-    `${entry.entity} keeps pending and duplicate-click protection with its declared Data owner`,
-    entry.owners.data === "data_runtime"
-      ? relevantSource.includes("useAdminEntityInstantMutation") &&
-          relevantSource.includes(
-            "instant.rowPending !== null || instant.bulkPending !== null",
-          ) &&
-          consumer.includes("mutationBusy")
-      : consumer.includes("pendingRowId") &&
-          consumer.includes("if (pendingRowId !== null) return") &&
-          relevantSource.includes("toggleRedirectStatusAction") &&
-          relevantSource.includes("deleteRedirectAction"),
-  );
+  if (supportedMutations.length > 0) {
+    check(
+      `${entry.entity} retains server-side Audit integration in its domain sources`,
+      relevantSource.includes("recordCmsAdminAudit"),
+    );
+    check(
+      `${entry.entity} keeps pending and duplicate-click protection with its declared Data owner`,
+      relevantSource.includes("useAdminEntityInstantMutation") &&
+        relevantSource.includes("instant.rowPending") &&
+        consumer.includes("mutationBusy"),
+    );
+  }
+  if (supportedDangerousActions.length > 0) {
+    check(
+      `${entry.entity} uses the shared Confirmation owner and no native confirm`,
+      (sharedConfirmationDeclaration || delegatedConfirmationDeclaration) &&
+        !relevantSource.includes("window.confirm"),
+    );
+  }
   if (entry.actions.delete === "adopted") {
     check(
       `${entry.entity} rejects failed shared-confirmation commands after publishing feedback`,
-      entry.entity === "redirects"
-        ? consumer.includes("onSelect: () => input.onDelete(row)")
-        : consumer.includes("throw "),
+      consumer.includes("if (!result.ok) throw") || consumer.includes("throw "),
     );
   }
 }
@@ -637,6 +697,8 @@ const listConsumerSources = [
   pagesSource,
   read(paths.projectsList),
   read(paths.redirects),
+  read(paths.activityLog),
+  read(paths.topicsWithoutImage),
 ];
 check(
   "all generic consumers removed local Surface spacing",
@@ -648,9 +710,16 @@ check(
   ),
 );
 check(
-  "shared list parents own the single 28px top-level cadence",
+  "shared list parents own 28px sections and the 16px table-footer cadence",
   entityListSurfaceSource.includes("AdminEntityListPrimarySection") &&
     entityListSurfaceSource.includes('SURFACE_LAYOUT_CLASSES = "flex flex-col gap-7"') &&
+    entityListSurfaceSource.includes("AdminEntityListTableRegion") &&
+    entityListSurfaceSource.includes(
+      'TABLE_REGION_LAYOUT_CLASSES = "flex flex-col gap-4"',
+    ) &&
+    entityListSurfaceSource.includes(
+      'data-admin-entity-list-table-region=""',
+    ) &&
     !entityListSurfaceSource.includes("mt-3") &&
     entityListSurfaceSource.includes("AdminEntityListPageLayout") &&
     entityListSurfaceSource.includes("gap-7") &&
@@ -658,12 +727,29 @@ check(
     entityListSource.includes('className="scroll-mt-6 flex flex-col gap-7"') &&
     !entityListSource.includes("primary-section]:mt-") &&
     !read(paths.pagination).includes('className={`mt-4') &&
-    read(paths.pageExperience).includes("flex flex-col gap-7"),
+    read(paths.pagination).includes('data-admin-table-pagination=""') &&
+    read(paths.pageExperience).includes("flex flex-col gap-7") &&
+    listConsumerSources.every(
+      (source) =>
+        source.includes("AdminEntityListTableRegion") &&
+        /<AdminEntityListTableRegion\b[\s\S]*?<AdminTablePagination\b[\s\S]*?<\/AdminEntityListTableRegion>/.test(
+          source,
+        ),
+    ),
+);
+
+check(
+  "More icon is vertical at the shared icon owner",
+  dataGridSource.includes('<circle cx="12" cy="5" r="1.7" />') &&
+    dataGridSource.includes('<circle cx="12" cy="12" r="1.7" />') &&
+    dataGridSource.includes('<circle cx="12" cy="19" r="1.7" />') &&
+    !dataGridSource.includes('<circle cx="5" cy="12"') &&
+    !dataGridSource.includes('<circle cx="19" cy="12"'),
 );
 check(
   "Pages uses shared page cadence, columns persistence, and Entity List",
   pagesSource.includes("<AdminEntityListPageLayout") &&
-    pagesSource.includes("<AdminEntityListPrimarySection") &&
+    pagesSource.includes("<AdminEntityListTableRegion") &&
     pagesSource.includes("enableColumnManagement") &&
     pagesSource.includes("savePagesTablePreferences") &&
     read(paths.pagesConfig).includes("PAGES_PREFERENCE_COLUMN_KEYS") &&
@@ -692,8 +778,22 @@ const scannedCollectionPresentationSources = [
 ]
   .filter((sourceFile) => {
     const source = readFileSync(sourceFile, "utf8");
-    return /<AdminEntityList(?:\s|<)|<AdminDataGrid(?:\s|>)|<table(?:\s|>)/.test(
-      source,
+    const relative = relativeSourceFile(sourceFile);
+    const isTopLevelCardCatalog =
+      relative.startsWith("src/app/admin/") &&
+      relative.endsWith("/page.tsx") &&
+      /<AdminCard\b/.test(source) &&
+      /\.map\s*\(/.test(source);
+    const isMappedCommandQueue =
+      relative.startsWith("src/app/admin/") &&
+      /<article\b/.test(source) &&
+      /\ballowedActions\.map\s*\(/.test(source);
+    return (
+      /<AdminEntityList(?:\s|<)|<AdminDataGrid(?:\s|>)|<table(?:\s|>)/.test(
+        source,
+      ) ||
+      isTopLevelCardCatalog ||
+      isMappedCommandQueue
     );
   })
   .map(relativeSourceFile)
@@ -710,6 +810,16 @@ check(
     [...presentationSourceCounts.values()].every((count) => count === 1),
 );
 check(
+  "Collection inventory owns only concrete collection/list workflows",
+  !Object.hasOwn(ADMIN_COLLECTION_SURFACE_ADOPTION, "outOfScopePages") &&
+    collectionSurfaces.every(
+      (surface) =>
+        surface.routes.length > 0 &&
+        surface.pageSourceFiles.length > 0 &&
+        "workflowClassification" in surface,
+    ),
+);
+check(
   "every inventoried Collection page and presentation source exists",
   collectionSurfaces.every((surface) =>
     [...surface.pageSourceFiles, ...surface.presentationSourceFiles].every(
@@ -718,47 +828,193 @@ check(
   ),
 );
 check(
-  "every AdminEntityList, AdminDataGrid, or native table surface is classified exactly once",
+  "every Collection entry declares the requested ownership and adoption axes",
+  collectionSurfaces.every(
+    (surface) =>
+      surface.sourceOwner.trim().length > 0 &&
+      (surface.workflowClassification === "auth_out_of_scope"
+        ? surface.headerOwner === "not_applicable" &&
+          surface.headerState === "auth_out_of_scope"
+        : surface.headerOwner === "AdminPageContextHeader" &&
+          surface.headerState === "adopted") &&
+      ["adopted", "auth_out_of_scope"].includes(
+        surface.pageChromeAdoption,
+      ) &&
+      ["adopted", "not_applicable"].includes(
+        surface.collectionAdoption,
+      ) &&
+      "rowActionsState" in surface &&
+      "paginationState" in surface &&
+      "paginationOwner" in surface &&
+      "gridOwner" in surface &&
+      "feedbackOwner" in surface &&
+      "confirmationOwner" in surface &&
+      "reorderOwner" in surface &&
+      "queryMode" in surface &&
+      Array.isArray(surface.genuineExceptions) &&
+      Array.isArray(surface.requiredAdoption) &&
+      (surface.exceptionRationale === null ||
+        surface.exceptionRationale.trim().length > 0),
+  ),
+);
+check(
+  "surface workflow classifications use only the approved five-value contract",
+  collectionSurfaces.every((surface) =>
+    [
+      "full_collection_adoption",
+      "specialized_data_owner_shared_collection_presentation",
+      "page_system_only",
+      "fixed_structure_not_paginated",
+      "auth_out_of_scope",
+    ].includes(surface.workflowClassification),
+  ) &&
+    !read(paths.manifest).includes("specialized_exception"),
+);
+check(
+  "Collection classifications resolve to a concrete shared grid owner",
+  collectionSurfaces.every((surface) => {
+    if (surface.workflowClassification === "full_collection_adoption") {
+      return (
+        surface.collectionAdoption === "adopted" &&
+        surface.gridOwner === "AdminEntityList"
+      );
+    }
+    if (
+      surface.workflowClassification ===
+      "specialized_data_owner_shared_collection_presentation"
+    ) {
+      return (
+        surface.collectionAdoption === "adopted" &&
+        ["AdminDataGrid", "MediaCatalog"].includes(surface.gridOwner)
+      );
+    }
+    return surface.collectionAdoption === "not_applicable";
+  }),
+);
+check(
+  "every generic list primitive, top-level card catalog, and mapped command queue is classified exactly once",
   scannedCollectionPresentationSources.every(
     (sourceFile) => presentationSourceCounts.get(sourceFile) === 1,
   ),
 );
+const genericDataEntityByCollectionId = new Map([
+  ["content-topics", "topics"],
+  ["content-categories", "categories"],
+  ["content-series", "series"],
+  ["pages", "pages"],
+  ["projects-residential-commercial", "projects"],
+  ["seo-redirects", "redirects"],
+  ["activity-log", "activity_log"],
+  ["topics-without-image-report", "topics_without_image"],
+]);
 check(
-  "all generic Collection routes are adopted with shared Row Actions and layout owners",
+  "generic inventory and Data Runtime registry cover the same consumers",
+  sameValueSet(
+    collectionSurfaces
+      .filter((surface) => surface.generic)
+      .map((surface) => genericDataEntityByCollectionId.get(surface.id) ?? ""),
+    registryEntities,
+  ),
+);
+check(
+  "generic headers render their declared uppercase Engine Label and no fourth context line remains",
+  collectionSurfaces
+    .filter((surface) => surface.generic)
+    .every((surface) => {
+      const source = [...surface.pageSourceFiles, ...surface.presentationSourceFiles]
+        .map(read)
+        .join("\n");
+      return source.includes(`eyebrow="${surface.engineLabel}"`);
+    }) &&
+    !collectTsxFiles(join(ROOT, "src")).some((sourceFile) =>
+      readFileSync(sourceFile, "utf8").includes("contextLine"),
+    ) &&
+    !read(paths.pageHeader).includes("contextLine") &&
+    read(paths.shell).includes(
+      'className="flex min-w-0 flex-1 flex-col gap-7 px-4 py-4 sm:px-6 lg:px-7"',
+    ) &&
+    !read(paths.shell).includes("admin-premium-card mb-5"),
+);
+check(
+  "all generic Collection routes adopt shared Header, Data, and Pagination owners",
   collectionSurfaces
     .filter((surface) => surface.generic)
     .every(
       (surface) =>
-        surface.classification === "adopted" &&
-        surface.rowActionsOwner === "shared_admin_row_actions" &&
+        surface.workflowClassification === "full_collection_adoption" &&
+        surface.pageChromeAdoption === "adopted" &&
+        surface.collectionAdoption === "adopted" &&
+        surface.headerOwner === "AdminPageContextHeader" &&
+        surface.headerState === "adopted" &&
+        typeof surface.engineLabel === "string" &&
+        surface.engineLabel === surface.engineLabel.toUpperCase() &&
+        surface.queryMode === "server-page" &&
+        surface.paginationState === "adopted" &&
+        surface.paginationOwner === "AdminTablePagination" &&
+        (surface.rowActionsState === "adopted"
+          ? surface.rowActionsOwner === "shared_admin_row_actions"
+          : surface.rowActionsState === "read_only_no_row_commands" &&
+            surface.rowActionsOwner === "not_applicable") &&
         surface.layoutOwner.includes("AdminEntityList") &&
+        surface.requiredAdoption.length === 0 &&
+        surface.exceptionRationale === null &&
         surface.routes.length > 0,
     ) &&
-    !collectionSurfaces.some(
-      (surface) => String(surface.classification) === "legacy_generic_gap",
-    ) &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.legacyGenericGaps.length === 0,
+    ADMIN_COLLECTION_SURFACE_ADOPTION.genericAdoptionGaps.length === 0,
 );
 check(
-  "optional generic columns use the shared owner and fixed Redirect columns are explicit",
+  "generic command collections declare column ownership truthfully",
   collectionSurfaces
     .filter(
       (surface) =>
-        surface.generic && surface.id !== "seo-redirects",
+        surface.generic &&
+        surface.rowActionsState === "adopted" &&
+        surface.id !== "topics-without-image-report",
     )
     .every(
       (surface) =>
         surface.columnVisibility === "shared_optional_columns",
     ) &&
     collectionSurfaces.find((surface) => surface.id === "seo-redirects")
-      ?.columnVisibility === "fixed_no_optional_columns",
+      ?.columnVisibility === "shared_optional_columns" &&
+    collectionSurfaces.find(
+      (surface) => surface.id === "topics-without-image-report",
+    )?.columnVisibility === "fixed_no_optional_columns",
 );
 check(
-  "Collection global closure remains truthful until authenticated Browser QA",
+  "dashboard, card catalog, report, and recovery inventory states match their concrete commands",
+  collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
+    ?.sourceOwner === "src/app/admin/page.tsx#getDashboardStats" &&
+    collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
+      ?.workflowClassification === "fixed_structure_not_paginated" &&
+    collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
+      ?.rowActionsState === "not_applicable" &&
+    collectionSurfaces.find((surface) => surface.id === "blocks-library-hub")
+      ?.presentationSourceFiles.includes(
+        "src/app/admin/pages-blocks/blocks/page.tsx",
+      ) &&
+    collectionSurfaces.find(
+      (surface) => surface.id === "topics-without-image-report",
+    )?.rowActionsState === "adopted" &&
+    manifestEntities.includes("topics_without_image") &&
+    collectionSurfaces.find((surface) => surface.id === "media-recovery-queue")
+      ?.presentationSourceFiles.includes(paths.mediaRecovery) &&
+    collectionSurfaces.find((surface) => surface.id === "media-recovery-queue")
+      ?.workflowClassification === "page_system_only" &&
+    collectionSurfaces.find((surface) => surface.id === "media-recovery-queue")
+      ?.rowActionsState === "not_applicable",
+);
+check(
+  "Collection global closure remains truthful across Browser, reorder, and Project publishing gaps",
   ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed === false &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.length === 1 &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers[0].includes(
-      "Authenticated Browser QA",
+    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
+      blocker.includes("Authenticated Browser QA"),
+    ) &&
+    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
+      blocker.includes("atomic reorder"),
+    ) &&
+    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
+      blocker.includes("PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY"),
     ),
 );
 check(
@@ -798,6 +1054,345 @@ check(
     /panelView\s*===\s*["']information["'][\s\S]{0,160}?ROW_ACTION_INFORMATION_ESTIMATED_HEIGHT[\s\S]{0,120}?ROW_ACTION_MENU_ESTIMATED_HEIGHT/.test(
       rendererSource,
     ),
+);
+check(
+  "specialized collection presentation and fixed surfaces declare pagination truthfully",
+  collectionSurfaces.find((surface) => surface.id === "media-library")
+    ?.workflowClassification ===
+      "specialized_data_owner_shared_collection_presentation" &&
+    collectionSurfaces.find((surface) => surface.id === "media-library")
+      ?.paginationState === "adopted" &&
+    collectionSurfaces.find((surface) => surface.id === "media-library")
+      ?.paginationOwner === "AdminTablePagination" &&
+    collectionSurfaces.find((surface) => surface.id === "media-library")
+      ?.queryMode === "specialized" &&
+    collectionSurfaces.find((surface) => surface.id === "projects-hub")
+      ?.queryMode === "small-fixed" &&
+    collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
+      ?.paginationState === "not_required" &&
+    collectionSurfaces.find(
+      (surface) => surface.id === "topics-without-image-report",
+    )?.paginationOwner === "AdminTablePagination",
+);
+check(
+  "nested eligible collections are separate from their specialized page shells",
+  [
+    "page-composition-shell",
+    "page-block-assignments",
+    "menu-editor-shell",
+    "menu-items",
+    "footer-builder-shell",
+    "footer-fixed-slots",
+    "footer-manual-links",
+    "block-template-libraries",
+    "block-template-editors",
+  ].every((surfaceId) =>
+    collectionSurfaces.some((surface) => surface.id === surfaceId),
+  ) &&
+    ["page-block-assignments", "menu-items", "footer-manual-links"].every(
+      (surfaceId) => {
+        const surface = collectionSurfaces.find(
+          (candidate) => candidate.id === surfaceId,
+        );
+        return (
+          surface?.collectionAdoption === "adopted" &&
+          surface.rowActionsOwner === "shared_admin_row_actions" &&
+          surface.paginationOwner === "AdminTablePagination"
+        );
+      },
+    ),
+);
+check(
+  "persisted reorder gaps fail closed at the atomic domain contract boundary",
+  ["page-block-assignments", "menu-items"].every((surfaceId) => {
+    const surface = collectionSurfaces.find(
+      (candidate) => candidate.id === surfaceId,
+    );
+    return (
+      surface?.reorderOwner === "blocked_atomic_reorder_contract" &&
+      surface.requiredAdoption.includes(
+        "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
+      )
+    );
+  }) &&
+    collectionSurfaces.find((surface) => surface.id === "footer-manual-links")
+      ?.reorderOwner === "domain_owned_atomic_reorder",
+);
+const pageAssignmentsSource = read(paths.pageAssignments);
+const pageAssignmentsGridSource = read(paths.pageAssignmentsGrid);
+const pageAssignmentRowSource = read(paths.pageAssignmentRow);
+const menuItemsSource = read(paths.menuItems);
+check(
+  "blocked reorder surfaces expose no non-atomic trigger or write path",
+  !existsSync(
+    join(
+      ROOT,
+      "src/app/admin/pages-blocks/pages/[id]/page-blocks/use-page-blocks-reorder.ts",
+    ),
+  ) &&
+    !existsSync(
+      join(
+        ROOT,
+        "src/app/admin/pages-blocks/pages/page-actions/assignment-reorder.ts",
+      ),
+    ) &&
+    !existsSync(
+      join(ROOT, "src/app/admin/pages-blocks/menus/menu-actions/reorder.ts"),
+    ) &&
+    !pageAssignmentsGridSource.includes("onReorder") &&
+    !pageAssignmentRowSource.includes("canReorderUp") &&
+    !pageAssignmentRowSource.includes("تحريك لأعلى") &&
+    !menuItemsSource.includes("moveMenuItemSortOrder") &&
+    !menuItemsSource.includes("requestSubmit") &&
+    !read(paths.pageActions).includes("movePageBlockAssignment") &&
+    !read(paths.pageActionIndex).includes("movePageBlockAssignment") &&
+    !read(paths.menuActions).includes("moveMenuItemSortOrder") &&
+    !read(paths.menuActionIndex).includes("moveMenuItemSortOrder"),
+);
+check(
+  "Page Assignments adopts the shared bounded-client URL/history owner",
+  collectionSurfaces.find((surface) => surface.id === "page-block-assignments")
+    ?.queryMode === "bounded-client" &&
+    pageAssignmentsSource.includes("useAdminBoundedClientPagination") &&
+    pageAssignmentsSource.includes("pagination.resetPage()") &&
+    pageAssignmentsGridSource.includes("summary={`${totalCount}") &&
+    pageAssignmentsSource.includes("totalCount={pagination.totalCount}") &&
+    !pageAssignmentsSource.includes("const [currentPage") &&
+    !pageAssignmentsSource.includes("Math.ceil(table.rows.length") &&
+    !pageAssignmentsSource.includes("table.rows.slice(") &&
+    read(paths.boundedPagination).includes("useSearchParams") &&
+    read(paths.boundedPagination).includes('behavior === "replace" ? "replaceState" : "pushState"') &&
+    read(paths.boundedPagination).includes("previousDatasetKey"),
+);
+
+const syntheticAssignmentRows = Array.from(
+  { length: 23 },
+  (_, index) => `assignment-${index + 1}`,
+);
+const initialAssignmentParams = new URLSearchParams(
+  "tab=modules&seo_notice=saved&page=2",
+);
+const initialAssignmentPagination = resolveClientPagination(
+  syntheticAssignmentRows.length,
+  initialAssignmentParams.get("page"),
+  initialAssignmentParams.get("limit"),
+);
+const nextAssignmentParams = writeAdminBoundedClientPaginationParams(
+  initialAssignmentParams,
+  { page: 3, pageSize: initialAssignmentPagination.pageSize },
+);
+const previousAssignmentParams = writeAdminBoundedClientPaginationParams(
+  nextAssignmentParams,
+  { page: 2, pageSize: initialAssignmentPagination.pageSize },
+);
+const resizedAssignmentParams = writeAdminBoundedClientPaginationParams(
+  previousAssignmentParams,
+  { page: 1, pageSize: 20 },
+);
+const assignmentHistory = [
+  initialAssignmentParams.toString(),
+  nextAssignmentParams.toString(),
+  previousAssignmentParams.toString(),
+  resizedAssignmentParams.toString(),
+];
+const backAssignmentParams = new URLSearchParams(assignmentHistory.at(-2));
+const forwardAssignmentParams = new URLSearchParams(assignmentHistory.at(-1));
+const nextAssignmentPagination = resolveClientPagination(
+  syntheticAssignmentRows.length,
+  nextAssignmentParams.get("page"),
+  nextAssignmentParams.get("limit"),
+);
+const previousAssignmentPagination = resolveClientPagination(
+  syntheticAssignmentRows.length,
+  previousAssignmentParams.get("page"),
+  previousAssignmentParams.get("limit"),
+);
+const resizedAssignmentPagination = resolveClientPagination(
+  syntheticAssignmentRows.length,
+  resizedAssignmentParams.get("page"),
+  resizedAssignmentParams.get("limit"),
+);
+const backAssignmentPagination = resolveClientPagination(
+  syntheticAssignmentRows.length,
+  backAssignmentParams.get("page"),
+  backAssignmentParams.get("limit"),
+);
+const forwardAssignmentPagination = resolveClientPagination(
+  syntheticAssignmentRows.length,
+  forwardAssignmentParams.get("page"),
+  forwardAssignmentParams.get("limit"),
+);
+check(
+  "bounded-client pagination changes next/previous/size rows and restores Back/Forward state",
+  initialAssignmentPagination.page === 2 &&
+    initialAssignmentPagination.pageSize === 10 &&
+    sameOrderedValues(
+      slicePageRows(
+        syntheticAssignmentRows,
+        initialAssignmentPagination.page,
+        initialAssignmentPagination.pageSize,
+      ),
+      syntheticAssignmentRows.slice(10, 20),
+    ) &&
+    nextAssignmentParams.get("page") === "3" &&
+    sameOrderedValues(
+      slicePageRows(
+        syntheticAssignmentRows,
+        nextAssignmentPagination.page,
+        nextAssignmentPagination.pageSize,
+      ),
+      syntheticAssignmentRows.slice(20, 23),
+    ) &&
+    previousAssignmentParams.get("page") === "2" &&
+    sameOrderedValues(
+      slicePageRows(
+        syntheticAssignmentRows,
+        previousAssignmentPagination.page,
+        previousAssignmentPagination.pageSize,
+      ),
+      syntheticAssignmentRows.slice(10, 20),
+    ) &&
+    resizedAssignmentParams.get("page") === null &&
+    resizedAssignmentParams.get("limit") === "20" &&
+    sameOrderedValues(
+      slicePageRows(
+        syntheticAssignmentRows,
+        resizedAssignmentPagination.page,
+        resizedAssignmentPagination.pageSize,
+      ),
+      syntheticAssignmentRows.slice(0, 20),
+    ) &&
+    backAssignmentPagination.page === 2 &&
+    backAssignmentPagination.pageSize === 10 &&
+    forwardAssignmentPagination.page === 1 &&
+    forwardAssignmentPagination.pageSize === 20 &&
+    resizedAssignmentParams.get("tab") === "modules" &&
+    resizedAssignmentParams.get("seo_notice") === "saved",
+);
+check(
+  "shared Pagination delegates range and URL math and exposes pending safety",
+  read(paths.pagination).includes("computePageRange") &&
+    read(paths.pagination).includes("buildAdminEntityListHref") &&
+    read(paths.pagination).includes("pending = false") &&
+    read(paths.pagination).includes("disabled={pending || isActive}") &&
+    read(paths.pagination).includes(
+      'data-admin-table-pagination-pending={pending ? "true" : "false"}',
+    ),
+);
+check(
+  "AdminDataGrid owns one edge-flush full-height actions surface for every Block Library family",
+  read(paths.dataGrid).includes("ADMIN_DATA_GRID_LINE_CELL_CLASSES") &&
+    read(paths.dataGrid).includes("[&>*]:self-stretch") &&
+    read(paths.dataGrid).includes("[&>*:last-child]:px-1.5") &&
+    read(paths.dataGrid).includes("columnGap: 0") &&
+    read(paths.renderer).includes("sticky = false") &&
+    [
+      paths.blockModuleManager,
+      paths.contentBlockManager,
+      paths.heroBlockManager,
+      paths.blockTemplateSummary,
+    ].every((sourceFile) =>
+      read(sourceFile).includes("ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact"),
+    ),
+);
+const redirectsClientSource = read(paths.redirects);
+const redirectsActionsSource = read(paths.redirectsActions);
+const activitySource = read(paths.activityLog);
+const reportSource = read(paths.topicsWithoutImage);
+check(
+  "new server-page adopters normalize out-of-range pages at their thin adapters",
+  [
+    paths.redirectsAdapter,
+    paths.activityLoader,
+    paths.reportAdapter,
+    paths.projectsAdapter,
+  ].every((sourceFile) =>
+    read(sourceFile).includes("loadNormalizedAdminEntityListPage"),
+  ) &&
+    read(paths.dataAdapter).includes("for (let attempt = 0;") &&
+    read(paths.dataAdapter).includes("page <= totalPages") &&
+    read(paths.dataAdapter).includes(
+      "throw new AdminEntityListPageNormalizationError",
+    ),
+);
+check(
+  "legacy collection query, URL, and pager owners are removed",
+  !redirectsActionsSource.includes("listRedirects(") &&
+    !redirectsActionsSource.includes("redirectWithMessage") &&
+    !redirectsActionsSource.includes('from "next/navigation"') &&
+    !redirectsClientSource.includes("setRows(") &&
+    !read(paths.redirectsFilters).includes("useRouter") &&
+    !activitySource.includes("useRouter") &&
+    !activitySource.includes("listAuditLogsAction") &&
+    !existsSync(join(ROOT, "src/app/admin/activity-log/actions.ts")) &&
+    !reportSource.includes("pageHref") &&
+    !reportSource.includes('method="get"'),
+);
+check(
+  "new Data Runtime adopters retain visible failure paths without false empty states",
+  redirectsClientSource.includes("controller.error") &&
+    activitySource.includes("controller.error") &&
+    reportSource.includes("controller.error") &&
+    !read("src/app/admin/seo/redirects/page.tsx").includes("catch(() => [])"),
+);
+check(
+  "Data Runtime restores visible Back and Forward state for draft-filter adopters",
+  read(paths.dataController).includes('addEventListener("popstate"') &&
+    activitySource.includes("controller.query") &&
+    reportSource.includes("controller.query") &&
+    redirectsClientSource.includes("search={controller.query.search}") &&
+    redirectsClientSource.includes("status={controller.query.filters.status}"),
+);
+check(
+  "route-locked Project queries reapply their invariant on every transition and Back or Forward restoration",
+  read(paths.dataController).includes("constrainQuery?:") &&
+    read(paths.dataController).includes(
+      "const resolved = applyQueryConstraint(candidate)",
+    ) &&
+    read(paths.dataController).includes(
+      "const restored = applyQueryConstraint(normalized)",
+    ) &&
+    read(paths.dataController).includes("window.history.replaceState") &&
+    read(paths.projectsList).includes("withLockedProjectType") &&
+    read(paths.projectsList).includes("constrainQuery,"),
+);
+check(
+  "Activity Log server pagination uses a deterministic id tie-breaker",
+  read(paths.activityLoader).includes(
+    '.order("created_at", { ascending: filters.sortDirection === "asc" })',
+  ) &&
+    read(paths.activityLoader).includes(
+      '.order("id", { ascending: filters.sortDirection === "asc" })',
+    ),
+);
+check(
+  "Redirects delegates filter presentation and query state to shared owners",
+  read(paths.redirectsFilters).includes("AdminEntityListFilters") &&
+    read(paths.redirectsFilters).includes("onQueryPatch") &&
+    !read(paths.redirectsFilters).includes("useRouter"),
+);
+check(
+  "server-page search consumers delegate PostgREST escaping without semantic sanitizers",
+  [
+    paths.redirectsAdapter,
+    paths.activityLoader,
+    paths.reportQuery,
+    paths.projectsAdapter,
+  ].every((sourceFile) =>
+    read(sourceFile).includes("buildAdminListSearchOrFilter"),
+  ) &&
+    read(paths.adminListSearch).includes('const pattern = `"%${escaped}%"`') &&
+    read(paths.adminListSearch).includes("Invalid Admin list search field") &&
+    !read(paths.redirectsAdapter).includes("sanitizeRedirectSearch") &&
+    !read(paths.projectsAdapter).includes("sanitizeProjectSearch"),
+);
+check(
+  "topics-without-image adapter delegates canonical sort direction to the domain read",
+  read(paths.reportAdapter).includes("sortDirection: query.sort.direction") &&
+    read(paths.reportQuery).includes(
+      'const ascending = input.sortDirection === "asc"',
+    ) &&
+    read(paths.reportQuery).includes('.order("updated_at", { ascending,'),
 );
 check(
   "floating position remeasures panel content and all viewport/scroll changes",
@@ -887,6 +1482,31 @@ check(
     confirmationSource.includes("if (failed)") &&
     confirmationSource.includes("data-admin-confirm-submit") &&
     confirmationSource.includes("Keep the dialog open"),
+);
+check(
+  "shared confirmation owns live invocation pending independently of row snapshots",
+  confirmationSource.includes("const busy = pending || invoking") &&
+    confirmationSource.includes("invokingRef.current = true") &&
+    confirmationSource.includes("await confirmRef.current()") &&
+    confirmationSource.includes("disabled={busy || confirmDisabled}") &&
+    rendererSource.includes("await activeConfirmation.onConfirm()") &&
+    floatingLayerSource.includes("await activeConfirmation.onConfirm()"),
+);
+const usersRolesSource = read(paths.usersRoles);
+check(
+  "Users edit status changes adopt shared confirmation with pending, retry, and focus return",
+  usersRolesSource.includes("editForm.is_active !== editUser.is_active") &&
+    usersRolesSource.includes("setConfirmEditStatus(true)") &&
+    usersRolesSource.includes("<AdminConfirmDialog") &&
+    usersRolesSource.includes("pending={editPending}") &&
+    usersRolesSource.includes("onConfirm={executeEditSave}") &&
+    usersRolesSource.includes("throw actionError") &&
+    usersRolesSource.includes("data-admin-users-edit-save") &&
+    usersRolesSource.includes("resolveReturnFocus={() =>") &&
+    usersRolesSource.includes("await updateAdminUserAction({") &&
+    usersRolesSource.includes("await setAdminUserActiveAction(user.id, nextActive)") &&
+    !usersRolesSource.includes("window.confirm") &&
+    !usersRolesSource.includes("/api/"),
 );
 check(
   "confirmation restores focus through a connected target after optimistic row removal",

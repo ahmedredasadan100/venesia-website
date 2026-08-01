@@ -2,15 +2,25 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  AdminFeedbackRegion,
+} from "../../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../../components/admin/page-blocks/AdminModuleTabs";
 import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
-import { AdminBulkActionBar, useAdminGridSelection } from "../../../../../components/admin/ui";
+import {
+  AdminBulkActionBar,
+  AdminPageExperience,
+  AdminTablePagination,
+  useAdminGridSelection,
+} from "../../../../../components/admin/ui";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
+import { useAdminBoundedClientPagination } from "../../../../../lib/admin/entity-list";
 import {
   moduleKindLabel,
   normalizeBoolean,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/types";
+import { resolvePagePublicPath } from "../../../../../lib/pages/page-admin-policy";
 import {
   bulkPageBlockAssignments,
   deletePageBlockAssignment,
@@ -20,14 +30,11 @@ import {
 import PageSeoPanel from "./PageSeoPanel";
 import PageBlocksAssignModal from "./page-blocks/PageBlocksAssignModal";
 import PageBlocksAssignmentsGrid from "./page-blocks/PageBlocksAssignmentsGrid";
-import PageBlocksDeleteConfirm from "./page-blocks/PageBlocksDeleteConfirm";
 import PageBlocksHeader, { PageModuleKindsBar } from "./page-blocks/PageBlocksHeader";
-import { buildReorderInfo } from "./page-blocks/build-reorder-info";
 import {
   assignmentRowId,
   isManageableAssignment,
 } from "./page-blocks/page-blocks-utils";
-import { usePageBlocksReorder } from "./page-blocks/use-page-blocks-reorder";
 import { usePageBlocksAssignModal } from "./page-blocks/use-page-blocks-assign-modal";
 
 type PageRow = {
@@ -74,9 +81,14 @@ export default function PageBlocksClient({
   initialTabId,
 }: PageBlocksClientProps) {
   const router = useRouter();
-  const [deletingAssignment, setDeletingAssignment] = useState<PageBlockAssignmentRow | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{
+    message: string;
+    ok: boolean;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const previewHref = resolvePagePublicPath(page);
+  const setActionMessage = (message: string | null) =>
+    setActionFeedback(message ? { message, ok: false } : null);
 
   const {
     assignModalOpen,
@@ -123,8 +135,19 @@ export default function PageBlocksClient({
     getRowId: (row) => assignmentRowId(row),
     sortAccessors,
   });
-
-  const manageableRows = useMemo(() => assignments.filter(isManageableAssignment), [assignments]);
+  const assignmentDatasetKey = useMemo(
+    () => table.rawRows.map(assignmentRowId).sort().join("|"),
+    [table.rawRows],
+  );
+  const pagination = useAdminBoundedClientPagination({
+    rows: table.rows,
+    datasetKey: assignmentDatasetKey,
+  });
+  const paginatedRows = pagination.rows;
+  const manageableRows = useMemo(
+    () => paginatedRows.filter(isManageableAssignment),
+    [paginatedRows],
+  );
   const visibleRowIds = useMemo(() => manageableRows.map((row) => assignmentRowId(row)), [manageableRows]);
   const selection = useAdminGridSelection<string>(visibleRowIds);
 
@@ -138,16 +161,6 @@ export default function PageBlocksClient({
     }
     return list;
   }, [assignments]);
-
-  const reorderInfo = useMemo(() => buildReorderInfo(table.rawRows), [table.rawRows]);
-
-  const { handleReorder } = usePageBlocksReorder({
-    pageId: page.id,
-    table,
-    reorderInfo,
-    setActionMessage,
-    startTransition,
-  });
 
   const { setRows } = table;
 
@@ -167,10 +180,10 @@ export default function PageBlocksClient({
     startTransition(async () => {
       const result = await togglePageBlockAssignment(formData);
       if (!result.ok) {
-        setActionMessage(result.message);
+        setActionFeedback({ message: result.message ?? "تعذر تحديث حالة الموديول.", ok: false });
         return;
       }
-      setActionMessage(null);
+      setActionFeedback({ message: result.message ?? "تم تحديث حالة الموديول.", ok: true });
       router.refresh();
     });
   }
@@ -187,10 +200,10 @@ export default function PageBlocksClient({
     startTransition(async () => {
       const result = await duplicateAssignedPageModule(formData);
       if (!result.ok) {
-        setActionMessage(result.message);
+        setActionFeedback({ message: result.message ?? "تعذر تكرار الموديول.", ok: false });
         return;
       }
-      setActionMessage(result.message);
+      setActionFeedback({ message: result.message ?? "تم تكرار الموديول.", ok: true });
       if (result.redirectTo) {
         router.push(result.redirectTo);
         return;
@@ -199,24 +212,19 @@ export default function PageBlocksClient({
     });
   }
 
-  function handleDeleteAssignment() {
-    if (!deletingAssignment) return;
-
+  async function handleDeleteAssignment(row: PageBlockAssignmentRow) {
     const formData = new FormData();
     formData.set("page_id", String(page.id));
-    formData.set("assignment_id", String(deletingAssignment.id));
-    formData.set("block_type", deletingAssignment.module_kind);
+    formData.set("assignment_id", String(row.id));
+    formData.set("block_type", row.module_kind);
 
-    startTransition(async () => {
-      const result = await deletePageBlockAssignment(formData);
-      if (!result.ok) {
-        setActionMessage(result.message);
-        return;
-      }
-      setDeletingAssignment(null);
-      setActionMessage(null);
-      router.refresh();
-    });
+    const result = await deletePageBlockAssignment(formData);
+    if (!result.ok) {
+      setActionFeedback({ message: result.message ?? "تعذرت إزالة الموديول من الصفحة.", ok: false });
+      return;
+    }
+    setActionFeedback({ message: result.message ?? "تمت إزالة الموديول من الصفحة.", ok: true });
+    router.refresh();
   }
 
   function handleBulkExecute(action: string, ids: string[]) {
@@ -227,26 +235,59 @@ export default function PageBlocksClient({
       formData.append("ids", id);
     }
 
-    startTransition(async () => {
-      await bulkPageBlockAssignments(formData);
-      selection.clearSelection();
-      setActionMessage(null);
-      router.refresh();
+    return new Promise<void>((resolve, reject) => {
+      startTransition(async () => {
+        try {
+          await bulkPageBlockAssignments(formData);
+          selection.clearSelection();
+          setActionFeedback({
+            message:
+              action === "delete"
+                ? "تمت إزالة الروابط المحددة من الصفحة."
+                : "تم تحديث الروابط المحددة.",
+            ok: true,
+          });
+          router.refresh();
+          resolve();
+        } catch (error) {
+          setActionFeedback({
+            message: "تعذر تنفيذ الإجراء الجماعي. لم يكتمل التغيير ويمكنك المحاولة مرة أخرى.",
+            ok: false,
+          });
+          if (action === "delete") {
+            reject(error);
+            return;
+          }
+          resolve();
+        }
+      });
     });
   }
 
   return (
-    <div className="space-y-6 pb-10" dir="rtl">
+    <AdminPageExperience dir="rtl">
       <PageBlocksHeader
         page={page}
+        previewHref={previewHref}
         onOpenAssignModal={openAssignModal}
       />
 
-      {actionMessage ? (
-        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm text-red-100">
-          {actionMessage}
-        </div>
-      ) : null}
+      <AdminFeedbackRegion
+        channel={`page-composition:${page.id}`}
+        label="نتائج إجراءات تكوين الصفحة"
+        feedback={
+          actionFeedback
+            ? {
+                variant: actionFeedback.ok ? "success" : "danger",
+                title: actionFeedback.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
+                message: actionFeedback.message,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "manual",
+              }
+            : null
+        }
+      />
 
       <AdminModuleTabs
         initialTabId={initialTabId}
@@ -303,20 +344,34 @@ export default function PageBlocksClient({
                 />
 
                 <PageBlocksAssignmentsGrid
-                  rows={table.rows}
+                  rows={paginatedRows}
+                  totalCount={pagination.totalCount}
+                  previewHref={previewHref}
                   sort={table.sort}
-                  onToggleSort={table.toggleSort}
+                  onToggleSort={(key) => {
+                    pagination.resetPage();
+                    table.toggleSort(key);
+                  }}
                   allSelected={selection.allSelected}
                   selectedSet={selection.selectedSet}
                   selectAllRef={selection.selectAllRef}
                   onToggleAll={(checked) => selection.toggleAll(checked)}
                   onToggleSelect={(rowId, checked) => selection.toggleOne(rowId, checked)}
                   isPending={isPending}
-                  reorderInfo={reorderInfo}
-                  onReorder={handleReorder}
                   onToggleVisibility={handleToggleVisibility}
                   onDuplicate={handleDuplicateAssignment}
-                  onDelete={setDeletingAssignment}
+                  onDelete={handleDeleteAssignment}
+                />
+
+                <AdminTablePagination
+                  basePath={`/admin/pages-blocks/pages/${page.id}`}
+                  currentPage={pagination.page}
+                  totalPages={pagination.totalPages}
+                  totalCount={pagination.totalCount}
+                  pageSize={String(pagination.pageSize)}
+                  onPageChange={pagination.setPage}
+                  onPageSizeChange={pagination.setPageSize}
+                  pending={isPending}
                 />
               </section>
             ),
@@ -349,15 +404,6 @@ export default function PageBlocksClient({
         />
       ) : null}
 
-      {deletingAssignment ? (
-        <PageBlocksDeleteConfirm
-          assignment={deletingAssignment}
-          pageTitle={page.title}
-          isPending={isPending}
-          onClose={() => setDeletingAssignment(null)}
-          onConfirm={handleDeleteAssignment}
-        />
-      ) : null}
-    </div>
+    </AdminPageExperience>
   );
 }

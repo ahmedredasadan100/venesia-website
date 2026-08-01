@@ -1,31 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
-import AdminNotice from "../../../../components/admin/AdminNotice";
-import { ADMIN_LIST_PAGE } from "../../../../lib/admin/admin-ui-styles";
+import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
-  ADMIN_DATA_GRID_RULES,
+  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  AdminBulkActionBar,
+  AdminDataGridCheckbox,
   AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
   AdminDataGridCenterCell,
   AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridPrimaryCell,
   AdminDataGridRow,
+  AdminDataGridRowActions,
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
+  AdminPageExperience,
   AdminPageHeader,
   AdminStatusPill,
+  AdminTablePagination,
+  type AdminRowActionsCapability,
+  useAdminGridSelection,
 } from "../../../../components/admin/ui";
 import { useAdminTable } from "../../../../components/admin/table-engine";
 import AddMenuPanelClient from "./AddMenuPanelClient";
-import BulkMenuController from "./BulkMenuController";
 import {
   bulkMenuAction,
   deleteMenu,
@@ -46,6 +49,7 @@ type MenusTableClientProps = {
   menus: MenuListRow[];
   message?: string | null;
   messageWarning?: boolean;
+  loadError?: string | null;
 };
 
 type MenuSortKey = "name" | "slug" | "item_count" | "status";
@@ -53,23 +57,13 @@ type MenuSortKey = "name" | "slug" | "item_count" | "status";
 /**
  * RTL table: القائمة (1fr, يمين) → … → الإجراءات (ثابت، شمال).
  */
-const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.count} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.count} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
+const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
 
-function PublicPreviewIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={ADMIN_DATA_GRID_RULES.actionIcon}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
-      <path d="M14 3h7v7" />
-      <path d="M10 14 21 3" />
-      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
-    </svg>
-  );
+function mutationFormData(fields: Record<string, string | number | boolean>) {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(fields)) formData.set(key, String(value));
+  return formData;
 }
 
 function locationLabel(location: string) {
@@ -91,7 +85,11 @@ export default function MenusTableClient({
   menus,
   message,
   messageWarning = false,
+  loadError = null,
 }: MenusTableClientProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const sortAccessors = useMemo(
     () => ({
       name: (item: MenuListRow) => item.name,
@@ -107,6 +105,23 @@ export default function MenusTableClient({
     getRowId: (item) => item.id,
     sortAccessors,
   });
+  const totalPages = Math.max(1, Math.ceil(table.rows.length / pageSize));
+  const resolvedCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedRows = useMemo(
+    () => table.rows.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
+    [pageSize, resolvedCurrentPage, table.rows],
+  );
+  const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
+  const selection = useAdminGridSelection<number>(visibleIds);
+
+  async function runMenuMutation(rowId: number, action: () => Promise<void>) {
+    setPendingRowId(rowId);
+    try {
+      await action();
+    } finally {
+      setPendingRowId(null);
+    }
+  }
 
   function sortProps(key: MenuSortKey) {
     return {
@@ -117,72 +132,64 @@ export default function MenusTableClient({
   }
 
   return (
-    <div className={ADMIN_LIST_PAGE.wrapper} dir="rtl">
+    <AdminPageExperience dir="rtl">
       <AdminPageHeader
         eyebrow="Admin Panel"
         title="إدارة القوائم"
         description="هنا بتدير كل قوائم الموقع: القائمة الرئيسية، الموبايل، الفوتر، أو أي قائمة جديدة. الدخول على اسم القائمة يفتح Builder الشجرة الخاصة بها."
         meta={`${menus.length} قائمة`}
-        actions={<AddMenuPanelClient />}
+        actions={loadError ? undefined : <AddMenuPanelClient />}
       />
 
-      {message ? (
-        <AdminNotice
-          variant={messageWarning ? "warning" : "success"}
-          message={message}
+      <AdminFeedbackRegion
+        channel="menu-builder:list"
+        label="نتائج إجراءات القوائم"
+        feedback={
+          loadError
+            ? {
+                variant: "danger",
+                title: "تعذر تحميل القوائم",
+                message: loadError,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "persistent",
+              }
+            : message
+              ? {
+                  variant: messageWarning ? "warning" : "success",
+                  title: messageWarning ? "تم الحفظ مع تنبيه" : "تم تنفيذ الإجراء",
+                  message,
+                  layout: "inline",
+                  dismissible: true,
+                  lifecycle: "manual",
+                  dismissSearchParams: ["message", "notice"],
+                }
+              : null
+        }
+      />
+
+      <div className="space-y-4">
+        <AdminBulkActionBar
+          selectedIds={selection.selectedIds}
+          entityLabel="قائمة"
+          action={bulkMenuAction}
+          options={[
+            { value: "show", label: "إظهار" },
+            { value: "hide", label: "إخفاء" },
+            { value: "delete", label: "حذف" },
+          ]}
+          idsFieldName="menu_ids"
+          onClearSelection={selection.clearSelection}
         />
-      ) : null}
-
-      <form id="bulk-menu-form" action={bulkMenuAction} />
-      <BulkMenuController />
-
-      <div className="bulk-menu-scope space-y-4">
-        <div
-          data-bulk-bar="menus"
-          hidden
-          className={ADMIN_LIST_PAGE.bulkBar}
-        >
-          <div className="text-sm font-bold text-white/72">
-            تم تحديد <span data-bulk-count="menus" className="font-en text-[#D8B87A]">0</span> قائمة
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <select
-              form="bulk-menu-form"
-              name="bulk_action"
-              defaultValue="show"
-              className="h-11 cursor-pointer rounded-2xl border border-white/10 bg-black/28 px-4 text-sm text-white outline-none focus:border-[#D8B87A]/45"
-            >
-              <option value="show">إظهار</option>
-              <option value="hide">إخفاء</option>
-              <option value="delete">حذف</option>
-            </select>
-
-            <button
-              form="bulk-menu-form"
-              className="h-11 cursor-pointer rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e4c88d]"
-            >
-              تنفيذ
-            </button>
-
-            <button
-              type="button"
-              data-bulk-clear="menus"
-              className="h-11 cursor-pointer rounded-2xl border border-transparent px-4 text-sm font-semibold text-white/50 transition hover:text-white/80"
-            >
-              إلغاء التحديد
-            </button>
-          </div>
-        </div>
 
         <AdminDataGrid summary={`${table.rows.length} قائمة`}>
           <AdminDataGridHeader columns={columns}>
             <AdminDataGridCheckboxCell>
-              <input
-                type="checkbox"
-                data-bulk-select-all="menus"
-                className={ADMIN_DATA_GRID_RULES.checkbox}
-                aria-label="تحديد كل القوائم"
+              <AdminDataGridCheckbox
+                inputRef={selection.selectAllRef}
+                checked={selection.allSelected}
+                onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
+                label="تحديد كل القوائم"
               />
             </AdminDataGridCheckboxCell>
             <AdminDataGridPrimaryCell>
@@ -208,18 +215,77 @@ export default function MenusTableClient({
             <div className="text-center">الإجراءات</div>
           </AdminDataGridHeader>
 
-          {table.rows.length ? (
-            table.rows.map((menu) => (
+          {paginatedRows.length ? (
+            paginatedRows.map((menu) => {
+              const rowPending = pendingRowId === menu.id;
+              const hidden = { access: "hidden" as const };
+              const capability: AdminRowActionsCapability = {
+                entityType: "menu",
+                entityId: menu.id,
+                entityLabel: menu.name,
+                actions: {
+                  edit: { access: "allowed", href: `/admin/pages-blocks/menus/${menu.id}` },
+                  preview: {
+                    access: "disabled",
+                    disabledReason: "القائمة لا تملك مسار معاينة عامًا خاصًا بها.",
+                  },
+                  information: {
+                    access: "allowed",
+                    title: `معلومات ${menu.name}`,
+                    items: [
+                      { label: "Slug", value: menu.slug },
+                      { label: "الموقع", value: locationLabel(menu.location) },
+                      { label: "عدد العناصر", value: String(menu.item_count) },
+                      { label: "الحالة", value: menuStatusLabel(menu.is_active) },
+                    ],
+                  },
+                  copyPublicLink: hidden,
+                  visibility: {
+                    access: "allowed",
+                    isVisible: menu.is_active,
+                    pending: rowPending,
+                    onSelect: () =>
+                      runMenuMutation(
+                        menu.id,
+                        () => toggleMenuVisibility(mutationFormData({ id: menu.id, is_active: !menu.is_active })),
+                      ),
+                  },
+                  featured: hidden,
+                  duplicate: {
+                    access: "allowed",
+                    pending: rowPending,
+                    onSelect: () =>
+                      runMenuMutation(
+                        menu.id,
+                        () => duplicateMenu(mutationFormData({ id: menu.id })),
+                      ),
+                  },
+                  archive: hidden,
+                  delete: {
+                    access: "allowed",
+                    pending: rowPending,
+                    onSelect: () =>
+                      runMenuMutation(
+                        menu.id,
+                        () => deleteMenu(mutationFormData({ id: menu.id })),
+                      ),
+                    confirmation: {
+                      mode: "shared",
+                      title: "تأكيد حذف القائمة",
+                      description: `حذف القائمة «${menu.name}» نهائيًا مع عناصرها؟`,
+                      confirmLabel: "حذف القائمة",
+                    },
+                  },
+                },
+              };
+
+              return (
               <AdminDataGridRow key={menu.id} columns={columns}>
                 <AdminDataGridCheckboxCell>
-                  <input
-                    form="bulk-menu-form"
-                    type="checkbox"
-                    name="menu_ids"
-                    value={menu.id}
-                    data-bulk-item="menus"
-                    className={ADMIN_DATA_GRID_RULES.checkbox}
-                    aria-label={`تحديد ${menu.name}`}
+                  <AdminDataGridCheckbox
+                    checked={selection.selectedSet.has(menu.id)}
+                    onChange={(event) => selection.toggleOne(menu.id, event.currentTarget.checked)}
+                    label={`تحديد ${menu.name}`}
                   />
                 </AdminDataGridCheckboxCell>
 
@@ -245,58 +311,29 @@ export default function MenusTableClient({
                   </AdminStatusPill>
                 </AdminDataGridStatusCell>
 
-                <AdminDataGridActionsCell compact>
-                  <AdminDataGridActionButton
-                    action="edit"
-                    href={`/admin/pages-blocks/menus/${menu.id}`}
-                    size="compact"
-                    title="فتح Builder الشجرة"
-                  />
-
-                  <AdminDataGridActionButton
-                    href="/"
-                    target="_blank"
-                    tone="dark"
-                    title="معاينة الموقع العام"
-                    size="compact"
-                  >
-                    <PublicPreviewIcon />
-                  </AdminDataGridActionButton>
-
-                  <form action={toggleMenuVisibility} className="contents">
-                    <input type="hidden" name="id" value={menu.id} />
-                    <input type="hidden" name="is_active" value={menu.is_active ? "false" : "true"} />
-                    <AdminDataGridActionButton
-                      type="submit"
-                      action="visibility"
-                      size="compact"
-                      isCurrentlyHidden={!menu.is_active}
-                      title={menu.is_active ? "إخفاء" : "إظهار"}
-                    />
-                  </form>
-
-                  <form action={duplicateMenu} className="contents">
-                    <input type="hidden" name="id" value={menu.id} />
-                    <AdminDataGridActionButton
-                      type="submit"
-                      action="duplicate"
-                      size="compact"
-                      title="تكرار القائمة بالكامل"
-                    />
-                  </form>
-
-                  <form action={deleteMenu} className="contents">
-                    <input type="hidden" name="id" value={menu.id} />
-                    <AdminDataGridActionButton type="submit" action="delete" size="compact" title="حذف نهائي" />
-                  </form>
-                </AdminDataGridActionsCell>
+                <AdminDataGridRowActions capability={capability} size="compact" />
               </AdminDataGridRow>
-            ))
+              );
+            })
           ) : (
             <AdminDataGridEmpty>لا توجد قوائم بعد. اضغط «إضافة منيو» لإنشاء أول قائمة.</AdminDataGridEmpty>
           )}
         </AdminDataGrid>
+
+        <AdminTablePagination
+          basePath="/admin/pages-blocks/menus"
+          currentPage={resolvedCurrentPage}
+          totalPages={totalPages}
+          totalCount={table.rows.length}
+          pageSize={String(pageSize)}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(nextPageSize) => {
+            setPageSize(nextPageSize);
+            setCurrentPage(1);
+          }}
+          pending={pendingRowId !== null}
+        />
       </div>
-    </div>
+    </AdminPageExperience>
   );
 }

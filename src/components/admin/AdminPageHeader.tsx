@@ -9,8 +9,6 @@ type AdminPageHeaderProps = {
   meta?: ReactNode;
   breadcrumb?: ReactNode;
   className?: string;
-  variant?: "default" | "context";
-  contextLine?: ReactNode;
   badge?: ReactNode;
   status?: "ready" | "loading" | "error" | "empty" | "under-construction";
   display?: "default" | "minimal";
@@ -23,15 +21,13 @@ type AdminPageHeaderProps = {
  * migrated. The actual visual source of truth is components/admin/ui/AdminPageHeader.
  */
 export default function AdminPageHeader({
-  eyebrow = "Admin Panel",
+  eyebrow = "ADMIN PANEL",
   title,
   description,
   actions,
   meta,
   breadcrumb,
   className,
-  variant,
-  contextLine,
   badge,
   status,
   display,
@@ -45,8 +41,6 @@ export default function AdminPageHeader({
       meta={meta}
       breadcrumb={breadcrumb}
       className={className}
-      variant={variant}
-      contextLine={contextLine}
       badge={badge}
       status={status}
       display={display}

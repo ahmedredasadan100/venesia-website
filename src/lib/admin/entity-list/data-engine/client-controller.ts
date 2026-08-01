@@ -47,6 +47,10 @@ export type AdminEntityListControllerOptions<
   initialQuery: AdminEntityListQuery<Filters, SortField>;
   initialResult: AdminEntityListResult<Row, Metrics>;
   staleTimeMs: number;
+  /** Re-applies a route-owned invariant to every query lifecycle transition. */
+  constrainQuery?: (
+    query: AdminEntityListQuery<Filters, SortField>,
+  ) => AdminEntityListQuery<Filters, SortField>;
 };
 
 export function useAdminEntityListInvalidation(entity: string) {
@@ -73,6 +77,7 @@ export function useAdminEntityListController<
   initialQuery,
   initialResult,
   staleTimeMs,
+  constrainQuery,
 }: AdminEntityListControllerOptions<
   Entity,
   Filters,
@@ -82,11 +87,17 @@ export function useAdminEntityListController<
 >) {
   const queryClient = useQueryClient();
   const invalidate = useAdminEntityListInvalidation(entity);
+  const applyQueryConstraint = useCallback(
+    (candidate: AdminEntityListQuery<Filters, SortField>) =>
+      constrainQuery ? constrainQuery(candidate) : candidate,
+    [constrainQuery],
+  );
   const [bootstrap] = useState(() => {
-    const query =
+    const normalizedInitial =
       initialResult.pagination.page === initialQuery.page
         ? initialQuery
         : { ...initialQuery, page: initialResult.pagination.page };
+    const query = applyQueryConstraint(normalizedInitial);
     return {
       query,
       key: adminEntityListQueryKeys.query(
@@ -109,7 +120,8 @@ export function useAdminEntityListController<
       behavior: HistoryBehavior,
     ) => {
       const current = queryRef.current;
-      const resolved = typeof next === "function" ? next(current) : next;
+      const candidate = typeof next === "function" ? next(current) : next;
+      const resolved = applyQueryConstraint(candidate);
       const params = writeAdminEntityListQuery(
         contract,
         resolved,
@@ -123,33 +135,55 @@ export function useAdminEntityListController<
       queryRef.current = resolved;
       setQuery(resolved);
     },
-    [contract],
+    [applyQueryConstraint, contract],
   );
 
   useEffect(() => {
-    if (initialQuery.page === bootstrap.query.page) return;
+    const currentParams = new URLSearchParams(window.location.search);
+    const restored = normalizeAdminEntityListQuery(contract, currentParams);
+    const constrainedRestored = applyQueryConstraint(restored);
+    const constraintChangedQuery =
+      JSON.stringify(restored) !== JSON.stringify(constrainedRestored);
+    if (
+      initialQuery.page === bootstrap.query.page &&
+      !constraintChangedQuery
+    ) {
+      return;
+    }
     const params = writeAdminEntityListQuery(
       contract,
       bootstrap.query,
-      new URLSearchParams(window.location.search),
+      currentParams,
     );
     const search = params.toString();
     const href = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
     window.history.replaceState(window.history.state, "", href);
-  }, [bootstrap.query, contract, initialQuery.page]);
+  }, [applyQueryConstraint, bootstrap.query, contract, initialQuery.page]);
 
   useEffect(() => {
     function handlePopState() {
-      const restored = normalizeAdminEntityListQuery(
+      const currentParams = new URLSearchParams(window.location.search);
+      const normalized = normalizeAdminEntityListQuery(
         contract,
-        new URLSearchParams(window.location.search),
+        currentParams,
       );
+      const restored = applyQueryConstraint(normalized);
+      if (JSON.stringify(normalized) !== JSON.stringify(restored)) {
+        const params = writeAdminEntityListQuery(
+          contract,
+          restored,
+          currentParams,
+        );
+        const search = params.toString();
+        const href = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+        window.history.replaceState(window.history.state, "", href);
+      }
       queryRef.current = restored;
       setQuery(restored);
     }
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [contract]);
+  }, [applyQueryConstraint, contract]);
 
   const queryKey = adminEntityListQueryKeys.query(
     entity,

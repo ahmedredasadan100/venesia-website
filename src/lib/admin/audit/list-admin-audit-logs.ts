@@ -1,6 +1,8 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { buildAdminListSearchOrFilter } from "../admin-list-search";
+import { loadNormalizedAdminEntityListPage } from "../entity-list/data-engine/adapter";
 import type { AuditLogFilters, AuditLogListResult, AuditLogRecord } from "./audit-types";
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -22,9 +24,11 @@ function mapAuditRow(row: Record<string, unknown>): AuditLogRecord {
   };
 }
 
-export async function listAdminAuditLogs(filters: AuditLogFilters = {}): Promise<AuditLogListResult> {
-  const page = Math.max(1, filters.page ?? 1);
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, filters.pageSize ?? DEFAULT_PAGE_SIZE));
+async function loadAdminAuditLogPage(
+  filters: AuditLogFilters,
+  page: number,
+  pageSize: number,
+) {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -50,25 +54,46 @@ export async function listAdminAuditLogs(filters: AuditLogFilters = {}): Promise
     query = query.lte("created_at", filters.dateTo);
   }
 
-  const search = filters.query?.trim();
-  if (search) {
-    const escaped = search.replace(/[%_]/g, "");
-    query = query.or(`actor_username.ilike.%${escaped}%,entity_label.ilike.%${escaped}%`);
-  }
+  const searchFilter = buildAdminListSearchOrFilter(
+    ["actor_username", "entity_label"],
+    filters.query ?? "",
+  );
+  if (searchFilter) query = query.or(searchFilter);
 
-  const { data, error, count } = await query.order("created_at", { ascending: false }).range(from, to);
+  const { data, error, count } = await query
+    .order("created_at", { ascending: filters.sortDirection === "asc" })
+    .order("id", { ascending: filters.sortDirection === "asc" })
+    .range(from, to);
 
   if (error) throw new Error(error.message);
 
-  const total = count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  return {
+    rows: (data ?? []).map((row) =>
+      mapAuditRow(row as Record<string, unknown>),
+    ),
+    totalRows: count ?? 0,
+  };
+}
+
+export async function listAdminAuditLogs(filters: AuditLogFilters = {}): Promise<AuditLogListResult> {
+  const page = Math.max(1, Math.trunc(filters.page ?? 1));
+  const pageSize = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, Math.trunc(filters.pageSize ?? DEFAULT_PAGE_SIZE)),
+  );
+  const loaded = await loadNormalizedAdminEntityListPage({
+    requestedPage: page,
+    pageSize,
+    loadPage: (nextPage) =>
+      loadAdminAuditLogPage(filters, nextPage, pageSize),
+  });
 
   return {
-    items: (data ?? []).map((row) => mapAuditRow(row as Record<string, unknown>)),
-    total,
-    page,
+    items: loaded.rows,
+    total: loaded.totalRows,
+    page: loaded.page,
     pageSize,
-    totalPages,
+    totalPages: loaded.totalPages,
   };
 }
 

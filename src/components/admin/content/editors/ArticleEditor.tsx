@@ -110,8 +110,8 @@ export default function ArticleEditor({
     <main className="space-y-7">
       <AdminPageContextHeader
         eyebrow="EDIT TOPIC"
-        contextLine="تعديل موضوع:"
         title={truncateWords(topic.title || "بدون عنوان")}
+        description="تعديل موضوع."
         actions={
           <>
             <AdminActionButton href={returnPath} variant="dark">عرض الموضوعات</AdminActionButton>

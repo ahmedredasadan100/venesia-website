@@ -3,10 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
+import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../components/admin/page-blocks/AdminModuleTabs";
-import { AdminActionButton, AdminCard, AdminPageHeader, AdminStatusPill } from "../../../../components/admin/ui";
+import {
+  AdminActionButton,
+  AdminCard,
+  AdminConfirmDialog,
+  AdminPageExperience,
+  AdminPageHeader,
+  AdminStatusPill,
+} from "../../../../components/admin/ui";
 import FooterBlockHeader from "../../../../components/footer/FooterBlockHeader";
-import { ADMIN_LIST_PAGE } from "../../../../lib/admin/admin-ui-styles";
 import type { FooterSlot, FooterSlotIndex } from "../../../../lib/footer/footer-slot-types";
 import { FOOTER_SLOT_INDICES } from "../../../../lib/footer/footer-slot-types";
 import type { FooterSettings } from "../../../../lib/footer/types";
@@ -20,7 +27,7 @@ import {
 import { FOOTER_BLOCK_TYPE_LABELS, FOOTER_COLUMN_LABELS } from "./footer-builder-labels";
 import { getFooterSlotBlockTitle, getFooterSlotBrandIcon } from "./footer-block-header-utils";
 import { moveFooterSlotInOrder, normalizeSlotsForSave } from "./footer-builder-utils";
-import { ContactItemsField, LegalFields, RestoreConfirmModal, SocialLinksField } from "./FooterBuilderEditors";
+import { ContactItemsField, LegalFields, SocialLinksField } from "./FooterBuilderEditors";
 import FooterSlotEditorCard from "./FooterSlotEditorCard";
 
 type FooterMenuItemRow = {
@@ -222,7 +229,7 @@ export default function FooterBuilderClient({
   );
 
   return (
-    <div className={ADMIN_LIST_PAGE.wrapper} dir="rtl">
+    <AdminPageExperience dir="rtl">
       <AdminPageHeader
         eyebrow="Footer Builder"
         title="منشئ الفوتر"
@@ -240,29 +247,41 @@ export default function FooterBuilderClient({
         }
       />
 
-      {settings.usesFallback ? (
-        <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          تنبيه: بعض مفاتيح الفوتر تُقرأ من fallback — راجع seed/migration عند الحاجة.
-        </div>
-      ) : null}
-
-      {message ? (
-        <div
-          className={
-            messageWarning
-              ? "rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
-              : "rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
-          }
-        >
-          {message}
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-          {error}
-        </div>
-      ) : null}
+      <AdminFeedbackRegion
+        channel="footer-builder"
+        label="نتائج إجراءات منشئ الفوتر"
+        feedback={
+          error
+            ? {
+                variant: "danger",
+                title: "تعذر تنفيذ الإجراء",
+                message: error,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "manual",
+              }
+            : message
+              ? {
+                  variant: messageWarning ? "warning" : "success",
+                  title: messageWarning ? "تم التنفيذ مع تنبيه" : "تم تنفيذ الإجراء",
+                  message,
+                  layout: "inline",
+                  dismissible: true,
+                  lifecycle: "manual",
+                  ...(saved ? { dismissSearchParams: ["saved"] } : {}),
+                }
+              : settings.usesFallback
+                ? {
+                    variant: "warning",
+                    title: "تنبيه مصدر إعدادات الفوتر",
+                    message: "بعض مفاتيح الفوتر تُقرأ من fallback — راجع seed/migration عند الحاجة.",
+                    layout: "inline",
+                    dismissible: true,
+                    lifecycle: "persistent",
+                  }
+                : null
+        }
+      />
 
       <AdminCard className="p-5 md:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -342,12 +361,15 @@ export default function FooterBuilderClient({
         </AdminActionButton>
       </div>
 
-      <RestoreConfirmModal
+      <AdminConfirmDialog
         open={restoreOpen}
-        onClose={() => setRestoreOpen(false)}
+        title="استعادة الفوتر الافتراضي"
+        description="سيتم استبدال تخطيط الأعمدة الأربعة والعناوين المرتبطة بالقيم الافتراضية. لن تُحذف بيانات التواصل أو السوشيال أو الحقوق."
+        confirmLabel="تأكيد الاستعادة"
+        onCancel={() => setRestoreOpen(false)}
         onConfirm={handleRestore}
         pending={isPending}
       />
-    </div>
+    </AdminPageExperience>
   );
 }

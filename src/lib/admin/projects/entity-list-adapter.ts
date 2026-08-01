@@ -2,7 +2,11 @@ import "server-only";
 
 import { z } from "zod";
 
-import type { AdminEntityListAdapter } from "../entity-list/data-engine/adapter";
+import {
+  loadNormalizedAdminEntityListPage,
+  type AdminEntityListAdapter,
+} from "../entity-list/data-engine/adapter";
+import { buildAdminListSearchOrFilter } from "../admin-list-search";
 import {
   createAdminEntityListResultSchema,
   type AdminEntityListQuery,
@@ -59,20 +63,16 @@ export class ProjectsEntityListDatabaseError extends Error {
   }
 }
 
-function sanitizeProjectSearch(value: string) {
-  return value
-    .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 async function loadProjectsPage(
   query: AdminEntityListQuery<ProjectFilters, ProjectSortField>,
   page: number,
 ) {
   const from = (page - 1) * query.pageSize;
   const to = from + query.pageSize - 1;
-  const search = sanitizeProjectSearch(query.search);
+  const searchFilter = buildAdminListSearchOrFilter(
+    ["arabic_name", "english_name", "slug"],
+    query.search,
+  );
   const ascending = query.sort.direction === "asc";
 
   let request = getSupabaseAdmin()
@@ -83,16 +83,7 @@ async function loadProjectsPage(
     )
     .eq("type", query.filters.projectType);
 
-  if (search) {
-    const pattern = `%${search}%`;
-    request = request.or(
-      [
-        `arabic_name.ilike.${pattern}`,
-        `english_name.ilike.${pattern}`,
-        `slug.ilike.${pattern}`,
-      ].join(","),
-    );
-  }
+  if (searchFilter) request = request.or(searchFilter);
 
   const { data, error, count } = await request
     .order(query.sort.field, { ascending, nullsFirst: false })
@@ -110,22 +101,19 @@ async function loadProjectsPage(
 export async function loadProjectsEntityListResult(
   query: AdminEntityListQuery<ProjectFilters, ProjectSortField>,
 ) {
-  let page = query.page;
-  let loaded = await loadProjectsPage(query, page);
-  const totalPages = Math.max(1, Math.ceil(loaded.totalRows / query.pageSize));
-
-  if (page > totalPages) {
-    page = totalPages;
-    loaded = await loadProjectsPage(query, page);
-  }
+  const loaded = await loadNormalizedAdminEntityListPage({
+    requestedPage: query.page,
+    pageSize: query.pageSize,
+    loadPage: (page) => loadProjectsPage(query, page),
+  });
 
   return projectsEntityListResultSchema.parse({
     rows: loaded.rows,
     pagination: {
-      page,
+      page: loaded.page,
       pageSize: query.pageSize,
       totalRows: loaded.totalRows,
-      totalPages,
+      totalPages: loaded.totalPages,
     },
     metrics: { total: loaded.totalRows },
     meta: {

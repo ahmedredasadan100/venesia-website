@@ -40,6 +40,9 @@ const adapter = read("src/lib/admin/projects/entity-list-adapter.ts");
 const contract = read("src/lib/admin/projects/entity-list-contract.ts");
 const types = read("src/lib/admin/projects/entity-list-types.ts");
 const client = read("src/app/admin/projects/ProjectsTableClient.tsx");
+const dataController = read(
+  "src/lib/admin/entity-list/data-engine/client-controller.ts",
+);
 const table = read(
   "src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx",
 );
@@ -107,16 +110,15 @@ check(
   "Project type remains server-scoped in the adapter",
 );
 check(
-  adapter.includes("sanitizeProjectSearch") &&
-    adapter.includes("arabic_name.ilike") &&
-    adapter.includes("english_name.ilike") &&
-    adapter.includes("slug.ilike"),
-  "Search is sanitized and limited to clean identity fields",
+  adapter.includes("buildAdminListSearchOrFilter") &&
+    adapter.includes('["arabic_name", "english_name", "slug"]') &&
+    !adapter.includes("sanitizeProjectSearch"),
+  "Search delegates semantic-safe PostgREST escaping for identity fields",
 );
 check(
-  adapter.includes("if (page > totalPages)") &&
-    adapter.includes("loadProjectsPage(query, page)"),
-  "Out-of-range pages are clamped and reloaded",
+  adapter.includes("loadNormalizedAdminEntityListPage") &&
+    adapter.includes("loadPage: (page) => loadProjectsPage(query, page)"),
+  "Out-of-range pages delegate bounded normalization to Data Runtime",
 );
 check(
   adapter.includes(".order(query.sort.field") &&
@@ -141,6 +143,17 @@ check(
   client.includes("useAdminEntityListController") &&
     client.includes("useAdminEntityInstantMutation"),
   "The list keeps the shared Collection and Instant Data owners",
+);
+check(
+  client.includes("withLockedProjectType") &&
+    client.includes("constrainQuery,") &&
+    residentialPage.includes('key="residential"') &&
+    commercialPage.includes('key="commercial"') &&
+    dataController.includes("constrainQuery?:") &&
+    dataController.includes("const resolved = applyQueryConstraint(candidate)") &&
+    dataController.includes("const restored = applyQueryConstraint(normalized)") &&
+    dataController.includes("window.history.replaceState"),
+  "Residential and Commercial route locks survive all query transitions and Back or Forward restoration",
 );
 check(
   client.includes("<AdminEntityList") &&
@@ -253,7 +266,7 @@ check(
 );
 check(
   duplication.includes("requireAdminSession") &&
-    duplication.includes('rpc(\n    "duplicate_project_admin_entry"') &&
+    /\.rpc\(\s*"duplicate_project_admin_entry"/.test(duplication) &&
     duplication.includes('buildCmsAuditAction("project", "duplicate")') &&
     duplication.includes("synchronizeDuplicatedProjectMedia") &&
     duplication.includes("revalidateProjectPaths"),
@@ -261,7 +274,7 @@ check(
 );
 check(
   featuredAction.includes("requireAdminSession") &&
-    featuredAction.includes('rpc(\n    "set_project_featured_admin_entry"') &&
+    /\.rpc\(\s*"set_project_featured_admin_entry"/.test(featuredAction) &&
     featuredAction.includes('buildCmsAuditAction("project", "update")') &&
     featuredAction.includes("revalidateProjectPaths"),
   "Featured command writes desired authoritative state through the authenticated audited Project boundary",

@@ -797,7 +797,21 @@ check("multi-upload, folders, smart views, metadata and safe replacement are pre
 check("physical rename and move controls stay out of Select Mode", core.includes('mode === "manage" && selectedAssets.length === 1') && !picker.includes("move_asset"));
 check("summary and folder counters consume the merged read model", core.includes("data.summary.totalBytes") && core.includes("item.totalAssetCount") && core.includes("item.totalBytes"));
 check("dashboard separates management, usage, missing, managed and read-only storage metrics", ["unreconciledAssetCount", "usageUnknownCount", "missingObjectCount", "managedStorageAssetCount", "readOnlyAssetCount", "largestAsset"].every((token) => core.includes(token)));
-check("Asset Viewer owns total results and 10/20/30/50/100 page sizes", core.includes("إجمالي النتائج") && core.includes("const PAGE_SIZES: PageSize[] = [10, 20, 30, 50, 100]") && core.includes("setPageSize"));
+check(
+  "Asset Viewer delegates total results and canonical 10/20/30/50/100 page sizes to Shared Pagination",
+  core.includes("<AdminTablePagination") &&
+    core.includes("const PAGE_SIZES: PageSize[] = [10, 20, 30, 50, 100]") &&
+    core.includes("totalCount={data.total}") &&
+    core.includes("pageSizeOptions={PAGE_SIZES.map(String)}") &&
+    core.includes("onPageSizeChange"),
+);
+check(
+  "Asset Viewer load failures expose a read-only retry owned by the catalog loader",
+  core.includes('role="alert"') &&
+    core.includes('onClick={() => void loadPage()}') &&
+    core.includes("disabled={loading}") &&
+    core.includes('loading ? "جارٍ إعادة المحاولة…" : "إعادة المحاولة"'),
+);
 check("asset type filter has an explicit accessible name", core.includes('aria-label="نوع الملف"'));
 check("folder navigation uses one recursive asset scope in Grid and List", source("src/lib/admin/media-catalog/catalog.ts").includes('asset.folderPath.startsWith(`${input.folder}/`)') && core.includes("openFolder"));
 check("PDF cards and the details panel provide a consistent document preview", core.includes("PdfDocumentPreview") && core.includes("<iframe") && core.includes("مستند قابل للمعاينة"));

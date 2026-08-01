@@ -9,6 +9,7 @@ import { AdminFloatingLayerProvider } from "./AdminFloatingLayerContext";
 
 const PRIMARY_SECTION_MARKER_CLASS = "admin-entity-list-primary-section";
 const SURFACE_LAYOUT_CLASSES = "flex flex-col gap-7";
+const TABLE_REGION_LAYOUT_CLASSES = "flex flex-col gap-4";
 
 /**
  * Page-level cadence for list pages whose header and list surface are direct
@@ -41,6 +42,25 @@ export function AdminEntityListPrimarySection({
       {...props}
       className={`${PRIMARY_SECTION_MARKER_CLASS} ${className}`.trim()}
       data-admin-entity-list-primary-section=""
+    />
+  );
+}
+
+/**
+ * Groups the table owner and its pagination footer as one visible primary
+ * section. The collection surface keeps the 28px section cadence while this
+ * region owns the 16px internal table-to-footer rhythm.
+ */
+export function AdminEntityListTableRegion({
+  className = "",
+  ...props
+}: ComponentPropsWithoutRef<"div">) {
+  return (
+    <div
+      {...props}
+      className={`${PRIMARY_SECTION_MARKER_CLASS} ${TABLE_REGION_LAYOUT_CLASSES} ${className}`.trim()}
+      data-admin-entity-list-primary-section=""
+      data-admin-entity-list-table-region=""
     />
   );
 }

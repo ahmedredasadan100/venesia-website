@@ -9,7 +9,6 @@ export {
   duplicateMenu,
   duplicateMenuItem,
   importMenuJson,
-  moveMenuItemSortOrder,
   toggleMenuItemVisibility,
   toggleMenuVisibility,
   updateMenu,

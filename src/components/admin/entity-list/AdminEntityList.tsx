@@ -60,6 +60,7 @@ export type AdminEntityListProps<
   enableColumnManagement?: boolean;
   enableSelection?: boolean;
   selectionLabel?: string;
+  scrollLabel?: string;
   bulkOptions?: readonly AdminEntityBulkOption[];
   bulkEntityLabel?: string;
   onBulkExecute?: (action: string, ids: TId[]) => Promise<AdminActionResult>;
@@ -120,6 +121,7 @@ function AdminEntityListInner<
     enableColumnManagement = Boolean(onPersistColumns),
     enableSelection = Boolean(props.bulkOptions?.length),
     selectionLabel,
+    scrollLabel,
     bulkOptions = [],
     bulkEntityLabel = "عنصر",
     onBulkExecute,
@@ -363,6 +365,7 @@ function AdminEntityListInner<
           sortMode={sortMode}
           selection={enableSelection ? selection : null}
           selectionLabel={selectionLabel}
+          scrollLabel={scrollLabel}
           actionsColumnWidth={actionsColumnWidth}
           empty={resolveAdminEntityListEmptyState(emptyState)}
           getRowDepth={getRowDepth}

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useAdminGridSelection } from "../ui";
-import type { AdminTableActionResult, AdminTableFeedback, AdminTableId, AdminTableSortDirection, AdminTableSortState } from "./types";
+import type { AdminTableActionResult, AdminTableId, AdminTableSortDirection, AdminTableSortState } from "./types";
 
 type SortAccessor<TRow> = (row: TRow) => string | number | null | undefined;
 
@@ -28,7 +28,6 @@ export function useAdminTable<TRow, TSortKey extends string = string>({
 }: UseAdminTableOptions<TRow, TSortKey>) {
   const [rows, setRows] = useState<TRow[]>(initialRows);
   const [sort, setSort] = useState<AdminTableSortState<TSortKey>>(defaultSort);
-  const [feedback, setFeedback] = useState<AdminTableFeedback>(null);
   const [isPending, startTransition] = useTransition();
 
   const visibleIds = useMemo(() => rows.map(getRowId), [rows, getRowId]);
@@ -61,26 +60,33 @@ export function useAdminTable<TRow, TSortKey extends string = string>({
   }
 
   function runAction(action: () => Promise<AdminTableActionResult<TRow>>) {
-    setFeedback(null);
-    startTransition(async () => {
-      try {
-        const result = await action();
-        if (!result.ok) {
-          setFeedback({ type: "error", message: result.message ?? "تعذر تنفيذ العملية." });
-          return;
-        }
+    return new Promise<AdminTableActionResult<TRow>>((resolve) => {
+      startTransition(async () => {
+        try {
+          const result = await action();
+          if (!result.ok) {
+            resolve(result);
+            return;
+          }
 
-        if (result.rows) {
-          setRows(result.rows);
-        } else {
-          await refreshRows();
-        }
+          if (result.rows) {
+            setRows(result.rows);
+          } else {
+            await refreshRows();
+          }
 
-        selection.clearSelection();
-        setFeedback({ type: "success", message: result.message ?? "تم تنفيذ العملية بنجاح." });
-      } catch (error) {
-        setFeedback({ type: "error", message: error instanceof Error ? error.message : "تعذر تنفيذ العملية." });
-      }
+          selection.clearSelection();
+          resolve(result);
+        } catch (error) {
+          resolve({
+            ok: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : "تعذر تنفيذ العملية.",
+          });
+        }
+      });
     });
   }
 
@@ -92,8 +98,6 @@ export function useAdminTable<TRow, TSortKey extends string = string>({
     toggleSort,
     selection,
     isPending,
-    feedback,
-    setFeedback,
     refreshRows,
     runAction,
   };

@@ -36,6 +36,7 @@ export type AuditLogFilters = {
   query?: string;
   page?: number;
   pageSize?: number;
+  sortDirection?: "asc" | "desc";
 };
 
 export type AuditLogListResult = {

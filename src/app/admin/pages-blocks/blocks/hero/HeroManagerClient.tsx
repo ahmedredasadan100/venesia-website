@@ -1,21 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import AdminNotice from "../../../../../components/admin/AdminNotice";
+import { useRouter } from "next/navigation";
+import { useMemo, useState, useTransition } from "react";
+import {
+  AdminFeedbackRegion,
+  useAdminFeedback,
+} from "../../../../../components/admin/AdminFeedbackProvider";
+import MediaSynchronizationWarningNotice from "../../../../../components/admin/media/MediaSynchronizationWarningNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
-  ADMIN_DATA_GRID_RULES,
+  ADMIN_DATA_GRID_COLUMNS,
+  ADMIN_FORM,
+  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminBulkActionBar,
   AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
   AdminDataGridCheckbox,
+  AdminDataGridCheckboxCell,
+  AdminDataGridCenterCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
   AdminDataGridRow,
+  AdminDataGridRowActions,
+  AdminDataGridStatusCell,
+  AdminModalCancelButton,
+  AdminModalPrimaryButton,
+  AdminPageExperience,
   AdminPageHeader,
   AdminStatusPill,
+  AdminTablePagination,
+  VenesiaModal,
+  adminFormFieldClassName,
+  adminFormLabelClassName,
+  type AdminRowActionsCapability,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
@@ -45,13 +63,8 @@ type HeroRow = {
 type HeroManagerClientProps = {
   heroes: HeroRow[];
   mediaSynchronizationWarning?: boolean;
+  loadError?: string | null;
 };
-
-function Icon({ label }: { label: string }) {
-  return <span aria-hidden="true" className="text-[15px] leading-none">{label}</span>;
-}
-
-function CloseIcon() { return <Icon label="×" />; }
 
 const sourceLabels: Record<string, string> = {
   manual: "يدوي",
@@ -66,23 +79,13 @@ const sourceLabels: Record<string, string> = {
 /**
  * RTL table: اسم الهيرو (1fr, يمين) → … → الإجراءات (ثابت، شمال).
  */
-const gridColumns = `44px minmax(260px, 1fr) 120px 96px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
+const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
 
-function PublicPreviewIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={ADMIN_DATA_GRID_RULES.actionIcon}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
-      <path d="M14 3h7v7" />
-      <path d="M10 14 21 3" />
-      <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
-    </svg>
-  );
+function mutationFormData(fields: Record<string, string | number | boolean>) {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(fields)) formData.set(key, String(value));
+  return formData;
 }
 
 function resolveHeroPreviewPath(hero: HeroRow) {
@@ -95,13 +98,86 @@ function resolveHeroPreviewPath(hero: HeroRow) {
 export default function HeroManagerClient({
   heroes,
   mediaSynchronizationWarning = false,
+  loadError = null,
 }: HeroManagerClientProps) {
+  const router = useRouter();
+  const feedbackChannel = "block-manager:hero";
+  const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const visibleIds = useMemo(() => heroes.map((hero) => hero.id), [heroes]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
+  const [isRefreshPending, startRefreshTransition] = useTransition();
+  const totalPages = Math.max(1, Math.ceil(heroes.length / pageSize));
+  const resolvedCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedHeroes = useMemo(
+    () => heroes.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
+    [heroes, pageSize, resolvedCurrentPage],
+  );
+  const visibleIds = useMemo(() => paginatedHeroes.map((hero) => hero.id), [paginatedHeroes]);
   const selection = useAdminGridSelection<number>(visibleIds);
+  const isBusy = pendingRowId !== null || isRefreshPending;
+  const loadFeedback = useMemo(
+    () =>
+      loadError
+        ? {
+            variant: "danger" as const,
+            title: "تعذر تحميل مكتبة الهيرو",
+            message: loadError,
+            layout: "inline" as const,
+            dismissible: true,
+            lifecycle: "persistent" as const,
+          }
+        : null,
+    [loadError],
+  );
+  const mediaWarningNotice = useMemo(
+    () => <MediaSynchronizationWarningNotice visible={mediaSynchronizationWarning} />,
+    [mediaSynchronizationWarning],
+  );
+
+  async function runMutation(
+    rowId: number | null,
+    action: () => Promise<void>,
+    successMessage: string,
+  ): Promise<boolean> {
+    clearFeedback(feedbackChannel);
+    setPendingRowId(rowId ?? -1);
+    try {
+      await action();
+      publishFeedback(
+        {
+          variant: "success",
+          title: "تم تنفيذ الإجراء",
+          message: successMessage,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline" },
+      );
+      startRefreshTransition(() => router.refresh());
+      return true;
+    } catch (error) {
+      publishFeedback(
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message: error instanceof Error ? error.message : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline", reveal: true },
+      );
+      return false;
+    } finally {
+      setPendingRowId(null);
+    }
+  }
 
   return (
-    <div className="space-y-6 pb-10" dir="rtl">
+    <AdminPageExperience dir="rtl">
       <AdminPageHeader
         eyebrow="HERO MODULE"
         title="إدارة الهيرو"
@@ -111,6 +187,7 @@ export default function HeroManagerClient({
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
+            disabled={Boolean(loadError)}
             className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
           >
             <PlusIcon />
@@ -119,188 +196,226 @@ export default function HeroManagerClient({
         )}
       />
 
-      {mediaSynchronizationWarning ? (
-        <AdminNotice
-          variant="warning"
-          message="تم حفظ بيانات الهيرو، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
-        />
-      ) : null}
+      {mediaWarningNotice}
+
+      <AdminFeedbackRegion
+        channel={feedbackChannel}
+        label="نتائج إجراءات مكتبة الهيرو"
+        feedback={loadFeedback}
+      />
 
       <div className="space-y-4">
         <AdminBulkActionBar
           selectedIds={selection.selectedIds}
           entityLabel="هيرو"
-          action={bulkHeroTemplates}
           options={[
             { value: "show", label: "إظهار" },
             { value: "hide", label: "إخفاء" },
             { value: "delete", label: "حذف" },
           ]}
           onClearSelection={selection.clearSelection}
+          isBusy={isBusy}
+          onExecute={async (action, ids) => {
+            const formData = new FormData();
+            formData.set("bulk_action", action);
+            ids.forEach((id) => formData.append("ids", String(id)));
+            const succeeded = await runMutation(null, () => bulkHeroTemplates(formData), "تم تنفيذ الإجراء الجماعي على الهيروهات المحددة.");
+            if (!succeeded) {
+              if (action === "delete") throw new Error("bulk hero delete failed");
+              return;
+            }
+            selection.clearSelection();
+          }}
         />
 
         <AdminDataGrid summary={heroes.length ? `${heroes.length} هيرو إجمال` : undefined}>
           <AdminDataGridHeader columns={gridColumns}>
-            <div className="flex justify-center">
+            <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
                 inputRef={selection.selectAllRef}
                 checked={selection.allSelected}
                 onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
                 label="تحديد كل الهيروهات"
               />
-            </div>
-            <div className="min-w-0 text-right">اسم الهيرو</div>
-            <div className="text-center">Slug</div>
-            <div className="text-center">الحالة</div>
+            </AdminDataGridCheckboxCell>
+            <AdminDataGridPrimaryCell>اسم الهيرو</AdminDataGridPrimaryCell>
+            <AdminDataGridCenterCell>Slug</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
             <div className="text-center">الإجراءات</div>
           </AdminDataGridHeader>
 
-          {heroes.map((hero) => {
+          {paginatedHeroes.map((hero) => {
             const previewPath = resolveHeroPreviewPath(hero);
+            const hidden = { access: "hidden" as const };
+            const rowPending = pendingRowId === hero.id;
+            const capability: AdminRowActionsCapability = {
+              entityType: "hero_template",
+              entityId: hero.id,
+              entityLabel: hero.name,
+              actions: {
+                edit: {
+                  access: "allowed",
+                  href: `/admin/pages-blocks/blocks/hero/${hero.id}`,
+                },
+                preview: previewPath
+                  ? { access: "allowed", href: previewPath, target: "_blank", rel: "noreferrer" }
+                  : { access: "disabled", disabledReason: "لا توجد صفحة مربوطة للمعاينة." },
+                information: {
+                  access: "allowed",
+                  title: `معلومات ${hero.name}`,
+                  items: [
+                    { label: "Slug", value: hero.slug },
+                    { label: "الحالة", value: hero.is_visible ? "ظاهر" : "مخفي" },
+                    { label: "الصفحات المربوطة", value: String(hero.hero_assignments.length) },
+                  ],
+                },
+                copyPublicLink: hidden,
+                visibility: {
+                  access: "allowed",
+                  isVisible: hero.is_visible,
+                  pending: rowPending,
+                  onSelect: async () => {
+                    await runMutation(
+                      hero.id,
+                      () => toggleHeroTemplate(mutationFormData({ id: hero.id, next_visible: !hero.is_visible })),
+                      hero.is_visible ? "تم إخفاء الهيرو." : "تم إظهار الهيرو.",
+                    );
+                  },
+                },
+                featured: hidden,
+                duplicate: {
+                  access: "allowed",
+                  pending: rowPending,
+                  onSelect: async () => {
+                    await runMutation(
+                      hero.id,
+                      () => duplicateHeroTemplate(mutationFormData({ id: hero.id })),
+                      "تم إنشاء نسخة من الهيرو.",
+                    );
+                  },
+                },
+                archive: hidden,
+                delete: {
+                  access: "allowed",
+                  pending: rowPending,
+                  onSelect: async () => {
+                    const succeeded = await runMutation(
+                      hero.id,
+                      () => deleteHeroTemplate(mutationFormData({ id: hero.id })),
+                      "تم حذف الهيرو.",
+                    );
+                    if (!succeeded) throw new Error("hero delete failed");
+                  },
+                  confirmation: {
+                    mode: "shared",
+                    title: "تأكيد حذف الهيرو",
+                    description: `حذف الهيرو «${hero.name}» نهائيًا؟`,
+                    confirmLabel: "حذف الهيرو",
+                  },
+                },
+              },
+            };
 
             return (
               <AdminDataGridRow key={hero.id} columns={gridColumns} className="border-b border-white/8 last:border-b-0">
-                <div className="flex justify-center">
+                <AdminDataGridCheckboxCell>
                   <AdminDataGridCheckbox
                     checked={selection.selectedSet.has(hero.id)}
                     onChange={(event) => selection.toggleOne(hero.id, event.currentTarget.checked)}
                     label={`تحديد ${hero.name}`}
                   />
-                </div>
+                </AdminDataGridCheckboxCell>
 
-                <div className="min-w-0 text-right">
+                <AdminDataGridPrimaryCell>
                   <Link href={`/admin/pages-blocks/blocks/hero/${hero.id}`} className="block truncate font-semibold text-white transition hover:text-[#D8B87A]">
                     {hero.name}
                   </Link>
                   {hero.description ? <p className="mt-1 line-clamp-1 text-xs text-white/36">{hero.description}</p> : null}
-                </div>
+                </AdminDataGridPrimaryCell>
 
-                <div className="min-w-0 text-center">
+                <AdminDataGridCenterCell>
                   <Link href={`/admin/pages-blocks/blocks/hero/${hero.id}`} className="font-en block truncate text-xs text-[#D8B87A]/78 transition hover:text-[#D8B87A]">
                     {hero.slug}
                   </Link>
-                </div>
+                </AdminDataGridCenterCell>
 
-                <div className="flex justify-center">
+                <AdminDataGridStatusCell>
                   <AdminStatusPill tone={hero.is_visible ? "green" : "muted"}>{hero.is_visible ? "ظاهر" : "مخفي"}</AdminStatusPill>
-                </div>
+                </AdminDataGridStatusCell>
 
-                <AdminDataGridActionsCell compact>
-                  <AdminDataGridActionButton
-                    action="edit"
-                    href={`/admin/pages-blocks/blocks/hero/${hero.id}`}
-                    size="compact"
-                  />
-
-                  {previewPath ? (
-                    <AdminDataGridActionButton
-                      href={previewPath}
-                      target="_blank"
-                      tone="dark"
-                      title="معاينة الصفحة العامة"
-                      size="compact"
-                    >
-                      <PublicPreviewIcon />
-                    </AdminDataGridActionButton>
-                  ) : (
-                    <AdminDataGridActionButton
-                      tone="dark"
-                      disabled
-                      title="لا توجد صفحة مربوطة للمعاينة"
-                      size="compact"
-                    >
-                      <PublicPreviewIcon />
-                    </AdminDataGridActionButton>
-                  )}
-
-                  <form action={toggleHeroTemplate} className="contents">
-                    <input type="hidden" name="id" value={hero.id} />
-                    <input type="hidden" name="next_visible" value={String(!hero.is_visible)} />
-                    <AdminDataGridActionButton
-                      type="submit"
-                      action="visibility"
-                      size="compact"
-                      isCurrentlyHidden={!hero.is_visible}
-                      title={hero.is_visible ? "إخفاء" : "إظهار"}
-                    />
-                  </form>
-
-                  <form action={duplicateHeroTemplate} className="contents">
-                    <input type="hidden" name="id" value={hero.id} />
-                    <AdminDataGridActionButton type="submit" action="duplicate" title="نسخ" size="compact" />
-                  </form>
-
-                  <form action={deleteHeroTemplate} className="contents">
-                    <input type="hidden" name="id" value={hero.id} />
-                    <AdminDataGridActionButton type="submit" action="delete" title="حذف" size="compact" />
-                  </form>
-                </AdminDataGridActionsCell>
+                <AdminDataGridRowActions capability={capability} size="compact" />
               </AdminDataGridRow>
             );
           })}
 
           {!heroes.length ? <AdminDataGridEmpty>لا توجد هيروهات بعد.</AdminDataGridEmpty> : null}
         </AdminDataGrid>
+
+        <AdminTablePagination
+          basePath="/admin/pages-blocks/blocks/hero"
+          currentPage={resolvedCurrentPage}
+          totalPages={totalPages}
+          totalCount={heroes.length}
+          pageSize={String(pageSize)}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(nextPageSize) => {
+            setPageSize(nextPageSize);
+            setCurrentPage(1);
+          }}
+          pending={isBusy}
+        />
       </div>
 
-      {showCreateModal ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setShowCreateModal(false)}>
-          <div className="w-full max-w-2xl rounded-[28px] border border-white/10 bg-[#080B10] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.5)]" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-              <div>
-                <h3 className="text-xl font-semibold text-white">إضافة هيرو جديد</h3>
-                <p className="mt-1 text-sm text-white/45">يمكنك إنشاء هيرو فارغ ثم الدخول لتفاصيله وربطه بالصفحات.</p>
-              </div>
-              <button type="button" onClick={() => setShowCreateModal(false)} className="cursor-pointer rounded-xl border border-white/10 p-2 text-white/50 hover:text-white">
-                <CloseIcon />
-              </button>
-            </div>
+      <VenesiaModal
+        open={showCreateModal}
+        title="إضافة هيرو جديد"
+        description="يمكنك إنشاء هيرو فارغ ثم الدخول لتفاصيله وربطه بالصفحات."
+        size="lg"
+        onClose={() => setShowCreateModal(false)}
+        footer={(
+          <>
+            <AdminModalCancelButton onClick={() => setShowCreateModal(false)}>إلغاء</AdminModalCancelButton>
+            <AdminModalPrimaryButton type="submit" form="create-hero-template-form">
+              إنشاء وفتح
+            </AdminModalPrimaryButton>
+          </>
+        )}
+      >
+        <form id="create-hero-template-form" action={createHeroTemplate} className={ADMIN_FORM.gridTwoCol}>
+          <label className={adminFormLabelClassName()}>
+            اسم الهيرو
+            <input name="name" required placeholder="Hero - من نحن" className={adminFormFieldClassName()} />
+          </label>
+          <label className={adminFormLabelClassName()}>
+            Slug
+            <input name="slug" placeholder="hero-about" dir="ltr" className={adminFormFieldClassName("text-left font-en")} />
+          </label>
+          <label className={`${adminFormLabelClassName()} md:col-span-2`}>
+            وصف داخلي
+            <input name="template_description" placeholder="وصف مختصر يظهر في جدول الإدارة" className={adminFormFieldClassName()} />
+          </label>
+          <label className={adminFormLabelClassName()}>
+            Variant
+            <select name="variant" defaultValue="internal-page" className={adminFormFieldClassName()}>
+              <option value="internal-page">Internal Page</option>
+              <option value="home-cinematic">Home Cinematic</option>
+            </select>
+          </label>
+          <label className={adminFormLabelClassName()}>
+            Source
+            <select name="source_type" defaultValue="manual" className={adminFormFieldClassName()}>
+              {Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className={`${ADMIN_FORM.checkboxRow} md:col-span-2`}>
+            <span>نشط</span>
+            <input type="checkbox" name="is_visible" defaultChecked className="h-4 w-4 accent-[#D8B87A]" />
+          </label>
+          <input type="hidden" name="style_preset" value="cinematic-gold" />
+          <input type="hidden" name="limit_count" value="1" />
+        </form>
+      </VenesiaModal>
 
-            <form action={createHeroTemplate} className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
-                <input name="name" required placeholder="Hero - من نحن" className="w-full rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white outline-none focus:border-[#D8B87A]/45" />
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">Slug</span>
-                <input name="slug" placeholder="hero-about" dir="ltr" className="w-full rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white outline-none focus:border-[#D8B87A]/45" />
-              </label>
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
-                <input name="template_description" placeholder="وصف مختصر يظهر في جدول الإدارة" className="w-full rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white outline-none focus:border-[#D8B87A]/45" />
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">Variant</span>
-                <select name="variant" defaultValue="internal-page" className="w-full cursor-pointer rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white outline-none focus:border-[#D8B87A]/45">
-                  <option value="internal-page">Internal Page</option>
-                  <option value="home-cinematic">Home Cinematic</option>
-                </select>
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">Source</span>
-                <select name="source_type" defaultValue="manual" className="w-full cursor-pointer rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white outline-none focus:border-[#D8B87A]/45">
-                  {Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </label>
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70 md:col-span-2">
-                <span>نشط</span>
-                <input type="checkbox" name="is_visible" defaultChecked className="cursor-pointer accent-[#D8B87A]" />
-              </label>
-              <input type="hidden" name="style_preset" value="cinematic-gold" />
-              <input type="hidden" name="limit_count" value="1" />
-              <div className="flex justify-end gap-3 md:col-span-2">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="cursor-pointer rounded-2xl border border-white/10 px-5 py-3 text-sm text-white/60 hover:bg-white/5 hover:text-white">
-                  إلغاء
-                </button>
-                <button className="cursor-pointer rounded-2xl bg-[#D8B87A] px-5 py-3 text-sm font-bold text-[#06101C] hover:bg-[#e5c98d]">
-                  إنشاء وفتح
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-    </div>
+    </AdminPageExperience>
   );
 }

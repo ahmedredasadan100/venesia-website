@@ -82,6 +82,7 @@ export default async function Page({
     return (
       <AdminPageExperience state="error">
         <AdminPageHeader
+          eyebrow="SERIES CONTROL"
           title="إدارة السلاسل"
           description="قبل استخدام الصفحة، نفّذ ملف SQL الخاص بإنشاء جدول topic_series."
         />

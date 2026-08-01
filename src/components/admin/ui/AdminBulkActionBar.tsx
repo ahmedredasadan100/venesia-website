@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import { useRef, useState } from "react";
+import type { FormEvent, ReactNode, RefObject } from "react";
+import { useFormStatus } from "react-dom";
+import AdminConfirmDialog from "./AdminConfirmDialog";
 import AdminListboxSelect from "./AdminListboxSelect";
 import type { AdminGridId } from "./useAdminGridSelection";
 
@@ -27,6 +29,39 @@ type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
   actionValue?: string;
 };
 
+function AdminBulkDeleteConfirm({
+  open,
+  count,
+  entityLabel,
+  busy,
+  triggerRef,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  count: number;
+  entityLabel: string;
+  busy: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  onCancel: () => void;
+  onConfirm: () => void | Promise<void>;
+}) {
+  const { pending } = useFormStatus();
+
+  return (
+    <AdminConfirmDialog
+      open={open}
+      title={`تأكيد حذف ${entityLabel}`}
+      description={`سيتم حذف ${count} ${entityLabel} من العناصر المحددة. لا يمكن التراجع عن هذا الإجراء.`}
+      confirmLabel="تأكيد الحذف"
+      pending={busy || pending}
+      returnFocusRef={triggerRef}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
 export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>({
   selectedIds,
   entityLabel,
@@ -44,17 +79,41 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   actionValue,
 }: AdminBulkActionBarProps<T>) {
   const [selectedAction, setSelectedAction] = useState(options[0]?.value ?? "");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const confirmedSubmitRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
   const resolvedAction = actionValue ?? selectedAction;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (confirmedSubmitRef.current) {
+      confirmedSubmitRef.current = false;
+      return;
+    }
+    if (resolvedAction === "delete") {
+      event.preventDefault();
+      setDeleteConfirmOpen(true);
+      return;
+    }
     if (!onExecute) return;
     event.preventDefault();
     void onExecute(resolvedAction, selectedIds);
+  }
+
+  async function handleConfirmedDelete() {
+    if (onExecute) {
+      await onExecute(resolvedAction, selectedIds);
+      setDeleteConfirmOpen(false);
+      return;
+    }
+    confirmedSubmitRef.current = true;
+    formRef.current?.requestSubmit();
   }
   if (!selectedIds.length) return null;
 
   return (
     <form
+      ref={formRef}
       id={formId}
       action={action}
       onSubmit={handleSubmit}
@@ -89,6 +148,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
         {additionalControls}
 
         <button
+          ref={submitRef}
           type="submit"
           disabled={isBusy}
           className="h-11 cursor-pointer rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e4c88d] disabled:cursor-not-allowed disabled:opacity-55"
@@ -105,6 +165,16 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
           إلغاء التحديد
         </button>
       </div>
+
+      <AdminBulkDeleteConfirm
+        open={deleteConfirmOpen}
+        count={selectedIds.length}
+        entityLabel={entityLabel}
+        busy={isBusy}
+        triggerRef={submitRef}
+        onCancel={() => setDeleteConfirmOpen(false)}
+        onConfirm={handleConfirmedDelete}
+      />
     </form>
   );
 }

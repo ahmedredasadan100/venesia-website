@@ -11,8 +11,3 @@ export type AdminTableActionResult<TRow> = {
   message?: string;
   rows?: TRow[];
 };
-
-export type AdminTableFeedback = {
-  type: "success" | "error";
-  message: string;
-} | null;

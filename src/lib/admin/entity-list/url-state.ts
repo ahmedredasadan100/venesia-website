@@ -5,6 +5,17 @@
 
 export type AdminEntityUrlPatch = Record<string, string | null | undefined>;
 
+export type AdminBoundedClientPaginationUrlState = {
+  page: number;
+  pageSize: number;
+};
+
+export type AdminBoundedClientPaginationUrlOptions = {
+  pageParamName?: string;
+  limitParamName?: string;
+  defaultPageSize?: number;
+};
+
 export function applyAdminEntityUrlPatch(
   current: URLSearchParams,
   patch: AdminEntityUrlPatch,
@@ -50,4 +61,31 @@ export function buildAdminEntityListHref(
   const query = next.toString();
   const path = query ? `${basePath}?${query}` : basePath;
   return hash ? `${path}${hash.startsWith("#") ? hash : `#${hash}`}` : path;
+}
+
+/**
+ * Writes the canonical URL state for a bounded client-side collection while
+ * preserving query params owned by the surrounding page (tabs, feedback, etc.).
+ */
+export function writeAdminBoundedClientPaginationParams(
+  current: URLSearchParams,
+  state: AdminBoundedClientPaginationUrlState,
+  options: AdminBoundedClientPaginationUrlOptions = {},
+) {
+  const pageParamName = options.pageParamName ?? "page";
+  const limitParamName = options.limitParamName ?? "limit";
+  const defaultPageSize = options.defaultPageSize ?? 10;
+
+  return applyAdminEntityUrlPatch(
+    current,
+    {
+      [pageParamName]: state.page <= 1 ? null : String(state.page),
+      [limitParamName]: String(state.pageSize),
+    },
+    {
+      resetPageParam: pageParamName,
+      limitParam: limitParamName,
+      defaultPageSize: String(defaultPageSize),
+    },
+  );
 }

@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
+import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { GlobalSeoSettings, GlobalSeoSocialLink } from "../../../../lib/seo/global-seo-types";
 import { saveGlobalSeoSettingsAction } from "./actions";
 
@@ -15,14 +17,12 @@ const inputClass =
 
 export default function MetaManagerClient({ initialSettings }: MetaManagerClientProps) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ message: string; warning: boolean } | null>(null);
+  const [feedback, setFeedback] = useState<AdminActionFeedback | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
 
     const formData = new FormData(event.currentTarget);
 
@@ -31,45 +31,37 @@ export default function MetaManagerClient({ initialSettings }: MetaManagerClient
         const result = await saveGlobalSeoSettingsAction(formData);
         const warning =
           result.mediaSynchronization.status === "saved_with_media_sync_warning";
-        setNotice({
-          warning,
+        setFeedback({
+          variant: warning ? "warning" : "success",
+          title: warning ? "تم الحفظ مع تحذير" : "تم حفظ إعدادات SEO",
           message: warning
             ? "تم حفظ إعدادات SEO، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا."
             : "تم حفظ إعدادات SEO العامة.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: warning ? "persistent" : "manual",
         });
         router.refresh();
       } catch (submitError) {
-        setError(submitError instanceof Error ? submitError.message : "تعذر حفظ الإعدادات.");
+        setFeedback({
+          variant: "danger",
+          title: "تعذر حفظ إعدادات SEO",
+          message: submitError instanceof Error ? submitError.message : "تعذر حفظ الإعدادات.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        });
       }
     });
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-6 pb-10" dir="rtl">
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D8B87A]/70">Global SEO</p>
-        <h1 className="mt-2 text-2xl font-semibold text-white">Meta Manager</h1>
-        <p className="mt-2 text-sm leading-7 text-white/55">
-          الإعدادات العامة للموقع. القيم الفارغة تعود تلقائيًا إلى ملفات <code className="text-white/70">config/seo</code>.
-        </p>
-      </section>
-
-      {notice ? (
-        <div
-          className={
-            notice.warning
-              ? "rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
-              : "rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
-          }
-        >
-          {notice.message}
-        </div>
-      ) : null}
-      {error ? (
-        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-          {error}
-        </div>
-      ) : null}
+      <AdminFeedbackRegion
+        channel="seo-meta-manager"
+        label="نتائج حفظ إعدادات SEO العامة"
+        feedback={feedback}
+      />
 
       <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-6 space-y-5">
         <h2 className="text-lg font-semibold text-white">القيم الافتراضية</h2>

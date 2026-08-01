@@ -2,7 +2,6 @@ export const dynamic = "force-dynamic";
 
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import BlockModuleManagerClient from "../../../../../components/admin/page-blocks/BlockModuleManagerClient";
-import MediaSynchronizationWarningNotice from "../../../../../components/admin/media/MediaSynchronizationWarningNotice";
 import {
   bulkFeedModules,
   createFeedModule,
@@ -21,17 +20,7 @@ export default async function FeedModulesPage({ searchParams }: PageProps) {
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 
-  if (error) {
-    return (
-      <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
-        حدث خطأ أثناء قراءة Feed Modules: {error.message}
-      </div>
-    );
-  }
-
   return (
-    <>
-    <MediaSynchronizationWarningNotice visible={query.notice === "saved_with_media_sync_warning"} />
     <BlockModuleManagerClient
       moduleKey="feed"
       moduleTitle="إدارة Feed Modules"
@@ -56,7 +45,8 @@ export default async function FeedModulesPage({ searchParams }: PageProps) {
         ["categories", "Categories"],
         ["series", "Series"],
       ]}
+      loadError={error ? `حدث خطأ أثناء قراءة Feed Modules: ${error.message}` : null}
+      mediaSynchronizationWarning={query.notice === "saved_with_media_sync_warning"}
     />
-    </>
   );
 }

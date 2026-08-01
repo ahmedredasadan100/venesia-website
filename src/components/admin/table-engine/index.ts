@@ -1,2 +1,2 @@
 export { useAdminTable } from "./useAdminTable";
-export type { AdminTableActionResult, AdminTableFeedback, AdminTableId, AdminTableSortDirection, AdminTableSortState } from "./types";
+export type { AdminTableActionResult, AdminTableId, AdminTableSortDirection, AdminTableSortState } from "./types";

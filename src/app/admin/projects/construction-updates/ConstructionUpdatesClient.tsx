@@ -20,13 +20,14 @@ export default function ConstructionUpdatesClient({ projects, siteUpdates }: Con
   return (
     <main className="space-y-7">
       <AdminPageHeader
-        variant="context"
-        eyebrow="رؤى المشاريع"
+        eyebrow="PROJECT INSIGHTS"
         title="تحديثات التنفيذ"
-        description="لوحة تخطيط للقراءة فقط — تجمع المشاريع السكنية مع محتوى «من أرض التنفيذ» الحالي."
-        contextLine="لا توجد جداول جديدة — القراءة من بيانات المشروعات ومحتوى تحديثات مواقع التنفيذ."
+        description="لوحة تخطيط للقراءة فقط — تجمع المشاريع السكنية مع محتوى «من أرض التنفيذ» الحالي. لا توجد جداول جديدة؛ القراءة من بيانات المشروعات ومحتوى تحديثات مواقع التنفيذ."
         actions={
           <>
+            <AdminActionButton href="/admin/projects" variant="dark">
+              العودة إلى مركز المشاريع
+            </AdminActionButton>
             <AdminActionButton href="/admin/projects/residential" variant="dark">
               المشاريع السكنية
             </AdminActionButton>

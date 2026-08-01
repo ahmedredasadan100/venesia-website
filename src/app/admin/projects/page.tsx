@@ -18,6 +18,7 @@ export default async function ProjectsHubPage() {
     return (
       <main className="space-y-7">
         <AdminPageHeader
+          eyebrow="PROJECTS CONTROL"
           title="المشاريع"
           description="مركز إدخال وتعديل المشاريع السكنية والتجارية."
         />

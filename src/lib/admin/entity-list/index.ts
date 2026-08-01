@@ -41,5 +41,13 @@ export {
 export {
   applyAdminEntityUrlPatch,
   buildAdminEntityListHref,
+  writeAdminBoundedClientPaginationParams,
+  type AdminBoundedClientPaginationUrlOptions,
+  type AdminBoundedClientPaginationUrlState,
   type AdminEntityUrlPatch,
 } from "./url-state";
+
+export {
+  useAdminBoundedClientPagination,
+  type AdminBoundedClientPaginationOptions,
+} from "./bounded-client-pagination";

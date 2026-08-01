@@ -7,7 +7,10 @@ import {
   AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../components/admin/entity-list";
-import { AdminEntityListPrimarySection } from "../../../components/admin/entity-list/AdminEntityListSurface";
+import {
+  AdminEntityListPrimarySection,
+  AdminEntityListTableRegion,
+} from "../../../components/admin/entity-list/AdminEntityListSurface";
 import { AdminInfoBar, AdminTablePagination } from "../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-feedback";
 import {
@@ -26,6 +29,7 @@ import {
   projectsQueryContract,
   type ProjectFilters,
   type ProjectSortField,
+  withLockedProjectType,
 } from "../../../lib/admin/projects/entity-list-contract";
 import type {
   ProjectEntityListMetrics,
@@ -84,12 +88,20 @@ export default function ProjectsTableClient({
   notice = null,
   errorMessage = null,
 }: ProjectsTableClientProps) {
+  const constrainQuery = useCallback(
+    (query: AdminEntityListQuery<ProjectFilters, ProjectSortField>) => ({
+      ...query,
+      filters: withLockedProjectType(query.filters, type),
+    }),
+    [type],
+  );
   const controller = useAdminEntityListController({
     entity: "projects",
     contract: projectsQueryContract,
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    constrainQuery,
   });
   const instant = useAdminEntityInstantMutation<ProjectEntityListRow>(
     "projects",
@@ -279,19 +291,6 @@ export default function ProjectsTableClient({
       ),
     [controller.error, errorMessage, notice],
   );
-  const rangeStart = controller.result.pagination.totalRows
-    ? (controller.result.pagination.page - 1) *
-        controller.result.pagination.pageSize +
-      1
-    : 0;
-  const rangeEnd = controller.result.pagination.totalRows
-    ? Math.min(
-        controller.result.pagination.page *
-          controller.result.pagination.pageSize,
-        controller.result.pagination.totalRows,
-      )
-    : 0;
-
   return (
     <AdminEntityListSurface consumer="projects">
       <AdminEntityListPrimarySection data-admin-projects-type={type}>
@@ -330,7 +329,7 @@ export default function ProjectsTableClient({
         />
       </AdminEntityListPrimarySection>
 
-      <AdminEntityListPrimarySection
+      <AdminEntityListTableRegion
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }
@@ -403,21 +402,19 @@ export default function ProjectsTableClient({
           }}
           initialFeedback={initialFeedback}
         />
-      </AdminEntityListPrimarySection>
-
-      <AdminTablePagination
-        basePath={basePath}
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
-        totalCount={controller.result.pagination.totalRows}
-        pageSize={String(controller.result.pagination.pageSize)}
-        pageSizeOptions={["10", "20", "30"]}
-        currentPage={controller.result.pagination.page}
-        totalPages={controller.result.pagination.totalPages}
-        emptySummaryText="لا توجد مشروعات"
-        onPageChange={controller.setPage}
-        onPageSizeChange={controller.setPageSize}
-      />
+        <AdminTablePagination
+          basePath={basePath}
+          totalCount={controller.result.pagination.totalRows}
+          pageSize={String(controller.result.pagination.pageSize)}
+          pageSizeOptions={["10", "20", "30", "50"]}
+          currentPage={controller.result.pagination.page}
+          totalPages={controller.result.pagination.totalPages}
+          emptySummaryText="لا توجد مشروعات"
+          onPageChange={controller.setPage}
+          onPageSizeChange={controller.setPageSize}
+          pending={controller.isFetching}
+        />
+      </AdminEntityListTableRegion>
     </AdminEntityListSurface>
   );
 }

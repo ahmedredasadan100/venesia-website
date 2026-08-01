@@ -32,12 +32,12 @@ export const ADMIN_INTERACTION_SYSTEM = {
   name: "Admin Interaction System",
   role: "governance_contracts_umbrella",
   ownsRuntime: false,
-  scope: "reference_consumers_and_declared_gaps",
+  scope: "complete_surface_adoption_phase_1",
   globalClosed: false,
   globalClosureBlockers: [
-    "Shared capabilities are not yet adopted by every eligible Admin surface.",
-    "Full Collection Runtime adoption remains incomplete outside the current reference consumers.",
-    "The independent runtime modules retain adoption work outside this correction pass.",
+    "Authenticated Browser acceptance on the final working tree is still required.",
+    "Atomic reorder contracts are not available for Page Assignment and Menu Item free drag.",
+    "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
   ],
 } as const;
 
@@ -210,7 +210,7 @@ export type AdminRowActionsAdoptionActionState =
 
 export type AdminRowActionsExistingOwners = {
   presentation: "shared_capabilities";
-  data: "data_runtime" | "domain_action_adapter";
+  data: "data_runtime";
   feedback: "feedback_runtime";
   confirmation: "confirmation_runtime";
   audit: "cms_admin_audit";
@@ -239,15 +239,10 @@ export const ADMIN_ROW_ACTIONS_EXISTING_OWNERS = {
   audit: "cms_admin_audit",
 } as const satisfies AdminRowActionsExistingOwners;
 
-export const ADMIN_ROW_ACTIONS_REDIRECT_OWNERS = {
-  ...ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
-  data: "domain_action_adapter",
-} as const satisfies AdminRowActionsExistingOwners;
-
 /**
  * Every generic Admin Collection declares Row Actions through the shared
- * presentation capability. Entity List consumers keep the Data Runtime;
- * Redirects keeps its established audited server-action adapter.
+ * presentation capability while the existing Data Runtime owns pending,
+ * optimistic reconciliation, rollback, and invalidation.
  */
 export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
   capability: "shared_admin_row_actions",
@@ -274,10 +269,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       "src/components/admin/ui/AdminDataGridRowActions.tsx",
       "src/components/admin/ui/AdminDataGrid.tsx",
     ],
-    data: [
-      "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
-      "src/app/admin/seo/redirects/actions.ts",
-    ],
+    data: ["src/lib/admin/entity-list/data-engine/instant-mutation.ts"],
     feedback: ["src/components/admin/AdminFeedbackProvider.tsx"],
     confirmation: ["src/components/admin/ui/AdminConfirmDialog.tsx"],
     audit: [
@@ -391,7 +383,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         edit: "adopted",
         preview: "adopted",
         information: "adopted",
-        copyPublicLink: "hidden",
+        copyPublicLink: "adopted",
         visibility: "adopted",
         featured: "hidden",
         duplicate: "adopted",
@@ -402,7 +394,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       confirmationActions: ["delete"],
       auditedActions: ["visibility", "duplicate", "delete"],
       rationale:
-        "Pages declares only supported actions and routes immediate commands through the existing Data and Feedback owners.",
+        "Pages exposes the authoritative public path for Preview and Copy Public Link, and routes immediate commands through the existing Data and Feedback owners.",
     },
     {
       entity: "projects",
@@ -443,6 +435,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       sourceFiles: [
         "src/app/admin/seo/redirects/RedirectsClient.tsx",
         "src/app/admin/seo/redirects/actions.ts",
+        "src/lib/admin/redirects/entity-list-adapter.ts",
       ],
       manualOrder: false,
       actions: {
@@ -456,11 +449,37 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         archive: "hidden",
         delete: "adopted",
       },
-      owners: ADMIN_ROW_ACTIONS_REDIRECT_OWNERS,
+      owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
       confirmationActions: ["delete"],
       auditedActions: ["visibility", "delete"],
       rationale:
-        "Redirects adopts the shared presentation and confirmation owners while preserving its validated, audited server-action adapter and fixed-column list contract.",
+        "Redirects uses shared presentation and confirmation while the Data Runtime owns pending and reconciliation around validated, audited domain commands.",
+    },
+    {
+      entity: "topics_without_image",
+      status: "adopted",
+      consumerSourceFile:
+        "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+      sourceFiles: [
+        "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+      ],
+      manualOrder: false,
+      actions: {
+        edit: "adopted",
+        preview: "adopted",
+        information: "adopted",
+        copyPublicLink: "hidden",
+        visibility: "hidden",
+        featured: "hidden",
+        duplicate: "hidden",
+        archive: "hidden",
+        delete: "hidden",
+      },
+      owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
+      confirmationActions: [],
+      auditedActions: [],
+      rationale:
+        "The quality report delegates topic edit navigation and read-only information presentation to Shared Row Actions; it declares no mutation capabilities.",
     },
   ],
 } as const satisfies {
@@ -478,20 +497,53 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
   entities: readonly AdminRowActionsAdoptionEntry[];
 };
 
-export type AdminCollectionSurfaceClassification =
+export type AdminCollectionSurfaceWorkflowClassification =
+  | "full_collection_adoption"
+  | "specialized_data_owner_shared_collection_presentation"
+  | "page_system_only"
+  | "fixed_structure_not_paginated"
+  | "auth_out_of_scope";
+
+/** Authenticated Collection surfaces cannot opt out of Shared Admin Chrome. */
+export type AdminCollectionHeaderState = "adopted" | "auth_out_of_scope";
+
+export type AdminCollectionRowActionsState =
   | "adopted"
-  | "legacy_generic_gap"
-  | "specialized_exception"
-  | "explicit_exception"
-  | "deprecated_legacy";
+  | "read_only_no_row_commands"
+  | "not_applicable";
+
+export type AdminCollectionPaginationState =
+  | "adopted"
+  | "not_required";
+
+export type AdminCollectionQueryMode =
+  | "server-page"
+  | "bounded-client"
+  | "small-fixed"
+  | "specialized";
+
+export type AdminCollectionAdoptionState = "adopted" | "not_applicable";
+
+export type AdminCollectionReorderOwner =
+  | "not_applicable"
+  | "domain_owned_atomic_reorder"
+  | "blocked_atomic_reorder_contract";
 
 export type AdminCollectionSurfaceInventoryEntry = {
   id: string;
-  classification: AdminCollectionSurfaceClassification;
+  /** Collection lifecycle only; Admin Chrome is inherited structurally. */
+  workflowClassification: AdminCollectionSurfaceWorkflowClassification;
+  pageChromeAdoption: "adopted" | "auth_out_of_scope";
+  collectionAdoption: AdminCollectionAdoptionState;
   generic: boolean;
   routes: readonly string[];
   pageSourceFiles: readonly string[];
   presentationSourceFiles: readonly string[];
+  sourceOwner: string;
+  headerOwner: "AdminPageContextHeader" | "not_applicable";
+  engineLabel: string | null;
+  headerState: AdminCollectionHeaderState;
+  rowActionsState: AdminCollectionRowActionsState;
   rowActionsOwner:
     | "shared_admin_row_actions"
     | "specialized_surface"
@@ -502,10 +554,70 @@ export type AdminCollectionSurfaceInventoryEntry = {
     | "not_applicable";
   summaryCards: boolean;
   filtersOrToolbar: boolean;
-  pagination: boolean;
+  paginationState: AdminCollectionPaginationState;
+  paginationOwner:
+    | "AdminTablePagination"
+    | "specialized_surface"
+    | "not_applicable";
+  queryMode: AdminCollectionQueryMode;
+  gridOwner:
+    | "AdminEntityList"
+    | "AdminDataGrid"
+    | "MediaCatalog"
+    | "not_applicable";
   layoutOwner: string;
+  feedbackOwner: "AdminFeedbackProvider" | "not_applicable";
+  confirmationOwner: "AdminConfirmDialog" | "not_applicable";
+  reorderOwner: AdminCollectionReorderOwner;
+  genuineExceptions: readonly string[];
+  requiredAdoption: readonly string[];
+  exceptionRationale: string | null;
   rationale: string;
 };
+
+const ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS = {
+  pageChromeAdoption: "adopted",
+  collectionAdoption: "adopted",
+  feedbackOwner: "AdminFeedbackProvider",
+  confirmationOwner: "AdminConfirmDialog",
+  gridOwner: "AdminEntityList",
+  reorderOwner: "not_applicable",
+  genuineExceptions: [],
+} as const;
+
+const ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS = {
+  pageChromeAdoption: "adopted",
+  collectionAdoption: "not_applicable",
+  feedbackOwner: "AdminFeedbackProvider",
+  confirmationOwner: "AdminConfirmDialog",
+  gridOwner: "not_applicable",
+  reorderOwner: "not_applicable",
+  genuineExceptions: [],
+} as const;
+
+const ADMIN_FIXED_SURFACE_DEFAULTS = {
+  pageChromeAdoption: "adopted",
+  collectionAdoption: "not_applicable",
+  feedbackOwner: "AdminFeedbackProvider",
+  confirmationOwner: "not_applicable",
+  gridOwner: "not_applicable",
+  reorderOwner: "not_applicable",
+  genuineExceptions: [
+    "The surface is a bounded structural or navigation composition, not a growing record collection.",
+  ],
+} as const;
+
+const ADMIN_AUTH_SURFACE_DEFAULTS = {
+  pageChromeAdoption: "auth_out_of_scope",
+  collectionAdoption: "not_applicable",
+  feedbackOwner: "not_applicable",
+  confirmationOwner: "not_applicable",
+  gridOwner: "not_applicable",
+  reorderOwner: "not_applicable",
+  genuineExceptions: [
+    "Authentication routes intentionally render outside authenticated Admin Chrome.",
+  ],
+} as const;
 
 /**
  * Exhaustive ledger for concrete Admin collection/list presentation sources.
@@ -517,21 +629,27 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   globalClosed: false,
   globalClosureBlockers: [
     "Authenticated Browser QA for every generic adopter on the final working tree is still required.",
+    "Page Assignment and Menu Item free drag require an authoritative atomic reorder mutation contract; adjacent multi-write swaps cannot close this item.",
+    "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
   ],
-  legacyGenericGaps: [],
+  genericAdoptionGaps: [],
   canonicalSectionGap: "gap-7",
+  canonicalTableFooterGap: "gap-4",
   ownerSourceFiles: {
+    header: "src/components/admin/ui/AdminPageContextHeader.tsx",
     rowActions:
       "src/components/admin/ui/AdminDataGridRowActions.tsx",
     columns: "src/components/admin/entity-list/AdminEntityList.tsx",
     layout:
       "src/components/admin/entity-list/AdminEntityListSurface.tsx",
     pagination: "src/components/admin/ui/AdminTablePagination.tsx",
+    query: "src/lib/admin/entity-list/data-engine/client-controller.ts",
   },
   surfaces: [
     {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "content-topics",
-      classification: "adopted",
+      workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/content/topics"],
       pageSourceFiles: ["src/app/admin/content/topics/page.tsx"],
@@ -539,72 +657,119 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/components/admin/content/TopicsListClient.tsx",
         "src/components/admin/content/UnifiedContentList.tsx",
       ],
+      sourceOwner:
+        "src/lib/admin/content/entity-list-adapters/topics.ts#topicsEntityListAdapter",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "UNIFIED CONTENT ENGINE",
+      headerState: "adopted",
+      rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "shared_optional_columns",
       summaryCards: true,
       filtersOrToolbar: true,
-      pagination: true,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
         "Generic content collection with shared metrics, filters, configurable columns, pagination, and Row Actions.",
     },
     {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "content-categories",
-      classification: "adopted",
+      workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/content/categories"],
       pageSourceFiles: ["src/app/admin/content/categories/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/content/categories/CategoriesListClient.tsx",
       ],
+      sourceOwner:
+        "src/lib/admin/content/entity-list-adapters/categories.ts#categoriesEntityListAdapter",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "CATEGORIES CONTROL",
+      headerState: "adopted",
+      rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "shared_optional_columns",
       summaryCards: true,
       filtersOrToolbar: true,
-      pagination: true,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
         "Generic taxonomy collection; relation-aware delete remains a domain adapter behind shared presentation.",
     },
     {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "content-series",
-      classification: "adopted",
+      workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/content/series"],
       pageSourceFiles: ["src/app/admin/content/series/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/content/series/SeriesTableClient.tsx",
       ],
+      sourceOwner:
+        "src/lib/admin/content/entity-list-adapters/series.ts#seriesEntityListAdapter",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "SERIES CONTROL",
+      headerState: "adopted",
+      rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "shared_optional_columns",
       summaryCards: true,
       filtersOrToolbar: true,
-      pagination: true,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
         "Generic taxonomy collection using the same list, columns, pagination, and Row Actions owners.",
     },
     {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "pages",
-      classification: "adopted",
+      workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/pages-blocks/pages"],
       pageSourceFiles: ["src/app/admin/pages-blocks/pages/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
       ],
+      sourceOwner:
+        "src/lib/admin/pages/entity-list-adapter.ts#pagesEntityListAdapter",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "PAGES CONTROL",
+      headerState: "adopted",
+      rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
-      pagination: true,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
         "Generic page collection now delegates table placement, optional columns, persistence, selection, and Row Actions to existing shared owners.",
     },
     {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "projects-residential-commercial",
-      classification: "adopted",
+      genuineExceptions: [
+        "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
+      ],
+      workflowClassification: "full_collection_adoption",
       generic: true,
       routes: [
         "/admin/projects/residential",
@@ -617,88 +782,237 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       presentationSourceFiles: [
         "src/app/admin/projects/ProjectsTableClient.tsx",
       ],
+      sourceOwner:
+        "src/lib/admin/projects/entity-list-adapter.ts#projectsEntityListAdapter",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "PROJECTS CONTROL",
+      headerState: "adopted",
+      rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "shared_optional_columns",
       summaryCards: true,
       filtersOrToolbar: true,
-      pagination: true,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
         "Residential and Commercial are locked Project query configurations over the same shared collection, columns, and action declaration.",
     },
     {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "seo-redirects",
-      classification: "adopted",
+      workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/seo/redirects"],
       pageSourceFiles: ["src/app/admin/seo/redirects/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/seo/redirects/RedirectsClient.tsx",
       ],
+      sourceOwner:
+        "src/lib/admin/redirects/entity-list-adapter.ts#redirectsEntityListAdapter",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "SEO REDIRECTS",
+      headerState: "adopted",
+      rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
-      pagination: false,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
         "Generic Redirect collection adopts shared placement and Row Actions; its compact domain schema intentionally exposes a fixed column set.",
     },
     {
-      id: "dashboard-recent-content",
-      classification: "explicit_exception",
+      ...ADMIN_FIXED_SURFACE_DEFAULTS,
+      id: "projects-hub",
+      workflowClassification: "fixed_structure_not_paginated",
       generic: false,
-      routes: ["/admin"],
-      pageSourceFiles: ["src/app/admin/page.tsx"],
-      presentationSourceFiles: ["src/app/admin/page.tsx"],
+      routes: ["/admin/projects"],
+      pageSourceFiles: ["src/app/admin/projects/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/projects/projects-table/ProjectsHubCard.tsx",
+      ],
+      sourceOwner: "src/lib/projects/queries.ts#countProjectsByType",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "PROJECTS CONTROL",
+      headerState: "adopted",
+      rowActionsState: "read_only_no_row_commands",
       rowActionsOwner: "not_applicable",
       columnVisibility: "not_applicable",
       summaryCards: true,
       filtersOrToolbar: false,
-      pagination: false,
-      layoutOwner: "Admin dashboard composition",
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "small-fixed",
+      layoutOwner: "Projects hub composition",
+      requiredAdoption: [],
+      exceptionRationale:
+        "Two fixed navigation cards form a chooser, not an entity collection lifecycle.",
       rationale:
-        "Read-only recent-content widget embedded in a metrics dashboard, not an entity collection lifecycle.",
+        "The Project hub keeps the canonical collection header while its fixed chooser requires neither Row Actions nor pagination.",
     },
     {
-      id: "activity-log",
-      classification: "explicit_exception",
+      ...ADMIN_FIXED_SURFACE_DEFAULTS,
+      id: "blocks-library-hub",
+      workflowClassification: "fixed_structure_not_paginated",
       generic: false,
+      routes: ["/admin/pages-blocks/blocks"],
+      pageSourceFiles: ["src/app/admin/pages-blocks/blocks/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/pages-blocks/blocks/page.tsx",
+      ],
+      sourceOwner: "src/app/admin/pages-blocks/blocks/page.tsx#modules",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: true,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "small-fixed",
+      layoutOwner: "Page Composition module catalog",
+      requiredAdoption: [],
+      exceptionRationale:
+        "Fixed module-definition cards navigate into specialized builders; they are not an entity collection lifecycle.",
+      rationale:
+        "The Page Composition catalog is a bounded module chooser with active, planned, and deprecated definitions.",
+    },
+    {
+      ...ADMIN_FIXED_SURFACE_DEFAULTS,
+      id: "dashboard-recent-content",
+      workflowClassification: "fixed_structure_not_paginated",
+      generic: false,
+      routes: ["/admin"],
+      pageSourceFiles: ["src/app/admin/page.tsx"],
+      presentationSourceFiles: ["src/app/admin/page.tsx"],
+      sourceOwner: "src/app/admin/page.tsx#getDashboardStats",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: true,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "small-fixed",
+      layoutOwner: "Admin dashboard composition",
+      requiredAdoption: [],
+      exceptionRationale:
+        "The embedded dashboard snapshot exposes local edit navigation but is not a standalone collection lifecycle.",
+      rationale:
+        "Recent content and projects are bounded dashboard snapshots with local navigation inside the metrics composition.",
+    },
+    {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      id: "activity-log",
+      workflowClassification: "full_collection_adoption",
+      generic: true,
       routes: ["/admin/activity-log"],
       pageSourceFiles: ["src/app/admin/activity-log/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/activity-log/ActivityLogClient.tsx",
       ],
+      sourceOwner:
+        "src/lib/admin/audit/entity-list-adapter.ts#activityLogEntityListAdapter",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "ACTIVITY LOG",
+      headerState: "adopted",
+      rowActionsState: "read_only_no_row_commands",
       rowActionsOwner: "not_applicable",
       columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
-      pagination: true,
-      layoutOwner: "Audit query surface",
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
+      layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
-        "Immutable audit query has no entity mutation or Row Actions lifecycle.",
+        "Immutable audit rows have no commands, while query state and pagination use the existing Collection and Data owners.",
     },
     {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "media-library",
-      classification: "specialized_exception",
+      gridOwner: "MediaCatalog",
+      genuineExceptions: [
+        "Folder, upload, usage, picker, and safe-delete presentation remains the specialized Media Catalog rather than a tabular EntityList.",
+      ],
+      workflowClassification:
+        "specialized_data_owner_shared_collection_presentation",
       generic: false,
       routes: ["/admin/media-library"],
       pageSourceFiles: ["src/app/admin/media-library/page.tsx"],
       presentationSourceFiles: [
         "src/components/admin/media/MediaLibraryCore.tsx",
       ],
+      sourceOwner:
+        "src/components/admin/media/MediaLibraryCore.tsx + src/app/api/admin/media-library/route.ts",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
       rowActionsOwner: "specialized_surface",
       columnVisibility: "not_applicable",
       summaryCards: true,
       filtersOrToolbar: true,
-      pagination: false,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "specialized",
       layoutOwner: "Media Library catalog",
+      requiredAdoption: [],
+      exceptionRationale:
+        "Folder, upload, usage, and safe-delete data remain with Media Catalog while shared Page, Pagination, Feedback, Confirmation, and Scrollbar owners provide presentation.",
       rationale:
         "Folder, upload, usage, recovery, and safe-delete catalog lifecycle is materially different from a tabular entity collection.",
     },
     {
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "media-recovery-queue",
+      workflowClassification: "page_system_only",
+      generic: false,
+      routes: ["/admin/settings/media"],
+      pageSourceFiles: ["src/app/admin/settings/media/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/settings/media/MediaRecoveryCenter.tsx",
+      ],
+      sourceOwner:
+        "src/lib/admin/media-catalog/recovery.ts#listMediaRecoveryQueue+executeMediaRecoveryAction",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "specialized_surface",
+      columnVisibility: "not_applicable",
+      summaryCards: true,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "Media Settings recovery queue",
+      requiredAdoption: [],
+      exceptionRationale:
+        "Recovery commands operate on guarded Storage and coordination states through the existing Media Catalog recovery owner, not a generic entity-row lifecycle.",
+      rationale:
+        "The bounded recovery queue retains its specialized confirmation, audit, verification, and fail-closed command lifecycle.",
+    },
+    {
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "construction-updates",
-      classification: "specialized_exception",
+      workflowClassification: "page_system_only",
       generic: false,
       routes: ["/admin/projects/construction-updates"],
       pageSourceFiles: [
@@ -707,18 +1021,32 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       presentationSourceFiles: [
         "src/app/admin/projects/construction-updates/ConstructionUpdatesClient.tsx",
       ],
-      rowActionsOwner: "specialized_surface",
+      sourceOwner:
+        "src/lib/admin/projects/construction-updates-query.ts",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
       columnVisibility: "not_applicable",
       summaryCards: true,
       filtersOrToolbar: true,
-      pagination: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
       layoutOwner: "Construction planning workspace",
+      requiredAdoption: [],
+      exceptionRationale:
+        "The project, phase, update, and media aggregate is not a single generic collection.",
       rationale:
         "Project, phase, update, and media planning is an aggregate workflow rather than a single entity list.",
     },
     {
-      id: "block-template-builders",
-      classification: "specialized_exception",
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      id: "block-template-libraries",
+      gridOwner: "AdminDataGrid",
+      workflowClassification:
+        "specialized_data_owner_shared_collection_presentation",
       generic: false,
       routes: [
         "/admin/pages-blocks/blocks/content",
@@ -744,145 +1072,647 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
         "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
         "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
-        "src/app/admin/pages-blocks/blocks/media-hub/page.tsx",
-        "src/app/admin/pages-blocks/blocks/media-sidebar/page.tsx",
+        "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
       ],
-      rowActionsOwner: "specialized_surface",
+      sourceOwner: "Page Composition template list loaders and domain actions",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
-      pagination: false,
-      layoutOwner: "Schema-driven block builder",
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "specialized",
+      layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
-        "Template creation, duplication, visibility, usage, and schema editing belong to the specialized Page Composition lifecycle recorded by the Form System ledger.",
+        "All eight template libraries share Collection presentation while their loaders and mutations remain owned by Page Composition.",
     },
     {
-      id: "menu-builder",
-      classification: "specialized_exception",
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "block-template-editors",
+      workflowClassification: "page_system_only",
       generic: false,
       routes: [
-        "/admin/pages-blocks/menus",
-        "/admin/pages-blocks/menus/[id]",
+        "/admin/pages-blocks/blocks/content/[id]",
+        "/admin/pages-blocks/blocks/hero/[id]",
+        "/admin/pages-blocks/blocks/breadcrumb/[id]",
+        "/admin/pages-blocks/blocks/cards/[id]",
+        "/admin/pages-blocks/blocks/cta/[id]",
+        "/admin/pages-blocks/blocks/feed/[id]",
+        "/admin/pages-blocks/blocks/media-hub/[id]",
+        "/admin/pages-blocks/blocks/media-sidebar/[id]",
       ],
       pageSourceFiles: [
-        "src/app/admin/pages-blocks/menus/page.tsx",
-        "src/app/admin/pages-blocks/menus/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/content/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/breadcrumb/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/cards/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/cta/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/feed/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/media-hub/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/media-sidebar/[id]/page.tsx",
       ],
       presentationSourceFiles: [
-        "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
-        "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+        "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+        "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+        "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+        "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+        "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+        "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+        "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+        "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
       ],
-      rowActionsOwner: "specialized_surface",
+      sourceOwner: "Page Composition schema and form owners",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "AdminShell + AdminPageExperience + Form Runtime where applicable",
+      requiredAdoption: [],
+      exceptionRationale: null,
+      rationale:
+        "Schema editing remains specialized content inside the structurally inherited Shared Admin Page System.",
+    },
+    {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      id: "menus-list",
+      gridOwner: "AdminDataGrid",
+      workflowClassification:
+        "specialized_data_owner_shared_collection_presentation",
+      generic: false,
+      routes: ["/admin/pages-blocks/menus"],
+      pageSourceFiles: ["src/app/admin/pages-blocks/menus/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+      ],
+      sourceOwner: "Menu list loader and menu domain actions",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
-      pagination: false,
-      layoutOwner: "Hierarchical Menu Builder",
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "specialized",
+      layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
-        "Nested items, ordering, import, and parent-child constraints form a specialized hierarchical builder lifecycle.",
+        "The menu records adopt shared collection presentation while menu mutations remain with the Menu domain owner.",
     },
     {
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "menu-editor-shell",
+      workflowClassification: "page_system_only",
+      generic: false,
+      routes: ["/admin/pages-blocks/menus/[id]"],
+      pageSourceFiles: ["src/app/admin/pages-blocks/menus/[id]/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/pages-blocks/menus/MenuBuilderClient.tsx",
+      ],
+      sourceOwner: "Hierarchical Menu Builder aggregate",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: true,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "AdminShell + AdminPageExperience",
+      requiredAdoption: [],
+      exceptionRationale: null,
+      rationale:
+        "The builder workflow remains specialized while the nested Menu Items surface is inventoried separately.",
+    },
+    {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      reorderOwner: "blocked_atomic_reorder_contract",
+      genuineExceptions: [
+        "Interactive reorder is hidden until the Menu domain owns an atomic hierarchy-aware reorder mutation.",
+      ],
+      id: "menu-items",
+      gridOwner: "AdminDataGrid",
+      workflowClassification:
+        "specialized_data_owner_shared_collection_presentation",
+      generic: false,
+      routes: ["/admin/pages-blocks/menus/[id]"],
+      pageSourceFiles: ["src/app/admin/pages-blocks/menus/[id]/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+      ],
+      sourceOwner: "Hierarchical Menu Item loader and domain actions",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
+      columnVisibility: "fixed_no_optional_columns",
+      summaryCards: false,
+      filtersOrToolbar: true,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "specialized",
+      layoutOwner: "AdminDataGrid Contract",
+      requiredAdoption: [
+        "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
+      ],
+      exceptionRationale: null,
+      rationale:
+        "Nested items share grid, actions, pagination, feedback, and confirmation; unsafe non-atomic reorder triggers and write exports are fail-closed.",
+    },
+    {
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "page-composition-shell",
+      workflowClassification: "page_system_only",
+      generic: false,
+      routes: ["/admin/pages-blocks/pages/[id]"],
+      pageSourceFiles: ["src/app/admin/pages-blocks/pages/[id]/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+      ],
+      sourceOwner: "Page Composition aggregate",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "shared_optional_columns",
+      summaryCards: false,
+      filtersOrToolbar: true,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "AdminShell + AdminPageExperience",
+      requiredAdoption: [],
+      exceptionRationale: null,
+      rationale:
+        "Page editing is a specialized aggregate, while its module assignment collection is inventoried separately.",
+    },
+    {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      reorderOwner: "blocked_atomic_reorder_contract",
+      genuineExceptions: [
+        "Interactive reorder is hidden until Page Composition owns an atomic cross-table reorder mutation.",
+      ],
       id: "page-block-assignments",
-      classification: "specialized_exception",
+      gridOwner: "AdminDataGrid",
+      workflowClassification:
+        "specialized_data_owner_shared_collection_presentation",
       generic: false,
       routes: ["/admin/pages-blocks/pages/[id]"],
       pageSourceFiles: ["src/app/admin/pages-blocks/pages/[id]/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx",
       ],
-      rowActionsOwner: "specialized_surface",
+      sourceOwner: "Page composition assignment loader and actions",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
-      pagination: false,
-      layoutOwner: "Page composition assignment workspace",
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "bounded-client",
+      layoutOwner: "AdminPageExperience + Page composition assignment content",
+      requiredAdoption: [
+        "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
+      ],
+      exceptionRationale: null,
       rationale:
-        "Assignment, slot eligibility, reorder, and detach operations are a nested composition lifecycle.",
+        "The complete assignment dataset is paginated by the shared bounded-client URL/history owner; unsafe non-atomic reorder triggers and write exports are fail-closed.",
     },
     {
-      id: "footer-builder",
-      classification: "specialized_exception",
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "footer-builder-shell",
+      workflowClassification: "page_system_only",
+      generic: false,
+      routes: ["/admin/pages-blocks/footer"],
+      pageSourceFiles: ["src/app/admin/pages-blocks/footer/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/pages-blocks/footer/FooterBuilderClient.tsx",
+      ],
+      sourceOwner: "Footer Builder form-session state",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "AdminShell + AdminPageExperience",
+      requiredAdoption: [],
+      exceptionRationale: null,
+      rationale:
+        "The Footer form session inherits Shared Admin Page, Feedback, and Confirmation owners.",
+    },
+    {
+      ...ADMIN_FIXED_SURFACE_DEFAULTS,
+      id: "footer-fixed-slots",
+      workflowClassification: "fixed_structure_not_paginated",
+      generic: false,
+      routes: ["/admin/pages-blocks/footer"],
+      pageSourceFiles: ["src/app/admin/pages-blocks/footer/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/pages-blocks/footer/FooterBuilderEditors.tsx",
+        "src/app/admin/pages-blocks/footer/FooterMenuPreviewDataGrid.tsx",
+      ],
+      sourceOwner: "Footer four-slot schema",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "small-fixed",
+      layoutOwner: "Footer fixed four-slot editor",
+      requiredAdoption: [],
+      exceptionRationale:
+        "Exactly four structural Footer slots are edited as one schema, not as growing records.",
+      rationale:
+        "The fixed slots retain their schema editor and are not forced into pagination or Entity List semantics.",
+    },
+    {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      reorderOwner: "domain_owned_atomic_reorder",
+      genuineExceptions: [
+        "Manual-link order is bounded Footer form-session state and is persisted with the full Footer aggregate, not through a shared adjacent-row mutation.",
+      ],
+      id: "footer-manual-links",
+      gridOwner: "AdminDataGrid",
+      workflowClassification:
+        "specialized_data_owner_shared_collection_presentation",
       generic: false,
       routes: ["/admin/pages-blocks/footer"],
       pageSourceFiles: ["src/app/admin/pages-blocks/footer/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
-        "src/app/admin/pages-blocks/footer/FooterMenuPreviewDataGrid.tsx",
       ],
-      rowActionsOwner: "specialized_surface",
+      sourceOwner: "Footer Builder form-session state",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
       filtersOrToolbar: false,
-      pagination: false,
-      layoutOwner: "Multi-slot Footer Builder",
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "specialized",
+      layoutOwner: "AdminPageExperience + Multi-slot Footer Builder content",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
         "In-memory nested link editing, ordering, and menu preview belong to one aggregate footer form session.",
     },
     {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      genuineExceptions: [
+        "Identity mutations, role validation, session invalidation, and self-protection remain with Auth and Permissions owners.",
+      ],
       id: "users-and-roles",
-      classification: "specialized_exception",
+      gridOwner: "AdminDataGrid",
+      workflowClassification:
+        "specialized_data_owner_shared_collection_presentation",
       generic: false,
       routes: ["/admin/users-roles"],
       pageSourceFiles: ["src/app/admin/users-roles/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/users-roles/UsersManagementClient.tsx",
       ],
-      rowActionsOwner: "specialized_surface",
+      sourceOwner: "Identity lifecycle loaders and privileged actions",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
-      pagination: false,
-      layoutOwner: "Identity lifecycle surface",
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "bounded-client",
+      layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
+      requiredAdoption: [],
+      exceptionRationale:
+        "Status, password, and role commands cross the Auth and Permissions stop boundary.",
       rationale:
         "User status, password, and role mutations cross the Auth and Permissions boundary and retain their specialized owner.",
     },
     {
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "sitemap-monitor",
-      classification: "explicit_exception",
+      workflowClassification: "page_system_only",
       generic: false,
       routes: ["/admin/seo/sitemap"],
       pageSourceFiles: ["src/app/admin/seo/sitemap/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/seo/sitemap/SitemapMonitorClient.tsx",
       ],
+      sourceOwner: "Sitemap diagnostics loader",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "read_only_no_row_commands",
       rowActionsOwner: "not_applicable",
       columnVisibility: "not_applicable",
       summaryCards: true,
       filtersOrToolbar: true,
-      pagination: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
       layoutOwner: "Sitemap diagnostics surface",
+      requiredAdoption: [],
+      exceptionRationale:
+        "Diagnostics and global refresh do not expose a row-level collection lifecycle.",
       rationale:
         "Read-only diagnostics and refresh commands do not expose a generic entity collection lifecycle.",
     },
     {
-      id: "topics-without-image-report",
-      classification: "explicit_exception",
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "content-editor-pages",
+      workflowClassification: "page_system_only",
       generic: false,
+      routes: [
+        "/admin/content/topics/new",
+        "/admin/content/topics/[id]",
+        "/admin/content/topics/[id]/preview",
+        "/admin/content/categories/new",
+        "/admin/content/categories/[id]",
+        "/admin/content/series/new",
+        "/admin/content/series/[id]",
+      ],
+      pageSourceFiles: [
+        "src/app/admin/content/topics/new/page.tsx",
+        "src/app/admin/content/topics/[id]/page.tsx",
+        "src/app/admin/content/topics/[id]/preview/page.tsx",
+        "src/app/admin/content/categories/new/page.tsx",
+        "src/app/admin/content/categories/[id]/page.tsx",
+        "src/app/admin/content/series/new/page.tsx",
+        "src/app/admin/content/series/[id]/page.tsx",
+      ],
+      presentationSourceFiles: [
+        "src/components/admin/content/editors/ArticleEditor.tsx",
+        "src/app/admin/content/categories/CategoryForm.tsx",
+        "src/app/admin/content/series/SeriesForm.tsx",
+      ],
+      sourceOwner: "Admin Form Runtime and Content domain actions",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "AdminShell + AdminPageExperience + Admin Form Runtime",
+      requiredAdoption: [],
+      exceptionRationale: null,
+      rationale:
+        "Content editors reuse the Page System while their form lifecycle remains with the existing Form Runtime.",
+    },
+    {
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "project-editor-pages",
+      workflowClassification: "page_system_only",
+      generic: false,
+      routes: ["/admin/projects/new", "/admin/projects/[id]"],
+      pageSourceFiles: [
+        "src/app/admin/projects/new/page.tsx",
+        "src/app/admin/projects/[id]/page.tsx",
+      ],
+      presentationSourceFiles: [
+        "src/app/admin/projects/ProjectEditForm.tsx",
+      ],
+      sourceOwner: "Project form and domain actions",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "AdminShell + AdminPageExperience",
+      requiredAdoption: [],
+      exceptionRationale: null,
+      rationale:
+        "Project create and edit stay form surfaces inside Shared Admin Chrome.",
+    },
+    {
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "settings-pages",
+      workflowClassification: "page_system_only",
+      generic: false,
+      routes: [
+        "/admin/settings/general",
+        "/admin/settings/security",
+        "/admin/settings/theme",
+        "/admin/settings/appearance",
+        "/admin/settings/integrations",
+        "/admin/settings/media",
+      ],
+      pageSourceFiles: [
+        "src/app/admin/settings/general/page.tsx",
+        "src/app/admin/settings/security/page.tsx",
+        "src/app/admin/settings/theme/page.tsx",
+        "src/app/admin/settings/appearance/page.tsx",
+        "src/app/admin/settings/integrations/page.tsx",
+        "src/app/admin/settings/media/page.tsx",
+      ],
+      presentationSourceFiles: [
+        "src/app/admin/settings/security/SecuritySettingsClient.tsx",
+        "src/app/admin/settings/general/CompanyIdentityPanel.tsx",
+        "src/app/admin/settings/general/MaintenanceModePanel.tsx",
+        "src/app/admin/settings/media/MediaSettingsPanel.tsx",
+        "src/components/admin/AdminPlaceholderPage.tsx",
+      ],
+      sourceOwner: "Settings domain panels and actions",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "AdminShell + AdminPageExperience",
+      requiredAdoption: [],
+      exceptionRationale: null,
+      rationale:
+        "Settings forms and placeholders share Page, Feedback, and Confirmation owners without forced Collection semantics.",
+    },
+    {
+      ...ADMIN_FIXED_SURFACE_DEFAULTS,
+      id: "reports-hub",
+      workflowClassification: "fixed_structure_not_paginated",
+      generic: false,
+      routes: ["/admin/reports"],
+      pageSourceFiles: ["src/app/admin/reports/page.tsx"],
+      presentationSourceFiles: ["src/app/admin/reports/page.tsx"],
+      sourceOwner: "Admin report registry",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: true,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "small-fixed",
+      layoutOwner: "Report navigation cards",
+      requiredAdoption: [],
+      exceptionRationale:
+        "The fixed report registry is a navigation hub rather than record data.",
+      rationale:
+        "The hub keeps cards while each report collection is inventoried independently.",
+    },
+    {
+      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
+      id: "seo-meta-manager",
+      workflowClassification: "page_system_only",
+      generic: false,
+      routes: ["/admin/seo/meta-manager"],
+      pageSourceFiles: ["src/app/admin/seo/meta-manager/page.tsx"],
+      presentationSourceFiles: [
+        "src/app/admin/seo/meta-manager/MetaManagerClient.tsx",
+      ],
+      sourceOwner: "SEO metadata aggregate",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: null,
+      headerState: "adopted",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: true,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "AdminShell + AdminPageExperience",
+      requiredAdoption: [],
+      exceptionRationale: null,
+      rationale:
+        "SEO metadata editing remains an aggregate page workflow within Shared Admin Chrome.",
+    },
+    {
+      ...ADMIN_AUTH_SURFACE_DEFAULTS,
+      id: "admin-auth-pages",
+      workflowClassification: "auth_out_of_scope",
+      generic: false,
+      routes: ["/admin/login", "/admin/forgot-password"],
+      pageSourceFiles: [
+        "src/app/admin/(auth)/login/page.tsx",
+        "src/app/admin/(auth)/forgot-password/page.tsx",
+      ],
+      presentationSourceFiles: [
+        "src/app/admin/(auth)/login/page.tsx",
+        "src/app/admin/(auth)/forgot-password/page.tsx",
+      ],
+      sourceOwner: "Authentication entry flow",
+      headerOwner: "not_applicable",
+      engineLabel: null,
+      headerState: "auth_out_of_scope",
+      rowActionsState: "not_applicable",
+      rowActionsOwner: "not_applicable",
+      columnVisibility: "not_applicable",
+      summaryCards: false,
+      filtersOrToolbar: false,
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+      layoutOwner: "Authentication layout",
+      requiredAdoption: [],
+      exceptionRationale:
+        "Authentication pages intentionally precede authenticated Admin Chrome.",
+      rationale:
+        "Login and recovery remain explicitly outside the authenticated shell boundary.",
+    },
+    {
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      id: "topics-without-image-report",
+      workflowClassification: "full_collection_adoption",
+      generic: true,
       routes: ["/admin/reports/topics-without-image"],
       pageSourceFiles: [
         "src/app/admin/reports/topics-without-image/page.tsx",
       ],
       presentationSourceFiles: [
-        "src/app/admin/reports/topics-without-image/page.tsx",
+        "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
       ],
-      rowActionsOwner: "not_applicable",
-      columnVisibility: "not_applicable",
+      sourceOwner:
+        "src/lib/admin/media-catalog/topics-without-image-entity-list-adapter.ts#topicsWithoutImageEntityListAdapter",
+      headerOwner: "AdminPageContextHeader",
+      engineLabel: "MEDIA QUALITY REPORT",
+      headerState: "adopted",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
+      columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
-      filtersOrToolbar: false,
-      pagination: false,
-      layoutOwner: "Read-only report surface",
+      filtersOrToolbar: true,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
+      layoutOwner: "AdminPageExperience + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
-        "Diagnostic report links to source records but owns no collection mutations or column preferences.",
+        "Read-only report rows expose only shared navigation and information commands, while query state and pagination use the existing Collection and Data owners.",
     },
   ],
 } as const satisfies {
   scope: "all_admin_collection_and_list_surfaces";
   globalClosed: false;
   globalClosureBlockers: readonly string[];
-  legacyGenericGaps: readonly string[];
+  genericAdoptionGaps: readonly string[];
   canonicalSectionGap: "gap-7";
+  canonicalTableFooterGap: "gap-4";
   ownerSourceFiles: Readonly<
-    Record<"rowActions" | "columns" | "layout" | "pagination", string>
+    Record<
+      "header" | "rowActions" | "columns" | "layout" | "pagination" | "query",
+      string
+    >
   >;
   surfaces: readonly AdminCollectionSurfaceInventoryEntry[];
 };

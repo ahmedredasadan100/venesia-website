@@ -11,6 +11,7 @@ import type {
 } from "../../lib/admin/shell/contracts";
 import { isAdminNavigationItemActive } from "../../lib/admin/shell/navigation";
 import AdminPageContextHeader from "./ui/AdminPageContextHeader";
+import AdminPageExperience from "./ui/AdminPageExperience";
 
 type AdminShellProps = {
   children: ReactNode;
@@ -388,8 +389,8 @@ export default function AdminShell({
           </div>
         ) : null}
 
-        <main className="min-w-0 flex-1 px-4 py-4 sm:px-6 lg:px-7">
-          <header className="admin-premium-card mb-5 rounded-[28px] p-4" data-admin-shell-header>
+        <main className="flex min-w-0 flex-1 flex-col gap-7 px-4 py-4 sm:px-6 lg:px-7">
+          <header className="admin-premium-card rounded-[28px] p-4" data-admin-shell-header>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <button type="button" onClick={() => setMobileState({ pathname, open: true })} className="grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/[0.045] text-white/70 lg:hidden" aria-label="فتح القائمة">☰</button>
@@ -416,14 +417,15 @@ export default function AdminShell({
             </div>
           </header>
 
-          <div
+          <AdminPageExperience
+            as="div"
             data-admin-route-content
-            className="flex flex-col [&:has([data-admin-page-header])>[data-admin-fallback-header]]:hidden"
+            className="min-w-0 pb-10 [&:has([data-admin-page-header])>[data-admin-fallback-header]]:hidden [&>[data-admin-page-body]>:has(>[data-admin-page-header])]:contents [&>[data-admin-page-body]>:has(>[data-admin-page-header])>*]:!my-0"
           >
             <div className="contents" data-admin-page-body>
               {children}
             </div>
-            <div data-admin-fallback-header className="order-first mb-7">
+            <div data-admin-fallback-header className="order-first">
               <AdminPageContextHeader
                 eyebrow={company.cmsLabel}
                 title={activeRouteItem?.label ?? company.adminLabel}
@@ -431,7 +433,7 @@ export default function AdminShell({
                 variant="minimal"
               />
             </div>
-          </div>
+          </AdminPageExperience>
         </main>
       </div>
     </section>

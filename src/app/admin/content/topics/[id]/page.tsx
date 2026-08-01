@@ -119,8 +119,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       <AdminPageContextHeader
         eyebrow="UNIFIED CONTENT ENGINE"
         title="تعديل موضوع"
-        contextLine={topic.title || "بدون عنوان"}
-        description={`المحرر الحالي: ${getContentTypeLabel(topic.content_type)}. اختيار المحرر يعتمد على content_type فقط.`}
+        description={`${topic.title || "بدون عنوان"} — المحرر الحالي: ${getContentTypeLabel(topic.content_type)}. اختيار المحرر يعتمد على content_type فقط.`}
         actions={
           <>
             <AdminActionButton href={returnPath} variant="dark">عرض الموضوعات</AdminActionButton>

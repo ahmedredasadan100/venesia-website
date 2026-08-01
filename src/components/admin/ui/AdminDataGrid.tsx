@@ -8,6 +8,7 @@ import type {
   RefObject,
 } from "react";
 import AdminCheckbox from "./AdminCheckbox";
+import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 
 type BaseProps = {
   children: ReactNode;
@@ -27,8 +28,12 @@ type GridProps = BaseProps & {
 
 type GridLineProps = BaseProps & {
   columns: string;
-  flushInlineEnd?: boolean;
   horizontalScroll?: boolean;
+};
+
+type GridActionLineProps = GridLineProps & {
+  /** Keep the final actions track visible inside the shared horizontal-scroll owner. */
+  stickyActions?: boolean;
 };
 
 export type AdminDataGridAction =
@@ -222,7 +227,8 @@ export const ADMIN_DATA_GRID_RULES = {
   actionButtonCompact: "h-10 w-10 rounded-[8px] cursor-pointer shrink-0",
   actionIcon: "h-4 w-4 shrink-0",
   checkbox: "h-4 w-4 accent-[#D8B87A] cursor-pointer",
-  rowPadding: "px-5 py-4",
+  cellInlinePadding: "px-4",
+  cellBlockPadding: "py-4",
   bulkBarTrigger: "selectedIds.length > 0",
   /** Default gap between action buttons (Tailwind gap-1.5 = 6px). */
   actionGapPx: 6,
@@ -233,6 +239,9 @@ export const ADMIN_DATA_GRID_RULES = {
   /** Official row separator — opt-in via `AdminDataGridRow divided` (matches Topics divide-y). */
   rowDivider: "border-t border-white/8",
 } as const;
+
+const ADMIN_DATA_GRID_LINE_CELL_CLASSES =
+  "[&>*]:min-w-0 [&>*]:self-stretch [&>*]:px-4 [&>*]:py-4 [&>*]:content-center [&>*:last-child]:px-1.5";
 
 /** Shared table header surface — Admin Data Grid + manual grid headers (Topics list, Categories tree). */
 export const ADMIN_DATA_GRID_HEADER_CLASSES =
@@ -393,9 +402,9 @@ export function AdminDataGridActionIcon({
         className={ADMIN_DATA_GRID_RULES.actionIcon}
         fill="currentColor"
       >
-        <circle cx="5" cy="12" r="1.7" />
+        <circle cx="12" cy="5" r="1.7" />
         <circle cx="12" cy="12" r="1.7" />
-        <circle cx="19" cy="12" r="1.7" />
+        <circle cx="12" cy="19" r="1.7" />
       </svg>
     );
   }
@@ -451,18 +460,23 @@ export function AdminDataGridActionIcon({
   );
 }
 
-export function AdminDataGrid({ children, summary, scrollLabel, className = "" }: GridProps) {
+export function AdminDataGrid({
+  children,
+  summary,
+  scrollLabel = "منطقة بيانات الإدارة",
+  className = "",
+}: GridProps) {
   return (
     <section
       className={`rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl ${className}`}
     >
       <div
-        dir={scrollLabel ? "rtl" : undefined}
-        role={scrollLabel ? "region" : undefined}
+        dir="rtl"
+        role="region"
         aria-label={scrollLabel}
-        tabIndex={scrollLabel ? 0 : undefined}
-        data-admin-data-grid-scroll={scrollLabel ? "" : undefined}
-        className={`overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/8 bg-black/14 ${scrollLabel ? "overscroll-x-contain [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.24)_rgba(255,255,255,0.06)] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-white/[0.04] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70" : ""}`}
+        tabIndex={0}
+        data-admin-data-grid-scroll=""
+        className={`overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/8 bg-black/14 overscroll-x-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
       >
         {children}
       </div>
@@ -475,22 +489,35 @@ export function AdminDataGrid({ children, summary, scrollLabel, className = "" }
   );
 }
 
-export function AdminDataGridHeader({ children, columns, flushInlineEnd = false, horizontalScroll = false, className = "" }: GridLineProps) {
+export function AdminDataGridHeader({
+  children,
+  columns,
+  horizontalScroll = false,
+  stickyActions = true,
+  className = "",
+}: GridActionLineProps) {
   return (
     <div
-      className={`grid items-center gap-4 px-5 py-4 ${flushInlineEnd ? "pe-0" : ""} ${horizontalScroll ? "w-max min-w-full" : "max-xl:hidden"} ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
-      style={{ gridTemplateColumns: columns }}
+      className={`grid gap-0 ${ADMIN_DATA_GRID_LINE_CELL_CLASSES} ${horizontalScroll ? "w-max min-w-full" : "max-xl:hidden"} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-40 [&>*:last-child]:border-s [&>*:last-child]:border-[#D8B87A]/18 [&>*:last-child]:bg-[#10151C]" : ""} ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
+      style={{ gridTemplateColumns: columns, columnGap: 0 }}
     >
       {children}
     </div>
   );
 }
 
-export function AdminDataGridRow({ children, columns, flushInlineEnd = false, horizontalScroll = false, className = "", divided = false }: GridLineProps & { divided?: boolean }) {
+export function AdminDataGridRow({
+  children,
+  columns,
+  horizontalScroll = false,
+  stickyActions = true,
+  className = "",
+  divided = false,
+}: GridActionLineProps & { divided?: boolean }) {
   return (
     <article
-      className={`grid gap-4 px-5 py-4 transition hover:bg-white/[0.035] ${flushInlineEnd ? "pe-0" : ""} ${horizontalScroll ? "w-max min-w-full items-center" : "xl:items-center"} ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
-      style={{ gridTemplateColumns: columns }}
+      className={`grid gap-0 ${ADMIN_DATA_GRID_LINE_CELL_CLASSES} transition hover:bg-white/[0.035] ${horizontalScroll ? "w-max min-w-full" : ""} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-30 [&>*:last-child]:border-s [&>*:last-child]:border-white/8 [&>*:last-child]:bg-[#080B10] hover:[&>*:last-child]:bg-[#0D1117]" : ""} ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
+      style={{ gridTemplateColumns: columns, columnGap: 0 }}
     >
       {children}
     </article>

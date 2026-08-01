@@ -324,8 +324,7 @@ const formMutationOwnerSources = [
   })
   .map((sourceFile) => normalizePath(relative(ROOT, sourceFile)))
   .filter(
-    (sourceFile) =>
-      sourceFile !== "src/components/admin/ui/AdminFormRuntime.tsx",
+    (sourceFile) => sourceFile !== "src/components/admin/ui/AdminFormRuntime.tsx",
   );
 const unclassifiedFormMutationOwners = formMutationOwnerSources.filter(
   (sourceFile) => !manifestSourceFileSet.has(sourceFile),
@@ -334,7 +333,6 @@ check(
   "every Admin raw-form or imperative FormData owner is classified in the adoption manifest",
   unclassifiedFormMutationOwners.length === 0,
 );
-
 const sharedReferenceSources = sourcePathsFor("shared_reference");
 check(
   "all reference consumers delegate their only form to AdminFormRuntime",

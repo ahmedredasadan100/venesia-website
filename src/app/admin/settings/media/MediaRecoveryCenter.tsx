@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   AdminFeedbackChannelViewport,
@@ -63,7 +63,7 @@ async function requestRecoveryQueue() {
 }
 
 export default function MediaRecoveryCenter() {
-  const { publishFeedback } = useAdminFeedback();
+  const { clearFeedback, publishFeedback } = useAdminFeedback();
   const [queue, setQueue] = useState<MediaRecoveryQueue | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<string | null>(null);
@@ -71,12 +71,15 @@ export default function MediaRecoveryCenter() {
     action: MediaRecoveryAction;
     item: MediaRecoveryItem;
   } | null>(null);
+  const confirmationTriggerRef = useRef<HTMLButtonElement>(null);
+  const recoveryRootRef = useRef<HTMLElement>(null);
 
   const announce = useCallback((input: {
     variant: "success" | "warning" | "danger";
     title: string;
     message: string;
   }) => {
+    clearFeedback("media-settings-recovery");
     publishFeedback(
       {
         ...input,
@@ -87,9 +90,11 @@ export default function MediaRecoveryCenter() {
       {
         channel: "media-settings-recovery",
         critical: input.variant === "danger",
+        placement: "inline",
+        reveal: input.variant === "danger",
       },
     );
-  }, [publishFeedback]);
+  }, [clearFeedback, publishFeedback]);
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -128,7 +133,11 @@ export default function MediaRecoveryCenter() {
     };
   }, [announce]);
 
-  async function execute(action: MediaRecoveryAction, item: MediaRecoveryItem) {
+  async function execute(
+    action: MediaRecoveryAction,
+    item: MediaRecoveryItem,
+    invokedFromConfirmation = false,
+  ) {
     const operationKey = `${item.kind}:${item.id}:${action}`;
     setPending(operationKey);
     try {
@@ -186,19 +195,24 @@ export default function MediaRecoveryCenter() {
       setConfirmation(null);
       await loadQueue();
     } catch (error) {
-      setConfirmation(null);
       announce({
         variant: "danger",
         title: "تم منع الإجراء",
         message: error instanceof Error ? error.message : "تعذر إثبات أمان الإجراء.",
       });
+      if (invokedFromConfirmation) throw error;
     } finally {
       setPending(null);
     }
   }
 
-  function requestAction(action: MediaRecoveryAction, item: MediaRecoveryItem) {
+  function requestAction(
+    action: MediaRecoveryAction,
+    item: MediaRecoveryItem,
+    trigger: HTMLButtonElement,
+  ) {
     if (CONFIRM_ACTIONS.has(action)) {
+      confirmationTriggerRef.current = trigger;
       setConfirmation({ action, item });
       return;
     }
@@ -207,7 +221,11 @@ export default function MediaRecoveryCenter() {
 
   return (
     <>
-      <section className="admin-premium-card mx-auto mb-6 w-full max-w-6xl space-y-5 rounded-[28px] p-5 sm:p-6 lg:p-8">
+      <section
+        ref={recoveryRootRef}
+        tabIndex={-1}
+        className="admin-premium-card mx-auto mb-6 w-full max-w-6xl space-y-5 rounded-[28px] p-5 sm:p-6 lg:p-8"
+      >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-white">حالات تحتاج مراجعة</h2>
@@ -334,7 +352,7 @@ export default function MediaRecoveryCenter() {
                         key={action}
                         type="button"
                         disabled={pending !== null}
-                        onClick={() => requestAction(action, item)}
+                        onClick={(event) => requestAction(action, item, event.currentTarget)}
                         className="rounded-xl border border-white/12 px-3 py-2 text-xs font-semibold text-white/70 disabled:opacity-40"
                       >
                         {pending === operationKey ? "جارٍ التنفيذ…" : ACTION_LABELS[action]}
@@ -354,10 +372,14 @@ export default function MediaRecoveryCenter() {
         description="سيعيد النظام التحقق من التخزين والارتباطات داخل الطلب نفسه، وسيمنع الإجراء إذا بقي أي نقص أو تعارض."
         confirmLabel={confirmation ? ACTION_LABELS[confirmation.action] : "تأكيد"}
         pending={Boolean(confirmation && pending === `${confirmation.item.kind}:${confirmation.item.id}:${confirmation.action}`)}
+        returnFocusRef={confirmationTriggerRef}
+        fallbackFocusRef={recoveryRootRef}
         onCancel={() => setConfirmation(null)}
-        onConfirm={() => {
-          if (confirmation) void execute(confirmation.action, confirmation.item);
-        }}
+        onConfirm={() =>
+          confirmation
+            ? execute(confirmation.action, confirmation.item, true)
+            : Promise.resolve()
+        }
       />
     </>
   );

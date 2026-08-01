@@ -37,6 +37,7 @@ const [
   read("src/lib/admin/pages/pages-list-config.ts"),
   read("src/app/admin/pages-blocks/pages/page-actions/column-preferences.ts"),
 ]);
+const pagePolicy = await read("src/lib/pages/page-admin-policy.ts");
 assert.match(registry, /pages:\s*pagesEntityListAdapter/);
 assert.match(client, /useAdminEntityListController/);
 assert.match(client, /useAdminEntityInstantMutation/);
@@ -46,6 +47,9 @@ assert.match(client, /enableColumnManagement/);
 assert.match(client, /mapAdminActionResultToFeedback/);
 assert.doesNotMatch(client, /<AdminNotice\b|\bsetFeedback\b|\buseAdminFeedback\b/);
 assert.match(client, /AdminDataGridRowActions/);
+assert.match(pagePolicy, /export function resolvePagePublicPath/);
+assert.match(client, /resolvePagePublicPath/);
+assert.doesNotMatch(client, /function publicPath/);
 assert.match(client, /duplicatePageAjax/);
 assert.match(
   client,
@@ -88,4 +92,4 @@ assert.match(company, /ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.match(company, /revalidateTag\(ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.equal((settings.match(/revalidatePath\("\/admin"/g) ?? []).length, 1);
 assert.match(page, /loadPagesEntityListResult/);
-console.log("verify:admin-instant-pages passed (32 structural assertions)");
+console.log("verify:admin-instant-pages passed (58 structural assertions)");

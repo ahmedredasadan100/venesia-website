@@ -11,9 +11,6 @@ type AdminPageHeaderProps = {
   meta?: ReactNode;
   breadcrumb?: ReactNode;
   className?: string;
-  /** Compatibility name; both values now use the single shared header core. */
-  variant?: "default" | "context";
-  contextLine?: ReactNode;
   badge?: ReactNode;
   status?: AdminPageContextHeaderProps["status"];
   display?: AdminPageContextHeaderProps["variant"];
@@ -23,11 +20,10 @@ export default function AdminPageHeader({
   title,
   description,
   actions,
-  eyebrow = "Admin Panel",
+  eyebrow = "ADMIN PANEL",
   meta,
   breadcrumb,
   className = "",
-  contextLine,
   badge,
   status,
   display,
@@ -41,7 +37,6 @@ export default function AdminPageHeader({
       meta={meta}
       breadcrumb={breadcrumb}
       className={className}
-      contextLine={contextLine}
       badge={badge}
       status={status}
       variant={display}

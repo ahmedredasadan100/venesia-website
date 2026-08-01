@@ -1,8 +1,7 @@
 import Link from "next/link";
 
 import {
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
+  AdminDataGridRowActions,
   AdminDataGridCenterCell,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
@@ -10,6 +9,7 @@ import {
   AdminDataGridRow,
   AdminDataGridStatusCell,
   AdminStatusPill,
+  type AdminRowActionsCapability,
 } from "../../../../../../components/admin/ui";
 import { moduleEditHref, moduleKindLabel } from "../../../../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
@@ -17,16 +17,14 @@ import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/t
 type PageBlocksAssignmentRowProps = {
   row: PageBlockAssignmentRow;
   rowId: string;
+  previewHref: string | null;
   index: number;
   columns: string;
   manageable: boolean;
   isVisible: boolean;
   isSelected: boolean;
   isPending: boolean;
-  canReorderUp: boolean;
-  canReorderDown: boolean;
   onToggleSelect: (checked: boolean) => void;
-  onReorder: (direction: "up" | "down") => void;
   onToggleVisibility: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -34,20 +32,83 @@ type PageBlocksAssignmentRowProps = {
 
 export default function PageBlocksAssignmentRow({
   row,
+  rowId,
+  previewHref,
   index,
   columns,
   manageable,
   isVisible,
   isSelected,
   isPending,
-  canReorderUp,
-  canReorderDown,
   onToggleSelect,
-  onReorder,
   onToggleVisibility,
   onDuplicate,
   onDelete,
 }: PageBlocksAssignmentRowProps) {
+  const hidden = { access: "hidden" as const };
+  const capability: AdminRowActionsCapability = {
+    entityType: "page_module_assignment",
+    entityId: rowId,
+    entityLabel: row.template_name,
+    actions: {
+      edit: {
+        access: "allowed",
+        href: moduleEditHref(row.module_kind, row.template_id),
+      },
+      preview: previewHref
+        ? {
+            access: "allowed",
+            href: previewHref,
+            target: "_blank",
+            rel: "noopener noreferrer",
+          }
+        : {
+            access: "disabled",
+            disabledReason: "المعاينة العامة تتطلب صفحة مربوطة ومسارًا عامًا محددًا.",
+          },
+      information: {
+        access: "allowed",
+        title: `معلومات ${row.template_name}`,
+        items: [
+          { label: "نوع الموديول", value: moduleKindLabel(row.module_kind) },
+          { label: "Slug", value: row.template_slug },
+          { label: "الحالة", value: isVisible ? "ظاهر" : "مخفي" },
+        ],
+      },
+      copyPublicLink: hidden,
+      visibility: manageable
+        ? {
+            access: "allowed",
+            isVisible,
+            pending: isPending,
+            onSelect: onToggleVisibility,
+          }
+        : hidden,
+      featured: hidden,
+      duplicate: manageable
+        ? {
+            access: "allowed",
+            pending: isPending,
+            onSelect: onDuplicate,
+          }
+        : hidden,
+      archive: hidden,
+      delete: manageable
+        ? {
+            access: "allowed",
+            pending: isPending,
+            onSelect: onDelete,
+            confirmation: {
+              mode: "shared",
+              title: "تأكيد الإزالة من الصفحة",
+              description: `إزالة ${moduleKindLabel(row.module_kind)} «${row.template_name}» من الصفحة؟ سيبقى القالب في المكتبة.`,
+              confirmLabel: "إزالة من الصفحة",
+            },
+          }
+        : hidden,
+    },
+  };
+
   return (
     <AdminDataGridRow
       columns={columns}
@@ -90,55 +151,7 @@ export default function PageBlocksAssignmentRow({
         </AdminStatusPill>
       </AdminDataGridStatusCell>
 
-      <AdminDataGridActionsCell compact>
-        {manageable ? (
-          <>
-            <AdminDataGridActionButton
-              tone="dark"
-              title="تحريك لأعلى"
-              size="compact"
-              disabled={isPending || !canReorderUp}
-              onClick={() => onReorder("up")}
-            >
-              <span className="text-sm">↑</span>
-            </AdminDataGridActionButton>
-            <AdminDataGridActionButton
-              tone="dark"
-              title="تحريك لأسفل"
-              size="compact"
-              disabled={isPending || !canReorderDown}
-              onClick={() => onReorder("down")}
-            >
-              <span className="text-sm">↓</span>
-            </AdminDataGridActionButton>
-          </>
-        ) : null}
-        <AdminDataGridActionButton
-          action="edit"
-          title="تعديل الموديول"
-          href={moduleEditHref(row.module_kind, row.template_id)}
-          size="compact"
-        />
-        {manageable ? (
-          <>
-            <AdminDataGridActionButton
-              action="visibility"
-              title={isVisible ? "إخفاء" : "إظهار"}
-              size="compact"
-              disabled={isPending}
-              onClick={onToggleVisibility}
-            />
-            <AdminDataGridActionButton
-              action="duplicate"
-              title="نسخ الموديول"
-              size="compact"
-              disabled={isPending}
-              onClick={onDuplicate}
-            />
-            <AdminDataGridActionButton action="delete" title="إزالة من الصفحة" size="compact" onClick={onDelete} />
-          </>
-        ) : null}
-      </AdminDataGridActionsCell>
+      <AdminDataGridRowActions capability={capability} size="compact" />
     </AdminDataGridRow>
   );
 }

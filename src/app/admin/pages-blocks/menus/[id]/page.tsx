@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import AdminPageHeader from "../../../../../components/admin/AdminPageHeader";
+import { AdminPageExperience } from "../../../../../components/admin/ui";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 
 import MenuBuilderClient from "../MenuBuilderClient";
@@ -32,7 +33,7 @@ export default async function Page({
   const databaseReady = Boolean(menu.is_active && items.some((item) => item.is_visible));
 
   return (
-    <main className="space-y-8">
+    <AdminPageExperience>
       <AdminPageHeader
         eyebrow="MENU BUILDER"
         title={`محرر ${menu.name}`}
@@ -45,7 +46,12 @@ export default async function Page({
         databaseReady={databaseReady}
         message={query?.message}
         messageWarning={query?.notice === "saved_with_media_sync_warning"}
+        loadError={
+          itemsResult.error
+            ? `حدث خطأ أثناء قراءة عناصر القائمة: ${itemsResult.error.message}`
+            : null
+        }
       />
-    </main>
+    </AdminPageExperience>
   );
 }

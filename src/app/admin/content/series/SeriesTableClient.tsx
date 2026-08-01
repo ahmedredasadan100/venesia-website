@@ -6,7 +6,10 @@ import {
   AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../../components/admin/entity-list";
-import { AdminEntityListPrimarySection } from "../../../../components/admin/entity-list/AdminEntityListSurface";
+import {
+  AdminEntityListPrimarySection,
+  AdminEntityListTableRegion,
+} from "../../../../components/admin/entity-list/AdminEntityListSurface";
 import {
   AdminMetricCardsGrid,
   AdminTablePagination,
@@ -408,7 +411,7 @@ export default function SeriesTableClient({
         />
       </AdminEntityListPrimarySection>
 
-      <AdminEntityListPrimarySection
+      <AdminEntityListTableRegion
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }
@@ -485,36 +488,19 @@ export default function SeriesTableClient({
           onBulkExecute={executeBulkMutation}
           initialFeedback={initialFeedback}
         />
-      </AdminEntityListPrimarySection>
-
-      <AdminTablePagination
-        basePath={BASE_PATH}
-        rangeStart={
-          controller.result.pagination.totalRows
-            ? (controller.result.pagination.page - 1) *
-                controller.result.pagination.pageSize +
-              1
-            : 0
-        }
-        rangeEnd={
-          controller.result.pagination.totalRows
-            ? Math.min(
-                controller.result.pagination.page *
-                  controller.result.pagination.pageSize,
-                controller.result.pagination.totalRows,
-              )
-            : 0
-        }
-        totalCount={controller.result.pagination.totalRows}
-        pageSize={String(controller.result.pagination.pageSize)}
-        pageSizeOptions={ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS.map(String)}
-        currentPage={controller.result.pagination.page}
-        totalPages={controller.result.pagination.totalPages}
-        emptySummaryText="لا توجد سلاسل"
-        forceShowSummary
-        onPageChange={controller.setPage}
-        onPageSizeChange={controller.setPageSize}
-      />
+        <AdminTablePagination
+          basePath={BASE_PATH}
+          totalCount={controller.result.pagination.totalRows}
+          pageSize={String(controller.result.pagination.pageSize)}
+          pageSizeOptions={ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS.map(String)}
+          currentPage={controller.result.pagination.page}
+          totalPages={controller.result.pagination.totalPages}
+          emptySummaryText="لا توجد سلاسل"
+          onPageChange={controller.setPage}
+          onPageSizeChange={controller.setPageSize}
+          pending={controller.isFetching}
+        />
+      </AdminEntityListTableRegion>
     </AdminEntityListSurface>
   );
 }

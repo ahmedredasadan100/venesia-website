@@ -5,6 +5,9 @@ import { seriesEntityListAdapter } from "../../content/entity-list-adapters/seri
 import { topicsEntityListAdapter } from "../../content/entity-list-adapters/topics";
 import { pagesEntityListAdapter } from "../../pages/entity-list-adapter";
 import { projectsEntityListAdapter } from "../../projects/entity-list-adapter";
+import { redirectsEntityListAdapter } from "../../redirects/entity-list-adapter";
+import { activityLogEntityListAdapter } from "../../audit/entity-list-adapter";
+import { topicsWithoutImageEntityListAdapter } from "../../media-catalog/topics-without-image-entity-list-adapter";
 import {
   parseAdminEntityListRequestQuery,
   type AdminEntityListQuery,
@@ -18,6 +21,9 @@ export const adminEntityListAdapterRegistry = {
   series: seriesEntityListAdapter,
   pages: pagesEntityListAdapter,
   projects: projectsEntityListAdapter,
+  redirects: redirectsEntityListAdapter,
+  activity_log: activityLogEntityListAdapter,
+  topics_without_image: topicsWithoutImageEntityListAdapter,
 } as const;
 
 export type AdminEntityListEntityKey =

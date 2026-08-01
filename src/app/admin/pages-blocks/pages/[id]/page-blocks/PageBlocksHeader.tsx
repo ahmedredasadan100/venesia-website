@@ -16,6 +16,7 @@ type PageBlocksHeaderPage = {
 
 type PageBlocksHeaderProps = {
   page: PageBlocksHeaderPage;
+  previewHref: string | null;
   onOpenAssignModal: () => void;
 };
 
@@ -57,10 +58,9 @@ export function PageModuleKindsBar({ page, usedModuleKinds }: PageModuleKindsBar
 
 export default function PageBlocksHeader({
   page,
+  previewHref,
   onOpenAssignModal,
 }: PageBlocksHeaderProps) {
-  const previewPath = page.path || "/";
-
   return (
     <AdminPageContextHeader
       eyebrow="منشئ الصفحات"
@@ -74,7 +74,11 @@ export default function PageBlocksHeader({
           <AdminActionButton href="/admin/pages-blocks/blocks" variant="dark">
             إدارة الموديولات
           </AdminActionButton>
-          <AdminActionButton href={previewPath} variant="dark">
+          <AdminActionButton
+            href={previewHref ?? undefined}
+            disabled={!previewHref}
+            variant="dark"
+          >
             معاينة الصفحة
           </AdminActionButton>
           <AdminActionButton variant="primary" onClick={onOpenAssignModal}>
