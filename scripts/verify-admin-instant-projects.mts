@@ -111,9 +111,15 @@ check(
 );
 check(
   adapter.includes("buildAdminListSearchOrFilter") &&
-    adapter.includes('["arabic_name", "english_name", "slug"]') &&
+    adapter.includes('["arabic_name", "english_name", "slug", "code"]') &&
     !adapter.includes("sanitizeProjectSearch"),
   "Search delegates semantic-safe PostgREST escaping for identity fields",
+);
+check(
+  adapter.includes('.eq("featured", query.filters.featured === "yes")') &&
+    contract.includes('featured: "all"') &&
+    client.includes('paramKey: "featured"'),
+  "Featured filter is declared, normalized, and applied before pagination",
 );
 check(
   adapter.includes("loadNormalizedAdminEntityListPage") &&

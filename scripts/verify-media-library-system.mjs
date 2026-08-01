@@ -101,6 +101,10 @@ assert.equal(liveLegacyUsage.references[0].fieldKey, "image");
 check("live Usage Scan matches an absolute legacy asset URL without a Catalog row", true);
 
 const readinessModule = loadTypeScriptModule("src/lib/admin/media-catalog/readiness.ts", {});
+const searchNormalizationModule = loadTypeScriptModule(
+  "src/lib/admin/entity-list/search-normalization.ts",
+  {},
+);
 const catalogModule = loadTypeScriptModule("src/lib/admin/media-catalog/catalog.ts", {
   "server-only": {},
   path: { default: nodePath },
@@ -110,6 +114,7 @@ const catalogModule = loadTypeScriptModule("src/lib/admin/media-catalog/catalog.
   "../media-library": {
     listManagedMediaInventory: async () => managedInventory,
   },
+  "../entity-list/search-normalization": searchNormalizationModule,
   "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
   "../../supabase-admin": { getSupabaseAdmin: () => ({}) },
   "./identity": {
@@ -555,6 +560,7 @@ const registrationRaceCatalogModule = loadTypeScriptModule(
     "../media-library": {
       listManagedMediaInventory: async () => registrationInventory,
     },
+    "../entity-list/search-normalization": searchNormalizationModule,
     "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
     "../../supabase-admin": { getSupabaseAdmin: () => registrationRaceSupabase },
     "./identity": {
@@ -812,7 +818,10 @@ check(
     core.includes("disabled={loading}") &&
     core.includes('loading ? "جارٍ إعادة المحاولة…" : "إعادة المحاولة"'),
 );
-check("asset type filter has an explicit accessible name", core.includes('aria-label="نوع الملف"'));
+check(
+  "asset type filter has an explicit accessible name",
+  core.includes("MEDIA_LIBRARY_FILTERS") && core.includes('label: "نوع الملف"'),
+);
 check("folder navigation uses one recursive asset scope in Grid and List", source("src/lib/admin/media-catalog/catalog.ts").includes('asset.folderPath.startsWith(`${input.folder}/`)') && core.includes("openFolder"));
 check("PDF cards and the details panel provide a consistent document preview", core.includes("PdfDocumentPreview") && core.includes("<iframe") && core.includes("مستند قابل للمعاينة"));
 check("unknown Storage usage is never rendered as a false zero", core.includes('value === null ? "لم يكتمل فحص الارتباطات"') && core.includes("يعرض الفحص المباشر أدناه"));

@@ -1,10 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   AdminFeedbackRegion,
 } from "../../../../../components/admin/AdminFeedbackProvider";
+import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
 import AdminModuleTabs from "../../../../../components/admin/page-blocks/AdminModuleTabs";
 import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
 import {
@@ -14,7 +15,12 @@ import {
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
-import { useAdminBoundedClientPagination } from "../../../../../lib/admin/entity-list";
+import {
+  adminCollectionSearchIncludes,
+  applyAdminEntityUrlPatch,
+  useAdminBoundedClientPagination,
+  type AdminEntityFilterDef,
+} from "../../../../../lib/admin/entity-list";
 import {
   moduleKindLabel,
   normalizeBoolean,
@@ -81,6 +87,7 @@ export default function PageBlocksClient({
   initialTabId,
 }: PageBlocksClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [actionFeedback, setActionFeedback] = useState<{
     message: string;
     ok: boolean;
@@ -135,12 +142,57 @@ export default function PageBlocksClient({
     getRowId: (row) => assignmentRowId(row),
     sortAccessors,
   });
+  const search = searchParams.get("q") ?? "";
+  const moduleType = searchParams.get("module_type") ?? "all";
+  const visibility = searchParams.get("visibility") ?? "all";
+  const assignmentFilters = useMemo<readonly AdminEntityFilterDef[]>(() => {
+    const kinds = [...new Set(assignments.map((row) => row.module_kind))];
+    return [
+      {
+        id: "assignment-module-type",
+        paramKey: "module_type",
+        label: "نوع الموديول",
+        type: "single_select",
+        allValue: "all",
+        placeholder: "نوع الموديول",
+        options: kinds.map((kind) => ({ value: kind, label: moduleKindLabel(kind) })),
+      },
+      {
+        id: "assignment-visibility",
+        paramKey: "visibility",
+        label: "الظهور",
+        type: "status",
+        allValue: "all",
+        placeholder: "الظهور",
+        options: [
+          { value: "visible", label: "ظاهر" },
+          { value: "hidden", label: "مخفي" },
+        ],
+      },
+    ];
+  }, [assignments]);
+  const filteredRows = useMemo(
+    () =>
+      table.rows.filter((row) => {
+        if (
+          search &&
+          !adminCollectionSearchIncludes(
+            `${row.template_name} ${moduleKindLabel(row.module_kind)} ${row.template_id}`,
+            search,
+          )
+        ) return false;
+        if (moduleType !== "all" && row.module_kind !== moduleType) return false;
+        const rowVisibility = normalizeBoolean(row.is_visible, true) ? "visible" : "hidden";
+        return visibility === "all" || rowVisibility === visibility;
+      }),
+    [moduleType, search, table.rows, visibility],
+  );
   const assignmentDatasetKey = useMemo(
-    () => table.rawRows.map(assignmentRowId).sort().join("|"),
-    [table.rawRows],
+    () => `${search}|${moduleType}|${visibility}|${filteredRows.map(assignmentRowId).sort().join("|")}`,
+    [filteredRows, moduleType, search, visibility],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: table.rows,
+    rows: filteredRows,
     datasetKey: assignmentDatasetKey,
   });
   const paginatedRows = pagination.rows;
@@ -330,17 +382,46 @@ export default function PageBlocksClient({
               <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
                 <PageModuleKindsBar page={page} usedModuleKinds={usedModuleKinds} />
 
-                <AdminBulkActionBar
-                  selectedIds={selection.selectedIds}
-                  entityLabel="ربط"
-                  options={[
-                    { value: "show", label: "إظهار على الموقع" },
-                    { value: "hide", label: "إخفاء من الموقع" },
-                    { value: "delete", label: "إزالة من الصفحة" },
-                  ]}
-                  onExecute={handleBulkExecute}
-                  onClearSelection={selection.clearSelection}
-                  isBusy={isPending}
+                <AdminEntityListFilters
+                  basePath={`/admin/pages-blocks/pages/${page.id}`}
+                  search={{
+                    value: search,
+                    placeholder: "ابحث باسم الموديول أو نوعه أو المعرّف…",
+                    minLength: 1,
+                    pending: isPending,
+                  }}
+                  filters={assignmentFilters}
+                  values={{ module_type: moduleType, visibility }}
+                  preserveParams={["tab"]}
+                  contextOverrideActive={selection.selectedIds.length > 0}
+                  contextOverride={
+                    <AdminBulkActionBar
+                      selectedIds={selection.selectedIds}
+                      entityLabel="ربط"
+                      options={[
+                        { value: "show", label: "إظهار على الموقع" },
+                        { value: "hide", label: "إخفاء من الموقع" },
+                        { value: "delete", label: "إزالة من الصفحة" },
+                      ]}
+                      onExecute={handleBulkExecute}
+                      onClearSelection={selection.clearSelection}
+                      isBusy={isPending}
+                    />
+                  }
+                  onQueryPatch={(patch, behavior = "push") => {
+                    const next = applyAdminEntityUrlPatch(
+                      new URLSearchParams(window.location.search),
+                      patch,
+                    );
+                    const query = next.toString();
+                    window.history[
+                      behavior === "replace" ? "replaceState" : "pushState"
+                    ](
+                      window.history.state,
+                      "",
+                      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+                    );
+                  }}
                 />
 
                 <PageBlocksAssignmentsGrid

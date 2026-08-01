@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   AdminEntityList,
-  AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../../components/admin/entity-list";
 import {
@@ -58,6 +57,8 @@ const STATUS_FILTER: AdminEntityFilterDef = {
   id: "categories-status-filter",
   paramKey: "status",
   placeholder: "كل الحالات",
+  label: "الحالة",
+  type: "status",
   options: [
     { value: "published", label: "منشور" },
     { value: "hidden", label: "مخفي" },
@@ -388,39 +389,6 @@ export default function CategoriesListClient({
         />
       </AdminEntityListPrimarySection>
 
-      <AdminEntityListPrimarySection>
-        <AdminEntityListFilters
-          basePath={BASE_PATH}
-          search={{
-            placeholder: "ابحث في التصنيفات",
-            value: controller.query.search,
-            className: "max-w-[330px]",
-          }}
-          filters={filters}
-          values={{ status: controller.query.filters.status }}
-          onQueryPatch={(patch) => {
-            const search =
-              "q" in patch
-                ? (patch.q ?? "").trim()
-                : controller.query.search;
-            // Engine path: only accepted status tokens reach the controller.
-            // Unknown/null status resets to the shared "all" sentinel so the
-            // trigger returns to "كل الحالات" without a duplicate option.
-            const status =
-              "status" in patch
-                ? patch.status === "published" || patch.status === "hidden"
-                  ? patch.status
-                  : "all"
-                : controller.query.filters.status;
-            controller.setSearchAndFilters(
-              search,
-              { status },
-              "q" in patch && !("status" in patch) ? "replace" : "push",
-            );
-          }}
-        />
-      </AdminEntityListPrimarySection>
-
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
@@ -433,6 +401,30 @@ export default function CategoriesListClient({
           number
         >
           listId="content-categories-table"
+          toolbar={{
+            basePath: BASE_PATH,
+            search: {
+              placeholder: "ابحث في التصنيفات",
+              value: controller.query.search,
+              className: "max-w-[330px]",
+              pending: controller.isFetching,
+            },
+            filters,
+            values: { status: controller.query.filters.status },
+            onQueryPatch: (patch, behavior = "push") => {
+              const search =
+                "q" in patch
+                  ? (patch.q ?? "").trim()
+                  : controller.query.search;
+              const status =
+                "status" in patch
+                  ? patch.status === "published" || patch.status === "hidden"
+                    ? patch.status
+                    : "all"
+                  : controller.query.filters.status;
+              controller.setSearchAndFilters(search, { status }, behavior);
+            },
+          }}
           rows={pageRows}
           columns={columns}
           getRowId={(row) => row.id}

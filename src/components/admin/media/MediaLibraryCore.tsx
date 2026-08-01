@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -16,6 +17,10 @@ import type {
   MediaCatalogPage,
   MediaSmartView,
 } from "../../../lib/admin/media-catalog/types";
+import {
+  applyAdminEntityUrlPatch,
+  type AdminEntityFilterDef,
+} from "../../../lib/admin/entity-list";
 import { getMediaReadinessReasonPresentation } from "../../../lib/admin/media-catalog/readiness";
 import {
   CMS_IMAGE_ACCEPT,
@@ -26,6 +31,7 @@ import {
   AdminFeedbackChannelViewport,
   useAdminFeedback,
 } from "../AdminFeedbackProvider";
+import AdminEntityListFilters from "../entity-list/AdminEntityListFilters";
 import AdminConfirmDialog from "../ui/AdminConfirmDialog";
 import AdminTablePagination from "../ui/AdminTablePagination";
 import MediaUsagePanel from "../media-intelligence/MediaUsagePanel";
@@ -63,6 +69,20 @@ const SMART_VIEWS: Array<{ id: MediaSmartView; label: string; description: strin
 
 const PAGE_SIZES: PageSize[] = [10, 20, 30, 50, 100];
 const TOPIC_MEDIA_CATALOG_SYNC_STORAGE_KEY = "venisia:admin:topic-media-catalog-sync";
+const MEDIA_LIBRARY_FILTERS: readonly AdminEntityFilterDef[] = [
+  {
+    id: "kind",
+    paramKey: "kind",
+    label: "نوع الملف",
+    type: "single_select",
+    allValue: "all",
+    placeholder: "نوع الملف",
+    options: [
+      { value: "image", label: "صور" },
+      { value: "document", label: "PDF" },
+    ],
+  },
+];
 
 function formatBytes(value: number | null) {
   if (value == null) return "غير معروف";
@@ -142,13 +162,18 @@ export default function MediaLibraryCore({
   onCancelSelection,
   className = "",
 }: MediaLibraryCoreProps) {
+  const searchParams = useSearchParams();
   const safeDeleteStatusId = useId();
   const { clearFeedback, publishFeedback } = useAdminFeedback();
   const [folder, setFolder] = useState<string | null>(initialFolder);
-  const [kind, setKind] = useState<KindFilter>(initialKind);
+  const [kind, setKind] = useState<KindFilter>(() => {
+    const value = mode === "manage" ? searchParams.get("kind") : null;
+    return value === "image" || value === "document" ? value : initialKind;
+  });
   const [smartView, setSmartView] = useState<MediaSmartView>("all");
-  const [searchInput, setSearchInput] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() =>
+    mode === "manage" ? (searchParams.get("q") ?? "") : "",
+  );
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -174,12 +199,20 @@ export default function MediaLibraryCore({
   const refreshFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setQuery(searchInput.trim());
+    if (mode !== "manage") return;
+    function syncFromHistory() {
+      const parameters = new URLSearchParams(window.location.search);
+      const nextQuery = parameters.get("q") ?? "";
+      const rawKind = parameters.get("kind");
+      const nextKind = rawKind === "image" || rawKind === "document" ? rawKind : "all";
+      setQuery(nextQuery);
+      setKind(nextKind);
       setPageNumber(1);
-    }, 240);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
+      setSelectedIds([]);
+    }
+    window.addEventListener("popstate", syncFromHistory);
+    return () => window.removeEventListener("popstate", syncFromHistory);
+  }, [mode]);
 
   const loadPage = useCallback(async () => {
     requestControllerRef.current?.abort();
@@ -631,19 +664,61 @@ export default function MediaLibraryCore({
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => uploadInputRef.current?.click()} disabled={Boolean(busy)} className="rounded-xl bg-[#D8B87A] px-4 py-2 text-sm font-bold text-[#05070B] disabled:opacity-50">{busy === "upload" ? `جارٍ الرفع ${uploadSummary ?? ""}` : "رفع ملفات"}</button>
               <input ref={uploadInputRef} type="file" multiple accept={`${CMS_IMAGE_ACCEPT},${CMS_PDF_ACCEPT}`} className="hidden" onChange={(event) => { void uploadFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
-              {mode === "manage" && selectedAssets.length ? (
-                <button ref={deleteConfirmationTriggerRef} type="button" aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined} title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => setConfirmation({ kind: "delete", assets: selectedAssets })} className="rounded-xl border border-red-300/25 px-4 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
-              ) : null}
-              {mode === "manage" && selectedAssets.length === 1 ? <button type="button" title={!canRebindSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canRebindSelectedAssets || Boolean(busy)} onClick={() => setShowPhysicalForm(true)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/65 disabled:opacity-40">نقل / إعادة تسمية</button> : null}
-              {selectedAssets.length ? <button type="button" onClick={() => setSelectedIds([])} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/55">مسح التحديد</button> : null}
             </div>
             <div className="flex gap-1 rounded-xl border border-white/10 p-1">
               <button type="button" onClick={() => setViewMode("grid")} aria-pressed={viewMode === "grid"} className={`rounded-lg px-3 py-1.5 text-xs ${viewMode === "grid" ? "bg-white/10 text-white" : "text-white/45"}`}>شبكة</button>
               <button type="button" onClick={() => setViewMode("list")} aria-pressed={viewMode === "list"} className={`rounded-lg px-3 py-1.5 text-xs ${viewMode === "list" ? "bg-white/10 text-white" : "text-white/45"}`}>قائمة</button>
             </div>
           </div>
+          <AdminEntityListFilters
+            basePath="/admin/media-library"
+            search={{
+              value: query,
+              placeholder: "ابحث بالاسم أو المسار أو الوصف البديل…",
+              debounceMs: 350,
+              pending: loading,
+            }}
+            filters={MEDIA_LIBRARY_FILTERS}
+            values={{ kind }}
+            contextOverrideActive={selectedAssets.length > 0}
+            contextOverride={
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-white/58">تم تحديد {selectedAssets.length}</span>
+                {mode === "manage" && selectedAssets.length ? (
+                  <button ref={deleteConfirmationTriggerRef} type="button" aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined} title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => setConfirmation({ kind: "delete", assets: selectedAssets })} className="rounded-xl border border-red-300/25 px-3 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
+                ) : null}
+                {mode === "manage" && selectedAssets.length === 1 ? <button type="button" title={!canRebindSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canRebindSelectedAssets || Boolean(busy)} onClick={() => setShowPhysicalForm(true)} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/65 disabled:opacity-40">نقل / إعادة تسمية</button> : null}
+                <button type="button" onClick={() => setSelectedIds([])} className="ms-auto rounded-xl border border-white/10 px-3 py-2 text-sm text-white/55">مسح التحديد</button>
+              </div>
+            }
+            onQueryPatch={(patch, behavior = "push") => {
+              if (mode === "manage") {
+                const next = applyAdminEntityUrlPatch(
+                  new URLSearchParams(window.location.search),
+                  patch,
+                );
+                const nextQuery = next.toString();
+                window.history[
+                  behavior === "replace" ? "replaceState" : "pushState"
+                ](
+                  window.history.state,
+                  "",
+                  `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`,
+                );
+              }
+              if (Object.hasOwn(patch, "q")) setQuery(patch.q ?? "");
+              if (Object.hasOwn(patch, "kind")) {
+                const nextKind = patch.kind;
+                setKind(nextKind === "image" || nextKind === "document" ? nextKind : "all");
+              }
+              setPageNumber(1);
+              setSelectedIds([]);
+            }}
+            className="mt-4"
+          />
+
           {mode === "manage" && selectedAssets.length > 0 && !canSafelyDeleteSelectedAssets ? (
-            <div id={safeDeleteStatusId} className="mt-3 rounded-2xl border border-amber-300/20 bg-amber-300/8 px-4 py-3 text-xs leading-6 text-amber-50" role="status">
+            <div id={safeDeleteStatusId} className="rounded-2xl border border-amber-300/20 bg-amber-300/8 px-4 py-3 text-xs leading-6 text-amber-50" role="status">
               <p className="font-semibold text-amber-100">الحذف الآمن متوقف لحماية الملفات.</p>
               <ul className="mt-1 space-y-2">
                 {safeDeleteReadinessMessages.map((item) => (
@@ -663,13 +738,6 @@ export default function MediaLibraryCore({
             </div>
           ) : null}
           {uploadRows.length ? <div className="mb-4 grid gap-2 rounded-2xl border border-white/8 bg-black/20 p-3 sm:grid-cols-2">{uploadRows.map((row, index) => <div key={`${row.name}-${index}`} className="min-w-0"><p className="truncate text-xs text-white/65">{row.name}</p><p className={`mt-1 text-[10px] ${row.state === "error" ? "text-red-200" : row.state === "complete" ? "text-emerald-300" : "text-white/35"}`}>{row.state === "pending" ? "في الانتظار" : row.state === "uploading" ? "جارٍ الرفع…" : row.state === "complete" ? "اكتمل" : row.error}</p></div>)}</div> : null}
-
-          <div className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_170px]">
-            <input type="search" value={searchInput} onChange={(event) => setSearchInput(event.currentTarget.value)} placeholder="ابحث بالاسم…" className="h-11 rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none focus:border-[#D8B87A]/40" />
-            <select aria-label="نوع الملف" value={kind} onChange={(event) => { setKind(event.currentTarget.value as KindFilter); setPageNumber(1); }} className="h-11 rounded-2xl border border-white/10 bg-[#080B10] px-3 text-sm text-white outline-none">
-              <option value="all">كل الأنواع</option><option value="image">صور</option><option value="document">PDF</option>
-            </select>
-          </div>
 
           <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-white/38">
             {folder ? folder.split("/").map((segment, index, segments) => {

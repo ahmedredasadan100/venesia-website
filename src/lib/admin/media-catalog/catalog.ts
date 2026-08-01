@@ -4,6 +4,7 @@ import path from "path";
 
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { adminCollectionSearchIncludes } from "../entity-list/search-normalization";
 import {
   resolveMediaStorageRuntimeContext,
   type MediaStorageRuntimeContext,
@@ -599,7 +600,7 @@ export function buildMediaLibraryReadModel(
   const referenceViewBlocked =
     (smartView === "used" || smartView === "unused") &&
     !readiness.usageResultsAuthoritative;
-  const normalizedQuery = input.query?.trim().toLocaleLowerCase().slice(0, 120);
+  const normalizedQuery = input.query?.trim().slice(0, 120) ?? "";
   const filtered = referenceViewBlocked
     ? []
     : mergedAssets
@@ -610,7 +611,19 @@ export function buildMediaLibraryReadModel(
             asset.folderPath.startsWith(`${input.folder}/`),
         )
         .filter((asset) => !input.kind || input.kind === "all" || asset.kind === input.kind)
-        .filter((asset) => !normalizedQuery || asset.displayName.toLocaleLowerCase().includes(normalizedQuery))
+        .filter(
+          (asset) =>
+            !normalizedQuery ||
+            adminCollectionSearchIncludes(
+              [
+                asset.displayName,
+                asset.originalFilename,
+                asset.objectKey,
+                asset.defaultAltText ?? "",
+              ].join(" "),
+              normalizedQuery,
+            ),
+        )
         .filter((asset) => matchesSmartView(asset, smartView, input.context.provider))
         .sort((left, right) => {
           const byDate = right.createdAt.localeCompare(left.createdAt);

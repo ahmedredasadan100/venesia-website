@@ -70,7 +70,7 @@ async function loadProjectsPage(
   const from = (page - 1) * query.pageSize;
   const to = from + query.pageSize - 1;
   const searchFilter = buildAdminListSearchOrFilter(
-    ["arabic_name", "english_name", "slug"],
+    ["arabic_name", "english_name", "slug", "code"],
     query.search,
   );
   const ascending = query.sort.direction === "asc";
@@ -82,6 +82,10 @@ async function loadProjectsPage(
       { count: "exact" },
     )
     .eq("type", query.filters.projectType);
+
+  if (query.filters.featured !== "all") {
+    request = request.eq("featured", query.filters.featured === "yes");
+  }
 
   if (searchFilter) request = request.or(searchFilter);
 

@@ -4,7 +4,6 @@ import { useCallback, useMemo } from "react";
 
 import {
   AdminEntityList,
-  AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../components/admin/entity-list";
 import {
@@ -22,6 +21,7 @@ import type {
   AdminEntityListQuery,
   AdminEntityListResult,
 } from "../../../lib/admin/entity-list/data-engine/contracts";
+import type { AdminEntityFilterDef } from "../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
 import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { resolveAdminNoticeFeedback } from "../../../lib/admin/entity-list/feedback-codes";
@@ -65,6 +65,20 @@ type ProjectsTableClientProps = {
   notice?: string | null;
   errorMessage?: string | null;
 };
+
+const PROJECT_FILTERS: readonly AdminEntityFilterDef[] = [
+  {
+    id: "project-featured",
+    paramKey: "featured",
+    label: "التمييز",
+    placeholder: "التمييز",
+    type: "boolean",
+    options: [
+      { value: "yes", label: "مميز" },
+      { value: "no", label: "غير مميز" },
+    ],
+  },
+];
 
 function toGridRow(row: ProjectEntityListRow): ProjectGridRow {
   return {
@@ -305,30 +319,6 @@ export default function ProjectsTableClient({
         />
       </AdminEntityListPrimarySection>
 
-      <AdminEntityListPrimarySection>
-        <AdminEntityListFilters
-          basePath={basePath}
-          search={{
-            placeholder: "ابحث بالاسم أو الرابط المختصر",
-            value: controller.query.search,
-            className: "max-w-[360px]",
-          }}
-          filters={[]}
-          values={{}}
-          onQueryPatch={(patch) => {
-            const search =
-              "q" in patch
-                ? (patch.q ?? "").trim()
-                : controller.query.search;
-            controller.setSearchAndFilters(
-              search,
-              { projectType: type },
-              "q" in patch ? "replace" : "push",
-            );
-          }}
-        />
-      </AdminEntityListPrimarySection>
-
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
@@ -341,6 +331,32 @@ export default function ProjectsTableClient({
           number
         >
           listId={`${type}-projects-table`}
+          toolbar={{
+            basePath,
+            search: {
+              placeholder: "ابحث بالاسم أو الرابط المختصر أو كود المشروع",
+              value: controller.query.search,
+              className: "max-w-[360px]",
+              pending: controller.isFetching,
+            },
+            filters: PROJECT_FILTERS,
+            values: { featured: controller.query.filters.featured },
+            onQueryPatch: (patch, behavior = "push") => {
+              const search =
+                "q" in patch ? (patch.q ?? "").trim() : controller.query.search;
+              const featured =
+                "featured" in patch
+                  ? patch.featured === "yes" || patch.featured === "no"
+                    ? patch.featured
+                    : "all"
+                  : controller.query.filters.featured;
+              controller.setSearchAndFilters(
+                search,
+                { projectType: type, featured },
+                behavior,
+              );
+            },
+          }}
           rows={projects}
           columns={columns}
           getRowId={(row) => row.id}

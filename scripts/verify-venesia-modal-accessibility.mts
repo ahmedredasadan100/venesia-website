@@ -275,6 +275,7 @@ const expectedConsumers = [
   "src/app/admin/seo/redirects/RedirectFormModal.tsx",
   "src/app/admin/users-roles/UsersManagementClient.tsx",
   "src/components/admin/content-workflow/BulkPublishValidationModal.tsx",
+  "src/components/admin/entity-list/AdminEntityListFilters.tsx",
   "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
   "src/components/admin/ui/AdminDuplicateResourceModal.tsx",
   "src/components/admin/ui/AdminLinkPicker.tsx",

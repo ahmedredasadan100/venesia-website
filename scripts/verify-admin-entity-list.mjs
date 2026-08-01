@@ -45,6 +45,7 @@ const coreFiles = [
   "src/lib/admin/entity-list/empty-state.ts",
   "src/lib/admin/entity-list/pagination.ts",
   "src/lib/admin/entity-list/url-state.ts",
+  "src/lib/admin/entity-list/search-normalization.ts",
   "src/lib/admin/preferences/admin-column-preferences.ts",
   "src/components/admin/entity-list/AdminEntityList.tsx",
   "src/components/admin/entity-list/AdminEntityListTable.tsx",
@@ -115,13 +116,15 @@ check(
   "Consumers must use AdminEntityListSurface + AdminEntityListFilters",
   topicsClient.includes("AdminEntityListSurface") &&
     topicsPage.includes("TopicsListClient") &&
-    topicsFilters.includes("AdminEntityListFilters") &&
+    topicsFilters.includes("AdminEntityListFiltersProps") &&
+    topicsList.includes("toolbar={toolbar}") &&
     categoriesClient.includes("AdminEntityListSurface") &&
-    categoriesClient.includes("AdminEntityListFilters") &&
+    categoriesClient.includes("toolbar={{") &&
     seriesClient.includes("AdminEntityListSurface") &&
-    seriesClient.includes("AdminEntityListFilters") &&
+    seriesClient.includes("toolbar={{") &&
     entitySurface.includes("AdminFloatingLayerProvider") &&
-    entityFilters.includes("AdminFilterListbox"),
+    entityList.includes("<AdminEntityListFilters") &&
+    entityFilters.includes("<VenesiaModal"),
 );
 
 check(
@@ -154,7 +157,7 @@ const coreSources = [
 ];
 
 check(
-  "Shared core must not import Topics/Categories/Series/Supabase/Venesia",
+  "Shared core must not import Topics/Categories/Series/Supabase domain owners",
   coreSources.every(
     (source) =>
       !source.includes("topics/actions") &&
@@ -164,7 +167,6 @@ check(
       !source.includes("content-topics") &&
       !source.includes("content-categories") &&
       !source.includes("content-series") &&
-      !source.toLowerCase().includes("venesia") &&
       !/\bTopics\b/.test(source) &&
       !/\bCategories\b/.test(source) &&
       !/\bSeries\b/.test(source) &&
@@ -344,11 +346,13 @@ check(
 );
 
 check(
-  "Shared filters own clear-filter and optimistic pending selection contracts",
+  "Shared filters own modal draft/apply, chips, and context-row contracts",
   entityFilters.includes("clearableFilterKeys") &&
-    entityFilters.includes("data-admin-clear-filters") &&
-    entityFilters.includes("pendingFilterValues") &&
-    entityFilters.includes("effectiveValues") &&
+    entityFilters.includes("data-admin-collection-context-row") &&
+    entityFilters.includes("data-admin-filter-modal-fields") &&
+    entityFilters.includes("draftFilters") &&
+    entityFilters.includes("applyDraftFilters") &&
+    entityFilters.includes('navigate(patch, "push")') &&
     entityFilters.includes("startTransition") &&
     !topicsFilters.includes("function resetFilters"),
 );
@@ -411,7 +415,7 @@ check(
     read("src/lib/admin/content/entity-preview-capabilities.ts").includes(
       "/admin/content/topics?series=",
     ) &&
-    seriesClient.includes("AdminEntityListFilters") &&
+    seriesClient.includes("toolbar={{") &&
     seriesClient.includes("useAdminEntityListController") &&
     seriesClient.includes("onPageChange") &&
     seriesListOwner.includes("category_id") &&

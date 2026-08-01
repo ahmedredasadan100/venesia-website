@@ -5,8 +5,6 @@ import { useMemo } from "react";
 
 import {
   AdminEntityList,
-  AdminEntityListFilters,
-  AdminEntityListPrimarySection,
   AdminEntityListSurface,
   AdminEntityListTableRegion,
 } from "../../../../components/admin/entity-list";
@@ -68,7 +66,9 @@ const REPORT_FILTERS: readonly AdminEntityFilterDef[] = [
   {
     id: "topics-without-image-status",
     paramKey: "status",
+    label: "الحالة",
     placeholder: "الحالة",
+    type: "status",
     options: CONTENT_STATUS_VALUES.map((status) => ({
       value: status,
       label: CONTENT_STATUS_METADATA[status].label,
@@ -78,7 +78,9 @@ const REPORT_FILTERS: readonly AdminEntityFilterDef[] = [
   {
     id: "topics-without-image-content-type",
     paramKey: "type",
+    label: "نوع المحتوى",
     placeholder: "نوع المحتوى",
+    type: "single_select",
     options: CONTENT_TYPE_OPTIONS.map((option) => ({
       value: option.value,
       label: option.label,
@@ -297,52 +299,6 @@ export default function TopicsWithoutImageReportClient({
 
   return (
     <AdminEntityListSurface consumer="topics-without-image">
-      <AdminEntityListPrimarySection>
-        <AdminEntityListFilters
-          basePath="/admin/reports/topics-without-image"
-          preserveParams={["sort", "limit"]}
-          search={{
-            placeholder: "بحث بالعنوان أو slug",
-            value: controller.query.search,
-            minLength: topicsWithoutImageQueryContract.searchMinLength,
-          }}
-          filters={REPORT_FILTERS}
-          values={{
-            status: controller.query.filters.status,
-            type: controller.query.filters.contentType,
-          }}
-          onQueryPatch={(patch) => {
-            const search =
-              "q" in patch
-                ? (patch.q ?? "").trim()
-                : controller.query.search;
-            const status =
-              "status" in patch &&
-              topicsWithoutImageStatuses.includes(
-                (patch.status ?? "all") as TopicsWithoutImageFilters["status"],
-              )
-                ? ((patch.status ?? "all") as TopicsWithoutImageFilters["status"])
-                : controller.query.filters.status;
-            const contentType =
-              "type" in patch &&
-              topicsWithoutImageContentTypes.includes(
-                (patch.type ?? "all") as TopicsWithoutImageFilters["contentType"],
-              )
-                ? ((patch.type ?? "all") as TopicsWithoutImageFilters["contentType"])
-                : controller.query.filters.contentType;
-            controller.setSearchAndFilters(
-              search,
-              { status, contentType },
-              "q" in patch &&
-                !("status" in patch) &&
-                !("type" in patch)
-                ? "replace"
-                : "push",
-            );
-          }}
-        />
-      </AdminEntityListPrimarySection>
-
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
@@ -355,6 +311,44 @@ export default function TopicsWithoutImageReportClient({
           number
         >
           listId="topics-without-image-table"
+          toolbar={{
+            basePath: "/admin/reports/topics-without-image",
+            preserveParams: ["sort", "limit"],
+            search: {
+              placeholder: "بحث بالعنوان أو slug",
+              value: controller.query.search,
+              minLength: topicsWithoutImageQueryContract.searchMinLength,
+              pending: controller.isFetching,
+            },
+            filters: REPORT_FILTERS,
+            values: {
+              status: controller.query.filters.status,
+              type: controller.query.filters.contentType,
+            },
+            onQueryPatch: (patch, behavior = "push") => {
+              const search =
+                "q" in patch ? (patch.q ?? "").trim() : controller.query.search;
+              const status =
+                "status" in patch &&
+                topicsWithoutImageStatuses.includes(
+                  (patch.status ?? "all") as TopicsWithoutImageFilters["status"],
+                )
+                  ? ((patch.status ?? "all") as TopicsWithoutImageFilters["status"])
+                  : controller.query.filters.status;
+              const contentType =
+                "type" in patch &&
+                topicsWithoutImageContentTypes.includes(
+                  (patch.type ?? "all") as TopicsWithoutImageFilters["contentType"],
+                )
+                  ? ((patch.type ?? "all") as TopicsWithoutImageFilters["contentType"])
+                  : controller.query.filters.contentType;
+              controller.setSearchAndFilters(
+                search,
+                { status, contentType },
+                behavior,
+              );
+            },
+          }}
           rows={controller.result.rows}
           columns={columns}
           getRowId={(row) => row.id}

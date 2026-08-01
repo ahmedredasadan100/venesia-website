@@ -3,7 +3,6 @@
 import { useCallback, useMemo } from "react";
 import {
   AdminEntityList,
-  AdminEntityListFilters,
   AdminEntityListSurface,
 } from "../../../../components/admin/entity-list";
 import {
@@ -63,6 +62,8 @@ const STATUS_FILTER: AdminEntityFilterDef = {
   id: "series-status-filter",
   paramKey: "status",
   placeholder: "كل الحالات",
+  label: "الحالة",
+  type: "status",
   options: [
     { value: "published", label: "منشور" },
     { value: "unpublished", label: "مخفي" },
@@ -277,7 +278,10 @@ export default function SeriesTableClient({
       {
         id: "series-category-filter",
         paramKey: "category",
+        label: "التصنيف",
         placeholder: "كل التصنيفات",
+        type: "hierarchical_entity_select",
+        searchable: true,
         options: controller.result.metrics?.categoryOptions ?? [],
         className: "min-w-[160px]",
       },
@@ -356,61 +360,6 @@ export default function SeriesTableClient({
         />
       </AdminEntityListPrimarySection>
 
-      <AdminEntityListPrimarySection>
-        <AdminEntityListFilters
-          basePath={BASE_PATH}
-          search={{
-            placeholder: "ابحث في السلاسل",
-            value: controller.query.search,
-            className: "max-w-[330px]",
-          }}
-          filters={filters}
-          values={{
-            status: controller.query.filters.status,
-            category: controller.query.filters.categoryId
-              ? String(controller.query.filters.categoryId)
-              : "all",
-          }}
-          onQueryPatch={(patch) => {
-            const search =
-              "q" in patch
-                ? (patch.q ?? "").trim()
-                : controller.query.search;
-            const statusValue =
-              "status" in patch
-                ? patch.status
-                : controller.query.filters.status;
-            const categoryValue =
-              "category" in patch
-                ? patch.category
-                : controller.query.filters.categoryId
-                  ? String(controller.query.filters.categoryId)
-                  : "all";
-            const status =
-              statusValue === "published" ||
-              statusValue === "unpublished" ||
-              statusValue === "draft" ||
-              statusValue === "archived"
-                ? statusValue
-                : "all";
-            const categoryId = Number(categoryValue);
-            controller.setSearchAndFilters(
-              search,
-              {
-                status,
-                categoryId:
-                  Number.isInteger(categoryId) && categoryId > 0
-                    ? categoryId
-                    : null,
-              },
-              "q" in patch && !("status" in patch) && !("category" in patch)
-                ? "replace"
-                : "push",
-            );
-          }}
-        />
-      </AdminEntityListPrimarySection>
-
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
@@ -418,6 +367,53 @@ export default function SeriesTableClient({
       >
         <AdminEntityList<SeriesListRow, SeriesColumnKey, SeriesSortKey, number>
           listId="content-series-table"
+          toolbar={{
+            basePath: BASE_PATH,
+            search: {
+              placeholder: "ابحث في السلاسل",
+              value: controller.query.search,
+              className: "max-w-[330px]",
+              pending: controller.isFetching,
+            },
+            filters,
+            values: {
+              status: controller.query.filters.status,
+              category: controller.query.filters.categoryId
+                ? String(controller.query.filters.categoryId)
+                : "all",
+            },
+            onQueryPatch: (patch, behavior = "push") => {
+              const search =
+                "q" in patch ? (patch.q ?? "").trim() : controller.query.search;
+              const statusValue =
+                "status" in patch ? patch.status : controller.query.filters.status;
+              const categoryValue =
+                "category" in patch
+                  ? patch.category
+                  : controller.query.filters.categoryId
+                    ? String(controller.query.filters.categoryId)
+                    : "all";
+              const status =
+                statusValue === "published" ||
+                statusValue === "unpublished" ||
+                statusValue === "draft" ||
+                statusValue === "archived"
+                  ? statusValue
+                  : "all";
+              const categoryId = Number(categoryValue);
+              controller.setSearchAndFilters(
+                search,
+                {
+                  status,
+                  categoryId:
+                    Number.isInteger(categoryId) && categoryId > 0
+                      ? categoryId
+                      : null,
+                },
+                behavior,
+              );
+            },
+          }}
           rows={controller.result.rows}
           columns={columns}
           getRowId={(row) => row.id}

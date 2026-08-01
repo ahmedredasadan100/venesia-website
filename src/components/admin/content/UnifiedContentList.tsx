@@ -18,6 +18,7 @@ import type {
   UnifiedContentRow,
 } from "../../../lib/admin/content/load-unified-content";
 import { AdminEntityList } from "../entity-list";
+import type { AdminEntityListFiltersProps } from "../entity-list/AdminEntityListFilters";
 import AdminListboxSelect from "../ui/AdminListboxSelect";
 import {
   createUnifiedContentColumns,
@@ -78,6 +79,7 @@ export default function UnifiedContentList({
   rowActionHandlers,
   onSortChange,
   onSuccessfulMutation,
+  toolbar,
 }: {
   rows: UnifiedContentRow[];
   categories: AdminContentCategoryNode[];
@@ -96,6 +98,7 @@ export default function UnifiedContentList({
   onSuccessfulMutation?: (
     result?: AdminActionResult,
   ) => void | Promise<void>;
+  toolbar: AdminEntityListFiltersProps;
 }) {
   const router = useRouter();
   const [bulkCategoryId, setBulkCategoryId] = useState("");
@@ -183,6 +186,7 @@ export default function UnifiedContentList({
         return bulkUpdateUnifiedContent(formData);
       }}
       initialFeedback={initialFeedback}
+      toolbar={toolbar}
       bulkAdditionalControls={({
         bulkAction,
         pending,
