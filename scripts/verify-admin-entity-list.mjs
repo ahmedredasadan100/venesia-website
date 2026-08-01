@@ -55,6 +55,7 @@ const coreFiles = [
   "src/components/admin/ui/AdminFilterListbox.tsx",
   "src/components/admin/ui/admin-floating-position.ts",
   "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
+  "src/components/admin/ui/admin-scrollbar-styles.ts",
 ];
 coreFiles.forEach((path) =>
   check(`Missing entity-list core file: ${path}`, existsSync(resolve(ROOT, path))),
@@ -84,6 +85,9 @@ const emptyStateCore = read("src/lib/admin/entity-list/empty-state.ts");
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const rowActions = read(
   "src/components/admin/ui/AdminDataGridRowActions.tsx",
+);
+const scrollbarStyles = read(
+  "src/components/admin/ui/admin-scrollbar-styles.ts",
 );
 
 const topicsList = read("src/components/admin/content/UnifiedContentList.tsx");
@@ -208,6 +212,56 @@ check(
     floatingPosition.includes('placement === "bottom" ? top : undefined') &&
     floatingPosition.includes('placement === "top" ? bottom : undefined') &&
     floatingPosition.includes("maxHeight"),
+);
+
+check(
+  "Shared DataGrid owns one labelled horizontal-scroll and scrollbar contract",
+  dataGrid.includes("ADMIN_SCROLLBAR_VISUAL_CLASSES") &&
+    dataGrid.includes('scrollLabel = "منطقة بيانات الإدارة"') &&
+    dataGrid.includes('role="region"') &&
+    dataGrid.includes("tabIndex={0}") &&
+    !dataGrid.includes("[scrollbar-width:thin]") &&
+    scrollbarStyles.includes("[&::-webkit-scrollbar]:h-1.5") &&
+    scrollbarStyles.includes("[&::-webkit-scrollbar]:w-1.5") &&
+    entityTable.includes("scrollLabel?: string") &&
+    entityTable.includes("scrollLabel={scrollLabel}") &&
+    !entityTable.includes("max-w-full overflow-hidden"),
+);
+
+check(
+  "Shared Row Actions uses the one vertical More icon and bounded scrollbar owner",
+  dataGrid.includes('<circle cx="12" cy="5" r="1.7" />') &&
+    dataGrid.includes('<circle cx="12" cy="12" r="1.7" />') &&
+    dataGrid.includes('<circle cx="12" cy="19" r="1.7" />') &&
+    !dataGrid.includes('<circle cx="5" cy="12"') &&
+    !dataGrid.includes('<circle cx="19" cy="12"') &&
+    rowActions.includes("ADMIN_SCROLLBAR_VISUAL_CLASSES") &&
+    rowActions.includes("overflow-y-auto overflow-x-hidden overscroll-contain"),
+);
+
+check(
+  "Shared Pagination auto-hides from the current page size and reuses the scrollbar owner",
+  pagination.includes("totalCount > currentPageSize") &&
+    !pagination.includes("getMinPageSize") &&
+    !pagination.includes("forceShowSummary") &&
+    pagination.includes("ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS") &&
+    pagination.includes("ADMIN_SCROLLBAR_VISUAL_CLASSES") &&
+    pagination.includes("buildAdminEntityListHref"),
+);
+check(
+  "Collection owner groups table and pagination with shared range and pending contracts",
+  entitySurface.includes("AdminEntityListTableRegion") &&
+    entitySurface.includes('TABLE_REGION_LAYOUT_CLASSES = "flex flex-col gap-4"') &&
+    pagination.includes("computePageRange") &&
+    pagination.includes("buildAdminEntityListHref") &&
+    pagination.includes("pending?: boolean") &&
+    pagination.includes("disabled={pending || isActive}") &&
+    pagination.includes('data-admin-table-pagination=""') &&
+    [topicsClient, categoriesClient, seriesClient].every(
+      (source) =>
+        source.includes("AdminEntityListTableRegion") &&
+        source.includes("pending={controller.isFetching}"),
+    ),
 );
 
 check(
@@ -431,6 +485,11 @@ check(
     pageState.rangeStart === 11 &&
     pageState.rangeEnd === 11 &&
     pageState.pageSize === 10,
+);
+const emptyPageRange = paginationModule.computePageRange(1, 10, 0);
+check(
+  "shared page range reports a canonical empty interval",
+  emptyPageRange.rangeStart === 0 && emptyPageRange.rangeEnd === 0,
 );
 const sliced = paginationModule.slicePageRows(
   Array.from({ length: 11 }, (_, index) => index + 1),

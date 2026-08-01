@@ -1,9 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ReactNode, useState, useTransition } from "react";
+import { type ReactNode, useRef, useState, useTransition } from "react";
 
+import {
+  AdminFeedbackChannelViewport,
+  useAdminFeedback,
+} from "../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../components/admin/page-blocks/AdminModuleTabs";
+import {
+  AdminConfirmDialog,
+  AdminPageContextHeader,
+} from "../../../../components/admin/ui";
 import {
   hasAdminSelfAccountFieldErrors,
   normalizeAdminEmail,
@@ -24,6 +32,8 @@ type SecuritySettingsClientProps = {
   fullName: string | null;
   lastLoginAt: string | null;
 };
+
+const FEEDBACK_CHANNEL = "settings-security";
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -68,6 +78,7 @@ export default function SecuritySettingsClient({
   lastLoginAt,
 }: SecuritySettingsClientProps) {
   const router = useRouter();
+  const { clearFeedback, publishFeedback } = useAdminFeedback();
   const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
   const [accountForm, setAccountForm] = useState({
     full_name: fullName ?? "",
@@ -77,9 +88,10 @@ export default function SecuritySettingsClient({
   const [savedEmail, setSavedEmail] = useState(email);
   const [accountFieldErrors, setAccountFieldErrors] = useState<AdminSelfAccountFieldErrors>({});
   const [revokePassword, setRevokePassword] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [revokePending, setRevokePending] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const revokeTriggerRef = useRef<HTMLButtonElement>(null);
 
   const accountPropsKey = `${email}|${fullName ?? ""}`;
   const [lastAccountPropsKey, setLastAccountPropsKey] = useState(accountPropsKey);
@@ -95,9 +107,51 @@ export default function SecuritySettingsClient({
 
   const emailChanged = normalizeAdminEmail(accountForm.email) !== normalizeAdminEmail(savedEmail);
 
-  function resetAlerts() {
-    setMessage(null);
-    setError(null);
+  function resetFeedback() {
+    clearFeedback(FEEDBACK_CHANNEL);
+  }
+
+  function announce(
+    variant: "success" | "danger" | "warning",
+    title: string,
+    message: string,
+  ) {
+    publishFeedback(
+      {
+        variant,
+        title,
+        message,
+        layout: "inline",
+        dismissible: true,
+        lifecycle: variant === "danger" ? "persistent" : "manual",
+      },
+      {
+        channel: FEEDBACK_CHANNEL,
+        placement: "inline",
+        critical: variant === "danger",
+        reveal: variant === "danger",
+      },
+    );
+  }
+
+  async function revokeAllSessions() {
+    resetFeedback();
+    setRevokePending(true);
+    try {
+      await revokeAllAdminSessionsAction(revokePassword);
+      window.location.href = "/admin/login";
+    } catch (actionError) {
+      announce(
+        "danger",
+        "تعذر إلغاء الجلسات",
+        actionError instanceof Error
+          ? actionError.message
+          : "تعذر إلغاء الجلسات.",
+      );
+      throw actionError;
+    } finally {
+      setRevokePending(false);
+    }
   }
 
   function clearAccountFieldError(field: AdminSelfAccountField) {
@@ -130,19 +184,33 @@ export default function SecuritySettingsClient({
             className="mt-5 grid max-w-xl gap-4"
             onSubmit={(event) => {
               event.preventDefault();
-              resetAlerts();
+              resetFeedback();
               if (passwordForm.next !== passwordForm.confirm) {
-                setError("تأكيد كلمة المرور غير متطابق.");
+                announce(
+                  "danger",
+                  "تعذر حفظ كلمة المرور",
+                  "تأكيد كلمة المرور غير متطابق.",
+                );
                 return;
               }
               startTransition(async () => {
                 try {
                   await changeAdminPasswordAction(passwordForm.current, passwordForm.next);
                   setPasswordForm({ current: "", next: "", confirm: "" });
-                  setMessage("تم تحديث كلمة المرور بنجاح.");
+                  announce(
+                    "success",
+                    "تم تحديث كلمة المرور",
+                    "تم تحديث كلمة المرور بنجاح.",
+                  );
                   router.refresh();
                 } catch (actionError) {
-                  setError(actionError instanceof Error ? actionError.message : "تعذر تحديث كلمة المرور.");
+                  announce(
+                    "danger",
+                    "تعذر تحديث كلمة المرور",
+                    actionError instanceof Error
+                      ? actionError.message
+                      : "تعذر تحديث كلمة المرور.",
+                  );
                 }
               });
             }}
@@ -198,7 +266,7 @@ export default function SecuritySettingsClient({
             className="mt-5 grid max-w-xl gap-4"
             onSubmit={(event) => {
               event.preventDefault();
-              resetAlerts();
+              resetFeedback();
               setAccountFieldErrors({});
 
               const fieldErrors = validateAdminSelfAccountForm({
@@ -207,25 +275,49 @@ export default function SecuritySettingsClient({
               });
               if (hasAdminSelfAccountFieldErrors(fieldErrors)) {
                 setAccountFieldErrors(fieldErrors);
+                announce(
+                  "danger",
+                  "راجع بيانات الحساب",
+                  "تحقق من الحقول الموضحة ثم أعد المحاولة.",
+                );
                 return;
               }
 
               startTransition(async () => {
-                const result = await updateAdminSelfAccountAction(accountForm);
-                if (!result.success) {
-                  setAccountFieldErrors(result.fieldErrors);
-                  return;
-                }
+                try {
+                  const result = await updateAdminSelfAccountAction(accountForm);
+                  if (!result.success) {
+                    setAccountFieldErrors(result.fieldErrors);
+                    announce(
+                      "danger",
+                      "تعذر حفظ بيانات الحساب",
+                      "تحقق من الحقول الموضحة ثم أعد المحاولة.",
+                    );
+                    return;
+                  }
 
-                setAccountForm({
-                  full_name: result.fullName ?? "",
-                  email: result.email,
-                  currentPassword: "",
-                });
-                setSavedEmail(result.email);
-                setAccountFieldErrors({});
-                setMessage("تم حفظ بيانات الحساب.");
-                router.refresh();
+                  setAccountForm({
+                    full_name: result.fullName ?? "",
+                    email: result.email,
+                    currentPassword: "",
+                  });
+                  setSavedEmail(result.email);
+                  setAccountFieldErrors({});
+                  announce(
+                    "success",
+                    "تم حفظ بيانات الحساب",
+                    "تم حفظ بيانات الحساب بنجاح.",
+                  );
+                  router.refresh();
+                } catch (actionError) {
+                  announce(
+                    "danger",
+                    "تعذر حفظ بيانات الحساب",
+                    actionError instanceof Error
+                      ? actionError.message
+                      : "تعذر حفظ بيانات الحساب.",
+                  );
+                }
               });
             }}
           >
@@ -328,15 +420,8 @@ export default function SecuritySettingsClient({
               className="mt-5 grid max-w-xl gap-4"
               onSubmit={(event) => {
                 event.preventDefault();
-                resetAlerts();
-                startTransition(async () => {
-                  try {
-                    await revokeAllAdminSessionsAction(revokePassword);
-                    window.location.href = "/admin/login";
-                  } catch (actionError) {
-                    setError(actionError instanceof Error ? actionError.message : "تعذر إلغاء الجلسات.");
-                  }
-                });
+                resetFeedback();
+                setConfirmRevoke(true);
               }}
             >
               <input
@@ -348,8 +433,9 @@ export default function SecuritySettingsClient({
                 className={fieldClassName}
               />
               <button
+                ref={revokeTriggerRef}
                 type="submit"
-                disabled={isPending}
+                disabled={isPending || revokePending}
                 className="w-fit rounded-2xl border border-red-400/25 bg-red-500/10 px-5 py-3 text-sm font-semibold text-red-100 disabled:opacity-60"
               >
                 إلغاء جميع الجلسات
@@ -362,26 +448,32 @@ export default function SecuritySettingsClient({
   ];
 
   return (
-    <div className="space-y-6 pb-10" dir="rtl">
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
-        <h1 className="text-2xl font-semibold text-white">الأمان</h1>
-        <p className="mt-2 text-sm leading-7 text-white/55">
-          إدارة بيانات الدخول للحساب الحالي. يُشترط إدخال كلمة المرور الحالية قبل أي تغيير حساس.
-        </p>
-      </section>
+    <div className="space-y-7 pb-10" dir="rtl">
+      <AdminPageContextHeader
+        eyebrow="ADMIN SETTINGS"
+        title="الأمان"
+        description="إدارة بيانات الدخول للحساب الحالي. يُشترط إدخال كلمة المرور الحالية قبل أي تغيير حساس."
+      />
 
-      {message ? (
-        <p className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-          {message}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</p>
-      ) : null}
+      <AdminFeedbackChannelViewport
+        channel={FEEDBACK_CHANNEL}
+        label="نتيجة إجراءات إعدادات الأمان"
+      />
 
       <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
         <AdminModuleTabs tabs={tabs} />
       </section>
+
+      <AdminConfirmDialog
+        open={confirmRevoke}
+        title="إلغاء جميع الجلسات؟"
+        description="سيتم إلغاء جميع الجلسات النشطة، بما فيها الجلسة الحالية، ثم إعادتك إلى صفحة تسجيل الدخول."
+        confirmLabel="إلغاء جميع الجلسات"
+        pending={revokePending}
+        returnFocusRef={revokeTriggerRef}
+        onCancel={() => setConfirmRevoke(false)}
+        onConfirm={revokeAllSessions}
+      />
     </div>
   );
 }

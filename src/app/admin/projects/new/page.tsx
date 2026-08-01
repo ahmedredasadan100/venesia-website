@@ -21,9 +21,8 @@ export default async function NewProjectPage({
     <main className="space-y-5" dir="rtl">
       <AdminPageContextHeader
         eyebrow="إدارة المشاريع"
-        contextLine="المشاريع / إضافة مشروع جديد"
         title="إضافة مشروع جديد"
-        description="نموذج واحد لإنشاء بيانات المشروع والموقع والنظرة العامة والمخططات والتسليم والوسائط وتحسين محركات البحث."
+        description="المشاريع / إضافة مشروع جديد — نموذج واحد لإنشاء بيانات المشروع والموقع والنظرة العامة والمخططات والتسليم والوسائط وتحسين محركات البحث."
         actions={<AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>}
       />
       <ProjectEditForm key={`${type}-new`} bundle={bundle} />

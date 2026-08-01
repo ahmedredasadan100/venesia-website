@@ -16,6 +16,15 @@ function normalizeStoredPath(path: string | null | undefined) {
   return `/${trimmed.replace(/^\/+/, "").replace(/\/+$/, "")}`;
 }
 
+export function resolvePagePublicPath(page: PageDeleteIdentity): string | null {
+  const storedPath = normalizeStoredPath(page.path);
+  if (storedPath) return storedPath;
+
+  const slug = normalizeSlug(page.slug);
+  if (!slug) return null;
+  return slug === "home" ? "/" : normalizeStoredPath(slug) || null;
+}
+
 export function isHomepagePage(page: PageDeleteIdentity) {
   const slug = normalizeSlug(page.slug);
   const path = normalizeStoredPath(page.path);

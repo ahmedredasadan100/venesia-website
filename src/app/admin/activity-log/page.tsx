@@ -2,11 +2,13 @@ import { redirect } from "next/navigation";
 
 import { AUDIT_ACTION_OPTIONS } from "../../../lib/admin/audit/audit-actions";
 import {
-  listAdminAuditLogs,
   listAuditActorUsernames,
   listAuditEntityTypes,
 } from "../../../lib/admin/audit/list-admin-audit-logs";
+import { activityLogEntityListAdapter } from "../../../lib/admin/audit/entity-list-adapter";
+import { activityLogQueryContract } from "../../../lib/admin/audit/entity-list-contract";
 import { getCurrentAdminUserFromCookies } from "../../../lib/admin/auth/admin-users";
+import { normalizeAdminEntityListQuery } from "../../../lib/admin/entity-list/data-engine/contracts";
 
 import ActivityLogClient from "./ActivityLogClient";
 
@@ -33,38 +35,28 @@ export default async function ActivityLogPage({
   }
 
   const query = (await searchParams) ?? {};
-  const page = Math.max(1, Number(query.page ?? "1") || 1);
+  const params = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    if (typeof value === "string") params.set(key, value);
+  });
+  const initialQuery = normalizeAdminEntityListQuery(
+    activityLogQueryContract,
+    params,
+  );
 
-  const [result, actorOptions, entityTypeOptions] = await Promise.all([
-    listAdminAuditLogs({
-      actorUsername: query.actor,
-      action: query.action,
-      entityType: query.entityType,
-      dateFrom: query.dateFrom ? `${query.dateFrom}T00:00:00.000Z` : undefined,
-      dateTo: query.dateTo ? `${query.dateTo}T23:59:59.999Z` : undefined,
-      query: query.q,
-      page,
-      pageSize: 25,
-    }),
+  const [initialResult, actorOptions, entityTypeOptions] = await Promise.all([
+    activityLogEntityListAdapter.load(initialQuery),
     listAuditActorUsernames(),
     listAuditEntityTypes(),
   ]);
 
   return (
     <ActivityLogClient
-      initialResult={result}
+      initialQuery={initialQuery}
+      initialResult={initialResult}
       actionOptions={AUDIT_ACTION_OPTIONS}
       actorOptions={actorOptions}
       entityTypeOptions={entityTypeOptions}
-      initialFilters={{
-        actor: query.actor ?? "",
-        action: query.action ?? "",
-        entityType: query.entityType ?? "",
-        dateFrom: query.dateFrom ?? "",
-        dateTo: query.dateTo ?? "",
-        q: query.q ?? "",
-        page,
-      }}
     />
   );
 }

@@ -16,6 +16,23 @@ function isValidAnchor(value: string) {
   return /^[a-zA-Z][\w-]*$/.test(value);
 }
 
+export function resolvePublicPreviewHref(
+  value: string | null | undefined,
+): string | null {
+  const href = value?.trim() ?? "";
+  if (!href || href.startsWith("#")) return null;
+
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  if (!/^https?:\/\//i.test(href)) return null;
+
+  try {
+    const url = new URL(href);
+    return url.protocol === "http:" || url.protocol === "https:" ? href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function validateAdminLink(value: AdminLinkValue | null | undefined): AdminLinkValidationResult {
   if (!value || value.link_kind === "none") {
     return { ok: true };

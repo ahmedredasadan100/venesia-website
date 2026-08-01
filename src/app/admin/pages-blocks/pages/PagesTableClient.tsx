@@ -6,8 +6,8 @@ import { useMemo } from "react";
 import {
   AdminEntityList,
   AdminEntityListPageLayout,
-  AdminEntityListPrimarySection,
   AdminEntityListSurface,
+  AdminEntityListTableRegion,
 } from "../../../../components/admin/entity-list";
 import {
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
@@ -41,7 +41,11 @@ import {
   getPagesDefaultColumnKeys,
   type PageColumnKey,
 } from "../../../../lib/admin/pages/pages-list-config";
-import { getPageDeleteBlockReason } from "../../../../lib/pages/page-admin-policy";
+import {
+  getPageDeleteBlockReason,
+  resolvePagePublicPath,
+} from "../../../../lib/pages/page-admin-policy";
+import { absoluteUrlWithBase } from "../../../../lib/seo/seo-utils";
 import CreatePageModal from "./CreatePageModal";
 import {
   deletePages,
@@ -72,13 +76,10 @@ function statusMeta(status: string) {
   return { label: "مسودة", tone: "muted" as const };
 }
 
-function publicPath(page: AdminPageListRow) {
-  return page.path || (page.slug === "home" ? "/" : `/${page.slug}`);
-}
-
 type PageRowActionHandlers = {
   rowPendingAction: (id: number) => string | null;
   mutationBusy: boolean;
+  onCopyPublicLink: (row: AdminPageListRow) => Promise<AdminActionResult>;
   onDelete: (row: AdminPageListRow) => Promise<AdminActionResult>;
   onDuplicate: (row: AdminPageListRow) => Promise<AdminActionResult>;
   onToggle: (row: AdminPageListRow) => Promise<AdminActionResult>;
@@ -96,6 +97,7 @@ function PageRowActions({
   const pendingAction = handlers.rowPendingAction(row.id);
   const status = statusMeta(row.status);
   const blocked = getPageDeleteBlockReason({ slug: row.slug, path: row.path });
+  const publicPath = resolvePagePublicPath(row);
   const pendingState = {
     access: "disabled" as const,
     disabledReason: MUTATION_PENDING_REASON,
@@ -121,24 +123,32 @@ function PageRowActions({
         access: "allowed",
         href: `/admin/pages-blocks/pages/${row.id}`,
       },
-      preview: {
-        access: "allowed",
-        href: publicPath(row),
-        target: "_blank",
-        rel: "noopener noreferrer",
-      },
+      preview: publicPath
+        ? {
+            access: "allowed",
+            href: publicPath,
+            target: "_blank",
+            rel: "noopener noreferrer",
+          }
+        : {
+            access: "disabled",
+            disabledReason: "لم يُحدد مسار عام موثوق لهذه الصفحة.",
+          },
       information: {
         access: "allowed",
         title: "معلومات الصفحة",
         items: [
           { label: "المعرف", value: String(row.id) },
-          { label: "المسار", value: publicPath(row) },
+          { label: "المسار", value: publicPath ?? "غير متاح" },
           { label: "النوع", value: formatPageTypeLabel(row.page_type) },
           { label: "الحالة", value: status.label },
           { label: "عدد الموديولات", value: String(row.block_count) },
         ],
       },
-      copyPublicLink: { access: "hidden" },
+      copyPublicLink: {
+        access: "allowed",
+        onSelect: () => run(handlers.onCopyPublicLink),
+      },
       visibility:
         pendingAction === "visibility"
           ? { ...pendingState, isVisible: row.status === "published" }
@@ -289,19 +299,6 @@ export default function PagesTableClient({
     controller.query,
   );
   const pages = controller.result.rows;
-  const rangeStart = controller.result.pagination.totalRows
-    ? (controller.result.pagination.page - 1) *
-        controller.result.pagination.pageSize +
-      1
-    : 0;
-  const rangeEnd = controller.result.pagination.totalRows
-    ? Math.min(
-        controller.result.pagination.page *
-          controller.result.pagination.pageSize,
-        controller.result.pagination.totalRows,
-      )
-    : 0;
-
   async function deletePage(page: AdminPageListRow): Promise<AdminActionResult> {
     try {
       const result = await instant.mutateAsync({
@@ -383,6 +380,37 @@ export default function PagesTableClient({
     }
   }
 
+  async function copyPublicLink(page: AdminPageListRow): Promise<AdminActionResult> {
+    const publicPath = resolvePagePublicPath(page);
+    if (!publicPath) {
+      return adminActionFailure(
+        "تعذر نسخ الرابط العام",
+        "لم يُحدد مسار عام موثوق لهذه الصفحة.",
+        { entityId: page.id },
+      );
+    }
+    const url = absoluteUrlWithBase(publicPath);
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API is unavailable");
+      }
+      await navigator.clipboard.writeText(url);
+      return {
+        ok: true,
+        feedbackStatus: "success",
+        title: "تم نسخ الرابط العام",
+        message: "تم نسخ رابط الصفحة العامة إلى الحافظة.",
+        entityId: page.id,
+      };
+    } catch {
+      return adminActionFailure(
+        "تعذر نسخ الرابط تلقائيًا",
+        `انسخ الرابط يدويًا: ${url}`,
+        { entityId: page.id },
+      );
+    }
+  }
+
   async function bulkDelete(ids: number[]): Promise<AdminActionResult> {
     const validIds = ids.filter((id) => {
       const page = pages.find((row) => row.id === id);
@@ -423,6 +451,7 @@ export default function PagesTableClient({
           instant.rowPending?.rowId === id ? instant.rowPending.action : null,
         mutationBusy:
           instant.rowPending !== null || instant.bulkPending !== null,
+        onCopyPublicLink: copyPublicLink,
         onDelete: deletePage,
         onDuplicate: duplicate,
         onToggle: toggle,
@@ -451,7 +480,7 @@ export default function PagesTableClient({
       />
 
       <AdminEntityListSurface consumer="pages">
-        <AdminEntityListPrimarySection
+        <AdminEntityListTableRegion
           data-admin-entity-list-pending={
             controller.isFetching ? "true" : "false"
           }
@@ -537,21 +566,19 @@ export default function PagesTableClient({
             }}
             initialFeedback={initialFeedback}
           />
-        </AdminEntityListPrimarySection>
-
-        <AdminTablePagination
-          basePath="/admin/pages-blocks/pages"
-          rangeStart={rangeStart}
-          rangeEnd={rangeEnd}
-          totalCount={controller.result.pagination.totalRows}
-          pageSize={String(controller.result.pagination.pageSize)}
-          pageSizeOptions={["10", "20", "30"]}
-          currentPage={controller.result.pagination.page}
-          totalPages={controller.result.pagination.totalPages}
-          emptySummaryText="لا توجد صفحات"
-          onPageChange={controller.setPage}
-          onPageSizeChange={controller.setPageSize}
-        />
+          <AdminTablePagination
+            basePath="/admin/pages-blocks/pages"
+            totalCount={controller.result.pagination.totalRows}
+            pageSize={String(controller.result.pagination.pageSize)}
+            pageSizeOptions={["10", "20", "30"]}
+            currentPage={controller.result.pagination.page}
+            totalPages={controller.result.pagination.totalPages}
+            emptySummaryText="لا توجد صفحات"
+            onPageChange={controller.setPage}
+            onPageSizeChange={controller.setPageSize}
+            pending={controller.isFetching}
+          />
+        </AdminEntityListTableRegion>
       </AdminEntityListSurface>
     </AdminEntityListPageLayout>
   );

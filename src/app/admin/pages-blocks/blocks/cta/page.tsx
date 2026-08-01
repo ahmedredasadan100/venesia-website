@@ -2,7 +2,6 @@ export const dynamic = "force-dynamic";
 
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import BlockModuleManagerClient from "../../../../../components/admin/page-blocks/BlockModuleManagerClient";
-import MediaSynchronizationWarningNotice from "../../../../../components/admin/media/MediaSynchronizationWarningNotice";
 import {
   bulkCtaBlocks,
   createCtaBlock,
@@ -21,17 +20,7 @@ export default async function CtaBlocksPage({ searchParams }: PageProps) {
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 
-  if (error) {
-    return (
-      <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
-        حدث خطأ أثناء قراءة بلوكات CTA: {error.message}
-      </div>
-    );
-  }
-
   return (
-    <>
-    <MediaSynchronizationWarningNotice visible={query.notice === "saved_with_media_sync_warning"} />
     <BlockModuleManagerClient
       moduleKey="cta"
       moduleTitle="إدارة بلوكات CTA"
@@ -44,7 +33,8 @@ export default async function CtaBlocksPage({ searchParams }: PageProps) {
       bulkAction={bulkCtaBlocks}
       defaultVariant="band"
       variantOptions={[["band", "Band"], ["split-image", "Split Image"], ["minimal", "Minimal"]]}
+      loadError={error ? `حدث خطأ أثناء قراءة بلوكات CTA: ${error.message}` : null}
+      mediaSynchronizationWarning={query.notice === "saved_with_media_sync_warning"}
     />
-    </>
   );
 }

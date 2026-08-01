@@ -5,7 +5,6 @@ export { deleteMenu } from "./delete";
 export { duplicateMenu, duplicateMenuItem } from "./duplicate";
 export { importMenuJson } from "./import";
 export { bulkMenuAction, clearMenuItems } from "./bulk";
-export { moveMenuItemSortOrder } from "./reorder";
 export { createMenuItem, updateMenuItem } from "./items-save";
 export { deleteMenuItem } from "./items-delete";
 export { toggleMenuItemVisibility } from "./items-status";

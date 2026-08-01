@@ -150,7 +150,11 @@ export async function searchAdminLinks(options: {
 
 export type { AdminLinkValue, LinkSearchResult, LinkedResourceType } from "./types";
 export { deserializeAdminLink, emptyAdminLink, legacyHrefFromConfig, serializeAdminLink, adminLinkFromSearchResult } from "./serialize";
-export { validateAdminLink, isAdminLinkEmpty } from "./validate";
+export {
+  isAdminLinkEmpty,
+  resolvePublicPreviewHref,
+  validateAdminLink,
+} from "./validate";
 export { ensureAdminLinkProvidersRegistered } from "./providers";
 export { menuItemToAdminLink, adminLinkToMenuItemColumns, parentOnlyMenuItemColumns } from "./menu-bridge";
 export type { MenuItemLinkColumns, MenuItemLinkRow } from "./menu-bridge";

@@ -12,7 +12,6 @@ export {
   deletePageBlockAssignment,
   duplicateAssignedPageModule,
   duplicatePageAjax,
-  movePageBlockAssignment,
   restorePagesTablePreferences,
   savePagesTablePreferences,
   togglePageBlockAssignment,

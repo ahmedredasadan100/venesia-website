@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
+import { AdminPageExperience, AdminPageHeader } from "../../../../../components/admin/ui";
 import { getPageModuleAssignmentsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import PageBlocksClient from "./PageBlocksClient";
@@ -14,6 +16,31 @@ function resolveInitialTabId(tab: string | undefined, hasSeoFeedback: boolean) {
   if (tab === "seo" || tab === "map" || tab === "modules") return tab;
   if (hasSeoFeedback) return "seo";
   return "modules";
+}
+
+function PageCompositionLoadError({ title, message }: { title: string; message: string }) {
+  return (
+    <AdminPageExperience state="error" dir="rtl">
+      <AdminPageHeader
+        eyebrow="Page Composition"
+        title={title}
+        description="تعذر تحميل بيانات تكوين الصفحة. لم تُنفذ أي تغييرات."
+        status="error"
+      />
+      <AdminFeedbackRegion
+        channel="page-composition:load"
+        label="خطأ تحميل تكوين الصفحة"
+        feedback={{
+          variant: "danger",
+          title: "تعذر تحميل تكوين الصفحة",
+          message,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "persistent",
+        }}
+      />
+    </AdminPageExperience>
+  );
 }
 
 export default async function PageBlocksDetailsPage({ params, searchParams }: PageProps) {
@@ -33,9 +60,10 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
 
   if (pageError) {
     return (
-      <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
-        حدث خطأ أثناء قراءة الصفحة: {pageError.message}
-      </div>
+      <PageCompositionLoadError
+        title="تكوين الصفحة"
+        message={`حدث خطأ أثناء قراءة الصفحة: ${pageError.message}`}
+      />
     );
   }
 
@@ -49,9 +77,10 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
   } catch (error) {
     const message = error instanceof Error ? error.message : "خطأ غير معروف";
     return (
-      <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
-        حدث خطأ أثناء قراءة بلوكات الصفحة: {message}
-      </div>
+      <PageCompositionLoadError
+        title={`تكوين ${page.title}`}
+        message={`حدث خطأ أثناء قراءة بلوكات الصفحة: ${message}`}
+      />
     );
   }
 

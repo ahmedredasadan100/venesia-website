@@ -1,6 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import {
+  useMemo,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 
 import VenesiaModal, {
   ADMIN_FORM,
@@ -10,18 +15,28 @@ import VenesiaModal, {
   adminFormLabelClassName,
 } from "../../../components/admin/VenesiaModal";
 import {
+  AdminFeedbackChannelViewport,
+  useAdminFeedback,
+} from "../../../components/admin/AdminFeedbackProvider";
+import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   AdminActionButton,
+  AdminConfirmDialog,
   AdminDataGrid,
-  AdminDataGridActionButton,
-  AdminDataGridActionsCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridRowActions,
   AdminDataGridRow,
   AdminPageHeader,
   AdminStatusPill,
+  AdminTablePagination,
+  type AdminRowActionsCapability,
 } from "../../../components/admin/ui";
 import { ADMIN_LIST_PAGE } from "../../../lib/admin/admin-ui-styles";
+import {
+  resolveClientPagination,
+  slicePageRows,
+} from "../../../lib/admin/entity-list/pagination";
 import type { AdminUserListItem } from "../../../lib/admin/users/admin-users-management";
 import {
   hasAdminUserCreateFieldErrors,
@@ -49,7 +64,10 @@ type UsersManagementClientProps = {
 
 type StatusFilter = "all" | "active" | "inactive";
 
-const columns = `minmax(140px,1.4fr) 90px 100px minmax(120px,1fr) ${ADMIN_DATA_GRID_ACTION_COLUMNS.three}`;
+const FEEDBACK_CHANNEL = "users-roles";
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 50] as const;
+
+const columns = `minmax(140px,1.4fr) 90px 100px minmax(120px,1fr) ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -93,11 +111,15 @@ export default function UsersManagementClient({
   currentUserId,
   currentUsername,
 }: UsersManagementClientProps) {
+  const { clearFeedback, publishFeedback } = useAdminFeedback();
   const [users, setUsers] = useState(initialUsers);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [rowPending, setRowPending] = useState<string | null>(null);
+  const [editPending, setEditPending] = useState(false);
+  const [confirmEditStatus, setConfirmEditStatus] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -138,6 +160,45 @@ export default function UsersManagementClient({
       );
     });
   }, [users, search, statusFilter]);
+  const pagination = resolveClientPagination(
+    filteredUsers.length,
+    page,
+    pageSize,
+    PAGE_SIZE_OPTIONS,
+    10,
+  );
+  const visibleUsers = slicePageRows(
+    filteredUsers,
+    pagination.page,
+    pagination.pageSize,
+  );
+
+  function resetFeedback() {
+    clearFeedback(FEEDBACK_CHANNEL);
+  }
+
+  function announce(
+    variant: "success" | "danger" | "warning",
+    title: string,
+    message: string,
+  ) {
+    publishFeedback(
+      {
+        variant,
+        title,
+        message,
+        layout: "inline",
+        dismissible: true,
+        lifecycle: variant === "danger" ? "persistent" : "manual",
+      },
+      {
+        channel: FEEDBACK_CHANNEL,
+        placement: "inline",
+        critical: variant === "danger",
+        reveal: variant === "danger",
+      },
+    );
+  }
 
   function clearCreateFieldError(field: AdminUserCreateField) {
     setCreateFieldErrors((current) => {
@@ -154,7 +215,7 @@ export default function UsersManagementClient({
   }
 
   function openCreateModal() {
-    resetAlerts();
+    resetFeedback();
     setCreateFieldErrors({});
     setCreateForm({
       username: "",
@@ -167,7 +228,7 @@ export default function UsersManagementClient({
   }
 
   async function handleCreateUser() {
-    resetAlerts();
+    resetFeedback();
 
     const fieldErrors = validateAdminCreateUserForm(createForm);
     if (hasAdminUserCreateFieldErrors(fieldErrors)) {
@@ -186,20 +247,26 @@ export default function UsersManagementClient({
         setUsers((prev) => [...prev, result.user].sort((a, b) => a.id - b.id));
         setCreateOpen(false);
         setCreateFieldErrors({});
-        setMessage(`تم إنشاء المستخدم «${result.user.username}».`);
+        announce(
+          "success",
+          "تم إنشاء المستخدم",
+          `تم إنشاء المستخدم «${result.user.username}».`,
+        );
       } catch (actionError) {
-        setError(actionError instanceof Error ? actionError.message : "تعذر إنشاء المستخدم.");
+        announce(
+          "danger",
+          "تعذر إنشاء المستخدم",
+          actionError instanceof Error
+            ? actionError.message
+            : "تعذر إنشاء المستخدم.",
+        );
       }
     });
   }
 
-  function resetAlerts() {
-    setMessage(null);
-    setError(null);
-  }
-
   function openEditModal(user: AdminUserListItem) {
-    resetAlerts();
+    resetFeedback();
+    setConfirmEditStatus(false);
     setEditUser(user);
     setEditForm({
       username: user.username,
@@ -225,10 +292,8 @@ export default function UsersManagementClient({
     clearEditPasswordFieldError(field);
   }
 
-  async function handleSaveEdit() {
-    if (!editUser) return;
-    resetAlerts();
-
+  function editFormIsValid() {
+    if (!editUser) return false;
     const passwordFieldErrors =
       editUser.id === currentUserId
         ? {}
@@ -236,29 +301,230 @@ export default function UsersManagementClient({
 
     if (hasAdminUserEditPasswordFieldErrors(passwordFieldErrors)) {
       setEditPasswordErrors(passwordFieldErrors);
-      return;
+      return false;
     }
     setEditPasswordErrors({});
+    return true;
+  }
 
-    startTransition(async () => {
-      try {
-        const updated = await updateAdminUserAction({
-          id: editUser.id,
-          ...editForm,
-          ...(editUser.id !== currentUserId && editPasswordForm.password.trim()
+  async function executeEditSave() {
+    if (!editUser || editPending) return;
+    resetFeedback();
+    setEditPending(true);
+    try {
+      const updated = await updateAdminUserAction({
+        id: editUser.id,
+        ...editForm,
+        ...(editUser.id !== currentUserId && editPasswordForm.password.trim()
+          ? {
+              password: editPasswordForm.password,
+              confirmPassword: editPasswordForm.confirmPassword,
+            }
+          : {}),
+      });
+      setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setConfirmEditStatus(false);
+      setEditUser(null);
+      announce(
+        "success",
+        "تم تحديث المستخدم",
+        `تم تحديث المستخدم «${updated.username}».`,
+      );
+    } catch (actionError) {
+      announce(
+        "danger",
+        "تعذر تحديث المستخدم",
+        actionError instanceof Error
+          ? actionError.message
+          : "تعذر تحديث المستخدم.",
+      );
+      throw actionError;
+    } finally {
+      setEditPending(false);
+    }
+  }
+
+  function handleSaveEdit() {
+    if (!editUser || editPending) return;
+    resetFeedback();
+    if (!editFormIsValid()) return;
+    if (editForm.is_active !== editUser.is_active) {
+      setConfirmEditStatus(true);
+      return;
+    }
+    void executeEditSave().catch(() => undefined);
+  }
+
+  async function toggleUserActive(user: AdminUserListItem) {
+    const nextActive = !user.is_active;
+    const operationKey = `${user.id}:visibility`;
+    resetFeedback();
+    setRowPending(operationKey);
+    try {
+      const updated = await setAdminUserActiveAction(user.id, nextActive);
+      setUsers((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      announce(
+        "success",
+        nextActive ? "تم تفعيل المستخدم" : "تم تعطيل المستخدم",
+        nextActive
+          ? `تم تفعيل المستخدم «${updated.username}».`
+          : `تم تعطيل المستخدم «${updated.username}» وإبطال جلساته.`,
+      );
+    } catch (actionError) {
+      announce(
+        "danger",
+        "تعذر تحديث حالة المستخدم",
+        actionError instanceof Error
+          ? actionError.message
+          : "تعذر تحديث حالة المستخدم.",
+      );
+      throw actionError;
+    } finally {
+      setRowPending(null);
+    }
+  }
+
+  async function deleteUser(user: AdminUserListItem) {
+    const operationKey = `${user.id}:delete`;
+    resetFeedback();
+    setRowPending(operationKey);
+    try {
+      const deleted = await deleteAdminUserAction(user.id);
+      setUsers((current) =>
+        current.filter((item) => item.id !== deleted.id),
+      );
+      setPage(
+        resolveClientPagination(
+          Math.max(0, filteredUsers.length - 1),
+          page,
+          pageSize,
+          PAGE_SIZE_OPTIONS,
+          10,
+        ).page,
+      );
+      announce(
+        "success",
+        "تم حذف المستخدم",
+        `تم حذف المستخدم «${deleted.username}».`,
+      );
+    } catch (actionError) {
+      announce(
+        "danger",
+        "تعذر حذف المستخدم",
+        actionError instanceof Error
+          ? actionError.message
+          : "تعذر حذف المستخدم.",
+      );
+      throw actionError;
+    } finally {
+      setRowPending(null);
+    }
+  }
+
+  function getUserRowActions(
+    user: AdminUserListItem,
+  ): AdminRowActionsCapability {
+    const isSelf = user.id === currentUserId;
+    const visibilityPending = rowPending === `${user.id}:visibility`;
+    const deletePending = rowPending === `${user.id}:delete`;
+    const otherThanVisibilityPending = rowPending !== null && !visibilityPending;
+    const otherThanDeletePending = rowPending !== null && !deletePending;
+    const blockedReason = "انتظر انتهاء الإجراء الحالي.";
+
+    return {
+      entityType: "admin_user",
+      entityId: user.id,
+      entityLabel: user.username,
+      actions: {
+        edit: rowPending
+          ? {
+              access: "disabled",
+              disabledReason: blockedReason,
+              pending: visibilityPending || deletePending,
+            }
+          : { access: "allowed", onSelect: () => openEditModal(user) },
+        preview: { access: "hidden" },
+        information: {
+          access: "allowed",
+          title: "معلومات المستخدم",
+          items: [
+            { label: "اسم المستخدم", value: user.username },
+            { label: "البريد الإلكتروني", value: user.email },
+            { label: "الدور", value: roleLabel(user.role) },
+            {
+              label: "الحالة",
+              value: user.is_active ? "نشط" : "موقوف",
+            },
+            { label: "آخر دخول", value: formatDate(user.last_login_at) },
+          ],
+        },
+        copyPublicLink: { access: "hidden" },
+        visibility: visibilityPending
+          ? {
+              access: "disabled",
+              disabledReason: blockedReason,
+              pending: true,
+              isVisible: user.is_active,
+            }
+          : otherThanVisibilityPending
             ? {
-                password: editPasswordForm.password,
-                confirmPassword: editPasswordForm.confirmPassword,
+                access: "disabled",
+                disabledReason: blockedReason,
+                isVisible: user.is_active,
               }
-            : {}),
-        });
-        setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-        setEditUser(null);
-        setMessage(`تم تحديث المستخدم «${updated.username}».`);
-      } catch (actionError) {
-        setError(actionError instanceof Error ? actionError.message : "تعذر تحديث المستخدم.");
-      }
-    });
+            : isSelf && user.is_active
+              ? {
+                  access: "disabled",
+                  disabledReason: "لا يمكنك تعطيل حسابك الحالي.",
+                  isVisible: true,
+                }
+              : {
+                  access: "allowed",
+                  isVisible: user.is_active,
+                  onSelect: () => toggleUserActive(user),
+                  confirmation: {
+                    mode: "shared",
+                    title: user.is_active
+                      ? "تعطيل المستخدم؟"
+                      : "تفعيل المستخدم؟",
+                    description: user.is_active
+                      ? `سيتم تعطيل «${user.username}» وإبطال جلساته فورًا.`
+                      : `سيتم تفعيل «${user.username}» والسماح له بتسجيل الدخول وفق الصلاحيات الحالية.`,
+                    confirmLabel: user.is_active
+                      ? "تأكيد التعطيل"
+                      : "تأكيد التفعيل",
+                  },
+                },
+        featured: { access: "hidden" },
+        duplicate: { access: "hidden" },
+        archive: { access: "hidden" },
+        delete: deletePending
+          ? {
+              access: "disabled",
+              disabledReason: blockedReason,
+              pending: true,
+            }
+          : otherThanDeletePending
+            ? { access: "disabled", disabledReason: blockedReason }
+            : isSelf
+              ? {
+                  access: "disabled",
+                  disabledReason: "لا يمكنك حذف حسابك الحالي.",
+                }
+              : {
+                  access: "allowed",
+                  onSelect: () => deleteUser(user),
+                  confirmation: {
+                    mode: "shared",
+                    title: "حذف المستخدم نهائيًا؟",
+                    description: `سيتم حذف المستخدم «${user.username}» نهائيًا. لا يمكن التراجع عن هذا الإجراء.`,
+                    confirmLabel: "تأكيد الحذف النهائي",
+                  },
+                },
+      },
+    };
   }
 
   return (
@@ -274,22 +540,20 @@ export default function UsersManagementClient({
         }
       />
 
-      {message ? (
-        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-          {message}
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</div>
-      ) : null}
+      <AdminFeedbackChannelViewport
+        channel={FEEDBACK_CHANNEL}
+        label="نتيجة إجراءات المستخدمين والصلاحيات"
+      />
 
       <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-4 md:p-6">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <input
             type="search"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
             placeholder="بحث باسم المستخدم أو البريد..."
             className={adminFormFieldClassName("max-w-xl")}
           />
@@ -305,7 +569,10 @@ export default function UsersManagementClient({
               <button
                 key={value}
                 type="button"
-                onClick={() => setStatusFilter(value)}
+                onClick={() => {
+                  setStatusFilter(value);
+                  setPage(1);
+                }}
                 className={`rounded-2xl border px-4 py-2 text-sm font-semibold transition ${
                   statusFilter === value
                     ? "border-[#D8B87A]/35 bg-[#D8B87A]/12 text-[#D8B87A]"
@@ -318,7 +585,10 @@ export default function UsersManagementClient({
           </div>
         </div>
 
-        <AdminDataGrid summary={`${filteredUsers.length} نتيجة`}>
+        <AdminDataGrid
+          summary={`${filteredUsers.length} نتيجة`}
+          scrollLabel="جدول المستخدمين والصلاحيات"
+        >
           <AdminDataGridHeader columns={columns}>
             <span>اسم المستخدم</span>
             <span>الدور</span>
@@ -330,8 +600,7 @@ export default function UsersManagementClient({
           {filteredUsers.length === 0 ? (
             <AdminDataGridEmpty>لا يوجد مستخدمون مطابقون للبحث أو الفلتر.</AdminDataGridEmpty>
           ) : (
-            filteredUsers.map((user) => {
-              const isSelf = user.id === currentUserId;
+            visibleUsers.map((user) => {
               return (
                 <AdminDataGridRow key={user.id} columns={columns}>
                   <span className="font-semibold text-white">{user.username}</span>
@@ -342,67 +611,33 @@ export default function UsersManagementClient({
                     </AdminStatusPill>
                   </span>
                   <span className="text-white/55">{formatDate(user.last_login_at)}</span>
-                  <AdminDataGridActionsCell>
-                    <AdminDataGridActionButton action="edit" title="تعديل" onClick={() => openEditModal(user)} />
-                    <AdminDataGridActionButton
-                      action="visibility"
-                      isCurrentlyHidden={!user.is_active}
-                      title={user.is_active ? "تعطيل" : "تفعيل"}
-                      disabled={isSelf && user.is_active}
-                      onClick={() => {
-                        resetAlerts();
-                        const nextActive = !user.is_active;
-                        const confirmText = nextActive
-                          ? `تفعيل المستخدم «${user.username}»؟`
-                          : `تعطيل المستخدم «${user.username}»؟ سيتم إبطال جلساته فورًا.`;
-                        if (!window.confirm(confirmText)) return;
-
-                        startTransition(async () => {
-                          try {
-                            const updated = await setAdminUserActiveAction(user.id, nextActive);
-                            setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-                            setMessage(
-                              nextActive ? "تم تفعيل المستخدم." : "تم تعطيل المستخدم وإبطال جلساته.",
-                            );
-                          } catch (actionError) {
-                            setError(
-                              actionError instanceof Error ? actionError.message : "تعذر تحديث حالة المستخدم.",
-                            );
-                          }
-                        });
-                      }}
-                    />
-                    <AdminDataGridActionButton
-                      action="delete"
-                      title="حذف"
-                      disabled={isSelf}
-                      onClick={() => {
-                        resetAlerts();
-                        if (
-                          !window.confirm(
-                            `حذف المستخدم «${user.username}» نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.`,
-                          )
-                        ) {
-                          return;
-                        }
-
-                        startTransition(async () => {
-                          try {
-                            const deleted = await deleteAdminUserAction(user.id);
-                            setUsers((prev) => prev.filter((item) => item.id !== deleted.id));
-                            setMessage(`تم حذف المستخدم «${deleted.username}».`);
-                          } catch (actionError) {
-                            setError(actionError instanceof Error ? actionError.message : "تعذر حذف المستخدم.");
-                          }
-                        });
-                      }}
-                    />
-                  </AdminDataGridActionsCell>
+                  <AdminDataGridRowActions
+                    capability={getUserRowActions(user)}
+                    size="compact"
+                    sticky
+                  />
                 </AdminDataGridRow>
               );
             })
           )}
         </AdminDataGrid>
+
+        <AdminTablePagination
+          basePath="/admin/users-roles"
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalCount={pagination.totalCount}
+          pageSize={String(pagination.pageSize)}
+          pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
+          emptySummaryText="لا يوجد مستخدمون مطابقون"
+          pending={rowPending !== null}
+          className="mt-4"
+          onPageChange={setPage}
+          onPageSizeChange={(nextPageSize) => {
+            setPageSize(nextPageSize);
+            setPage(1);
+          }}
+        />
       </section>
 
       <VenesiaModal
@@ -477,11 +712,27 @@ export default function UsersManagementClient({
         title="تعديل المستخدم"
         description={editUser ? `تعديل بيانات «${editUser.username}»` : undefined}
         size="md"
-        onClose={() => setEditUser(null)}
+        onClose={() => {
+          if (editPending) return;
+          setConfirmEditStatus(false);
+          setEditUser(null);
+        }}
         footer={
           <>
-            <AdminModalCancelButton onClick={() => setEditUser(null)}>إلغاء</AdminModalCancelButton>
-            <AdminModalPrimaryButton disabled={isPending} onClick={handleSaveEdit}>
+            <AdminModalCancelButton
+              disabled={editPending}
+              onClick={() => {
+                setConfirmEditStatus(false);
+                setEditUser(null);
+              }}
+            >
+              إلغاء
+            </AdminModalCancelButton>
+            <AdminModalPrimaryButton
+              data-admin-users-edit-save=""
+              disabled={isPending || editPending}
+              onClick={handleSaveEdit}
+            >
               حفظ التعديل
             </AdminModalPrimaryButton>
           </>
@@ -578,6 +829,23 @@ export default function UsersManagementClient({
           )}
         </div>
       </VenesiaModal>
+
+      <AdminConfirmDialog
+        open={confirmEditStatus && Boolean(editUser)}
+        title={editForm.is_active ? "تفعيل المستخدم ضمن حفظ التعديلات؟" : "تعطيل المستخدم ضمن حفظ التعديلات؟"}
+        description={
+          editForm.is_active
+            ? `سيتم حفظ تعديلات «${editUser?.username ?? "المستخدم"}» وتفعيل الحساب وفق الصلاحيات الحالية.`
+            : `سيتم حفظ تعديلات «${editUser?.username ?? "المستخدم"}» وتعطيل الحساب وإبطال جلساته الحالية.`
+        }
+        confirmLabel={editForm.is_active ? "حفظ وتفعيل المستخدم" : "حفظ وتعطيل المستخدم"}
+        pending={editPending}
+        resolveReturnFocus={() =>
+          document.querySelector<HTMLButtonElement>("[data-admin-users-edit-save]")
+        }
+        onCancel={() => setConfirmEditStatus(false)}
+        onConfirm={executeEditSave}
+      />
 
       <p className="text-xs text-white/35">
         المستخدم الحالي: <span className="text-white/55">{currentUsername}</span>

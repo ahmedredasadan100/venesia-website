@@ -6,11 +6,20 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
 import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
+import {
+  ADMIN_ENTITY_LIST_DEFAULT_PAGE_SIZE,
+  ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS,
+  computePageRange,
+} from "../../../lib/admin/entity-list/pagination";
+import { buildAdminEntityListHref } from "../../../lib/admin/entity-list/url-state";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
 
-export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE = "10";
-export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS = ["10", "20", "30", "50"] as const;
+export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE = String(
+  ADMIN_ENTITY_LIST_DEFAULT_PAGE_SIZE,
+);
+export const ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS =
+  ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS.map(String);
 
 const PAGINATION_MENU_ATTR = "data-admin-table-pagination-menu";
 
@@ -27,25 +36,18 @@ export type AdminTablePaginationProps = {
   currentPage: number;
   totalPages: number;
   totalCount: number;
-  rangeStart: number;
-  rangeEnd: number;
   pageSize: string;
+  /** Core options are always 10/20/30/50; Media may request the additional 100 option. */
   pageSizeOptions?: readonly string[];
-  defaultPageSize?: string;
   pageSizeSelectorMode?: PageSizeSelectorMode;
-  forceShowSummary?: boolean;
   emptySummaryText?: string;
   pageParamName?: string;
   limitParamName?: string;
   onPageChange?: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
+  pending?: boolean;
   className?: string;
 };
-
-function getMinPageSize(pageSizeOptions: readonly string[]) {
-  const values = pageSizeOptions.map((option) => Number(option)).filter((value) => Number.isFinite(value) && value > 0);
-  return values.length > 0 ? Math.min(...values) : Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
-}
 
 function ChevronDownIcon() {
   return (
@@ -89,15 +91,7 @@ export function buildAdminPaginationHref(
   params: URLSearchParams,
   patch: Record<string, string | null>,
 ) {
-  const next = new URLSearchParams(params.toString());
-
-  Object.entries(patch).forEach(([key, value]) => {
-    if (!value) next.delete(key);
-    else next.set(key, value);
-  });
-
-  const query = next.toString();
-  return query ? `${basePath}?${query}` : basePath;
+  return buildAdminEntityListHref(basePath, params, patch);
 }
 
 export default function AdminTablePagination({
@@ -105,18 +99,16 @@ export default function AdminTablePagination({
   currentPage,
   totalPages,
   totalCount,
-  rangeStart,
-  rangeEnd,
   pageSize,
-  pageSizeOptions = ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
-  defaultPageSize = ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  pageSizeOptions: requestedPageSizeOptions =
+    ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
   pageSizeSelectorMode = "auto",
-  forceShowSummary = false,
   emptySummaryText = "لا توجد نتائج مطابقة",
   pageParamName = "page",
   limitParamName = "limit",
   onPageChange,
   onPageSizeChange,
+  pending = false,
   className = "",
 }: AdminTablePaginationProps) {
   const router = useRouter();
@@ -127,6 +119,9 @@ export default function AdminTablePagination({
   const floating = useAdminFloatingLayer();
   const [uncontrolledLimitOpen, setUncontrolledLimitOpen] = useState(false);
   const [activeLimit, setActiveLimit] = useState(pageSize);
+  const pageSizeOptions = requestedPageSizeOptions.includes("100")
+    ? [...ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS, "100"]
+    : ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS;
   const isLimitOpen = floating
     ? floating.openLayerId === layerId
     : uncontrolledLimitOpen;
@@ -147,14 +142,19 @@ export default function AdminTablePagination({
     estimatedHeight: 220,
   });
   const paginationItems = buildAdminPaginationItems(currentPage, totalPages);
-  const minPageSize = getMinPageSize(pageSizeOptions);
+  const currentPageSize = Math.max(
+    1,
+    Number.isFinite(Number(pageSize))
+      ? Number(pageSize)
+      : Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE),
+  );
   const shouldShowPageSizeSelector =
     pageSizeSelectorMode === "always"
       ? true
       : pageSizeSelectorMode === "never"
         ? false
-        : totalCount > minPageSize;
-  const shouldShowFooter = forceShowSummary || totalCount > minPageSize || totalPages > 1;
+        : totalCount > currentPageSize;
+  const shouldShowFooter = totalCount > currentPageSize || totalPages > 1;
   const isMounted = useClientMounted();
 
   useEffect(() => {
@@ -186,6 +186,11 @@ export default function AdminTablePagination({
   }, [isLimitOpen, layerId, floating]);
 
   function applyLimit(nextLimit: string) {
+    if (pending || nextLimit === pageSize) {
+      setIsLimitOpen(false);
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+      return;
+    }
     if (onPageSizeChange) {
       onPageSizeChange(Number(nextLimit));
       setIsLimitOpen(false);
@@ -194,7 +199,9 @@ export default function AdminTablePagination({
     }
     const params = new URLSearchParams(searchParams.toString());
 
-    if (nextLimit === defaultPageSize) params.delete(limitParamName);
+    if (nextLimit === ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE) {
+      params.delete(limitParamName);
+    }
     else params.set(limitParamName, nextLimit);
 
     params.delete(pageParamName);
@@ -234,6 +241,11 @@ export default function AdminTablePagination({
     }
   }
 
+  const { rangeStart, rangeEnd } = computePageRange(
+    currentPage,
+    Number(pageSize),
+    totalCount,
+  );
   const summaryText =
     totalCount === 0
       ? emptySummaryText
@@ -265,6 +277,7 @@ export default function AdminTablePagination({
               type="button"
               role="option"
               aria-selected={selected}
+              disabled={pending}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyLimit(option)}
               className={`flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
@@ -300,7 +313,12 @@ export default function AdminTablePagination({
   if (!shouldShowFooter) return null;
 
   return (
-    <div className={`rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES} ${className}`.trim()}>
+    <div
+      className={`rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES} ${className}`.trim()}
+      data-admin-table-pagination=""
+      data-admin-table-pagination-pending={pending ? "true" : "false"}
+      aria-busy={pending}
+    >
       <div
         dir="ltr"
         className="grid grid-cols-1 items-center gap-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-3"
@@ -316,12 +334,13 @@ export default function AdminTablePagination({
                 aria-haspopup="listbox"
                 aria-expanded={isLimitOpen}
                 aria-controls={`${limitTriggerId}-menu`}
+                disabled={pending}
                 onClick={() => {
                   setActiveLimit(pageSize);
                   setIsLimitOpen(!isLimitOpen);
                 }}
                 onKeyDown={handleLimitKeyDown}
-                className={`flex h-9 min-w-[72px] cursor-pointer items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+                className={`flex h-9 min-w-[72px] items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
                   isLimitOpen
                     ? "border-[#D8B87A]/35 bg-black/30 text-[#F4E7C5]"
                     : "border-[#D8B87A]/16 bg-black/22 text-[#F4E7C5]/90 hover:border-[#D8B87A]/28 hover:bg-black/28"
@@ -342,18 +361,20 @@ export default function AdminTablePagination({
         {totalPages > 1 ? (
           <nav
             data-admin-pagination-nav=""
-            className="flex max-w-full flex-nowrap items-center justify-center gap-1.5 overflow-x-auto md:justify-self-center"
+            className={`flex max-w-full flex-nowrap items-center justify-center gap-1.5 overflow-x-auto overscroll-x-contain md:justify-self-center ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
             aria-label="ترقيم الصفحات"
+            aria-busy={pending}
           >
             {currentPage > 1 && onPageChange ? (
               <button
                 type="button"
                 onClick={() => onPageChange(currentPage - 1)}
-                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                disabled={pending}
+                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 السابق
               </button>
-            ) : prevHref ? (
+            ) : prevHref && !pending ? (
               <Link
                 href={prevHref}
                 scroll={false}
@@ -392,8 +413,9 @@ export default function AdminTablePagination({
                   type="button"
                   onClick={() => onPageChange(item)}
                   aria-current={isActive ? "page" : undefined}
+                  disabled={pending || isActive}
                   data-admin-pagination-slot="page"
-                  className={`inline-flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+                  className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-default disabled:opacity-70 ${
                     isActive
                       ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/65 hover:border-[#D8B87A]/24 hover:bg-black/24 hover:text-[#F4E7C5]"
@@ -401,6 +423,20 @@ export default function AdminTablePagination({
                 >
                   {item}
                 </button>
+              ) : isActive || pending ? (
+                <span
+                  key={item}
+                  aria-current={isActive ? "page" : undefined}
+                  aria-disabled="true"
+                  data-admin-pagination-slot="page"
+                  className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums ${
+                    isActive
+                      ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                      : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/38"
+                  }`}
+                >
+                  {item}
+                </span>
               ) : (
                 <Link
                   key={item}
@@ -423,11 +459,12 @@ export default function AdminTablePagination({
               <button
                 type="button"
                 onClick={() => onPageChange(currentPage + 1)}
-                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                disabled={pending}
+                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 التالي
               </button>
-            ) : nextHref ? (
+            ) : nextHref && !pending ? (
               <Link
                 href={nextHref}
                 scroll={false}

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../components/admin/page-blocks/AdminModuleTabs";
 import { AdminCard } from "../../../../components/admin/ui";
 
@@ -17,6 +18,7 @@ type MenuBuilderClientProps = {
   databaseReady: boolean;
   message?: string | null;
   messageWarning?: boolean;
+  loadError?: string | null;
 };
 
 export default function MenuBuilderClient({
@@ -25,6 +27,7 @@ export default function MenuBuilderClient({
   databaseReady,
   message,
   messageWarning = false,
+  loadError = null,
 }: MenuBuilderClientProps) {
   const tabs = [
     {
@@ -96,7 +99,7 @@ export default function MenuBuilderClient({
   ];
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="contents" dir="rtl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href="/admin/pages-blocks/menus"
@@ -115,17 +118,32 @@ export default function MenuBuilderClient({
         </span>
       </div>
 
-      {message ? (
-        <div
-          className={
-            messageWarning
-              ? "rounded-[22px] border border-amber-400/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-100"
-              : "rounded-[22px] border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-5 py-4 text-sm text-[#F4D99A]"
-          }
-        >
-          {message}
-        </div>
-      ) : null}
+      <AdminFeedbackRegion
+        channel={`menu-builder:${menu.id}`}
+        label="نتائج محرر القائمة"
+        feedback={
+          loadError
+            ? {
+                variant: "danger",
+                title: "تعذر تحميل عناصر القائمة",
+                message: loadError,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "persistent",
+              }
+            : message
+              ? {
+                  variant: messageWarning ? "warning" : "success",
+                  title: messageWarning ? "تم الحفظ مع تنبيه" : "تم الحفظ",
+                  message,
+                  layout: "inline",
+                  dismissible: true,
+                  lifecycle: "manual",
+                  dismissSearchParams: ["message", "notice"],
+                }
+              : null
+        }
+      />
 
       <AdminCard className="p-5 md:p-6">
         <AdminModuleTabs tabs={tabs} />

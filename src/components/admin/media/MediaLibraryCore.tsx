@@ -22,8 +22,12 @@ import {
   CMS_PDF_ACCEPT,
   validateCmsUploadFile,
 } from "../../../lib/admin/media-intelligence/cms-upload-policy";
-import { useAdminFeedback } from "../AdminFeedbackProvider";
+import {
+  AdminFeedbackChannelViewport,
+  useAdminFeedback,
+} from "../AdminFeedbackProvider";
 import AdminConfirmDialog from "../ui/AdminConfirmDialog";
+import AdminTablePagination from "../ui/AdminTablePagination";
 import MediaUsagePanel from "../media-intelligence/MediaUsagePanel";
 import MediaNoImage from "./MediaNoImage";
 
@@ -139,14 +143,14 @@ export default function MediaLibraryCore({
   className = "",
 }: MediaLibraryCoreProps) {
   const safeDeleteStatusId = useId();
-  const { publishFeedback } = useAdminFeedback();
+  const { clearFeedback, publishFeedback } = useAdminFeedback();
   const [folder, setFolder] = useState<string | null>(initialFolder);
   const [kind, setKind] = useState<KindFilter>(initialKind);
   const [smartView, setSmartView] = useState<MediaSmartView>("all");
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [pageNumber, setPageNumber] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSize>(20);
+  const [pageSize, setPageSize] = useState<PageSize>(10);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [data, setData] = useState<MediaCatalogPage | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
@@ -162,6 +166,10 @@ export default function MediaLibraryCore({
   const [confirmation, setConfirmation] = useState<PendingConfirmation>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const replacementInputRef = useRef<HTMLInputElement>(null);
+  const libraryRootRef = useRef<HTMLDivElement>(null);
+  const deleteConfirmationTriggerRef = useRef<HTMLButtonElement>(null);
+  const moveConfirmationTriggerRef = useRef<HTMLButtonElement>(null);
+  const replacementConfirmationTriggerRef = useRef<HTMLButtonElement>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
   const refreshFrameRef = useRef<number | null>(null);
 
@@ -332,6 +340,7 @@ export default function MediaLibraryCore({
   }
 
   function announce(variant: "success" | "danger" | "warning", title: string, message: string) {
+    clearFeedback("media-library");
     publishFeedback(
       {
         variant,
@@ -341,7 +350,12 @@ export default function MediaLibraryCore({
         dismissible: true,
         lifecycle: variant === "danger" ? "persistent" : "manual",
       },
-      { channel: "media-library", critical: variant === "danger" },
+      {
+        channel: "media-library",
+        critical: variant === "danger",
+        placement: "inline",
+        reveal: variant === "danger",
+      },
     );
   }
 
@@ -458,11 +472,13 @@ export default function MediaLibraryCore({
   }
 
   async function executeConfirmation() {
-    if (!confirmation) return;
-    if (confirmation.kind === "delete") {
+    const activeConfirmation = confirmation;
+    if (!activeConfirmation) return;
+    if (activeConfirmation.kind === "delete") {
       setBusy("delete");
+      let completedCount = 0;
       try {
-        for (const asset of confirmation.assets) {
+        for (const asset of activeConfirmation.assets) {
           const response = await fetch("/api/admin/media-library", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
@@ -470,21 +486,28 @@ export default function MediaLibraryCore({
           });
           const payload = (await response.json()) as { error?: string; state?: string };
           if (!response.ok) throw new Error(payload.error || `تعذر حذف ${asset.displayName}.`);
+          completedCount += 1;
         }
         setSelectedIds([]);
         setConfirmation(null);
         await loadPage();
         announce("success", "تم الحذف الآمن", "حُذفت فقط الملفات التي ثبت عدم ارتباطها بأي محتوى.");
       } catch (deleteError) {
-        setConfirmation(null);
+        const remainingAssets = activeConfirmation.assets.slice(completedCount);
+        setConfirmation({
+          kind: "delete",
+          assets: remainingAssets.length ? remainingAssets : activeConfirmation.assets,
+        });
+        await loadPage();
         announce("danger", "تم منع الحذف", deleteError instanceof Error ? deleteError.message : "تعذر إثبات سلامة الحذف.");
+        throw deleteError;
       } finally {
         setBusy(null);
       }
       return;
     }
 
-    if (confirmation.kind === "move") {
+    if (activeConfirmation.kind === "move") {
       setBusy("move");
       try {
         const response = await fetch("/api/admin/media-library", {
@@ -492,9 +515,9 @@ export default function MediaLibraryCore({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             operation: "move_asset",
-            assetId: confirmation.asset.id,
-            targetFolder: confirmation.targetFolder,
-            targetFilename: confirmation.targetFilename,
+            assetId: activeConfirmation.asset.id,
+            targetFolder: activeConfirmation.targetFolder,
+            targetFilename: activeConfirmation.targetFilename,
           }),
         });
         const payload = (await response.json()) as { error?: string };
@@ -505,8 +528,8 @@ export default function MediaLibraryCore({
         await loadPage();
         announce("success", "اكتملت عملية التخزين", "تغير المسار الفعلي وأعيد ربط المراجع المدعومة.");
       } catch (moveError) {
-        setConfirmation(null);
         announce("danger", "لم تكتمل عملية التخزين", `${moveError instanceof Error ? moveError.message : "خطأ غير معروف."} لم يُعلن نجاح جزئي.`);
+        throw moveError;
       } finally {
         setBusy(null);
       }
@@ -520,19 +543,19 @@ export default function MediaLibraryCore({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           operation: "replace_all",
-          previousAssetId: confirmation.previous.id,
-          nextAssetId: confirmation.next.id,
+          previousAssetId: activeConfirmation.previous.id,
+          nextAssetId: activeConfirmation.next.id,
         }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "تعذر استبدال المراجع.");
       setConfirmation(null);
-      setSelectedIds([confirmation.next.id]);
+      setSelectedIds([activeConfirmation.next.id]);
       await loadPage();
       announce("success", "اكتمل الاستبدال", "أُعيد ربط المراجع المدعومة وبقي الأصل القديم محفوظًا.");
     } catch (replacementError) {
-      setConfirmation(null);
       announce("danger", "لم يكتمل الاستبدال", `${replacementError instanceof Error ? replacementError.message : "خطأ غير معروف."} بقي الأصلان محفوظين.`);
+      throw replacementError;
     } finally {
       setBusy(null);
     }
@@ -553,10 +576,21 @@ export default function MediaLibraryCore({
     ? `سيتم تحديث مواضع الاستخدام المدعومة من «${confirmation.previous.displayName}» إلى «${confirmation.next.displayName}». سيبقى الملف القديم محفوظًا.`
     : confirmation?.kind === "move"
       ? `سينتقل الملف إلى ${confirmation.targetFolder}/${confirmation.targetFilename} مع تحديث مواضع الاستخدام المدعومة. لن يعتمد التغيير إذا لم يكتمل كله.`
-      : `سيتم فحص ارتباطات ${confirmation?.kind === "delete" ? confirmation.assets.length : 0} ملف قبل الحذف. لن يُحذف أي ملف عند تعذر إثبات سلامة العملية.`;
+      : `سيتم فحص ارتباطات ${confirmation?.kind === "delete" ? confirmation.assets.length : 0} ملف قبل حذفه. إذا تعذر إثبات سلامة أحد الملفات ستتوقف الدفعة، وتبقى الملفات غير المنفذة متاحة لإعادة المحاولة.`;
 
   return (
-    <div className={`min-w-0 w-full max-w-full space-y-4 ${className}`} dir="rtl" data-media-library-mode={mode}>
+    <div
+      ref={libraryRootRef}
+      tabIndex={-1}
+      className={`min-w-0 w-full max-w-full space-y-4 ${className}`}
+      dir="rtl"
+      data-media-library-mode={mode}
+    >
+      <AdminFeedbackChannelViewport
+        channel="media-library"
+        label="نتيجة إجراءات مكتبة الوسائط"
+      />
+
       {data?.warning ? (
         <div className="rounded-2xl border border-amber-300/25 bg-amber-300/8 px-4 py-3 text-sm leading-6 text-amber-100" role="status">
           {data.warning}
@@ -598,7 +632,7 @@ export default function MediaLibraryCore({
               <button type="button" onClick={() => uploadInputRef.current?.click()} disabled={Boolean(busy)} className="rounded-xl bg-[#D8B87A] px-4 py-2 text-sm font-bold text-[#05070B] disabled:opacity-50">{busy === "upload" ? `جارٍ الرفع ${uploadSummary ?? ""}` : "رفع ملفات"}</button>
               <input ref={uploadInputRef} type="file" multiple accept={`${CMS_IMAGE_ACCEPT},${CMS_PDF_ACCEPT}`} className="hidden" onChange={(event) => { void uploadFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
               {mode === "manage" && selectedAssets.length ? (
-                <button type="button" aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined} title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => setConfirmation({ kind: "delete", assets: selectedAssets })} className="rounded-xl border border-red-300/25 px-4 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
+                <button ref={deleteConfirmationTriggerRef} type="button" aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined} title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => setConfirmation({ kind: "delete", assets: selectedAssets })} className="rounded-xl border border-red-300/25 px-4 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
               ) : null}
               {mode === "manage" && selectedAssets.length === 1 ? <button type="button" title={!canRebindSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canRebindSelectedAssets || Boolean(busy)} onClick={() => setShowPhysicalForm(true)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/65 disabled:opacity-40">نقل / إعادة تسمية</button> : null}
               {selectedAssets.length ? <button type="button" onClick={() => setSelectedIds([])} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/55">مسح التحديد</button> : null}
@@ -649,7 +683,22 @@ export default function MediaLibraryCore({
           {folder && childFolders.length ? <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{childFolders.map((item) => <button key={item.id} type="button" onClick={() => openFolder(item.path)} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-right hover:border-[#D8B87A]/30"><span className="block text-lg text-[#D8B87A]/70">▰</span><span className="mt-2 block truncate text-sm font-semibold text-white">{item.displayName}</span><span className="mt-1 block text-[10px] text-white/35">{item.totalAssetCount} أصل — {formatBytes(item.totalBytes)}</span><span className="mt-1 block text-[10px] text-white/25">{item.directAssetCount} في المستوى الحالي</span></button>)}</div> : null}
 
           {loading ? <div className="grid h-64 place-items-center text-sm text-white/45" role="status">جارٍ تحميل الملفات…</div> : null}
-          {error ? <div className="rounded-2xl border border-red-300/20 bg-red-300/8 p-4 text-sm text-red-100" role="alert">{error}</div> : null}
+          {error ? (
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-300/20 bg-red-300/8 p-4 text-sm text-red-100"
+              role="alert"
+            >
+              <span>{error}</span>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void loadPage()}
+                className="rounded-xl border border-red-100/25 px-3 py-2 font-semibold text-red-50 transition hover:border-red-100/45 hover:bg-red-100/10 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {loading ? "جارٍ إعادة المحاولة…" : "إعادة المحاولة"}
+              </button>
+            </div>
+          ) : null}
           {!loading && !error && !data?.assets.length ? <div className="grid h-56 place-items-center px-4 text-center text-sm leading-7 text-white/42">{referenceViewUnavailable ? smartView === "used" ? "عرض الملفات المستخدمة غير جاهز حتى يكتمل فحص مواضع الاستخدام." : "عرض الملفات غير المستخدمة غير جاهز حتى يكتمل فحص مواضع الاستخدام." : "لا توجد ملفات مطابقة داخل هذا العرض."}</div> : null}
 
           {!loading && data?.assets.length ? (
@@ -682,20 +731,26 @@ export default function MediaLibraryCore({
           ) : null}
 
           {data ? (
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/8 pt-4" aria-label="صفحات الأصول">
-              <p className="text-xs text-white/45">إجمالي النتائج: <span className="font-semibold text-white">{data.total}</span></p>
-              <label className="flex items-center gap-2 text-xs text-white/45">
-                <span>حجم الصفحة</span>
-                <select value={pageSize} onChange={(event) => { setPageSize(Number(event.currentTarget.value) as PageSize); setPageNumber(1); }} className="h-9 rounded-xl border border-white/10 bg-[#080B10] px-3 text-xs text-white outline-none">
-                  {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
-                </select>
-              </label>
-              <div className="flex items-center gap-3">
-                <button type="button" disabled={pageNumber <= 1} onClick={() => setPageNumber((value) => value - 1)} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 disabled:opacity-30">السابق</button>
-                <span className="text-xs text-white/40">صفحة {pageNumber} من {Math.max(1, data.totalPages)}</span>
-                <button type="button" disabled={pageNumber >= Math.max(1, data.totalPages)} onClick={() => setPageNumber((value) => value + 1)} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 disabled:opacity-30">التالي</button>
-              </div>
-            </div>
+            <AdminTablePagination
+              basePath="/admin/media-library"
+              currentPage={pageNumber}
+              totalPages={Math.max(1, data.totalPages)}
+              totalCount={data.total}
+              pageSize={String(pageSize)}
+              pageSizeOptions={PAGE_SIZES.map(String)}
+              emptySummaryText="لا توجد أصول مطابقة"
+              pending={loading}
+              className="mt-5"
+              onPageChange={(nextPage) => {
+                setPageNumber(nextPage);
+                setSelectedIds([]);
+              }}
+              onPageSizeChange={(nextPageSize) => {
+                setPageSize(nextPageSize as PageSize);
+                setPageNumber(1);
+                setSelectedIds([]);
+              }}
+            />
           ) : null}
 
           {selectionMode ? (
@@ -750,12 +805,12 @@ export default function MediaLibraryCore({
                     {focusedAsset.kind === "image" ? <><input name="defaultAltText" defaultValue={focusedAsset.defaultAltText ?? ""} placeholder="النص البديل الافتراضي" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none" /><input name="defaultTitle" defaultValue={focusedAsset.defaultTitle ?? ""} placeholder="العنوان الافتراضي" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none" /><textarea name="defaultCaption" defaultValue={focusedAsset.defaultCaption ?? ""} placeholder="التعليق" className="min-h-20 w-full rounded-xl border border-white/10 bg-black/25 p-3 text-sm text-white outline-none" /></> : null}
                     <button type="submit" disabled={!isManaged(focusedAsset) || busy === "metadata"} className="w-full rounded-xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-3 py-2 text-sm font-semibold text-[#D8B87A] disabled:opacity-40">حفظ البيانات</button>
                   </form>
-                  <div className="mt-4 border-t border-white/8 pt-4"><button type="button" disabled={!canMutate || !data?.readiness.usageResultsAuthoritative || !isManaged(focusedAsset) || Boolean(busy)} onClick={() => replacementInputRef.current?.click()} className="w-full rounded-xl border border-white/10 px-3 py-2 text-sm text-white/65 disabled:opacity-40">{busy === "replace-upload" ? "جارٍ رفع بديل جديد…" : "رفع بديل ثم استبدال كل المراجع"}</button><input ref={replacementInputRef} type="file" accept={focusedAsset.kind === "image" ? CMS_IMAGE_ACCEPT : CMS_PDF_ACCEPT} className="hidden" onChange={(event) => { void stageReplacement(event.currentTarget.files?.[0] ?? null); event.currentTarget.value = ""; }} /><p className="mt-2 text-[10px] leading-5 text-white/35">يتطلب الاستبدال فحص ارتباطات مكتملًا، ويبقى الأصل القديم محفوظًا.</p></div>
+                  <div className="mt-4 border-t border-white/8 pt-4"><button ref={replacementConfirmationTriggerRef} type="button" disabled={!canMutate || !data?.readiness.usageResultsAuthoritative || !isManaged(focusedAsset) || Boolean(busy)} onClick={() => replacementInputRef.current?.click()} className="w-full rounded-xl border border-white/10 px-3 py-2 text-sm text-white/65 disabled:opacity-40">{busy === "replace-upload" ? "جارٍ رفع بديل جديد…" : "رفع بديل ثم استبدال كل المراجع"}</button><input ref={replacementInputRef} type="file" accept={focusedAsset.kind === "image" ? CMS_IMAGE_ACCEPT : CMS_PDF_ACCEPT} className="hidden" onChange={(event) => { void stageReplacement(event.currentTarget.files?.[0] ?? null); event.currentTarget.value = ""; }} /><p className="mt-2 text-[10px] leading-5 text-white/35">يتطلب الاستبدال فحص ارتباطات مكتملًا، ويبقى الأصل القديم محفوظًا.</p></div>
                   {showPhysicalForm ? <form key={`move-${focusedAsset.id}`} action={(formData) => {
                     const targetFolder = String(formData.get("targetFolder") || "").trim();
                     const targetFilename = String(formData.get("targetFilename") || "").trim();
                     if (targetFolder && targetFilename) setConfirmation({ kind: "move", asset: focusedAsset, targetFolder, targetFilename });
-                  }} className="mt-4 space-y-2 border-t border-white/8 pt-4"><p className="text-xs font-semibold text-white/60">تغيير المجلد أو اسم الملف</p><input name="targetFolder" defaultValue={focusedAsset.folderPath} aria-label="مجلد الوجهة" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 font-mono text-xs text-white outline-none" dir="ltr" /><input name="targetFilename" defaultValue={focusedAsset.objectKey.split("/").at(-1)} aria-label="اسم الملف الفعلي الجديد" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 font-mono text-xs text-white outline-none" dir="ltr" /><div className="flex gap-2"><button type="button" onClick={() => setShowPhysicalForm(false)} className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/55">إلغاء</button><button type="submit" className="flex-1 rounded-xl border border-[#D8B87A]/30 px-3 py-2 text-xs font-semibold text-[#D8B87A]">مراجعة العملية</button></div></form> : null}
+                  }} className="mt-4 space-y-2 border-t border-white/8 pt-4"><p className="text-xs font-semibold text-white/60">تغيير المجلد أو اسم الملف</p><input name="targetFolder" defaultValue={focusedAsset.folderPath} aria-label="مجلد الوجهة" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 font-mono text-xs text-white outline-none" dir="ltr" /><input name="targetFilename" defaultValue={focusedAsset.objectKey.split("/").at(-1)} aria-label="اسم الملف الفعلي الجديد" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 font-mono text-xs text-white outline-none" dir="ltr" /><div className="flex gap-2"><button type="button" onClick={() => setShowPhysicalForm(false)} className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/55">إلغاء</button><button ref={moveConfirmationTriggerRef} type="submit" className="flex-1 rounded-xl border border-[#D8B87A]/30 px-3 py-2 text-xs font-semibold text-[#D8B87A]">مراجعة العملية</button></div></form> : null}
                 </section>
               ) : null}
               <MediaUsagePanel assetPath={focusedAsset.publicUrl} refreshToken={dataRevision} />
@@ -770,6 +825,14 @@ export default function MediaLibraryCore({
         description={confirmDescription}
         confirmLabel={confirmation?.kind === "replace" ? "تأكيد الاستبدال" : confirmation?.kind === "move" ? "تأكيد النقل / التسمية" : "فحص ثم حذف"}
         pending={busy === "delete" || busy === "replace" || busy === "move"}
+        returnFocusRef={
+          confirmation?.kind === "delete"
+            ? deleteConfirmationTriggerRef
+            : confirmation?.kind === "move"
+              ? moveConfirmationTriggerRef
+              : replacementConfirmationTriggerRef
+        }
+        fallbackFocusRef={libraryRootRef}
         onCancel={() => setConfirmation(null)}
         onConfirm={executeConfirmation}
       />

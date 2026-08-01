@@ -153,10 +153,12 @@ check(
   createSection.includes('.select("*")') &&
     updateSection.includes('.select("*")') &&
     actions.includes("result,") &&
-    client.includes("handleRedirectSaved") &&
-    client.includes("current.some((row) => row.id === savedRedirect.id)") &&
+    client.includes("invalidateAfterFormSave") &&
+    client.includes("void controller.invalidate()") &&
+    !client.includes("handleRedirectSaved") &&
+    !client.includes("setRows(") &&
     !client.includes("router.refresh()"),
-  "successful modal saves reconcile the authoritative row without refresh or duplicates",
+  "successful modal saves invalidate the authoritative Data Runtime without local row ownership",
 );
 check(
   createSection.indexOf("validateRedirectInput(") <

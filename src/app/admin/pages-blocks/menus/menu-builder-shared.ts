@@ -148,17 +148,3 @@ export function flattenMenuItemsForTable(items: MenuItem[]): FlatMenuItemRow[] {
   const tree = buildMenuTree(items);
   return flattenMenuTree(tree);
 }
-
-export function getSiblingIds(items: MenuItem[], item: MenuItem, direction: "up" | "down") {
-  const siblings = items
-    .filter((row) => row.parent_id === item.parent_id)
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  const index = siblings.findIndex((row) => row.id === item.id);
-  if (index === -1) return null;
-
-  const targetIndex = direction === "up" ? index - 1 : index + 1;
-  const target = siblings[targetIndex];
-  if (!target) return null;
-
-  return { currentId: item.id, targetId: target.id };
-}

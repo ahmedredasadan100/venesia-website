@@ -814,11 +814,7 @@ export default function AdminDataGridRowActions({
             data-placement={position.placement}
             style={position.style}
             onKeyDown={handleMenuKeyDown}
-            className={`flex max-w-[calc(100vw-24px)] flex-col gap-1 overflow-y-auto overflow-x-hidden rounded-[16px] border border-[#D8B87A]/20 bg-[#080B10]/98 p-2 text-right shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl ${
-              panelView === "information"
-                ? `overscroll-contain ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`
-                : ""
-            }`}
+            className={`flex max-w-[calc(100vw-24px)] flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-[16px] border border-[#D8B87A]/20 bg-[#080B10]/98 p-2 text-right shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
           >
             {panelView === "information" &&
             information.access !== "hidden" ? (

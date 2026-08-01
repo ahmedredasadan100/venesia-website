@@ -15,17 +15,18 @@ import {
 import type { AdminTableSortDirection } from "../../../../../../components/admin/table-engine";
 import { normalizeBoolean } from "../../../../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
-import type { ReorderAdjacency } from "./build-reorder-info";
 import PageBlocksAssignmentRow from "./PageBlocksAssignmentRow";
 import { assignmentRowId, isManageableAssignment } from "./page-blocks-utils";
 
 type SortKey = "module_kind" | "template_name" | "visibility";
 
 // 150px = secondary module-type column (no dedicated preset).
-const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.statusCompact} ${ADMIN_DATA_GRID_ACTION_COLUMNS.sixCompact}`;
+const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.statusCompact} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 
 type PageBlocksAssignmentsGridProps = {
   rows: PageBlockAssignmentRow[];
+  totalCount: number;
+  previewHref: string | null;
   sort: { key: SortKey | null; direction: AdminTableSortDirection };
   onToggleSort: (key: SortKey) => void;
   allSelected: boolean;
@@ -34,8 +35,6 @@ type PageBlocksAssignmentsGridProps = {
   onToggleAll: (checked: boolean) => void;
   onToggleSelect: (rowId: string, checked: boolean) => void;
   isPending: boolean;
-  reorderInfo: Map<string, ReorderAdjacency>;
-  onReorder: (row: PageBlockAssignmentRow, direction: "up" | "down") => void;
   onToggleVisibility: (row: PageBlockAssignmentRow) => void;
   onDuplicate: (row: PageBlockAssignmentRow) => void;
   onDelete: (row: PageBlockAssignmentRow) => void;
@@ -43,6 +42,8 @@ type PageBlocksAssignmentsGridProps = {
 
 export default function PageBlocksAssignmentsGrid({
   rows,
+  totalCount,
+  previewHref,
   sort,
   onToggleSort,
   allSelected,
@@ -51,8 +52,6 @@ export default function PageBlocksAssignmentsGrid({
   onToggleAll,
   onToggleSelect,
   isPending,
-  reorderInfo,
-  onReorder,
   onToggleVisibility,
   onDuplicate,
   onDelete,
@@ -66,7 +65,7 @@ export default function PageBlocksAssignmentsGrid({
   }
 
   return (
-    <AdminDataGrid summary={`${rows.length} موديول`}>
+    <AdminDataGrid summary={`${totalCount} موديول`}>
       <AdminDataGridHeader columns={gridColumns}>
         <AdminDataGridCheckboxCell>
           <AdminDataGridCheckbox
@@ -97,16 +96,14 @@ export default function PageBlocksAssignmentsGrid({
             key={rowId}
             row={row}
             rowId={rowId}
+            previewHref={previewHref}
             index={index}
             columns={gridColumns}
             manageable={manageable}
             isVisible={isVisible}
             isSelected={selectedSet.has(rowId)}
             isPending={isPending}
-            canReorderUp={Boolean(reorderInfo.get(rowId)?.up)}
-            canReorderDown={Boolean(reorderInfo.get(rowId)?.down)}
             onToggleSelect={(checked) => onToggleSelect(rowId, checked)}
-            onReorder={(direction) => onReorder(row, direction)}
             onToggleVisibility={() => onToggleVisibility(row)}
             onDuplicate={() => onDuplicate(row)}
             onDelete={() => onDelete(row)}

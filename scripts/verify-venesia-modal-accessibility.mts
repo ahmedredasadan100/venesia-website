@@ -266,14 +266,16 @@ const actualConsumers = collectTsxFiles(join(ROOT, "src"))
   .sort();
 const expectedConsumers = [
   "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
-  "src/app/admin/pages-blocks/footer/FooterBuilderEditors.tsx",
+  "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
   "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
   "src/app/admin/pages-blocks/menus/AddMenuPanelClient.tsx",
   "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx",
   "src/app/admin/pages-blocks/pages/CreatePageModal.tsx",
   "src/app/admin/seo/redirects/RedirectFormModal.tsx",
   "src/app/admin/users-roles/UsersManagementClient.tsx",
   "src/components/admin/content-workflow/BulkPublishValidationModal.tsx",
+  "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
   "src/components/admin/ui/AdminDuplicateResourceModal.tsx",
   "src/components/admin/ui/AdminLinkPicker.tsx",
 ].sort();

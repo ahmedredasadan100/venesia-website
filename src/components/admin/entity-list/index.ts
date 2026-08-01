@@ -12,6 +12,7 @@ export {
   default as AdminEntityListSurface,
   AdminEntityListPageLayout,
   AdminEntityListPrimarySection,
+  AdminEntityListTableRegion,
 } from "./AdminEntityListSurface";
 export {
   AdminFloatingLayerProvider,

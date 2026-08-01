@@ -103,44 +103,24 @@ const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.p
 
 ## 3) Action Buttons
 
-ترتيب الإجراءات ثابت في كل الصفحات:
+كل Management Collection تعلن الإجراءات عبر `AdminDataGridRowActions` والعقد المشترك فقط:
 
-1. تعديل `edit`
-2. إظهار / إخفاء `visibility`
-3. نسخ `duplicate`
-4. حذف `delete`
+- Quick Actions: `edit` ثم `preview` حيث يدعمهما الـDomain، ثم زر `more` العمودي.
+- More Actions: `information` ثم `copyPublicLink` ثم `visibility` ثم `featured` ثم `duplicate` ثم `archive`/`restore` ثم `delete`.
+- كل Entity تعلن صراحة `allowed` أو `hidden` أو `disabled`; لا تنشئ action rail أو SVG محليًا.
+- أيقونة More يملكها `AdminDataGridActionIcon` وتبقى عمودية (`⋮`) في كل Consumers.
 
-ممنوع رسم أيقونات الإجراءات داخل الصفحات. ممنوع استدعاء SVG أو Lucide مباشرة داخل أي Data Grid.
+### 3.a) Manual Reorder
 
-الصيغة الصحيحة:
-
-```tsx
-<AdminDataGridActionButton action="edit" href="..." />
-<AdminDataGridActionButton action="visibility" type="submit" />
-<AdminDataGridActionButton action="duplicate" type="submit" />
-<AdminDataGridActionButton action="delete" type="submit" />
-```
-
-كل حجم ولون وأيقونة وHover وCursor يتم التحكم فيه من `AdminDataGridActionButton` فقط.
-
-### 3.a) Sortable Resource Action Order
-
-المورد القابل للترتيب اليدوي (فيه أسهم `moveUp`/`moveDown`) يستخدم ترتيب إجراءات ثابت:
-
-`moveUp / moveDown → edit → visibilityToggle → duplicate → preview if available → delete`
-
-- الأسهم تعتمد على `sort_order` الحقيقي (ترتيب فعلي مُخزَّن)، وليست فرزًا بصريًا مؤقتًا.
-- أول عنصر عالميًا: `moveUp` معطّل. آخر عنصر عالميًا: `moveDown` معطّل.
-- `preview` يظهر فقط عند وجود public route حقيقي للمورد؛ وإلا يُحذف من الصف (لا رابط وهمي).
-- هذا Pattern رسمي للموارد القابلة للترتيب وليس استثناءً. الموارد غير القابلة للترتيب تبقى على `edit → visibility → duplicate → delete`.
+Reorder ليس Row Action ولا يُوضع داخل More. عندما يملك الـDomain عقد mutation ذريًا مع rollback، يستخدم surface عنصر Grip/Drag Handle مشتركًا في عمود مستقل مع keyboard equivalent. لا يجوز تمثيل السحب الحر بسلسلة adjacent writes غير ذرية؛ تبقى تلك الهجرة متوقفة حتى يعتمد Domain owner العقد المطلوب.
 
 ### 3.b) View Sorting vs Manual Reorder
 
 يجب التمييز بوضوح بين نوعين مختلفين ولا يُخلط بينهما:
 
 - **Table Sorting (View Sorting):** فرز عرض فقط عبر الضغط على عنوان العمود. يعيد ترتيب **الصفوف كاملةً كوحدة واحدة** (وليس خلية/عمودًا منفردًا). **لا يغيّر أي بيانات ولا يغيّر `sort_order`.** في الجداول المقسّمة لصفحات (paginated) يكون الفرز **server-side على كامل البيانات قبل الـ pagination** عبر query params (`?sort=...&dir=asc|desc`)، وليس فرز عميل للصفحة الظاهرة فقط. النقر: أول ضغطة `asc`، ثانية `desc`، ثالثة رجوع للـ default.
-- **Manual Reorder:** فقط عبر أسهم `moveUp`/`moveDown`، وهو الوحيد الذي **يغيّر `sort_order` الحقيقي** في قاعدة البيانات.
-- **العزل بينهما إلزامي:** الـ default view يكون حسب `sort_order ASC`، وهو الوضع الوحيد الذي تعمل فيه أسهم reorder. عند تفعيل أي فرز عرض غير الـ default، تُعطَّل أسهم `moveUp`/`moveDown` (منعًا للخلط بين الرؤية المؤقتة والترتيب المحفوظ)، بينما تبقى باقي الإجراءات (`edit`/`visibility`/`duplicate`/`delete`) فعّالة.
+- **Manual Reorder:** يغيّر `sort_order` الحقيقي فقط عبر Domain mutation ذري مع rollback؛ الـpresentation لا يملك writes.
+- **العزل بينهما إلزامي:** الـdefault view يكون حسب `sort_order ASC`. عند تفعيل فرز عرض مختلف، يُعطّل reorder بينما تبقى الإجراءات المعلنة عبر Row Actions فعّالة.
 
 ## 4) Cursor
 
@@ -174,14 +154,7 @@ List empty states should use `AdminListEmptyState` for consistent title, helper 
 
 ## 8) RTL Protection For Actions
 
-Because the admin is RTL, action rows must keep the visual order fixed from the right edge: edit -> visibility -> duplicate -> delete. Use `dir="rtl"` on inline action containers unless the page deliberately uses a two-button pattern like Topics.
-This prevents the visual order from flipping between pages.
-
-Mandatory visual order remains:
-
-`edit → visibility → duplicate → delete`
-
-If a module cannot support one of these actions, the missing action must be documented in the page code with a clear reason. Otherwise, the action is considered missing.
+The Actions column is the last logical `inline-end` column and therefore the visual far-left column in RTL. The outer grid/table cell alone owns its sticky inset, separator, background, edge-flush placement, and full header/row height; the inner Row Actions rail only owns button order and spacing. Quick Actions keep `edit → preview → more`; unsupported actions are declared hidden or disabled in the capability contract.
 
 ## 9) Actions Column Containment
 
@@ -189,31 +162,22 @@ Every actions column must stay inside the table/card bounds. Overflow outside th
 
 Use the shared helpers from `AdminDataGrid`:
 
-- `AdminDataGridActionsCell` — required wrapper for the actions grid cell.
-- `AdminDataGridActions` — inner flex row only (used inside `AdminDataGridActionsCell`); never use `min-w-max`.
-- `adminDataGridActionsColumn(count)` or `ADMIN_DATA_GRID_ACTION_COLUMNS` — fixed column width from button count.
-- `compact` on `AdminDataGridActionsCell` when a row has 5+ buttons (40px buttons, tighter gap).
+- `AdminDataGridRowActions` — the only Collection row-actions renderer.
+- `AdminDataGridStickyActionsCell` / `AdminDataGridStickyActionsHeaderCell` — required table wrappers at logical `inline-end`.
+- `ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact` — canonical fixed track for Edit, Preview, and More.
 
 Rules:
 
-- Forms wrapping submit buttons must use `className="contents"` so they do not expand the flex row.
 - Action buttons always use `shrink-0`.
-- Never rely on a wider column than `adminDataGridActionsColumn()` returns.
-- Extra reorder/move buttons count toward the total button count.
+- Never rely on a wider column than the shared action-column contract.
+- Reorder owns a separate track outside Row Actions and does not change the three-button width.
 
-## 10) Page Context Header (`AdminPageHeader` variants)
+## 10) Page Context Header (`AdminPageHeader`)
 
-مكوّن `AdminPageHeader` له نمطان (variant):
+`AdminPageHeader` و`AdminPageContextHeader` يعرضان ترويسة موحّدة من ثلاثة مستويات منطقية فقط:
 
-- `variant="default"` — الشكل القديم/الحالي لكل الصفحات، ولم ولن يتغيّر. أي صفحة لا تمرّر `variant` تبقى على هذا النمط تلقائيًا.
-- `variant="context"` — نمط Page Context Header الجديد للصفحات التي تحتاج فصلًا بصريًا واضحًا بين:
-  - **هوية الصفحة** (Eyebrow + Title + `contextLine`) على اليمين،
-  - **وصف الصفحة** على اليسار، يفصلهما divider رأسي هادئ (warm-gold) على الديسكتوب وفاصل أفقي على الموبايل،
-  - **إجراءات الصفحة** في Page Actions Bar سفلي مدمج داخل نفس البلوك (centered).
+1. **Engine Label** عبر `eyebrow`، ويُكتب بالإنجليزية Uppercase.
+2. **Page Title** عبر `title`.
+3. **Page Description** عبر `description`.
 
-قواعد الاستخدام:
-
-- الاستخدام **opt-in فقط** — يُفعَّل بتمرير `variant="context"` صراحةً.
-- **ممنوع تعميمه** على كل الصفحات إلا بقرار Rollout منفصل.
-- النمط جاهز للحالات: بدون actions (لا يظهر الشريط السفلي)، زر واحد أو عدة أزرار (تتوسّط وتلتف بدون overflow)، بدون `contextLine` (لا فراغ تحت العنوان)، وعنوان/وصف طويل (يلتفّان دون كسر التوازن).
-- على الموبايل: الهوية والوصف يصبحان stacked، والـ divider يتحوّل لفاصل أفقي، والأزرار تلتف بدون overflow أفقي.
+أي معلومة سياقية ضرورية تُدمج داخل `description` أو تُنقل إلى موضع وظيفي مناسب. لا يوجد سطر سياقي مستقل ولا نمط سياقي موازٍ. تبقى الإجراءات والبيانات الوصفية داخل الـdock المشترك، ويلتف المحتوى والأزرار دون overflow على الشاشات الضيقة.

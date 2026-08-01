@@ -29,8 +29,8 @@ export default async function ProjectEditPage({
       <main className="space-y-5" dir="rtl">
         <AdminPageContextHeader
           eyebrow="إدارة المشاريع"
-          contextLine="المشاريع / تعديل المشروع"
           title="تعذر فتح محرر المشروع"
+          description="المشاريع / تعديل المشروع"
           actions={<AdminActionButton href="/admin/projects/residential" variant="dark">عرض المشروعات</AdminActionButton>}
         />
         <AdminNotice
@@ -50,9 +50,8 @@ export default async function ProjectEditPage({
     <main className="space-y-5" dir="rtl">
       <AdminPageContextHeader
         eyebrow="إدارة المشاريع"
-        contextLine="المشاريع / تعديل المشروع"
         title={project.arabic_name || project.english_name || "تعديل المشروع"}
-        description={`${project.english_name || "اسم المشروع بالإنجليزية"} — ${project.slug}`}
+        description={`المشاريع / تعديل المشروع — ${project.english_name || "اسم المشروع بالإنجليزية"} — ${project.slug}`}
         actions={<AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>}
       />
       <ProjectEditForm key={bundle.project.id ?? `project-${id}`} bundle={bundle} />

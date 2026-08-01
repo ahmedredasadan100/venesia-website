@@ -17,16 +17,10 @@ export default async function MenusPage({
     .select("id, name, slug, location, is_active")
     .order("id", { ascending: true });
 
-  if (error) {
-    return (
-      <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
-        حدث خطأ أثناء قراءة القوائم: {error.message}
-      </div>
-    );
-  }
-
   const menuRows = menus ?? [];
-  const counts = await countMenuItemsByMenuIds(menuRows.map((menu) => menu.id));
+  const counts = error
+    ? new Map<number, number>()
+    : await countMenuItemsByMenuIds(menuRows.map((menu) => menu.id));
 
   const rows: MenuListRow[] = menuRows.map((menu) => ({
     id: menu.id,
@@ -42,6 +36,7 @@ export default async function MenusPage({
       menus={rows}
       message={message}
       messageWarning={query.notice === "saved_with_media_sync_warning"}
+      loadError={error ? `حدث خطأ أثناء قراءة القوائم: ${error.message}` : null}
     />
   );
 }

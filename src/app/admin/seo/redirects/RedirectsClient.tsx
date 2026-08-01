@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   AdminEntityList,
   AdminEntityListPageLayout,
   AdminEntityListPrimarySection,
   AdminEntityListSurface,
+  AdminEntityListTableRegion,
 } from "../../../../components/admin/entity-list";
 import {
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
@@ -15,41 +15,54 @@ import {
   AdminDataGridRowActions,
   AdminPageContextHeader,
   AdminStatusPill,
+  AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
+import {
+  adminActionFailure,
+  adminActionSuccess,
+  type AdminActionResult,
+} from "../../../../lib/admin/admin-action-result";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
-import type { UrlRedirectRecord } from "../../../../lib/redirects/redirect-types";
+import type {
+  AdminEntityListQuery,
+  AdminEntityListResult,
+} from "../../../../lib/admin/entity-list/data-engine/contracts";
+import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
+import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
+import type { RedirectEntityListRow } from "../../../../lib/admin/redirects/entity-list-adapter";
+import {
+  REDIRECTS_LIST_PAGE_SIZES,
+  redirectsQueryContract,
+  type RedirectFilters,
+  type RedirectSortField,
+} from "../../../../lib/admin/redirects/entity-list-contract";
+import {
+  getRedirectsDefaultColumnKeys,
+  REDIRECTS_LIST_COLUMN_META,
+  type RedirectColumnKey,
+} from "../../../../lib/admin/redirects/list-config";
 
 import RedirectFormModal from "./RedirectFormModal";
 import RedirectsListFilters from "./RedirectsListFilters";
 import {
   deleteRedirectAction,
+  restoreRedirectsTablePreferences,
+  saveRedirectsTablePreferences,
   toggleRedirectStatusAction,
 } from "./actions";
 
-type RedirectColumnKey =
-  | "source"
-  | "destination"
-  | "type"
-  | "status"
-  | "note"
-  | "created"
-  | "updated"
-  | "actions";
-
-type RedirectSortKey = "fixed";
+type RedirectColumnSortKey = "fixed";
 
 type RedirectsClientProps = {
-  redirects: UrlRedirectRecord[];
-  notice?: string | null;
-  error?: string | null;
-  initialFilters: {
-    q: string;
-    status: string;
-    redirectType: string;
-  };
+  initialQuery: AdminEntityListQuery<RedirectFilters, RedirectSortField>;
+  initialResult: AdminEntityListResult<RedirectEntityListRow>;
+  initialVisibleColumns?: readonly string[];
+  preferenceError?: string | null;
 };
+
+const PAGE_SIZE_OPTIONS = REDIRECTS_LIST_PAGE_SIZES.map(String);
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -66,37 +79,20 @@ function formatDate(value?: string | null) {
   }
 }
 
-function getNoticeText(notice?: string | null) {
-  if (notice === "created") return "تم إنشاء التحويل بنجاح.";
-  if (notice === "updated") return "تم تحديث التحويل بنجاح.";
-  if (notice === "deleted") return "تم حذف التحويل بنجاح.";
-  if (notice === "activated") return "تم تفعيل التحويل بنجاح.";
-  if (notice === "deactivated") return "تم إيقاف التحويل بنجاح.";
-  return null;
-}
-
-function redirectFormData(id: number) {
-  const formData = new FormData();
-  formData.set("id", String(id));
-  return formData;
-}
-
 function createRedirectColumns(input: {
-  pendingRowId: number | null;
-  onEdit: (row: UrlRedirectRecord) => void;
-  onToggle: (row: UrlRedirectRecord) => Promise<void>;
-  onDelete: (row: UrlRedirectRecord) => Promise<void>;
+  rowPendingAction: (id: number) => string | null;
+  mutationBusy: boolean;
+  onEdit: (row: RedirectEntityListRow) => void;
+  onToggle: (row: RedirectEntityListRow) => Promise<AdminActionResult>;
+  onDelete: (row: RedirectEntityListRow) => Promise<AdminActionResult>;
 }): AdminEntityColumnDef<
-  UrlRedirectRecord,
+  RedirectEntityListRow,
   RedirectColumnKey,
-  RedirectSortKey
+  RedirectColumnSortKey
 >[] {
   return [
     {
-      key: "source",
-      label: "المصدر",
-      defaultVisible: true,
-      hideable: false,
+      ...REDIRECTS_LIST_COLUMN_META.source,
       minWidth: 210,
       width: 210,
       sticky: "start",
@@ -108,10 +104,7 @@ function createRedirectColumns(input: {
       ),
     },
     {
-      key: "destination",
-      label: "الوجهة",
-      defaultVisible: true,
-      hideable: false,
+      ...REDIRECTS_LIST_COLUMN_META.destination,
       minWidth: 220,
       width: 220,
       renderCell: ({ row }) => (
@@ -121,10 +114,7 @@ function createRedirectColumns(input: {
       ),
     },
     {
-      key: "type",
-      label: "النوع",
-      defaultVisible: true,
-      hideable: false,
+      ...REDIRECTS_LIST_COLUMN_META.type,
       minWidth: 96,
       width: 96,
       renderCell: ({ row }) => (
@@ -132,10 +122,7 @@ function createRedirectColumns(input: {
       ),
     },
     {
-      key: "status",
-      label: "الحالة",
-      defaultVisible: true,
-      hideable: false,
+      ...REDIRECTS_LIST_COLUMN_META.status,
       minWidth: 112,
       width: 112,
       renderCell: ({ row }) => (
@@ -145,10 +132,7 @@ function createRedirectColumns(input: {
       ),
     },
     {
-      key: "note",
-      label: "ملاحظة",
-      defaultVisible: true,
-      hideable: false,
+      ...REDIRECTS_LIST_COLUMN_META.note,
       minWidth: 150,
       width: 150,
       renderCell: ({ row }) => (
@@ -158,10 +142,7 @@ function createRedirectColumns(input: {
       ),
     },
     {
-      key: "created",
-      label: "أُنشئ",
-      defaultVisible: true,
-      hideable: false,
+      ...REDIRECTS_LIST_COLUMN_META.created,
       minWidth: 164,
       width: 164,
       renderCell: ({ row }) => (
@@ -171,10 +152,7 @@ function createRedirectColumns(input: {
       ),
     },
     {
-      key: "updated",
-      label: "آخر تحديث",
-      defaultVisible: true,
-      hideable: false,
+      ...REDIRECTS_LIST_COLUMN_META.updated,
       minWidth: 164,
       width: 164,
       renderCell: ({ row }) => (
@@ -184,21 +162,19 @@ function createRedirectColumns(input: {
       ),
     },
     {
-      key: "actions",
-      label: "الإجراءات",
-      defaultVisible: true,
-      hideable: false,
+      ...REDIRECTS_LIST_COLUMN_META.actions,
       minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
-      renderCell: ({ row }) => {
-        const pending = input.pendingRowId === row.id;
+      renderCell: ({ row, onMutationResult }) => {
+        const pendingAction = input.rowPendingAction(row.id);
+        const disabled = input.mutationBusy;
         const capability: AdminRowActionsCapability = {
           entityType: "redirect",
           entityId: row.id,
           entityLabel: row.source_path,
           actions: {
-            edit: pending
+            edit: disabled
               ? {
                   access: "disabled",
                   disabledReason: "انتظر انتهاء الإجراء الحالي.",
@@ -220,30 +196,37 @@ function createRedirectColumns(input: {
               ],
             },
             copyPublicLink: { access: "hidden" },
-            visibility: pending
+            visibility: disabled
               ? {
                   access: "disabled",
                   disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                  pending: true,
+                  pending: pendingAction === "visibility",
                   isVisible: row.status === "active",
                 }
               : {
                   access: "allowed",
                   isVisible: row.status === "active",
-                  onSelect: () => input.onToggle(row),
+                  onSelect: async () => {
+                    const result = await input.onToggle(row);
+                    onMutationResult?.(result);
+                  },
                 },
             featured: { access: "hidden" },
             duplicate: { access: "hidden" },
             archive: { access: "hidden" },
-            delete: pending
+            delete: disabled
               ? {
                   access: "disabled",
                   disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                  pending: true,
+                  pending: pendingAction === "delete",
                 }
               : {
                   access: "allowed",
-                  onSelect: () => input.onDelete(row),
+                  onSelect: async () => {
+                    const result = await input.onDelete(row);
+                    onMutationResult?.(result);
+                    if (!result.ok) throw new Error(result.message);
+                  },
                   confirmation: {
                     mode: "shared",
                     title: "تأكيد حذف التحويل",
@@ -253,82 +236,172 @@ function createRedirectColumns(input: {
                 },
           },
         };
-        return <AdminDataGridRowActions capability={capability} size="compact" />;
+        return (
+          <AdminDataGridRowActions capability={capability} size="compact" />
+        );
       },
     },
   ];
 }
 
 export default function RedirectsClient({
-  redirects,
-  notice,
-  error,
-  initialFilters,
+  initialQuery,
+  initialResult,
+  initialVisibleColumns,
+  preferenceError = null,
 }: RedirectsClientProps) {
-  const [rows, setRows] = useState(redirects);
+  const controller = useAdminEntityListController({
+    entity: "redirects",
+    contract: redirectsQueryContract,
+    initialQuery,
+    initialResult,
+    staleTimeMs: 30_000,
+  });
+  const instant = useAdminEntityInstantMutation<RedirectEntityListRow>(
+    "redirects",
+    controller.query,
+  );
   const [createOpen, setCreateOpen] = useState(false);
-  const [editingRedirect, setEditingRedirect] = useState<UrlRedirectRecord | null>(null);
-  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
-  const noticeText = getNoticeText(notice);
+  const [editingRedirect, setEditingRedirect] =
+    useState<RedirectEntityListRow | null>(null);
 
-  const filteredRedirects = useMemo(() => {
-    const q = initialFilters.q.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (initialFilters.status !== "all" && row.status !== initialFilters.status) return false;
-      if (initialFilters.redirectType !== "all" && row.redirect_type !== initialFilters.redirectType) {
-        return false;
+  const toggleRedirect = useCallback(
+    async (row: RedirectEntityListRow): Promise<AdminActionResult> => {
+      const nextStatus = row.status === "active" ? "inactive" : "active";
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "visibility",
+          optimistic: (cache) => {
+            if (
+              controller.query.filters.status !== "all" &&
+              controller.query.filters.status !== nextStatus
+            ) {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((current) =>
+              current.id === row.id
+                ? { ...current, status: nextStatus }
+                : current,
+            );
+          },
+          execute: () => toggleRedirectStatusAction(row.id),
+          reconcileSuccess: (confirmed, tools) => {
+            const status =
+              confirmed.status === "active" || confirmed.status === "inactive"
+                ? confirmed.status
+                : nextStatus;
+            const updatedAt =
+              typeof confirmed.updatedAt === "string"
+                ? confirmed.updatedAt
+                : null;
+            tools.cache.patchRows((current) =>
+              current.id === row.id
+                ? {
+                    ...current,
+                    status,
+                    updated_at: updatedAt ?? current.updated_at,
+                  }
+                : current,
+            );
+          },
+        });
+        const confirmedStatus =
+          result.status === "active" || result.status === "inactive"
+            ? result.status
+            : nextStatus;
+        return adminActionSuccess(
+          confirmedStatus === "active"
+            ? "تم تفعيل التحويل"
+            : "تم إيقاف التحويل",
+          result.message,
+          {
+            code:
+              confirmedStatus === "active" ? "published" : "unpublished",
+            entityId: row.id,
+          },
+        );
+      } catch (error) {
+        return adminActionFailure(
+          "تعذر تحديث حالة التحويل",
+          error instanceof Error
+            ? error.message
+            : "تعذر تحديث حالة التحويل. حاول مرة أخرى.",
+          { entityId: row.id },
+        );
       }
-      if (!q) return true;
-      return (
-        row.source_path.toLowerCase().includes(q) ||
-        row.destination_path.toLowerCase().includes(q) ||
-        (row.note ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [rows, initialFilters]);
+    },
+    [controller.query.filters.status, instant],
+  );
 
-  function handleRedirectSaved(savedRedirect: UrlRedirectRecord) {
-    setRows((current) => {
-      const nextRows = current.some((row) => row.id === savedRedirect.id)
-        ? current.map((row) =>
-            row.id === savedRedirect.id ? savedRedirect : row,
-          )
-        : [savedRedirect, ...current];
-      return nextRows.sort((left, right) =>
-        right.updated_at.localeCompare(left.updated_at),
-      );
-    });
-  }
-
-  async function runRowAction(
-    row: UrlRedirectRecord,
-    action: (formData: FormData) => Promise<unknown>,
-  ) {
-    if (pendingRowId !== null) return;
-    setPendingRowId(row.id);
-    try {
-      await action(redirectFormData(row.id));
-    } finally {
-      setPendingRowId(null);
-    }
-  }
+  const deleteRedirect = useCallback(
+    async (row: RedirectEntityListRow): Promise<AdminActionResult> => {
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "delete",
+          optimistic: (cache) => cache.removeRows(new Set([row.id])),
+          execute: () => deleteRedirectAction(row.id),
+        });
+        return adminActionSuccess("تم حذف التحويل", result.message, {
+          code: "deleted",
+          entityId: row.id,
+        });
+      } catch (error) {
+        return adminActionFailure(
+          "تعذر حذف التحويل",
+          error instanceof Error
+            ? error.message
+            : "تعذر حذف التحويل. حاول مرة أخرى.",
+          { entityId: row.id },
+        );
+      }
+    },
+    [instant],
+  );
 
   const columns = useMemo(
     () =>
       createRedirectColumns({
-        pendingRowId,
+        rowPendingAction: (id) =>
+          instant.rowPending?.rowId === id
+            ? instant.rowPending.action
+            : null,
+        mutationBusy:
+          instant.rowPending !== null || instant.bulkPending !== null,
         onEdit: setEditingRedirect,
-        onToggle: (row) => runRowAction(row, toggleRedirectStatusAction),
-        onDelete: (row) => runRowAction(row, deleteRedirectAction),
+        onToggle: toggleRedirect,
+        onDelete: deleteRedirect,
       }),
-    // Server actions navigate after success; only the pending row changes locally.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pendingRowId],
+    [
+      deleteRedirect,
+      instant.bulkPending,
+      instant.rowPending,
+      toggleRedirect,
+    ],
   );
   const hasFilters =
-    Boolean(initialFilters.q.trim()) ||
-    initialFilters.status !== "all" ||
-    initialFilters.redirectType !== "all";
+    Boolean(controller.query.search) ||
+    controller.query.filters.status !== "all" ||
+    controller.query.filters.redirectType !== "all";
+  const initialFeedback = useMemo(
+    () =>
+      controller.error || preferenceError
+        ? mapAdminActionResultToFeedback(
+            adminActionFailure(
+              controller.error
+                ? "تعذر تحميل التحويلات"
+                : "تعذر تحميل تفضيلات الأعمدة",
+              controller.error?.message ?? preferenceError ?? "تعذر تحميل التفضيلات.",
+            ),
+          )
+        : null,
+    [controller.error, preferenceError],
+  );
+  function invalidateAfterFormSave() {
+    void controller.invalidate();
+  }
 
   return (
     <>
@@ -338,56 +411,92 @@ export default function RedirectsClient({
           title="إدارة التحويلات"
           description="أنشئ تحويلات URL عامة لتغييرات المسارات بعد الإطلاق. التحويلات النشطة تُطبَّق فورًا على الطلبات العامة."
           actions={
-            <AdminActionButton variant="primary" onClick={() => setCreateOpen(true)}>
+            <AdminActionButton
+              variant="primary"
+              onClick={() => setCreateOpen(true)}
+            >
               إضافة تحويل
             </AdminActionButton>
           }
         />
 
-        {noticeText ? <AdminNotice variant="success" message={noticeText} /> : null}
-        {error ? (
-          <AdminNotice
-            variant="danger"
-            title="تعذر تنفيذ العملية"
-            message={decodeURIComponent(error)}
-          />
-        ) : null}
-
         <AdminEntityListSurface consumer="redirects">
           <AdminEntityListPrimarySection>
             <RedirectsListFilters
-              q={initialFilters.q}
-              status={initialFilters.status}
-              redirectType={initialFilters.redirectType}
+              search={controller.query.search}
+              status={controller.query.filters.status}
+              redirectType={controller.query.filters.redirectType}
+              onQueryPatch={(patch) => {
+                const search =
+                  "q" in patch
+                    ? (patch.q ?? "").trim()
+                    : controller.query.search;
+                const status =
+                  "status" in patch
+                    ? patch.status === "active" ||
+                      patch.status === "inactive"
+                      ? patch.status
+                      : "all"
+                    : controller.query.filters.status;
+                const redirectType =
+                  "type" in patch
+                    ? patch.type === "301" || patch.type === "302"
+                      ? patch.type
+                      : "all"
+                    : controller.query.filters.redirectType;
+                controller.setSearchAndFilters(
+                  search,
+                  { status, redirectType },
+                  "q" in patch &&
+                    !("status" in patch) &&
+                    !("type" in patch)
+                    ? "replace"
+                    : "push",
+                );
+              }}
             />
           </AdminEntityListPrimarySection>
 
-          <AdminEntityListPrimarySection>
+          <AdminEntityListTableRegion
+            data-admin-entity-list-pending={
+              controller.isFetching ? "true" : "false"
+            }
+          >
             <AdminEntityList<
-              UrlRedirectRecord,
+              RedirectEntityListRow,
               RedirectColumnKey,
-              RedirectSortKey,
+              RedirectColumnSortKey,
               number
             >
               listId="redirects-table"
-              rows={filteredRedirects}
+              rows={controller.result.rows}
               columns={columns}
               getRowId={(row) => row.id}
               getRowLabel={(row) => row.source_path}
-              enableColumnManagement={false}
+              initialVisibleColumns={initialVisibleColumns}
+              defaultVisibleColumns={[...getRedirectsDefaultColumnKeys()]}
+              onPersistColumns={saveRedirectsTablePreferences}
+              onRestoreColumns={restoreRedirectsTablePreferences}
+              enableColumnManagement
               enableSelection={false}
+              scrollLabel="جدول تحويلات SEO"
               mapResultToFeedback={mapAdminActionResultToFeedback}
               sort={null}
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
+              initialFeedback={initialFeedback}
               emptyState={{
-                mode: rows.length === 0 && !hasFilters ? "system" : "filtered",
+                mode:
+                  controller.result.pagination.totalRows === 0 && !hasFilters
+                    ? "system"
+                    : "filtered",
                 systemEmpty: (
                   <div>
                     <p className="text-base font-semibold text-white">
                       لا توجد تحويلات بعد
                     </p>
                     <p className="mt-2 text-sm leading-7 text-white/45">
-                      أنشئ أول تحويل URL لإدارة تغييرات المسارات العامة بعد الإطلاق.
+                      أنشئ أول تحويل URL لإدارة تغييرات المسارات العامة بعد
+                      الإطلاق.
                     </p>
                     <button
                       type="button"
@@ -405,7 +514,19 @@ export default function RedirectsClient({
                 ),
               }}
             />
-          </AdminEntityListPrimarySection>
+            <AdminTablePagination
+              basePath="/admin/seo/redirects"
+              totalCount={controller.result.pagination.totalRows}
+              pageSize={String(controller.result.pagination.pageSize)}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              currentPage={controller.result.pagination.page}
+              totalPages={controller.result.pagination.totalPages}
+              emptySummaryText="لا توجد تحويلات"
+              pending={controller.isFetching}
+              onPageChange={controller.setPage}
+              onPageSizeChange={controller.setPageSize}
+            />
+          </AdminEntityListTableRegion>
         </AdminEntityListSurface>
       </AdminEntityListPageLayout>
 
@@ -413,14 +534,14 @@ export default function RedirectsClient({
         open={createOpen}
         mode="create"
         onClose={() => setCreateOpen(false)}
-        onSaved={handleRedirectSaved}
+        onSaved={invalidateAfterFormSave}
       />
       <RedirectFormModal
         open={Boolean(editingRedirect)}
         mode="edit"
         redirect={editingRedirect ?? undefined}
         onClose={() => setEditingRedirect(null)}
-        onSaved={handleRedirectSaved}
+        onSaved={invalidateAfterFormSave}
       />
     </>
   );

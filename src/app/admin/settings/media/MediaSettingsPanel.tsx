@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   AdminFeedbackChannelViewport,
@@ -60,7 +60,7 @@ export default function MediaSettingsPanel({
   readiness: MediaCatalogReadiness;
 }) {
   const router = useRouter();
-  const { publishFeedback } = useAdminFeedback();
+  const { clearFeedback, publishFeedback } = useAdminFeedback();
   const [allowedKinds, setAllowedKinds] = useState(settings.allowedKinds);
   const [allowedImageExtensions, setAllowedImageExtensions] = useState(
     settings.allowedImageExtensions,
@@ -71,6 +71,8 @@ export default function MediaSettingsPanel({
   const [scanBusy, setScanBusy] = useState<"preview" | "apply" | null>(null);
   const [preview, setPreview] = useState<ReconciliationResult | null>(null);
   const [confirmScan, setConfirmScan] = useState(false);
+  const applyScanTriggerRef = useRef<HTMLButtonElement>(null);
+  const reconciliationRootRef = useRef<HTMLElement>(null);
   const canRunScan =
     readiness.catalogAvailable &&
     readiness.managedStorageAvailable &&
@@ -82,6 +84,7 @@ export default function MediaSettingsPanel({
     title: string,
     message: string,
   ) {
+    clearFeedback("media-settings-reconciliation");
     publishFeedback(
       {
         variant,
@@ -94,6 +97,8 @@ export default function MediaSettingsPanel({
       {
         channel: "media-settings-reconciliation",
         critical: variant === "danger",
+        placement: "inline",
+        reveal: variant === "danger",
       },
     );
   }
@@ -164,12 +169,12 @@ export default function MediaSettingsPanel({
         router.refresh();
       }
     } catch (error) {
-      setConfirmScan(false);
       announce(
         "danger",
         "تعذر إكمال الفحص",
         error instanceof Error ? error.message : "حدث خطأ غير معروف.",
       );
+      if (!dryRun) throw error;
     } finally {
       setScanBusy(null);
     }
@@ -177,7 +182,11 @@ export default function MediaSettingsPanel({
 
   return (
     <>
-      <section className="admin-premium-card mx-auto mb-6 w-full max-w-6xl space-y-5 rounded-[28px] p-5 sm:p-6 lg:p-8">
+      <section
+        ref={reconciliationRootRef}
+        tabIndex={-1}
+        className="admin-premium-card mx-auto mb-6 w-full max-w-6xl space-y-5 rounded-[28px] p-5 sm:p-6 lg:p-8"
+      >
         <div>
           <h2 className="text-lg font-semibold text-white">حالة فحص المكتبة</h2>
           <p className="mt-1 text-sm leading-7 text-white/50">
@@ -250,6 +259,7 @@ export default function MediaSettingsPanel({
             {scanBusy === "preview" ? "جارٍ إعداد المعاينة…" : "معاينة الفحص"}
           </button>
           <button
+            ref={applyScanTriggerRef}
             type="button"
             title={!canApplyScan ? "نفّذ معاينة موثوقة أولًا قبل تطبيق الفحص والمزامنة." : undefined}
             disabled={!canApplyScan || scanBusy !== null}
@@ -406,6 +416,8 @@ export default function MediaSettingsPanel({
         description="ستتم مطابقة ملفات Supabase Storage مع سجل المكتبة وفحص مواضع الارتباط. لن تُحذف أو تُستبدل أي ملفات."
         confirmLabel="تنفيذ الفحص والمزامنة"
         pending={scanBusy === "apply"}
+        returnFocusRef={applyScanTriggerRef}
+        fallbackFocusRef={reconciliationRootRef}
         onCancel={() => setConfirmScan(false)}
         onConfirm={() => runScan(false)}
       />

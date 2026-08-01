@@ -10,7 +10,10 @@ import {
 } from "../../../app/admin/content/topics/actions";
 
 import { AdminEntityListSurface } from "../entity-list";
-import { AdminEntityListPrimarySection } from "../entity-list/AdminEntityListSurface";
+import {
+  AdminEntityListPrimarySection,
+  AdminEntityListTableRegion,
+} from "../entity-list/AdminEntityListSurface";
 import { AdminMetricCardsGrid, AdminTablePagination } from "../ui";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
@@ -415,19 +418,6 @@ export default function TopicsListClient({
       : ADMIN_CONTENT_ROUTES.topics;
   }, [controller.query, sort]);
 
-  const rangeStart = controller.result.pagination.totalRows
-    ? (controller.result.pagination.page - 1) *
-        controller.result.pagination.pageSize +
-      1
-    : 0;
-  const rangeEnd = controller.result.pagination.totalRows
-    ? Math.min(
-        controller.result.pagination.page *
-          controller.result.pagination.pageSize,
-        controller.result.pagination.totalRows,
-      )
-    : 0;
-
   return (
     <AdminEntityListSurface consumer="topics">
       <AdminEntityListPrimarySection>
@@ -494,7 +484,7 @@ export default function TopicsListClient({
 
       {/* Quiet pending indicator only; aria-busy is reserved for the row
           action that owns the in-flight mutation. */}
-      <AdminEntityListPrimarySection
+      <AdminEntityListTableRegion
         data-admin-entity-list-pending={
           controller.isFetching ? "true" : "false"
         }
@@ -525,21 +515,19 @@ export default function TopicsListClient({
             }
           }}
         />
-      </AdminEntityListPrimarySection>
-
-      <AdminTablePagination
-        basePath={ADMIN_CONTENT_ROUTES.topics}
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
-        totalCount={controller.result.pagination.totalRows}
-        pageSize={String(controller.result.pagination.pageSize)}
-        pageSizeOptions={TOPICS_LIST_PAGE_SIZES.map(String)}
-        currentPage={controller.result.pagination.page}
-        totalPages={controller.result.pagination.totalPages}
-        emptySummaryText="لا توجد موضوعات مطابقة"
-        onPageChange={controller.setPage}
-        onPageSizeChange={controller.setPageSize}
-      />
+        <AdminTablePagination
+          basePath={ADMIN_CONTENT_ROUTES.topics}
+          totalCount={controller.result.pagination.totalRows}
+          pageSize={String(controller.result.pagination.pageSize)}
+          pageSizeOptions={TOPICS_LIST_PAGE_SIZES.map(String)}
+          currentPage={controller.result.pagination.page}
+          totalPages={controller.result.pagination.totalPages}
+          emptySummaryText="لا توجد موضوعات مطابقة"
+          onPageChange={controller.setPage}
+          onPageSizeChange={controller.setPageSize}
+          pending={controller.isFetching}
+        />
+      </AdminEntityListTableRegion>
     </AdminEntityListSurface>
   );
 }

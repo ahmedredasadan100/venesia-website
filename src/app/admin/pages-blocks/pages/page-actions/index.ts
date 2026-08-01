@@ -15,7 +15,6 @@ export {
   assignPageBlock,
 } from "./assignment-create";
 export { updateHeroPageAssignment, updatePageBlockAssignment } from "./assignment-update";
-export { movePageBlockAssignment } from "./assignment-reorder";
 export { togglePageBlockAssignment } from "./assignment-status";
 export { deletePageBlockAssignment } from "./assignment-delete";
 export { duplicateAssignedPageModule } from "./assignment-duplicate";

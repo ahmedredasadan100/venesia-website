@@ -52,6 +52,7 @@ export type AdminEntityListTableProps<
   sortMode?: SortMode;
   selection?: AdminEntityListSelectionApi<TId> | null;
   selectionLabel?: string;
+  scrollLabel?: string;
   actionsColumnWidth: number;
   empty: ReactNode;
   className?: string;
@@ -81,6 +82,7 @@ export default function AdminEntityListTable<
   sortMode,
   selection,
   selectionLabel = "تحديد كل الصفوف في الصفحة",
+  scrollLabel = "جدول بيانات الإدارة",
   actionsColumnWidth,
   empty,
   className = "",
@@ -158,7 +160,10 @@ export default function AdminEntityListTable<
   }
 
   return (
-    <AdminDataGrid className={`max-w-full overflow-hidden ${className}`.trim()}>
+    <AdminDataGrid
+      scrollLabel={scrollLabel}
+      className={`max-w-full ${className}`.trim()}
+    >
       <table
         style={{
           width: flexibleColumnKey === undefined ? tableMinWidth : "100%",

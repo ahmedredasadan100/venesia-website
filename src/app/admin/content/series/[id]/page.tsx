@@ -39,9 +39,8 @@ export default async function EditSeriesPage({
     <AdminPageExperience>
       <AdminPageContextHeader
         eyebrow="SERIES CONTROL"
-        contextLine="تعديل سلسلة:"
         title={truncateWords(series.name || "بدون اسم")}
-        description="حدّث بيانات السلسلة مع الحفاظ على Slug الثابت وروابط الموضوعات الحالية."
+        description="تعديل سلسلة — حدّث بيانات السلسلة مع الحفاظ على Slug الثابت وروابط الموضوعات الحالية."
         actions={
           <>
             <AdminActionButton href="/admin/content/series" variant="dark">

@@ -11,22 +11,29 @@ import VenesiaModal, {
 } from "../../../../components/admin/VenesiaModal";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminActionButton,
+  adminDataGridActionsColumn,
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
+  AdminDataGridRowActions,
   AdminStatusPill,
+  AdminTablePagination,
   AdminLinkField,
+  type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
 import { hasAdminLinkInContainer, linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { serializeAdminLink } from "../../../../lib/admin/links/serialize";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";
+import { resolvePublicPreviewHref } from "../../../../lib/admin/links/validate";
 import type { FooterManualLink } from "../../../../lib/footer/footer-slot-types";
 
-const columns = `56px minmax(120px,1.1fr) minmax(160px,1.4fr) 88px 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.fiveCompact}`;
+const columns = `56px minmax(120px,1.1fr) minmax(160px,1.4fr) 88px 88px ${adminDataGridActionsColumn(2, "compact")} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
+const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
 
 function emptyLink(sortOrder = 0): FooterManualLink {
   return { label: "", href: "", link: null, target: "_self", visible: true, sortOrder };
@@ -81,6 +88,14 @@ export default function FooterLinksDataGrid({
   const sortedLinks = useMemo(() => sortLinks(links), [links]);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState<FooterManualLink>(emptyLink());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(sortedLinks.length / pageSize));
+  const resolvedCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedLinks = useMemo(
+    () => sortedLinks.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
+    [pageSize, resolvedCurrentPage, sortedLinks],
+  );
 
   const isCreate = editIndex === -1;
   const modalOpen = editIndex !== null;
@@ -140,7 +155,6 @@ export default function FooterLinksDataGrid({
   }
 
   function deleteRow(index: number) {
-    if (!window.confirm("حذف هذا الرابط؟")) return;
     onChange(reindexLinks(sortedLinks.filter((_, rowIndex) => rowIndex !== index)));
   }
 
@@ -160,11 +174,56 @@ export default function FooterLinksDataGrid({
           <span>الرابط</span>
           <span className="text-center">الهدف</span>
           <span className="text-center">الحالة</span>
+          <span className="text-center">الترتيب</span>
           <span className="text-center">الإجراءات</span>
         </AdminDataGridHeader>
 
-        {sortedLinks.length ? (
-          sortedLinks.map((item, index) => (
+        {paginatedLinks.length ? (
+          paginatedLinks.map((item, pageIndex) => {
+            const index = (resolvedCurrentPage - 1) * pageSize + pageIndex;
+            const previewHref = resolvePublicPreviewHref(manualLinkHrefLabel(item));
+            const hidden = { access: "hidden" as const };
+            const capability: AdminRowActionsCapability = {
+              entityType: "footer_manual_link",
+              entityId: `${index}:${item.label}`,
+              entityLabel: item.label || "رابط بدون اسم",
+              actions: {
+                edit: { access: "allowed", onSelect: () => openEdit(index) },
+                preview: previewHref
+                  ? { access: "allowed", href: previewHref, target: "_blank", rel: "noreferrer" }
+                  : { access: "disabled", disabledReason: "لم يُحدد رابط صالح للمعاينة." },
+                information: {
+                  access: "allowed",
+                  title: `معلومات ${item.label || "الرابط"}`,
+                  items: [
+                    { label: "الرابط", value: manualLinkHrefLabel(item) },
+                    { label: "الهدف", value: item.target === "_blank" ? "تبويب جديد" : "نفس النافذة" },
+                    { label: "الحالة", value: item.visible !== false ? "ظاهر" : "مخفي" },
+                  ],
+                },
+                copyPublicLink: hidden,
+                visibility: {
+                  access: "allowed",
+                  isVisible: item.visible !== false,
+                  onSelect: () => toggleVisible(index),
+                },
+                featured: hidden,
+                duplicate: hidden,
+                archive: hidden,
+                delete: {
+                  access: "allowed",
+                  onSelect: () => deleteRow(index),
+                  confirmation: {
+                    mode: "shared",
+                    title: "تأكيد حذف الرابط",
+                    description: `حذف الرابط «${item.label || "بدون اسم"}» من مسودة الفوتر؟`,
+                    confirmLabel: "حذف الرابط",
+                  },
+                },
+              },
+            };
+
+            return (
             <AdminDataGridRow key={`link-${index}-${item.label}`} columns={columns}>
               <span className="text-center text-sm font-en text-white/45">{index + 1}</span>
               <span className="truncate text-sm text-white/85">{item.label || "—"}</span>
@@ -198,21 +257,28 @@ export default function FooterLinksDataGrid({
                 >
                   <span className="text-sm">↓</span>
                 </AdminDataGridActionButton>
-                <AdminDataGridActionButton action="edit" size="compact" onClick={() => openEdit(index)} />
-                <AdminDataGridActionButton
-                  action="visibility"
-                  size="compact"
-                  isCurrentlyHidden={item.visible === false}
-                  onClick={() => toggleVisible(index)}
-                />
-                <AdminDataGridActionButton action="delete" size="compact" onClick={() => deleteRow(index)} />
               </AdminDataGridActionsCell>
+              <AdminDataGridRowActions capability={capability} size="compact" />
             </AdminDataGridRow>
-          ))
+            );
+          })
         ) : (
           <AdminDataGridEmpty>{emptyLabel}</AdminDataGridEmpty>
         )}
       </AdminDataGrid>
+
+      <AdminTablePagination
+        basePath="/admin/pages-blocks/footer"
+        currentPage={resolvedCurrentPage}
+        totalPages={totalPages}
+        totalCount={sortedLinks.length}
+        pageSize={String(pageSize)}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(nextPageSize) => {
+          setPageSize(nextPageSize);
+          setCurrentPage(1);
+        }}
+      />
 
       <VenesiaModal
         open={modalOpen}
@@ -273,6 +339,7 @@ export default function FooterLinksDataGrid({
           />
         </div>
       </VenesiaModal>
+
     </div>
   );
 }

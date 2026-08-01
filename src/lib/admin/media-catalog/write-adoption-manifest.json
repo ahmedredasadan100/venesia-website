@@ -230,10 +230,9 @@
       "structuredWarning": false,
       "sourceFiles": [
         "src/app/admin/pages-blocks/menus/menu-actions/bulk.ts",
-        "src/app/admin/pages-blocks/menus/menu-actions/items-status.ts",
-        "src/app/admin/pages-blocks/menus/menu-actions/reorder.ts"
+        "src/app/admin/pages-blocks/menus/menu-actions/items-status.ts"
       ],
-      "rationale": "Visibility, status, and ordering commands do not alter href values."
+      "rationale": "Visibility and status commands do not alter href values; unsafe adjacent-row ordering is intentionally absent until an atomic contract exists."
     },
     {
       "id": "menu-removal-commands",

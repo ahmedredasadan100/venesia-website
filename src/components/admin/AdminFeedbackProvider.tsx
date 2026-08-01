@@ -202,6 +202,38 @@ export function AdminFeedbackChannelViewport({
   );
 }
 
+/**
+ * Thin route adapter for server/redirect feedback. The provider remains the
+ * state owner; consumers only declare the feedback they received and where it
+ * belongs in the shared page flow.
+ */
+export function AdminFeedbackRegion({
+  channel,
+  label,
+  feedback,
+}: {
+  channel: string;
+  label: string;
+  feedback?: AdminActionFeedback | null;
+}) {
+  const { publishFeedback, clearFeedback } = useAdminFeedback();
+
+  useEffect(() => {
+    clearFeedback(channel);
+    if (feedback) {
+      publishFeedback(feedback, {
+        channel,
+        placement: "inline",
+        reveal: feedback.variant === "danger",
+      });
+    }
+
+    return () => clearFeedback(channel);
+  }, [channel, clearFeedback, feedback, publishFeedback]);
+
+  return <AdminFeedbackChannelViewport channel={channel} label={label} />;
+}
+
 export default function AdminFeedbackProvider({
   children,
 }: {

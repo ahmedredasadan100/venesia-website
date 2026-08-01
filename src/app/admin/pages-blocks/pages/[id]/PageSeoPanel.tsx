@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 
-import AdminNotice from "../../../../../components/admin/AdminNotice";
+import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
 import { AdminFormField, AdminFormSection } from "../../../../../components/admin/ui";
 import { savePageSeoAction } from "../page-seo-actions";
 
@@ -41,17 +41,33 @@ export default function PageSeoPanel({
         </p>
       </div>
 
-      {notice === "saved" ? (
-        <div className="mb-5">
-          <AdminNotice variant="success" message="تم حفظ إعدادات السيو للصفحة." />
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="mb-5">
-          <AdminNotice variant="danger" title="تعذر حفظ السيو" message={error} />
-        </div>
-      ) : null}
+      <AdminFeedbackRegion
+        channel={`page-seo:${pageId}`}
+        label="نتيجة حفظ إعدادات السيو"
+        feedback={
+          error
+            ? {
+                variant: "danger",
+                title: "تعذر حفظ السيو",
+                message: error,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "manual",
+                dismissSearchParams: ["error"],
+              }
+            : notice === "saved"
+              ? {
+                  variant: "success",
+                  title: "تم الحفظ",
+                  message: "تم حفظ إعدادات السيو للصفحة.",
+                  layout: "inline",
+                  dismissible: true,
+                  lifecycle: "manual",
+                  dismissSearchParams: ["notice"],
+                }
+              : null
+        }
+      />
 
       <form
         action={(formData) => {

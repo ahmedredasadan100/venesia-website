@@ -189,7 +189,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     ],
     surfaces: ["footer-compose", "footer-link-edit", "ordering"],
     rationale:
-      "Multi-slot footer composition is a specialized aggregate editor; its link-delete confirm remains recorded debt.",
+      "Multi-slot footer composition is a specialized aggregate editor whose destructive interactions delegate to Shared Confirmation.",
   },
   {
     id: "global-seo-settings",
@@ -287,7 +287,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/components/admin/media/MediaLibraryCore.tsx",
       "src/components/admin/media-intelligence/AdminMediaLibraryClient.tsx",
       "src/components/admin/media-intelligence/MediaUsagePanel.tsx",
-      "src/app/admin/reports/topics-without-image/page.tsx",
+      "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
     ],
     surfaces: ["activity-query", "sitemap-check", "media-command", "media-usage"],
     rationale:
@@ -295,8 +295,4 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
 ] as const satisfies readonly AdminFormAdoptionEntry[];
 
-export const ADMIN_FORM_CONFIRM_DEBT = [
-  "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
-  "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
-  "src/app/admin/users-roles/UsersManagementClient.tsx",
-] as const;
+export const ADMIN_FORM_CONFIRM_DEBT = [] as const;

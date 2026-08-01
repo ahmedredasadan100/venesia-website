@@ -12,6 +12,10 @@ import {
   type AdminEntityListQueryContract,
   type AdminEntityListResult,
 } from "../src/lib/admin/entity-list/data-engine/contracts.ts";
+import {
+  AdminEntityListPageNormalizationError,
+  loadNormalizedAdminEntityListPage,
+} from "../src/lib/admin/entity-list/data-engine/adapter.ts";
 import { adminEntityListQueryKeys } from "../src/lib/admin/entity-list/data-engine/query-keys.ts";
 import {
   removeAdminEntityRows,
@@ -19,6 +23,13 @@ import {
   setAdminEntityListCachesInScope,
 } from "../src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts";
 import { cacheNormalizedAdminEntityListResult } from "../src/lib/admin/entity-list/data-engine/normalized-result-cache.ts";
+import { activityLogQueryContract } from "../src/lib/admin/audit/entity-list-contract.ts";
+import { redirectsQueryContract } from "../src/lib/admin/redirects/entity-list-contract.ts";
+import { topicsWithoutImageQueryContract } from "../src/lib/admin/media-catalog/topics-without-image-entity-list-contract.ts";
+import {
+  buildAdminListSearchOrFilter,
+  escapeAdminListSearchTerm,
+} from "../src/lib/admin/admin-list-search.ts";
 
 type Filters = { status: "all" | "published"; category: number | null };
 type SortField = "title" | "created_at";
@@ -133,6 +144,138 @@ assert.deepEqual(
 );
 // Canonical defaults do not pollute the URL.
 assert.equal(writeAdminEntityListQuery(contract, normalized).toString(), "");
+
+// Phase 1 adopters use the same strict boundary and canonical URL writer.
+const redirectQuery = parseAdminEntityListRequestQuery(
+  redirectsQueryContract,
+  "q=%2Fold&type=301&status=active&page=2&limit=20",
+);
+assert.equal(redirectQuery.page, 2);
+assert.equal(redirectQuery.pageSize, 20);
+assert.deepEqual(redirectQuery.filters, {
+  status: "active",
+  redirectType: "301",
+});
+assert.equal(
+  writeAdminEntityListQuery(redirectsQueryContract, redirectQuery).toString(),
+  "limit=20&page=2&q=%2Fold&status=active&type=301",
+);
+assert.throws(
+  () => parseAdminEntityListRequestQuery(redirectsQueryContract, "status=all"),
+  AdminEntityListQueryValidationError,
+);
+
+assert.equal(buildAdminListSearchOrFilter(["title"], "   "), "");
+assert.equal(
+  buildAdminListSearchOrFilter(
+    ["source_path", "destination_path"],
+    "/foo&bar?x=1,(a).",
+  ),
+  'source_path.ilike."%/foo&bar?x=1,(a).%",destination_path.ilike."%/foo&bar?x=1,(a).%"',
+);
+assert.equal(escapeAdminListSearchTerm("50%_*"), "50\\%\\_\\*");
+assert.equal(escapeAdminListSearchTerm('a"b\\c'), 'a\\"b\\\\c');
+assert.throws(
+  () => buildAdminListSearchOrFilter(["title,deleted_at"], "unsafe"),
+  TypeError,
+);
+
+const stablePageReads: number[] = [];
+const stablePage = await loadNormalizedAdminEntityListPage({
+  requestedPage: 2,
+  pageSize: 10,
+  loadPage: async (page) => {
+    stablePageReads.push(page);
+    return { rows: ["stable"], totalRows: 15 };
+  },
+});
+assert.deepEqual(stablePageReads, [2]);
+assert.deepEqual(stablePage, {
+  rows: ["stable"],
+  totalRows: 15,
+  page: 2,
+  totalPages: 2,
+});
+
+const shrinkingPageReads: number[] = [];
+const shrinkingTotals = [20, 9, 9];
+const shrinkingPage = await loadNormalizedAdminEntityListPage({
+  requestedPage: 3,
+  pageSize: 10,
+  loadPage: async (page) => {
+    shrinkingPageReads.push(page);
+    return {
+      rows: page === 1 ? ["final"] : [],
+      totalRows: shrinkingTotals[shrinkingPageReads.length - 1] ?? 9,
+    };
+  },
+});
+assert.deepEqual(shrinkingPageReads, [3, 2, 1]);
+assert.deepEqual(shrinkingPage, {
+  rows: ["final"],
+  totalRows: 9,
+  page: 1,
+  totalPages: 1,
+});
+await assert.rejects(
+  loadNormalizedAdminEntityListPage({
+    requestedPage: 5,
+    pageSize: 10,
+    maxReads: 2,
+    loadPage: async (page) => ({ rows: [], totalRows: (page - 1) * 10 }),
+  }),
+  AdminEntityListPageNormalizationError,
+);
+await assert.rejects(
+  loadNormalizedAdminEntityListPage({
+    requestedPage: 1,
+    pageSize: 10,
+    loadPage: async () => ({ rows: [], totalRows: -1 }),
+  }),
+  TypeError,
+);
+
+const activityQuery = parseAdminEntityListRequestQuery(
+  activityLogQueryContract,
+  "actor=admin&dateFrom=2026-07-01&dateTo=2026-07-31&limit=50&page=3",
+);
+assert.equal(activityQuery.page, 3);
+assert.equal(activityQuery.pageSize, 50);
+assert.equal(activityQuery.filters.actorUsername, "admin");
+assert.throws(
+  () =>
+    parseAdminEntityListRequestQuery(
+      activityLogQueryContract,
+      "dateFrom=31-07-2026",
+    ),
+  AdminEntityListQueryValidationError,
+);
+
+const reportQuery = parseAdminEntityListRequestQuery(
+  topicsWithoutImageQueryContract,
+  "q=missing&type=video&status=published&page=4",
+);
+assert.equal(reportQuery.pageSize, 10);
+assert.deepEqual(reportQuery.filters, {
+  status: "published",
+  contentType: "video",
+});
+assert.throws(
+  () =>
+    parseAdminEntityListRequestQuery(
+      topicsWithoutImageQueryContract,
+      "page=abc",
+    ),
+  AdminEntityListQueryValidationError,
+);
+assert.throws(
+  () =>
+    parseAdminEntityListRequestQuery(
+      topicsWithoutImageQueryContract,
+      "limit=24",
+    ),
+  AdminEntityListQueryValidationError,
+);
 
 const cachedPages = [
   {
@@ -389,5 +532,5 @@ assert.equal(clientEndpointRequests, 1);
 assert.deepEqual(normalizedCacheResult, normalizedResult);
 controllerQueryClient.clear();
 
-console.log("verify-admin-data-engine-contracts passed (52 assertions).");
+console.log("verify-admin-data-engine-contracts passed (76 assertions).");
 console.log(`out-of-range client endpoint request count: ${clientEndpointRequests}`);

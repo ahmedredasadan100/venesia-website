@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
@@ -10,8 +9,15 @@ import type {
   AdminFormActionState,
   AdminFormMode,
 } from "../../../../lib/admin/form-runtime";
+import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
+import {
+  getRedirectsDefaultColumnKeys,
+  getRedirectsPreferenceColumnKeys,
+  REDIRECTS_LIST_VIEW_KEY,
+  type RedirectColumnKey,
+} from "../../../../lib/admin/redirects/list-config";
 import { clearActiveRedirectsCache } from "../../../../lib/redirects/load-active-redirects";
-import type { RedirectStatus, RedirectType, UrlRedirectRecord } from "../../../../lib/redirects/redirect-types";
+import type { RedirectStatus, UrlRedirectRecord } from "../../../../lib/redirects/redirect-types";
 import {
   validateRedirectInput,
   type RedirectValidationResult,
@@ -25,6 +31,30 @@ type DatabaseErrorLike = {
   message?: string;
 };
 
+type RedirectMutationFailure = {
+  ok: false;
+  code: string;
+  message: string;
+};
+
+export type RedirectStatusMutationResult =
+  | RedirectMutationFailure
+  | {
+      ok: true;
+      feedbackStatus: "success";
+      message: string;
+      status: RedirectStatus;
+      updatedAt: string;
+    };
+
+export type RedirectDeleteMutationResult =
+  | RedirectMutationFailure
+  | {
+      ok: true;
+      feedbackStatus: "success";
+      message: string;
+    };
+
 const REDIRECT_FORM_FIELD_BY_DOMAIN_FIELD = {
   sourcePath: "source_path",
   destinationPath: "destination_path",
@@ -35,10 +65,6 @@ const REDIRECT_FORM_FIELD_BY_DOMAIN_FIELD = {
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
-}
-
-function redirectWithMessage(path: string, key: "notice" | "error", value: string): never {
-  redirect(`${path}?${key}=${encodeURIComponent(value)}`);
 }
 
 function revalidateRedirectsAdmin() {
@@ -330,17 +356,26 @@ export async function updateRedirectAction(
   }
 }
 
-export async function toggleRedirectStatusAction(formData: FormData) {
+export async function toggleRedirectStatusAction(
+  id: number,
+): Promise<RedirectStatusMutationResult> {
   const user = await requireAdminSession();
 
-  const id = Number(getString(formData, "id"));
-  if (!Number.isFinite(id) || id <= 0) {
-    redirectWithMessage("/admin/seo/redirects", "error", "معرّف التحويل غير صالح.");
+  if (!Number.isInteger(id) || id <= 0) {
+    return {
+      ok: false,
+      code: "invalid_redirect_id",
+      message: "معرّف التحويل غير صالح.",
+    };
   }
 
   const existing = await getRedirectById(id);
   if (!existing) {
-    redirectWithMessage("/admin/seo/redirects", "error", "التحويل غير موجود.");
+    return {
+      ok: false,
+      code: "redirect_not_found",
+      message: "التحويل غير موجود.",
+    };
   }
 
   const nextStatus: RedirectStatus = existing.status === "active" ? "inactive" : "active";
@@ -358,20 +393,30 @@ export async function toggleRedirectStatusAction(formData: FormData) {
     );
 
     if (!validation.ok) {
-      redirectWithMessage("/admin/seo/redirects", "error", validation.error);
+      return {
+        ok: false,
+        code: "redirect_activation_invalid",
+        message: validation.error,
+      };
     }
   }
 
-  const { error } = await getSupabaseAdmin()
+  const { data, error } = await getSupabaseAdmin()
     .from("url_redirects")
     .update({
       status: nextStatus,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("status, updated_at")
+    .maybeSingle<Pick<UrlRedirectRecord, "status" | "updated_at">>();
 
-  if (error) {
-    redirectWithMessage("/admin/seo/redirects", "error", error.message);
+  if (error || !data) {
+    return {
+      ok: false,
+      code: error ? "redirect_status_update_failed" : "redirect_not_found",
+      message: error?.message ?? "التحويل غير موجود.",
+    };
   }
 
   await recordCmsAdminAudit(
@@ -386,29 +431,53 @@ export async function toggleRedirectStatusAction(formData: FormData) {
   );
 
   revalidateRedirectsAdmin();
-  redirectWithMessage("/admin/seo/redirects", "notice", nextStatus === "active" ? "activated" : "deactivated");
+  return {
+    ok: true,
+    feedbackStatus: "success",
+    message:
+      data.status === "active"
+        ? "تم تفعيل التحويل بنجاح."
+        : "تم إيقاف التحويل بنجاح.",
+    status: data.status,
+    updatedAt: data.updated_at,
+  };
 }
 
-export async function deleteRedirectAction(formData: FormData) {
+export async function deleteRedirectAction(
+  id: number,
+): Promise<RedirectDeleteMutationResult> {
   const user = await requireAdminSession();
 
-  const id = Number(getString(formData, "id"));
-  if (!Number.isFinite(id) || id <= 0) {
-    redirectWithMessage("/admin/seo/redirects", "error", "معرّف التحويل غير صالح.");
+  if (!Number.isInteger(id) || id <= 0) {
+    return {
+      ok: false,
+      code: "invalid_redirect_id",
+      message: "معرّف التحويل غير صالح.",
+    };
   }
 
   const existing = await getRedirectById(id);
   if (!existing) {
-    redirectWithMessage("/admin/seo/redirects", "error", "التحويل غير موجود.");
+    return {
+      ok: false,
+      code: "redirect_not_found",
+      message: "التحويل غير موجود.",
+    };
   }
 
-  const { error } = await getSupabaseAdmin()
+  const { data, error } = await getSupabaseAdmin()
     .from("url_redirects")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle<{ id: number }>();
 
-  if (error) {
-    redirectWithMessage("/admin/seo/redirects", "error", error.message);
+  if (error || !data) {
+    return {
+      ok: false,
+      code: error ? "redirect_delete_failed" : "redirect_not_found",
+      message: error?.message ?? "التحويل غير موجود.",
+    };
   }
 
   await recordCmsAdminAudit(
@@ -419,51 +488,30 @@ export async function deleteRedirectAction(formData: FormData) {
       entityLabel: existing.source_path,
       metadata: {
         destination_path: existing.destination_path,
-        redirect_type: existing.redirect_type as RedirectType,
+        redirect_type: existing.redirect_type,
       },
     },
     user,
   );
 
   revalidateRedirectsAdmin();
-  redirectWithMessage("/admin/seo/redirects", "notice", "deleted");
+  return {
+    ok: true,
+    feedbackStatus: "success",
+    message: "تم حذف التحويل بنجاح.",
+  };
 }
 
-export type RedirectListFilters = {
-  q?: string;
-  status?: string;
-  redirectType?: string;
-};
+export async function saveRedirectsTablePreferences(visibleColumns: string[]) {
+  return saveAdminColumnPreferences({
+    viewKey: REDIRECTS_LIST_VIEW_KEY,
+    visibleColumns,
+    allowedColumns: getRedirectsPreferenceColumnKeys(),
+  });
+}
 
-export async function listRedirects(filters: RedirectListFilters = {}) {
-  let query = getSupabaseAdmin()
-    .from("url_redirects")
-    .select("*")
-    .order("updated_at", { ascending: false });
-
-  if (filters.status === "active" || filters.status === "inactive") {
-    query = query.eq("status", filters.status);
-  }
-
-  if (filters.redirectType === "301" || filters.redirectType === "302") {
-    query = query.eq("redirect_type", filters.redirectType);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  let rows = (data ?? []) as UrlRedirectRecord[];
-  const q = filters.q?.trim().toLowerCase();
-  if (q) {
-    rows = rows.filter(
-      (row) =>
-        row.source_path.toLowerCase().includes(q) ||
-        row.destination_path.toLowerCase().includes(q) ||
-        (row.note ?? "").toLowerCase().includes(q),
-    );
-  }
-
-  return rows;
+export async function restoreRedirectsTablePreferences() {
+  return saveRedirectsTablePreferences([
+    ...getRedirectsDefaultColumnKeys(),
+  ] as RedirectColumnKey[]);
 }

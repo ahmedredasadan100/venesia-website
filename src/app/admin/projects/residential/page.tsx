@@ -80,7 +80,7 @@ export default async function ResidentialProjectsPage({
   if (listResult.error) {
     return (
       <AdminEntityListPageLayout>
-        <AdminPageHeader title="المشاريع السكنية" description="مدير المشاريع السكنية." />
+        <AdminPageHeader eyebrow="PROJECTS CONTROL" title="المشاريع السكنية" description="مدير المشاريع السكنية." />
         <AdminNotice
           variant="danger"
           title="تعذر تحميل قائمة المشاريع"
@@ -97,10 +97,9 @@ export default async function ResidentialProjectsPage({
   return (
     <AdminEntityListPageLayout>
       <AdminPageHeader
-        variant="context"
+        eyebrow="PROJECTS CONTROL"
         title="المشاريع السكنية"
-        description="جميع المشاريع السكنية في شبكة إدارية واحدة — بدون تعديل الواجهة العامة."
-        contextLine="أنت الآن تدير: المشروعات السكنية"
+        description="أنت الآن تدير المشروعات السكنية في شبكة إدارية واحدة — بدون تعديل الواجهة العامة."
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <AddProjectPanelClient type="residential" />
@@ -124,6 +123,7 @@ export default async function ResidentialProjectsPage({
 
       {listResult.data ? (
         <ProjectsTableClient
+          key="residential"
           type="residential"
           basePath={BASE_PATH}
           initialQuery={initialQuery}

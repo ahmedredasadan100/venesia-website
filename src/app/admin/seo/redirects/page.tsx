@@ -1,49 +1,43 @@
-import { listRedirects } from "./actions";
+import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
+import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
+import { loadRedirectsEntityListResult } from "../../../../lib/admin/redirects/entity-list-adapter";
+import { redirectsQueryContract } from "../../../../lib/admin/redirects/entity-list-contract";
+import {
+  getRedirectsDefaultColumnKeys,
+  REDIRECTS_LIST_VIEW_KEY,
+} from "../../../../lib/admin/redirects/list-config";
 import RedirectsClient from "./RedirectsClient";
 
 export const dynamic = "force-dynamic";
 
-type RedirectsSearchParams = {
-  notice?: string;
-  error?: string;
-  q?: string;
-  status?: string;
-  type?: string;
-};
-
 export default async function RedirectsPage({
   searchParams,
 }: {
-  searchParams?: Promise<RedirectsSearchParams>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const query = await searchParams;
-  const filters = {
-    q: query?.q ?? "",
-    status: query?.status ?? "all",
-    redirectType: query?.type ?? "all",
-  };
+  const resolved = searchParams ? await searchParams : {};
+  const params = new URLSearchParams();
+  Object.entries(resolved).forEach(([key, value]) => {
+    if (typeof value === "string") params.set(key, value);
+  });
 
-  const redirects = await listRedirects({
-    q: filters.q,
-    status: filters.status === "all" ? undefined : filters.status,
-    redirectType: filters.redirectType === "all" ? undefined : filters.redirectType,
-  }).catch(() => []);
-  const clientSnapshotKey = [
-    filters.q,
-    filters.status,
-    filters.redirectType,
-    query?.notice ?? "",
-    query?.error ?? "",
-    ...redirects.map((row) => `${row.id}:${row.updated_at}`),
-  ].join("|");
+  const initialQuery = normalizeAdminEntityListQuery(
+    redirectsQueryContract,
+    params,
+  );
+  const [initialResult, preference] = await Promise.all([
+    loadRedirectsEntityListResult(initialQuery),
+    readAdminColumnPreferences(REDIRECTS_LIST_VIEW_KEY),
+  ]);
 
   return (
     <RedirectsClient
-      key={clientSnapshotKey}
-      redirects={redirects}
-      notice={query?.notice ?? null}
-      error={query?.error ?? null}
-      initialFilters={filters}
+      initialQuery={initialQuery}
+      initialResult={initialResult}
+      initialVisibleColumns={
+        preference.visibleColumns ?? [...getRedirectsDefaultColumnKeys()]
+      }
+      preferenceError={preference.error}
     />
   );
 }

@@ -255,9 +255,8 @@ export default function HeroEditClient({
     <div className="space-y-6 pb-10" dir="rtl">
       <AdminPageContextHeader
         eyebrow="MODULE EDITOR"
-        contextLine={hero.name}
         title="إدارة موديول الهيرو"
-        description="تحكّم في محتوى الموديول وإعداداته وطريقة ظهوره داخل الصفحات المرتبطة به."
+        description={`${hero.name} — تحكّم في محتوى الموديول وإعداداته وطريقة ظهوره داخل الصفحات المرتبطة به.`}
         meta={statusInfo.label}
         actions={
           <AdminActionButton href="/admin/pages-blocks/blocks/hero" variant="dark">

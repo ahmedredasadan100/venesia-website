@@ -22,14 +22,19 @@ export async function bulkPageBlockAssignments(formData: FormData) {
   const action = cleanText(formData.get("bulk_action"));
   const entries = parseAssignmentKeys(formData);
 
-  if (!pageId || !entries.length) return;
+  if (!pageId || !entries.length) {
+    throw new Error("Invalid page block bulk request.");
+  }
+  if (action !== "show" && action !== "hide" && action !== "delete") {
+    throw new Error("Unsupported page block bulk action.");
+  }
 
   const now = new Date().toISOString();
 
   if (action === "show" || action === "hide") {
     const isVisible = action === "show";
 
-    await Promise.all(
+    const mutationResults = await Promise.all(
       entries.map((entry) => {
         if (entry.moduleKind === "hero") {
           return getSupabaseAdmin()
@@ -65,10 +70,12 @@ export async function bulkPageBlockAssignments(formData: FormData) {
           .eq("page_id", pageId);
       }),
     );
+    const mutationError = mutationResults.find((result) => result?.error)?.error;
+    if (mutationError) throw new Error(mutationError.message);
   }
 
   if (action === "delete") {
-    await Promise.all(
+    const mutationResults = await Promise.all(
       entries.map((entry) => {
         if (entry.moduleKind === "hero") {
           return getSupabaseAdmin()
@@ -104,6 +111,8 @@ export async function bulkPageBlockAssignments(formData: FormData) {
           .eq("page_id", pageId);
       }),
     );
+    const mutationError = mutationResults.find((result) => result?.error)?.error;
+    if (mutationError) throw new Error(mutationError.message);
   }
 
   if (action === "show" || action === "hide" || action === "delete") {

@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { AdminPageHeader } from "../../../../../components/admin/ui";
-import MediaSynchronizationWarningNotice from "../../../../../components/admin/media/MediaSynchronizationWarningNotice";
+import BlockTemplateSummaryListClient from "../BlockTemplateSummaryListClient";
 
 export const dynamic = "force-dynamic";
 
@@ -14,48 +12,21 @@ export default async function MediaHubModulesPage({ searchParams }: PageProps) {
     .select("id,name,slug,section_key,status,sort_order")
     .order("sort_order");
 
-  if (error) {
-    return (
-      <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-red-100" dir="rtl">
-        {error.message}
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6" dir="rtl">
-      <MediaSynchronizationWarningNotice visible={query.notice === "saved_with_media_sync_warning"} />
-      <AdminPageHeader
-        title="Media Hub Modules"
-        description="قوالب سكاشن Hub في /media-center — الظهور والترتيب يُدار من ربط الصفحة."
-      />
-
-      <div className="overflow-hidden rounded-[28px] border border-white/10">
-        <table className="w-full text-right text-sm text-white/75">
-          <thead className="bg-white/[0.03] text-xs uppercase tracking-[0.2em] text-white/45">
-            <tr>
-              <th className="px-5 py-4">الاسم</th>
-              <th className="px-5 py-4">Slug</th>
-              <th className="px-5 py-4">Section</th>
-              <th className="px-5 py-4">الحالة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(templates ?? []).map((template) => (
-              <tr key={template.id} className="border-t border-white/10">
-                <td className="px-5 py-4">
-                  <Link href={`/admin/pages-blocks/blocks/media-hub/${template.id}`} className="font-semibold text-[#D8B87A] hover:text-[#e5c98d]">
-                    {template.name}
-                  </Link>
-                </td>
-                <td className="px-5 py-4 font-mono text-xs text-white/45" dir="ltr">{template.slug}</td>
-                <td className="px-5 py-4">{template.section_key}</td>
-                <td className="px-5 py-4">{template.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <BlockTemplateSummaryListClient
+      moduleKey="media-hub"
+      title="Media Hub Modules"
+      description="قوالب سكاشن Hub في /media-center — الظهور والترتيب يُدار من ربط الصفحة."
+      detailLabel="Section"
+      rows={(templates ?? []).map((template) => ({
+        id: Number(template.id),
+        name: String(template.name),
+        slug: String(template.slug),
+        detail: String(template.section_key),
+        status: String(template.status),
+      }))}
+      errorMessage={error?.message}
+      mediaSynchronizationWarning={query.notice === "saved_with_media_sync_warning"}
+    />
   );
 }
