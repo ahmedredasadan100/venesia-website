@@ -188,21 +188,6 @@ export function createCategoryColumns(
       },
     },
     {
-      key: "count",
-      label: "الموضوعات",
-      defaultVisible: true,
-      hideable: true,
-      sortable: true,
-      sortKey: "count",
-      minWidth: 96,
-      width: 96,
-      renderCell: ({ row }) => (
-        <span className="font-en tabular-nums text-sm font-semibold text-white/82">
-          {row.totalCount}
-        </span>
-      ),
-    },
-    {
       key: "status",
       label: "الحالة",
       defaultVisible: true,
@@ -218,8 +203,35 @@ export function createCategoryColumns(
       ),
     },
     {
+      key: "parent",
+      label: "التصنيف الأب",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "parent",
+      minWidth: 160,
+      width: 180,
+      renderCell: ({ row }) =>
+        singleLine(row.parent_name?.trim() ? row.parent_name : "—"),
+    },
+    {
+      key: "count",
+      label: "الموضوعات",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "count",
+      minWidth: 96,
+      width: 96,
+      renderCell: ({ row }) => (
+        <span className="font-en tabular-nums text-sm font-semibold text-white/82">
+          {row.totalCount}
+        </span>
+      ),
+    },
+    {
       key: "id",
-      label: "ID",
+      label: "المعرف",
       defaultVisible: false,
       hideable: true,
       sortable: true,
@@ -231,21 +243,9 @@ export function createCategoryColumns(
       ),
     },
     {
-      key: "parent",
-      label: "التصنيف الأب",
-      defaultVisible: false,
-      hideable: true,
-      sortable: true,
-      sortKey: "parent",
-      minWidth: 160,
-      width: 180,
-      renderCell: ({ row }) =>
-        singleLine(row.parent_name?.trim() ? row.parent_name : "—"),
-    },
-    {
       key: "sort_order",
       label: "الترتيب",
-      defaultVisible: false,
+      defaultVisible: true,
       hideable: true,
       sortable: true,
       sortKey: "sort_order",
@@ -260,7 +260,7 @@ export function createCategoryColumns(
     {
       key: "created_at",
       label: "تاريخ الإنشاء",
-      defaultVisible: false,
+      defaultVisible: true,
       hideable: true,
       sortable: true,
       sortKey: "created_at",

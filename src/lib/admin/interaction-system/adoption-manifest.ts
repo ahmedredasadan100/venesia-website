@@ -38,6 +38,8 @@ export const ADMIN_INTERACTION_SYSTEM = {
     "Authenticated Browser acceptance on the final working tree is still required.",
     "Atomic reorder contracts are not available for Page Assignment and Menu Item free drag.",
     "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
+    "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
+    "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
   ],
 } as const;
 
@@ -631,8 +633,12 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
     "Authenticated Browser QA for every generic adopter on the final working tree is still required.",
     "Page Assignment and Menu Item free drag require an authoritative atomic reorder mutation contract; adjacent multi-write swaps cannot close this item.",
     "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
+    "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
+    "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
   ],
-  genericAdoptionGaps: [],
+  genericAdoptionGaps: [
+    "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
+  ],
   canonicalSectionGap: "gap-7",
   canonicalTableFooterGap: "gap-4",
   ownerSourceFiles: {
@@ -768,6 +774,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       id: "projects-residential-commercial",
       genuineExceptions: [
         "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
+        "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
       ],
       workflowClassification: "full_collection_adoption",
       generic: true,
@@ -796,7 +803,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
-      requiredAdoption: [],
+      requiredAdoption: [
+        "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
+      ],
       exceptionRationale: null,
       rationale:
         "Residential and Commercial are locked Project query configurations over the same shared collection, columns, and action declaration.",
@@ -932,7 +941,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "read_only_no_row_commands",
       rowActionsOwner: "not_applicable",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
@@ -1087,7 +1096,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationOwner: "AdminTablePagination",
       queryMode: "specialized",
       layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
-      requiredAdoption: [],
+      requiredAdoption: [
+        "PAGE_COMPOSITION_TEMPLATE_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
+      ],
       exceptionRationale: null,
       rationale:
         "All eight template libraries share Collection presentation while their loaders and mutations remain owned by Page Composition.",
@@ -1170,7 +1181,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationOwner: "AdminTablePagination",
       queryMode: "specialized",
       layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
-      requiredAdoption: [],
+      requiredAdoption: [
+        "MENU_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
+      ],
       exceptionRationale: null,
       rationale:
         "The menu records adopt shared collection presentation while menu mutations remain with the Menu domain owner.",
@@ -1234,6 +1247,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       layoutOwner: "AdminDataGrid Contract",
       requiredAdoption: [
         "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
+        "MENU_ITEM_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
       ],
       exceptionRationale: null,
       rationale:
@@ -1298,6 +1312,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       layoutOwner: "AdminPageExperience + Page composition assignment content",
       requiredAdoption: [
         "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
+        "PAGE_COMPOSITION_ASSIGNMENT_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
       ],
       exceptionRationale: null,
       rationale:
@@ -1423,7 +1438,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationOwner: "AdminTablePagination",
       queryMode: "bounded-client",
       layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
-      requiredAdoption: [],
+      requiredAdoption: [
+        "IDENTITY_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
+      ],
       exceptionRationale:
         "Status, password, and role commands cross the Auth and Permissions stop boundary.",
       rationale:
@@ -1688,7 +1705,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",

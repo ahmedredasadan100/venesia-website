@@ -22,6 +22,12 @@ export const PAGES_LIST_COLUMNS = [
     hideable: false,
   },
   {
+    key: "status",
+    label: "الحالة",
+    defaultVisible: true,
+    hideable: true,
+  },
+  {
     key: "modules",
     label: "الموديولات",
     defaultVisible: true,
@@ -30,12 +36,6 @@ export const PAGES_LIST_COLUMNS = [
   {
     key: "type",
     label: "النوع",
-    defaultVisible: true,
-    hideable: true,
-  },
-  {
-    key: "status",
-    label: "الحالة",
     defaultVisible: true,
     hideable: true,
   },

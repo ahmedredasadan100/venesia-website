@@ -8,6 +8,9 @@ export type ProjectGridRow = {
   arabic_name: string;
   english_name: string;
   location_label: string;
+  city_name: string;
+  main_area_name: string;
+  sub_area_name: string;
   featured: boolean;
   updated_at: string;
 };

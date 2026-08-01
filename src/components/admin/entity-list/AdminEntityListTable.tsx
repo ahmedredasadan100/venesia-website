@@ -10,7 +10,9 @@ import {
   AdminDataGridSortLabel,
   AdminDataGridStickyActionsCell,
   AdminDataGridStickyActionsHeaderCell,
+  ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES,
   ADMIN_DATA_GRID_HEADER_CLASSES,
+  ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES,
   getAdminDataGridFixedColumnStyle,
 } from "../ui/AdminDataGrid";
 import type { AdminGridId } from "../ui/useAdminGridSelection";
@@ -133,6 +135,13 @@ export default function AdminEntityListTable<
 
     const active = sort?.key === column.sortKey;
     const direction = sort?.direction ?? "asc";
+    const alignment = column.align ?? (column.primary ? "start" : "center");
+    const justifyClass =
+      alignment === "start"
+        ? "justify-start"
+        : alignment === "end"
+          ? "justify-end"
+          : "justify-center";
 
     if (sortMode.mode === "href") {
       return (
@@ -140,7 +149,7 @@ export default function AdminEntityListTable<
           href={sortMode.hrefFor(column.key, column.sortKey)}
           active={active}
           direction={direction}
-          className={column.primary ? "justify-start" : ""}
+          className={justifyClass}
         >
           {column.label}
         </AdminDataGridSortLink>
@@ -152,7 +161,7 @@ export default function AdminEntityListTable<
         active={active}
         direction={direction}
         onClick={() => sortMode.onToggle(column.sortKey!)}
-        className={column.primary ? "justify-start" : "mx-auto"}
+        className={justifyClass}
       >
         {column.label}
       </AdminDataGridSortLabel>
@@ -185,9 +194,11 @@ export default function AdminEntityListTable<
           ))}
         </colgroup>
         <thead>
-          <tr className={ADMIN_DATA_GRID_HEADER_CLASSES}>
+          <tr
+            className={`${ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES} ${ADMIN_DATA_GRID_HEADER_CLASSES}`}
+          >
             {showSelection && selection ? (
-              <th className="sticky start-0 z-40 w-[46px] min-w-[46px] bg-[#10151C] px-3 py-4 text-center">
+              <th className="sticky start-0 z-40 w-[46px] min-w-[46px] bg-[#10151C] text-center">
                 <AdminDataGridCheckbox
                   inputRef={selection.selectAllRef}
                   checked={selection.allSelected}
@@ -217,12 +228,20 @@ export default function AdminEntityListTable<
                     ? "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-[46px] min-[641px]:z-40 bg-[#10151C] text-right"
                     : "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-0 min-[641px]:z-40 bg-[#10151C] text-right"
                   : "";
+              const alignment =
+                column.align ?? (column.primary ? "start" : "center");
+              const alignmentClass =
+                alignment === "start"
+                  ? "text-start"
+                  : alignment === "end"
+                    ? "text-end"
+                    : "text-center";
 
               return (
                 <th
                   key={column.key}
                   style={getColumnTrackStyle(column)}
-                  className={`whitespace-nowrap px-4 py-4 text-center ${stickyPrimary}`}
+                  className={`whitespace-nowrap ${alignmentClass} ${stickyPrimary}`}
                 >
                   {content}
                 </th>
@@ -237,14 +256,14 @@ export default function AdminEntityListTable<
             return (
               <tr
                 key={String(rowId)}
-                className={`group border-b border-white/8 transition hover:bg-white/[0.035] ${
+                className={`group ${ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES} border-b border-white/8 transition hover:bg-white/[0.035] ${
                   rowClassName?.(row) ?? ""
                 }`}
                 data-entity-row-id={String(rowId)}
                 data-entity-depth={depth}
               >
                 {showSelection && selection ? (
-                  <td className="sticky start-0 z-30 w-[46px] min-w-[46px] border-b border-white/8 bg-[#080B10] px-3 py-4 text-center transition group-last:border-b-0 group-hover:bg-[#0D1117]">
+                  <td className="sticky start-0 z-30 w-[46px] min-w-[46px] border-b border-white/8 bg-[#080B10] text-center transition group-last:border-b-0 group-hover:bg-[#0D1117]">
                     <AdminDataGridCheckbox
                       checked={selection.selectedSet.has(rowId)}
                       onChange={(event) =>
@@ -278,6 +297,14 @@ export default function AdminEntityListTable<
                         ? "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-[46px] min-[641px]:z-30 bg-[#080B10] text-right transition group-hover:bg-[#0D1117]"
                         : "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-0 min-[641px]:z-30 bg-[#080B10] text-right transition group-hover:bg-[#0D1117]"
                       : "";
+                  const alignment =
+                    column.align ?? (column.primary ? "start" : "center");
+                  const alignmentClass =
+                    alignment === "start"
+                      ? "text-start"
+                      : alignment === "end"
+                        ? "text-end"
+                        : "text-center";
 
                   return (
                     <td
@@ -288,7 +315,7 @@ export default function AdminEntityListTable<
                           ? { paddingInlineStart: undefined }
                           : {}),
                       }}
-                      className={`min-w-0 overflow-hidden border-b border-white/8 px-4 py-4 text-center text-sm text-white/68 group-last:border-b-0 ${stickyPrimary}`}
+                      className={`min-w-0 overflow-hidden border-b border-white/8 text-sm text-white/68 group-last:border-b-0 ${alignmentClass} ${stickyPrimary}`}
                     >
                       {content}
                     </td>

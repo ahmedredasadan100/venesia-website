@@ -1,4 +1,5 @@
 import type { PageBlockStatus, PageBlockType } from "./types";
+import { getContentStatusMetadata } from "../admin/content/content-status-metadata";
 
 export const BLOCK_STATUSES: PageBlockStatus[] = ["draft", "published", "unpublished", "archived"];
 
@@ -51,10 +52,7 @@ export function getStatus(value: string): PageBlockStatus {
 }
 
 export function statusMeta(status?: string | null) {
-  if (status === "published") return { label: "منشور", tone: "green" as const };
-  if (status === "unpublished") return { label: "مخفي", tone: "gold" as const };
-  if (status === "archived") return { label: "أرشيف", tone: "muted" as const };
-  return { label: "مسودة", tone: "muted" as const };
+  return getContentStatusMetadata(status);
 }
 
 export function fieldClassName(extra = "") {

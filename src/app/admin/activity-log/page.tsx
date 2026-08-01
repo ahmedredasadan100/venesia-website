@@ -7,8 +7,10 @@ import {
 } from "../../../lib/admin/audit/list-admin-audit-logs";
 import { activityLogEntityListAdapter } from "../../../lib/admin/audit/entity-list-adapter";
 import { activityLogQueryContract } from "../../../lib/admin/audit/entity-list-contract";
+import { ACTIVITY_LOG_LIST_VIEW_KEY } from "../../../lib/admin/audit/activity-log-list-config";
 import { getCurrentAdminUserFromCookies } from "../../../lib/admin/auth/admin-users";
 import { normalizeAdminEntityListQuery } from "../../../lib/admin/entity-list/data-engine/contracts";
+import { readAdminColumnPreferences } from "../../../lib/admin/preferences/admin-column-preferences";
 
 import ActivityLogClient from "./ActivityLogClient";
 
@@ -44,10 +46,16 @@ export default async function ActivityLogPage({
     params,
   );
 
-  const [initialResult, actorOptions, entityTypeOptions] = await Promise.all([
+  const [
+    initialResult,
+    actorOptions,
+    entityTypeOptions,
+    columnPreferences,
+  ] = await Promise.all([
     activityLogEntityListAdapter.load(initialQuery),
     listAuditActorUsernames(),
     listAuditEntityTypes(),
+    readAdminColumnPreferences(ACTIVITY_LOG_LIST_VIEW_KEY),
   ]);
 
   return (
@@ -57,6 +65,7 @@ export default async function ActivityLogPage({
       actionOptions={AUDIT_ACTION_OPTIONS}
       actorOptions={actorOptions}
       entityTypeOptions={entityTypeOptions}
+      initialVisibleColumns={columnPreferences.visibleColumns}
     />
   );
 }

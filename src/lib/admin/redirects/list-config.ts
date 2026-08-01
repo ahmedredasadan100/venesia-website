@@ -15,6 +15,7 @@ type RedirectColumnMeta = {
   label: string;
   defaultVisible: boolean;
   hideable: boolean;
+  sortable: boolean;
 };
 
 export const REDIRECTS_LIST_COLUMN_META = {
@@ -23,48 +24,56 @@ export const REDIRECTS_LIST_COLUMN_META = {
     label: "المصدر",
     defaultVisible: true,
     hideable: false,
+    sortable: false,
   },
   destination: {
     key: "destination",
     label: "الوجهة",
     defaultVisible: true,
     hideable: true,
+    sortable: false,
   },
   type: {
     key: "type",
     label: "النوع",
     defaultVisible: true,
     hideable: true,
+    sortable: false,
   },
   status: {
     key: "status",
     label: "الحالة",
     defaultVisible: true,
     hideable: true,
+    sortable: false,
   },
   note: {
     key: "note",
     label: "ملاحظة",
     defaultVisible: true,
     hideable: true,
+    sortable: false,
   },
   created: {
     key: "created",
     label: "أُنشئ",
     defaultVisible: true,
     hideable: true,
+    sortable: false,
   },
   updated: {
     key: "updated",
     label: "آخر تحديث",
     defaultVisible: true,
     hideable: true,
+    sortable: false,
   },
   actions: {
     key: "actions",
     label: "الإجراءات",
     defaultVisible: true,
     hideable: false,
+    sortable: false,
   },
 } as const satisfies Record<RedirectColumnKey, RedirectColumnMeta>;
 

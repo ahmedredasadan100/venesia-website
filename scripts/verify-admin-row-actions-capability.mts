@@ -615,10 +615,14 @@ check(
     !entityListTableSource.includes("w-max min-w-full table-fixed"),
 );
 check(
-  "shared actions cells own equal 6px logical inline padding",
+  "shared grid cells own equal 6px logical inline padding",
   dataGridSource.includes('actionCellInlinePadding: "px-1.5"') &&
-    dataGridSource.includes("ADMIN_DATA_GRID_RULES.actionCellInlinePadding") &&
-    dataGridSource.includes("p-0 transition group-hover"),
+    dataGridSource.includes('cellInlinePadding: "px-1.5"') &&
+    dataGridSource.includes(
+      "cellInlinePaddingPx: ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx",
+    ) &&
+    dataGridSource.includes("ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES") &&
+    dataGridSource.includes("ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES"),
 );
 
 const geometryConsumers = [
@@ -958,30 +962,26 @@ check(
           : surface.rowActionsState === "read_only_no_row_commands" &&
             surface.rowActionsOwner === "not_applicable") &&
         surface.layoutOwner.includes("AdminEntityList") &&
-        surface.requiredAdoption.length === 0 &&
+        (surface.id === "projects-residential-commercial"
+          ? sameOrderedValues(surface.requiredAdoption, [
+              "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
+            ])
+          : surface.requiredAdoption.length === 0) &&
         surface.exceptionRationale === null &&
         surface.routes.length > 0,
     ) &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.genericAdoptionGaps.length === 0,
+    sameOrderedValues(ADMIN_COLLECTION_SURFACE_ADOPTION.genericAdoptionGaps, [
+      "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
+    ]),
 );
 check(
-  "generic command collections declare column ownership truthfully",
+  "generic collections declare shared column ownership truthfully",
   collectionSurfaces
-    .filter(
-      (surface) =>
-        surface.generic &&
-        surface.rowActionsState === "adopted" &&
-        surface.id !== "topics-without-image-report",
-    )
+    .filter((surface) => surface.generic)
     .every(
       (surface) =>
         surface.columnVisibility === "shared_optional_columns",
-    ) &&
-    collectionSurfaces.find((surface) => surface.id === "seo-redirects")
-      ?.columnVisibility === "shared_optional_columns" &&
-    collectionSurfaces.find(
-      (surface) => surface.id === "topics-without-image-report",
-    )?.columnVisibility === "fixed_no_optional_columns",
+    ),
 );
 check(
   "dashboard, card catalog, report, and recovery inventory states match their concrete commands",
@@ -1282,10 +1282,11 @@ check(
     ),
 );
 check(
-  "AdminDataGrid owns one edge-flush full-height actions surface for every Block Library family",
-  read(paths.dataGrid).includes("ADMIN_DATA_GRID_LINE_CELL_CLASSES") &&
+  "AdminDataGrid owns one compact full-height divided cell surface for every Block Library family",
+  read(paths.dataGrid).includes("ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES") &&
     read(paths.dataGrid).includes("[&>*]:self-stretch") &&
-    read(paths.dataGrid).includes("[&>*:last-child]:px-1.5") &&
+    read(paths.dataGrid).includes("[&>*]:px-1.5") &&
+    read(paths.dataGrid).includes("[&>*+*]:border-s") &&
     read(paths.dataGrid).includes("columnGap: 0") &&
     read(paths.renderer).includes("sticky = false") &&
     [

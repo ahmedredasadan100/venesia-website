@@ -30,6 +30,9 @@ import type {
   AdminEntityFilterDef,
 } from "../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
+import { ACTIVITY_LOG_DEFAULT_COLUMN_KEYS } from "../../../lib/admin/audit/activity-log-list-config";
+
+import { saveActivityLogColumnPreferences } from "./column-preferences";
 import type {
   AdminEntityListQuery,
   AdminEntityListResult,
@@ -44,6 +47,7 @@ type ActivityLogClientProps = {
   actionOptions: Array<{ value: string; label: string }>;
   actorOptions: string[];
   entityTypeOptions: string[];
+  initialVisibleColumns: string[] | null;
 };
 
 type ActivityLogColumnKey =
@@ -99,6 +103,7 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     hideable: false,
     sortable: true,
     sortKey: "created_at",
+    align: "start",
     minWidth: 164,
     width: 164,
     primary: true,
@@ -113,7 +118,9 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     key: "actor",
     label: "المستخدم",
     defaultVisible: true,
-    hideable: false,
+    hideable: true,
+    sortable: false,
+    align: "center",
     minWidth: 150,
     width: 150,
     renderCell: ({ row }) => (
@@ -126,7 +133,9 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     key: "action",
     label: "العملية",
     defaultVisible: true,
-    hideable: false,
+    hideable: true,
+    sortable: false,
+    align: "center",
     minWidth: 190,
     width: 190,
     renderCell: ({ row }) => (
@@ -139,7 +148,9 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     key: "entity_type",
     label: "نوع الكيان",
     defaultVisible: true,
-    hideable: false,
+    hideable: true,
+    sortable: false,
+    align: "center",
     minWidth: 132,
     width: 132,
     renderCell: ({ row }) => (
@@ -152,7 +163,9 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     key: "entity",
     label: "الكيان",
     defaultVisible: true,
-    hideable: false,
+    hideable: true,
+    sortable: false,
+    align: "center",
     minWidth: 160,
     width: 160,
     renderCell: ({ row }) => (
@@ -163,9 +176,11 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
   },
   {
     key: "ip",
-    label: "IP",
+    label: "عنوان IP",
     defaultVisible: true,
-    hideable: false,
+    hideable: true,
+    sortable: false,
+    align: "center",
     minWidth: 136,
     width: 136,
     renderCell: ({ row }) => (
@@ -178,7 +193,9 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     key: "details",
     label: "التفاصيل",
     defaultVisible: true,
-    hideable: false,
+    hideable: true,
+    sortable: false,
+    align: "start",
     minWidth: 220,
     width: 220,
     renderCell: ({ row }) => {
@@ -198,6 +215,7 @@ export default function ActivityLogClient({
   actionOptions,
   actorOptions,
   entityTypeOptions,
+  initialVisibleColumns,
 }: ActivityLogClientProps) {
   const controller = useAdminEntityListController({
     entity: "activity_log",
@@ -363,7 +381,12 @@ export default function ActivityLogClient({
             columns={ACTIVITY_LOG_COLUMNS}
             getRowId={(row) => row.id}
             getRowLabel={(row) => row.entity_label || row.actor_username}
-            enableColumnManagement={false}
+            initialVisibleColumns={
+              initialVisibleColumns ?? [...ACTIVITY_LOG_DEFAULT_COLUMN_KEYS]
+            }
+            defaultVisibleColumns={[...ACTIVITY_LOG_DEFAULT_COLUMN_KEYS]}
+            onPersistColumns={saveActivityLogColumnPreferences}
+            enableColumnManagement
             enableSelection={false}
             scrollLabel="جدول سجل النشاط"
             mapResultToFeedback={mapAdminActionResultToFeedback}
