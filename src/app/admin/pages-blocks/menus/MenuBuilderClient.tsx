@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
-import AdminModuleTabs from "../../../../components/admin/page-blocks/AdminModuleTabs";
+import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
 import { AdminCard } from "../../../../components/admin/ui";
 
 import { createMenuItem, updateMenu } from "./actions";

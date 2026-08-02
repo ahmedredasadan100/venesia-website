@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { MouseEventHandler, ReactNode } from "react";
+import type { ButtonHTMLAttributes, MouseEventHandler, ReactNode } from "react";
 
 type AdminActionButtonProps = {
   children: ReactNode;
@@ -8,6 +8,8 @@ type AdminActionButtonProps = {
   variant?: "gold" | "primary" | "dark" | "ghost";
   className?: string;
   onClick?: MouseEventHandler<HTMLButtonElement>;
+  type?: ButtonHTMLAttributes<HTMLButtonElement>["type"];
+  form?: string;
 };
 
 const variants: Record<NonNullable<AdminActionButtonProps["variant"]>, string> = {
@@ -24,6 +26,8 @@ export default function AdminActionButton({
   variant = "dark",
   className = "",
   onClick,
+  type = "button",
+  form,
 }: AdminActionButtonProps) {
   const classes = `inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${variants[variant]} ${
     disabled ? "cursor-not-allowed opacity-45" : ""
@@ -38,7 +42,7 @@ export default function AdminActionButton({
   }
 
   return (
-    <button type="button" disabled={disabled} onClick={onClick} className={classes}>
+    <button type={type} form={form} disabled={disabled} onClick={onClick} className={classes}>
       {children}
     </button>
   );

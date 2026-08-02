@@ -99,12 +99,15 @@ check(
 );
 check(
   "shared publishing keeps one balanced four-cell field source without FAQ ownership",
-  publishingOptions.includes("mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch") &&
+  publishingOptions.includes('className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch ${status ? "mt-5" : ""}`.trim()}') &&
     publishingOptions.match(/className="contents"/g)?.length === 2 &&
     ["is_featured", "is_popular", "is_published"].every((name) =>
       publishingOptions.match(new RegExp(`name="${name}"`, "g"))?.length === 1,
     ) &&
     publishingOptions.includes("TopicDateLabelField") &&
+    publishingOptions.includes("الحالة: {status}") &&
+    !publishingOptions.includes("إجراءات النشر") &&
+    !publishingOptions.includes("تُطبّق حالة النشر مع باقي بيانات الموضوع عند الضغط على حفظ.") &&
     !publishingOptions.includes("presentation?:") &&
     !publishingOptions.includes("presentation ===") &&
     !publishingOptions.includes("data-topic-faq-visibility-slot") &&

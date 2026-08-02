@@ -40,7 +40,10 @@ const sharedSeoPanelPath = "src/components/admin/seo/AdminEntitySeoPanel.tsx";
 const projectsHubPagePath = "src/app/admin/projects/page.tsx";
 const projectHelpersPath = "src/app/admin/projects/project-actions/helpers.ts";
 const previewPath = "src/components/admin/projects/entry/ProjectEntryPreview.tsx";
-const moduleTabsPath = "src/components/admin/page-blocks/AdminModuleTabs.tsx";
+const moduleTabsPath = "src/components/admin/ui/AdminModuleTabs.tsx";
+const legacyModuleTabsPath = "src/components/admin/page-blocks/AdminModuleTabs.tsx";
+const formPresentationPath = "src/components/admin/ui/AdminForm.tsx";
+const pageExperiencePath = "src/components/admin/ui/AdminPageExperience.tsx";
 const formListboxPath = "src/components/admin/ui/AdminFormListboxSelect.tsx";
 const listboxPath = "src/components/admin/ui/AdminListboxSelect.tsx";
 const slugFieldPath = "src/components/admin/ui/AdminSlugField.tsx";
@@ -69,6 +72,8 @@ for (const path of [
   projectsHubPagePath,
   projectHelpersPath,
   moduleTabsPath,
+  formPresentationPath,
+  pageExperiencePath,
   formListboxPath,
   listboxPath,
   slugFieldPath,
@@ -122,6 +127,8 @@ const repeaters = read(repeatersPath);
 const mediaEditors = read(mediaEditorsPath);
 const locationEditor = read(locationEditorPath);
 const moduleTabs = read(moduleTabsPath);
+const formPresentation = read(formPresentationPath);
+const pageExperience = read(pageExperiencePath);
 const formListbox = read(formListboxPath);
 const listbox = read(listboxPath);
 const slugField = read(slugFieldPath);
@@ -134,6 +141,14 @@ const editPage = read("src/app/admin/projects/[id]/page.tsx");
 const coordinator = read("src/lib/admin/projects/project-entry-media-coordination.ts");
 const projectSeoPanel = read(projectSeoPanelPath);
 const seoPanel = read(sharedSeoPanelPath);
+const entitySeoPrimaryStart = seoPanel.indexOf("const seoBasicsContent");
+const entitySeoReturnStart = seoPanel.indexOf("  return (", entitySeoPrimaryStart);
+const entitySeoPrimaryRender = seoPanel.slice(entitySeoPrimaryStart, entitySeoReturnStart);
+const entitySeoHelperStart = seoPanel.indexOf("<AdminSingleOpenAccordion", entitySeoReturnStart);
+const entitySeoHelperRender = seoPanel.slice(entitySeoHelperStart);
+const entitySeoRobotsIndexPosition = seoPanel.indexOf("name={fieldNames.robotsIndex}");
+const entitySeoRobotsFollowPosition = seoPanel.indexOf("name={fieldNames.robotsFollow}");
+const entitySeoCanonicalPosition = seoPanel.indexOf("name={fieldNames.canonicalUrl}");
 const projectsHubPage = read(projectsHubPagePath);
 const projectHelpers = read(projectHelpersPath);
 const projectHelperExports = Array.from(
@@ -890,10 +905,15 @@ check(
     declaredProjectTabIds.every((tabId) => approvedProjectTabIds.includes(tabId as (typeof approvedProjectTabIds)[number])),
 );
 check(
-  "Project tabs use the full-width entry layout without a parallel preview column",
+  "Project tabs use the shared full-width editor presentation without a parallel preview column",
   form.includes('<div className="min-w-0 w-full">') &&
     form.includes("<AdminModuleTabs") &&
+    form.includes('variant="editor"') &&
+    !form.includes('variant="segmented"') &&
     moduleTabs.includes("export default function AdminModuleTabs") &&
+    moduleTabs.includes('data-admin-tabs-owner="AdminModuleTabs"') &&
+    !moduleTabs.includes("data-topic-tab") &&
+    !existsSync(join(ROOT, legacyModuleTabsPath)) &&
     !form.includes("ProjectEntryPreview") &&
     !form.includes("AdminFormLayout") &&
     !form.includes("aside=") &&
@@ -902,6 +922,51 @@ check(
     repeaters.includes('className="grid scroll-mt-28 gap-4 xl:grid-cols-3"') &&
     mediaEditors.includes('className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"') &&
     !mediaEditors.includes("2xl:grid-cols-4"),
+);
+check(
+  "Project tab metadata adopts the shared navigation, heading, and semantic-icon contract",
+  ["البيانات", "الموقع", "نظرة عامة", "المساحات", "المواصفات", "الميديا", "SEO"].every((label) =>
+    form.includes(`navigationLabel: "${label}"`),
+  ) &&
+    ["البيانات الأساسية للمشروع", "بيانات الموقع الأساسية", "النظرة العامة ومميزات المشروع", "المساحات والمخططات", "مواصفات التنفيذ والتسليم", "الصور والفيديو", "تحسين محركات البحث والمشاركة"].every((heading) =>
+      form.includes(`sectionHeading: "${heading}"`),
+    ) &&
+    form.includes('sectionDescription: "حدّد الموقع الإداري والإحداثيات والطرق والمعالم المحيطة بالمشروع."') &&
+    ["content", "location", "overview", "plans", "specifications", "media", "seo"].every((icon) =>
+      form.includes(`icon: "${icon}" as const`),
+    ) &&
+    moduleTabs.includes("AdminModuleTabIconName") &&
+    moduleTabs.includes('variant = "editor"') &&
+    moduleTabs.includes("sectionHeading?: ReactNode") &&
+    !form.includes("<svg"),
+);
+check(
+  "Project tab content starts after the shared heading without semantic duplicates",
+  !form.includes('title="بيانات المشروع الأساسية"') &&
+    !form.includes('title="بيانات الموقع الأساسية"') &&
+    !form.includes('title="نظرة عامة عن المشروع"') &&
+    ["بيانات الموقع الأساسية", "المساحات والمخططات", "مواصفات التنفيذ والتسليم", "الصور والفيديو"].every(
+      (heading) => form.match(new RegExp(heading, "g"))?.length === 1,
+    ) &&
+    form.match(/<SectionCard>/g)?.length === 4 &&
+    /<RepeaterSection>\s*<ProjectFloorPlansEditor/.test(form) &&
+    form.includes("title?: string;") &&
+    repeaters.includes("title?: string;") &&
+    ["إعدادات الهيرو", "ما حول المشروع", "مميزات المشروع", "بنود المواصفات", "صور المواصفات والتسليم", "معرض الصور", "معرض الفيديو"].every(
+      (subsection) => form.includes(`title="${subsection}"`),
+    ),
+);
+check(
+  "Project Create and Edit adopt the shared page surface and full-form cadence",
+  [createPage, editPage].every((source) =>
+    source.includes("<AdminPageExperience"),
+  ) &&
+    pageExperience.includes('data-admin-page-surface-owner="AdminPageExperience"') &&
+    formPresentation.includes(
+      'export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-7"',
+    ) &&
+    form.includes("className={ADMIN_FORM_STACK_CLASS_NAME}") &&
+    !form.includes('className="space-y-5"'),
 );
 check(
   "Project select consumers use the shared form listbox owner without visible native selects",
@@ -989,6 +1054,25 @@ check(
     projectSeoPanel.includes('mediaBrowseFolder="images/projects/seo"') &&
     projectSeoPanel.includes("fieldNames={PROJECT_SEO_FIELD_NAMES}") &&
     projectSeoPanel.includes("fieldIds={PROJECT_SEO_FIELD_IDS}") &&
+    seoPanel.match(/<AdminFormLayout/g)?.length === 1 &&
+    seoPanel.match(/<AdminSingleOpenAccordion/g)?.length === 1 &&
+    seoPanel.includes('defaultOpenId="search-result-preview"') &&
+    ["search-result-preview", "open-graph-preview", "live-seo-analysis"].every((id) => seoPanel.includes(`id: "${id}"`)) &&
+    ["معاينة نتائج البحث", "معاينة Open Graph", "تحليل SEO المباشر"].every((label) => seoPanel.includes(`label: "${label}"`)) &&
+    entitySeoPrimaryStart >= 0 &&
+    entitySeoReturnStart > entitySeoPrimaryStart &&
+    entitySeoHelperStart > entitySeoReturnStart &&
+    ["seoTitle", "seoDescription", "focusKeyword", "seoKeywords", "robotsIndex", "robotsFollow", "canonicalUrl", "ogImage", "ogImageAlt"].every(
+      (field) => entitySeoPrimaryRender.includes(`fieldNames.${field}`) && !entitySeoHelperRender.includes(`fieldNames.${field}`),
+    ) &&
+    entitySeoRobotsIndexPosition >= 0 &&
+    entitySeoRobotsIndexPosition < entitySeoRobotsFollowPosition &&
+    entitySeoRobotsFollowPosition < entitySeoCanonicalPosition &&
+    seoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
+    !seoPanel.includes("البيانات الأساسية لتحسين محركات البحث") &&
+    !seoPanel.includes("خصص عنوان ووصف وكلمات") &&
+    !entitySeoHelperRender.includes("navigationEventName=") &&
+    !["seo-basics", "social-sharing", "analysis-preview"].some((id) => seoPanel.includes(`id: "${id}"`)) &&
     !seoPanel.includes("project-") &&
     !seoPanel.includes("images/projects"),
 );

@@ -1,6 +1,6 @@
 "use client";
 
-import AdminModuleTabs from "./AdminModuleTabs";
+import AdminModuleTabs from "../ui/AdminModuleTabs";
 import BlockEditorContextHeader from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";

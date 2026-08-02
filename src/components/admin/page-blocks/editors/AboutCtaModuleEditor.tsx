@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import AdminModuleTabs from "../AdminModuleTabs";
+import AdminModuleTabs from "../../ui/AdminModuleTabs";
 import { AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";

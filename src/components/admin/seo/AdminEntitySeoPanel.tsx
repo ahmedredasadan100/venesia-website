@@ -16,9 +16,10 @@ import {
 } from "../../../lib/admin/seo-length-standards";
 import AdminTagsField from "../AdminTagsField";
 import AdminMediaImageField from "../media/AdminMediaImageField";
-import { ADMIN_FORM_SECTION_CLASSES } from "../ui/AdminForm";
+import { ADMIN_FORM_SECTION_CLASSES, AdminFormLayout } from "../ui/AdminForm";
 import AdminFormListboxSelect from "../ui/AdminFormListboxSelect";
 import { AdminFormError } from "../ui/AdminFormRuntime";
+import AdminSingleOpenAccordion from "../ui/AdminSingleOpenAccordion";
 
 export type AdminEntitySeoCorrectionTarget = {
   tabId: string;
@@ -306,93 +307,128 @@ export default function AdminEntitySeoPanel({
     `سيظهر وصف ${entityLabel} هنا بعد إدخاله.`;
   const publicPath = `${publicPathPrefix}/${live.slug.trim() || slugPlaceholder}`;
   const canonical = live.canonicalUrl.trim() || publicPath;
+  const seoBasicsContent = (
+    <section className="rounded-2xl border border-white/10 bg-black/20 p-5" data-admin-entity-seo-basics>
+      <div className="space-y-5">
+        <SeoTextField id={fieldIds.seoTitle} name={fieldNames.seoTitle} label="عنوان صفحة محركات البحث" defaultValue={initial.seoTitle} liveValue={live.seoTitle} standard={SEO_LENGTH_STANDARDS.title} />
+        <SeoTextField id={fieldIds.seoDescription} name={fieldNames.seoDescription} label="الوصف التعريفي" defaultValue={initial.seoDescription} liveValue={live.seoDescription} textarea standard={SEO_LENGTH_STANDARDS.description} />
+        <SeoTextField id={fieldIds.focusKeyword} name={fieldNames.focusKeyword} label="الكلمة المفتاحية الرئيسية" defaultValue={initial.focusKeyword} liveValue={live.focusKeyword} />
+        <div id={fieldIds.seoKeywords} className="scroll-mt-28">
+          <AdminTagsField name={fieldNames.seoKeywords} label="الكلمات المفتاحية الداعمة" defaultTags={initial.seoKeywords} appearance="dark" />
+          <AdminFormError name={fieldNames.seoKeywords} />
+        </div>
+      </div>
+    </section>
+  );
+  const robotsCanonicalContent = (
+    <section id={fieldIds.robotsSection} className="scroll-mt-28 rounded-2xl border border-white/10 bg-black/20 p-5" data-admin-entity-seo-overrides>
+      <h3 className="text-base font-semibold text-white">Canonical وRobots</h3>
+      <p className="mt-2 text-sm leading-7 text-white/42">القيم العامة تظل المصدر الافتراضي، ويمكن تخصيص هذا {entityLabel} فقط عند الحاجة.</p>
+      <div
+        className="mt-5 grid gap-3 lg:grid-cols-[minmax(180px,.7fr)_minmax(180px,.7fr)_minmax(0,1.6fr)] lg:items-start"
+        data-admin-seo-control-order="index-follow-canonical"
+      >
+        <AdminFormListboxSelect
+          id={fieldIds.robotsIndexListbox}
+          focusTargetId={fieldIds.robotsIndexFocusTarget}
+          name={fieldNames.robotsIndex}
+          label="الفهرسة"
+          options={robotsIndexOptions}
+          defaultValue={initial.robotsIndex === null ? "" : String(initial.robotsIndex)}
+          placeholder="الإعداد العام"
+        />
+        <AdminFormListboxSelect
+          id={fieldIds.robotsFollowListbox}
+          focusTargetId={fieldIds.robotsFollowFocusTarget}
+          name={fieldNames.robotsFollow}
+          label="تتبع الروابط"
+          options={robotsFollowOptions}
+          defaultValue={initial.robotsFollow === null ? "" : String(initial.robotsFollow)}
+          placeholder="الإعداد العام"
+        />
+        <SeoTextField id={fieldIds.canonicalUrl} name={fieldNames.canonicalUrl} label="الرابط الأساسي" defaultValue={initial.canonicalUrl} liveValue={live.canonicalUrl} dir="ltr" />
+      </div>
+    </section>
+  );
+  const socialSharingFields = (
+    <section className="rounded-2xl border border-white/10 bg-black/20 p-5" data-admin-entity-seo-social-fields>
+      <h3 className="text-base font-semibold text-white">بيانات المشاركة الاجتماعية</h3>
+      <p className="mt-2 text-sm leading-7 text-white/42">صورة المشاركة ونصها البديل لهذا {entityLabel}.</p>
+      <div id={fieldIds.ogImageSection} className="mt-5 scroll-mt-28">
+        <AdminMediaImageField name={fieldNames.ogImage} label="صورة المشاركة" defaultValue={initial.image} dimensionHint="content" browseFolder={mediaBrowseFolder} appearance="dark" onValueChange={(image) => setLive((current) => ({ ...current, image }))} />
+        <label className="mt-4 block text-sm font-semibold text-white/72">النص البديل للصورة
+          <input id={fieldIds.ogImageAlt} name={fieldNames.ogImageAlt} defaultValue={initial.imageAlt} className={fieldClass} />
+          <AdminFormError name={fieldNames.ogImageAlt} />
+        </label>
+      </div>
+    </section>
+  );
+  const searchResultPreviewContent = (
+    <div className="rounded-2xl border border-white/10 bg-black/28 p-4" data-admin-entity-seo-search-preview>
+      <p className="break-all font-mono text-xs text-emerald-300" dir="ltr">{canonical}</p>
+      <p className="mt-2 text-lg font-semibold leading-7 text-[#8AB4F8]">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-white/58">{description}</p>
+    </div>
+  );
+  const openGraphPreviewContent = (
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/28" data-admin-entity-seo-social-preview>
+      {live.image ? (
+        <div className="aspect-[1.91/1] bg-cover bg-center" style={{ backgroundImage: `url(${live.image})` }} role="img" aria-label={live.imageAlt || title} />
+      ) : (
+        <div className="grid aspect-[1.91/1] place-items-center bg-[#05070B] text-xs text-white/35">لا توجد صورة مشاركة</div>
+      )}
+      <div className="p-3"><p className="font-semibold text-white/82">{title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-white/45">{description}</p></div>
+    </div>
+  );
+  const liveSeoAnalysisContent = (
+    <div data-admin-entity-seo-analysis>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-xs text-white/45">{analysis.label} — كثافة الكلمة {analysis.keywordDensity}%</p>
+        <div className="grid size-20 shrink-0 place-items-center rounded-full border-[7px] border-emerald-400 bg-emerald-400/10 text-xl font-bold text-emerald-200">{analysis.overallScore}</div>
+      </div>
+      <div className="mt-4 space-y-2">
+        {analysis.issues.map((issue) => (
+          <IssueRow key={issue.id ?? issue.label} issue={issue} target={issue.id ? correctionTargets[issue.id] : undefined} navigationEventName={navigationEventName} />
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <section id={id} className={ADMIN_FORM_SECTION_CLASSES} data-admin-entity-seo-panel>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,.85fr)] xl:items-start">
-        <div className="min-w-0 space-y-5">
-          <section className="rounded-[24px] border border-white/10 bg-[#05070B]/70 p-4 sm:p-5">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-white">البيانات الأساسية لتحسين محركات البحث</h3>
-              <p className="mt-1 text-sm leading-6 text-white/45">خصص عنوان ووصف وكلمات {entityLabel} مع إبقاء التحليل ضمن نظام تحسين محركات البحث المشترك.</p>
-            </div>
-            <div className="space-y-4">
-              <SeoTextField id={fieldIds.seoTitle} name={fieldNames.seoTitle} label="عنوان صفحة محركات البحث" defaultValue={initial.seoTitle} liveValue={live.seoTitle} standard={SEO_LENGTH_STANDARDS.title} />
-              <SeoTextField id={fieldIds.seoDescription} name={fieldNames.seoDescription} label="الوصف التعريفي" defaultValue={initial.seoDescription} liveValue={live.seoDescription} textarea standard={SEO_LENGTH_STANDARDS.description} />
-              <SeoTextField id={fieldIds.focusKeyword} name={fieldNames.focusKeyword} label="الكلمة المفتاحية الرئيسية" defaultValue={initial.focusKeyword} liveValue={live.focusKeyword} />
-              <div id={fieldIds.seoKeywords} className="scroll-mt-28">
-                <AdminTagsField name={fieldNames.seoKeywords} label="الكلمات المفتاحية الداعمة" defaultTags={initial.seoKeywords} appearance="dark" />
-                <AdminFormError name={fieldNames.seoKeywords} />
-              </div>
-              <SeoTextField id={fieldIds.canonicalUrl} name={fieldNames.canonicalUrl} label="الرابط الأساسي" defaultValue={initial.canonicalUrl} liveValue={live.canonicalUrl} dir="ltr" />
-              <div id={fieldIds.robotsSection} className="grid scroll-mt-28 gap-3 sm:grid-cols-2">
-                <AdminFormListboxSelect
-                  id={fieldIds.robotsIndexListbox}
-                  focusTargetId={fieldIds.robotsIndexFocusTarget}
-                  name={fieldNames.robotsIndex}
-                  label="الفهرسة"
-                  options={robotsIndexOptions}
-                  defaultValue={initial.robotsIndex === null ? "" : String(initial.robotsIndex)}
-                  placeholder="الإعداد العام"
-                />
-                <AdminFormListboxSelect
-                  id={fieldIds.robotsFollowListbox}
-                  focusTargetId={fieldIds.robotsFollowFocusTarget}
-                  name={fieldNames.robotsFollow}
-                  label="تتبع الروابط"
-                  options={robotsFollowOptions}
-                  defaultValue={initial.robotsFollow === null ? "" : String(initial.robotsFollow)}
-                  placeholder="الإعداد العام"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section id={fieldIds.ogImageSection} className="scroll-mt-28 rounded-[24px] border border-white/10 bg-[#05070B]/70 p-4 sm:p-5">
-            <h3 className="mb-4 text-base font-bold text-white">صورة المشاركة</h3>
-            <AdminMediaImageField name={fieldNames.ogImage} label="صورة المشاركة" defaultValue={initial.image} dimensionHint="content" browseFolder={mediaBrowseFolder} appearance="dark" onValueChange={(image) => setLive((current) => ({ ...current, image }))} />
-            <label className="mt-4 block text-sm font-semibold text-white/72">النص البديل للصورة
-              <input id={fieldIds.ogImageAlt} name={fieldNames.ogImageAlt} defaultValue={initial.imageAlt} className={fieldClass} />
-              <AdminFormError name={fieldNames.ogImageAlt} />
-            </label>
-          </section>
-        </div>
-
-        <aside className="min-w-0 space-y-4 xl:sticky xl:top-5">
-          <section className="rounded-[24px] border border-white/10 bg-[#05070B]/70 p-4 sm:p-5">
-            <h3 className="text-base font-bold text-white">معاينة نتيجة البحث</h3>
-            <div className="mt-3 rounded-2xl border border-white/10 bg-black/28 p-4">
-              <p className="break-all font-mono text-xs text-emerald-300" dir="ltr">{canonical}</p>
-              <p className="mt-2 text-lg font-semibold leading-7 text-[#8AB4F8]">{title}</p>
-              <p className="mt-1 text-sm leading-6 text-white/58">{description}</p>
-            </div>
-          </section>
-
-          <section className="rounded-[24px] border border-white/10 bg-[#05070B]/70 p-4 sm:p-5">
-            <h3 className="text-base font-bold text-white">معاينة المشاركة</h3>
-            <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-black/28">
-              {live.image ? (
-                <div className="aspect-[1.91/1] bg-cover bg-center" style={{ backgroundImage: `url(${live.image})` }} role="img" aria-label={live.imageAlt || title} />
-              ) : (
-                <div className="grid aspect-[1.91/1] place-items-center bg-[#05070B] text-xs text-white/35">لا توجد صورة مشاركة</div>
-              )}
-              <div className="p-3"><p className="font-semibold text-white/82">{title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-white/45">{description}</p></div>
-            </div>
-          </section>
-
-          <section className="rounded-[24px] border border-white/10 bg-[#05070B]/70 p-4 sm:p-5" data-admin-entity-seo-analysis>
-            <div className="flex items-center justify-between gap-4">
-              <div><h3 className="text-base font-bold text-white">تحليل تحسين محركات البحث المباشر</h3><p className="mt-1 text-xs text-white/45">{analysis.label} — كثافة الكلمة {analysis.keywordDensity}%</p></div>
-              <div className="grid size-20 shrink-0 place-items-center rounded-full border-[7px] border-emerald-400 bg-emerald-400/10 text-xl font-bold text-emerald-200">{analysis.overallScore}</div>
-            </div>
-            <div className="mt-4 space-y-2">
-              {analysis.issues.map((issue) => (
-                <IssueRow key={issue.id ?? issue.label} issue={issue} target={issue.id ? correctionTargets[issue.id] : undefined} navigationEventName={navigationEventName} />
-              ))}
-            </div>
-          </section>
-        </aside>
-      </div>
+      <AdminFormLayout
+        aside={
+          <AdminSingleOpenAccordion
+            ariaLabel={`معاينات وتحليل SEO الخاصة بـ${entityLabel}`}
+            defaultOpenId="search-result-preview"
+            items={[
+              {
+                id: "search-result-preview",
+                label: "معاينة نتائج البحث",
+                description: "الشكل المتوقع للرابط داخل نتائج محركات البحث.",
+                content: searchResultPreviewContent,
+              },
+              {
+                id: "open-graph-preview",
+                label: "معاينة Open Graph",
+                description: "الصورة والنص المتوقعان عند مشاركة الرابط.",
+                content: openGraphPreviewContent,
+              },
+              {
+                id: "live-seo-analysis",
+                label: "تحليل SEO المباشر",
+                description: "الدرجة الإرشادية وملاحظات تحسين المحتوى.",
+                content: liveSeoAnalysisContent,
+              },
+            ]}
+          />
+        }
+        asideClassName="xl:sticky xl:top-6 xl:self-start"
+      >
+        {seoBasicsContent}
+        {robotsCanonicalContent}
+        {socialSharingFields}
+      </AdminFormLayout>
     </section>
   );
 }

@@ -354,6 +354,19 @@ const articleEdit = read(
 );
 const categoryForm = read("src/app/admin/content/categories/CategoryForm.tsx");
 const seriesForm = read("src/app/admin/content/series/SeriesForm.tsx");
+const adminFormPresentation = read("src/components/admin/ui/AdminForm.tsx");
+const adminPageExperience = read(
+  "src/components/admin/ui/AdminPageExperience.tsx",
+);
+const mediaContentForm = read(
+  "src/components/admin/content/editors/media/MediaContentForm.tsx",
+);
+const redirectForm = read(
+  "src/app/admin/seo/redirects/RedirectFormModal.tsx",
+);
+const createPageModal = read(
+  "src/app/admin/pages-blocks/pages/CreatePageModal.tsx",
+);
 const topicFormDefinition = read(
   "src/components/admin/content/editors/article/topic-form-definition.ts",
 );
@@ -417,7 +430,10 @@ check(
   ) &&
     topicTabs.includes('variant="editor"') &&
     topicBasicPanel.includes('data-topic-basic-presentation="editor"') &&
-    topicSeoPanel.includes("<AdminSingleOpenAccordion") &&
+    occurrenceCount(topicSeoPanel, /<AdminFormLayout/g) === 1 &&
+    occurrenceCount(topicSeoPanel, /<AdminSingleOpenAccordion/g) === 1 &&
+    topicSeoPanel.includes('defaultOpenId="search-result-preview"') &&
+    topicSeoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
     topicPublishingOptions.includes('data-topic-publishing-presentation="integrated"') &&
     topicPublishChecklist.includes('data-topic-publish-review-presentation="embedded"'),
 );
@@ -528,6 +544,48 @@ check(
     "mode={mode}",
     'entityKey="series"',
   ].every((marker) => seriesForm.includes(marker)),
+);
+check(
+  "full-page reference forms adopt one shared presentation cadence and page surface",
+  adminFormPresentation.includes(
+    'export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-7"',
+  ) &&
+    adminPageExperience.includes(
+      'data-admin-page-surface-owner="AdminPageExperience"',
+    ) &&
+    [articleCreate, articleEdit].every(
+      (source) =>
+        source.includes("<AdminPageExperience") &&
+        source.includes("className={ADMIN_FORM_STACK_CLASS_NAME}") &&
+        !source.includes('<main className="space-y-7">'),
+    ) &&
+    [categoryForm, seriesForm].every((source) =>
+      source.includes("className={ADMIN_FORM_STACK_CLASS_NAME}"),
+    ),
+);
+check(
+  "Media Topic Create and Edit reuse shared presentation owners without changing their legacy form lifecycle classification",
+  [
+    "<AdminFormLayout",
+    "<AdminFormSection",
+    "<AdminFormField",
+    "<AdminFormListboxSelect",
+    "<AdminFormSwitch",
+    "<AdminStickyFormBar",
+    "className={ADMIN_FORM_STACK_CLASS_NAME}",
+  ].every((marker) => mediaContentForm.includes(marker)) &&
+    !mediaContentForm.includes("<AdminFormSelect") &&
+    !mediaContentForm.includes('className="w-full rounded-2xl border border-white/10 bg-black/30'),
+);
+check(
+  "Redirect and Page quick-create forms adopt the existing shared field presentation owners",
+  redirectForm.includes("<AdminFormField") &&
+    redirectForm.includes("<AdminFormGrid") &&
+    redirectForm.includes("<AdminFormListboxSelect") &&
+    !redirectForm.includes("adminFormLabelClassName") &&
+    !redirectForm.includes("<select") &&
+    createPageModal.includes("<AdminFormField") &&
+    !createPageModal.includes("adminFormLabelClassName"),
 );
 
 const runtime = read("src/components/admin/ui/AdminFormRuntime.tsx");

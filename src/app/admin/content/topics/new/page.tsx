@@ -1,7 +1,11 @@
 import AdminNotice from "../../../../../components/admin/AdminNotice";
 import ArticleCreateEditor from "../../../../../components/admin/content/editors/ArticleCreateEditor";
 import TopicContentTypeControl from "../../../../../components/admin/content/editors/TopicContentTypeControl";
-import { AdminActionButton, AdminPageContextHeader } from "../../../../../components/admin/ui";
+import {
+  AdminActionButton,
+  AdminPageContextHeader,
+  AdminPageExperience,
+} from "../../../../../components/admin/ui";
 import {
   buildAdminCategoryTree,
   flattenAdminCategoryTree,
@@ -66,7 +70,7 @@ export default async function NewUnifiedContentPage({
   if (!isMediaEditableContentType(contentType)) return null;
 
   return (
-    <main className="space-y-7">
+    <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
         eyebrow="UNIFIED CONTENT ENGINE"
         title={`إضافة ${contentType}`}
@@ -90,6 +94,6 @@ export default async function NewUnifiedContentPage({
           series={series}
         />
       ) : null}
-    </main>
+    </AdminPageExperience>
   );
 }

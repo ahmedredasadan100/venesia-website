@@ -5,9 +5,11 @@ import { useRef } from "react";
 import {
   AdminModalCancelButton,
   AdminModalPrimaryButton,
+  AdminFormField,
+  AdminFormGrid,
+  AdminFormListboxSelect,
   VenesiaModal,
   adminFormFieldClassName,
-  adminFormLabelClassName,
 } from "../../../../components/admin/ui";
 import AdminFormRuntime, {
   AdminFormError,
@@ -20,6 +22,16 @@ import {
   updateRedirectAction,
   type RedirectFormActionState,
 } from "./actions";
+
+const REDIRECT_TYPE_OPTIONS = [
+  { value: "301", label: "301 — دائم" },
+  { value: "302", label: "302 — مؤقت" },
+] as const;
+
+const REDIRECT_STATUS_OPTIONS = [
+  { value: "active", label: "نشط" },
+  { value: "inactive", label: "غير نشط" },
+] as const;
 
 type RedirectFormModalProps = {
   open: boolean;
@@ -74,8 +86,7 @@ export default function RedirectFormModal({
               <input type="hidden" name="id" value={redirect.id} />
             ) : null}
 
-            <label className={adminFormLabelClassName()}>
-              مسار المصدر
+            <AdminFormField label="مسار المصدر" required>
               <input
                 name="source_path"
                 defaultValue={redirect?.source_path ?? ""}
@@ -93,10 +104,9 @@ export default function RedirectFormModal({
                 }
               />
               <AdminFormError name="source_path" />
-            </label>
+            </AdminFormField>
 
-            <label className={adminFormLabelClassName()}>
-              الوجهة
+            <AdminFormField label="الوجهة" required>
               <input
                 name="destination_path"
                 defaultValue={redirect?.destination_path ?? ""}
@@ -116,54 +126,31 @@ export default function RedirectFormModal({
                 }
               />
               <AdminFormError name="destination_path" />
-            </label>
+            </AdminFormField>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className={adminFormLabelClassName()}>
-                نوع التحويل
-                <select
-                  name="redirect_type"
-                  defaultValue={redirect?.redirect_type ?? "301"}
-                  className={adminFormFieldClassName(
-                    fieldErrors.redirect_type?.length
-                      ? "border-red-400/40"
-                      : "",
-                  )}
-                  aria-invalid={Boolean(fieldErrors.redirect_type?.length)}
-                  aria-describedby={
-                    fieldErrors.redirect_type?.length
-                      ? "redirect_type-error"
-                      : undefined
-                  }
-                >
-                  <option value="301">301 — دائم</option>
-                  <option value="302">302 — مؤقت</option>
-                </select>
-                <AdminFormError name="redirect_type" />
-              </label>
+            <AdminFormGrid>
+              <AdminFormListboxSelect
+                name="redirect_type"
+                focusTargetId="redirect_type"
+                label="نوع التحويل"
+                options={REDIRECT_TYPE_OPTIONS}
+                defaultValue={redirect?.redirect_type ?? "301"}
+                disabled={pending}
+                error={fieldErrors.redirect_type?.[0] ?? null}
+              />
 
-              <label className={adminFormLabelClassName()}>
-                الحالة
-                <select
-                  name="status"
-                  defaultValue={redirect?.status ?? "active"}
-                  className={adminFormFieldClassName(
-                    fieldErrors.status?.length ? "border-red-400/40" : "",
-                  )}
-                  aria-invalid={Boolean(fieldErrors.status?.length)}
-                  aria-describedby={
-                    fieldErrors.status?.length ? "status-error" : undefined
-                  }
-                >
-                  <option value="active">نشط</option>
-                  <option value="inactive">غير نشط</option>
-                </select>
-                <AdminFormError name="status" />
-              </label>
-            </div>
+              <AdminFormListboxSelect
+                name="status"
+                focusTargetId="status"
+                label="الحالة"
+                options={REDIRECT_STATUS_OPTIONS}
+                defaultValue={redirect?.status ?? "active"}
+                disabled={pending}
+                error={fieldErrors.status?.[0] ?? null}
+              />
+            </AdminFormGrid>
 
-            <label className={adminFormLabelClassName()}>
-              ملاحظة داخلية
+            <AdminFormField label="ملاحظة داخلية">
               <textarea
                 name="note"
                 defaultValue={redirect?.note ?? ""}
@@ -171,7 +158,7 @@ export default function RedirectFormModal({
                 className={adminFormFieldClassName()}
                 placeholder="سبب التحويل أو سياق التغيير"
               />
-            </label>
+            </AdminFormField>
 
             <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
               <AdminModalCancelButton

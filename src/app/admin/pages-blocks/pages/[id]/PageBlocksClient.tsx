@@ -6,7 +6,7 @@ import {
   AdminFeedbackRegion,
 } from "../../../../../components/admin/AdminFeedbackProvider";
 import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
-import AdminModuleTabs from "../../../../../components/admin/page-blocks/AdminModuleTabs";
+import AdminModuleTabs from "../../../../../components/admin/ui/AdminModuleTabs";
 import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
 import {
   AdminBulkActionBar,

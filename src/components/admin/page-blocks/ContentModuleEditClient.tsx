@@ -3,7 +3,7 @@
 import { useFormStatus } from "react-dom";
 import AdminNotice from "../AdminNotice";
 import { AdminActionButton, AdminPageContextHeader, AdminStickyFormBar } from "../ui";
-import AdminModuleTabs from "./AdminModuleTabs";
+import AdminModuleTabs from "../ui/AdminModuleTabs";
 import BlockEditorContextHeader from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";

@@ -4,7 +4,7 @@ import { useCallback, useState, type ReactNode } from "react";
 
 import AdminRichTextEditor from "../../../components/admin/AdminRichTextEditor";
 import AdminMediaImageField from "../../../components/admin/media/AdminMediaImageField";
-import AdminModuleTabs from "../../../components/admin/page-blocks/AdminModuleTabs";
+import AdminModuleTabs from "../../../components/admin/ui/AdminModuleTabs";
 import ProjectLocationEditor from "../../../components/admin/projects/entry/ProjectLocationEditor";
 import {
   ProjectDeliveryItemsEditor,
@@ -26,6 +26,7 @@ import {
   AdminFormRuntime,
   AdminFormSection,
   AdminSlugField,
+  ADMIN_FORM_STACK_CLASS_NAME,
   adminFormFieldClassName,
 } from "../../../components/admin/ui";
 import {
@@ -88,18 +89,18 @@ function SectionCard({
   children,
 }: {
   number?: number;
-  title: string;
+  title?: string;
   description?: string;
   children: ReactNode;
 }) {
   return (
     <AdminFormSection
-      title={
+      title={title ? (
         <>
           {number ? <span className="ms-2 text-[#D8B87A]">{number}.</span> : null}
           {title}
         </>
-      }
+      ) : undefined}
       description={description}
     >
       {children}
@@ -191,11 +192,10 @@ function ImageWithAlt({
         dimensionHint={dimensionHint}
         previewLoading={previewLoading}
       />
-      <label htmlFor={altName} className="mt-4 block text-xs font-semibold text-white/55">
-        النص البديل للصورة <span className="text-red-300">*</span>
-        <input id={altName} name={altName} defaultValue={alt} className={`${fieldClass} mt-1`} />
+      <AdminFormField label="النص البديل للصورة" required className="mt-4">
+        <input id={altName} name={altName} defaultValue={alt} className={fieldClass} />
         <AdminFormError name={altName} />
-      </label>
+      </AdminFormField>
       <AdminFormError name={imageName} />
     </div>
   );
@@ -206,7 +206,7 @@ function BasicTab({ bundle, mode }: { bundle: ProjectEntryBundle; mode: "create"
   const [slug, setSlug] = useState(project.slug);
   return (
     <div className="space-y-4">
-      <SectionCard number={1} title="بيانات المشروع الأساسية">
+      <SectionCard>
         <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.1fr)]">
           <div className="space-y-4">
             <Field name="arabic_name" label="اسم المشروع بالعربية" required>
@@ -278,7 +278,7 @@ function OverviewTab({ bundle }: { bundle: ProjectEntryBundle }) {
   const [mediaType, setMediaType] = useState(project.overview_media_type);
   return (
     <div className="space-y-4">
-      <SectionCard number={1} title="نظرة عامة عن المشروع">
+      <SectionCard>
         <div className="space-y-4">
           <Field name="overview_title" label="عنوان القسم" required>
             <input id="overview_title" name="overview_title" defaultValue={project.overview_title} className={fieldClass} />
@@ -321,7 +321,7 @@ function DeliveryTab({ bundle }: { bundle: ProjectEntryBundle }) {
   const project = bundle.project;
   return (
     <div className="space-y-4">
-      <SectionCard number={1} title="مواصفات التنفيذ والتسليم">
+      <SectionCard>
         <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.36fr)_minmax(0,1fr)]">
           <Field name="delivery_title" label="عنوان القسم" required>
             <input id="delivery_title" name="delivery_title" defaultValue={project.delivery_title} className={fieldClass} />
@@ -374,27 +374,36 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
   );
 
   const tabs = [
-    { id: PROJECT_ENTRY_TAB_IDS.basic, label: "البيانات الأساسية", content: <BasicTab bundle={bundle} mode={mode} /> },
+    { id: PROJECT_ENTRY_TAB_IDS.basic, navigationLabel: "البيانات", sectionHeading: "البيانات الأساسية للمشروع", sectionDescription: "هوية المشروع ونوعه ووصفه وصور العرض الرئيسية.", icon: "content" as const, content: <BasicTab bundle={bundle} mode={mode} /> },
     {
       id: PROJECT_ENTRY_TAB_IDS.location,
-      label: "الموقع",
+      navigationLabel: "الموقع",
+      sectionHeading: "بيانات الموقع الأساسية",
+      sectionDescription: "حدّد الموقع الإداري والإحداثيات والطرق والمعالم المحيطة بالمشروع.",
+      icon: "location" as const,
       content: (
         <div className="space-y-4">
-          <SectionCard number={1} title="بيانات الموقع الأساسية"><ProjectLocationEditor project={bundle.project} locations={bundle.locations} schemaReady={bundle.schemaReady} schemaMessage={bundle.schemaMessage} /></SectionCard>
+          <SectionCard><ProjectLocationEditor project={bundle.project} locations={bundle.locations} schemaReady={bundle.schemaReady} schemaMessage={bundle.schemaMessage} /></SectionCard>
           <RepeaterSection title="ما حول المشروع" description="وسائل النقل والمحاور والمعالم القريبة، مع ترتيب مستقل لكل مجموعة."><ProjectLocationPointsEditor initialItems={bundle.location_points} /></RepeaterSection>
         </div>
       ),
     },
-    { id: PROJECT_ENTRY_TAB_IDS.overview, label: "نظرة عامة", content: <OverviewTab bundle={bundle} /> },
+    { id: PROJECT_ENTRY_TAB_IDS.overview, navigationLabel: "نظرة عامة", sectionHeading: "النظرة العامة ومميزات المشروع", sectionDescription: "المحتوى التعريفي والمميزات والوسائط الداعمة لنظرة المشروع العامة.", icon: "overview" as const, content: <OverviewTab bundle={bundle} /> },
     {
       id: PROJECT_ENTRY_TAB_IDS.plans,
-      label: "المساحات والمخططات",
-      content: <RepeaterSection title="المساحات والمخططات" description="أضف المخططات ورتبها، مع صور المعماري والفرش وتفاصيل ثابتة الهوية."><ProjectFloorPlansEditor initialPlans={bundle.floor_plans} /></RepeaterSection>,
+      navigationLabel: "المساحات",
+      sectionHeading: "المساحات والمخططات",
+      sectionDescription: "مخططات الوحدات والمساحات وصور المعماري والفرش المرتبطة بها.",
+      icon: "plans" as const,
+      content: <RepeaterSection><ProjectFloorPlansEditor initialPlans={bundle.floor_plans} /></RepeaterSection>,
     },
-    { id: PROJECT_ENTRY_TAB_IDS.delivery, label: "مواصفات التنفيذ والتسليم", content: <DeliveryTab bundle={bundle} /> },
+    { id: PROJECT_ENTRY_TAB_IDS.delivery, navigationLabel: "المواصفات", sectionHeading: "مواصفات التنفيذ والتسليم", sectionDescription: "تفاصيل التنفيذ وبنود التسليم والمواد والصور التوضيحية.", icon: "specifications" as const, content: <DeliveryTab bundle={bundle} /> },
     {
       id: PROJECT_ENTRY_TAB_IDS.media,
-      label: "الصور والفيديو",
+      navigationLabel: "الميديا",
+      sectionHeading: "الصور والفيديو",
+      sectionDescription: "معرض المشروع الكامل من الصور ومقاطع الفيديو المرتبة.",
+      icon: "media" as const,
       content: (
         <div className="space-y-4">
           <RepeaterSection title="معرض الصور"><ProjectImageCollectionEditor section="gallery" initialItems={bundle.media} addLabel="إضافة صورة للمعرض" /></RepeaterSection>
@@ -402,7 +411,7 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
         </div>
       ),
     },
-    { id: PROJECT_ENTRY_TAB_IDS.seo, label: "تحسين محركات البحث", content: <ProjectSeoPanel project={bundle.project} /> },
+    { id: PROJECT_ENTRY_TAB_IDS.seo, navigationLabel: "SEO", sectionHeading: "تحسين محركات البحث والمشاركة", sectionDescription: "بيانات الظهور في البحث والمشاركة الاجتماعية والتحليل المباشر.", icon: "seo" as const, content: <ProjectSeoPanel project={bundle.project} /> },
   ];
 
   return (
@@ -415,7 +424,7 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
       onSuccess={handleSaveSuccess}
       navigation={PROJECT_ENTRY_NAVIGATION}
       formId={mode === "create" ? "project-create-form" : "project-edit-form"}
-      className="space-y-5"
+      className={ADMIN_FORM_STACK_CLASS_NAME}
     >
       {bundle.project.id ? <input type="hidden" name="id" value={bundle.project.id} /> : null}
       {!bundle.schemaReady ? (
@@ -425,7 +434,7 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
         </div>
       ) : null}
       <div className="min-w-0 w-full">
-        <AdminModuleTabs tabs={tabs} variant="segmented" navigationEventName={PROJECT_ENTRY_NAVIGATION_EVENT} ariaLabel="أقسام بيانات المشروع" />
+        <AdminModuleTabs tabs={tabs} variant="editor" navigationEventName={PROJECT_ENTRY_NAVIGATION_EVENT} ariaLabel="أقسام بيانات المشروع" />
       </div>
       <AdminFormError />
       <AdminFormActions submitLabel={mode === "create" ? "إنشاء المشروع" : "حفظ التغييرات"} closeLabel="إغلاق" title={mode === "create" ? "إنشاء المشروع" : "حفظ التغييرات"} description="يحفظ المشروع وجميع العناصر التابعة كعملية ذرية واحدة." />
