@@ -24,9 +24,9 @@ const topicEditTabs = read("src/components/admin/content/editors/article/TopicEd
 let passed = 0;
 function check(label, condition) { assert.ok(condition, label); passed += 1; console.log(`PASS ${label}`); }
 
-for (const label of ["فقرة", "H1", "H2", "H3", "Bold", "Italic", "قائمة نقطية", "قائمة رقمية", "رابط", "تراجع", "إعادة", "إضافة محتوى"]) check(`content toolbar: ${label}`, editor.includes(label));
+for (const label of ["فقرة", "H1", "H2", "H3", "Bold", "Italic", "قائمة نقطية", "قائمة رقمية", "رابط", "تراجع", "إعادة"]) check(`content toolbar: ${label}`, editor.includes(label));
 check("numbered list continues on Enter", editor.includes("Number(ordered[1]) + 1"));
-check("internal link is deferred and disabled", editor.includes("رابط داخلي — قريبًا") && editor.includes("disabled"));
+check("redundant add-content and quote-content toolbar actions are absent", !editor.includes("إضافة محتوى") && !editor.includes("اقتباس المحتوى") && !editor.includes('<ToolButton label="Quote"') && !editor.includes("addMenuOpen") && !editor.includes("رابط داخلي — قريبًا"));
 check("editor top cards include all heading counts and real internal-link count", ["H1", "H2", "H3", "روابط داخلية"].every((label) => editor.includes(`label="${label}"`)) && editor.includes("markdownInternalLinks + htmlInternalLinks") && editor.includes("stats.internalLinks"));
 check("zero internal links use the light warning state", editor.includes("warning={stats.internalLinks === 0}"));
 check("lower content analysis is fully removed", ["قراءة فنية سريعة", "تحليل مباشر", "data-topic-content-analysis", "AnalysisCard", "analysisPortalTarget"].every((token) => !editor.includes(token)));
@@ -35,6 +35,7 @@ check("content tab excludes FAQ counter", !editor.includes("أسئلة FAQ"));
 check("FAQ uses shared confirmation", faq.includes("AdminConfirmDialog") && !faq.includes("window.confirm"));
 check("FAQ supports reorder", faq.includes("draggable") && faq.includes("onDrop"));
 check("FAQ owns its two display controls with one form source each", !displaySettings.includes('name="show_faq_on_page"') && faq.match(/name="show_faq_on_page"/g)?.length === 1 && faq.match(/name="show_faq_title_on_page"/g)?.length === 1 && helper.includes("showFaqOnPage") && helper.includes("showFaqTitleOnPage"));
+check("FAQ display switches inherit shared card geometry without a local alignment override", faq.includes("<AdminFormSwitch") && faq.includes("surface") && !faq.includes('className="w-full justify-between"') && sharedSwitch.includes('surface ? "grid grid-cols-[minmax(0,1fr)_auto] gap-3"'));
 check("Create and Edit keep the sole FAQ visibility source in the FAQ tab", [create, edit].every((source) => source.match(/<FaqEditor\b/g)?.length === 1) && faq.includes("{faqVisibilitySwitch}") && !faq.includes("createPortal") && !faq.includes("visibilityPortalTargetId") && ![create, edit].some((source) => source.includes("faqVisibilitySlotId")) && !publishingOptions.includes("data-topic-faq-visibility-slot") && !publishingOptions.includes('name="show_faq_on_page"'));
 check("FAQ matches list plus settings and preview sidebar", faq.includes("data-topic-faq-list") && faq.includes("data-topic-faq-settings") && faq.includes("data-topic-faq-preview") && faq.includes("xl:grid-cols-[minmax(280px,0.75fr)_minmax(0,1.45fr)]"));
 check("FAQ rows use only the red trash icon", faq.includes("<TrashIcon />") && faq.includes('aria-label="حذف السؤال"') && faq.includes('title="حذف السؤال"') && !faq.includes(">حذف</button>"));

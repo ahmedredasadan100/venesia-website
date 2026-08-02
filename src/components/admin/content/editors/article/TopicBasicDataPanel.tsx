@@ -107,7 +107,10 @@ export default function TopicBasicDataPanel({ formId, contentType, contentTypeMo
 
             {excerptField}
 
-            <div className="flex flex-wrap items-end gap-5 lg:flex-nowrap" data-topic-compact-select-row>
+            <div
+              className="grid gap-5 lg:grid-cols-[max-content_minmax(15rem,1fr)_minmax(16rem,1.08fr)] lg:items-end"
+              data-topic-compact-select-row
+            >
               {contentTypeField}
               {categoryField}
               {seriesField}
