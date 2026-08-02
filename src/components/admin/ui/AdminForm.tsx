@@ -29,10 +29,17 @@ export function AdminFormLayout({
   );
 }
 
+const ADMIN_FORM_SECTION_SURFACE_CLASSES =
+  "rounded-[28px] border border-white/10 bg-[#080B10]/92 shadow-[0_24px_80px_rgba(0,0,0,0.28)]";
+
 export const ADMIN_FORM_SECTION_CLASSES =
-  "rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]";
+  `${ADMIN_FORM_SECTION_SURFACE_CLASSES} p-6`;
+
+const ADMIN_FORM_SECTION_COMPACT_CLASSES =
+  `${ADMIN_FORM_SECTION_SURFACE_CLASSES} px-6 py-4`;
 
 type AdminFormSectionProps = {
+  id?: string;
   children: ReactNode;
   title?: ReactNode;
   eyebrow?: ReactNode;
@@ -40,10 +47,12 @@ type AdminFormSectionProps = {
   description?: ReactNode;
   actions?: ReactNode;
   compactHeader?: boolean;
+  density?: "default" | "compact";
   className?: string;
 };
 
 export function AdminFormSection({
+  id,
   children,
   title,
   eyebrow,
@@ -51,12 +60,17 @@ export function AdminFormSection({
   description,
   actions,
   compactHeader = false,
+  density = "default",
   className = "",
 }: AdminFormSectionProps) {
   const hasHeader = eyebrow || title || description || actions;
+  const sectionClassName =
+    density === "compact"
+      ? ADMIN_FORM_SECTION_COMPACT_CLASSES
+      : ADMIN_FORM_SECTION_CLASSES;
 
   return (
-    <section className={`${ADMIN_FORM_SECTION_CLASSES} ${className}`.trim()}>
+    <section id={id} className={`${sectionClassName} ${className}`.trim()}>
       {hasHeader ? (
         <div className={`flex flex-wrap items-start justify-between gap-3 ${compactHeader ? "mb-4" : "mb-6"}`}>
           <div>

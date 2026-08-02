@@ -363,6 +363,22 @@ const topicCategorySelect = read(
 const topicSeriesSelect = read(
   "src/components/admin/content/editors/article/TopicSeriesFields.tsx",
 );
+const topicTabs = read(
+  "src/components/admin/content/editors/article/TopicEditTabs.tsx",
+);
+const topicBasicPanel = read(
+  "src/components/admin/content/editors/article/TopicBasicDataPanel.tsx",
+);
+const topicSeoPanel = read("src/components/admin/SeoPanel.tsx");
+const topicPublishingOptions = read(
+  "src/components/admin/content/editors/article/TopicPublishingOptions.tsx",
+);
+const topicPublishChecklist = read(
+  "src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx",
+);
+const topicMediaSyncSignal = read(
+  "src/components/admin/content/editors/article/TopicMediaCatalogSyncSignal.tsx",
+);
 const adminListboxSelect = read(
   "src/components/admin/ui/AdminListboxSelect.tsx",
 );
@@ -385,19 +401,81 @@ check(
     articleEdit.includes('mode="edit"'),
 );
 check(
+  "Topic Article Create and Edit mount one shared editor identity",
+  [articleCreate, articleEdit].every((source) =>
+    [
+      "TopicEditTabs",
+      "TopicBasicDataPanel",
+      "TopicMarkdownEditor",
+      "FaqEditor",
+      "SeoPanel",
+      "TopicPublishingOptions",
+      "TopicPublishChecklistPanel",
+    ].every(
+      (owner) => occurrenceCount(source, new RegExp(`<${owner}\\b`, "g")) === 1,
+    ),
+  ) &&
+    topicTabs.includes('variant="editor"') &&
+    topicBasicPanel.includes('data-topic-basic-presentation="editor"') &&
+    topicSeoPanel.includes("<AdminSingleOpenAccordion") &&
+    topicPublishingOptions.includes('data-topic-publishing-presentation="integrated"') &&
+    topicPublishChecklist.includes('data-topic-publish-review-presentation="embedded"'),
+);
+check(
+  "retired Topic presentation branches cannot fork Create from Edit",
+  !topicTabs.includes("variant?:") &&
+    !topicBasicPanel.includes("editorPresentation") &&
+    !topicSeoPanel.includes("presentation?:") &&
+    !topicSeoPanel.includes("presentation ===") &&
+    !topicPublishingOptions.includes("presentation?:") &&
+    !topicPublishingOptions.includes("presentation ===") &&
+    !topicPublishChecklist.includes("presentation?:") &&
+    !topicPublishChecklist.includes("presentation ===") &&
+    ![articleCreate, articleEdit].some(
+      (source) =>
+        source.includes('variant="editor"') ||
+        source.includes('presentation="editor"') ||
+        source.includes('presentation="integrated"') ||
+        source.includes('presentation="embedded"'),
+    ),
+);
+check(
+  "Topic mode identity, Preview, and media-signal differences remain declarative and unique",
+  occurrenceCount(articleCreate, /name="content_type"/g) === 1 &&
+    occurrenceCount(articleCreate, /name="id"/g) === 0 &&
+    occurrenceCount(articleEdit, /name="content_type"/g) === 1 &&
+    occurrenceCount(articleEdit, /name="id"/g) === 1 &&
+    occurrenceCount(articleCreate, /<AdminEntityPreviewActions\b/g) === 0 &&
+    occurrenceCount(articleEdit, /<AdminEntityPreviewActions\b/g) === 1 &&
+    [articleCreate, articleEdit].every(
+      (source) => occurrenceCount(source, /<TopicMediaCatalogSyncSignal\b/g) === 1,
+    ) &&
+    topicMediaSyncSignal.includes('form.addEventListener("admin-form-saved"') &&
+    topicMediaSyncSignal.includes("window.localStorage.setItem("),
+);
+check(
   "Topic Article editors no longer reference the parallel SaveBar engine",
   !articleCreate.includes("SaveBar") && !articleEdit.includes("SaveBar"),
 );
 check(
-  "Topic taxonomy errors target stable visible inline-listbox controls",
+  "Topic taxonomy errors target one stable visible dropdown presentation",
   topicFormDefinition.includes(
     'category_slug: { tabId: "basic", targetId: "topic-category-listbox" }',
   ) &&
     topicFormDefinition.includes(
       'series_id: { tabId: "basic", targetId: "topic-series-listbox" }',
     ) &&
-    topicCategorySelect.includes('id="topic-category"') &&
-    topicSeriesSelect.includes('id="topic-series"') &&
+    topicCategorySelect.includes('id="topic-category-popover"') &&
+    topicCategorySelect.includes('triggerId="topic-category-listbox"') &&
+    topicSeriesSelect.includes('id="topic-series-popover"') &&
+    topicSeriesSelect.includes('triggerId="topic-series-listbox"') &&
+    ![topicCategorySelect, topicSeriesSelect].some(
+      (source) =>
+        /(?:^|[<\s])presentation=/m.test(source) ||
+        /(?:^|\s)presentation\??:/.test(source) ||
+        /(?:^|\s)presentation\s*===/.test(source) ||
+        source.includes("inline="),
+    ) &&
     adminListboxSelect.includes('id={`${controlId}-listbox`}') &&
     adminListboxSelect.includes('role="listbox"'),
 );
@@ -455,6 +533,21 @@ check(
 const runtime = read("src/components/admin/ui/AdminFormRuntime.tsx");
 const formRuntimeContract = read("src/lib/admin/form-runtime.ts");
 const actionsSource = runtime.slice(runtime.indexOf("export function AdminFormActions"));
+const createEditHandoffStart = runtime.indexOf(
+  'if (state.mode === "create" && state.editHref)',
+);
+const createEditHandoffReplace = runtime.indexOf(
+  "router.replace(editHref, { scroll: false })",
+  createEditHandoffStart,
+);
+const createEditHandoffEnd = runtime.indexOf(
+  "\n    const submittedBaseline =",
+  createEditHandoffReplace,
+);
+const createEditHandoff = runtime.slice(
+  createEditHandoffStart,
+  createEditHandoffEnd,
+);
 const runtimeActionMarkers = [
   ...actionsSource.matchAll(/data-admin-form-action="([^"]+)"/g),
 ].map((match) => match[1]);
@@ -501,6 +594,21 @@ check(
     "disabled={pending}",
     'aria-live="polite"',
   ].every((marker) => runtime.includes(marker)),
+);
+check(
+  "create-to-edit handoff validates the internal target, clears dirty state, and replaces once",
+  createEditHandoffStart >= 0 &&
+    createEditHandoffReplace > createEditHandoffStart &&
+    createEditHandoffEnd > createEditHandoffReplace &&
+    runtime.includes("Boolean(state.editHref)") &&
+    createEditHandoff.includes('resolveSafeInternalPath(state.editHref, "")') &&
+    createEditHandoff.includes("markClean(submittedBaseline)") &&
+    createEditHandoff.includes("onSuccess?.(state)") &&
+    occurrenceCount(runtime, /router\.replace\(editHref, \{ scroll: false \}\)/g) === 1 &&
+    createEditHandoff.indexOf("markClean(submittedBaseline)") <
+      createEditHandoff.indexOf("router.replace(editHref, { scroll: false })") &&
+    createEditHandoff.indexOf("onSuccess?.(state)") <
+      createEditHandoff.indexOf("router.replace(editHref, { scroll: false })"),
 );
 const formDomPreservation = read(
   "src/lib/admin/form-dom-preservation.ts",
@@ -887,6 +995,15 @@ check(
     unifiedAction.includes("editHref:") &&
     unifiedAction.includes("fieldErrors") &&
     !unifiedAction.includes("redirect("),
+);
+check(
+  "Topic Create alone receives the safe shared-runtime Edit handoff target",
+  /\.\.\.\(mode === "create"\s*\?\s*\{\s*editHref: `\/admin\/content\/topics\/\$\{entityId\}`\s*\}\s*:\s*\{\}\s*\)/.test(unifiedAction) &&
+    occurrenceCount(unifiedAction, /editHref:/g) === 1 &&
+    articleCreate.includes('mode="create"') &&
+    articleEdit.includes('mode="edit"') &&
+    !articleCreate.includes("router.replace") &&
+    !articleEdit.includes("router.replace"),
 );
 check(
   "obsolete Topic SaveBar and Previous button components are removed",

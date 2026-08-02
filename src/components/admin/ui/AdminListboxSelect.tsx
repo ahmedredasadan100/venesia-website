@@ -27,6 +27,8 @@ export type AdminListboxSelectProps = {
   disabled?: boolean;
   className?: string;
   placeholder?: string;
+  showPlaceholderForEmptyValue?: boolean;
+  sizing?: "full" | "content" | "content-relaxed" | "medium" | "wide";
   /** Registers with exclusive floating layer when provided. */
   layerId?: string;
   openLayerId?: string | null;
@@ -70,6 +72,8 @@ export default function AdminListboxSelect({
   disabled = false,
   className = "",
   placeholder,
+  showPlaceholderForEmptyValue = false,
+  sizing = "full",
   layerId,
   openLayerId,
   onOpenLayer,
@@ -87,11 +91,23 @@ export default function AdminListboxSelect({
   const controlId = id ?? generatedId;
   const resolvedTriggerId = triggerId ?? `${controlId}-trigger`;
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const isMounted = useClientMounted();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [activeValue, setActiveValue] = useState(value);
   const [search, setSearch] = useState("");
+  const compactSized = sizing !== "full";
+  const triggerSizingClassName =
+    sizing === "content"
+      ? "w-fit max-w-full ps-4 pe-4"
+      : sizing === "content-relaxed"
+        ? "min-w-32 w-fit max-w-full ps-4 pe-4"
+        : sizing === "medium"
+          ? "w-60 max-w-full ps-4 pe-4"
+          : sizing === "wide"
+            ? "w-64 max-w-full ps-4 pe-4"
+            : "w-full px-4";
 
   const isControlled = typeof openLayerId !== "undefined" && Boolean(layerId);
   const isOpen = isControlled
@@ -111,9 +127,11 @@ export default function AdminListboxSelect({
   const menuPosition = useAdminFloatingMenuPosition(isOpen, triggerRef, {
     minWidth: 180,
     preferredWidth: 180,
+    align: dir === "rtl" ? "right" : "left",
     offset: 6,
     collisionPadding: 12,
     estimatedHeight: searchable ? 320 : 280,
+    floatingRef: menuRef,
   });
 
   const visibleOptions = useMemo(() => {
@@ -132,12 +150,16 @@ export default function AdminListboxSelect({
     () => options.find((option) => option.value === value),
     [options, value],
   );
-  const displayValue = selected?.label ?? placeholder ?? "اختر";
+  const emptyValueUsesPlaceholder =
+    showPlaceholderForEmptyValue && value === "" && Boolean(placeholder);
+  const displayValue = emptyValueUsesPlaceholder
+    ? placeholder
+    : selected?.label ?? placeholder ?? "اختر";
   const activeIndex = Math.max(
     0,
     selectableOptions.findIndex((option) => option.value === activeValue),
   );
-  const resolvedActiveValue = selectableOptions[activeIndex]?.value ?? "";
+  const resolvedActiveValue = selectableOptions[activeIndex]?.value;
   const inlineTabStopValue =
     selectableOptions.find((option) => option.value === value)?.value ??
     selectableOptions[0]?.value;
@@ -180,7 +202,7 @@ export default function AdminListboxSelect({
   }, [isOpen, menuPosition, searchable]);
 
   useEffect(() => {
-    if (!isOpen || !resolvedActiveValue) return;
+    if (!isOpen || resolvedActiveValue === undefined) return;
     const frame = window.requestAnimationFrame(() => {
       document
         .getElementById(`${controlId}-option-${resolvedActiveValue}`)
@@ -305,6 +327,7 @@ export default function AdminListboxSelect({
     menuPosition &&
     createPortal(
       <div
+        ref={menuRef}
         {...{ [ADMIN_FILTER_MENU_ATTR]: "" }}
         id={`${controlId}-popover`}
         dir={dir}
@@ -326,7 +349,7 @@ export default function AdminListboxSelect({
               aria-label={searchPlaceholder}
               aria-controls={`${controlId}-listbox`}
               aria-activedescendant={
-                resolvedActiveValue
+                resolvedActiveValue !== undefined
                   ? `${controlId}-option-${resolvedActiveValue}`
                   : undefined
               }
@@ -377,7 +400,15 @@ export default function AdminListboxSelect({
                         {"— ".repeat(option.depth)}
                       </span>
                     ) : null}
-                    <span className="truncate">{option.label}</span>
+                    <span
+                      className={
+                        compactSized
+                          ? "min-w-0 whitespace-normal break-words text-start leading-5"
+                          : "truncate"
+                      }
+                    >
+                      {option.label}
+                    </span>
                   </span>
                 </button>
               );
@@ -393,7 +424,7 @@ export default function AdminListboxSelect({
     );
 
   return (
-    <div className={`relative overflow-visible ${className}`}>
+    <div className={`relative overflow-visible ${compactSized ? "inline-block w-fit max-w-full" : ""} ${className}`}>
       {inline ? (
         <div
           dir={dir}
@@ -411,7 +442,7 @@ export default function AdminListboxSelect({
               aria-label={searchPlaceholder}
               aria-controls={`${controlId}-listbox`}
               aria-activedescendant={
-                resolvedActiveValue
+                resolvedActiveValue !== undefined
                   ? `${controlId}-option-${resolvedActiveValue}`
                   : undefined
               }
@@ -487,7 +518,7 @@ export default function AdminListboxSelect({
           aria-expanded={isOpen}
           aria-controls={`${controlId}-listbox`}
           aria-activedescendant={
-            isOpen && resolvedActiveValue
+            isOpen && resolvedActiveValue !== undefined
               ? `${controlId}-option-${resolvedActiveValue}`
               : undefined
           }
@@ -497,9 +528,9 @@ export default function AdminListboxSelect({
             setOpen(!isOpen);
           }}
           onKeyDown={handleKeyDown}
-          className="flex h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/28 px-4 text-sm text-white outline-none transition hover:border-white/18 focus:border-[#D8B87A]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-55"
+          className={`flex h-11 cursor-pointer items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/28 text-sm text-white outline-none transition hover:border-white/18 focus:border-[#D8B87A]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-55 ${triggerSizingClassName}`}
         >
-          <span className={`truncate ${selected ? "text-white/78" : "text-white/35"}`}>
+          <span className={`min-w-0 truncate ${selected && !emptyValueUsesPlaceholder ? "text-white/78" : "text-white/35"}`}>
             {displayValue}
           </span>
           <span

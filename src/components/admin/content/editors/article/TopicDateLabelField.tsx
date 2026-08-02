@@ -12,9 +12,10 @@ type TopicDateLabelFieldProps = {
   defaultValue?: string | null;
   publishedAt?: string | null;
   disabled?: boolean;
+  className?: string;
 };
 
-export default function TopicDateLabelField({ defaultValue, publishedAt, disabled = false }: TopicDateLabelFieldProps) {
+export default function TopicDateLabelField({ defaultValue, publishedAt, disabled = false, className = "" }: TopicDateLabelFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const defaultIsDate = /^\d{4}-\d{2}-\d{2}$/.test(defaultValue ?? "");
   const publishedDateValue = getDateInputValue(publishedAt);
@@ -46,17 +47,17 @@ export default function TopicDateLabelField({ defaultValue, publishedAt, disable
 
   return (
     <>
-      <div id="topic-publish-date-field" className={`${TOPIC_SETTINGS_SURFACE_CLASS_NAME} min-w-0`} data-topic-publish-date-field>
+      <div id="topic-publish-date-field" className={`${TOPIC_SETTINGS_SURFACE_CLASS_NAME} min-w-0 ${className}`.trim()} data-topic-publish-date-field>
         <button
           type="button"
           disabled={disabled}
           onClick={openCalendar}
           aria-controls="topic-published-at"
-          aria-label="فتح تقويم تاريخ النشر"
+          aria-label="فتح تقويم تاريخ النشر الظاهر"
           data-topic-date-picker-trigger="label"
           className="flex w-full items-center justify-between gap-3 text-xs font-medium text-white/70 transition hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-55"
         >
-          <span>تاريخ النشر</span>
+          <span>تاريخ النشر الظاهر</span>
           <svg
             aria-hidden="true"
             viewBox="0 0 24 24"
@@ -80,7 +81,7 @@ export default function TopicDateLabelField({ defaultValue, publishedAt, disable
             onChange={(event) => {
               setDateValue(event.target.value);
             }}
-            aria-label="تاريخ النشر"
+            aria-label="تاريخ النشر الظاهر"
             data-topic-date-picker-input=""
             className="min-w-0 flex-1 cursor-pointer bg-transparent px-3 py-3 text-sm text-white outline-none disabled:cursor-not-allowed"
           />

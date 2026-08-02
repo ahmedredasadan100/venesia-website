@@ -46,7 +46,16 @@ export default function ArticleTopicCategorySelect({ groups, defaultValue = "", 
           </optgroup>
         ))}
       </select>
-      <AdminListboxSelect id="topic-category" value={value} options={options} onChange={update} placeholder="اختر التصنيف" className="w-full" inline />
+      <AdminListboxSelect
+        id="topic-category-popover"
+        triggerId="topic-category-listbox"
+        value={value}
+        options={options}
+        onChange={update}
+        placeholder="اختر التصنيف"
+        sizing="medium"
+        className="max-w-full"
+      />
       <AdminFormError name={name} />
     </div>
   );

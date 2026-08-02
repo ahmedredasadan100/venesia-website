@@ -10,10 +10,9 @@ type TopicSeriesFieldsProps = {
   defaultSeriesId?: number | string | null;
   defaultSeries?: string | null;
   defaultSeriesSlug?: string | null;
-  className?: string;
 };
 
-export default function TopicSeriesFields({ options, defaultSeriesId = "", defaultSeries = "", defaultSeriesSlug = "", className = "block" }: TopicSeriesFieldsProps) {
+export default function TopicSeriesFields({ options, defaultSeriesId = "", defaultSeries = "", defaultSeriesSlug = "" }: TopicSeriesFieldsProps) {
   const defaultId = defaultSeriesId ? String(defaultSeriesId) : "";
   const [value, setValue] = useState(defaultId);
   const hiddenRef = useRef<HTMLInputElement>(null);
@@ -26,10 +25,20 @@ export default function TopicSeriesFields({ options, defaultSeriesId = "", defau
   }
 
   return (
-    <label className={`${className} space-y-1.5`}>
+    <label className="inline-grid min-w-0 max-w-full shrink-0 space-y-1.5">
       <span className="text-xs font-medium text-white/58">السلسلة (اختياري)</span>
       <input ref={hiddenRef} type="hidden" name="series_id" value={value} />
-      <AdminListboxSelect id="topic-series" value={value} options={[{ value: "", label: "بدون سلسلة" }, ...options.map((option) => ({ value: String(option.id), label: option.name }))]} onChange={update} className="w-full" inline />
+      <AdminListboxSelect
+        id="topic-series-popover"
+        triggerId="topic-series-listbox"
+        value={value}
+        options={[{ value: "", label: "بدون سلسلة" }, ...options.map((option) => ({ value: String(option.id), label: option.name }))]}
+        onChange={update}
+        placeholder="اختر السلسلة"
+        showPlaceholderForEmptyValue
+        sizing="wide"
+        className="max-w-full"
+      />
       <AdminFormError name="series_id" />
       {fallbackSeries ? <input type="hidden" name="legacy_series" value={fallbackSeries} /> : null}
       {fallbackSeriesSlug ? <input type="hidden" name="legacy_series_slug" value={fallbackSeriesSlug} /> : null}

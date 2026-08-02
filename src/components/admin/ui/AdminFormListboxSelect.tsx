@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import AdminListboxSelect, {
   type AdminListboxSelectOption,
+  type AdminListboxSelectProps,
 } from "./AdminListboxSelect";
 
 export type AdminFormListboxSelectProps = {
@@ -28,6 +29,7 @@ export type AdminFormListboxSelectProps = {
   className?: string;
   inline?: boolean;
   dir?: "rtl" | "ltr";
+  sizing?: AdminListboxSelectProps["sizing"];
 };
 
 export default function AdminFormListboxSelect({
@@ -52,6 +54,7 @@ export default function AdminFormListboxSelect({
   className = "",
   inline = false,
   dir = "rtl",
+  sizing = "full",
 }: AdminFormListboxSelectProps) {
   const generatedId = useId();
   const controlId = id ?? `admin-form-listbox-${generatedId}`;
@@ -137,7 +140,8 @@ export default function AdminFormListboxSelect({
         emptyMessage={emptyMessage}
         inline={inline}
         dir={dir}
-        className="w-full"
+        sizing={sizing}
+        className={sizing === "full" ? "w-full" : "max-w-full"}
       />
 
       {loading ? (

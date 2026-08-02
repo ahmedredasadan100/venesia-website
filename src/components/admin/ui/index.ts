@@ -66,6 +66,11 @@ export type {
 } from "./AdminListboxSelect";
 export { default as AdminFormListboxSelect } from "./AdminFormListboxSelect";
 export type { AdminFormListboxSelectProps } from "./AdminFormListboxSelect";
+export { default as AdminSingleOpenAccordion } from "./AdminSingleOpenAccordion";
+export type {
+  AdminSingleOpenAccordionItem,
+  AdminSingleOpenAccordionProps,
+} from "./AdminSingleOpenAccordion";
 export {
   default as AdminFormSwitch,
   ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME,

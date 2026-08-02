@@ -12,6 +12,7 @@ type TopicFormSwitchProps = {
   defaultChecked: boolean;
   surface?: boolean;
   disabled?: boolean;
+  className?: string;
 };
 
 export default function TopicFormSwitch({
@@ -21,6 +22,7 @@ export default function TopicFormSwitch({
   defaultChecked,
   surface = false,
   disabled = false,
+  className,
 }: TopicFormSwitchProps) {
   return (
     <AdminFormSwitch
@@ -30,6 +32,7 @@ export default function TopicFormSwitch({
       defaultChecked={defaultChecked}
       surface={surface}
       disabled={disabled}
+      className={className}
     />
   );
 }

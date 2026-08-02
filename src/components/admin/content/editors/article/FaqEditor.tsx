@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { TrashIcon } from "../../../AdminRowActions";
 import { AdminConfirmDialog } from "../../../ui";
 import { AdminFormError } from "../../../ui/AdminFormRuntime";
+import AdminFormSwitch from "../../../ui/AdminFormSwitch";
 
 type FaqItem = { id: string; question: string; answer: string };
 type StoredFaqItem = { question?: string; answer?: string };
@@ -34,21 +35,15 @@ function FaqDisplaySwitch({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-3 text-xs leading-5 text-white/70">
-      <span>{label}</span>
-      <span className="relative inline-flex h-5 w-9 shrink-0">
-        <input
-          type="checkbox"
-          role="switch"
-          name={name}
-          checked={checked}
-          onChange={(event) => onChange(event.target.checked)}
-          className="peer sr-only"
-        />
-        <span className="absolute inset-0 rounded-full bg-white/10 transition peer-checked:bg-[#C9972F] peer-focus-visible:ring-2 peer-focus-visible:ring-[#E2B84F]" />
-        <span className="absolute start-0.5 top-0.5 size-4 rounded-full bg-white/80 shadow transition peer-checked:translate-x-4 peer-checked:bg-white rtl:peer-checked:-translate-x-4" />
-      </span>
-    </label>
+    <AdminFormSwitch
+      name={name}
+      label={label}
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+      surface
+      className="w-full justify-between"
+      wrapLabel
+    />
   );
 }
 
@@ -107,6 +102,15 @@ export default function FaqEditor({
     if (draggedId) moveItem(draggedId, toId);
     setDraggedId(null);
   }
+
+  const faqVisibilitySwitch = (
+    <FaqDisplaySwitch
+      name="show_faq_on_page"
+      label="إظهار قسم الأسئلة الشائعة في الصفحة"
+      checked={showSection}
+      onChange={setShowSection}
+    />
+  );
 
   return (
     <section id="topic-faq-editor" ref={rootRef} className="scroll-mt-24 rounded-[24px] border border-white/10 bg-[#080B10]/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.28)] md:p-6" data-topic-faq-editor>
@@ -186,7 +190,7 @@ export default function FaqEditor({
           <section className="rounded-2xl border border-white/10 bg-black/20 p-4" data-topic-faq-settings>
             <h3 className="text-base font-semibold text-white">إعدادات العرض</h3>
             <div className="mt-4 space-y-2">
-              <FaqDisplaySwitch name="show_faq_on_page" label="إظهار قسم الأسئلة الشائعة في الصفحة" checked={showSection} onChange={setShowSection} />
+              {faqVisibilitySwitch}
               <FaqDisplaySwitch name="show_faq_title_on_page" label="إظهار عنوان قسم الأسئلة الشائعة" checked={showTitle} onChange={setShowTitle} />
             </div>
           </section>

@@ -1499,6 +1499,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/content/series/[id]/page.tsx",
       ],
       presentationSourceFiles: [
+        "src/components/admin/content/editors/ArticleCreateEditor.tsx",
         "src/components/admin/content/editors/ArticleEditor.tsx",
         "src/app/admin/content/categories/CategoryForm.tsx",
         "src/app/admin/content/series/SeriesForm.tsx",
