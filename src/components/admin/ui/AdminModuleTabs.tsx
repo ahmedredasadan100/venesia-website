@@ -2,15 +2,42 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-type AdminModuleTab = {
+export type AdminModuleTabIconName =
+  | "content"
+  | "faq"
+  | "location"
+  | "media"
+  | "overview"
+  | "plans"
+  | "publish"
+  | "section"
+  | "seo"
+  | "specifications";
+
+type AdminModuleTabNavigationLabel =
+  | {
+      navigationLabel: ReactNode;
+      /** @deprecated Use navigationLabel for the short tab label. */
+      label?: never;
+    }
+  | {
+      /** @deprecated Use navigationLabel for the short tab label. */
+      label: ReactNode;
+      navigationLabel?: never;
+    };
+
+export type AdminModuleTab = AdminModuleTabNavigationLabel & {
   id: string;
-  label: string;
-  icon?: ReactNode;
+  /** Full descriptive heading rendered inside the active panel. */
+  sectionHeading?: ReactNode;
+  sectionDescription?: ReactNode;
+  /** Semantic icon rendered by the shared owner. */
+  icon?: AdminModuleTabIconName;
   indicator?: ReactNode;
   content: ReactNode;
 };
 
-type AdminModuleTabsProps = {
+export type AdminModuleTabsProps = {
   tabs: AdminModuleTab[];
   /** Optional initial tab id; falls back to the first tab. */
   initialTabId?: string;
@@ -36,6 +63,76 @@ const ADMIN_EDITOR_TAB_INDICATOR_CLASS_NAME =
   "inline-flex shrink-0 items-center justify-center";
 const ADMIN_EDITOR_TAB_ACTIVE_INDICATOR_CLASS_NAME =
   "pointer-events-none absolute bottom-0 start-6 end-6 h-0.5 rounded-t-full bg-[#D8B87A]";
+
+function AdminModuleTabIcon({ name }: { name: AdminModuleTabIconName }) {
+  const glyph =
+    name === "content" ? (
+      <>
+        <path d="M14 2.75H6.75a2 2 0 0 0-2 2v14.5a2 2 0 0 0 2 2h10.5a2 2 0 0 0 2-2V8Z" />
+        <path d="M14 2.75V8h5.25M8 12h8M8 16h6" />
+      </>
+    ) : name === "faq" ? (
+      <>
+        <path d="M20.25 11.5a8.25 8.25 0 1 1-3.18-6.52" />
+        <path d="M17.5 3.75h2.75V6.5M9.65 9.4a2.55 2.55 0 0 1 4.85 1.1c0 1.8-2.5 2-2.5 3.7M12 17.65v.1" />
+      </>
+    ) : name === "location" ? (
+      <>
+        <path d="M20 10c0 5-8 11.25-8 11.25S4 15 4 10a8 8 0 1 1 16 0Z" />
+        <circle cx="12" cy="10" r="2.5" />
+      </>
+    ) : name === "media" ? (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <circle cx="8.5" cy="9" r="1.5" />
+        <path d="m4.5 17 4.25-4.25 3.25 3.25 2.5-2.5 5 5" />
+      </>
+    ) : name === "overview" ? (
+      <>
+        <path d="M3.5 12s3-6 8.5-6 8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6Z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </>
+    ) : name === "plans" ? (
+      <>
+        <path d="M4 4h16v16H4zM9 4v6h6V4M4 14h6v6M15 10h5" />
+      </>
+    ) : name === "publish" ? (
+      <>
+        <path d="M12 15.75v-12M7.75 8 12 3.75 16.25 8" />
+        <path d="M5 13.75v4.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4.5" />
+      </>
+    ) : name === "seo" ? (
+      <>
+        <circle cx="10.75" cy="10.75" r="6.5" />
+        <path d="m15.5 15.5 4.25 4.25M8.5 11.25l1.55 1.55 3.2-3.55" />
+      </>
+    ) : name === "specifications" ? (
+      <>
+        <path d="M8 5h12M8 12h12M8 19h12" />
+        <path d="m3.5 5 1.25 1.25L6.5 4.5m-3 7.5 1.25 1.25L6.5 11.5m-3 7.5 1.25 1.25L6.5 18.5" />
+      </>
+    ) : (
+      <>
+        <rect x="4" y="4" width="16" height="16" rx="3" />
+        <path d="M8 9h8M8 13h8M8 17h5" />
+      </>
+    );
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      focusable="false"
+    >
+      {glyph}
+    </svg>
+  );
+}
 
 type AdminModuleNavigationDetail =
   | string
@@ -67,7 +164,7 @@ function focusNavigationTarget(targetId: string) {
   });
 }
 
-export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, variant = "pills", navigationEventName, ariaLabel = "أقسام المحرر" }: AdminModuleTabsProps) {
+export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, variant = "editor", navigationEventName, ariaLabel = "أقسام المحرر" }: AdminModuleTabsProps) {
   const instanceId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const fallbackId = tabs[0]?.id ?? "";
@@ -107,7 +204,11 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
   }
 
   return (
-    <div className="space-y-5" data-admin-module-tabs={variant}>
+    <div
+      className="space-y-5"
+      data-admin-module-tabs={variant}
+      data-admin-tabs-owner="AdminModuleTabs"
+    >
       <div
         className={[
           variant === "editor"
@@ -125,6 +226,8 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
       >
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeId;
+          const navigationLabel = tab.navigationLabel ?? tab.label;
+          const icon = tab.icon ?? "section";
           return (
             <button
               key={tab.id}
@@ -137,7 +240,6 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveId(tab.id)}
               onKeyDown={(event) => handleTabKeyDown(event, index)}
-              data-topic-tab={tab.id}
               data-admin-tab-id={tab.id}
               className={[
                 variant === "editor"
@@ -166,12 +268,10 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
               {variant === "editor" ? (
                 <>
                   <span className={ADMIN_EDITOR_TAB_CONTENT_CLASS_NAME}>
-                    {tab.icon ? (
-                      <span aria-hidden="true" className={ADMIN_EDITOR_TAB_ICON_CLASS_NAME}>
-                        {tab.icon}
-                      </span>
-                    ) : null}
-                    <span>{tab.label}</span>
+                    <span className={ADMIN_EDITOR_TAB_ICON_CLASS_NAME}>
+                      <AdminModuleTabIcon name={icon} />
+                    </span>
+                    <span>{navigationLabel}</span>
                     {tab.indicator ? (
                       <span aria-hidden="true" className={ADMIN_EDITOR_TAB_INDICATOR_CLASS_NAME}>
                         {tab.indicator}
@@ -185,7 +285,7 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
               ) : (
                 <>
                   {isActive && variant === "segmented" ? <span aria-hidden className="me-2">✓</span> : null}
-                  {tab.label}
+                  {navigationLabel}
                 </>
               )}
             </button>
@@ -202,6 +302,31 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
           hidden={tab.id !== activeId}
           className={tab.id === activeId ? "block" : "hidden"}
         >
+          {tab.sectionHeading ? (
+            <header
+              className="mb-5 flex min-h-[84px] min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5"
+              data-admin-tab-section-heading={tab.id}
+            >
+              <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] shadow-[inset_0_0_14px_rgba(216,184,122,0.08)] sm:size-12 [&>svg]:size-5">
+                <AdminModuleTabIcon name={tab.icon ?? "section"} />
+              </span>
+              <span
+                aria-hidden="true"
+                className="h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent sm:h-9"
+                data-admin-tab-section-accent
+              />
+              <span className="min-w-0 flex-1">
+                <h2 className="text-lg font-semibold leading-6 text-white sm:text-xl sm:leading-7">
+                  {tab.sectionHeading}
+                </h2>
+                {tab.sectionDescription ? (
+                  <span className="mt-1 block max-w-3xl text-sm leading-5 text-white/45 sm:leading-6">
+                    {tab.sectionDescription}
+                  </span>
+                ) : null}
+              </span>
+            </header>
+          ) : null}
           {tab.content}
         </div>
       ))}

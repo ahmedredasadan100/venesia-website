@@ -17,6 +17,7 @@ import {
   useOptionalAdminFormRuntime,
 } from "./ui/AdminFormRuntime";
 import AdminSingleOpenAccordion from "./ui/AdminSingleOpenAccordion";
+import { AdminFormLayout } from "./ui/AdminForm";
 
 export { default as AdminEntitySeoPanel } from "./seo/AdminEntitySeoPanel";
 
@@ -224,6 +225,86 @@ export default function SeoPanel(props: SeoPanelProps) {
       dir="ltr"
     />
   );
+  const seoBasicsContent = (
+    <div className="space-y-5" data-topic-seo-main-column>
+      <section className="rounded-2xl border border-white/10 bg-black/20 p-5" data-topic-seo-basics>
+        <div className="space-y-5">
+          <SeoField
+            id="topic-seo-title"
+            label="SEO Title"
+            name="seo_title"
+            defaultValue={props.seoTitle}
+            lengthAssessment={seoTitleLength}
+          />
+          <SeoField
+            id="topic-seo-description"
+            label="Meta Description"
+            name="seo_description"
+            defaultValue={props.seoDescription}
+            lengthAssessment={seoDescriptionLength}
+            textarea
+          />
+          <SeoField
+            id="topic-focus-keyword"
+            label="Focus Keyword"
+            name="focus_keyword"
+            defaultValue={props.focusKeyword}
+            count={live.focusKeyword.length}
+            helper="عبارة البحث الرئيسية التي تُحسب عليها الكثافة والتحليلات"
+          />
+          <div id="topic-seo-keywords" className="scroll-mt-24">
+            <AdminTagsField
+              name="seo_keywords"
+              label="SEO Keywords"
+              defaultTags={props.seoKeywords}
+              placeholder="اكتب كلمة أو عبارة ثم Enter"
+              helperText="كل عبارة متعددة الكلمات تُحفظ كوحدة واحدة"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="topic-seo-overrides"
+        className="scroll-mt-24 rounded-2xl border border-white/10 bg-black/20 p-5"
+        data-topic-seo-overrides
+      >
+        <h3 className="text-base font-semibold text-white">Canonical وRobots</h3>
+        <p className="mt-2 text-sm leading-7 text-white/42">
+          القيم العامة تظل المصدر الافتراضي، ويمكن تخصيص هذا الموضوع فقط عند الحاجة.
+        </p>
+        <div
+          id="topic-seo-robots"
+          dir="rtl"
+          data-topic-seo-top-row
+          data-admin-seo-control-order="index-follow-canonical"
+          className="mt-5 grid scroll-mt-24 gap-3 lg:grid-cols-[minmax(180px,.7fr)_minmax(180px,.7fr)_minmax(0,1.6fr)] lg:items-start"
+        >
+          <AdminFormListboxSelect
+            id="topic-robots-index-listbox"
+            focusTargetId="topic-robots-index"
+            name="robots_index"
+            label="الفهرسة"
+            options={ROBOTS_INDEX_OPTIONS}
+            defaultValue={props.robotsIndex === null ? "" : String(props.robotsIndex)}
+            placeholder="استخدام الإعداد العام"
+            sizing="full"
+          />
+          <AdminFormListboxSelect
+            id="topic-robots-follow-listbox"
+            focusTargetId="topic-robots-follow"
+            name="robots_follow"
+            label="تتبع الروابط"
+            options={ROBOTS_FOLLOW_OPTIONS}
+            defaultValue={props.robotsFollow === null ? "" : String(props.robotsFollow)}
+            placeholder="استخدام الإعداد العام"
+            sizing="full"
+          />
+          <div className="min-w-0 flex-1">{canonicalField}</div>
+        </div>
+      </section>
+    </div>
+  );
 
   return (
     <section
@@ -231,109 +312,37 @@ export default function SeoPanel(props: SeoPanelProps) {
       className="rounded-[24px] border border-white/10 bg-[#080B10]/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.28)] md:p-6"
       data-topic-seo-panel
     >
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.85fr)] xl:items-start">
-        <div className="space-y-5">
-          <section className="rounded-2xl border border-white/10 bg-black/20 p-5">
-            <div className="mb-5">
-              <h3 className="text-lg font-semibold text-white">بيانات SEO الخاصة بالموضوع</h3>
-              <p className="mt-2 text-sm leading-7 text-white/42">
-                اترك أي Override اختياري فارغًا لاستخدام إعدادات SEO العامة للموقع.
-              </p>
-            </div>
-
-            <div className="space-y-5">
-              <SeoField
-                id="topic-seo-title"
-                label="SEO Title"
-                name="seo_title"
-                defaultValue={props.seoTitle}
-                lengthAssessment={seoTitleLength}
-              />
-              <SeoField
-                id="topic-seo-description"
-                label="Meta Description"
-                name="seo_description"
-                defaultValue={props.seoDescription}
-                lengthAssessment={seoDescriptionLength}
-                textarea
-              />
-              <SeoField
-                id="topic-focus-keyword"
-                label="Focus Keyword"
-                name="focus_keyword"
-                defaultValue={props.focusKeyword}
-                count={live.focusKeyword.length}
-                helper="عبارة البحث الرئيسية التي تُحسب عليها الكثافة والتحليلات"
-              />
-              <div id="topic-seo-keywords" className="scroll-mt-24">
-                <AdminTagsField
-                  name="seo_keywords"
-                  label="SEO Keywords"
-                  defaultTags={props.seoKeywords}
-                  placeholder="اكتب كلمة أو عبارة ثم Enter"
-                  helperText="كل عبارة متعددة الكلمات تُحفظ كوحدة واحدة"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section
-            id="topic-seo-overrides"
-            className="scroll-mt-24 rounded-2xl border border-white/10 bg-black/20 p-5"
-            data-topic-seo-overrides
-          >
-            <div>
-              <h3 className="text-base font-semibold text-white">Canonical وRobots</h3>
-              <p className="mt-2 text-sm leading-7 text-white/42">
-                القيم العامة تظل المصدر الافتراضي، ويمكن تخصيص هذا الموضوع فقط عند الحاجة.
-              </p>
-            </div>
-
-            <div
-              id="topic-seo-robots"
-              dir="rtl"
-              data-topic-seo-top-row
-              className="mt-5 flex scroll-mt-24 flex-col gap-3 lg:flex-row lg:items-start"
-            >
-              <AdminFormListboxSelect
-                id="topic-robots-index-listbox"
-                focusTargetId="topic-robots-index"
-                name="robots_index"
-                label="الفهرسة"
-                options={ROBOTS_INDEX_OPTIONS}
-                defaultValue={props.robotsIndex === null ? "" : String(props.robotsIndex)}
-                placeholder="استخدام الإعداد العام"
-                sizing="content"
-                className="min-w-0 shrink-0"
-              />
-              <AdminFormListboxSelect
-                id="topic-robots-follow-listbox"
-                focusTargetId="topic-robots-follow"
-                name="robots_follow"
-                label="تتبع الروابط"
-                options={ROBOTS_FOLLOW_OPTIONS}
-                defaultValue={props.robotsFollow === null ? "" : String(props.robotsFollow)}
-                placeholder="استخدام الإعداد العام"
-                sizing="content"
-                className="min-w-0 shrink-0"
-              />
-              <div className="min-w-0 flex-1">{canonicalField}</div>
-            </div>
-          </section>
-        </div>
-
-        <aside className="min-w-0 xl:sticky xl:top-6">
+      <AdminFormLayout
+        aside={
           <AdminSingleOpenAccordion
             ariaLabel="معاينات وتحليل SEO"
             defaultOpenId="search-result-preview"
             items={[
-              { id: "search-result-preview", label: "معاينة نتائج البحث", content: searchResultPreviewContent },
-              { id: "open-graph-preview", label: "معاينة Open Graph", content: openGraphPreviewContent },
-              { id: "live-seo-analysis", label: "تحليل SEO المباشر", content: liveSeoAnalysisContent },
+              {
+                id: "search-result-preview",
+                label: "معاينة نتائج البحث",
+                description: "الشكل المتوقع للرابط داخل نتائج محركات البحث.",
+                content: searchResultPreviewContent,
+              },
+              {
+                id: "open-graph-preview",
+                label: "معاينة Open Graph",
+                description: "الصورة والنص المتوقعان عند مشاركة الرابط.",
+                content: openGraphPreviewContent,
+              },
+              {
+                id: "live-seo-analysis",
+                label: "تحليل SEO المباشر",
+                description: "الدرجة الإرشادية وملاحظات تحسين المحتوى.",
+                content: liveSeoAnalysisContent,
+              },
             ]}
           />
-        </aside>
-      </div>
+        }
+        asideClassName="xl:sticky xl:top-6 xl:self-start"
+      >
+        {seoBasicsContent}
+      </AdminFormLayout>
     </section>
   );
 }

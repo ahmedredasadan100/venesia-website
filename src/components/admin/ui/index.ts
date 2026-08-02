@@ -71,6 +71,12 @@ export type {
   AdminSingleOpenAccordionItem,
   AdminSingleOpenAccordionProps,
 } from "./AdminSingleOpenAccordion";
+export { default as AdminModuleTabs } from "./AdminModuleTabs";
+export type {
+  AdminModuleTab,
+  AdminModuleTabIconName,
+  AdminModuleTabsProps,
+} from "./AdminModuleTabs";
 export {
   default as AdminFormSwitch,
   ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME,
@@ -150,6 +156,7 @@ export {
   AdminFormSection,
   AdminFormField,
   AdminStickyFormBar,
+  ADMIN_FORM_STACK_CLASS_NAME,
   ADMIN_FORM_SECTION_CLASSES,
 } from "./AdminForm";
 export {

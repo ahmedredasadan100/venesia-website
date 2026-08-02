@@ -53,7 +53,7 @@ const [
   read("src/components/admin/content/editors/ArticleEditor.tsx"),
   read("src/components/admin/content/editors/TopicContentTypeControl.tsx"),
   read("src/components/admin/content/editors/article/TopicBasicDataPanel.tsx"),
-  read("src/components/admin/page-blocks/AdminModuleTabs.tsx"),
+  read("src/components/admin/ui/AdminModuleTabs.tsx"),
   read("src/components/admin/content/editors/article/TopicSlugInput.tsx"),
   read("src/components/admin/content/editors/article/TopicImageField.tsx"),
   read("src/components/admin/content/editors/article/ArticleTopicCategorySelect.tsx"),
@@ -120,8 +120,11 @@ check(
   ),
 );
 
-for (const label of ["المحتوى الأساسي", "الأسئلة الشائعة", "SEO والتحليل", "المراجعة والنشر"]) {
-  check(`four-tab shell includes ${label}`, createEditor.includes(`label: "${label}"`) && editEditor.includes(`label: "${label}"`));
+for (const label of ["المحتوى", "الأسئلة", "SEO", "المراجعة"]) {
+  check(`four-tab shell includes short navigation label ${label}`, createEditor.includes(`navigationLabel: "${label}"`) && editEditor.includes(`navigationLabel: "${label}"`));
+}
+for (const heading of ["بيانات الموضوع والمحتوى", "الأسئلة الشائعة وإعدادات الظهور", "تحسين محركات البحث والمشاركة", "مراجعة الجاهزية والنشر"]) {
+  check(`four-tab shell includes descriptive section heading ${heading}`, createEditor.includes(`sectionHeading: "${heading}"`) && editEditor.includes(`sectionHeading: "${heading}"`));
 }
 check("legacy content tab is removed", !createEditor.includes('id: "content"') && !editEditor.includes('id: "content"'));
 check("the current content editor moved into the basic panel", basicPanel.includes("contentEditor") && createEditor.match(/<TopicMarkdownEditor/g)?.length === 1 && editEditor.match(/<TopicMarkdownEditor/g)?.length === 1);

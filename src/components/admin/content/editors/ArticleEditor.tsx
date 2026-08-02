@@ -3,6 +3,8 @@ import {
   AdminEntityPreviewActions,
   AdminFormActions,
   AdminPageContextHeader,
+  AdminPageExperience,
+  ADMIN_FORM_STACK_CLASS_NAME,
 } from "../../ui";
 import AdminFormRuntime from "../../ui/AdminFormRuntime";
 import SeoPanel from "../../SeoPanel";
@@ -107,7 +109,7 @@ export default function ArticleEditor({
   const selectedCategory = safeCategories.find((category) => category.slug === topic.category_slug)?.name ?? topic.category_slug ?? "—";
 
   return (
-    <main className="space-y-7">
+    <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
         eyebrow="EDIT TOPIC"
         title={truncateWords(topic.title || "بدون عنوان")}
@@ -141,7 +143,7 @@ export default function ArticleEditor({
         closeHref={returnPath}
         navigation={TOPIC_FORM_NAVIGATION}
         formId="topic-edit-form"
-        className="space-y-7"
+        className={ADMIN_FORM_STACK_CLASS_NAME}
       >
         <input type="hidden" name="id" value={topic.id} />
         <input type="hidden" name="content_type" value="article" />
@@ -150,7 +152,10 @@ export default function ArticleEditor({
           tabs={[
             {
               id: "basic",
-              label: "المحتوى الأساسي",
+              navigationLabel: "المحتوى",
+              sectionHeading: "بيانات الموضوع والمحتوى",
+              sectionDescription: "حدّث المحتوى الأساسي والتصنيف والصورة وإعدادات الظهور.",
+              icon: "content",
               content: (
                 <TopicBasicDataPanel
                   formId="topic-edit-form"
@@ -178,12 +183,18 @@ export default function ArticleEditor({
             },
             {
               id: "faq",
-              label: "الأسئلة الشائعة",
+              navigationLabel: "الأسئلة",
+              sectionHeading: "الأسئلة الشائعة وإعدادات الظهور",
+              sectionDescription: "راجع الأسئلة والأجوبة وطريقة ظهور القسم في صفحة الموضوع.",
+              icon: "faq",
               content: <FaqEditor defaultFaq={faq} defaultVisible={topic.show_faq_on_page} defaultTitleVisible={topic.show_faq_title_on_page} />,
             },
             {
               id: "seo",
-              label: "SEO والتحليل",
+              navigationLabel: "SEO",
+              sectionHeading: "تحسين محركات البحث والمشاركة",
+              sectionDescription: "راجع الأساسيات والمشاركة الاجتماعية والتحليل من عرض واحد منظم.",
+              icon: "seo",
               content: (
                 <SeoPanel
                   title={topic.title ?? ""}
@@ -206,7 +217,10 @@ export default function ArticleEditor({
             },
             {
               id: "publish",
-              label: "المراجعة والنشر",
+              navigationLabel: "المراجعة",
+              sectionHeading: "مراجعة الجاهزية والنشر",
+              sectionDescription: "راجع الحالة والملخص والتحذيرات قبل حفظ قرار النشر.",
+              icon: "publish",
               content: (
                 <TopicPublishingOptions
                   status={status}
@@ -221,6 +235,8 @@ export default function ArticleEditor({
                     status={status}
                     publishedAt={topic.published_at}
                     dateLabel={topic.date_label}
+                    featured={Boolean(topic.is_featured)}
+                    updatedAt={topic.updated_at}
                     categoryLabel={selectedCategory}
                     seriesLabel={topic.series ?? "—"}
                     initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }}
@@ -232,6 +248,6 @@ export default function ArticleEditor({
         />
         <AdminFormActions />
       </AdminFormRuntime>
-    </main>
+    </AdminPageExperience>
   );
 }

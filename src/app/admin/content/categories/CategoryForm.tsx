@@ -5,6 +5,7 @@ import {
   AdminFormField,
   AdminFormSection,
   AdminSlugField,
+  ADMIN_FORM_STACK_CLASS_NAME,
   adminFormFieldClassName,
 } from "../../../../components/admin/ui";
 import AdminFormListboxSelect from "../../../../components/admin/ui/AdminFormListboxSelect";
@@ -48,6 +49,7 @@ export default function CategoryForm({
       entityKey="category"
       closeHref="/admin/content/categories"
       formId="category-taxonomy-form"
+      className={ADMIN_FORM_STACK_CLASS_NAME}
     >
       {({ fieldErrors, pending }) => (
         <>

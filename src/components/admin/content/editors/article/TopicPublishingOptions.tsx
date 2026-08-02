@@ -30,22 +30,16 @@ export default function TopicPublishingOptions({
       data-topic-publishing-options
       data-topic-publishing-presentation="integrated"
     >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-white">إجراءات النشر</h3>
-            <p className="mt-1 text-xs text-white/40">
-              تُطبّق حالة النشر مع باقي بيانات الموضوع عند الضغط على حفظ.
-            </p>
-          </div>
-          {status ? (
+        {status ? (
+          <div className="flex justify-end">
             <span className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/55">
               الحالة: {status}
             </span>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <div
-          className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch"
+          className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch ${status ? "mt-5" : ""}`.trim()}
           data-topic-publishing-actions-row
         >
           <div className="contents" data-topic-publishing-simple-options>

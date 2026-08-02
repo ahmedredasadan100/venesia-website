@@ -565,7 +565,7 @@ export function ProjectFloorPlansEditor({ initialPlans }: { initialPlans: Projec
   );
 }
 
-export function RepeaterSection({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+export function RepeaterSection({ title, description, children }: { title?: string; description?: string; children: ReactNode }) {
   return (
     <AdminFormSection title={title} description={description} compactHeader className="min-w-0">
       {children}

@@ -14,6 +14,8 @@ type SummaryState = TopicPublishInput & {
   category: string;
   series: string;
   publishedAt: string;
+  published: boolean;
+  featured: boolean;
   showTitle: boolean;
   showImage: boolean;
   showExcerpt: boolean;
@@ -26,6 +28,8 @@ type Props = {
   status?: string;
   publishedAt?: string | null;
   dateLabel?: string | null;
+  featured?: boolean;
+  updatedAt?: string | null;
   contentTypeLabel?: string;
   seriesLabel?: string;
   categoryLabel?: string;
@@ -104,6 +108,8 @@ function read(form: HTMLFormElement, seed: SummaryState): SummaryState {
     faq: faq(form),
     category,
     publishedAt: field(form, "published_at", seed.publishedAt),
+    published: checked(form, "is_published", seed.published),
+    featured: checked(form, "is_featured", seed.featured),
     showTitle: checked(form, "show_title_on_page", seed.showTitle),
     showImage: checked(form, "show_image_on_page", seed.showImage),
     showExcerpt: checked(form, "show_excerpt_on_page", seed.showExcerpt),
@@ -120,6 +126,12 @@ function statusLabel(status?: string) {
   if (status === "unpublished") return "غير منشور";
   if (status === "archived") return "مؤرشف";
   return "مسودة";
+}
+
+function formatAuditTimestamp(value?: string | null) {
+  if (!value) return "لم يُحفظ بعد";
+  const normalized = value.replace("T", " ").replace("Z", "");
+  return normalized.length >= 16 ? `${normalized.slice(0, 10)} · ${normalized.slice(11, 16)}` : value;
 }
 
 function inferGateTarget(hint: string): CorrectionTarget | undefined {
@@ -145,6 +157,8 @@ export default function TopicPublishChecklistPanel({
   status,
   publishedAt,
   dateLabel,
+  featured = false,
+  updatedAt,
   contentTypeLabel = "مقال",
   seriesLabel = "—",
   categoryLabel = "—",
@@ -157,6 +171,8 @@ export default function TopicPublishChecklistPanel({
       category: categoryLabel,
       series: seriesLabel,
       publishedAt: publishedAt?.slice(0, 10) ?? "",
+      published: status === "published",
+      featured,
       showTitle: initialDisplay?.title !== false,
       showImage: initialDisplay?.image !== false,
       showExcerpt: initialDisplay?.excerpt !== false,
@@ -168,6 +184,8 @@ export default function TopicPublishChecklistPanel({
       categoryLabel,
       seriesLabel,
       publishedAt,
+      status,
+      featured,
       initialDisplay,
     ],
   );
@@ -220,6 +238,16 @@ export default function TopicPublishChecklistPanel({
       ? "يحتاج تحسين"
       : "مكتمل";
   const publishDate = dateLabel || input.publishedAt || "غير محدد";
+  const publishState = input.published === (status === "published")
+    ? statusLabel(status)
+    : input.published
+      ? "سيُنشر عند الحفظ"
+      : "سيُحفظ دون نشر";
+  const warningSummary = blockers.length
+    ? `${blockers.length} ${blockers.length === 1 ? "تنبيه مانع" : "تنبيهات مانعة"}`
+    : improvements.length
+      ? `${improvements.length} ${improvements.length === 1 ? "تحسين اختياري" : "تحسينات اختيارية"}`
+      : "لا توجد تحذيرات";
   const cardClassName = "flex h-full min-h-0 min-w-0 flex-col rounded-2xl bg-black/20 p-4";
 
   return (
@@ -228,6 +256,31 @@ export default function TopicPublishChecklistPanel({
       data-topic-publish-review
       data-topic-publish-review-presentation="embedded"
     >
+      <section
+        className="rounded-2xl border border-white/10 bg-black/20 p-4"
+        data-topic-publish-review-overview
+      >
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-white">ملخص المراجعة</h3>
+            <p className="mt-1 text-xs leading-6 text-white/42">
+              لقطة عرض فقط للحالة الحالية والقرار المتوقع بعد الحفظ.
+            </p>
+          </div>
+          <span className="rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] px-3 py-1.5 text-xs font-semibold text-[#F2D99B]">
+            جاهزية {readiness}%
+          </span>
+        </div>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ReviewMetric label="حالة النشر" value={publishState} />
+          <ReviewMetric label="الحالة المميزة" value={input.featured ? "مميز" : "غير مميز"} />
+          <ReviewMetric label="تاريخ النشر" value={publishDate} />
+          <ReviewMetric label="آخر تحديث" value={formatAuditTimestamp(updatedAt)} />
+          <ReviewMetric label="نتيجة المراجعة" value={`${readiness}% جاهز`} />
+          <ReviewMetric label="التحذيرات" value={warningSummary} tone={blockers.length ? "danger" : improvements.length ? "gold" : "success"} />
+        </dl>
+      </section>
+
       <div
         className="grid gap-4 lg:grid-cols-2"
         data-topic-publish-review-grid
@@ -389,6 +442,31 @@ function Summary({ label, value }: { label: string; value: string }) {
     <div className="min-w-0 rounded-xl border border-white/10 bg-black/20 p-3">
       <dt className="text-xs text-white/35">{label}</dt>
       <dd className="mt-1 break-words text-white/70">{value || "—"}</dd>
+    </div>
+  );
+}
+
+function ReviewMetric({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "danger" | "gold" | "success";
+}) {
+  const valueClassName =
+    tone === "danger"
+      ? "text-red-200"
+      : tone === "gold"
+        ? "text-[#F2D99B]"
+        : tone === "success"
+          ? "text-emerald-200"
+          : "text-white/76";
+  return (
+    <div className="min-w-0 rounded-xl border border-white/10 bg-[#080B10]/72 p-3">
+      <dt className="text-xs text-white/35">{label}</dt>
+      <dd className={`mt-1 break-words text-sm font-semibold leading-6 ${valueClassName}`}>{value}</dd>
     </div>
   );
 }

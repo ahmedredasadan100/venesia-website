@@ -1,4 +1,8 @@
-import { AdminActionButton, AdminPageContextHeader } from "../../../../components/admin/ui";
+import {
+  AdminActionButton,
+  AdminPageContextHeader,
+  AdminPageExperience,
+} from "../../../../components/admin/ui";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { loadEmptyProjectEntry } from "../../../../lib/admin/projects/project-entry-data";
 import type { ProjectType } from "../../../../lib/admin/projects/project-entry-contract";
@@ -18,7 +22,7 @@ export default async function NewProjectPage({
   const listPath = type === "commercial" ? "/admin/projects/commercial" : "/admin/projects/residential";
 
   return (
-    <main className="space-y-5" dir="rtl">
+    <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
         eyebrow="إدارة المشاريع"
         title="إضافة مشروع جديد"
@@ -26,6 +30,6 @@ export default async function NewProjectPage({
         actions={<AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>}
       />
       <ProjectEditForm key={`${type}-new`} bundle={bundle} />
-    </main>
+    </AdminPageExperience>
   );
 }

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
-import AdminModuleTabs from "../../../../components/admin/page-blocks/AdminModuleTabs";
+import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
 import {
   AdminActionButton,
   AdminCard,

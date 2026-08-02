@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-7";
+
 type AdminFormLayoutProps = {
   children: ReactNode;
   aside?: ReactNode;

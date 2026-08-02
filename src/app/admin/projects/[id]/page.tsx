@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
 
 import AdminNotice from "../../../../components/admin/AdminNotice";
-import { AdminActionButton, AdminPageContextHeader } from "../../../../components/admin/ui";
+import {
+  AdminActionButton,
+  AdminPageContextHeader,
+  AdminPageExperience,
+} from "../../../../components/admin/ui";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import {
   loadProjectEntry,
@@ -26,7 +30,7 @@ export default async function ProjectEditPage({
   } catch (error) {
     if (!(error instanceof ProjectEntrySchemaUnavailableError)) throw error;
     return (
-      <main className="space-y-5" dir="rtl">
+      <AdminPageExperience dir="rtl" state="error">
         <AdminPageContextHeader
           eyebrow="إدارة المشاريع"
           title="تعذر فتح محرر المشروع"
@@ -38,7 +42,7 @@ export default async function ProjectEditPage({
           title="ترحيل قاعدة البيانات الجديد غير مطبق"
           message={error.message}
         />
-      </main>
+      </AdminPageExperience>
     );
   }
 
@@ -47,7 +51,7 @@ export default async function ProjectEditPage({
   const listPath = project.type === "commercial" ? "/admin/projects/commercial" : "/admin/projects/residential";
 
   return (
-    <main className="space-y-5" dir="rtl">
+    <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
         eyebrow="إدارة المشاريع"
         title={project.arabic_name || project.english_name || "تعديل المشروع"}
@@ -55,6 +59,6 @@ export default async function ProjectEditPage({
         actions={<AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>}
       />
       <ProjectEditForm key={bundle.project.id ?? `project-${id}`} bundle={bundle} />
-    </main>
+    </AdminPageExperience>
   );
 }

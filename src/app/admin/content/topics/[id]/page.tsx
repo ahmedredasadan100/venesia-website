@@ -6,7 +6,11 @@ import ArticleEditor, {
   type ArticleEditorSeries,
   type ArticleEditorTopic,
 } from "../../../../../components/admin/content/editors/ArticleEditor";
-import { AdminActionButton, AdminPageContextHeader } from "../../../../../components/admin/ui";
+import {
+  AdminActionButton,
+  AdminPageContextHeader,
+  AdminPageExperience,
+} from "../../../../../components/admin/ui";
 import {
   buildAdminCategoryTree,
   flattenAdminCategoryTree,
@@ -115,7 +119,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
   );
 
   return (
-    <main className="space-y-7">
+    <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
         eyebrow="UNIFIED CONTENT ENGINE"
         title="تعديل موضوع"
@@ -172,6 +176,6 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
           focus_keyword: topic.focus_keyword,
         }}
       />
-    </main>
+    </AdminPageExperience>
   );
 }

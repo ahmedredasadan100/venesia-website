@@ -6,9 +6,12 @@ import {
   AdminActionButton,
   AdminFormField,
   AdminFormLayout,
-  AdminFormSelect,
+  AdminFormListboxSelect,
   AdminFormSection,
+  AdminFormSwitch,
   AdminStickyFormBar,
+  ADMIN_FORM_STACK_CLASS_NAME,
+  adminFormFieldClassName,
 } from "../../../ui";
 import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import TopicMarkdownEditor from "../article/TopicMarkdownEditor";
@@ -60,6 +63,13 @@ type MediaContentFormProps = {
 };
 
 const DEFAULT_CONTENT = "# عنوان المحتوى\n\nابدأ كتابة المحتوى هنا...\n\n## عنوان فرعي\n\nاكتب الفقرة هنا...";
+
+const MEDIA_STATUS_OPTIONS = [
+  { value: "draft", label: "مسودة" },
+  { value: "published", label: "منشور" },
+  { value: "unpublished", label: "مخفي" },
+  { value: "archived", label: "أرشيف" },
+] as const;
 
 function getVideoDefaults(payload?: MediaTopicPayload | null) {
   if (!payload || payload.kind !== "video") {
@@ -122,6 +132,27 @@ export default function MediaContentForm({
   const videoDefaults = getVideoDefaults(values?.media_payload);
   const galleryDefaults = getGalleryDefaults(values?.media_payload);
   const selectedCategory = categories.find((category) => String(category.id) === selectedCategoryId);
+  const categoryOptions = categories.map((category) => ({
+    value: String(category.id),
+    label: `${"— ".repeat(category.depth)}${category.name}${!category.is_active ? " (غير مفعل)" : ""}`,
+    disabled: !category.is_active && category.id !== values?.category_id,
+  }));
+  const seriesOptions = [
+    { value: "", label: "بدون سلسلة" },
+    ...series
+      .filter(
+        (item) =>
+          (item.status === "published" && !item.deleted_at) ||
+          item.id === values?.series_id,
+      )
+      .map((item) => ({
+        value: String(item.id),
+        label: item.name,
+        disabled:
+          (item.status !== "published" || Boolean(item.deleted_at)) &&
+          item.id !== values?.series_id,
+      })),
+  ];
   const formId = mode === "edit" ? "media-content-form" : "media-content-form-create";
   const publishInitial =
     mediaRowToPublishInput({
@@ -150,7 +181,7 @@ export default function MediaContentForm({
     <>
       {mode === "create" ? <ContentTemplatePicker target="media" formId={formId} /> : null}
 
-      <form id={formId} action={action} className="space-y-7" noValidate>
+      <form id={formId} action={action} className={ADMIN_FORM_STACK_CLASS_NAME} noValidate>
       {values?.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <input type="hidden" name="content_type" value={contentType} />
 
@@ -161,85 +192,55 @@ export default function MediaContentForm({
               <div className="space-y-4">
                 <SectionTypeHint contentType={contentType} />
 
-                <AdminFormField
+                <AdminFormListboxSelect
+                  name="category_id"
+                  focusTargetId="media-category"
                   label="التصنيف"
                   hint="التصنيف تنظيمي ومستقل عن نوع المحرر، وتأتي الخيارات من قاعدة البيانات."
+                  options={categoryOptions}
+                  value={selectedCategoryId}
+                  onChange={setSelectedCategoryId}
+                  placeholder="اختر التصنيف"
                   required
-                >
-                  <AdminFormSelect
-                    name="category_id"
-                    required
-                    value={selectedCategoryId}
-                    onChange={(event) => setSelectedCategoryId(event.currentTarget.value)}
-                  >
-                    <option value="">اختر التصنيف</option>
-                    {categories.map((category) => (
-                      <option
-                        key={category.id}
-                        value={category.id}
-                        disabled={!category.is_active && category.id !== values?.category_id}
-                      >
-                        {`${"— ".repeat(category.depth)}${category.name}${!category.is_active ? " (غير مفعل)" : ""}`}
-                      </option>
-                    ))}
-                  </AdminFormSelect>
-                </AdminFormField>
+                  searchable={categoryOptions.length > 7}
+                  searchPlaceholder="ابحث في التصنيفات"
+                  emptyMessage="لا توجد تصنيفات متاحة."
+                />
 
-                <AdminFormField label="السلسلة" hint="اختياري — ترتبط السلاسل بالمحتوى من قاعدة البيانات.">
-                  <AdminFormSelect name="series_id" defaultValue={values?.series_id ?? ""}>
-                    <option value="">بدون سلسلة</option>
-                    {series
-                      .filter(
-                        (item) =>
-                          (item.status === "published" && !item.deleted_at) ||
-                          item.id === values?.series_id,
-                      )
-                      .map((item) => (
-                        <option
-                          key={item.id}
-                          value={item.id}
-                          disabled={
-                            (item.status !== "published" || Boolean(item.deleted_at)) &&
-                            item.id !== values?.series_id
-                          }
-                        >
-                          {item.name}
-                        </option>
-                      ))}
-                  </AdminFormSelect>
-                </AdminFormField>
+                <AdminFormListboxSelect
+                  name="series_id"
+                  focusTargetId="media-series"
+                  label="السلسلة"
+                  hint="اختياري — ترتبط السلاسل بالمحتوى من قاعدة البيانات."
+                  options={seriesOptions}
+                  defaultValue={values?.series_id ? String(values.series_id) : ""}
+                  placeholder="بدون سلسلة"
+                  searchable={seriesOptions.length > 8}
+                  searchPlaceholder="ابحث في السلاسل"
+                />
 
-                <AdminFormField
+                <AdminFormListboxSelect
+                  name="status"
+                  focusTargetId="media-status"
                   label="الحالة"
                   hint="مسودة: غير مرئية. منشور: متاح للعرض. مخفي: محفوظ لكن غير معروض. أرشيف: غير نشط."
-                >
-                  <AdminFormSelect
-                    name="status"
-                    defaultValue={values?.status ?? "draft"}
-                  >
-                    <option value="draft">مسودة</option>
-                    <option value="published">منشور</option>
-                    <option value="unpublished">مخفي</option>
-                    <option value="archived">أرشيف</option>
-                  </AdminFormSelect>
-                </AdminFormField>
+                  options={MEDIA_STATUS_OPTIONS}
+                  defaultValue={values?.status ?? "draft"}
+                />
 
-                <AdminFormField
-                  label="محتوى مميز"
-                  hint="يُبرز هذا المحتوى في مواقع بارزة داخل المركز الإعلامي."
-                  className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-white/70">تفعيل التمييز</span>
-                    <input
-                      type="checkbox"
-                      name="is_featured"
-                      defaultChecked={Boolean(values?.is_featured)}
-                      aria-label="تفعيل التمييز"
-                      className="h-4 w-4 accent-[#D8B87A]"
-                    />
-                  </div>
-                </AdminFormField>
+                <AdminFormSwitch
+                  name="is_featured"
+                  defaultChecked={Boolean(values?.is_featured)}
+                  surface
+                  label={
+                    <>
+                      <span className="block text-sm font-medium text-white/70">محتوى مميز</span>
+                      <span className="mt-1 block text-xs text-white/42">
+                        يُبرز هذا المحتوى في مواقع بارزة داخل المركز الإعلامي.
+                      </span>
+                    </>
+                  }
+                />
               </div>
             </AdminFormSection>
 
@@ -261,16 +262,15 @@ export default function MediaContentForm({
 
               {showTextFields ? (
                 <div className="mt-4 space-y-3">
-                  <label className="block">
-                    <span className="text-sm font-medium text-white/70">وصف الصورة Alt Text</span>
+                  <AdminFormField label="وصف الصورة Alt Text">
                     <input
                       id="media-image-alt"
                       name="image_alt"
                       defaultValue={values?.image_alt ?? ""}
                       placeholder="وصف مختصر للصورة يساعد SEO وإتاحة الوصول"
-                      className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+                      className={adminFormFieldClassName()}
                     />
-                  </label>
+                  </AdminFormField>
                   <AdminMediaAltWarning formId={formId} requiredForPublish={showTextFields} />
                 </div>
               ) : null}
@@ -292,7 +292,7 @@ export default function MediaContentForm({
                 required
                 defaultValue={values?.title ?? ""}
                 placeholder="مثال: Venesia تطلق بيانًا صحفيًا جديدًا"
-                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-xl font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+                className={adminFormFieldClassName("py-4 text-xl font-semibold")}
               />
             </AdminFormField>
 
@@ -304,7 +304,7 @@ export default function MediaContentForm({
                 rows={4}
                 defaultValue={values?.excerpt ?? ""}
                 placeholder="ملخص قصير يظهر في قائمة المركز الإعلامي وبطاقات المحتوى..."
-                className="w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+                className={adminFormFieldClassName("resize-none leading-7")}
               />
             </AdminFormField>
           </div>
@@ -369,7 +369,7 @@ export default function MediaContentForm({
               name="seo_title"
               defaultValue={values?.seo_title ?? ""}
               placeholder="عنوان يظهر في نتائج البحث..."
-                      className="w-full scroll-mt-24 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+              className={adminFormFieldClassName("scroll-mt-24")}
             />
           </AdminFormField>
 
@@ -378,7 +378,7 @@ export default function MediaContentForm({
               name="focus_keyword"
               defaultValue={values?.focus_keyword ?? ""}
               placeholder="الكلمة الرئيسية المستهدفة"
-              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+              className={adminFormFieldClassName()}
             />
           </AdminFormField>
         </div>
@@ -389,7 +389,7 @@ export default function MediaContentForm({
             rows={4}
             defaultValue={values?.seo_description ?? ""}
             placeholder="وصف مختصر يظهر في نتائج البحث..."
-            className="w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
+            className={adminFormFieldClassName("resize-none leading-7")}
           />
         </AdminFormField>
       </AdminFormSection>
@@ -405,13 +405,12 @@ export default function MediaContentForm({
         <AdminActionButton href={returnPath} variant="dark">
           {mode === "edit" ? "رجوع للقائمة" : "إلغاء والعودة للقائمة"}
         </AdminActionButton>
-        <button
+        <AdminActionButton
           type="submit"
-          aria-label={mode === "edit" ? "حفظ التعديلات" : "إنشاء المحتوى"}
-          className="rounded-full bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
+          variant="primary"
         >
           {mode === "edit" ? "حفظ التعديلات" : "إنشاء المحتوى"}
-        </button>
+        </AdminActionButton>
       </AdminStickyFormBar>
     </form>
     </>

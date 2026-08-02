@@ -81,9 +81,10 @@ function validate(
   );
 }
 
-const [runtime, formContract, modal, client, actions] = await Promise.all([
+const [runtime, formContract, formListbox, modal, client, actions] = await Promise.all([
   read("src/components/admin/ui/AdminFormRuntime.tsx"),
   read("src/lib/admin/form-runtime.ts"),
+  read("src/components/admin/ui/AdminFormListboxSelect.tsx"),
   read("src/app/admin/seo/redirects/RedirectFormModal.tsx"),
   read("src/app/admin/seo/redirects/RedirectsClient.tsx"),
   read("src/app/admin/seo/redirects/actions.ts"),
@@ -125,16 +126,18 @@ check(
   "Redirect modal delegates its only create/edit form lifecycle to AdminFormRuntime",
 );
 check(
-  [
-    "source_path",
-    "destination_path",
-    "redirect_type",
-    "status",
-  ].every(
+  ["source_path", "destination_path"].every(
     (field) =>
       modal.includes(`<AdminFormError name="${field}"`) &&
       modal.includes(`${field}-error`),
-  ),
+  ) &&
+    ["redirect_type", "status"].every(
+      (field) =>
+        modal.includes(`focusTargetId="${field}"`) &&
+        modal.includes(`error={fieldErrors.${field}?.[0] ?? null}`),
+    ) &&
+    formListbox.includes('role="alert"') &&
+    formListbox.includes('triggerId={focusTargetId}'),
   "Redirect validation fields expose visible errors and focusable controls",
 );
 check(

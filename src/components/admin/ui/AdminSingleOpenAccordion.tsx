@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useId,
   useRef,
   useState,
@@ -11,6 +12,7 @@ import {
 export type AdminSingleOpenAccordionItem = {
   id: string;
   label: ReactNode;
+  description?: ReactNode;
   content: ReactNode;
 };
 
@@ -20,6 +22,8 @@ export type AdminSingleOpenAccordionProps = {
   ariaLabel: string;
   className?: string;
   dir?: "rtl" | "ltr";
+  /** Opens the disclosure containing a requested focus target before shared navigation focuses it. */
+  navigationEventName?: string;
 };
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -44,6 +48,7 @@ export default function AdminSingleOpenAccordion({
   ariaLabel,
   className = "",
   dir = "rtl",
+  navigationEventName,
 }: AdminSingleOpenAccordionProps) {
   const generatedId = useId();
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -55,6 +60,22 @@ export default function AdminSingleOpenAccordion({
   const resolvedOpenId = openId !== null && items.some((item) => item.id === openId)
     ? openId
     : null;
+
+  useEffect(() => {
+    if (!navigationEventName) return;
+    const revealTarget = (event: Event) => {
+      const detail = (event as CustomEvent<{ targetId?: string }>).detail;
+      const targetId = typeof detail === "object" ? detail?.targetId : undefined;
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      const panel = target?.closest<HTMLElement>("[data-admin-accordion-panel]");
+      const itemId = panel?.dataset.adminAccordionPanel;
+      if (!itemId || !items.some((item) => item.id === itemId)) return;
+      setOpenId(itemId);
+    };
+    window.addEventListener(navigationEventName, revealTarget);
+    return () => window.removeEventListener(navigationEventName, revealTarget);
+  }, [items, navigationEventName]);
 
   function focusItem(itemId: string) {
     triggerRefs.current.get(itemId)?.focus();
@@ -119,7 +140,14 @@ export default function AdminSingleOpenAccordion({
                     : "text-white/68 hover:bg-white/[0.035] hover:text-white"
                 }`}
               >
-                <span className="min-w-0">{item.label}</span>
+                <span className="min-w-0">
+                  <span className="block">{item.label}</span>
+                  {item.description ? (
+                    <span className={`mt-1 block text-xs font-normal leading-5 ${open ? "text-white/48" : "text-white/36"}`}>
+                      {item.description}
+                    </span>
+                  ) : null}
+                </span>
                 <ChevronIcon open={open} />
               </button>
             </h3>

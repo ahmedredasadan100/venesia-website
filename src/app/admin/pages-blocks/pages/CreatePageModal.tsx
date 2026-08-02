@@ -6,11 +6,11 @@ import { PlusIcon } from "../../../../components/admin/AdminRowActions";
 import {
   ADMIN_FORM,
   AdminActionButton,
+  AdminFormField,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   VenesiaModal,
   adminFormFieldClassName,
-  adminFormLabelClassName,
 } from "../../../../components/admin/ui";
 import { checkPagePathAvailable, createPage } from "./actions";
 
@@ -99,8 +99,7 @@ export default function CreatePageModal() {
             </p>
           ) : null}
 
-          <label className={adminFormLabelClassName()}>
-            اسم الصفحة
+          <AdminFormField label="اسم الصفحة" required>
             <input
               name="title"
               value={titleValue}
@@ -113,10 +112,19 @@ export default function CreatePageModal() {
               placeholder="مثال: رؤيتنا"
               disabled={isPending}
             />
-          </label>
+          </AdminFormField>
 
-          <label className={adminFormLabelClassName()}>
-            مسار الصفحة
+          <AdminFormField
+            label="مسار الصفحة"
+            required
+            hint={
+              <>
+                اكتب المسار الذي ستظهر عليه الصفحة لاحقًا، مثل: {" "}
+                <span className="font-en text-white/55">/our-vision</span>
+              </>
+            }
+            error={pathError}
+          >
             <input
               name="path"
               value={pathValue}
@@ -130,12 +138,7 @@ export default function CreatePageModal() {
               placeholder="/our-vision"
               disabled={isPending}
             />
-            <span className="mt-2 block text-xs leading-6 text-white/45">
-              اكتب المسار الذي ستظهر عليه الصفحة لاحقًا، مثل:{" "}
-              <span className="font-en text-white/55">/our-vision</span>
-            </span>
-            {pathError ? <span className="mt-2 block text-sm text-red-300">{pathError}</span> : null}
-          </label>
+          </AdminFormField>
         </form>
       </VenesiaModal>
     </>

@@ -2,6 +2,8 @@ import {
   AdminActionButton,
   AdminFormActions,
   AdminPageContextHeader,
+  AdminPageExperience,
+  ADMIN_FORM_STACK_CLASS_NAME,
 } from "../../ui";
 import AdminFormRuntime from "../../ui/AdminFormRuntime";
 import SeoPanel from "../../SeoPanel";
@@ -35,7 +37,7 @@ export default function ArticleCreateEditor({
   const publishInput = topicRowToPublishInput({ content: defaultContent });
 
   return (
-    <main className="space-y-7">
+    <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
         eyebrow="CREATE TOPIC"
         title="إضافة موضوع جديد"
@@ -67,24 +69,33 @@ export default function ArticleCreateEditor({
         closeHref="/admin/content/topics"
         navigation={TOPIC_FORM_NAVIGATION}
         formId="topic-create-form"
-        className="space-y-7"
+        className={ADMIN_FORM_STACK_CLASS_NAME}
       >
         <input type="hidden" name="content_type" value="article" />
         <TopicEditTabs
           tabs={[
             {
               id: "basic",
-              label: "المحتوى الأساسي",
+              navigationLabel: "المحتوى",
+              sectionHeading: "بيانات الموضوع والمحتوى",
+              sectionDescription: "اكتب المحتوى الأساسي واضبط التصنيف والصورة وإعدادات الظهور.",
+              icon: "content",
               content: <TopicBasicDataPanel formId="topic-create-form" contentType="article" contentTypeMode="create" categoryGroups={categoryGroups} series={safeSeries} contentEditor={<TopicMarkdownEditor defaultValue={defaultContent} variant="compact" />} />,
             },
             {
               id: "faq",
-              label: "الأسئلة الشائعة",
+              navigationLabel: "الأسئلة",
+              sectionHeading: "الأسئلة الشائعة وإعدادات الظهور",
+              sectionDescription: "أضف الأسئلة والأجوبة وحدد طريقة ظهور القسم في صفحة الموضوع.",
+              icon: "faq",
               content: <FaqEditor />,
             },
             {
               id: "seo",
-              label: "SEO والتحليل",
+              navigationLabel: "SEO",
+              sectionHeading: "تحسين محركات البحث والمشاركة",
+              sectionDescription: "راجع الأساسيات والمشاركة الاجتماعية والتحليل من عرض واحد منظم.",
+              icon: "seo",
               content: (
                 <SeoPanel
                   title=""
@@ -107,7 +118,10 @@ export default function ArticleCreateEditor({
             },
             {
               id: "publish",
-              label: "المراجعة والنشر",
+              navigationLabel: "المراجعة",
+              sectionHeading: "مراجعة الجاهزية والنشر",
+              sectionDescription: "راجع الحالة والملخص والتحذيرات قبل حفظ قرار النشر.",
+              icon: "publish",
               content: (
                 <TopicPublishingOptions status="draft">
                   <TopicPublishChecklistPanel
@@ -122,6 +136,6 @@ export default function ArticleCreateEditor({
         />
         <AdminFormActions />
       </AdminFormRuntime>
-    </main>
+    </AdminPageExperience>
   );
 }

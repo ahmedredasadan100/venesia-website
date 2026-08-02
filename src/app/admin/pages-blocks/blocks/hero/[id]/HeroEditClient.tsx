@@ -3,7 +3,7 @@
 import AdminNotice from "../../../../../../components/admin/AdminNotice";
 import AdminRichTextEditor from "../../../../../../components/admin/AdminRichTextEditor";
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
-import AdminModuleTabs from "../../../../../../components/admin/page-blocks/AdminModuleTabs";
+import AdminModuleTabs from "../../../../../../components/admin/ui/AdminModuleTabs";
 import ModuleCrossPageUsageBanner from "../../../../../../components/admin/page-blocks/ModuleCrossPageUsageBanner";
 import ModulePageAssignmentsField from "../../../../../../components/admin/page-blocks/ModulePageAssignmentsField";
 import { AdminActionButton, AdminLinkField, AdminPageContextHeader } from "../../../../../../components/admin/ui";

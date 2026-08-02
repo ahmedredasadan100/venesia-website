@@ -9,6 +9,7 @@ const review = read("src/components/admin/content-workflow/TopicPublishChecklist
 const publishingOptions = read("src/components/admin/content/editors/article/TopicPublishingOptions.tsx");
 const create = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
 const edit = read("src/components/admin/content/editors/ArticleEditor.tsx");
+const basicPanel = read("src/components/admin/content/editors/article/TopicBasicDataPanel.tsx");
 const helper = read("src/app/admin/content/topics/article-actions/helpers.ts");
 const publicPage = read("src/app/(site)/topics/[slug]/page.tsx");
 const migration = read("sql/migrations/20260721143000_topics_page_display_settings.sql");
@@ -18,8 +19,11 @@ const sharedSwitch = read("src/components/admin/ui/AdminFormSwitch.tsx");
 const previewCapability = read("src/lib/admin/interaction-system/entity-preview-capability.ts");
 const contentPreviewCapability = read("src/lib/admin/content/entity-preview-capabilities.ts");
 const previewActions = read("src/components/admin/ui/AdminEntityPreviewActions.tsx");
-const tabsOwner = read("src/components/admin/page-blocks/AdminModuleTabs.tsx");
+const tabsOwner = read("src/components/admin/ui/AdminModuleTabs.tsx");
 const topicEditTabs = read("src/components/admin/content/editors/article/TopicEditTabs.tsx");
+const sectionHeadingStart = tabsOwner.indexOf("{tab.sectionHeading ? (");
+const sectionHeadingEnd = tabsOwner.indexOf("{tab.content}", sectionHeadingStart);
+const sectionHeadingRender = tabsOwner.slice(sectionHeadingStart, sectionHeadingEnd);
 
 let passed = 0;
 function check(label, condition) { assert.ok(condition, label); passed += 1; console.log(`PASS ${label}`); }
@@ -91,13 +95,73 @@ check(
     tabsOwner.match(/✓/g)?.length === 1,
 );
 check(
-  "one Topic tabs adapter makes the editor preset mandatory for Create and Edit",
-  topicEditTabs.includes("TopicEditorTabIcon") &&
+  "one Topic tabs adapter delegates icon and section-heading presentation to the shared owner",
+  !topicEditTabs.includes("TopicEditorTabIcon") &&
+    !topicEditTabs.includes("<svg") &&
+    topicEditTabs.includes("AdminModuleTabIconName") &&
+    topicEditTabs.includes("navigationLabel: string") &&
+    topicEditTabs.includes("sectionHeading: string") &&
     topicEditTabs.includes('variant="editor"') &&
-    topicEditTabs.includes("const configuredTabs = tabs.map") &&
+    topicEditTabs.includes("tabs={tabs}") &&
     !topicEditTabs.includes("variant?:") &&
     !topicEditTabs.includes("segmented") &&
-    [create, edit].every((source) => source.match(/<TopicEditTabs\b/g)?.length === 1 && !source.includes('variant="editor"')),
+    [create, edit].every((source) =>
+      source.match(/<TopicEditTabs\b/g)?.length === 1 &&
+      !source.includes('variant="editor"') &&
+      ["المحتوى", "الأسئلة", "SEO", "المراجعة"].every((label) => source.includes(`navigationLabel: "${label}"`)) &&
+      ["content", "faq", "seo", "publish"].every((icon) => source.includes(`icon: "${icon}"`)),
+    ),
+);
+check(
+  "shared tabs owner separates compact navigation from descriptive panel headings and owns semantic icons",
+  tabsOwner.includes("AdminModuleTabIconName") &&
+    tabsOwner.includes("sectionHeading?: ReactNode") &&
+    tabsOwner.includes("sectionDescription?: ReactNode") &&
+    tabsOwner.includes('variant = "editor"') &&
+    tabsOwner.includes('data-admin-tab-section-heading={tab.id}') &&
+    tabsOwner.includes("<AdminModuleTabIcon name={icon}") &&
+    tabsOwner.includes('const icon = tab.icon ?? "section"'),
+);
+check(
+  "shared tab content header renders one balanced icon, heading, and description without repeating the navigation label",
+  sectionHeadingStart >= 0 &&
+    sectionHeadingEnd > sectionHeadingStart &&
+    sectionHeadingRender.includes("min-h-[84px]") &&
+    sectionHeadingRender.includes("items-center gap-3") &&
+    sectionHeadingRender.includes("overflow-hidden rounded-2xl border border-[#D8B87A]/20") &&
+    sectionHeadingRender.includes("bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))]") &&
+    sectionHeadingRender.includes("shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)]") &&
+    sectionHeadingRender.includes("px-4 py-3") &&
+    sectionHeadingRender.includes("sm:gap-4 sm:px-5") &&
+    sectionHeadingRender.includes("inline-flex size-11 shrink-0 items-center justify-center") &&
+    sectionHeadingRender.includes("shadow-[inset_0_0_14px_rgba(216,184,122,0.08)]") &&
+    sectionHeadingRender.includes("sm:size-12 [&>svg]:size-5") &&
+    sectionHeadingRender.match(/data-admin-tab-section-accent/g)?.length === 1 &&
+    sectionHeadingRender.includes("h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent sm:h-9") &&
+    sectionHeadingRender.includes('className="min-w-0 flex-1"') &&
+    sectionHeadingRender.includes('className="text-lg font-semibold leading-6 text-white sm:text-xl sm:leading-7"') &&
+    sectionHeadingRender.includes('className="mt-1 block max-w-3xl text-sm leading-5 text-white/45 sm:leading-6"') &&
+    !sectionHeadingRender.includes("tab.navigationLabel") &&
+    !sectionHeadingRender.includes("tab.label") &&
+    !sectionHeadingRender.includes("items-start") &&
+    !sectionHeadingRender.includes("uppercase") &&
+    !tabsOwner.includes("sectionPresentation"),
+);
+check(
+  "Topic tab content preserves true subsections without repeating shared section headings",
+  !basicPanel.includes("بيانات الموضوع والمحتوى") &&
+    !faq.includes("الأسئلة الشائعة وإعدادات الظهور") &&
+    !seo.includes("تحسين محركات البحث والمشاركة") &&
+    !seo.includes("بيانات SEO الخاصة بالموضوع") &&
+    !seo.includes("اترك أي Override اختياري فارغًا لاستخدام إعدادات SEO العامة للموقع.") &&
+    !publishingOptions.includes("مراجعة الجاهزية والنشر") &&
+    !publishingOptions.includes("إجراءات النشر") &&
+    !publishingOptions.includes("تُطبّق حالة النشر مع باقي بيانات الموضوع عند الضغط على حفظ.") &&
+    !review.includes("مراجعة الجاهزية والنشر") &&
+    publishingOptions.includes("الحالة: {status}") &&
+    ["إعدادات العرض داخل صفحة الموضوع", "صورة الموضوع", "الأسئلة الشائعة (FAQ)", "إعدادات العرض", "معاينة الشكل في الصفحة", "ملخص المراجعة"].every(
+      (subsection) => [basicPanel, faq, publishingOptions, review].some((source) => source.includes(subsection)),
+    ),
 );
 check("retired Topic-only presentation flags cannot split Create from Edit", ![create, edit, topicEditTabs, seo, publishingOptions, review].some((source) => source.includes('presentation?: "default"') || source.includes('presentation === "editor"') || source.includes('presentation === "embedded"') || source.includes('presentation === "integrated"')));
 check(
