@@ -102,6 +102,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     classification: "shared_adopter",
     sourceFiles: [
       "src/app/admin/projects/ProjectEditForm.tsx",
+      "src/components/admin/projects/ProjectPublishChecklistPanel.tsx",
     ],
     surfaces: [
       "residential:create",
@@ -110,7 +111,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "commercial:edit",
     ],
     rationale:
-      "One Project form delegates create and edit lifecycle ownership, dirty protection, feedback, validation focus, and Create-to-Edit handoff to AdminFormRuntime.",
+      "One Project form delegates create and edit lifecycle ownership, dirty protection, feedback, validation focus, Create-to-Edit handoff, and live review snapshots to AdminFormRuntime.",
   },
   {
     id: "pages-quick-create",

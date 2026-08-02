@@ -55,6 +55,10 @@ const PROJECT_ROOT_SELECT = [
   "robots_follow",
   "og_image",
   "og_image_alt",
+  "publication_status",
+  "published_at",
+  "published_by",
+  "featured",
   "created_at",
   "updated_at",
 ].join(",");
@@ -293,6 +297,14 @@ export async function loadProjectEntry(
       robots_follow: booleanOrNull(root.robots_follow),
       og_image: stringValue(root.og_image),
       og_image_alt: stringValue(root.og_image_alt),
+      publication_status:
+        root.publication_status === "published" ||
+        root.publication_status === "unpublished"
+          ? root.publication_status
+          : "draft",
+      published_at: stringValue(root.published_at) || null,
+      published_by: numberOrNull(root.published_by),
+      featured: root.featured === true,
       created_at: stringValue(root.created_at) || null,
       updated_at: stringValue(root.updated_at) || null,
     },

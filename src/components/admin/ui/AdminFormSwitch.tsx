@@ -40,6 +40,8 @@ export type AdminFormSwitchProps = {
   disabled?: boolean;
   surface?: boolean;
   value?: string;
+  /** Submitted before the checkbox so FormData.getAll(name).at(-1) is authoritative. */
+  uncheckedValue?: string;
   className?: string;
   describedBy?: string;
   wrapLabel?: boolean;
@@ -55,12 +57,16 @@ export default function AdminFormSwitch({
   disabled = false,
   surface = false,
   value,
+  uncheckedValue,
   className = "",
   describedBy,
   wrapLabel = false,
 }: AdminFormSwitchProps) {
   const switchControl = (
     <span className="relative inline-flex h-5 w-9 shrink-0">
+      {uncheckedValue !== undefined ? (
+        <input type="hidden" name={name} value={uncheckedValue} />
+      ) : null}
       <input
         type="checkbox"
         role="switch"

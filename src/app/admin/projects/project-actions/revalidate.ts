@@ -16,6 +16,8 @@ export function revalidateProjectPaths(
   if (id) revalidatePath(`/admin/projects/${id}`);
 
   revalidatePath("/projects", "page");
+  revalidatePath("/", "page");
+  revalidatePath("/sitemap.xml");
   if (slug) revalidatePath(`/projects/${slug}`, "page");
   if (previousSlug && previousSlug !== slug) revalidatePath(`/projects/${previousSlug}`, "page");
 }

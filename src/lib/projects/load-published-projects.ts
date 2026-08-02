@@ -3,6 +3,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
+import type { ProjectPublicationStatus } from "../admin/projects/project-publishing-capability";
 import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
 import {
@@ -17,6 +18,7 @@ import { getProjectStats, getProjectsByFilter } from "./public-helpers";
 
 const PUBLIC_PROJECT_COLUMNS = [
   "id", "type", "arabic_name", "english_name", "slug", "featured",
+  "publication_status", "published_at",
   "general_description", "short_description",
   "image", "image_alt", "hero_image", "hero_image_alt",
   "small_box_image", "small_box_image_alt",
@@ -46,6 +48,14 @@ export class PublicProjectReadError extends Error {
 export type LoadProjectBySlugResult =
   | { status: "ok"; project: PublicProject }
   | { status: "invalid_slug" | "not_found"; project: null };
+
+export type LoadProjectAdminPreviewResult =
+  | {
+      status: "ok";
+      project: PublicProject;
+      publicationStatus: ProjectPublicationStatus;
+    }
+  | { status: "invalid_id" | "not_found"; project: null };
 
 function throwReadError(
   context: string,
@@ -78,10 +88,13 @@ async function loadLocationRows(projects: PublicProjectRootRow[]) {
   return (result.data ?? []) as PublicProjectChildRow[];
 }
 
-async function queryPublicProjects() {
-  const result = await getSupabaseAdmin()
+async function queryPublicProjects(featuredOnly = false) {
+  let request = getSupabaseAdmin()
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
+    .eq("publication_status", "published");
+  if (featuredOnly) request = request.eq("featured", true);
+  const result = await request
     .order("updated_at", { ascending: false })
     .order("id", { ascending: false });
 
@@ -98,40 +111,52 @@ async function queryPublicProjects() {
 }
 
 async function queryPublicProjectsCached() {
-  return unstable_cache(queryPublicProjects, ["public-projects-clean-aggregate"], {
-    revalidate: 300,
-    tags: ["projects"],
-  })();
+  return unstable_cache(
+    () => queryPublicProjects(false),
+    ["public-projects-clean-aggregate"],
+    { revalidate: 300, tags: ["projects"] },
+  )();
 }
 
-/**
- * Compatibility name retained for callers. The clean schema has no approved
- * publication/homepage flag, so the current public set is the projects table itself.
- */
 export async function loadPublishedProjects(): Promise<PublicProject[]> {
   return queryPublicProjectsCached();
 }
 
-export async function loadPublishedProjectSlugs(): Promise<string[]> {
-  return (await loadPublishedProjects()).map((project) => project.slug);
+export type PublishedProjectSitemapRow = {
+  slug: string;
+  updatedAt: string;
+};
+
+export async function loadPublishedProjectSitemapRows(): Promise<
+  PublishedProjectSitemapRow[]
+> {
+  return unstable_cache(
+    async () => {
+      const { data, error } = await getSupabaseAdmin()
+        .from("projects")
+        .select("slug,updated_at")
+        .eq("publication_status", "published")
+        .order("updated_at", { ascending: false });
+      if (error) throwReadError("Published project sitemap query failed", error);
+      return (data ?? []).map((row) => ({
+        slug: String(row.slug),
+        updatedAt: String(row.updated_at),
+      }));
+    },
+    ["published-project-sitemap-rows"],
+    { revalidate: 300, tags: ["projects"] },
+  )();
 }
 
-async function queryProjectBySlug(slug: string): Promise<LoadProjectBySlugResult> {
-  if (!PROJECT_SLUG_PATTERN.test(slug)) return { status: "invalid_slug", project: null };
+export async function loadPublishedProjectSlugs(): Promise<string[]> {
+  return (await loadPublishedProjectSitemapRows()).map((project) => project.slug);
+}
 
+async function mapLoadedProjectAggregate(
+  project: PublicProjectRootRow,
+  context: { identity: string; source: "marketing" | "track" | "admin-preview" },
+): Promise<PublicProject> {
   const supabase = getSupabaseAdmin();
-  const rootResult = await supabase
-    .from("projects")
-    .select(PUBLIC_PROJECT_COLUMNS)
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (rootResult.error) {
-    throwReadError("Public project root lookup failed", rootResult.error, { slug });
-  }
-  if (!rootResult.data) return { status: "not_found", project: null };
-
-  const project = rootResult.data as unknown as PublicProjectRootRow;
   const projectId = Number(project.id);
   const locationIds = locationIdsFromProjects([project]);
 
@@ -151,9 +176,10 @@ async function queryProjectBySlug(slug: string): Promise<LoadProjectBySlugResult
   const childResults = { locations, locationPoints, features, floorPlans, deliveryItems, media, videos };
   const failedChild = Object.entries(childResults).find(([, result]) => result.error);
   if (failedChild) {
-    throwReadError("Public project child lookup failed", failedChild[1].error, {
-      slug,
+    throwReadError("Project aggregate child lookup failed", failedChild[1].error, {
       projectId,
+      identity: context.identity,
+      source: context.source,
       relation: failedChild[0],
     });
   }
@@ -168,26 +194,31 @@ async function queryProjectBySlug(slug: string): Promise<LoadProjectBySlugResult
         .order("sort_order")
     : { data: [], error: null };
   if (details.error) {
-    throwReadError("Public project floor-plan details lookup failed", details.error, { slug, projectId });
+    throwReadError("Project aggregate floor-plan details lookup failed", details.error, {
+      projectId,
+      identity: context.identity,
+      source: context.source,
+    });
   }
 
   try {
-    return {
-      status: "ok",
-      project: mapProjectAggregateToPublicProject({
-        project,
-        locations: (locations.data ?? []) as PublicProjectChildRow[],
-        locationPoints: (locationPoints.data ?? []) as PublicProjectChildRow[],
-        features: (features.data ?? []) as PublicProjectChildRow[],
-        floorPlans: (floorPlans.data ?? []) as PublicProjectChildRow[],
-        floorPlanDetails: (details.data ?? []) as PublicProjectChildRow[],
-        deliveryItems: (deliveryItems.data ?? []) as PublicProjectChildRow[],
-        media: (media.data ?? []) as PublicProjectChildRow[],
-        videos: (videos.data ?? []) as PublicProjectChildRow[],
-      }),
-    };
+    return mapProjectAggregateToPublicProject({
+      project,
+      locations: (locations.data ?? []) as PublicProjectChildRow[],
+      locationPoints: (locationPoints.data ?? []) as PublicProjectChildRow[],
+      features: (features.data ?? []) as PublicProjectChildRow[],
+      floorPlans: (floorPlans.data ?? []) as PublicProjectChildRow[],
+      floorPlanDetails: (details.data ?? []) as PublicProjectChildRow[],
+      deliveryItems: (deliveryItems.data ?? []) as PublicProjectChildRow[],
+      media: (media.data ?? []) as PublicProjectChildRow[],
+      videos: (videos.data ?? []) as PublicProjectChildRow[],
+    });
   } catch (error) {
-    logError("Public project aggregate mapping failed", error, { slug, projectId });
+    logError("Project aggregate mapping failed", error, {
+      projectId,
+      identity: context.identity,
+      source: context.source,
+    });
     if (error instanceof PublicProjectMappingError) {
       throw new PublicProjectReadError("mapping_failed", "تعذر تجهيز بيانات المشروع للعرض.");
     }
@@ -195,23 +226,101 @@ async function queryProjectBySlug(slug: string): Promise<LoadProjectBySlugResult
   }
 }
 
+async function queryProjectBySlug(
+  slug: string,
+  source: "marketing" | "track",
+): Promise<LoadProjectBySlugResult> {
+  if (!PROJECT_SLUG_PATTERN.test(slug)) return { status: "invalid_slug", project: null };
+
+  let request = getSupabaseAdmin()
+    .from("projects")
+    .select(PUBLIC_PROJECT_COLUMNS)
+    .eq("slug", slug);
+  if (source === "marketing") {
+    request = request.eq("publication_status", "published");
+  }
+  const rootResult = await request.maybeSingle();
+
+  if (rootResult.error) {
+    throwReadError("Project root lookup failed", rootResult.error, { slug, source });
+  }
+  if (!rootResult.data) return { status: "not_found", project: null };
+
+  return {
+    status: "ok",
+    project: await mapLoadedProjectAggregate(
+      rootResult.data as unknown as PublicProjectRootRow,
+      { identity: slug, source },
+    ),
+  };
+}
+
 export const loadProjectBySlugResult = cache(async function loadProjectBySlugResult(
   slug: string,
 ): Promise<LoadProjectBySlugResult> {
   return unstable_cache(
-    async () => queryProjectBySlug(slug),
+    () => queryProjectBySlug(slug, "marketing"),
     ["public-project-clean-aggregate", slug],
     { revalidate: 300, tags: ["projects", "project"] },
   )();
 });
 
-/** Compatibility for the out-of-scope Track Your Project consumer. */
-export async function loadProjectBySlug(slug: string): Promise<PublicProject | null> {
-  return (await loadProjectBySlugResult(slug)).project;
-}
+/** Track keeps its pre-capability slug lookup semantics and is not Marketing visibility. */
+export const loadTrackProjectBySlug = cache(async function loadTrackProjectBySlug(
+  slug: string,
+): Promise<PublicProject | null> {
+  return unstable_cache(
+    () => queryProjectBySlug(slug, "track"),
+    ["track-project-clean-aggregate", slug],
+    { revalidate: 300, tags: ["projects", "project"] },
+  )().then((result) => result.project);
+});
+
+export const loadProjectForAdminPreviewResult = cache(
+  async function loadProjectForAdminPreviewResult(
+    id: number,
+  ): Promise<LoadProjectAdminPreviewResult> {
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return { status: "invalid_id", project: null };
+    }
+    const { data, error } = await getSupabaseAdmin()
+      .from("projects")
+      .select(PUBLIC_PROJECT_COLUMNS)
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throwReadError("Admin project preview root lookup failed", error, { id });
+    if (!data) return { status: "not_found", project: null };
+
+    const project = data as unknown as PublicProjectRootRow;
+    const publicationStatus = project.publication_status;
+    if (
+      publicationStatus !== "draft" &&
+      publicationStatus !== "published" &&
+      publicationStatus !== "unpublished"
+    ) {
+      throwReadError(
+        "Admin project preview publication state invalid",
+        new Error("invalid_project_publication_status"),
+        { id },
+      );
+    }
+    return {
+      status: "ok",
+      publicationStatus,
+      project: await mapLoadedProjectAggregate(
+        project,
+        { identity: String(id), source: "admin-preview" },
+      ),
+    };
+  },
+);
 
 export async function loadFeaturedProjects(): Promise<PublicProject[]> {
-  return (await loadPublishedProjects()).filter((project) => project.featured);
+  return unstable_cache(
+    () => queryPublicProjects(true),
+    ["public-featured-projects-clean-aggregate"],
+    { revalidate: 300, tags: ["projects"] },
+  )();
 }
 
 export async function loadProjectsHubData(filterId: ProjectHubFilterId = "all") {

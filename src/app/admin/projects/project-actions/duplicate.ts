@@ -100,6 +100,31 @@ export async function duplicateProjectAjax(id: number) {
   }
 
   const duplicated = parsed.data;
+  const { data: publication, error: publicationError } = await getSupabaseAdmin()
+    .from("projects")
+    .select("publication_status,published_at,published_by,featured")
+    .eq("id", duplicated.project_id)
+    .maybeSingle<{
+      publication_status: "draft" | "published" | "unpublished";
+      published_at: string | null;
+      published_by: number | null;
+      featured: boolean;
+    }>();
+  if (
+    publicationError ||
+    !publication ||
+    publication.publication_status !== "draft" ||
+    publication.published_at !== null ||
+    publication.published_by !== null ||
+    publication.featured !== false
+  ) {
+    return {
+      ok: false as const,
+      code: "project_duplicate_publication_result_invalid",
+      message:
+        "أُنشئت النسخة دون إثبات عقد المسودة النهائي. حدّث القائمة قبل أي إجراء آخر.",
+    };
+  }
   const mediaSynchronization = await synchronizeDuplicatedProjectMedia(
     duplicated.project_id,
   );
@@ -115,6 +140,7 @@ export async function duplicateProjectAjax(id: number) {
         type: duplicated.project_type,
         aggregateContract: "project_admin_entry_v2",
         mediaSynchronization: mediaSynchronization.status,
+        publicationStatus: publication.publication_status,
       },
     },
     actor,
@@ -141,6 +167,9 @@ export async function duplicateProjectAjax(id: number) {
       projectType: duplicated.project_type,
       slug: duplicated.project_slug,
       featured: duplicated.featured,
+      publicationStatus: publication.publication_status,
+      publishedAt: publication.published_at,
+      publishedBy: publication.published_by,
       createdAt: duplicated.created_at,
       updatedAt: duplicated.updated_at,
     },

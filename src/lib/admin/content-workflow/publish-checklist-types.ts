@@ -5,6 +5,8 @@ export type PublishChecklistItem = {
   label: string;
   status: PublishChecklistStatus;
   hint: string;
+  fixable?: boolean;
+  field?: string;
 };
 
 export function countChecklistStatus(items: PublishChecklistItem[], status: PublishChecklistStatus) {

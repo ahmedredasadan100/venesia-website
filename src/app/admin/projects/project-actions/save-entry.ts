@@ -1,7 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import type {
   AdminFormActionState,
   AdminFormMode,
@@ -22,11 +20,18 @@ import {
 } from "../../../../lib/admin/projects/project-entry-contract";
 import { loadProjectEntry } from "../../../../lib/admin/projects/project-entry-data";
 import { coordinateProjectEntrySave } from "../../../../lib/admin/projects/project-entry-media-coordination";
+import {
+  getProjectPublishingReadiness,
+  resolveProjectPublicationAuditOperation,
+  type ProjectPublicationStatus,
+} from "../../../../lib/admin/projects/project-publishing-capability";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { revalidateProjectPaths } from "./revalidate";
 
 export type ProjectEntrySaveResult = {
   mediaSynchronizationStatus: "synced" | "warning";
   reconciledBundle: ProjectEntryBundle | null;
+  publicationStatus: ProjectPublicationStatus;
 };
 
 function failure(
@@ -93,6 +98,24 @@ function databaseFailure(
       "project_location_hierarchy_invalid",
     );
   }
+  if (/PROJECT_PUBLISH_BLOCKED|PROJECT_PUBLICATION_ACTOR_REQUIRED/i.test(text)) {
+    return failure(
+      mode,
+      revision,
+      "تعذر نشر المشروع لأن بيانات العرض العام غير مكتملة. راجع قائمة الجاهزية.",
+      { publication_status: ["راجع متطلبات النشر وأصلح الحقول المشار إليها."] },
+      "project_publish_validation_failed",
+    );
+  }
+  if (/PROJECT_PUBLICATION_STATE_CONFLICT/i.test(text)) {
+    return failure(
+      mode,
+      revision,
+      "تغيرت حالة نشر المشروع أثناء التحرير. أعد تحميل المحرر ثم حاول مرة أخرى.",
+      undefined,
+      "project_publication_state_conflict",
+    );
+  }
   return failure(
     mode,
     revision,
@@ -131,17 +154,69 @@ export async function saveProjectEntry(
     return failure(mode, revision, "تعارض معرّف المشروع داخل النموذج.");
   }
 
+  const publishingReadiness = getProjectPublishingReadiness({
+    fieldErrors,
+    seoTitle: payload.project.seo_title,
+    seoDescription: payload.project.seo_description,
+  });
+  if (
+    payload.project.publication_status === "published" &&
+    !publishingReadiness.ready
+  ) {
+    return failure(
+      mode,
+      revision,
+      "أكمل متطلبات العرض العام قبل نشر المشروع.",
+      fieldErrors,
+      "project_publish_validation_failed",
+    );
+  }
+
   try {
+    let previousPublicationStatus: ProjectPublicationStatus | null = null;
+    let previousPublishedAt: string | null = null;
+    let previousSlug: string | null = null;
+    if (mode === "edit" && projectId) {
+      const { data: current, error: currentError } = await getSupabaseAdmin()
+        .from("projects")
+        .select("publication_status,published_at,slug")
+        .eq("id", projectId)
+        .maybeSingle<{
+          publication_status: ProjectPublicationStatus;
+          published_at: string | null;
+          slug: string;
+        }>();
+      if (currentError || !current) {
+        return databaseFailure(mode, revision, currentError);
+      }
+      previousPublicationStatus = current.publication_status;
+      previousPublishedAt = current.published_at;
+      previousSlug = current.slug;
+    }
+
+    const requestedPublicationStatus =
+      mode === "create" && payload.project.publication_status === "unpublished"
+        ? "draft"
+        : payload.project.publication_status;
+    const trustedPayload = {
+      ...payload,
+      project: {
+        ...payload.project,
+        publication_status: requestedPublicationStatus,
+      },
+      publication_actor_id: actor.id,
+      publication_previous_status: previousPublicationStatus,
+    };
     const coordinated = await coordinateProjectEntrySave({
       actorId: actor.id,
       projectId,
-      payload,
+      payload: trustedPayload,
       mutate: async () => {
         const { data, error } = await getSupabaseAdmin().rpc(
           "save_project_admin_entry",
           {
             p_project_id: projectId,
-            p_payload: payload,
+            p_payload: trustedPayload,
           },
         );
         if (error) {
@@ -178,14 +253,29 @@ export async function saveProjectEntry(
     }
     const reconciliationWarning = mode === "edit" && !reconciledBundle;
     const savedWithWarning = mediaWarning || reconciliationWarning;
+    const nextPublicationStatus =
+      reconciledBundle?.project.publication_status ??
+      trustedPayload.project.publication_status;
+    const auditOperation = resolveProjectPublicationAuditOperation({
+      mode,
+      previousStatus: previousPublicationStatus,
+      nextStatus: nextPublicationStatus,
+    });
+    const firstPublishedAt =
+      reconciledBundle?.project.published_at ??
+      previousPublishedAt ??
+      (nextPublicationStatus === "published" ? saved.updatedAt : null);
 
-    revalidatePath(`/admin/projects/${saved.id}`);
-    revalidatePath("/admin/projects/residential");
-    revalidatePath("/admin/projects/commercial");
+    revalidateProjectPaths(
+      payload.project.type,
+      saved.id,
+      saved.slug,
+      previousSlug,
+    );
 
     await recordCmsAdminAudit(
       {
-        action: buildCmsAuditAction("project", mode === "create" ? "create" : "update"),
+        action: buildCmsAuditAction("project", auditOperation),
         entityType: "project",
         entityId: saved.id,
         entityLabel: payload.project.arabic_name,
@@ -194,6 +284,11 @@ export async function saveProjectEntry(
           type: payload.project.type,
           aggregateContract: "project_admin_entry_v2",
           mediaSynchronization: coordinated.mediaSynchronization.status,
+          previousPublicationStatus,
+          nextPublicationStatus,
+          firstPublishedAt,
+          featured: payload.project.featured,
+          mutationSource: "form_save",
         },
       },
       actor,
@@ -207,12 +302,22 @@ export async function saveProjectEntry(
         ? "تم حفظ المشروع — يلزم تحديث المحرر"
         : mediaWarning
           ? "تم حفظ المشروع مع تنبيه للميديا"
-          : "تم حفظ المشروع",
+          : nextPublicationStatus === "published"
+            ? "تم حفظ المشروع ونشره"
+            : nextPublicationStatus === "unpublished"
+              ? "تم حفظ المشروع وإخفاؤه"
+              : mode === "create"
+                ? "تم إنشاء المشروع كمسودة"
+                : "تم حفظ المشروع",
       message: reconciliationWarning
         ? "حُفظ المشروع وكل عناصره، لكن تعذرت إعادة قراءة عقد التعديل بأمان. سيُعاد تحميل المحرر قبل السماح بحفظ آخر."
         : mediaWarning
           ? "حُفظ Project Aggregate ذريًا، لكن تعذر إثبات اكتمال مزامنة مراجع الميديا. يظل الحذف الآمن متوقفًا حتى reconciliation."
-          : "حُفظ أصل المشروع وكل العناصر التابعة كوحدة واحدة.",
+          : nextPublicationStatus === "published"
+            ? "حُفظ Project Aggregate وأصبح المشروع ظاهرًا للعامة."
+            : nextPublicationStatus === "unpublished"
+              ? "حُفظ المشروع وأُخفي عن العرض العام مع الاحتفاظ بتاريخ أول نشر."
+              : "حُفظ أصل المشروع وكل العناصر التابعة كمسودة ضمن عملية ذرية واحدة.",
       code: reconciliationWarning
         ? "saved_requires_reconciliation_reload"
         : mediaWarning
@@ -224,6 +329,7 @@ export async function saveProjectEntry(
       result: {
         mediaSynchronizationStatus: mediaWarning ? "warning" : "synced",
         reconciledBundle,
+        publicationStatus: nextPublicationStatus,
       },
     };
   } catch (error) {

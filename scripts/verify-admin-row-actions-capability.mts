@@ -159,6 +159,8 @@ const paths = {
   projects:
     "src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx",
   projectsAdapter: "src/lib/admin/projects/entity-list-adapter.ts",
+  projectPublishing:
+    "sql/migrations/20260803120000_project_publishing_visibility_capability.sql",
   redirects: "src/app/admin/seo/redirects/RedirectsClient.tsx",
   pagesConfig: "src/lib/admin/pages/pages-list-config.ts",
   pagesPreferences:
@@ -236,7 +238,10 @@ check(
       blocker.includes("Atomic reorder contracts"),
     ) &&
     ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.includes(
-      "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
+      "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
+    ) &&
+    !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
+      blocker.startsWith("PROJECT_"),
     ),
 );
 
@@ -962,17 +967,11 @@ check(
           : surface.rowActionsState === "read_only_no_row_commands" &&
             surface.rowActionsOwner === "not_applicable") &&
         surface.layoutOwner.includes("AdminEntityList") &&
-        (surface.id === "projects-residential-commercial"
-          ? sameOrderedValues(surface.requiredAdoption, [
-              "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
-            ])
-          : surface.requiredAdoption.length === 0) &&
+        surface.requiredAdoption.length === 0 &&
         surface.exceptionRationale === null &&
         surface.routes.length > 0,
     ) &&
-    sameOrderedValues(ADMIN_COLLECTION_SURFACE_ADOPTION.genericAdoptionGaps, [
-      "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
-    ]),
+    ADMIN_COLLECTION_SURFACE_ADOPTION.genericAdoptionGaps.length === 0,
 );
 check(
   "generic collections declare shared column ownership truthfully",
@@ -1007,7 +1006,7 @@ check(
       ?.rowActionsState === "not_applicable",
 );
 check(
-  "Collection global closure remains truthful across Browser, reorder, and Project publishing gaps",
+  "Collection global closure remains truthful across Browser, reorder, and specialized-grid gaps",
   ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed === false &&
     ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
       blocker.includes("Authenticated Browser QA"),
@@ -1015,8 +1014,11 @@ check(
     ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
       blocker.includes("atomic reorder"),
     ) &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
-      blocker.includes("PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY"),
+    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.includes(
+      "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
+    ) &&
+    !ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
+      blocker.startsWith("PROJECT_"),
     ),
 );
 check(
@@ -1029,7 +1031,8 @@ check(
       (surface) => surface.id === "projects-residential-commercial",
     )?.presentationSourceFiles.join("|") === paths.projectsList &&
     projectsColumnsSource.includes("copyPublicLink:") &&
-    projectsColumnsSource.includes('visibility: { access: "hidden" }') &&
+    projectsColumnsSource.includes("visibility:") &&
+    projectsColumnsSource.includes("onVisibility") &&
     projectsColumnsSource.includes("onToggleFeatured") &&
     projectsColumnsSource.includes("onDuplicate") &&
     projectsColumnsSource.includes('archive: { access: "hidden" }'),
@@ -1379,15 +1382,17 @@ check(
     !read(paths.redirectsFilters).includes("useRouter"),
 );
 check(
-  "server-page search consumers delegate PostgREST escaping without semantic sanitizers",
+  "server-page search consumers delegate escaping to their authoritative query owners",
   [
     paths.redirectsAdapter,
     paths.activityLoader,
     paths.reportQuery,
-    paths.projectsAdapter,
   ].every((sourceFile) =>
     read(sourceFile).includes("buildAdminListSearchOrFilter"),
   ) &&
+    read(paths.projectsAdapter).includes("p_search: query.search") &&
+    read(paths.projectPublishing).includes("v_search_pattern") &&
+    read(paths.projectPublishing).includes("ilike v_search_pattern") &&
     read(paths.adminListSearch).includes('const pattern = `"%${escaped}%"`') &&
     read(paths.adminListSearch).includes("Invalid Admin list search field") &&
     !read(paths.redirectsAdapter).includes("sanitizeRedirectSearch") &&

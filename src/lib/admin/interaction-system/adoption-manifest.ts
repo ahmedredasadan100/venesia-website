@@ -37,8 +37,6 @@ export const ADMIN_INTERACTION_SYSTEM = {
   globalClosureBlockers: [
     "Authenticated Browser acceptance on the final working tree is still required.",
     "Atomic reorder contracts are not available for Page Assignment and Menu Item free drag.",
-    "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
-    "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
     "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
   ],
 } as const;
@@ -409,7 +407,10 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         "src/app/admin/projects/project-actions/delete.ts",
         "src/app/admin/projects/project-actions/duplicate.ts",
         "src/app/admin/projects/project-actions/featured.ts",
+        "src/app/admin/projects/project-actions/publication.ts",
+        "src/lib/admin/projects/project-publishing-capability.ts",
         "sql/migrations/20260731100000_project_row_actions_capability.sql",
+        "sql/migrations/20260803120000_project_publishing_visibility_capability.sql",
       ],
       manualOrder: false,
       actions: {
@@ -417,7 +418,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         preview: "adopted",
         information: "adopted",
         copyPublicLink: "adopted",
-        visibility: "hidden",
+        visibility: "adopted",
         featured: "adopted",
         duplicate: "adopted",
         archive: "hidden",
@@ -425,9 +426,9 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       },
       owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
       confirmationActions: ["delete"],
-      auditedActions: ["featured", "duplicate", "delete"],
+      auditedActions: ["visibility", "featured", "duplicate", "delete"],
       rationale:
-        "Residential and Commercial share one Project action declaration; the Project Domain owns atomic duplication and authoritative featured writes while the shared renderer owns presentation.",
+        "Residential and Commercial share one Project action declaration; the Project Domain owns authoritative publication, featured writes, and atomic duplication while the shared renderer owns presentation.",
     },
     {
       entity: "redirects",
@@ -632,13 +633,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   globalClosureBlockers: [
     "Authenticated Browser QA for every generic adopter on the final working tree is still required.",
     "Page Assignment and Menu Item free drag require an authoritative atomic reorder mutation contract; adjacent multi-write swaps cannot close this item.",
-    "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
-    "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
     "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
   ],
-  genericAdoptionGaps: [
-    "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
-  ],
+  genericAdoptionGaps: [],
   canonicalSectionGap: "gap-7",
   canonicalTableFooterGap: "gap-4",
   ownerSourceFiles: {
@@ -772,10 +769,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "projects-residential-commercial",
-      genuineExceptions: [
-        "PROJECT_VISIBILITY_REQUIRES_PUBLISHING_CAPABILITY",
-        "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
-      ],
+      genuineExceptions: [],
       workflowClassification: "full_collection_adoption",
       generic: true,
       routes: [
@@ -803,12 +797,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
-      requiredAdoption: [
-        "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
-      ],
+      requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Residential and Commercial are locked Project query configurations over the same shared collection, columns, and action declaration.",
+        "Residential and Commercial are locked Project query configurations over the same shared collection, publication-aware read model, columns, and action declaration.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,

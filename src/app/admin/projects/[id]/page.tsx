@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import AdminNotice from "../../../../components/admin/AdminNotice";
 import {
   AdminActionButton,
+  AdminEntityPreviewActions,
   AdminPageContextHeader,
   AdminPageExperience,
 } from "../../../../components/admin/ui";
@@ -11,6 +12,7 @@ import {
   loadProjectEntry,
   ProjectEntrySchemaUnavailableError,
 } from "../../../../lib/admin/projects/project-entry-data";
+import { getProjectPreviewCapability } from "../../../../lib/admin/projects/project-publishing-capability";
 import ProjectEditForm from "../ProjectEditForm";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +58,18 @@ export default async function ProjectEditPage({
         eyebrow="إدارة المشاريع"
         title={project.arabic_name || project.english_name || "تعديل المشروع"}
         description={`المشاريع / تعديل المشروع — ${project.english_name || "اسم المشروع بالإنجليزية"} — ${project.slug}`}
-        actions={<AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>}
+        actions={
+          <>
+            <AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>
+            <AdminEntityPreviewActions
+              capability={getProjectPreviewCapability({
+                id: project.id!,
+                slug: project.slug,
+                publicationStatus: project.publication_status,
+              })}
+            />
+          </>
+        }
       />
       <ProjectEditForm key={bundle.project.id ?? `project-${id}`} bundle={bundle} />
     </AdminPageExperience>

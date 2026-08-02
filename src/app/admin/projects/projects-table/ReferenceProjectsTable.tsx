@@ -16,7 +16,12 @@ import type { AdminActionResult } from "../../../../lib/admin/admin-action-resul
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import type { ProjectSortField } from "../../../../lib/admin/projects/entity-list-contract";
 import type { ProjectColumnKey } from "../../../../lib/admin/projects/projects-list-config";
-import { getProjectHref } from "../../../../lib/projects/public-helpers";
+import {
+  getProjectPreviewCapability,
+  getProjectPublicationMetadata,
+  isProjectPubliclyVisible,
+} from "../../../../lib/admin/projects/project-publishing-capability";
+import { resolveAdminEntityPreviewActions } from "../../../../lib/admin/interaction-system/entity-preview-capability";
 import { formatDate } from "./projects-table-utils";
 import type { ProjectGridRow } from "./projects-table-types";
 
@@ -31,6 +36,10 @@ export type ProjectRowActionHandlers = {
   onDelete: (row: ProjectGridRow) => Promise<AdminActionResult>;
   onDuplicate: (row: ProjectGridRow) => Promise<AdminActionResult>;
   onToggleFeatured: (row: ProjectGridRow) => Promise<AdminActionResult>;
+  onVisibility: (
+    row: ProjectGridRow,
+    visible: boolean,
+  ) => Promise<AdminActionResult>;
 };
 
 function ProjectIcon({ type }: Pick<ProjectGridRow, "type">) {
@@ -80,6 +89,18 @@ function ProjectRowActions({
     onMutationResult?.(result);
     if (!result.ok) throw new Error(result.message);
   }
+  const isVisible = isProjectPubliclyVisible(row.publication_status);
+  const previewActions = resolveAdminEntityPreviewActions(
+    getProjectPreviewCapability({
+      id: row.id,
+      slug: row.slug,
+      publicationStatus: row.publication_status,
+    }),
+  );
+  const previewAction =
+    previewActions.find((action) => action.kind === "public-view") ??
+    previewActions.find((action) => action.kind === "internal-preview");
+  const publication = getProjectPublicationMetadata(row.publication_status);
 
   const capability: AdminRowActionsCapability = {
     entityType: "project",
@@ -90,12 +111,14 @@ function ProjectRowActions({
         access: "allowed",
         href: `/admin/projects/${row.id}`,
       },
-      preview: {
-        access: "allowed",
-        href: getProjectHref(row),
-        target: "_blank",
-        rel: "noopener noreferrer",
-      },
+      preview: previewAction
+        ? {
+            access: "allowed",
+            href: previewAction.href,
+            target: "_blank",
+            rel: "noopener noreferrer",
+          }
+        : { access: "hidden" },
       information: {
         access: "allowed",
         title: "معلومات المشروع",
@@ -107,15 +130,46 @@ function ProjectRowActions({
             value: row.type === "commercial" ? "تجاري" : "سكني",
           },
           { label: "الموقع", value: row.location_label || "—" },
+          { label: "حالة النشر", value: publication.label },
+          { label: "تاريخ أول نشر", value: formatDate(row.published_at) },
+          { label: "الظهور العام", value: publication.publicLabel },
           { label: "التمييز", value: row.featured ? "مميز" : "عادي" },
           { label: "آخر تحديث", value: formatDate(row.updated_at) },
         ],
       },
       copyPublicLink: {
-        access: "allowed",
-        onSelect: () => run(handlers.onCopyPublicLink),
+        ...(isVisible
+          ? {
+              access: "allowed" as const,
+              onSelect: () => run(handlers.onCopyPublicLink),
+            }
+          : {
+              access: "disabled" as const,
+              disabledReason: "انشر المشروع أولًا قبل نسخ الرابط العام.",
+            }),
       },
-      visibility: { access: "hidden" },
+      visibility:
+        pendingAction === "visibility"
+          ? { ...pendingState, isVisible }
+          : handlers.mutationBusy
+            ? { ...busyState, isVisible }
+            : {
+                access: "allowed",
+                isVisible,
+                onSelect: () => run((project) => handlers.onVisibility(project, !isVisible)),
+                ...(
+                  isVisible
+                    ? {
+                        confirmation: {
+                          mode: "shared" as const,
+                          title: "إخفاء المشروع عن العرض العام؟",
+                          description: `سيُزال «${row.arabic_name}» من صفحات وبطاقات المشاريع العامة مع الاحتفاظ بتاريخ أول نشر.`,
+                          confirmLabel: "تأكيد الإخفاء",
+                        },
+                      }
+                    : {}
+                ),
+              },
       featured:
         pendingAction === "featured"
           ? { ...pendingState, isFeatured: row.featured }
@@ -202,6 +256,25 @@ export function createProjectColumns(
       ),
     },
     {
+      key: "publication_status",
+      label: "حالة النشر",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "publication_status",
+      align: "center",
+      minWidth: 118,
+      width: 124,
+      renderCell: ({ row }) => {
+        const metadata = getProjectPublicationMetadata(row.publication_status);
+        return (
+          <AdminStatusPill tone={metadata.tone}>
+            {metadata.label}
+          </AdminStatusPill>
+        );
+      },
+    },
+    {
       key: "featured",
       label: "مميز",
       defaultVisible: true,
@@ -272,6 +345,18 @@ export function createProjectColumns(
       minWidth: 170,
       width: 190,
       renderCell: ({ row }) => singleLine(row.slug, "font-en text-center text-[#D8B87A]/85"),
+    },
+    {
+      key: "published_at",
+      label: "تاريخ النشر",
+      defaultVisible: false,
+      hideable: true,
+      sortable: true,
+      sortKey: "published_at",
+      align: "center",
+      minWidth: 145,
+      width: 150,
+      renderCell: ({ row }) => singleLine(formatDate(row.published_at), "font-en text-center tabular-nums"),
     },
     {
       key: "updated_at",

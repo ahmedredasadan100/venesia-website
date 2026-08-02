@@ -5,12 +5,14 @@ export const PROJECTS_COMMERCIAL_LIST_VIEW_KEY = "projects-commercial";
 
 export type ProjectColumnKey =
   | "project"
+  | "publication_status"
   | "featured"
   | "city"
   | "main_area"
   | "sub_area"
   | "english_name"
   | "slug"
+  | "published_at"
   | "updated_at"
   | "actions";
 
@@ -29,6 +31,13 @@ export const PROJECTS_LIST_COLUMNS = [
     defaultVisible: true,
     hideable: false,
     gridTrack: "minmax(260px,1.3fr)",
+  },
+  {
+    key: "publication_status",
+    label: "حالة النشر",
+    defaultVisible: true,
+    hideable: true,
+    gridTrack: "124px",
   },
   {
     key: "featured",
@@ -71,6 +80,13 @@ export const PROJECTS_LIST_COLUMNS = [
     defaultVisible: false,
     hideable: true,
     gridTrack: "minmax(170px,0.9fr)",
+  },
+  {
+    key: "published_at",
+    label: "تاريخ النشر",
+    defaultVisible: false,
+    hideable: true,
+    gridTrack: "150px",
   },
   {
     key: "updated_at",

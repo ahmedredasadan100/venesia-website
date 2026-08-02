@@ -6,7 +6,7 @@ import { SEO_ROUTES } from "../../config/seo/seo-routes";
 import { getMediaItems } from "../media-center";
 import { logError } from "../logging";
 import { isReservedPublicPath } from "../pages/reserved-public-paths";
-import { loadPublishedProjectSlugs } from "../projects/load-published-projects";
+import { loadPublishedProjectSitemapRows } from "../projects/load-published-projects";
 import { getSupabaseAdmin } from "../supabase-admin";
 
 import type { SitemapEntry, SitemapEntrySource, SitemapGenerationResult } from "./sitemap-monitor-types";
@@ -152,15 +152,15 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
 
   const [projectEntries, mediaEntries, topicEntries, cmsEntries] = await Promise.all([
     loadSourceEntries("projects", async () => {
-      const projectSlugs = await loadPublishedProjectSlugs();
-      return projectSlugs.map((slug) => {
-        const path = `/projects/${slug}`;
+      const projects = await loadPublishedProjectSitemapRows();
+      return projects.map((project) => {
+        const path = `/projects/${project.slug}`;
         return {
           url: buildSitemapAbsoluteUrl(path, baseUrl),
           path,
           source: "projects" as const,
-          slug,
-          lastModified: new Date(),
+          slug: project.slug,
+          lastModified: new Date(project.updatedAt),
           changeFrequency: "weekly" as const,
           priority: 0.85,
         };

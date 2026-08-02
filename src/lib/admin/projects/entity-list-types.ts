@@ -1,4 +1,5 @@
 import type { ProjectListType } from "./entity-list-contract";
+import type { ProjectPublicationStatus } from "./project-publishing-capability";
 
 export type ProjectEntityListRow = {
   id: number;
@@ -11,6 +12,8 @@ export type ProjectEntityListRow = {
   main_area_name: string;
   sub_area_name: string;
   featured: boolean;
+  publication_status: ProjectPublicationStatus;
+  published_at: string | null;
   updated_at: string;
 };
 
