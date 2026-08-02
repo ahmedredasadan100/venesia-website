@@ -28,6 +28,7 @@ export type AdminListboxSelectProps = {
   className?: string;
   placeholder?: string;
   showPlaceholderForEmptyValue?: boolean;
+  allowEmptySelection?: boolean;
   sizing?: "full" | "content" | "content-relaxed" | "medium" | "wide";
   /** Registers with exclusive floating layer when provided. */
   layerId?: string;
@@ -73,6 +74,7 @@ export default function AdminListboxSelect({
   className = "",
   placeholder,
   showPlaceholderForEmptyValue = false,
+  allowEmptySelection = false,
   sizing = "full",
   layerId,
   openLayerId,
@@ -97,17 +99,30 @@ export default function AdminListboxSelect({
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [activeValue, setActiveValue] = useState(value);
   const [search, setSearch] = useState("");
+  const resolvedOptions = useMemo(
+    () =>
+      allowEmptySelection && placeholder && !options.some((option) => option.value === "")
+        ? [{ value: "", label: placeholder }, ...options]
+        : options,
+    [allowEmptySelection, options, placeholder],
+  );
   const compactSized = sizing !== "full";
+  const contentSized = sizing === "content" || sizing === "content-relaxed";
   const triggerSizingClassName =
     sizing === "content"
       ? "w-fit max-w-full ps-4 pe-4"
       : sizing === "content-relaxed"
         ? "min-w-32 w-fit max-w-full ps-4 pe-4"
         : sizing === "medium"
-          ? "w-60 max-w-full ps-4 pe-4"
+          ? "min-w-60 w-full max-w-full ps-4 pe-4"
           : sizing === "wide"
-            ? "w-64 max-w-full ps-4 pe-4"
+            ? "min-w-64 w-full max-w-full ps-4 pe-4"
             : "w-full px-4";
+  const containerSizingClassName = contentSized
+    ? "inline-block w-fit max-w-full"
+    : compactSized
+      ? "block w-full max-w-full"
+      : "";
 
   const isControlled = typeof openLayerId !== "undefined" && Boolean(layerId);
   const isOpen = isControlled
@@ -136,19 +151,19 @@ export default function AdminListboxSelect({
 
   const visibleOptions = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ar");
-    if (!query) return options;
-    return options.filter((option) =>
+    if (!query) return resolvedOptions;
+    return resolvedOptions.filter((option) =>
       option.label.toLocaleLowerCase("ar").includes(query),
     );
-  }, [options, search]);
+  }, [resolvedOptions, search]);
   const selectableOptions = useMemo(
     () => visibleOptions.filter((option) => !option.disabled),
     [visibleOptions],
   );
 
   const selected = useMemo(
-    () => options.find((option) => option.value === value),
-    [options, value],
+    () => resolvedOptions.find((option) => option.value === value),
+    [resolvedOptions, value],
   );
   const emptyValueUsesPlaceholder =
     showPlaceholderForEmptyValue && value === "" && Boolean(placeholder);
@@ -212,7 +227,7 @@ export default function AdminListboxSelect({
   }, [controlId, isOpen, resolvedActiveValue]);
 
   function handleSelect(next: string) {
-    if (options.find((option) => option.value === next)?.disabled) return;
+    if (resolvedOptions.find((option) => option.value === next)?.disabled) return;
     onChange(next);
     setOpen(false);
     triggerRef.current?.focus();
@@ -424,7 +439,7 @@ export default function AdminListboxSelect({
     );
 
   return (
-    <div className={`relative overflow-visible ${compactSized ? "inline-block w-fit max-w-full" : ""} ${className}`}>
+    <div className={`relative overflow-visible ${containerSizingClassName} ${className}`}>
       {inline ? (
         <div
           dir={dir}

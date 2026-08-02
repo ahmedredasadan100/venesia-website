@@ -32,10 +32,11 @@ export default function TopicSeriesFields({ options, defaultSeriesId = "", defau
         id="topic-series-popover"
         triggerId="topic-series-listbox"
         value={value}
-        options={[{ value: "", label: "بدون سلسلة" }, ...options.map((option) => ({ value: String(option.id), label: option.name }))]}
+        options={options.map((option) => ({ value: String(option.id), label: option.name }))}
         onChange={update}
         placeholder="اختر السلسلة"
         showPlaceholderForEmptyValue
+        allowEmptySelection
         sizing="wide"
         className="max-w-full"
       />

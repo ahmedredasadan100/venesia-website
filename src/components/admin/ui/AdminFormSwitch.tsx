@@ -59,32 +59,50 @@ export default function AdminFormSwitch({
   describedBy,
   wrapLabel = false,
 }: AdminFormSwitchProps) {
+  const switchControl = (
+    <span className="relative inline-flex h-5 w-9 shrink-0">
+      <input
+        type="checkbox"
+        role="switch"
+        name={name}
+        defaultChecked={checked === undefined ? defaultChecked : undefined}
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        value={value}
+        aria-describedby={describedBy}
+        className="peer sr-only"
+      />
+      <span className="absolute inset-0 rounded-full bg-white/10 transition peer-checked:bg-[#C9972F] peer-focus-visible:ring-2 peer-focus-visible:ring-[#E2B84F]" />
+      <span className="absolute start-0.5 top-0.5 size-4 rounded-full bg-white/80 shadow transition peer-checked:translate-x-4 peer-checked:bg-white rtl:peer-checked:-translate-x-4" />
+    </span>
+  );
+  const labelContent = (
+    <span className={surface ? "min-w-0 text-start leading-5" : undefined}>
+      {label}
+    </span>
+  );
+
   return (
     <label
       id={id}
-      className={`flex min-w-0 cursor-pointer items-center gap-2 text-xs text-white/70 ${wrapLabel ? "leading-5" : "lg:whitespace-nowrap"} ${
+      className={`${surface ? "grid grid-cols-[minmax(0,1fr)_auto] gap-3" : "inline-flex gap-2"} min-w-0 cursor-pointer items-center text-xs text-white/70 ${surface || wrapLabel ? "leading-5" : "lg:whitespace-nowrap"} ${
         surface
           ? ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME
           : "rounded-lg px-1 py-1.5"
       } ${disabled ? "cursor-not-allowed opacity-55" : ""} ${className}`.trim()}
     >
-      <span className="relative inline-flex h-5 w-9 shrink-0">
-        <input
-          type="checkbox"
-          role="switch"
-          name={name}
-          defaultChecked={checked === undefined ? defaultChecked : undefined}
-          checked={checked}
-          onChange={onChange}
-          disabled={disabled}
-          value={value}
-          aria-describedby={describedBy}
-          className="peer sr-only"
-        />
-        <span className="absolute inset-0 rounded-full bg-white/10 transition peer-checked:bg-[#C9972F] peer-focus-visible:ring-2 peer-focus-visible:ring-[#E2B84F]" />
-        <span className="absolute start-0.5 top-0.5 size-4 rounded-full bg-white/80 shadow transition peer-checked:translate-x-4 peer-checked:bg-white rtl:peer-checked:-translate-x-4" />
-      </span>
-      <span>{label}</span>
+      {surface ? (
+        <>
+          {labelContent}
+          {switchControl}
+        </>
+      ) : (
+        <>
+          {switchControl}
+          {labelContent}
+        </>
+      )}
     </label>
   );
 }

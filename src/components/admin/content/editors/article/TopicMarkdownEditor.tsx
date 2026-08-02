@@ -306,7 +306,6 @@ function MarkdownEditor({ content, setContent, compact = false }: { content: str
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const historyRef = useRef<string[]>([content]);
   const historyIndexRef = useRef(0);
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
 
   function updateWithCursor(next: string, cursor?: number, record = true) {
     if (record && historyRef.current[historyIndexRef.current] !== next) {
@@ -418,7 +417,6 @@ function MarkdownEditor({ content, setContent, compact = false }: { content: str
         <span className="mx-1 h-9 w-px bg-white/10" />
         <ToolButton label="• List" title="قائمة نقطية" onClick={() => prefix("- ")} />
         <ToolButton label="1. List" title="قائمة رقمية" onClick={() => prefix("1. ")} />
-        <ToolButton label="Quote" title="اقتباس" onClick={() => prefix("> ")} />
         <ToolButton label="Link" title="رابط" onClick={addLink} />
         <span className="mx-1 h-9 w-px bg-white/10" />
         <ToolButton label="يمين" title="محاذاة لليمين" onClick={() => prefix("::right:: ")} />
@@ -428,15 +426,6 @@ function MarkdownEditor({ content, setContent, compact = false }: { content: str
         <ToolButton label="تراجع" title="Undo" onClick={undo} />
         <ToolButton label="إعادة" title="Redo" onClick={redo} />
         <ToolButton label="Clear" title="إزالة التنسيق" onClick={clearFormat} />
-        <div className="relative">
-          <ToolButton label="إضافة محتوى" onClick={() => setAddMenuOpen((open) => !open)} />
-          {addMenuOpen ? (
-            <div className="absolute end-0 top-12 z-30 min-w-56 rounded-xl border border-white/10 bg-[#10151C] p-2 shadow-2xl">
-              <button type="button" onClick={() => { prefix("> "); setAddMenuOpen(false); }} className="block w-full rounded-lg px-3 py-2 text-right text-sm text-white/75 hover:bg-white/5">اقتباس</button>
-              <button type="button" disabled className="block w-full cursor-not-allowed rounded-lg px-3 py-2 text-right text-sm text-white/30">رابط داخلي — قريبًا</button>
-            </div>
-          ) : null}
-        </div>
       </div>
 
       <textarea

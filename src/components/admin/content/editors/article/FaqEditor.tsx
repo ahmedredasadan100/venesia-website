@@ -41,7 +41,6 @@ function FaqDisplaySwitch({
       checked={checked}
       onChange={(event) => onChange(event.target.checked)}
       surface
-      className="w-full justify-between"
       wrapLabel
     />
   );
