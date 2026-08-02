@@ -36,8 +36,11 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "", fo
       </div>
 
       <label className="block">
-        <span className="text-xs font-medium text-white/58">النص البديل للصورة (Alt Text)</span>
-        <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+        <span className="inline-flex items-center gap-2 text-xs font-medium text-white/58">
+          <span>النص البديل للصورة (Alt Text)</span>
+          <TopicFieldCounter count={altLength} />
+        </span>
+        <div className="mt-1.5 min-w-0">
           <textarea
             id="topic-image-alt"
             name="image_alt"
@@ -47,7 +50,6 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "", fo
             onInput={(event) => setAltLength(event.currentTarget.value.length)}
             className={adminFormFieldClassName("h-auto min-h-16 scroll-mt-24 resize-y rounded-xl px-3 py-2.5 leading-6")}
           />
-          <TopicFieldCounter count={altLength} />
         </div>
       </label>
       <AdminFormError name="image_alt" />

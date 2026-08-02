@@ -11,10 +11,12 @@ import {
 } from "../../lib/admin/seo-length-standards";
 import AdminTagsField from "./AdminTagsField";
 import TopicCorrectionButton from "./content/editors/article/TopicCorrectionButton";
+import AdminFormListboxSelect from "./ui/AdminFormListboxSelect";
 import {
   AdminFormError,
   useOptionalAdminFormRuntime,
 } from "./ui/AdminFormRuntime";
+import AdminSingleOpenAccordion from "./ui/AdminSingleOpenAccordion";
 
 export { default as AdminEntitySeoPanel } from "./seo/AdminEntitySeoPanel";
 
@@ -55,6 +57,18 @@ const SEO_CORRECTION_TARGETS: Record<string, CorrectionTarget> = {
   slug: { tabId: "basic", targetId: "topic-slug" },
   "keyword-density": { tabId: "basic", targetId: "topic-content-markdown" },
 };
+
+const ROBOTS_INDEX_OPTIONS = [
+  { value: "", label: "استخدام الإعداد العام" },
+  { value: "true", label: "Index" },
+  { value: "false", label: "Noindex" },
+] as const;
+
+const ROBOTS_FOLLOW_OPTIONS = [
+  { value: "", label: "استخدام الإعداد العام" },
+  { value: "true", label: "Follow" },
+  { value: "false", label: "Nofollow" },
+] as const;
 
 function value(form: HTMLFormElement, name: string, fallback: string) {
   const field = form.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | null;
@@ -143,6 +157,73 @@ export default function SeoPanel(props: SeoPanelProps) {
     live.seoDescription,
     SEO_LENGTH_STANDARDS.description,
   );
+  const searchResultPreviewContent = (
+    <div data-topic-search-result-preview>
+      <div className="rounded-xl border border-white/10 bg-[#0B0F14] p-4" dir="rtl">
+        <p className="break-all text-xs text-emerald-200/70" dir="ltr">{canonicalPreview}</p>
+        <p className="mt-3 text-lg leading-7 text-[#8B8CFF]">{previewTitle}</p>
+        <p className="mt-2 text-sm leading-7 text-white/58">{previewDescription}</p>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <PreviewValue label="Robots" value={robotsLabel(live.robotsIndex, "Index", "Noindex")} />
+        <PreviewValue label="Links" value={robotsLabel(live.robotsFollow, "Follow", "Nofollow")} />
+      </div>
+    </div>
+  );
+  const openGraphPreviewContent = (
+    <div data-topic-open-graph-preview>
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-[#0B0F14]">
+        {live.image ? (
+          <div
+            className="aspect-[1.91/1] bg-cover bg-center"
+            style={{ backgroundImage: `url(${live.image})` }}
+            role="img"
+            aria-label={live.imageAlt || previewTitle}
+          />
+        ) : (
+          <div className="flex aspect-[1.91/1] items-center justify-center border-b border-white/10 text-xs text-white/30">
+            تُستخدم صورة Open Graph العامة
+          </div>
+        )}
+        <div className="p-4">
+          <p className="line-clamp-2 text-sm font-semibold leading-6 text-white/78">{previewTitle}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/42">{previewDescription}</p>
+        </div>
+      </div>
+    </div>
+  );
+  const liveSeoAnalysisContent = (
+    <div data-topic-live-seo-analysis>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="mt-1 text-xs text-white/40">الدرجة إرشادية ولا تمنع النشر وحدها.</p>
+        </div>
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-[7px] border-[#D8B87A]/60 bg-black/25 font-en text-xl font-semibold text-white">
+          {analysis.seoScore}
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm" data-topic-seo-keyword-density>
+        <span className="text-white/55">كثافة Focus Keyword</span>
+        <span className="font-en font-semibold text-[#D8B87A]">
+          {live.focusKeyword.trim() ? `${analysis.keywordDensity}%` : "غير متاح"}
+        </span>
+      </div>
+      <div className="mt-5 space-y-2">
+        <IssueRows issues={analysis.issues.seo} />
+      </div>
+    </div>
+  );
+  const canonicalField = (
+    <SeoField
+      id="topic-canonical-url"
+      label="Canonical URL"
+      name="canonical_url"
+      defaultValue={props.canonicalUrl}
+      count={live.canonicalUrl.length}
+      helper="اتركه فارغًا لاستخدام رابط الموضوع العام تلقائيًا"
+      dir="ltr"
+    />
+  );
 
   return (
     <section
@@ -208,95 +289,49 @@ export default function SeoPanel(props: SeoPanelProps) {
               </p>
             </div>
 
-            <div className="mt-5 space-y-5">
-              <SeoField
-                id="topic-canonical-url"
-                label="Canonical URL"
-                name="canonical_url"
-                defaultValue={props.canonicalUrl}
-                count={live.canonicalUrl.length}
-                helper="اتركه فارغًا لاستخدام رابط الموضوع العام تلقائيًا"
-                dir="ltr"
+            <div
+              id="topic-seo-robots"
+              dir="rtl"
+              data-topic-seo-top-row
+              className="mt-5 flex scroll-mt-24 flex-col gap-3 lg:flex-row lg:items-start"
+            >
+              <AdminFormListboxSelect
+                id="topic-robots-index-listbox"
+                focusTargetId="topic-robots-index"
+                name="robots_index"
+                label="الفهرسة"
+                options={ROBOTS_INDEX_OPTIONS}
+                defaultValue={props.robotsIndex === null ? "" : String(props.robotsIndex)}
+                placeholder="استخدام الإعداد العام"
+                sizing="content"
+                className="min-w-0 shrink-0"
               />
-
-              <div id="topic-seo-robots" className="grid scroll-mt-24 gap-3 sm:grid-cols-2">
-                <RobotsSelect
-                  id="topic-robots-index"
-                  name="robots_index"
-                  label="الفهرسة"
-                  defaultValue={props.robotsIndex}
-                  positive="Index"
-                  negative="Noindex"
-                />
-                <RobotsSelect
-                  id="topic-robots-follow"
-                  name="robots_follow"
-                  label="تتبع الروابط"
-                  defaultValue={props.robotsFollow}
-                  positive="Follow"
-                  negative="Nofollow"
-                />
-              </div>
+              <AdminFormListboxSelect
+                id="topic-robots-follow-listbox"
+                focusTargetId="topic-robots-follow"
+                name="robots_follow"
+                label="تتبع الروابط"
+                options={ROBOTS_FOLLOW_OPTIONS}
+                defaultValue={props.robotsFollow === null ? "" : String(props.robotsFollow)}
+                placeholder="استخدام الإعداد العام"
+                sizing="content"
+                className="min-w-0 shrink-0"
+              />
+              <div className="min-w-0 flex-1">{canonicalField}</div>
             </div>
           </section>
         </div>
 
-        <aside className="space-y-5 xl:sticky xl:top-6">
-          <section className="rounded-2xl border border-white/10 bg-black/20 p-5">
-            <h3 className="text-base font-semibold text-white">معاينة نتائج البحث</h3>
-            <div className="mt-4 rounded-xl border border-white/10 bg-[#0B0F14] p-4" dir="rtl">
-              <p className="break-all text-xs text-emerald-200/70" dir="ltr">{canonicalPreview}</p>
-              <p className="mt-3 text-lg leading-7 text-[#8B8CFF]">{previewTitle}</p>
-              <p className="mt-2 text-sm leading-7 text-white/58">{previewDescription}</p>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <PreviewValue label="Robots" value={robotsLabel(live.robotsIndex, "Index", "Noindex")} />
-              <PreviewValue label="Links" value={robotsLabel(live.robotsFollow, "Follow", "Nofollow")} />
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/10 bg-black/20 p-5" data-topic-open-graph-preview>
-            <h3 className="text-base font-semibold text-white">معاينة Open Graph</h3>
-            <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-[#0B0F14]">
-              {live.image ? (
-                <div
-                  className="aspect-[1.91/1] bg-cover bg-center"
-                  style={{ backgroundImage: `url(${live.image})` }}
-                  role="img"
-                  aria-label={live.imageAlt || previewTitle}
-                />
-              ) : (
-                <div className="flex aspect-[1.91/1] items-center justify-center border-b border-white/10 text-xs text-white/30">
-                  تُستخدم صورة Open Graph العامة
-                </div>
-              )}
-              <div className="p-4">
-                <p className="line-clamp-2 text-sm font-semibold leading-6 text-white/78">{previewTitle}</p>
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/42">{previewDescription}</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-white/10 bg-black/20 p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h3 className="text-base font-semibold text-white">تحليل SEO المباشر</h3>
-                <p className="mt-1 text-xs text-white/40">الدرجة إرشادية ولا تمنع النشر وحدها.</p>
-              </div>
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-[7px] border-[#D8B87A]/60 bg-black/25 font-en text-xl font-semibold text-white">
-                {analysis.seoScore}
-              </div>
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm" data-topic-seo-keyword-density>
-              <span className="text-white/55">كثافة Focus Keyword</span>
-              <span className="font-en font-semibold text-[#D8B87A]">
-                {live.focusKeyword.trim() ? `${analysis.keywordDensity}%` : "غير متاح"}
-              </span>
-            </div>
-            <div className="mt-5 space-y-2">
-              <IssueRows issues={analysis.issues.seo} />
-            </div>
-          </section>
+        <aside className="min-w-0 xl:sticky xl:top-6">
+          <AdminSingleOpenAccordion
+            ariaLabel="معاينات وتحليل SEO"
+            defaultOpenId="search-result-preview"
+            items={[
+              { id: "search-result-preview", label: "معاينة نتائج البحث", content: searchResultPreviewContent },
+              { id: "open-graph-preview", label: "معاينة Open Graph", content: openGraphPreviewContent },
+              { id: "live-seo-analysis", label: "تحليل SEO المباشر", content: liveSeoAnalysisContent },
+            ]}
+          />
         </aside>
       </div>
     </section>
@@ -391,38 +426,6 @@ function SeoField({
         )}
       </span>
       <AdminFormError name={name} />
-    </label>
-  );
-}
-
-function RobotsSelect({
-  id,
-  name,
-  label,
-  defaultValue,
-  positive,
-  negative,
-}: {
-  id: string;
-  name: string;
-  label: string;
-  defaultValue: boolean | null;
-  positive: string;
-  negative: string;
-}) {
-  return (
-    <label htmlFor={id} className="block rounded-xl border border-white/10 bg-white/[0.025] p-4 text-sm text-white/70">
-      <span>{label}</span>
-      <select
-        id={id}
-        name={name}
-        defaultValue={defaultValue === null ? "" : String(defaultValue)}
-        className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-[#090D12] px-3 text-sm text-white outline-none focus:border-[#D8B87A]/45"
-      >
-        <option value="">استخدام الإعداد العام</option>
-        <option value="true">{positive}</option>
-        <option value="false">{negative}</option>
-      </select>
     </label>
   );
 }

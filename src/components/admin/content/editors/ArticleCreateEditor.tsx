@@ -109,10 +109,13 @@ export default function ArticleCreateEditor({
               id: "publish",
               label: "المراجعة والنشر",
               content: (
-                <div className="space-y-6">
-                  <TopicPublishingOptions status="draft" />
-                  <TopicPublishChecklistPanel formId="topic-create-form" initial={publishInput} status="draft" />
-                </div>
+                <TopicPublishingOptions status="draft">
+                  <TopicPublishChecklistPanel
+                    formId="topic-create-form"
+                    initial={publishInput}
+                    status="draft"
+                  />
+                </TopicPublishingOptions>
               ),
             },
           ]}

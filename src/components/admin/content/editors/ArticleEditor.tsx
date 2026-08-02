@@ -169,8 +169,6 @@ export default function ArticleEditor({
                     seriesId: topic.series_id,
                     series: topic.series,
                     seriesSlug: topic.series_slug,
-                    dateLabel: topic.date_label,
-                    publishedAt: topic.published_at,
                     showTitle: topic.show_title_on_page,
                     showImage: topic.show_image_on_page,
                     showExcerpt: topic.show_excerpt_on_page,
@@ -210,10 +208,24 @@ export default function ArticleEditor({
               id: "publish",
               label: "المراجعة والنشر",
               content: (
-                <div className="space-y-6">
-                  <TopicPublishingOptions status={status} featured={Boolean(topic.is_featured)} popular={Boolean(topic.is_popular)} publishedAt={topic.published_at} dateLabel={topic.date_label} />
-                  <TopicPublishChecklistPanel formId="topic-edit-form" initial={publishInput} status={status} publishedAt={topic.published_at} dateLabel={topic.date_label} categoryLabel={selectedCategory} seriesLabel={topic.series ?? "—"} initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }} />
-                </div>
+                <TopicPublishingOptions
+                  status={status}
+                  featured={Boolean(topic.is_featured)}
+                  popular={Boolean(topic.is_popular)}
+                  publishedAt={topic.published_at}
+                  dateLabel={topic.date_label}
+                >
+                  <TopicPublishChecklistPanel
+                    formId="topic-edit-form"
+                    initial={publishInput}
+                    status={status}
+                    publishedAt={topic.published_at}
+                    dateLabel={topic.date_label}
+                    categoryLabel={selectedCategory}
+                    seriesLabel={topic.series ?? "—"}
+                    initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }}
+                  />
+                </TopicPublishingOptions>
               ),
             },
           ]}

@@ -45,7 +45,7 @@ type CorrectionTarget = {
 const CHECKLIST_CORRECTION_TARGETS: Record<string, CorrectionTarget> = {
   title: { tabId: "basic", targetId: "topic-title" },
   slug: { tabId: "basic", targetId: "topic-slug" },
-  category: { tabId: "basic", targetId: "topic-category" },
+  category: { tabId: "basic", targetId: "topic-category-listbox" },
   excerpt: { tabId: "basic", targetId: "topic-excerpt" },
   image: { tabId: "basic", targetId: "topic-image-field" },
   "image-alt": { tabId: "basic", targetId: "topic-image-alt" },
@@ -220,27 +220,26 @@ export default function TopicPublishChecklistPanel({
       ? "يحتاج تحسين"
       : "مكتمل";
   const publishDate = dateLabel || input.publishedAt || "غير محدد";
+  const cardClassName = "flex h-full min-h-0 min-w-0 flex-col rounded-2xl bg-black/20 p-4";
 
   return (
-    <section className="space-y-5" data-topic-publish-review>
+    <section
+      className="space-y-4"
+      data-topic-publish-review
+      data-topic-publish-review-presentation="embedded"
+    >
       <div
-        className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] xl:items-start"
+        className="grid gap-4 lg:grid-cols-2"
         data-topic-publish-review-grid
       >
-        <section className="min-w-0 rounded-2xl border border-red-400/20 bg-[#080B10]/92 p-5" data-topic-publish-blockers>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs tracking-[.22em] text-red-200/55">BLOCKING ISSUES</p>
-              <h3 className="mt-2 text-base font-semibold text-white">
-                {blockers.length
-                  ? `يوجد ${blockers.length} ${blockers.length === 1 ? "تنبيه مانع" : "تنبيهات مانعة"} للنشر`
-                  : "لا توجد تنبيهات مانعة للنشر"}
-              </h3>
-            </div>
-            <span className="shrink-0 rounded-full border border-[#D8B87A]/25 px-3 py-1.5 font-en text-sm text-[#F2D99B]">
-              {readiness}%
-            </span>
-          </div>
+        <section className={`${cardClassName} border border-red-400/20`} data-topic-publish-blockers>
+          <ReviewCardHeader
+            title={blockers.length
+              ? `يوجد ${blockers.length} ${blockers.length === 1 ? "تنبيه مانع" : "تنبيهات مانعة"} للنشر`
+              : "لا توجد تنبيهات مانعة للنشر"}
+            status={`${readiness}%`}
+            tone="danger"
+          />
           {blockers.length ? (
             <ReviewRows items={blockers} />
           ) : (
@@ -250,20 +249,21 @@ export default function TopicPublishChecklistPanel({
           )}
         </section>
 
-        <section className="min-w-0 rounded-2xl border border-white/10 bg-[#080B10]/92 p-5" data-topic-publishing-tasks>
-          <h3 className="text-base font-semibold text-white">Publishing Tasks</h3>
-          <p className="mt-2 text-xs text-white/38">
-            {countChecklistStatus(items, "pass")} مكتمل · {countChecklistStatus(items, "fail")} مانع · {countChecklistStatus(items, "warn")} تحسين
-          </p>
+        <section className={`${cardClassName} border border-white/10`} data-topic-publishing-tasks>
+          <ReviewCardHeader
+            title="Publishing Tasks"
+            status={`${countChecklistStatus(tasks, "pass")}/${tasks.length}`}
+          />
           <TaskRows items={tasks} />
         </section>
 
-        <div className="min-w-0 space-y-5" data-topic-publish-left-column>
-          <section className="rounded-2xl border border-[#D8B87A]/22 bg-[#080B10]/92 p-5" data-topic-publish-improvements>
-            <h3 className="text-base font-semibold text-[#F2D99B]">تحسينات اختيارية</h3>
-            <p className="mt-2 text-sm leading-7 text-white/45">
-              توصيات لا تغيّر شروط منع النشر الحالية.
-            </p>
+        <div className="contents" data-topic-publish-left-column>
+          <section className={`${cardClassName} border border-[#D8B87A]/22`} data-topic-publish-improvements>
+            <ReviewCardHeader
+              title="تحسينات اختيارية"
+              status={`${improvements.length}`}
+              tone="gold"
+            />
             {improvements.length ? (
               <ReviewRows items={improvements} />
             ) : (
@@ -273,8 +273,8 @@ export default function TopicPublishChecklistPanel({
             )}
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[#080B10]/92 p-5" data-topic-publish-summary>
-            <h3 className="text-base font-semibold text-white">ملخص الموضوع</h3>
+          <section className={`${cardClassName} border border-white/10`} data-topic-publish-summary>
+            <ReviewCardHeader title="ملخص الموضوع" status={statusLabel(status)} />
             <div className="mt-4 flex gap-4">
               {input.image ? (
                 <div
@@ -299,7 +299,7 @@ export default function TopicPublishChecklistPanel({
               <Summary label="التصنيف" value={input.category} />
               <Summary label="السلسلة" value={input.series} />
               <Summary label="عدد الكلمات" value={`${words(input.content)} كلمة`} />
-              <Summary label="تاريخ النشر" value={publishDate} />
+              <Summary label="تاريخ النشر الظاهر" value={publishDate} />
               <Summary label="حالة SEO" value={seoStatus} />
               <Summary label="الأسئلة الشائعة" value={`${faqCount} مكتمل · ${input.faqVisible ? "ظاهر" : "مخفي"}`} />
             </dl>
@@ -344,6 +344,42 @@ function TaskRows({ items }: { items: PublishChecklistItem[] }) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ReviewCardHeader({
+  title,
+  status,
+  tone = "default",
+}: {
+  title: string;
+  status: string;
+  tone?: "default" | "danger" | "gold";
+}) {
+  const titleClassName =
+    tone === "gold" ? "text-[#F2D99B]" : "text-white";
+  const statusClassName =
+    tone === "danger"
+      ? "border-red-400/20 bg-red-400/[0.06] text-red-100/80"
+      : tone === "gold"
+        ? "border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#F2D99B]"
+        : "border-white/10 bg-white/[0.035] text-white/55";
+
+  return (
+    <div
+      className="flex min-h-11 items-start justify-between gap-3"
+      data-topic-publish-card-header
+    >
+      <h3 className={`min-w-0 text-base font-semibold leading-6 ${titleClassName}`}>
+        {title}
+      </h3>
+      <span
+        className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${statusClassName}`}
+        data-topic-publish-card-status
+      >
+        {status}
+      </span>
     </div>
   );
 }

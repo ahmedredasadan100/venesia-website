@@ -8,6 +8,8 @@ const createEditor = read("src/components/admin/content/editors/ArticleCreateEdi
 const editEditor = read("src/components/admin/content/editors/ArticleEditor.tsx");
 const basicPanel = read("src/components/admin/content/editors/article/TopicBasicDataPanel.tsx");
 const helpers = read("src/app/admin/content/topics/article-actions/helpers.ts");
+const publishingOptions = read("src/components/admin/content/editors/article/TopicPublishingOptions.tsx");
+const faqEditor = read("src/components/admin/content/editors/article/FaqEditor.tsx");
 
 let passed = 0;
 function check(label, condition) {
@@ -66,6 +68,70 @@ check(
 check(
   "category slug remains bound to the existing save payload",
   helpers.includes('categorySlug: getString(formData, "category_slug")'),
+);
+check(
+  "Create and Edit embed one shared review inside one shared publishing owner",
+  [createEditor, editEditor].every((source) =>
+    /<TopicPublishingOptions\b[\s\S]*?<TopicPublishChecklistPanel\b[\s\S]*?<\/TopicPublishingOptions>/.test(source),
+  ) &&
+    publishingOptions.includes("data-topic-publishing-review-slot") &&
+    checklist.includes('data-topic-publish-review-presentation="embedded"') &&
+    checklist.includes('className="grid gap-4 lg:grid-cols-2"') &&
+    ![createEditor, editEditor, publishingOptions, checklist].some((source) =>
+      /(?:^|[<\s])presentation="(?:embedded|integrated)"/m.test(source) ||
+      source.includes('presentation?: "default"'),
+    ),
+);
+check(
+  "shared review keeps four coherent equal-height two-by-two cells",
+  checklist.includes('const cardClassName = "flex h-full min-h-0 min-w-0 flex-col rounded-2xl bg-black/20 p-4"') &&
+    checklist.match(/\$\{cardClassName\}/g)?.length === 4 &&
+    checklist.match(/<ReviewCardHeader/g)?.length === 4 &&
+    checklist.includes("data-topic-publish-card-header") &&
+    checklist.includes("data-topic-publish-card-status") &&
+    !checklist.includes("xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]") &&
+    [
+      "data-topic-publish-blockers",
+      "data-topic-publishing-tasks",
+      "data-topic-publish-improvements",
+      "data-topic-publish-summary",
+    ].every((marker) => checklist.includes(marker)),
+);
+check(
+  "shared publishing keeps one balanced four-cell field source without FAQ ownership",
+  publishingOptions.includes("mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-stretch") &&
+    publishingOptions.match(/className="contents"/g)?.length === 2 &&
+    ["is_featured", "is_popular", "is_published"].every((name) =>
+      publishingOptions.match(new RegExp(`name="${name}"`, "g"))?.length === 1,
+    ) &&
+    publishingOptions.includes("TopicDateLabelField") &&
+    !publishingOptions.includes("presentation?:") &&
+    !publishingOptions.includes("presentation ===") &&
+    !publishingOptions.includes("data-topic-faq-visibility-slot") &&
+    !publishingOptions.includes('name="show_faq_on_page"'),
+);
+check(
+  "legitimate Create defaults and Edit hydration do not fork publishing presentation",
+  createEditor.includes('<TopicPublishingOptions status="draft">') &&
+    !createEditor.includes("featured={") &&
+    !createEditor.includes("popular={") &&
+    !createEditor.includes("publishedAt={topic.") &&
+    !createEditor.includes("initialDisplay={{") &&
+    editEditor.includes("featured={Boolean(topic.is_featured)}") &&
+    editEditor.includes("popular={Boolean(topic.is_popular)}") &&
+    editEditor.includes("publishedAt={topic.published_at}") &&
+    editEditor.includes("initialDisplay={{"),
+);
+check(
+  "FAQ visibility remains one FaqEditor-owned source in the FAQ tab and read-only in review",
+  faqEditor.match(/name="show_faq_on_page"/g)?.length === 1 &&
+    faqEditor.includes("{faqVisibilitySwitch}") &&
+    !faqEditor.includes("createPortal") &&
+    !faqEditor.includes("visibilityPortalTargetId") &&
+    ![createEditor, editEditor].some((source) => source.includes("faqVisibilitySlotId")) &&
+    checklist.includes('faqVisible: checked(form, "show_faq_on_page", seed.faqVisible)') &&
+    checklist.includes("input.faqVisible") &&
+    !publishingOptions.includes('name="show_faq_on_page"'),
 );
 
 console.log(`verify:topic-publish-checklist passed (${passed} assertions)`);

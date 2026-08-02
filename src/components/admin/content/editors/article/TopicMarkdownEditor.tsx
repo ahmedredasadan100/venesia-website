@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
-type TopicMarkdownEditorProps = {
+export type AdminPublicRichContentEditorProps = {
   defaultValue?: string;
   variant?: "default" | "compact";
 };
@@ -454,7 +454,8 @@ function MarkdownEditor({ content, setContent, compact = false }: { content: str
   );
 }
 
-export default function TopicMarkdownEditor({ defaultValue = "", variant = "default" }: TopicMarkdownEditorProps) {
+/** Canonical detailed Markdown owner for structured public content in the Admin. */
+export function AdminPublicRichContentEditor({ defaultValue = "", variant = "default" }: AdminPublicRichContentEditorProps) {
   const normalizedDefaultValue = useMemo(() => normalizeInitialContent(defaultValue), [defaultValue]);
   const [content, setContent] = useState(normalizedDefaultValue);
   const [viewMode, setViewMode] = useState<ViewMode>("write");
@@ -616,3 +617,5 @@ export default function TopicMarkdownEditor({ defaultValue = "", variant = "defa
     </section>
   );
 }
+
+export default AdminPublicRichContentEditor;

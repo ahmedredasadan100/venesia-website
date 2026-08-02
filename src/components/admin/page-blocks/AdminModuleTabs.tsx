@@ -5,6 +5,8 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 type AdminModuleTab = {
   id: string;
   label: string;
+  icon?: ReactNode;
+  indicator?: ReactNode;
   content: ReactNode;
 };
 
@@ -17,10 +19,23 @@ type AdminModuleTabsProps = {
    * Safe default remains wrap for existing editors.
    */
   nowrap?: boolean;
-  variant?: "pills" | "segmented" | "underline";
+  variant?: "pills" | "segmented" | "underline" | "editor";
   navigationEventName?: string;
   ariaLabel?: string;
 };
+
+const ADMIN_EDITOR_TAB_CONTAINER_CLASS_NAME =
+  "flex w-full min-w-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-white/10 bg-[#090D12]/88 p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+const ADMIN_EDITOR_TAB_CLASS_NAME =
+  "relative inline-flex h-14 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-xl border border-transparent ps-6 pe-6 text-[15px] font-semibold leading-none transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#D8B87A]/70";
+const ADMIN_EDITOR_TAB_CONTENT_CLASS_NAME =
+  "inline-flex items-center justify-center gap-2";
+const ADMIN_EDITOR_TAB_ICON_CLASS_NAME =
+  "inline-flex size-5 shrink-0 items-center justify-center [&>svg]:size-5";
+const ADMIN_EDITOR_TAB_INDICATOR_CLASS_NAME =
+  "inline-flex shrink-0 items-center justify-center";
+const ADMIN_EDITOR_TAB_ACTIVE_INDICATOR_CLASS_NAME =
+  "pointer-events-none absolute bottom-0 start-6 end-6 h-0.5 rounded-t-full bg-[#D8B87A]";
 
 type AdminModuleNavigationDetail =
   | string
@@ -95,13 +110,15 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
     <div className="space-y-5" data-admin-module-tabs={variant}>
       <div
         className={[
-          variant === "segmented"
+          variant === "editor"
+            ? ADMIN_EDITOR_TAB_CONTAINER_CLASS_NAME
+            : variant === "segmented"
             ? "grid grid-cols-2 overflow-hidden rounded-2xl border border-white/12 bg-[#090D12]/88 sm:grid-cols-4"
             : variant === "underline"
               ? "flex border-b border-white/10 bg-[#080B10]/92 px-2"
             : "flex gap-2 border-b border-white/10 pb-3",
-          variant !== "segmented" && nowrap ? "flex-nowrap overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "",
-          variant !== "segmented" && !nowrap ? "flex-wrap" : "",
+          variant !== "segmented" && variant !== "editor" && nowrap ? "flex-nowrap overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "",
+          variant !== "segmented" && variant !== "editor" && !nowrap ? "flex-wrap" : "",
         ].join(" ")}
         role="tablist"
         aria-label={ariaLabel}
@@ -123,25 +140,54 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
               data-topic-tab={tab.id}
               data-admin-tab-id={tab.id}
               className={[
-                variant === "segmented"
+                variant === "editor"
+                  ? ADMIN_EDITOR_TAB_CLASS_NAME
+                  : variant === "segmented"
                   ? "min-h-12 cursor-pointer border-b border-e border-white/10 px-3 py-3 text-sm font-semibold transition sm:border-b-0"
                   : variant === "underline"
                     ? "min-h-14 shrink-0 cursor-pointer border-b-2 px-4 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#D8B87A]/70"
                   : "cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition",
-                nowrap && variant !== "segmented" ? "shrink-0 whitespace-nowrap" : "",
+                nowrap && variant !== "segmented" && variant !== "editor" ? "shrink-0 whitespace-nowrap" : "",
                 isActive
-                  ? variant === "segmented"
+                  ? variant === "editor"
+                    ? "border-[#D8B87A]/20 bg-[#D8B87A]/[0.08] text-[#E6C98D]"
+                    : variant === "segmented"
                     ? "bg-[linear-gradient(135deg,rgba(201,148,42,0.34),rgba(104,71,20,0.35))] text-[#F2CB69] shadow-[inset_0_0_24px_rgba(226,174,59,0.10)]"
                     : variant === "underline"
                       ? "border-[#D8B87A] bg-[#D8B87A]/[0.06] text-[#F2D99B]"
                     : "bg-[#D8B87A]/15 text-[#D8B87A] ring-1 ring-[#D8B87A]/35"
-                  : variant === "underline"
+                  : variant === "editor"
+                    ? "text-white/55 hover:bg-white/[0.035] hover:text-white/85"
+                    : variant === "underline"
                     ? "border-transparent text-white/52 hover:border-[#D8B87A]/35 hover:bg-white/[0.035] hover:text-white"
                     : "text-white/50 hover:bg-white/[0.04] hover:text-white",
               ].join(" ")}
             >
-              {isActive && variant === "segmented" ? <span aria-hidden className="me-2">✓</span> : null}
-              {tab.label}
+              {variant === "editor" ? (
+                <>
+                  <span className={ADMIN_EDITOR_TAB_CONTENT_CLASS_NAME}>
+                    {tab.icon ? (
+                      <span aria-hidden="true" className={ADMIN_EDITOR_TAB_ICON_CLASS_NAME}>
+                        {tab.icon}
+                      </span>
+                    ) : null}
+                    <span>{tab.label}</span>
+                    {tab.indicator ? (
+                      <span aria-hidden="true" className={ADMIN_EDITOR_TAB_INDICATOR_CLASS_NAME}>
+                        {tab.indicator}
+                      </span>
+                    ) : null}
+                  </span>
+                  {isActive ? (
+                    <span aria-hidden="true" className={ADMIN_EDITOR_TAB_ACTIVE_INDICATOR_CLASS_NAME} />
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  {isActive && variant === "segmented" ? <span aria-hidden className="me-2">✓</span> : null}
+                  {tab.label}
+                </>
+              )}
             </button>
           );
         })}
