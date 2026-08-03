@@ -30,6 +30,8 @@ export type TopicRow = {
   canonical_url: string | null;
   robots_index: boolean | null;
   robots_follow: boolean | null;
+  og_image: string | null;
+  og_image_alt: string;
   faq: { question: string; answer: string }[] | null;
 };
 

@@ -270,9 +270,11 @@ check(
   !(await adapter.listImagePaths("images", 20)).includes(uploaded.path),
 );
 
+const entitySeoContract = loadTypeScriptModule("src/lib/seo/entity-seo-types.ts");
 const topicValidation = loadTypeScriptModule(
   "src/lib/admin/content-workflow/topic-publish-validation.ts",
   {
+    "../../seo/entity-seo-types": entitySeoContract,
     "./brand-tone-guardrails": loadTypeScriptModule(
       "src/lib/admin/content-workflow/brand-tone-guardrails.ts",
     ),

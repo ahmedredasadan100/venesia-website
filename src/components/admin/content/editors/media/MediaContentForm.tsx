@@ -25,6 +25,7 @@ import {
 import MediaVideoFields from "./MediaVideoFields";
 import ContentTemplatePicker from "../../../content-workflow/ContentTemplatePicker";
 import MediaPublishChecklistPanel from "../../../content-workflow/MediaPublishChecklistPanel";
+import MediaEntitySeoPanel from "./MediaEntitySeoPanel";
 import AdminMediaAltWarning from "../../../media-intelligence/AdminMediaAltWarning";
 import { mediaRowToPublishInput } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 
@@ -45,6 +46,12 @@ type MediaContentFormValues = {
   seo_title?: string | null;
   seo_description?: string | null;
   focus_keyword?: string | null;
+  seo_keywords?: string[] | null;
+  canonical_url?: string | null;
+  robots_index?: boolean | null;
+  robots_follow?: boolean | null;
+  og_image?: string | null;
+  og_image_alt?: string | null;
 };
 
 type MediaContentFormProps = {
@@ -356,43 +363,7 @@ export default function MediaContentForm({
         ) : null}
       </AdminFormLayout>
 
-      <AdminFormSection
-        eyebrow="SEO"
-        title="إعدادات السيو"
-        description="حقول اختيارية لعنوان ووصف محركات البحث. إن تُركت فارغة يُستخدم العنوان والموجز."
-        compactHeader
-        className="border-[#D8B87A]/12"
-      >
-        <div className="grid gap-5 lg:grid-cols-2">
-          <AdminFormField label="SEO Title">
-            <input
-              name="seo_title"
-              defaultValue={values?.seo_title ?? ""}
-              placeholder="عنوان يظهر في نتائج البحث..."
-              className={adminFormFieldClassName("scroll-mt-24")}
-            />
-          </AdminFormField>
-
-          <AdminFormField label="Focus Keyword">
-            <input
-              name="focus_keyword"
-              defaultValue={values?.focus_keyword ?? ""}
-              placeholder="الكلمة الرئيسية المستهدفة"
-              className={adminFormFieldClassName()}
-            />
-          </AdminFormField>
-        </div>
-
-        <AdminFormField label="Meta Description">
-          <textarea
-            name="seo_description"
-            rows={4}
-            defaultValue={values?.seo_description ?? ""}
-            placeholder="وصف مختصر يظهر في نتائج البحث..."
-            className={adminFormFieldClassName("resize-none leading-7")}
-          />
-        </AdminFormField>
-      </AdminFormSection>
+      <MediaEntitySeoPanel contentType={contentType} values={values} />
 
       <AdminStickyFormBar
         title={mode === "edit" ? "حفظ التعديلات" : "إنشاء المحتوى"}

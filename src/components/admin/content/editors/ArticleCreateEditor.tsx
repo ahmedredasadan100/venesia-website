@@ -111,8 +111,9 @@ export default function ArticleCreateEditor({
                   canonicalUrl=""
                   robotsIndex={null}
                   robotsFollow={null}
+                  ogImage=""
+                  ogImageAlt=""
                   faq={[]}
-                  hideImageAltField
                 />
               ),
             },

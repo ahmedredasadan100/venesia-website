@@ -15,7 +15,7 @@ export async function getTopicById(id: string) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "id, title, slug, excerpt, content, image, image_alt, media_payload, category_slug, series_id, status, published_at, published_by, date_label, deleted_at, seo_title, seo_description, focus_keyword, seo_keywords, canonical_url, robots_index, robots_follow, faq, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_faq_on_page, show_faq_title_on_page",
+      "id, title, slug, excerpt, content, image, image_alt, media_payload, category_slug, series_id, status, published_at, published_by, date_label, deleted_at, seo_title, seo_description, focus_keyword, seo_keywords, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_faq_on_page, show_faq_title_on_page",
     )
     .eq("id", id)
     .eq("content_type", "article")
@@ -104,7 +104,7 @@ export async function getTopicForDuplicate(id: string) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "title, slug, excerpt, content, image, image_alt, category, category_slug, category_id, series_id, series, series_slug, date_label, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, faq, is_featured, is_popular, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_faq_on_page, show_faq_title_on_page",
+      "title, slug, excerpt, content, image, image_alt, category, category_slug, category_id, series_id, series, series_slug, date_label, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, is_featured, is_popular, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_faq_on_page, show_faq_title_on_page",
     )
     .eq("id", id)
     .eq("content_type", "article")

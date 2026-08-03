@@ -8,18 +8,9 @@ import {
   PROJECT_ENTRY_NAVIGATION_EVENT,
   type ProjectEntryRoot,
 } from "../../../../lib/admin/projects/project-entry-contract";
+import { ENTITY_SEO_FIELD_NAMES } from "../../../../lib/seo/entity-seo-types";
 
-const PROJECT_SEO_FIELD_NAMES = {
-  seoTitle: "seo_title",
-  seoDescription: "seo_description",
-  focusKeyword: "focus_keyword",
-  seoKeywords: "seo_keywords",
-  canonicalUrl: "canonical_url",
-  robotsIndex: "robots_index",
-  robotsFollow: "robots_follow",
-  ogImage: "og_image",
-  ogImageAlt: "og_image_alt",
-} satisfies AdminEntitySeoFieldNames;
+const PROJECT_SEO_FIELD_NAMES = ENTITY_SEO_FIELD_NAMES satisfies AdminEntitySeoFieldNames;
 
 const PROJECT_SEO_FIELD_IDS = {
   seoTitle: "project-seo-title",
@@ -32,8 +23,6 @@ const PROJECT_SEO_FIELD_IDS = {
   robotsIndexFocusTarget: "project-robots-index",
   robotsFollowListbox: "project-robots-follow-listbox",
   robotsFollowFocusTarget: "project-robots-follow",
-  ogImageSection: "project-og-image",
-  ogImageAlt: "project-og-image-alt",
 } satisfies AdminEntitySeoFieldIds;
 
 export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot }) {
@@ -43,23 +32,31 @@ export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot
       entityLabel="المشروع"
       publicPathPrefix="/projects"
       slugPlaceholder="project-slug"
-      mediaBrowseFolder="images/projects/seo"
       navigationEventName={PROJECT_ENTRY_NAVIGATION_EVENT}
       sourceFieldNames={{
         title: "arabic_name",
         description: "general_description",
         content: "overview_body",
         slug: "slug",
+        image: "hero_image",
+        imageAlt: "hero_image_alt",
       }}
       fieldNames={PROJECT_SEO_FIELD_NAMES}
       fieldIds={PROJECT_SEO_FIELD_IDS}
+      social={{
+        mediaBrowseFolder: "images/projects/seo",
+        fieldIds: {
+          imageSection: "project-og-image",
+          imageAlt: "project-og-image-alt",
+        },
+      }}
       initial={{
         title: project.arabic_name,
         description: project.general_description,
         content: project.overview_body,
         slug: project.slug,
-        image: project.og_image,
-        imageAlt: project.og_image_alt,
+        image: project.hero_image,
+        imageAlt: project.hero_image_alt,
         seoTitle: project.seo_title,
         seoDescription: project.seo_description,
         seoKeywords: project.seo_keywords,
@@ -67,6 +64,8 @@ export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot
         canonicalUrl: project.canonical_url,
         robotsIndex: project.robots_index,
         robotsFollow: project.robots_follow,
+        ogImage: project.og_image,
+        ogImageAlt: project.og_image_alt,
       }}
       correctionTargets={{
         "seo-title-length": { tabId: "seo", targetId: PROJECT_SEO_FIELD_IDS.seoTitle },
@@ -75,8 +74,8 @@ export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot
         "keyword-title": { tabId: "seo", targetId: PROJECT_SEO_FIELD_IDS.seoTitle },
         "keyword-description": { tabId: "seo", targetId: PROJECT_SEO_FIELD_IDS.seoDescription },
         "keyword-content": { tabId: "overview", targetId: "overview_body-editor" },
-        image: { tabId: "seo", targetId: PROJECT_SEO_FIELD_IDS.ogImageSection },
-        "image-alt": { tabId: "seo", targetId: PROJECT_SEO_FIELD_IDS.ogImageAlt },
+        image: { tabId: "seo", targetId: "project-og-image" },
+        "image-alt": { tabId: "seo", targetId: "project-og-image-alt" },
         slug: { tabId: "basic", targetId: "project-slug" },
         "seo-keywords": { tabId: "seo", targetId: PROJECT_SEO_FIELD_IDS.seoKeywords },
       }}

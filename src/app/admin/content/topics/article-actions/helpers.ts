@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { parseFormPublishedDate, resolveTopicPublishedAt } from "../../../../../lib/content-dates";
 import {
+  readEntitySeoFormData,
+  toEntitySeoPersistence,
+} from "../../../../../lib/seo/entity-seo-types";
+import {
   getTopicDraftValidationError,
   getTopicPublishOnlyValidationError,
   getTopicPublishValidationError,
@@ -22,13 +26,6 @@ export function getRedirectTo(formData: FormData, fallback = "/admin/content/top
 
 export function getBoolean(formData: FormData, key: string) {
   return formData.get(key) === "on" || formData.get(key) === "true";
-}
-
-export function getOptionalBoolean(formData: FormData, key: string) {
-  const value = formData.get(key);
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return null;
 }
 
 export function validateId(id: string) {
@@ -107,13 +104,6 @@ function getFile(formData: FormData, key: string) {
   return value instanceof File && value.size > 0 ? value : null;
 }
 
-function getKeywords(formData: FormData) {
-  return getString(formData, "seo_keywords")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function getDateLabel(formData: FormData) {
   const label = getString(formData, "date_label");
   return label || null;
@@ -152,6 +142,7 @@ export function getPayload(formData: FormData) {
   const seriesId = getString(formData, "series_id");
   const legacySeries = getString(formData, "legacy_series");
   const legacySeriesSlug = getString(formData, "legacy_series_slug");
+  const seo = readEntitySeoFormData(formData);
 
   return {
     title,
@@ -167,13 +158,7 @@ export function getPayload(formData: FormData) {
     legacySeriesSlug: legacySeriesSlug ? createSlug(legacySeriesSlug) : null,
     dateLabel: getDateLabel(formData),
     publishedAt: parseFormPublishedDate(formData),
-    seoTitle: getString(formData, "seo_title"),
-    seoDescription: getString(formData, "seo_description"),
-    focusKeyword: getString(formData, "focus_keyword"),
-    seoKeywords: getKeywords(formData),
-    canonicalUrl: getString(formData, "canonical_url"),
-    robotsIndex: getOptionalBoolean(formData, "robots_index"),
-    robotsFollow: getOptionalBoolean(formData, "robots_follow"),
+    ...seo,
     faq: getFaq(formData),
     faqEditorPresent: getBoolean(formData, "faq_editor_present"),
     isFeatured: getBoolean(formData, "is_featured"),
@@ -237,20 +222,12 @@ export function preservePayloadFromCurrent(payload: TopicPayload, currentTopic: 
     payload.imageFieldPresent,
   );
   payload.imageAlt = preserveText(payload.imageAlt, String(currentTopic.image_alt ?? ""));
-  payload.seoTitle = preserveText(payload.seoTitle, String(currentTopic.seo_title ?? ""));
-  payload.seoDescription = preserveText(payload.seoDescription, String(currentTopic.seo_description ?? ""));
-  payload.focusKeyword = preserveText(payload.focusKeyword, String(currentTopic.focus_keyword ?? ""));
-
   if (!payload.excerpt.trim()) {
     payload.excerpt = String(currentTopic.excerpt ?? "");
   }
 
   if (!payload.content.trim()) {
     payload.content = String(currentTopic.content ?? "");
-  }
-
-  if (!payload.seoKeywords.length && Array.isArray(currentTopic.seo_keywords)) {
-    payload.seoKeywords = currentTopic.seo_keywords.map(String).filter(Boolean);
   }
 
   if (!payload.faqEditorPresent && !payload.faq.length && Array.isArray(currentTopic.faq)) {
@@ -279,6 +256,7 @@ export function buildTopicWritePayload(
   now: string,
   currentTopic?: TopicRow | null,
 ) {
+  const seo = toEntitySeoPersistence(payload);
   return {
     title: payload.title,
     slug: payload.slug,
@@ -294,13 +272,7 @@ export function buildTopicWritePayload(
     series_slug: series?.slug ?? payload.legacySeriesSlug,
     date_label: payload.dateLabel,
     status,
-    seo_title: payload.seoTitle || null,
-    seo_description: payload.seoDescription || null,
-    seo_keywords: payload.seoKeywords,
-    focus_keyword: payload.focusKeyword || null,
-    canonical_url: payload.canonicalUrl || null,
-    robots_index: payload.robotsIndex,
-    robots_follow: payload.robotsFollow,
+    ...seo,
     faq: payload.faq,
     is_featured: payload.isFeatured,
     is_popular: payload.isPopular,

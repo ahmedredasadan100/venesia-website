@@ -2,26 +2,21 @@ import "server-only";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
+import type { EntitySeoPersistenceRecord } from "../seo/entity-seo-types";
 
-export type PublishedPageByPath = {
+export type PublishedPageByPath = EntitySeoPersistenceRecord & {
   id: number;
   title: string;
   slug: string;
   path: string;
-  seo_title: string | null;
-  seo_description: string | null;
-  seo_keywords: string[] | null;
   status: "published";
 };
 
-type DbPublishedPageRow = {
+type DbPublishedPageRow = EntitySeoPersistenceRecord & {
   id: number;
   title: string;
   slug: string;
   path: string;
-  seo_title: string | null;
-  seo_description: string | null;
-  seo_keywords: string[] | null;
   status: string;
 };
 
@@ -33,7 +28,7 @@ export async function getPublishedPageByPath(path: string): Promise<PublishedPag
   try {
     const { data, error } = await getSupabaseAdmin()
       .from("pages")
-      .select("id,title,slug,path,seo_title,seo_description,seo_keywords,status")
+      .select("id,title,slug,path,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,status")
       .eq("path", path)
       .eq("status", "published")
       .maybeSingle<DbPublishedPageRow>();
@@ -54,7 +49,13 @@ export async function getPublishedPageByPath(path: string): Promise<PublishedPag
       path: data.path,
       seo_title: data.seo_title,
       seo_description: data.seo_description,
-      seo_keywords: Array.isArray(data.seo_keywords) ? data.seo_keywords : null,
+      focus_keyword: data.focus_keyword,
+      seo_keywords: Array.isArray(data.seo_keywords) ? data.seo_keywords : [],
+      canonical_url: data.canonical_url,
+      robots_index: data.robots_index,
+      robots_follow: data.robots_follow,
+      og_image: data.og_image,
+      og_image_alt: data.og_image_alt,
       status: "published",
     };
   } catch (error) {

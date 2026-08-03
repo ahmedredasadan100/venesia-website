@@ -14,7 +14,7 @@ export const UNIFIED_LISTING_SELECT =
 
 /** Detail page fields — includes full content + SEO. */
 export const UNIFIED_DETAIL_SELECT =
-  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, seo_title, seo_description, seo_keywords, focus_keyword";
+  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt";
 
 const UNIFIED_MEDIA_CONTENT_TYPES = ["news", "press", "site_update", "video", "gallery"] as const;
 

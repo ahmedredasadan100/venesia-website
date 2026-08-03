@@ -383,6 +383,9 @@ const topicBasicPanel = read(
   "src/components/admin/content/editors/article/TopicBasicDataPanel.tsx",
 );
 const topicSeoPanel = read("src/components/admin/SeoPanel.tsx");
+const sharedEntitySeoPanel = read(
+  "src/components/admin/seo/AdminEntitySeoPanel.tsx",
+);
 const topicPublishingOptions = read(
   "src/components/admin/content/editors/article/TopicPublishingOptions.tsx",
 );
@@ -430,10 +433,13 @@ check(
   ) &&
     topicTabs.includes('variant="editor"') &&
     topicBasicPanel.includes('data-topic-basic-presentation="editor"') &&
-    occurrenceCount(topicSeoPanel, /<AdminFormLayout/g) === 1 &&
-    occurrenceCount(topicSeoPanel, /<AdminSingleOpenAccordion/g) === 1 &&
-    topicSeoPanel.includes('defaultOpenId="search-result-preview"') &&
-    topicSeoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
+    occurrenceCount(topicSeoPanel, /<AdminEntitySeoPanel/g) === 1 &&
+    occurrenceCount(topicSeoPanel, /<AdminFormLayout/g) === 0 &&
+    occurrenceCount(topicSeoPanel, /<AdminSingleOpenAccordion/g) === 0 &&
+    occurrenceCount(sharedEntitySeoPanel, /<AdminFormLayout/g) === 1 &&
+    occurrenceCount(sharedEntitySeoPanel, /<AdminSingleOpenAccordion/g) === 1 &&
+    sharedEntitySeoPanel.includes('defaultOpenId="search-result-preview"') &&
+    sharedEntitySeoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
     topicPublishingOptions.includes('data-topic-publishing-presentation="integrated"') &&
     topicPublishChecklist.includes('data-topic-publish-review-presentation="embedded"'),
 );

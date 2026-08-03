@@ -14,6 +14,11 @@ import {
 } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { validateSlugFormat } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
 import { resolveTopicPublishedAt } from "../../../../../lib/content-dates";
+import {
+  readEntitySeoFormData,
+  toEntitySeoPersistence,
+  validateEntitySeoValues,
+} from "../../../../../lib/seo/entity-seo-types";
 import type { MediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 import type { MediaStatus, MediaTopicRow } from "./types";
 import { VALID_STATUSES } from "./types";
@@ -121,6 +126,7 @@ export function getPayload(formData: FormData) {
   const title = getString(formData, "title");
   const rawSlug = getString(formData, "slug");
   const slug = rawSlug ? createSlug(rawSlug) : createSlug(title);
+  const seo = readEntitySeoFormData(formData);
 
   return {
     title,
@@ -134,15 +140,15 @@ export function getPayload(formData: FormData) {
     seriesId: getString(formData, "series_id"),
     status: getNormalizedStatus(getString(formData, "status"), "draft"),
     isFeatured: getBoolean(formData, "is_featured"),
-    seoTitle: getString(formData, "seo_title"),
-    seoDescription: getString(formData, "seo_description"),
-    focusKeyword: getString(formData, "focus_keyword"),
+    ...seo,
   };
 }
 
 export type MediaPayload = ReturnType<typeof getPayload>;
 
 export function getValidationError(payload: MediaPayload) {
+  const seoIssue = validateEntitySeoValues(payload)[0];
+  if (seoIssue) return seoIssue.message;
   return getMediaBaseValidationError({
     title: payload.title,
     slug: payload.slug,
@@ -217,6 +223,7 @@ export function buildMediaWritePayload(
   series?: { id: number; name: string; slug: string } | null,
 ) {
   const isRichMedia = contentType === "video" || contentType === "gallery";
+  const seo = toEntitySeoPersistence(payload);
 
   return {
     title: payload.title,
@@ -235,10 +242,7 @@ export function buildMediaWritePayload(
     series_slug: series?.slug ?? null,
     date_label: null,
     status: payload.status,
-    seo_title: payload.seoTitle || null,
-    seo_description: payload.seoDescription || null,
-    seo_keywords: Array.isArray(currentTopic?.seo_keywords) ? currentTopic.seo_keywords : [],
-    focus_keyword: payload.focusKeyword || null,
+    ...seo,
     faq: Array.isArray(currentTopic?.faq) ? currentTopic.faq : [],
     is_featured: payload.isFeatured,
     is_popular: false,

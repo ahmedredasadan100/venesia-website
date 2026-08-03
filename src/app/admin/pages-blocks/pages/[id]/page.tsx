@@ -54,7 +54,7 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
 
   const { data: page, error: pageError } = await getSupabaseAdmin()
     .from("pages")
-    .select("id,title,slug,path,page_type,status,seo_title,seo_description,seo_keywords")
+    .select("id,title,slug,path,page_type,status,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt")
     .eq("id", pageId)
     .maybeSingle();
 
@@ -97,7 +97,13 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       seo={{
         seoTitle: page.seo_title ?? "",
         seoDescription: page.seo_description ?? "",
+        focusKeyword: page.focus_keyword ?? "",
         seoKeywords: Array.isArray(page.seo_keywords) ? page.seo_keywords : [],
+        canonicalUrl: page.canonical_url ?? "",
+        robotsIndex: page.robots_index ?? null,
+        robotsFollow: page.robots_follow ?? null,
+        ogImage: page.og_image ?? "",
+        ogImageAlt: page.og_image_alt ?? "",
         notice: seoNotice,
         error: seoError,
       }}

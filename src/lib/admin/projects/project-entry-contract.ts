@@ -1,6 +1,10 @@
 import { validateSlugFormat } from "../slug";
 import { stripHtml } from "../../rich-text/html-utils";
 import {
+  readEntitySeoFormData,
+  validateEntitySeoValues,
+} from "../../seo/entity-seo-types";
+import {
   isProjectPublicationStatus,
   type ProjectPublicationStatus,
 } from "./project-publishing-capability";
@@ -343,23 +347,8 @@ function readOptionalId(value: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-function readNullableBoolean(value: string): boolean | null {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return null;
-}
-
 function readBoolean(value: string) {
   return value === "true" || value === "on" || value === "1";
-}
-
-function splitKeywords(value: string) {
-  return [...new Set(
-    value
-      .split(/[,;،؛]+/)
-      .map((keyword) => keyword.trim().replace(/\s+/g, " "))
-      .filter(Boolean),
-  )];
 }
 
 function entryCount(...lists: string[][]) {
@@ -505,6 +494,7 @@ export function projectEntryPayloadFromFormData(
     formData,
     "publication_status",
   ) || "draft") as ProjectPublicationStatus;
+  const seo = readEntitySeoFormData(formData);
 
   return {
     project: {
@@ -539,15 +529,15 @@ export function projectEntryPayloadFromFormData(
       overview_main_image_alt: readString(formData, "overview_main_image_alt"),
       delivery_title: readString(formData, "delivery_title"),
       delivery_body: readString(formData, "delivery_body"),
-      seo_title: readString(formData, "seo_title"),
-      seo_description: readString(formData, "seo_description"),
-      focus_keyword: readString(formData, "focus_keyword"),
-      seo_keywords: splitKeywords(readString(formData, "seo_keywords")),
-      canonical_url: readString(formData, "canonical_url"),
-      robots_index: readNullableBoolean(readString(formData, "robots_index")),
-      robots_follow: readNullableBoolean(readString(formData, "robots_follow")),
-      og_image: readString(formData, "og_image"),
-      og_image_alt: readString(formData, "og_image_alt"),
+      seo_title: seo.seoTitle,
+      seo_description: seo.seoDescription,
+      focus_keyword: seo.focusKeyword,
+      seo_keywords: seo.seoKeywords,
+      canonical_url: seo.canonicalUrl,
+      robots_index: seo.robotsIndex,
+      robots_follow: seo.robotsFollow,
+      og_image: seo.ogImage,
+      og_image_alt: seo.ogImageAlt,
       publication_status: publicationStatus,
       published_at: null,
       published_by: null,
@@ -642,7 +632,6 @@ export function validateProjectEntryPayload(
     ["hero_image", "hero_image_alt", "صورة الهيرو"],
     ["small_box_image", "small_box_image_alt", "صورة البوكس الصغير"],
     ["overview_main_image", "overview_main_image_alt", "صورة النظرة العامة"],
-    ["og_image", "og_image_alt", "صورة المشاركة"],
   ] as const) {
     if (
       (imageField === "image" ||
@@ -773,14 +762,18 @@ export function validateProjectEntryPayload(
       addError(errors, posterAltField, "النص البديل لصورة غلاف الفيديو مطلوب.");
     }
   }
-  if (project.seo_title.length > 60) {
-    addError(errors, "seo_title", "عنوان تحسين محركات البحث لا يتجاوز 60 حرفًا.");
-  }
-  if (project.seo_description.length > 160) {
-    addError(errors, "seo_description", "الوصف التعريفي لا يتجاوز 160 حرفًا.");
-  }
-  if (project.canonical_url && !isValidHttpUrl(project.canonical_url)) {
-    addError(errors, "canonical_url", "الرابط الأساسي يجب أن يبدأ بـ http أو https.");
+  for (const issue of validateEntitySeoValues({
+    seoTitle: project.seo_title,
+    seoDescription: project.seo_description,
+    focusKeyword: project.focus_keyword,
+    seoKeywords: project.seo_keywords,
+    canonicalUrl: project.canonical_url,
+    robotsIndex: project.robots_index,
+    robotsFollow: project.robots_follow,
+    ogImage: project.og_image,
+    ogImageAlt: project.og_image_alt,
+  })) {
+    addError(errors, issue.field, issue.message);
   }
 
   const deletionContracts = [
