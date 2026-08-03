@@ -14,6 +14,10 @@ import {
 } from "../../../../../lib/admin/media-catalog/write-lease";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
+  ENTITY_SEO_LIMITS,
+  validateEntitySeoValues,
+} from "../../../../../lib/seo/entity-seo-types";
+import {
   buildTopicWritePayload,
   getBoolean,
   getNormalizedStatus,
@@ -80,6 +84,10 @@ function validateTopicFields(
 ) {
   const fieldErrors: FieldErrors = {};
 
+  for (const issue of validateEntitySeoValues(payload)) {
+    addFieldError(fieldErrors, issue.field, issue.message);
+  }
+
   if (!payload.title) addFieldError(fieldErrors, "title", "العنوان مطلوب.");
   if (!payload.slug) {
     addFieldError(fieldErrors, "slug", "الرابط مطلوب.");
@@ -131,11 +139,11 @@ function validateTopicFields(
   }
   if (!payload.seoTitle.trim()) {
     addFieldError(fieldErrors, "seo_title", "SEO Title مطلوب قبل النشر.");
-  } else if (payload.seoTitle.length < 45 || payload.seoTitle.length > 70) {
+  } else if (payload.seoTitle.length < ENTITY_SEO_LIMITS.title.min) {
     addFieldError(
       fieldErrors,
       "seo_title",
-      "يجب أن يكون SEO Title بين 45 و70 حرفًا.",
+      `يجب ألا يقل SEO Title عن ${ENTITY_SEO_LIMITS.title.min} حرفًا.`,
     );
   }
   if (!payload.seoDescription.trim()) {
@@ -145,13 +153,12 @@ function validateTopicFields(
       "SEO Description مطلوب قبل النشر.",
     );
   } else if (
-    payload.seoDescription.length < 120 ||
-    payload.seoDescription.length > 170
+    payload.seoDescription.length < ENTITY_SEO_LIMITS.description.min
   ) {
     addFieldError(
       fieldErrors,
       "seo_description",
-      "يجب أن يكون SEO Description بين 120 و170 حرفًا.",
+      `يجب ألا يقل SEO Description عن ${ENTITY_SEO_LIMITS.description.min} حرفًا.`,
     );
   }
 

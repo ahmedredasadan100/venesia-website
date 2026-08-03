@@ -48,7 +48,12 @@ check("empty FAQ deletion is preserved as empty", helper.includes("faqEditorPres
 check("public FAQ honors visibility", publicPage.includes("topic.showFaqOnPage && topic.faq.length"));
 check("FAQ migration is additive and defaults visible", migration.includes("show_faq_on_page boolean not null default true"));
 check("FAQ title visibility is additive and honored publicly", migration.includes("show_faq_title_on_page boolean not null default true") && publicPage.includes("topic.showFaqTitleOnPage"));
-for (const name of ["seo_title", "seo_description", "focus_keyword", "seo_keywords"]) check(`SEO field adapter: ${name}`, seo.includes(`\"${name}\"`));
+for (const field of ["seoTitle", "seoDescription", "focusKeyword", "seoKeywords", "canonicalUrl", "robotsIndex", "robotsFollow", "ogImage", "ogImageAlt"]) {
+  check(
+    `SEO field adapter: ${field}`,
+    seo.includes("ENTITY_SEO_FIELD_NAMES") && sharedSeo.includes(`fieldNames.${field}`),
+  );
+}
 check("SEO excludes duplicate inputs", !seo.includes('name="slug"') && !seo.includes('name="image_alt"'));
 check("SEO adapter provides the public Topic path to the shared preview owner", seo.includes('publicPathPrefix="/topics"') && sharedSeo.includes("live.slug.trim() || slugPlaceholder"));
 check("SEO adapter adds only typed Topic analysis while the shared owner renders all issues", seo.includes("topicAnalysis.issues.seo.filter") && seo.includes("topicAnalysis.issues.content.find") && !seo.includes("topicAnalysis.issues.readiness") && sharedSeo.includes("analysis.issues.map"));

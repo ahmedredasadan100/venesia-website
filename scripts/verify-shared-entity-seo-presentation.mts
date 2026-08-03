@@ -1,31 +1,35 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { PGlite } from "@electric-sql/pglite";
 
 import {
   ADMIN_ENTITY_SEO_ADOPTION_MANIFEST,
   ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE,
 } from "../src/lib/admin/seo/entity-seo-adoption-manifest.ts";
+import {
+  ENTITY_SEO_FIELD_NAMES,
+  readEntitySeoFormData,
+  toEntitySeoPersistence,
+  validateEntitySeoValues,
+} from "../src/lib/seo/entity-seo-types.ts";
 
-const read = (path: string) =>
-  readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const occurrences = (source: string, token: string) => source.split(token).length - 1;
 
-const sharedPath = "src/components/admin/seo/AdminEntitySeoPanel.tsx";
-const topicPath = "src/components/admin/SeoPanel.tsx";
-const projectPath =
-  "src/components/admin/projects/entry/ProjectSeoPanel.tsx";
-const shared = read(sharedPath);
-const topic = read(topicPath);
-const project = read(projectPath);
-const topicCreate = read(
-  "src/components/admin/content/editors/ArticleCreateEditor.tsx",
-);
-const topicEdit = read(
-  "src/components/admin/content/editors/ArticleEditor.tsx",
-);
-const projectEditor = read("src/app/admin/projects/ProjectEditForm.tsx");
-const accordion = read(
-  "src/components/admin/ui/AdminSingleOpenAccordion.tsx",
-);
+const paths = {
+  shared: "src/components/admin/seo/AdminEntitySeoPanel.tsx",
+  contract: "src/lib/seo/entity-seo-types.ts",
+  topic: "src/components/admin/SeoPanel.tsx",
+  project: "src/components/admin/projects/entry/ProjectSeoPanel.tsx",
+  media: "src/components/admin/content/editors/media/MediaEntitySeoPanel.tsx",
+  mediaForm: "src/components/admin/content/editors/media/MediaContentForm.tsx",
+  page: "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
+  migration: "sql/migrations/20260803153000_shared_entity_seo_capability.sql",
+} as const;
+
+const source = Object.fromEntries(
+  Object.entries(paths).map(([key, path]) => [key, read(path)]),
+) as Record<keyof typeof paths, string>;
 
 let passed = 0;
 function check(label: string, condition: unknown) {
@@ -34,231 +38,321 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
-function occurrences(source: string, token: string) {
-  return source.split(token).length - 1;
-}
-
-function block(source: string, start: string, end: string) {
-  const startIndex = source.indexOf(start);
-  const endIndex = source.indexOf(end, startIndex + start.length);
-  assert.ok(startIndex >= 0 && endIndex > startIndex, `Missing block ${start}`);
-  return source.slice(startIndex, endIndex);
-}
-
-check(
-  "Topic and Project adapters delegate Entity SEO presentation to one shared owner",
-  topic.match(/<AdminEntitySeoPanel\b/g)?.length === 1 &&
-    project.match(/<AdminEntitySeoPanel\b/g)?.length === 1 &&
-    [topicCreate, topicEdit].every(
-      (source) => source.match(/<SeoPanel\b/g)?.length === 1,
-    ) &&
-    projectEditor.match(/<ProjectSeoPanel\b/g)?.length === 1,
-);
-
-check(
-  "the Topic adapter contains mappings and typed analysis only, not a parallel panel",
-  topic.includes("AdminEntitySeoAnalysisExtension") &&
-    topic.includes("analyzeTopicSeo") &&
-    topic.includes("TOPIC_SEO_CORRECTION_TARGETS") &&
-    topic.includes('mode: "entity_fallback"') &&
-    ![
-      "<AdminFormLayout",
-      "<AdminSingleOpenAccordion",
-      "<AdminMediaImageField",
-      "<input",
-      "<textarea",
-      "function IssueRow",
-      "function PreviewValue",
-    ].some((token) => topic.includes(token)),
-);
-
-const terminology = [
-  "عنوان صفحة محركات البحث (SEO Title)",
-  "الوصف التعريفي لمحركات البحث (Meta Description)",
-  "الكلمة المفتاحية الرئيسية (Focus Keyword)",
-  "الكلمات المفتاحية الداعمة (SEO Keywords)",
-  "الرابط الأساسي (Canonical URL)",
-  "الفهرسة وتتبع الروابط (Robots)",
-  "إعدادات المشاركة الاجتماعية (Open Graph)",
-  "معاينة المشاركة الاجتماعية (Open Graph)",
+const fieldNames = [
+  "seoTitle",
+  "seoDescription",
+  "focusKeyword",
+  "seoKeywords",
+  "canonicalUrl",
+  "robotsIndex",
+  "robotsFollow",
+  "ogImage",
+  "ogImageAlt",
 ] as const;
 
 check(
-  "one shared semantic owner defines and consumes the standard Entity SEO terminology",
-  shared.includes("ADMIN_ENTITY_SEO_TERMINOLOGY") &&
-    terminology.every(
-      (label) =>
-        occurrences(shared, label) === 1 &&
-        !topic.includes(label) &&
-        !project.includes(label),
-    ),
+  "one existing Entity SEO module owns the final nine-field data and persistence contract",
+  source.contract.includes("export const ENTITY_SEO_FIELD_NAMES") &&
+    source.contract.includes("export type EntitySeoValues") &&
+    source.contract.includes("export type EntitySeoPersistenceRecord") &&
+    source.contract.includes("readEntitySeoFormData") &&
+    source.contract.includes("toEntitySeoPersistence") &&
+    source.contract.includes("validateEntitySeoValues") &&
+    fieldNames.every((field) => source.contract.includes(`${field}:`)),
 );
 
 check(
-  "the shared Focus Keyword helper is exact and never falls back to the generic optional copy",
-  occurrences(
-    shared,
-    "عبارة البحث الرئيسية التي تُحسب عليها الكثافة والتحليلات.",
-  ) === 1 &&
-    ![shared, topic, project].some((source) =>
-      source.includes("قيمة اختيارية قابلة للتخصيص."),
-    ),
-);
-
-const searchPreview = block(
-  shared,
-  "const searchResultPreviewContent",
-  "const openGraphPreviewContent",
-);
-check(
-  "the shared Search Result Preview resolves URL, title, description, Robots, and Links",
-  searchPreview.includes("{canonical}") &&
-    searchPreview.includes("{title}") &&
-    searchPreview.includes("{description}") &&
-    searchPreview.includes('label="Robots"') &&
-    searchPreview.includes('label="Links"') &&
-    ["الإعداد العام", "Index", "Noindex", "Follow", "Nofollow"].every(
-      (value) => shared.includes(`"${value}"`),
-    ),
-);
-
-const socialFields = block(
-  shared,
-  "const socialSharingFields",
-  "const searchResultPreviewContent",
-);
-const socialPreview = block(
-  shared,
-  "const openGraphPreviewContent",
-  "const liveSeoAnalysisContent",
-);
-check(
-  "Social Settings own one optional override image pair while Preview stays read-only",
-  occurrences(socialFields, "<AdminMediaImageField") === 1 &&
-    occurrences(socialFields, "<input") === 1 &&
-    socialFields.includes("name={social.fieldNames.image}") &&
-    socialFields.includes("name={social.fieldNames.imageAlt}") &&
-    socialFields.includes('social.mode === "editable_override"') &&
-    socialFields.includes("data-admin-entity-seo-social-source") &&
-    !["<input", "<textarea", "<AdminMediaImageField", "name="].some(
-      (token) => socialPreview.includes(token),
-    ),
-);
-
-check(
-  "Project preserves explicit Open Graph overrides and Topic preserves its existing image fallback",
-  project.includes('mode: "editable_override"') &&
-    project.includes('image: "og_image"') &&
-    project.includes('imageAlt: "og_image_alt"') &&
-    topic.includes('mode: "entity_fallback"') &&
-    topic.includes('image: "image"') &&
-    topic.includes('imageAlt: "image_alt"') &&
-    occurrences(topic, 'imageAlt: "image_alt"') === 1,
-);
-
-check(
-  "Topic-specific rules extend the shared issue and metric contracts without local presentation",
-  topic.includes("AdminEntitySeoAnalysisExtension<TopicSeoAnalysisState>") &&
-    [
-      '"keyword-intro"',
-      '"image-alt-length"',
-      '"keyword-alt"',
-      '"keyword-density"',
-      'issue.id === "faq"',
-      'id: "faq-count"',
-    ].every((token) => topic.includes(token)) &&
-    shared.includes("readonly SeoIssue[]") &&
-    shared.includes("readonly AdminEntitySeoAnalysisMetric[]"),
-);
-
-check(
-  "the shared analysis presentation exposes stable code, severity, details, metrics, and empty state",
-  [
-    "data-admin-entity-seo-issue={issue.id",
-    "data-admin-entity-seo-severity={issue.type}",
-    "data-admin-entity-seo-issue-code",
-    "<details",
-    "data-admin-entity-seo-metrics",
-    "لا توجد ملاحظات SEO متاحة حاليًا.",
-  ].every((token) => shared.includes(token)),
-);
-
-check(
-  "both adapters provide entity correction targets and the shared button dispatches navigation without submitting",
-  [topic, project].every(
-    (source) =>
-      source.includes("correctionTargets=") &&
-      source.includes('tabId: "seo"') &&
-      source.includes('tabId: "basic"'),
-  ) &&
-    shared.includes('type="button"') &&
-    shared.includes("new CustomEvent(navigationEventName") &&
-    !shared.includes("window.location"),
-);
-
-check(
-  "AdminSingleOpenAccordion is the sole Entity SEO disclosure owner",
-  occurrences(shared, "<AdminSingleOpenAccordion") === 1 &&
-    !topic.includes("AdminSingleOpenAccordion") &&
-    !project.includes("AdminSingleOpenAccordion") &&
-    accordion.includes("useState<string | null>") &&
-    accordion.includes("aria-expanded={open}") &&
-    accordion.includes('event.key === "ArrowDown"'),
-);
-
-check(
-  "each shared submitted field binding is rendered once and previews own no save source",
-  [
-    "seoTitle",
-    "seoDescription",
-    "focusKeyword",
-    "canonicalUrl",
-    "robotsIndex",
-    "robotsFollow",
-  ].every((field) => occurrences(shared, `name={fieldNames.${field}}`) === 1) &&
-    occurrences(shared, "name={fieldNames.seoKeywords}") === 2 &&
-    occurrences(shared, "<AdminTagsField") === 1 &&
-    !searchPreview.includes("name=") &&
-    !socialPreview.includes("name=") &&
-    !shared.includes("<form"),
-);
-
-const classifications = new Set(
-  ADMIN_ENTITY_SEO_ADOPTION_MANIFEST.map((entry) => entry.classification),
-);
-check(
-  "the adoption manifest classifies every required surface family and every recorded source exists",
-  [
-    "shared_reference",
-    "adopted",
-    "legacy_generic_gap",
-    "specialized_exception",
-    "explicit_exception",
-  ].every((classification) => classifications.has(classification as never)) &&
-    [
-      "entity_seo_editor",
-      "global_seo_settings",
-      "redirect_management",
-      "sitemap_robots_utility",
-      "specialized_exception",
-    ].every((kind) =>
-      ADMIN_ENTITY_SEO_ADOPTION_MANIFEST.some(
-        (entry) => entry.surfaceKind === kind,
-      ),
+  "the migration makes Topic and Page schemas match the established Project SEO column contract",
+  ["public.topics", "public.pages"].every((table) => source.migration.includes(`alter table ${table}`)) &&
+    ["focus_keyword", "canonical_url", "robots_index", "robots_follow", "og_image", "og_image_alt"].every(
+      (column) => source.migration.includes(column),
     ) &&
-    ADMIN_ENTITY_SEO_ADOPTION_MANIFEST.every((entry) =>
-      entry.sourceFiles.every((sourceFile) => existsSync(sourceFile)),
+    occurrences(source.migration, "alter column seo_keywords type text[]") === 2 &&
+    occurrences(source.migration, "char_length(seo_title) <= 60") === 2 &&
+    occurrences(source.migration, "char_length(seo_description) <= 160") === 2 &&
+    occurrences(source.migration, "og_image is null or btrim(og_image_alt) <> ''") === 2,
+);
+
+check(
+  "Topic, Project, Media Topic, and Page adapters all delegate presentation to the same owner",
+  [source.topic, source.project, source.media, source.page].every(
+    (adapter) => occurrences(adapter, "<AdminEntitySeoPanel") === 1,
+  ) &&
+    source.mediaForm.includes("<MediaEntitySeoPanel") &&
+    !source.mediaForm.includes('name="seo_title"') &&
+    !source.page.includes('name="seo_title"'),
+);
+
+check(
+  "the historical entity-fallback presentation contract is removed",
+  !source.shared.includes("entity_fallback") &&
+    !source.topic.includes("entity_fallback") &&
+    !source.shared.includes("data-admin-entity-seo-social-source") &&
+    occurrences(source.shared, "<AdminMediaImageField") === 1 &&
+    source.shared.includes("name={fieldNames.ogImage}") &&
+    source.shared.includes("name={fieldNames.ogImageAlt}"),
+);
+
+check(
+  "Open Graph preview uses explicit override first and the entity image only as fallback",
+  source.shared.includes("const effectiveImage = live.ogImage.trim() || live.image.trim()") &&
+    source.shared.includes("live.ogImage.trim()") &&
+    source.shared.includes("live.ogImageAlt.trim()") &&
+    source.shared.includes("url(${effectiveImage})") &&
+    source.shared.includes("aria-label={effectiveImageAlt || title}"),
+);
+
+const persistenceFiles = [
+  read("src/app/admin/content/topics/article-actions/helpers.ts"),
+  read("src/app/admin/content/topics/media-actions/helpers.ts"),
+  read("src/app/admin/pages-blocks/pages/page-seo-actions.ts"),
+  read("src/lib/admin/projects/project-entry-contract.ts"),
+];
+check(
+  "every save owner reads or validates the shared persistence contract without a parallel field parser",
+  persistenceFiles.every((file) => file.includes("readEntitySeoFormData")) &&
+    persistenceFiles.every((file) => file.includes("validateEntitySeoValues") || file.includes("toEntitySeoPersistence")) &&
+    persistenceFiles.slice(0, 3).every((file) => file.includes("toEntitySeoPersistence")),
+);
+
+const resolver = read("src/lib/seo/resolve-seo-metadata.ts");
+const generator = read("src/lib/seo/generate-public-metadata.ts");
+check(
+  "public metadata has one EntitySeoData contract and no Page-specific parallel resolver contract",
+  !source.contract.includes("PageSeoData") &&
+    !source.contract.includes("pageSeo?:") &&
+    !resolver.includes("input.pageSeo") &&
+    generator.includes("mergeEntitySeoData(input.entitySeo, pageSeo)") &&
+    resolver.indexOf("input.entitySeo?.ogImage") < resolver.indexOf("input.image"),
+);
+
+check(
+  "Topic, Project, Page, and Media public routes expose explicit OG alt, canonical, and robots through the shared resolver",
+  read("src/app/(site)/topics/[slug]/page.tsx").includes("ogImageAlt: topic.ogImage") &&
+    read("src/app/(site)/projects/[slug]/page.tsx").includes("ogImageAlt: project.seo.ogImage?.alt") &&
+    read("src/app/(site)/[...slug]/page.tsx").includes("entitySeoDataFromPersistence(page)") &&
+    ["canonical: item.canonicalUrl", "robotsIndex: item.robotsIndex", "robotsFollow: item.robotsFollow", "ogImageAlt: item.ogImageAlt"].every(
+      (token) => read("src/lib/media-center/generate-media-detail-metadata.ts").includes(token),
     ),
 );
 
 check(
-  "Global SEO capability remains explicitly open while entity-editor gaps remain recorded",
-  ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE.globalClosed === false &&
-    ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE.allowedClaim ===
-      "topic_and_project_adoption_closed" &&
-    ADMIN_ENTITY_SEO_ADOPTION_MANIFEST.filter(
-      (entry) => entry.classification === "legacy_generic_gap",
-    ).length >= 2,
+  "the shared Search Preview still owns canonical, title, description, Index, and Follow presentation",
+  ["{canonical}", "{title}", "{description}", 'label="Robots"', 'label="Links"'].every(
+    (token) => source.shared.includes(token),
+  ) && source.shared.includes('data-admin-seo-control-order="index-follow-canonical"'),
 );
 
-console.log(`\n${passed}/${passed} shared Entity SEO checks passed.`);
+check(
+  "the canonical 45-60 and 120-160 standards drive presentation and affected validation",
+  source.contract.includes("min: 45, max: 60") &&
+    source.contract.includes("min: 120, max: 160") &&
+    read("src/lib/admin/seo-length-standards.ts").includes("ENTITY_SEO_LIMITS") &&
+    !read("src/app/admin/content/topics/article-actions/save.ts").includes("> 70") &&
+    !read("src/lib/admin/content-workflow/topic-publish-validation.ts").includes("<= 170"),
+);
+
+check(
+  "the shared owner remains form-neutral and owns the one accordion preview/analysis disclosure",
+  !source.shared.includes("<form") &&
+    occurrences(source.shared, "<AdminSingleOpenAccordion") === 1 &&
+    source.shared.includes("search-result-preview") &&
+    source.shared.includes("open-graph-preview") &&
+    source.shared.includes("live-seo-analysis"),
+);
+
+check(
+  "correction buttons remain non-submitting and provide shared focus fallback after navigation",
+  source.shared.includes('type="button"') &&
+    source.shared.includes("new CustomEvent(navigationEventName") &&
+    source.shared.includes("document.getElementById(target.targetId)") &&
+    source.shared.includes("focus({ preventScroll: true })"),
+);
+
+check(
+  "all eligible entity editors are closed while non-entity SEO utilities remain explicit exceptions",
+  ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE.globalClosed === true &&
+    ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE.allowedClaim === "eligible_entity_seo_capability_closed" &&
+    !ADMIN_ENTITY_SEO_ADOPTION_MANIFEST.some((entry) => entry.classification === ("legacy_generic_gap" as never)) &&
+    ["topic-article-seo", "project-seo", "page-seo", "media-topic-seo"].every((id) =>
+      ADMIN_ENTITY_SEO_ADOPTION_MANIFEST.some((entry) => entry.id === id && entry.classification === "adopted"),
+    ) &&
+    ["global-seo-settings", "seo-redirects", "sitemap-monitor", "category-series-seo"].every((id) =>
+      ADMIN_ENTITY_SEO_ADOPTION_MANIFEST.some((entry) => entry.id === id && entry.classification !== "adopted"),
+    ),
+);
+
+check(
+  "every recorded manifest source exists",
+  ADMIN_ENTITY_SEO_ADOPTION_MANIFEST.every((entry) =>
+    entry.sourceFiles.every((sourceFile) => existsSync(sourceFile)),
+  ),
+);
+
+const formData = new FormData();
+formData.set(ENTITY_SEO_FIELD_NAMES.seoTitle, "  عنوان موحّد  ");
+formData.set(ENTITY_SEO_FIELD_NAMES.seoDescription, "  وصف موحّد  ");
+formData.set(ENTITY_SEO_FIELD_NAMES.focusKeyword, "  كلمة  ");
+formData.set(ENTITY_SEO_FIELD_NAMES.seoKeywords, "alpha، beta, alpha");
+formData.set(ENTITY_SEO_FIELD_NAMES.canonicalUrl, "https://example.com/entity");
+formData.set(ENTITY_SEO_FIELD_NAMES.robotsIndex, "false");
+formData.set(ENTITY_SEO_FIELD_NAMES.robotsFollow, "true");
+formData.set(ENTITY_SEO_FIELD_NAMES.ogImage, "/images/entity-og.jpg");
+formData.set(ENTITY_SEO_FIELD_NAMES.ogImageAlt, "  صورة المشاركة  ");
+const parsed = readEntitySeoFormData(formData);
+const persisted = toEntitySeoPersistence(parsed);
+check(
+  "the shared form and persistence contract normalizes all nine fields once",
+  parsed.seoTitle === "عنوان موحّد" &&
+    parsed.seoKeywords.join("|") === "alpha|beta" &&
+    persisted.canonical_url === "https://example.com/entity" &&
+    persisted.robots_index === false &&
+    persisted.robots_follow === true &&
+    persisted.og_image === "/images/entity-og.jpg" &&
+    persisted.og_image_alt === "صورة المشاركة",
+);
+
+check(
+  "the shared validator rejects invalid canonical and an OG override without alt text",
+  validateEntitySeoValues({
+    ...parsed,
+    canonicalUrl: "/relative-path",
+    ogImageAlt: "",
+  }).some((issue) => issue.field === ENTITY_SEO_FIELD_NAMES.canonicalUrl) &&
+    validateEntitySeoValues({
+      ...parsed,
+      canonicalUrl: "",
+      ogImageAlt: "",
+    }).some((issue) => issue.field === ENTITY_SEO_FIELD_NAMES.ogImageAlt),
+);
+
+const database = await PGlite.create();
+try {
+  await database.exec(`
+    create schema if not exists public;
+    create role anon nologin;
+    create role authenticated nologin;
+    create role service_role nologin;
+    create table public.topic_categories (
+      id bigint primary key,
+      name text,
+      slug text,
+      color_token text
+    );
+    create table public.topic_series (
+      id bigint primary key,
+      name text,
+      slug text
+    );
+    create table public.admin_users (
+      id bigint primary key,
+      full_name text,
+      email text
+    );
+    create table public.topics (
+      id bigint primary key,
+      slug text,
+      title text not null,
+      excerpt text,
+      content text,
+      image text,
+      image_alt text,
+      category_id bigint,
+      series_id bigint,
+      content_type text,
+      media_payload jsonb,
+      status text,
+      is_featured boolean,
+      is_popular boolean,
+      published_at timestamptz,
+      created_at timestamptz,
+      updated_at timestamptz,
+      created_by bigint,
+      updated_by bigint,
+      published_by bigint,
+      views_count bigint,
+      deleted_at timestamptz,
+      seo_title text,
+      seo_description text,
+      focus_keyword text,
+      seo_keywords jsonb default '[]'::jsonb,
+      canonical_url text,
+      robots_index boolean,
+      robots_follow boolean,
+      faq jsonb,
+      date_label text
+    );
+    create table public.pages (
+      id bigint primary key,
+      title text not null,
+      seo_title text,
+      seo_description text,
+      seo_keywords jsonb default '[]'::jsonb
+    );
+    create view public.admin_content_topics
+    with (security_invoker = true)
+    as
+    select topics.id, topics.slug, topics.title, topics.seo_keywords
+    from public.topics topics;
+    grant all on public.admin_content_topics to anon, authenticated, service_role;
+    insert into public.topics (
+      id, slug, title, image_alt, seo_title, seo_description, focus_keyword,
+      seo_keywords, canonical_url, robots_index, robots_follow
+    ) values (
+      1, 'topic-fallback', 'Topic fallback', 'Topic image alt', repeat('T', 61),
+      repeat('D', 161), null, '["alpha", "beta"]'::jsonb, '/invalid', null, false
+    );
+    insert into public.pages (id, title, seo_title, seo_description, seo_keywords)
+    values (1, 'Page fallback', null, null, '["gamma"]'::jsonb);
+  `);
+  await database.exec(source.migration);
+
+  const columns = await database.query<{ table_name: string; column_name: string; data_type: string }>(`
+    select table_name, column_name, data_type
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name in ('topics', 'pages')
+      and column_name in ('seo_keywords', 'focus_keyword', 'canonical_url', 'robots_index', 'robots_follow', 'og_image', 'og_image_alt')
+  `);
+  const keywordColumns = columns.rows.filter((column) => column.column_name === "seo_keywords");
+  const topic = await database.query<{
+    seo_title: string;
+    seo_description: string;
+    seo_keywords: string[];
+    canonical_url: string | null;
+  }>("select seo_title, seo_description, seo_keywords, canonical_url from public.topics where id = 1");
+  const page = await database.query<{ focus_keyword: string; seo_keywords: string[]; og_image_alt: string }>(
+    "select focus_keyword, seo_keywords, og_image_alt from public.pages where id = 1",
+  );
+  const viewColumns = await database.query<{ column_name: string }>(`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'admin_content_topics'
+  `);
+
+  check(
+    "the migration executes against the historical Topic and Page schemas and produces one SQL contract",
+    keywordColumns.length === 2 &&
+      keywordColumns.every((column) => column.data_type === "ARRAY") &&
+      columns.rows.filter((column) => column.column_name !== "seo_keywords").length === 12 &&
+      topic.rows[0]?.seo_title.length === 60 &&
+      topic.rows[0]?.seo_description.length === 160 &&
+      topic.rows[0]?.seo_keywords.join("|") === "alpha|beta" &&
+      topic.rows[0]?.canonical_url === null &&
+      page.rows[0]?.focus_keyword === "" &&
+      page.rows[0]?.seo_keywords.join("|") === "gamma" &&
+      page.rows[0]?.og_image_alt === "" &&
+      ["seo_title", "seo_description", "focus_keyword", "seo_keywords", "canonical_url", "robots_index", "robots_follow", "og_image", "og_image_alt"].every(
+        (column) => viewColumns.rows.some((viewColumn) => viewColumn.column_name === column),
+      ),
+  );
+
+  await assert.rejects(
+    database.exec("update public.pages set og_image = '/images/page.jpg', og_image_alt = '' where id = 1"),
+  );
+  check("the migrated database enforces paired Open Graph image alt text", true);
+} finally {
+  await database.close();
+}
+
+console.log(`\n${passed}/${passed} shared Entity SEO capability checks passed.`);

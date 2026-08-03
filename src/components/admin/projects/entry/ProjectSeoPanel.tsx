@@ -8,16 +8,9 @@ import {
   PROJECT_ENTRY_NAVIGATION_EVENT,
   type ProjectEntryRoot,
 } from "../../../../lib/admin/projects/project-entry-contract";
+import { ENTITY_SEO_FIELD_NAMES } from "../../../../lib/seo/entity-seo-types";
 
-const PROJECT_SEO_FIELD_NAMES = {
-  seoTitle: "seo_title",
-  seoDescription: "seo_description",
-  focusKeyword: "focus_keyword",
-  seoKeywords: "seo_keywords",
-  canonicalUrl: "canonical_url",
-  robotsIndex: "robots_index",
-  robotsFollow: "robots_follow",
-} satisfies AdminEntitySeoFieldNames;
+const PROJECT_SEO_FIELD_NAMES = ENTITY_SEO_FIELD_NAMES satisfies AdminEntitySeoFieldNames;
 
 const PROJECT_SEO_FIELD_IDS = {
   seoTitle: "project-seo-title",
@@ -45,16 +38,13 @@ export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot
         description: "general_description",
         content: "overview_body",
         slug: "slug",
+        image: "hero_image",
+        imageAlt: "hero_image_alt",
       }}
       fieldNames={PROJECT_SEO_FIELD_NAMES}
       fieldIds={PROJECT_SEO_FIELD_IDS}
       social={{
-        mode: "editable_override",
         mediaBrowseFolder: "images/projects/seo",
-        fieldNames: {
-          image: "og_image",
-          imageAlt: "og_image_alt",
-        },
         fieldIds: {
           imageSection: "project-og-image",
           imageAlt: "project-og-image-alt",
@@ -65,8 +55,8 @@ export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot
         description: project.general_description,
         content: project.overview_body,
         slug: project.slug,
-        image: project.og_image,
-        imageAlt: project.og_image_alt,
+        image: project.hero_image,
+        imageAlt: project.hero_image_alt,
         seoTitle: project.seo_title,
         seoDescription: project.seo_description,
         seoKeywords: project.seo_keywords,
@@ -74,6 +64,8 @@ export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot
         canonicalUrl: project.canonical_url,
         robotsIndex: project.robots_index,
         robotsFollow: project.robots_follow,
+        ogImage: project.og_image,
+        ogImageAlt: project.og_image_alt,
       }}
       correctionTargets={{
         "seo-title-length": { tabId: "seo", targetId: PROJECT_SEO_FIELD_IDS.seoTitle },

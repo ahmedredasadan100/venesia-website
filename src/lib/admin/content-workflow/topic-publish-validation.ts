@@ -1,5 +1,6 @@
 import type { PublishChecklistItem } from "./publish-checklist-types";
 import { VENESIA_BRAND_TONE_RULES } from "./brand-tone-guardrails";
+import { ENTITY_SEO_LIMITS } from "../../seo/entity-seo-types";
 
 export type TopicFaqItem = {
   question?: string;
@@ -50,14 +51,14 @@ export function getTopicPublishOnlyValidationError(input: TopicPublishInput): st
   }
   if (!input.focusKeyword.trim()) return "Focus Keyword مطلوب قبل النشر.";
   if (!input.seoTitle.trim()) return "SEO Title مطلوب قبل النشر.";
-  if (input.seoTitle.length < 45) return "SEO Title قصير. النطاق المقترح من 45 إلى 60 حرف.";
-  if (input.seoTitle.length > 70) return "SEO Title طويل جدًا. الأفضل ألا يزيد عن 70 حرف.";
+  if (input.seoTitle.length < ENTITY_SEO_LIMITS.title.min) return `SEO Title قصير. النطاق المعتمد من ${ENTITY_SEO_LIMITS.title.min} إلى ${ENTITY_SEO_LIMITS.title.max} حرف.`;
+  if (input.seoTitle.length > ENTITY_SEO_LIMITS.title.max) return `SEO Title طويل. الحد الأقصى ${ENTITY_SEO_LIMITS.title.max} حرفًا.`;
   if (!input.seoDescription.trim()) return "SEO Description مطلوب قبل النشر.";
-  if (input.seoDescription.length < 120) {
-    return "SEO Description قصير. النطاق المقترح من 120 إلى 160 حرف.";
+  if (input.seoDescription.length < ENTITY_SEO_LIMITS.description.min) {
+    return `SEO Description قصير. النطاق المعتمد من ${ENTITY_SEO_LIMITS.description.min} إلى ${ENTITY_SEO_LIMITS.description.max} حرف.`;
   }
-  if (input.seoDescription.length > 170) {
-    return "SEO Description طويل جدًا. الأفضل ألا يزيد عن 170 حرف.";
+  if (input.seoDescription.length > ENTITY_SEO_LIMITS.description.max) {
+    return `SEO Description طويل. الحد الأقصى ${ENTITY_SEO_LIMITS.description.max} حرفًا.`;
   }
   return null;
 }
@@ -167,7 +168,7 @@ export function buildTopicPublishChecklist(input: TopicPublishInput): PublishChe
       label: "SEO Title",
       status: !input.seoTitle.trim()
         ? "fail"
-        : input.seoTitle.length >= 45 && input.seoTitle.length <= 70
+        : input.seoTitle.length >= ENTITY_SEO_LIMITS.title.min && input.seoTitle.length <= ENTITY_SEO_LIMITS.title.max
           ? "pass"
           : "warn",
       hint: input.seoTitle.trim()
@@ -179,7 +180,7 @@ export function buildTopicPublishChecklist(input: TopicPublishInput): PublishChe
       label: "SEO Description",
       status: !input.seoDescription.trim()
         ? "fail"
-        : input.seoDescription.length >= 120 && input.seoDescription.length <= 170
+        : input.seoDescription.length >= ENTITY_SEO_LIMITS.description.min && input.seoDescription.length <= ENTITY_SEO_LIMITS.description.max
           ? "pass"
           : "warn",
       hint: input.seoDescription.trim()

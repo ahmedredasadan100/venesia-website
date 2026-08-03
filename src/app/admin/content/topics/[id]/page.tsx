@@ -173,7 +173,13 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
           media_payload: (topic.media_payload as MediaTopicPayload | null) ?? null,
           seo_title: topic.seo_title,
           seo_description: topic.seo_description,
+          seo_keywords: Array.isArray(topic.seo_keywords) ? topic.seo_keywords : [],
           focus_keyword: topic.focus_keyword,
+          canonical_url: topic.canonical_url,
+          robots_index: topic.robots_index,
+          robots_follow: topic.robots_follow,
+          og_image: topic.og_image,
+          og_image_alt: topic.og_image_alt,
         }}
       />
     </AdminPageExperience>

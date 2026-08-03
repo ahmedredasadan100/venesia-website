@@ -45,6 +45,7 @@ export async function generateMetadata({
       description: project.seo.description,
       keywords: project.seo.keywords,
       ogImage: project.seo.ogImage?.src,
+      ogImageAlt: project.seo.ogImage?.alt,
       image: project.seo.ogImage?.src ?? project.heroImage.src,
       imageAlt: project.seo.ogImage?.alt || project.heroImage.alt,
       canonical: project.seo.canonicalUrl,

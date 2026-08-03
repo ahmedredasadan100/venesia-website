@@ -1,3 +1,5 @@
+import { ENTITY_SEO_LIMITS } from "../seo/entity-seo-types";
+
 export type SeoLengthState = "muted" | "warning" | "success" | "danger";
 
 export type SeoLengthStandard = {
@@ -11,16 +13,10 @@ export type SeoLengthAssessment = SeoLengthStandard & {
   state: SeoLengthState;
 };
 
-export const SEO_LENGTH_STANDARDS = {
-  title: {
-    min: 45,
-    max: 60,
-  },
-  description: {
-    min: 120,
-    max: 160,
-  },
-} as const satisfies Record<string, SeoLengthStandard>;
+export const SEO_LENGTH_STANDARDS = ENTITY_SEO_LIMITS satisfies Record<
+  string,
+  SeoLengthStandard
+>;
 
 /** Counts every character currently present in the field. */
 export function countSeoTextCharacters(value: string) {

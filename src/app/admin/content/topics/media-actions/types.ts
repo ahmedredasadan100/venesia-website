@@ -32,5 +32,10 @@ export type MediaTopicRow = {
   seo_description?: string | null;
   seo_keywords?: string[] | null;
   focus_keyword?: string | null;
+  canonical_url?: string | null;
+  robots_index?: boolean | null;
+  robots_follow?: boolean | null;
+  og_image?: string | null;
+  og_image_alt?: string | null;
   faq?: { question: string; answer: string }[] | null;
 };

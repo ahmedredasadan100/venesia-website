@@ -5,30 +5,24 @@ import { unstable_cache } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
-import type { PageSeoData } from "./entity-seo-types";
+import {
+  ENTITY_SEO_SELECT,
+  entitySeoDataFromPersistence,
+  type EntitySeoData,
+  type EntitySeoPersistenceRow,
+} from "./entity-seo-types";
 import { normalizePath } from "./seo-utils";
 
-type DbPageSeoRow = {
+type DbPageSeoRow = EntitySeoPersistenceRow & {
   path: string;
-  seo_title: string | null;
-  seo_description: string | null;
-  seo_keywords: string[] | null;
 };
 
-function mapPageSeoRow(row: DbPageSeoRow): PageSeoData {
-  return {
-    title: row.seo_title,
-    description: row.seo_description,
-    keywords: Array.isArray(row.seo_keywords) ? row.seo_keywords : null,
-  };
-}
-
-async function queryPageSeoByPath(path: string): Promise<PageSeoData | null> {
+async function queryPageSeoByPath(path: string): Promise<EntitySeoData | null> {
   const normalizedPath = normalizePath(path);
 
   const { data, error } = await getSupabaseAdmin()
     .from("pages")
-    .select("path, seo_title, seo_description, seo_keywords")
+    .select(`path,${ENTITY_SEO_SELECT}`)
     .eq("path", normalizedPath)
     .maybeSingle<DbPageSeoRow>();
 
@@ -39,12 +33,12 @@ async function queryPageSeoByPath(path: string): Promise<PageSeoData | null> {
 
   if (!data) return null;
 
-  return mapPageSeoRow(data);
+  return entitySeoDataFromPersistence(data);
 }
 
 export const loadPageSeoByPath = cache(async function loadPageSeoByPath(
   path: string,
-): Promise<PageSeoData | null> {
+): Promise<EntitySeoData | null> {
   const normalizedPath = normalizePath(path);
 
   return unstable_cache(

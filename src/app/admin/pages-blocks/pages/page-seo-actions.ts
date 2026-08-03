@@ -8,21 +8,16 @@ import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actio
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import { revalidatePublicCacheTags } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { normalizePath } from "../../../../lib/seo/seo-utils";
+import {
+  readEntitySeoFormData,
+  toEntitySeoPersistence,
+  validateEntitySeoValues,
+} from "../../../../lib/seo/entity-seo-types";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
-}
-
-function readKeywords(formData: FormData) {
-  const raw = readString(formData, "seo_keywords");
-  if (!raw) return [];
-
-  return raw
-    .split(/[,;]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function appendSeoQuery(redirectTo: string, key: "seo_notice" | "seo_error", value: string) {
@@ -42,16 +37,16 @@ export async function savePageSeoAction(formData: FormData) {
     redirect(appendSeoQuery(redirectTo, "seo_error", "معرّف الصفحة غير صالح"));
   }
 
-  const seoTitle = readString(formData, "seo_title") || null;
-  const seoDescription = readString(formData, "seo_description") || null;
-  const seoKeywords = readKeywords(formData);
+  const seo = readEntitySeoFormData(formData);
+  const seoIssue = validateEntitySeoValues(seo)[0];
+  if (seoIssue) {
+    redirect(appendSeoQuery(redirectTo, "seo_error", seoIssue.message));
+  }
 
   const { error } = await getSupabaseAdmin()
     .from("pages")
     .update({
-      seo_title: seoTitle,
-      seo_description: seoDescription,
-      seo_keywords: seoKeywords,
+      ...toEntitySeoPersistence(seo),
       updated_at: new Date().toISOString(),
     })
     .eq("id", pageId);

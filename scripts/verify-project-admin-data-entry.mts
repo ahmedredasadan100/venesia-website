@@ -1063,11 +1063,8 @@ check(
     entitySeoPrimaryStart >= 0 &&
     entitySeoReturnStart > entitySeoPrimaryStart &&
     entitySeoHelperStart > entitySeoReturnStart &&
-    ["seoTitle", "seoDescription", "focusKeyword", "seoKeywords", "robotsIndex", "robotsFollow", "canonicalUrl"].every(
+    ["seoTitle", "seoDescription", "focusKeyword", "seoKeywords", "robotsIndex", "robotsFollow", "canonicalUrl", "ogImage", "ogImageAlt"].every(
       (field) => entitySeoPrimaryRender.includes(`fieldNames.${field}`) && !entitySeoHelperRender.includes(`fieldNames.${field}`),
-    ) &&
-    ["name={social.fieldNames.image}", "name={social.fieldNames.imageAlt}"].every(
-      (binding) => entitySeoPrimaryRender.includes(binding) && !entitySeoHelperRender.includes(binding),
     ) &&
     entitySeoRobotsIndexPosition >= 0 &&
     entitySeoRobotsIndexPosition < entitySeoRobotsFollowPosition &&

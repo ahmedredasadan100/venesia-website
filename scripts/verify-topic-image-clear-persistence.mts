@@ -49,6 +49,8 @@ const currentTopic: TopicRow = {
   canonical_url: null,
   robots_index: null,
   robots_follow: null,
+  og_image: null,
+  og_image_alt: "",
   faq: [],
 };
 

@@ -53,6 +53,8 @@ export type ArticleEditorTopic = {
   canonical_url?: string | null;
   robots_index?: boolean | null;
   robots_follow?: boolean | null;
+  og_image?: string | null;
+  og_image_alt?: string | null;
   status: string | null;
   published_at: string | null;
   updated_at: string | null;
@@ -210,6 +212,8 @@ export default function ArticleEditor({
                   canonicalUrl={topic.canonical_url ?? ""}
                   robotsIndex={topic.robots_index ?? null}
                   robotsFollow={topic.robots_follow ?? null}
+                  ogImage={topic.og_image ?? ""}
+                  ogImageAlt={topic.og_image_alt ?? ""}
                   faq={faq}
                 />
               ),

@@ -9,7 +9,6 @@ export type AdminEntitySeoSurfaceKind =
 export type AdminEntitySeoAdoptionClassification =
   | "shared_reference"
   | "adopted"
-  | "legacy_generic_gap"
   | "specialized_exception"
   | "explicit_exception";
 
@@ -24,16 +23,13 @@ export type AdminEntitySeoAdoptionEntry = {
 };
 
 export const ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE = {
-  id: "shared_entity_seo_presentation",
+  id: "shared_entity_seo_capability",
   owner: "src/components/admin/seo/AdminEntitySeoPanel.tsx",
-  scope: "topic_and_project_entity_editors",
-  allowedClaim: "topic_and_project_adoption_closed",
-  globalClosed: false,
-  globalClosureBlockers: [
-    "Per-page SEO remains a legacy entity editor with a specialized save lifecycle.",
-    "Media Topic SEO fields remain inside the legacy generic media editor.",
-    "Global defaults, redirects, and sitemap monitoring are separate capabilities and do not prove entity-editor adoption.",
-  ],
+  dataContractOwner: "src/lib/seo/entity-seo-types.ts",
+  scope: "all_eligible_public_entity_editors",
+  allowedClaim: "eligible_entity_seo_capability_closed",
+  globalClosed: true,
+  globalClosureBlockers: [],
 } as const;
 
 export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
@@ -42,8 +38,12 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
     label: "Shared Entity SEO presentation owner",
     surfaceKind: "entity_seo_editor",
     classification: "shared_reference",
-    sourceFiles: ["src/components/admin/seo/AdminEntitySeoPanel.tsx"],
-    surfaces: ["shared-presentation", "shared-preview", "shared-analysis"],
+    sourceFiles: [
+      "src/components/admin/seo/AdminEntitySeoPanel.tsx",
+      "src/lib/seo/entity-seo-types.ts",
+      "src/lib/seo/resolve-seo-metadata.ts",
+    ],
+    surfaces: ["shared-data-contract", "shared-presentation", "shared-preview", "shared-analysis", "shared-public-metadata"],
     rationale:
       "Owns Entity SEO terminology, field presentation, previews, accordion disclosure, issue cards, metrics, and correction-button presentation.",
   },
@@ -59,7 +59,7 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
     ],
     surfaces: ["topic:create", "topic:edit"],
     rationale:
-      "A thin adapter maps Topic fields, image fallback, FAQ analysis state, and correction targets into the shared owner.",
+      "A thin adapter maps Topic sources, explicit Open Graph overrides, FAQ analysis state, and correction targets into the shared owner; content image remains only the fallback source.",
   },
   {
     id: "project-seo",
@@ -83,19 +83,24 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
     id: "page-seo",
     label: "Per-page SEO overrides",
     surfaceKind: "entity_seo_editor",
-    classification: "legacy_generic_gap",
-    sourceFiles: ["src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx"],
+    classification: "adopted",
+    sourceFiles: [
+      "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
+      "src/app/admin/pages-blocks/pages/page-seo-actions.ts",
+    ],
     surfaces: ["page:edit"],
     rationale:
-      "Pages have a public path and entity metadata overrides, but retain a dedicated save lifecycle and legacy local presentation.",
+      "The existing Page save lifecycle now reads and writes the final Entity SEO contract while presentation, preview, analysis, and correction delegate to the shared owner.",
   },
   {
     id: "media-topic-seo",
     label: "Media Topic SEO fields",
     surfaceKind: "entity_seo_editor",
-    classification: "legacy_generic_gap",
+    classification: "adopted",
     sourceFiles: [
       "src/components/admin/content/editors/media/MediaContentForm.tsx",
+      "src/components/admin/content/editors/media/MediaEntitySeoPanel.tsx",
+      "src/app/admin/content/topics/media-actions/helpers.ts",
     ],
     surfaces: [
       "news:create-edit",
@@ -105,7 +110,7 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
       "gallery:create-edit",
     ],
     rationale:
-      "Media Topic types persist entity SEO fields but still render them inside the generic media form without the shared Entity SEO presentation.",
+      "All five public Media Topic types use the same Entity SEO fields, persistence mapping, shared presentation, previews, analysis, and public metadata fallback chain.",
   },
   {
     id: "global-seo-settings",

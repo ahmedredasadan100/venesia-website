@@ -3,59 +3,64 @@
 import { useTransition } from "react";
 
 import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
-import { AdminFormField, AdminFormSection } from "../../../../../components/admin/ui";
+import AdminEntitySeoPanel, {
+  type AdminEntitySeoFieldIds,
+  type AdminEntitySeoFieldNames,
+} from "../../../../../components/admin/seo/AdminEntitySeoPanel";
+import { ENTITY_SEO_FIELD_NAMES } from "../../../../../lib/seo/entity-seo-types";
 import { savePageSeoAction } from "../page-seo-actions";
+
+const PAGE_SEO_FIELD_IDS = {
+  seoTitle: "page-seo-title",
+  seoDescription: "page-seo-description",
+  focusKeyword: "page-focus-keyword",
+  seoKeywords: "page-seo-keywords",
+  canonicalUrl: "page-canonical-url",
+  robotsSection: "page-seo-robots",
+  robotsIndexListbox: "page-robots-index-listbox",
+  robotsIndexFocusTarget: "page-robots-index",
+  robotsFollowListbox: "page-robots-follow-listbox",
+  robotsFollowFocusTarget: "page-robots-follow",
+} satisfies AdminEntitySeoFieldIds;
 
 type PageSeoPanelProps = {
   pageId: number;
+  pageTitle: string;
   path: string;
   seoTitle: string;
   seoDescription: string;
+  focusKeyword: string;
   seoKeywords: string[];
+  canonicalUrl: string;
+  robotsIndex: boolean | null;
+  robotsFollow: boolean | null;
+  ogImage: string;
+  ogImageAlt: string;
   notice?: string | null;
   error?: string | null;
 };
 
-export default function PageSeoPanel({
-  pageId,
-  path,
-  seoTitle,
-  seoDescription,
-  seoKeywords,
-  notice,
-  error,
-}: PageSeoPanelProps) {
+export default function PageSeoPanel(props: PageSeoPanelProps) {
   const [isPending, startTransition] = useTransition();
+  const publicSlug = props.path === "/" ? "" : props.path.replace(/^\/+/, "");
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-      <div className="mb-6 border-b border-white/10 pb-5">
-        <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">PAGE SEO</p>
-        <h2 className="mt-3 text-2xl font-semibold text-white">إعدادات السيو للصفحة</h2>
-        <p className="mt-2 text-sm leading-7 text-white/50">
-          تُستخدم هذه القيم للمسار العام{" "}
-          <span dir="ltr" className="font-en text-[#D8B87A]">
-            {path || "/"}
-          </span>{" "}
-          عند توفرها، مع الاحتفاظ بقيم المسار الافتراضية كاحتياط.
-        </p>
-      </div>
-
+    <section className="space-y-5" dir="rtl">
       <AdminFeedbackRegion
-        channel={`page-seo:${pageId}`}
+        channel={`page-seo:${props.pageId}`}
         label="نتيجة حفظ إعدادات السيو"
         feedback={
-          error
+          props.error
             ? {
                 variant: "danger",
                 title: "تعذر حفظ السيو",
-                message: error,
+                message: props.error,
                 layout: "inline",
                 dismissible: true,
                 lifecycle: "manual",
                 dismissSearchParams: ["error"],
               }
-            : notice === "saved"
+            : props.notice === "saved"
               ? {
                   variant: "success",
                   title: "تم الحفظ",
@@ -75,44 +80,67 @@ export default function PageSeoPanel({
         }}
         className="space-y-5"
       >
-        <input type="hidden" name="page_id" value={pageId} />
-        <input
-          type="hidden"
-          name="redirect_to"
-          value={`/admin/pages-blocks/pages/${pageId}?tab=seo`}
+        <input type="hidden" name="page_id" value={props.pageId} />
+        <input type="hidden" name="redirect_to" value={`/admin/pages-blocks/pages/${props.pageId}?tab=seo`} />
+        <input type="hidden" name="page_title" value={props.pageTitle} />
+        <input type="hidden" name="page_description" value="" />
+        <input type="hidden" name="page_content" value="" />
+        <input type="hidden" name="page_slug" value={publicSlug} />
+        <input type="hidden" name="page_image" value="" />
+        <input type="hidden" name="page_image_alt" value="" />
+
+        <AdminEntitySeoPanel
+          id="page-entity-seo-panel"
+          entityLabel="الصفحة"
+          publicPathPrefix=""
+          slugPlaceholder=""
+          navigationEventName="admin-page-blocks-navigation"
+          sourceFieldNames={{
+            title: "page_title",
+            description: "page_description",
+            content: "page_content",
+            slug: "page_slug",
+            image: "page_image",
+            imageAlt: "page_image_alt",
+          }}
+          fieldNames={ENTITY_SEO_FIELD_NAMES satisfies AdminEntitySeoFieldNames}
+          fieldIds={PAGE_SEO_FIELD_IDS}
+          social={{
+            mediaBrowseFolder: "images/pages/seo",
+            fieldIds: {
+              imageSection: "page-og-image",
+              imageAlt: "page-og-image-alt",
+            },
+          }}
+          initial={{
+            title: props.pageTitle,
+            description: "",
+            content: "",
+            slug: publicSlug,
+            image: "",
+            imageAlt: "",
+            seoTitle: props.seoTitle,
+            seoDescription: props.seoDescription,
+            focusKeyword: props.focusKeyword,
+            seoKeywords: props.seoKeywords,
+            canonicalUrl: props.canonicalUrl,
+            robotsIndex: props.robotsIndex,
+            robotsFollow: props.robotsFollow,
+            ogImage: props.ogImage,
+            ogImageAlt: props.ogImageAlt,
+          }}
+          correctionTargets={{
+            "seo-title-length": { tabId: "seo", targetId: PAGE_SEO_FIELD_IDS.seoTitle },
+            "meta-description-length": { tabId: "seo", targetId: PAGE_SEO_FIELD_IDS.seoDescription },
+            "focus-keyword": { tabId: "seo", targetId: PAGE_SEO_FIELD_IDS.focusKeyword },
+            "keyword-title": { tabId: "seo", targetId: PAGE_SEO_FIELD_IDS.seoTitle },
+            "keyword-description": { tabId: "seo", targetId: PAGE_SEO_FIELD_IDS.seoDescription },
+            image: { tabId: "seo", targetId: "page-og-image" },
+            "image-alt": { tabId: "seo", targetId: "page-og-image-alt" },
+            slug: { tabId: "seo", targetId: PAGE_SEO_FIELD_IDS.canonicalUrl },
+            "seo-keywords": { tabId: "seo", targetId: PAGE_SEO_FIELD_IDS.seoKeywords },
+          }}
         />
-
-        <AdminFormSection eyebrow="METADATA" title="العنوان والوصف" compactHeader>
-          <div className="grid gap-5 lg:grid-cols-2">
-            <AdminFormField label="SEO Title">
-              <input
-                name="seo_title"
-                defaultValue={seoTitle}
-                placeholder="عنوان يظهر في نتائج البحث..."
-                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
-              />
-            </AdminFormField>
-
-            <AdminFormField label="SEO Keywords" hint="افصل بين الكلمات بفاصلة أو ;">
-              <input
-                name="seo_keywords"
-                defaultValue={seoKeywords.join(", ")}
-                placeholder="مثال: فينيسيا, مشاريع سكنية"
-                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
-              />
-            </AdminFormField>
-          </div>
-
-          <AdminFormField label="Meta Description">
-            <textarea
-              name="seo_description"
-              rows={4}
-              defaultValue={seoDescription}
-              placeholder="وصف مختصر للصفحة في نتائج البحث..."
-              className="w-full resize-none rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-7 text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
-            />
-          </AdminFormField>
-        </AdminFormSection>
 
         <div className="flex justify-end">
           <button

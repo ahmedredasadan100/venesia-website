@@ -11,6 +11,7 @@ import AdminEntitySeoPanel, {
   type AdminEntitySeoFieldIds,
   type AdminEntitySeoFieldNames,
 } from "./seo/AdminEntitySeoPanel";
+import { ENTITY_SEO_FIELD_NAMES } from "../../lib/seo/entity-seo-types";
 import { TOPIC_EDITOR_NAVIGATION_EVENT } from "./content/editors/article/topic-editor-navigation";
 
 type SeoPanelProps = {
@@ -27,6 +28,8 @@ type SeoPanelProps = {
   canonicalUrl: string;
   robotsIndex: boolean | null;
   robotsFollow: boolean | null;
+  ogImage: string;
+  ogImageAlt: string;
   faq?: FaqItem[];
 };
 
@@ -34,15 +37,7 @@ type TopicSeoAnalysisState = {
   faq: FaqItem[];
 };
 
-const TOPIC_SEO_FIELD_NAMES = {
-  seoTitle: "seo_title",
-  seoDescription: "seo_description",
-  focusKeyword: "focus_keyword",
-  seoKeywords: "seo_keywords",
-  canonicalUrl: "canonical_url",
-  robotsIndex: "robots_index",
-  robotsFollow: "robots_follow",
-} satisfies AdminEntitySeoFieldNames;
+const TOPIC_SEO_FIELD_NAMES = ENTITY_SEO_FIELD_NAMES satisfies AdminEntitySeoFieldNames;
 
 const TOPIC_SEO_FIELD_IDS = {
   seoTitle: "topic-seo-title",
@@ -71,9 +66,9 @@ const TOPIC_SEO_CORRECTION_TARGETS = {
   },
   "keyword-content": { tabId: "basic", targetId: "topic-content-markdown" },
   "keyword-intro": { tabId: "basic", targetId: "topic-content-markdown" },
-  image: { tabId: "basic", targetId: "topic-image-field" },
-  "image-alt": { tabId: "basic", targetId: "topic-image-alt" },
-  "image-alt-length": { tabId: "basic", targetId: "topic-image-alt" },
+  image: { tabId: "seo", targetId: "topic-og-image" },
+  "image-alt": { tabId: "seo", targetId: "topic-og-image-alt" },
+  "image-alt-length": { tabId: "seo", targetId: "topic-og-image-alt" },
   "keyword-alt": { tabId: "basic", targetId: "topic-image-alt" },
   "seo-keywords": { tabId: "seo", targetId: "topic-seo-keywords" },
   slug: { tabId: "basic", targetId: "topic-slug" },
@@ -188,18 +183,16 @@ export default function SeoPanel(props: SeoPanelProps) {
         description: "excerpt",
         content: "content",
         slug: "slug",
+        image: "image",
+        imageAlt: "image_alt",
       }}
       fieldNames={TOPIC_SEO_FIELD_NAMES}
       fieldIds={TOPIC_SEO_FIELD_IDS}
       social={{
-        mode: "entity_fallback",
-        sourceFieldNames: {
-          image: "image",
-          imageAlt: "image_alt",
-        },
-        correctionTargets: {
-          image: TOPIC_SEO_CORRECTION_TARGETS.image,
-          imageAlt: TOPIC_SEO_CORRECTION_TARGETS["image-alt"],
+        mediaBrowseFolder: "images/topics/seo",
+        fieldIds: {
+          imageSection: "topic-og-image",
+          imageAlt: "topic-og-image-alt",
         },
       }}
       initial={{
@@ -216,6 +209,8 @@ export default function SeoPanel(props: SeoPanelProps) {
         canonicalUrl: props.canonicalUrl,
         robotsIndex: props.robotsIndex,
         robotsFollow: props.robotsFollow,
+        ogImage: props.ogImage,
+        ogImageAlt: props.ogImageAlt,
       }}
       correctionTargets={TOPIC_SEO_CORRECTION_TARGETS}
       analysisExtension={createTopicAnalysisExtension(props.faq ?? [])}

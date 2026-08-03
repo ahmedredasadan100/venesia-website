@@ -70,7 +70,13 @@ type PageBlocksClientProps = {
   seo: {
     seoTitle: string;
     seoDescription: string;
+    focusKeyword: string;
     seoKeywords: string[];
+    canonicalUrl: string;
+    robotsIndex: boolean | null;
+    robotsFollow: boolean | null;
+    ogImage: string;
+    ogImageAlt: string;
     notice?: string | null;
     error?: string | null;
   };
@@ -343,17 +349,28 @@ export default function PageBlocksClient({
 
       <AdminModuleTabs
         initialTabId={initialTabId}
+        navigationEventName="admin-page-blocks-navigation"
         tabs={[
           {
             id: "seo",
-            label: "إعدادات السيو",
+            navigationLabel: "SEO",
+            sectionHeading: "تحسين محركات البحث والمشاركة",
+            sectionDescription: "أدر بيانات البحث والمشاركة والتحليل من عقد Entity SEO المشترك.",
+            icon: "seo",
             content: (
               <PageSeoPanel
                 pageId={page.id}
+                pageTitle={page.title}
                 path={page.path}
                 seoTitle={seo.seoTitle}
                 seoDescription={seo.seoDescription}
+                focusKeyword={seo.focusKeyword}
                 seoKeywords={seo.seoKeywords}
+                canonicalUrl={seo.canonicalUrl}
+                robotsIndex={seo.robotsIndex}
+                robotsFollow={seo.robotsFollow}
+                ogImage={seo.ogImage}
+                ogImageAlt={seo.ogImageAlt}
                 notice={seo.notice}
                 error={seo.error}
               />
@@ -361,23 +378,22 @@ export default function PageBlocksClient({
           },
           {
             id: "map",
-            label: "خريطة الصفحة",
+            navigationLabel: "الخريطة",
+            sectionHeading: "خريطة الصفحة",
+            sectionDescription: "راجع ترتيب أقسام الصفحة وهيكل المحتوى الظاهر للزائر.",
+            icon: "plans",
             content: (
               <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <div className="mb-6 border-b border-white/10 pb-5">
-                  <p className="font-en text-xs tracking-[0.34em] text-[#D8B87A]/70">PAGE MAP</p>
-                  <h2 className="mt-3 text-2xl font-semibold text-white">خريطة الصفحة</h2>
-                  <p className="mt-2 text-sm leading-7 text-white/50">
-                    راجع ترتيب أقسام الصفحة وهيكل المحتوى الظاهر للزائر.
-                  </p>
-                </div>
                 <PageVisualSlotMap assignments={assignments} />
               </section>
             ),
           },
           {
             id: "modules",
-            label: "موديولات الصفحة",
+            navigationLabel: "الموديولات",
+            sectionHeading: "موديولات الصفحة",
+            sectionDescription: "أدر الموديولات المرتبطة بالصفحة وترتيبها وحالة ظهورها.",
+            icon: "section",
             content: (
               <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
                 <PageModuleKindsBar page={page} usedModuleKinds={usedModuleKinds} />

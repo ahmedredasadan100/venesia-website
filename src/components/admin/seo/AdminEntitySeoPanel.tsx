@@ -54,6 +54,8 @@ export type AdminEntitySeoFieldNames = {
   canonicalUrl: string;
   robotsIndex: string;
   robotsFollow: string;
+  ogImage: string;
+  ogImageAlt: string;
 };
 
 export type AdminEntitySeoFieldIds = {
@@ -69,30 +71,13 @@ export type AdminEntitySeoFieldIds = {
   robotsFollowFocusTarget: string;
 };
 
-export type AdminEntitySeoSocialContract =
-  | {
-      mode: "editable_override";
-      mediaBrowseFolder: string;
-      fieldNames: {
-        image: string;
-        imageAlt: string;
-      };
-      fieldIds: {
-        imageSection: string;
-        imageAlt: string;
-      };
-    }
-  | {
-      mode: "entity_fallback";
-      sourceFieldNames: {
-        image: string;
-        imageAlt: string;
-      };
-      correctionTargets: {
-        image: AdminEntitySeoCorrectionTarget;
-        imageAlt: AdminEntitySeoCorrectionTarget;
-      };
-    };
+export type AdminEntitySeoSocialContract = {
+  mediaBrowseFolder: string;
+  fieldIds: {
+    imageSection: string;
+    imageAlt: string;
+  };
+};
 
 export type AdminEntitySeoAnalysisMetric = {
   id: string;
@@ -128,6 +113,8 @@ export type AdminEntitySeoPanelProps<TAnalysisState = undefined> = {
     description: string;
     content: string;
     slug: string;
+    image: string;
+    imageAlt: string;
   };
   fieldNames: AdminEntitySeoFieldNames;
   fieldIds: AdminEntitySeoFieldIds;
@@ -136,6 +123,8 @@ export type AdminEntitySeoPanelProps<TAnalysisState = undefined> = {
     canonicalUrl: string;
     robotsIndex: boolean | null;
     robotsFollow: boolean | null;
+    ogImage: string;
+    ogImageAlt: string;
   };
   correctionTargets: Partial<
     Record<string, AdminEntitySeoCorrectionTarget>
@@ -208,6 +197,21 @@ function correctionButton(
         window.dispatchEvent(
           new CustomEvent(navigationEventName, { detail: target }),
         );
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            const element = document.getElementById(target.targetId);
+            if (!element) return;
+            const focusTarget = element.matches(
+              'input, textarea, select, button, [contenteditable="true"], [tabindex]',
+            )
+              ? element
+              : element.querySelector<HTMLElement>(
+                  'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+                );
+            element.scrollIntoView({ block: "center" });
+            (focusTarget as HTMLElement | null)?.focus({ preventScroll: true });
+          });
+        });
       }}
     >
       تصحيح
@@ -428,10 +432,6 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
     if (!(form instanceof HTMLFormElement)) return;
 
     const read = () => {
-      const socialFieldNames =
-        social.mode === "editable_override"
-          ? social.fieldNames
-          : social.sourceFieldNames;
       setLive({
         title: readValue(form, sourceFieldNames.title, initial.title),
         description: readValue(
@@ -441,8 +441,8 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
         ),
         content: readValue(form, sourceFieldNames.content, initial.content),
         slug: readValue(form, sourceFieldNames.slug, initial.slug),
-        image: readValue(form, socialFieldNames.image, initial.image),
-        imageAlt: readValue(form, socialFieldNames.imageAlt, initial.imageAlt),
+        image: readValue(form, sourceFieldNames.image, initial.image),
+        imageAlt: readValue(form, sourceFieldNames.imageAlt, initial.imageAlt),
         seoTitle: readValue(form, fieldNames.seoTitle, initial.seoTitle),
         seoDescription: readValue(
           form,
@@ -472,6 +472,8 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           fieldNames.robotsFollow,
           initial.robotsFollow,
         ),
+        ogImage: readValue(form, fieldNames.ogImage, initial.ogImage),
+        ogImageAlt: readValue(form, fieldNames.ogImageAlt, initial.ogImageAlt),
       });
       if (analysisExtension) {
         setAnalysisState(
@@ -489,10 +491,18 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
     };
   }, [analysisExtension, fieldNames, id, initial, social, sourceFieldNames]);
 
-  const baseAnalysis = useMemo(() => analyzeEntitySeo(live), [live]);
+  const effectiveImage = live.ogImage.trim() || live.image.trim();
+  const effectiveImageAlt = live.ogImage.trim()
+    ? live.ogImageAlt.trim()
+    : live.imageAlt.trim();
+  const analysisInput = useMemo(
+    () => ({ ...live, image: effectiveImage, imageAlt: effectiveImageAlt }),
+    [effectiveImage, effectiveImageAlt, live],
+  );
+  const baseAnalysis = useMemo(() => analyzeEntitySeo(analysisInput), [analysisInput]);
   const extensionAnalysis = useMemo(
-    () => analysisExtension?.analyze(live, analysisState),
-    [analysisExtension, analysisState, live],
+    () => analysisExtension?.analyze(analysisInput, analysisState),
+    [analysisExtension, analysisInput, analysisState],
   );
   const analysis = {
     score: extensionAnalysis?.score ?? baseAnalysis.overallScore,
@@ -577,8 +587,8 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
         {ADMIN_ENTITY_SEO_TERMINOLOGY.robots}
       </h3>
       <p className="mt-2 text-sm leading-7 text-white/42">
-        القيم العامة تظل المصدر الافتراضي، ويمكن تخصيص هذا {entityLabel} فقط
-        عند الحاجة.
+        القيم العامة تظل المصدر الافتراضي، ويمكن تخصيص إعدادات {entityLabel} فقط عند
+        الحاجة.
       </p>
       <div
         className="mt-5 grid gap-3 lg:grid-cols-[minmax(180px,.7fr)_minmax(180px,.7fr)_minmax(0,1.6fr)] lg:items-start"
@@ -625,7 +635,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
     <section
       className="rounded-2xl border border-white/10 bg-black/20 p-5"
       data-admin-entity-seo-social-fields
-      data-admin-entity-seo-social-mode={social.mode}
+      data-admin-entity-seo-social-mode="editable_override"
     >
       <h3 className="text-base font-semibold text-white">
         {ADMIN_ENTITY_SEO_TERMINOLOGY.socialSettings}
@@ -633,61 +643,32 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       <p className="mt-2 text-sm leading-7 text-white/42">
         {ADMIN_ENTITY_SEO_TERMINOLOGY.socialSettingsDescription}
       </p>
-      {social.mode === "editable_override" ? (
-        <div id={social.fieldIds.imageSection} className="mt-5 scroll-mt-28">
-          <AdminMediaImageField
-            name={social.fieldNames.image}
-            label="صورة المشاركة"
-            defaultValue={initial.image}
-            dimensionHint="content"
-            browseFolder={social.mediaBrowseFolder}
-            appearance="dark"
-            onValueChange={(image) =>
-              setLive((current) => ({ ...current, image }))
-            }
+      <div id={social.fieldIds.imageSection} className="mt-5 scroll-mt-28">
+        <AdminMediaImageField
+          name={fieldNames.ogImage}
+          label="صورة المشاركة"
+          defaultValue={initial.ogImage}
+          dimensionHint="content"
+          browseFolder={social.mediaBrowseFolder}
+          appearance="dark"
+          onValueChange={(ogImage) =>
+            setLive((current) => ({ ...current, ogImage }))
+          }
+        />
+        <label className="mt-4 block text-sm font-semibold text-white/72">
+          النص البديل لصورة المشاركة
+          <input
+            id={social.fieldIds.imageAlt}
+            name={fieldNames.ogImageAlt}
+            defaultValue={initial.ogImageAlt}
+            className={fieldClass}
           />
-          <label className="mt-4 block text-sm font-semibold text-white/72">
-            النص البديل لصورة المشاركة
-            <input
-              id={social.fieldIds.imageAlt}
-              name={social.fieldNames.imageAlt}
-              defaultValue={initial.imageAlt}
-              className={fieldClass}
-            />
-            <AdminFormError name={social.fieldNames.imageAlt} />
-          </label>
-        </div>
-      ) : (
-        <div
-          className="mt-5 grid gap-3 sm:grid-cols-2"
-          data-admin-entity-seo-social-source
-        >
-          <div className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-4">
-            <div className="min-w-0">
-              <p className="text-xs text-white/38">مصدر صورة المشاركة</p>
-              <p className="mt-1 text-sm leading-6 text-white/72">
-                {live.image ? `صورة ${entityLabel} الحالية` : "الإعداد العام"}
-              </p>
-            </div>
-            {correctionButton(
-              navigationEventName,
-              social.correctionTargets.image,
-            )}
-          </div>
-          <div className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-4">
-            <div className="min-w-0">
-              <p className="text-xs text-white/38">النص البديل المستخدم</p>
-              <p className="mt-1 line-clamp-2 text-sm leading-6 text-white/72">
-                {live.imageAlt || "الإعداد العام"}
-              </p>
-            </div>
-            {correctionButton(
-              navigationEventName,
-              social.correctionTargets.imageAlt,
-            )}
-          </div>
-        </div>
-      )}
+          <AdminFormError name={fieldNames.ogImageAlt} />
+        </label>
+        <p className="mt-3 text-xs leading-6 text-white/38">
+          عند ترك الصورة فارغة تُستخدم صورة {entityLabel}، ثم صورة Open Graph العامة.
+        </p>
+      </div>
     </section>
   );
 
@@ -720,12 +701,12 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       className="overflow-hidden rounded-xl border border-white/10 bg-[#0B0F14]"
       data-admin-entity-seo-social-preview
     >
-      {live.image ? (
+      {effectiveImage ? (
         <div
           className="aspect-[1.91/1] bg-cover bg-center"
-          style={{ backgroundImage: `url(${live.image})` }}
+          style={{ backgroundImage: `url(${effectiveImage})` }}
           role="img"
-          aria-label={live.imageAlt || title}
+          aria-label={effectiveImageAlt || title}
         />
       ) : (
         <div className="grid aspect-[1.91/1] place-items-center border-b border-white/10 text-xs text-white/30">

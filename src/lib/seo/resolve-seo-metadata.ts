@@ -28,20 +28,16 @@ function buildRobotsDirective(
   explicit: SeoRobotsDirective | undefined,
   entityIndex: boolean | null | undefined,
   entityFollow: boolean | null | undefined,
-  pageIndex: boolean | null | undefined,
-  pageFollow: boolean | null | undefined,
   global: GlobalSeoSettings,
 ): SeoRobotsDirective {
   if (explicit) return explicit;
 
   const index =
     entityIndex ??
-    pageIndex ??
     global.defaultRobotsIndex;
 
   const follow =
     entityFollow ??
-    pageFollow ??
     global.defaultRobotsFollow;
 
   return {
@@ -66,7 +62,6 @@ export function resolveSeoMetadata(
 
   const title = pickString(
     input.entitySeo?.title,
-    input.pageSeo?.title,
     input.title,
     route?.title,
     global.defaultTitle,
@@ -75,7 +70,6 @@ export function resolveSeoMetadata(
 
   const description = pickString(
     input.entitySeo?.description,
-    input.pageSeo?.description,
     input.description,
     route?.description,
     global.defaultDescription,
@@ -83,34 +77,32 @@ export function resolveSeoMetadata(
   );
 
   const keywords = pickKeywords(
-    input.keywords,
     input.entitySeo?.keywords,
-    input.pageSeo?.keywords,
+    input.keywords,
   );
 
+  const entityOgImage = pickString(input.entitySeo?.ogImage);
   const image = pickString(
+    entityOgImage,
     input.image,
-    input.entitySeo?.ogImage,
     input.entitySeo?.image,
-    input.pageSeo?.ogImage,
-    input.pageSeo?.image,
     route?.openGraph?.image,
     global.defaultOgImage,
     SEO_SITE.defaultImage,
   );
 
   const imageAlt = pickString(
+    entityOgImage ? input.entitySeo?.ogImageAlt : undefined,
     input.imageAlt,
     input.entitySeo?.imageAlt,
-    input.pageSeo?.imageAlt,
     global.defaultOgImageAlt,
     title,
     global.siteName,
   );
 
   const twitterImage = pickString(
-    global.defaultTwitterImage,
     image,
+    global.defaultTwitterImage,
     global.defaultOgImage,
     SEO_SITE.defaultImage,
   );
@@ -118,7 +110,6 @@ export function resolveSeoMetadata(
   const canonical = buildCanonicalWithBase(
     pickString(
       input.entitySeo?.canonical,
-      input.pageSeo?.canonical,
       route?.alternates?.canonical,
       input.path,
     ),
@@ -129,8 +120,6 @@ export function resolveSeoMetadata(
     input.robots ?? route?.robots,
     input.entitySeo?.robotsIndex,
     input.entitySeo?.robotsFollow,
-    input.pageSeo?.robotsIndex,
-    input.pageSeo?.robotsFollow,
     global,
   );
 

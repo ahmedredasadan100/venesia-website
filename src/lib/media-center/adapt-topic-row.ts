@@ -25,6 +25,11 @@ export type UnifiedMediaTopicRow = {
   seo_description?: string | null;
   seo_keywords?: string[] | null;
   focus_keyword?: string | null;
+  canonical_url?: string | null;
+  robots_index?: boolean | null;
+  robots_follow?: boolean | null;
+  og_image?: string | null;
+  og_image_alt?: string | null;
   image_alt: string | null;
 };
 
@@ -101,8 +106,13 @@ export function adaptTopicRowToMediaItem(row: UnifiedMediaTopicRow): MediaConten
     content: resolveTopicContent(row, publicType),
     seoTitle: row.seo_title ?? undefined,
     seoDescription: row.seo_description ?? undefined,
+    focusKeyword: row.focus_keyword ?? undefined,
     seoKeywords: Array.isArray(row.seo_keywords) ? row.seo_keywords : undefined,
+    canonicalUrl: row.canonical_url ?? undefined,
+    robotsIndex: row.robots_index ?? null,
+    robotsFollow: row.robots_follow ?? null,
     imageAlt: row.image_alt ?? undefined,
-    ogImage: row.image ?? undefined,
+    ogImage: row.og_image ?? undefined,
+    ogImageAlt: row.og_image_alt ?? undefined,
   };
 }

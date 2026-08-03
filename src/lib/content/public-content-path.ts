@@ -9,8 +9,12 @@ const CONTENT_TYPE_PUBLIC_BASE: Record<ContentType, string> = {
   gallery: "/media-center/gallery",
 };
 
+export function resolvePublicContentBasePath(contentType: ContentType) {
+  return CONTENT_TYPE_PUBLIC_BASE[contentType];
+}
+
 export function resolvePublicContentPath(contentType: ContentType, slug: string) {
   const normalizedSlug = slug.trim().replace(/^\/+|\/+$/g, "");
-  const basePath = CONTENT_TYPE_PUBLIC_BASE[contentType];
+  const basePath = resolvePublicContentBasePath(contentType);
   return normalizedSlug ? `${basePath}/${normalizedSlug}` : `${basePath}/your-slug`;
 }

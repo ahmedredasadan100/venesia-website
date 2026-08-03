@@ -25,9 +25,14 @@ export type MediaContentItem = {
   categorySlug?: string;
   seoTitle?: string;
   seoDescription?: string;
+  focusKeyword?: string;
   seoKeywords?: string[];
+  canonicalUrl?: string;
+  robotsIndex?: boolean | null;
+  robotsFollow?: boolean | null;
   imageAlt?: string;
   ogImage?: string;
+  ogImageAlt?: string;
 };
 
 export type MediaNewsItem = MediaContentItem;

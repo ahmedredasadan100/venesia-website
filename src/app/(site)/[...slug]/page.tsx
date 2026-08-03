@@ -7,6 +7,7 @@ import { resolvePublicPathFromSlugSegments } from "../../../lib/pages/normalize-
 import { isReservedPublicPath } from "../../../lib/pages/reserved-public-paths";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
+import { entitySeoDataFromPersistence } from "../../../lib/seo/entity-seo-types";
 
 export const revalidate = 300;
 
@@ -40,11 +41,7 @@ export async function generateMetadata({ params }: DynamicCmsPageProps) {
     path: page.path,
     title: page.title,
     includePageSeo: false,
-    pageSeo: {
-      title: page.seo_title,
-      description: page.seo_description,
-      keywords: page.seo_keywords,
-    },
+    entitySeo: entitySeoDataFromPersistence(page),
   });
 }
 

@@ -35,6 +35,8 @@ type DbTopic = {
   canonical_url?: string | null;
   robots_index?: boolean | null;
   robots_follow?: boolean | null;
+  og_image?: string | null;
+  og_image_alt?: string | null;
   faq: { question: string; answer: string }[] | null;
   show_title_on_page?: boolean | null;
   show_image_on_page?: boolean | null;
@@ -52,6 +54,8 @@ export type PublicTopicDetail = {
   image: string;
   metadataImage: string;
   imageAlt: string;
+  ogImage: string;
+  ogImageAlt: string;
   category: string;
   categorySlug: string;
   series: string;
@@ -109,6 +113,8 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
     image: resolveLocalPublicImage(topic.image, DEFAULT_TOPIC_IMAGE),
     metadataImage: resolveLocalPublicImage(topic.image, ""),
     imageAlt: topic.image_alt ?? topic.title ?? "",
+    ogImage: resolveLocalPublicImage(topic.og_image, ""),
+    ogImageAlt: topic.og_image_alt ?? "",
     category: topic.category ?? "",
     categorySlug: topic.category_slug ?? "",
     series: topic.series ?? "",
