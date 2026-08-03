@@ -103,7 +103,7 @@ export function useUnifiedContentToolbar({
         options: [
           { value: "published", label: "منشور" },
           { value: "draft", label: "مسودة" },
-          { value: "unpublished", label: "مخفي" },
+          { value: "unpublished", label: "غير منشور" },
           { value: "archived", label: "أرشيف" },
         ],
       },

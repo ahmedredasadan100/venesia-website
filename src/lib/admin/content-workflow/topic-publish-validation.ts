@@ -1,11 +1,13 @@
-import type { PublishChecklistItem } from "./publish-checklist-types";
-import { VENESIA_BRAND_TONE_RULES } from "./brand-tone-guardrails";
-import { ENTITY_SEO_LIMITS } from "../../seo/entity-seo-types";
+import {
+  buildContentReviewChecks,
+  getContentDraftValidationError,
+  getContentPublishValidationError,
+  validateContentSlug,
+  type ContentReviewFaqItem,
+  type ContentReviewInput,
+} from "./content-review-capability";
 
-export type TopicFaqItem = {
-  question?: string;
-  answer?: string;
-};
+export type TopicFaqItem = ContentReviewFaqItem;
 
 export type TopicPublishInput = {
   title: string;
@@ -18,238 +20,53 @@ export type TopicPublishInput = {
   seoTitle: string;
   seoDescription: string;
   focusKeyword: string;
+  canonicalUrl?: string;
+  ogImage?: string;
+  ogImageAlt?: string;
   faq?: TopicFaqItem[];
 };
 
-export function validateSlugFormat(slug: string) {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+function toContentReviewInput(input: TopicPublishInput): ContentReviewInput {
+  return {
+    ...input,
+    contentType: "article",
+    canonicalUrl: input.canonicalUrl ?? "",
+    ogImage: input.ogImage ?? "",
+    ogImageAlt: input.ogImageAlt ?? "",
+    mediaPayload: null,
+  };
 }
 
-export function getTopicDraftValidationError(input: TopicPublishInput): string | null {
-  if (!input.title.trim()) return "العنوان مطلوب.";
-  if (!input.slug.trim()) return "الرابط مطلوب.";
-  if (!validateSlugFormat(input.slug)) {
-    return "الـ Slug لازم يكون إنجليزي صغير، أرقام، وشرطة بين الكلمات فقط.";
-  }
-  if (!input.categorySlug.trim()) return "التصنيف مطلوب.";
-  return null;
+export const validateSlugFormat = validateContentSlug;
+
+export function getTopicDraftValidationError(input: TopicPublishInput) {
+  return getContentDraftValidationError(toContentReviewInput(input));
 }
 
 export function getTopicPublishReadyError(input: TopicPublishInput): string | null {
-  const draftError = getTopicDraftValidationError(input);
-  if (draftError) return draftError;
-  if (!input.excerpt.trim() || input.excerpt.trim().length < 20) {
-    return "الوصف المختصر مطلوب ولا يقل عن 20 حرف.";
-  }
-  if (!input.image.trim()) return "الصورة الرئيسية مطلوبة.";
-  return null;
+  const checks = buildContentReviewChecks(toContentReviewInput(input));
+  return checks.find(
+    (item) =>
+      item.status === "fail" &&
+      ["title", "slug", "category", "excerpt", "content", "image", "image-alt", "faq"].includes(item.id),
+  )?.hint ?? null;
 }
 
 export function getTopicPublishOnlyValidationError(input: TopicPublishInput): string | null {
-  if (input.image.trim() && !input.imageAlt.trim()) {
-    return "وصف الصورة Alt Text مطلوب قبل النشر.";
-  }
-  if (!input.focusKeyword.trim()) return "Focus Keyword مطلوب قبل النشر.";
-  if (!input.seoTitle.trim()) return "SEO Title مطلوب قبل النشر.";
-  if (input.seoTitle.length < ENTITY_SEO_LIMITS.title.min) return `SEO Title قصير. النطاق المعتمد من ${ENTITY_SEO_LIMITS.title.min} إلى ${ENTITY_SEO_LIMITS.title.max} حرف.`;
-  if (input.seoTitle.length > ENTITY_SEO_LIMITS.title.max) return `SEO Title طويل. الحد الأقصى ${ENTITY_SEO_LIMITS.title.max} حرفًا.`;
-  if (!input.seoDescription.trim()) return "SEO Description مطلوب قبل النشر.";
-  if (input.seoDescription.length < ENTITY_SEO_LIMITS.description.min) {
-    return `SEO Description قصير. النطاق المعتمد من ${ENTITY_SEO_LIMITS.description.min} إلى ${ENTITY_SEO_LIMITS.description.max} حرف.`;
-  }
-  if (input.seoDescription.length > ENTITY_SEO_LIMITS.description.max) {
-    return `SEO Description طويل. الحد الأقصى ${ENTITY_SEO_LIMITS.description.max} حرفًا.`;
-  }
-  return null;
+  const checks = buildContentReviewChecks(toContentReviewInput(input));
+  return checks.find(
+    (item) =>
+      item.status === "fail" &&
+      ["seo-title", "seo-description", "focus-keyword", "canonical-url", "og-image-alt"].includes(item.id),
+  )?.hint ?? null;
 }
 
-export function getTopicPublishValidationError(input: TopicPublishInput): string | null {
-  const readyError = getTopicPublishReadyError(input);
-  if (readyError) return readyError;
-  return getTopicPublishOnlyValidationError(input);
+export function getTopicPublishValidationError(input: TopicPublishInput) {
+  return getContentPublishValidationError(toContentReviewInput(input));
 }
 
-function countWords(text: string) {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
-
-function countInternalLinks(content: string) {
-  return content.match(/\[[^\]]+\]\((\/topics\/|\/projects\/)[^)]+\)/g)?.length ?? 0;
-}
-
-function getFaqValidationHint(faq: TopicFaqItem[] = []) {
-  const partial = faq.filter(
-    (item) => Boolean(item.question?.trim()) !== Boolean(item.answer?.trim()),
-  );
-  if (partial.length > 0) {
-    return "أكمل السؤال والإجابة لكل عنصر FAQ أو احذف الصفوف الناقصة.";
-  }
-  const complete = faq.filter((item) => item.question?.trim() && item.answer?.trim());
-  if (complete.length === 0) return "FAQ اختياري — أضف أسئلة مكتملة إن وُجدت.";
-  return `${complete.length} سؤالًا مكتملًا في FAQ.`;
-}
-
-export function buildTopicPublishChecklist(input: TopicPublishInput): PublishChecklistItem[] {
-  const draftError = getTopicDraftValidationError(input);
-  const readyError = getTopicPublishReadyError(input);
-  const publishOnlyError = getTopicPublishOnlyValidationError(input);
-  const wordCount = countWords(input.content);
-  const internalLinks = countInternalLinks(input.content);
-  const faqHint = getFaqValidationHint(input.faq);
-  const faqPartial = (input.faq ?? []).some(
-    (item) => Boolean(item.question?.trim()) !== Boolean(item.answer?.trim()),
-  );
-
-  const items: PublishChecklistItem[] = [
-    {
-      id: "title",
-      label: "العنوان",
-      status: input.title.trim() ? "pass" : "fail",
-      hint: input.title.trim() ? "العنوان موجود." : "أضف عنوانًا واضحًا للموضوع.",
-    },
-    {
-      id: "slug",
-      label: "Slug",
-      status: !input.slug.trim() ? "fail" : validateSlugFormat(input.slug) ? "pass" : "fail",
-      hint: !input.slug.trim()
-        ? "Slug مطلوب."
-        : validateSlugFormat(input.slug)
-          ? "صيغة Slug صحيحة."
-          : "استخدم أحرفًا إنجليزية صغيرة وأرقامًا وشرطات فقط.",
-    },
-    {
-      id: "category",
-      label: "التصنيف",
-      status: input.categorySlug.trim() ? "pass" : "fail",
-      hint: input.categorySlug.trim() ? "تم اختيار التصنيف." : "اختر تصنيفًا نشطًا.",
-    },
-    {
-      id: "excerpt",
-      label: "الوصف المختصر",
-      status: input.excerpt.trim().length >= 20 ? "pass" : input.excerpt.trim() ? "warn" : "fail",
-      hint:
-        input.excerpt.trim().length >= 20
-          ? "الوصف المختصر جاهز للنشر."
-          : "لا يقل عن 20 حرفًا قبل النشر.",
-    },
-    {
-      id: "image",
-      label: "الصورة الرئيسية",
-      status: input.image.trim() ? "pass" : "fail",
-      hint: input.image.trim() ? "تم اختيار صورة الغلاف." : "الصورة مطلوبة قبل النشر.",
-    },
-    {
-      id: "image-alt",
-      label: "Alt Text",
-      status: !input.image.trim()
-        ? "info"
-        : input.imageAlt.trim()
-          ? "pass"
-          : "fail",
-      hint: !input.image.trim()
-        ? "يُفعّل بعد اختيار الصورة."
-        : input.imageAlt.trim()
-          ? "وصف الصورة متوفر."
-          : "Alt Text إلزامي قبل النشر.",
-    },
-    {
-      id: "content",
-      label: "المحتوى",
-      status: wordCount >= 300 ? "pass" : wordCount >= 120 ? "warn" : wordCount > 0 ? "warn" : "fail",
-      hint:
-        wordCount >= 300
-          ? `${wordCount} كلمة — عمق جيد للمقال.`
-          : wordCount > 0
-            ? `${wordCount} كلمة — يُفضّل توسيع المحتوى قبل النشر.`
-            : "أضف نص المقال.",
-    },
-    {
-      id: "seo-title",
-      label: "SEO Title",
-      status: !input.seoTitle.trim()
-        ? "fail"
-        : input.seoTitle.length >= ENTITY_SEO_LIMITS.title.min && input.seoTitle.length <= ENTITY_SEO_LIMITS.title.max
-          ? "pass"
-          : "warn",
-      hint: input.seoTitle.trim()
-        ? `${input.seoTitle.length} حرف — المستهدف 45–60.`
-        : "SEO Title مطلوب قبل النشر.",
-    },
-    {
-      id: "seo-description",
-      label: "SEO Description",
-      status: !input.seoDescription.trim()
-        ? "fail"
-        : input.seoDescription.length >= ENTITY_SEO_LIMITS.description.min && input.seoDescription.length <= ENTITY_SEO_LIMITS.description.max
-          ? "pass"
-          : "warn",
-      hint: input.seoDescription.trim()
-        ? `${input.seoDescription.length} حرف — المستهدف 120–160.`
-        : "SEO Description مطلوب قبل النشر.",
-    },
-    {
-      id: "focus-keyword",
-      label: "Focus Keyword",
-      status: input.focusKeyword.trim() ? "pass" : "fail",
-      hint: input.focusKeyword.trim() ? "الكلمة المفتاحية محددة." : "Focus Keyword مطلوب قبل النشر.",
-    },
-    {
-      id: "faq",
-      label: "الأسئلة الشائعة",
-      status: faqPartial ? "fail" : "info",
-      hint: faqHint,
-    },
-    {
-      id: "internal-links",
-      label: "روابط داخلية",
-      status: internalLinks > 0 ? "pass" : "info",
-      hint:
-        internalLinks > 0
-          ? `${internalLinks} رابطًا داخليًا (/topics/ أو /projects/).`
-          : "يُفضّل ربط المقال بموضوعات أو مشاريع ذات صلة.",
-    },
-  ];
-
-  if (draftError) {
-    items.unshift({
-      id: "draft-gate",
-      label: "جاهزية المسودة",
-      status: "fail",
-      hint: draftError,
-    });
-  } else if (readyError) {
-    items.unshift({
-      id: "publish-ready",
-      label: "جاهزية النشر",
-      status: "fail",
-      hint: readyError,
-    });
-  } else if (publishOnlyError) {
-    items.unshift({
-      id: "publish-seo",
-      label: "جاهزية SEO للنشر",
-      status: "fail",
-      hint: publishOnlyError,
-    });
-  } else {
-    items.unshift({
-      id: "publish-ready",
-      label: "جاهزية النشر",
-      status: "pass",
-      hint: "جميع متطلبات النشر الأساسية مستوفاة.",
-    });
-  }
-
-  for (const rule of VENESIA_BRAND_TONE_RULES) {
-    items.push({
-      id: `tone-${rule.id}`,
-      label: rule.label,
-      status: "info",
-      hint: rule.hint,
-    });
-  }
-
-  return items;
+export function buildTopicPublishChecklist(input: TopicPublishInput) {
+  return buildContentReviewChecks(toContentReviewInput(input));
 }
 
 export function topicRowToPublishInput(row: {
@@ -263,6 +80,9 @@ export function topicRowToPublishInput(row: {
   seo_title?: string | null;
   seo_description?: string | null;
   focus_keyword?: string | null;
+  canonical_url?: string | null;
+  og_image?: string | null;
+  og_image_alt?: string | null;
   faq?: TopicFaqItem[] | null;
 }): TopicPublishInput {
   return {
@@ -276,6 +96,9 @@ export function topicRowToPublishInput(row: {
     seoTitle: row.seo_title ?? "",
     seoDescription: row.seo_description ?? "",
     focusKeyword: row.focus_keyword ?? "",
+    canonicalUrl: row.canonical_url ?? "",
+    ogImage: row.og_image ?? "",
+    ogImageAlt: row.og_image_alt ?? "",
     faq: Array.isArray(row.faq) ? row.faq : [],
   };
 }

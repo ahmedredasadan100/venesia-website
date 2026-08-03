@@ -31,6 +31,9 @@ export type UnifiedMediaTopicRow = {
   og_image?: string | null;
   og_image_alt?: string | null;
   image_alt: string | null;
+  show_title_on_page?: boolean | null;
+  show_image_on_page?: boolean | null;
+  show_excerpt_on_page?: boolean | null;
 };
 
 function splitMarkdownParagraphs(content: string | null | undefined) {
@@ -114,5 +117,8 @@ export function adaptTopicRowToMediaItem(row: UnifiedMediaTopicRow): MediaConten
     imageAlt: row.image_alt ?? undefined,
     ogImage: row.og_image ?? undefined,
     ogImageAlt: row.og_image_alt ?? undefined,
+    showTitleOnPage: row.show_title_on_page !== false,
+    showImageOnPage: row.show_image_on_page !== false,
+    showExcerptOnPage: row.show_excerpt_on_page !== false,
   };
 }

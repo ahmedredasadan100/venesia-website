@@ -11,6 +11,9 @@ type MediaDetailArticleProps = {
   content: string[];
   config: MediaDetailPageConfig;
   relatedItems: MediaContentItem[];
+  showTitle: boolean;
+  showImage: boolean;
+  showExcerpt: boolean;
 };
 
 export default function MediaDetailArticle({
@@ -18,6 +21,9 @@ export default function MediaDetailArticle({
   content,
   config,
   relatedItems,
+  showTitle,
+  showImage,
+  showExcerpt,
 }: MediaDetailArticleProps) {
   return (
     <article className="space-y-10">
@@ -42,14 +48,20 @@ export default function MediaDetailArticle({
           ) : null}
         </div>
 
-        <h1 className="mt-5 max-w-4xl text-3xl font-semibold leading-tight text-white md:text-4xl">
-          {item.title}
-        </h1>
+        {showTitle ? (
+          <h1 className="mt-5 max-w-4xl text-3xl font-semibold leading-tight text-white md:text-4xl">
+            {item.title}
+          </h1>
+        ) : null}
 
-        <p className="mt-5 max-w-3xl leading-8 text-white/60">{item.excerpt}</p>
+        {showExcerpt ? (
+          <p className="mt-5 max-w-3xl leading-8 text-white/60">{item.excerpt}</p>
+        ) : null}
       </div>
 
-      <MediaDetailHeroImage src={item.image} alt={item.title} variant={config.heroVariant} />
+      {showImage ? (
+        <MediaDetailHeroImage src={item.image} alt={item.imageAlt || item.title} variant={config.heroVariant} />
+      ) : null}
 
       <div className="space-y-6 rounded-[2rem] border border-white/10 bg-black/15 p-7 md:p-9">
         {content.map((paragraph) => (

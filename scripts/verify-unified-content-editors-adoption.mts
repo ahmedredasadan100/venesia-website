@@ -154,12 +154,15 @@ check(
     !articleSave.includes('getBoolean(formData, "is_published")'),
 );
 check(
-  "article-only FAQ display and visible-date differences stay typed",
+  "FAQ stays typed while display popular and visible-date contracts are shared",
   articleCreate.includes("<FaqEditor") &&
     articleEdit.includes("<FaqEditor") &&
     !mediaEditor.includes("<FaqEditor") &&
-    articleCreate.includes("dateLabel={null}") &&
-    !mediaEditor.includes("dateLabel="),
+    CONTENT_TYPES.every((contentType) => CONTENT_EDITOR_ADAPTERS[contentType].supportsDisplaySettings) &&
+    CONTENT_TYPES.every((contentType) => CONTENT_EDITOR_ADAPTERS[contentType].supportsPopular) &&
+    [articleCreate, articleEdit, mediaEditor].every((source) =>
+      source.includes("<ContentDisplaySettings") && source.includes("dateLabel="),
+    ),
 );
 check(
   "video and gallery fields stay outside the shared core",

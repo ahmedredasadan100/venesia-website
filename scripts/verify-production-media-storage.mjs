@@ -271,13 +271,20 @@ check(
 );
 
 const entitySeoContract = loadTypeScriptModule("src/lib/seo/entity-seo-types.ts");
+const mediaTopicPayloadContract = loadTypeScriptModule(
+  "src/lib/admin/media-topic-payload.ts",
+);
+const contentReviewContract = loadTypeScriptModule(
+  "src/lib/admin/content-workflow/content-review-capability.ts",
+  {
+    "../media-topic-payload": mediaTopicPayloadContract,
+    "../../seo/entity-seo-types": entitySeoContract,
+  },
+);
 const topicValidation = loadTypeScriptModule(
   "src/lib/admin/content-workflow/topic-publish-validation.ts",
   {
-    "../../seo/entity-seo-types": entitySeoContract,
-    "./brand-tone-guardrails": loadTypeScriptModule(
-      "src/lib/admin/content-workflow/brand-tone-guardrails.ts",
-    ),
+    "./content-review-capability": contentReviewContract,
   },
 );
 const validTopic = {
