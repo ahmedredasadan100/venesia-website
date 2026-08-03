@@ -127,29 +127,28 @@ export default function ArticleCreateEditor({
             {
               id: "publish",
               navigationLabel: "المراجعة",
-              sectionHeading: "مراجعة الجاهزية والنشر",
-              sectionDescription: "راجع الحالة والملخص والتحذيرات قبل حفظ قرار النشر.",
               icon: "publish",
               content: (
-                <ContentPublishingOptions
+                <ContentReviewPanel
+                  formId="topic-create-form"
+                  initial={{
+                    ...publishInput,
+                    contentType: "article",
+                    canonicalUrl: publishInput.canonicalUrl ?? "",
+                    ogImage: publishInput.ogImage ?? "",
+                    ogImageAlt: publishInput.ogImageAlt ?? "",
+                    mediaPayload: null,
+                  }}
+                  publishingOptions={
+                    <ContentPublishingOptions
+                      status="draft"
+                      popular={false}
+                      dateLabel={null}
+                    />
+                  }
                   status="draft"
-                  popular={false}
-                  dateLabel={null}
-                >
-                  <ContentReviewPanel
-                    formId="topic-create-form"
-                    initial={{
-                      ...publishInput,
-                      contentType: "article",
-                      canonicalUrl: publishInput.canonicalUrl ?? "",
-                      ogImage: publishInput.ogImage ?? "",
-                      ogImageAlt: publishInput.ogImageAlt ?? "",
-                      mediaPayload: null,
-                    }}
-                    status="draft"
-                    contentTypeLabel="مقال"
-                  />
-                </ContentPublishingOptions>
+                  contentTypeLabel="مقال"
+                />
               ),
             },
         ]}

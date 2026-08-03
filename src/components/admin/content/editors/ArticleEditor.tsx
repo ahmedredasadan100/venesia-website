@@ -221,39 +221,38 @@ export default function ArticleEditor({
             {
               id: "publish",
               navigationLabel: "المراجعة",
-              sectionHeading: "مراجعة الجاهزية والنشر",
-              sectionDescription: "راجع الحالة والملخص والتحذيرات قبل حفظ قرار النشر.",
               icon: "publish",
               content: (
-                <ContentPublishingOptions
+                <ContentReviewPanel
+                  formId="topic-edit-form"
+                  initial={{
+                    ...publishInput,
+                    contentType: "article",
+                    canonicalUrl: publishInput.canonicalUrl ?? "",
+                    ogImage: publishInput.ogImage ?? "",
+                    ogImageAlt: publishInput.ogImageAlt ?? "",
+                    mediaPayload: null,
+                  }}
+                  publishingOptions={
+                    <ContentPublishingOptions
+                      status={status}
+                      featured={Boolean(topic.is_featured)}
+                      popular={Boolean(topic.is_popular)}
+                      publishedAt={topic.published_at}
+                      dateLabel={topic.date_label}
+                    />
+                  }
                   status={status}
-                  featured={Boolean(topic.is_featured)}
-                  popular={Boolean(topic.is_popular)}
                   publishedAt={topic.published_at}
                   dateLabel={topic.date_label}
-                >
-                  <ContentReviewPanel
-                    formId="topic-edit-form"
-                    initial={{
-                      ...publishInput,
-                      contentType: "article",
-                      canonicalUrl: publishInput.canonicalUrl ?? "",
-                      ogImage: publishInput.ogImage ?? "",
-                      ogImageAlt: publishInput.ogImageAlt ?? "",
-                      mediaPayload: null,
-                    }}
-                    status={status}
-                    publishedAt={topic.published_at}
-                    dateLabel={topic.date_label}
                     featured={Boolean(topic.is_featured)}
                     popular={Boolean(topic.is_popular)}
                     updatedAt={topic.updated_at}
                     contentTypeLabel="مقال"
                     categoryLabel={selectedCategory}
                     seriesLabel={topic.series ?? "—"}
-                    initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page }}
-                  />
-                </ContentPublishingOptions>
+                  initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page }}
+                />
               ),
             },
         ]}
