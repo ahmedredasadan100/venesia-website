@@ -83,6 +83,9 @@ const ANALYSIS_CARDS: readonly AnalysisCardDefinition[] = [
   },
 ] as const;
 
+const GUIDANCE_ANALYSIS_CARDS = ANALYSIS_CARDS.slice(0, 3);
+const VALIDATION_ANALYSIS_CARD = ANALYSIS_CARDS[3];
+
 function field(form: HTMLFormElement, name: string, fallback = "") {
   const item = form.elements.namedItem(name);
   return item instanceof HTMLInputElement ||
@@ -348,8 +351,12 @@ export default function ContentReviewPanel({
             مؤشرات الجاهزية
           </h2>
         </div>
-        <div className="grid items-start gap-4 lg:grid-cols-2" data-content-review-analysis-grid>
-          {ANALYSIS_CARDS.map((definition) => {
+        <div
+          className="grid items-start gap-4 lg:grid-cols-3"
+          data-content-review-analysis-grid
+          data-content-review-guidance-grid
+        >
+          {GUIDANCE_ANALYSIS_CARDS.map((definition) => {
             const items = checks.filter((item) => definition.checkIds.includes(item.id));
             return (
               <ReviewAnalysisCard
@@ -358,9 +365,19 @@ export default function ContentReviewPanel({
                 items={items}
                 expanded={expandedCards.has(definition.id)}
                 onToggle={() => toggleCard(definition.id)}
+                variant="guidance"
               />
             );
           })}
+        </div>
+        <div className="mt-4" data-content-review-validation-row>
+          <ReviewAnalysisCard
+            definition={VALIDATION_ANALYSIS_CARD}
+            items={checks.filter((item) => VALIDATION_ANALYSIS_CARD.checkIds.includes(item.id))}
+            expanded={expandedCards.has(VALIDATION_ANALYSIS_CARD.id)}
+            onToggle={() => toggleCard(VALIDATION_ANALYSIS_CARD.id)}
+            variant="validation"
+          />
         </div>
       </section>
 
@@ -430,11 +447,13 @@ function ReviewAnalysisCard({
   items,
   expanded,
   onToggle,
+  variant,
 }: {
   definition: AnalysisCardDefinition;
   items: ContentReviewCheck[];
   expanded: boolean;
   onToggle: () => void;
+  variant: "guidance" | "validation";
 }) {
   const score = getContentReviewScore(items);
   const issues = items.filter((item) => item.status !== "pass");
@@ -443,48 +462,79 @@ function ReviewAnalysisCard({
   const improvements = issues.filter((item) => item.status === "info").length;
   const topIssue = issues.find((item) => item.status === "fail") ?? issues[0];
   const panelId = `content-review-analysis-${definition.id}`;
+  const publicationBlocked = errors > 0;
 
   return (
     <article
-      className="overflow-hidden rounded-[22px] border border-white/10 bg-[#090D13]/88 shadow-[0_18px_44px_rgba(0,0,0,0.18)]"
+      className={`overflow-hidden rounded-[22px] border bg-[#090D13]/88 shadow-[0_18px_44px_rgba(0,0,0,0.18)] ${variant === "validation" ? publicationBlocked ? "border-red-300/25" : "border-emerald-300/18" : "min-h-[22.125rem] border-white/10"}`}
       data-content-review-analysis={definition.id}
       data-content-review-expanded={expanded ? "true" : "false"}
+      data-content-review-analysis-tier={variant === "validation" ? "blocking" : "guidance"}
     >
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-white/88">{definition.title}</h3>
-            <p className="mt-1 text-xs leading-5 text-white/38">{definition.description}</p>
-          </div>
-          <div className="grid size-14 shrink-0 place-items-center rounded-2xl border border-[#D8B87A]/22 bg-[#D8B87A]/[0.075] font-en text-lg font-semibold text-[#F0D69F]">
-            {score}
-          </div>
-        </div>
-
-        <dl className="mt-5 grid grid-cols-3 gap-2">
-          <AnalysisCount label="الأخطاء" value={errors} tone="error" />
-          <AnalysisCount label="التنبيهات" value={warnings} tone="warning" />
-          <AnalysisCount label="التحسينات" value={improvements} tone="info" />
-        </dl>
-
-        <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-3.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">أهم مشكلة</p>
-          {topIssue ? (
-            <div className="mt-1.5">
-              <p className="text-sm font-semibold text-white/72">{topIssue.label}</p>
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/42">{topIssue.hint}</p>
+      <div className={variant === "validation" ? "grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_minmax(15rem,auto)_auto] md:items-center md:p-5" : "flex min-h-full flex-col p-4"}>
+        {variant === "validation" ? (
+          <>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-red-200/55">
+                تحقق مانع للنشر
+              </p>
+              <h3 className="mt-1 text-base font-semibold text-white/88">{definition.title}</h3>
+              <p className="mt-1 text-xs leading-5 text-white/42">{definition.description}</p>
             </div>
-          ) : (
-            <p className="mt-1.5 text-sm font-medium text-emerald-200/70">لا توجد مشكلات حالية.</p>
-          )}
-        </div>
+            <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/8 bg-black/20 p-3">
+              <div className={`grid size-14 shrink-0 place-items-center rounded-xl border font-en text-xl font-semibold ${publicationBlocked ? "border-red-300/20 bg-red-300/[0.07] text-red-100/80" : "border-emerald-300/20 bg-emerald-300/[0.07] text-emerald-100/80"}`}>
+                {errors}
+              </div>
+              <div className="min-w-0">
+                <p className={`text-xs font-semibold ${publicationBlocked ? "text-red-100/78" : "text-emerald-100/75"}`}>
+                  {publicationBlocked ? "النشر ممنوع" : "النشر مسموح"}
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-white/38">
+                  {publicationBlocked
+                    ? `${errors} ${errors === 1 ? "مشكلة مانعة تحتاج إصلاحًا." : "مشكلات مانعة تحتاج إصلاحًا."}`
+                    : "الحقول المطلوبة والقيم الأساسية سليمة."}
+                </p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex min-h-16 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-white/88">{definition.title}</h3>
+                <p className="mt-1 min-h-10 text-xs leading-5 text-white/38">{definition.description}</p>
+              </div>
+              <div className="grid size-12 shrink-0 place-items-center rounded-xl border border-[#D8B87A]/22 bg-[#D8B87A]/[0.075] font-en text-base font-semibold text-[#F0D69F]">
+                {score}
+              </div>
+            </div>
+
+            <dl className="mt-4 grid grid-cols-3 gap-2">
+              <AnalysisCount label="الأخطاء" value={errors} tone="error" />
+              <AnalysisCount label="التنبيهات" value={warnings} tone="warning" />
+              <AnalysisCount label="التحسينات" value={improvements} tone="info" />
+            </dl>
+
+            <div className="mt-3 min-h-24 rounded-xl border border-white/8 bg-black/20 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">أهم مشكلة</p>
+              {topIssue ? (
+                <div className="mt-1.5">
+                  <p className="text-sm font-semibold text-white/72">{topIssue.label}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/42">{topIssue.hint}</p>
+                </div>
+              ) : (
+                <p className="mt-1.5 text-sm font-medium text-emerald-200/70">لا توجد مشكلات حالية.</p>
+              )}
+            </div>
+          </>
+        )}
 
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
           aria-controls={panelId}
-          className="mt-4 inline-flex min-h-10 items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/[0.065] px-4 py-2 text-xs font-semibold text-[#EED49B] transition hover:border-[#D8B87A]/45 hover:bg-[#D8B87A]/[0.11] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
+          className={`${variant === "validation" ? "md:justify-self-end" : "mt-4 self-start"} inline-flex min-h-10 items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/[0.065] px-4 py-2 text-xs font-semibold text-[#EED49B] transition hover:border-[#D8B87A]/45 hover:bg-[#D8B87A]/[0.11] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55`}
         >
           {expanded ? "إخفاء التفاصيل" : "عرض التفاصيل"}
           <span aria-hidden="true" className={`ms-2 transition ${expanded ? "rotate-180" : ""}`}>⌄</span>
