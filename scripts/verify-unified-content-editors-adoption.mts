@@ -99,6 +99,16 @@ check(
   ]),
 );
 check(
+  "one shell supplies the shared Review Section Hero to every content editor",
+  containsAll(shell, [
+    'tab.id === "publish"',
+    "CONTENT_REVIEW_TAB_SECTION",
+    "مراجعة المحتوى وحالة النشر",
+    "راجع جاهزية المحتوى وإعدادات الظهور، ثم عالج الملاحظات قبل النشر.",
+    "tabs={presentedTabs}",
+  ]),
+);
+check(
   "shell owns one hidden content type and optional entity identity",
   shell.includes('name="content_type"') &&
     shell.includes('name="id"') &&

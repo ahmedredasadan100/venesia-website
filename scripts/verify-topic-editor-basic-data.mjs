@@ -81,7 +81,7 @@ check("article editors preserve the media-catalog save signal", [createEditor, e
 for (const id of ["basic", "faq", "seo", "publish"]) {
   check(`article create and edit retain the ${id} tab`, [createEditor, editEditor].every((source) => source.match(new RegExp(`id: "${id}"`, "g"))?.length === 1));
 }
-check("shared shell renders declarative editor tabs", shell.includes("<AdminModuleTabs") && shell.includes('variant="editor"') && shell.includes("tabs={tabs}"));
+check("shared shell renders declarative editor tabs through its shared presentation layer", shell.includes("<AdminModuleTabs") && shell.includes('variant="editor"') && shell.includes("tabs={presentedTabs}") && shell.includes("tabs.map((tab) =>"));
 check("legacy content tab remains absent", !createEditor.includes('id: "content"') && !editEditor.includes('id: "content"'));
 
 check("article adapters mount every article-specific capability once", [createEditor, editEditor].every((source) => ["ContentBasicDataPanel", "TopicMarkdownEditor", "FaqEditor", "SeoPanel", "ContentPublishingOptions", "ContentReviewPanel"].every((owner) => source.match(new RegExp(`<${owner}\\b`, "g"))?.length === 1)));

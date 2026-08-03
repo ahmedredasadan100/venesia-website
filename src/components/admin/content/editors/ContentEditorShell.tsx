@@ -26,6 +26,13 @@ type ContentEditorShellProps = {
   beforeTabs?: ReactNode;
 };
 
+const CONTENT_REVIEW_TAB_SECTION = {
+  sectionHeading: "مراجعة المحتوى وحالة النشر",
+  sectionDescription:
+    "راجع جاهزية المحتوى وإعدادات الظهور، ثم عالج الملاحظات قبل النشر.",
+  icon: "publish" as const,
+};
+
 export default function ContentEditorShell({
   action,
   contentType,
@@ -37,6 +44,10 @@ export default function ContentEditorShell({
   initialState,
   beforeTabs,
 }: ContentEditorShellProps) {
+  const presentedTabs: AdminModuleTab[] = tabs.map((tab) =>
+    tab.id === "publish" ? { ...tab, ...CONTENT_REVIEW_TAB_SECTION } : tab,
+  );
+
   return (
     <AdminFormRuntime
       key={entityId ?? `${contentType}:create`}
@@ -53,7 +64,7 @@ export default function ContentEditorShell({
       <input type="hidden" name="content_type" value={contentType} />
       {beforeTabs}
       <AdminModuleTabs
-        tabs={tabs}
+        tabs={presentedTabs}
         variant="editor"
         navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}
       />
