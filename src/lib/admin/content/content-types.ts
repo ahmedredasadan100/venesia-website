@@ -9,31 +9,99 @@ export const CONTENT_TYPES = [
 
 export type ContentType = (typeof CONTENT_TYPES)[number];
 export type ContentEditorKind = "article" | "text-media" | "video" | "gallery";
+export type ContentEditorBodyKind = "markdown" | "video" | "gallery";
+
+export type ContentEditorAdapter = {
+  contentType: ContentType;
+  editor: ContentEditorKind;
+  body: ContentEditorBodyKind;
+  supportsFaq: boolean;
+  supportsDisplaySettings: boolean;
+  supportsPopular: boolean;
+};
+
+export const CONTENT_EDITOR_ADAPTERS = {
+  article: {
+    contentType: "article",
+    editor: "article",
+    body: "markdown",
+    supportsFaq: true,
+    supportsDisplaySettings: true,
+    supportsPopular: true,
+  },
+  news: {
+    contentType: "news",
+    editor: "text-media",
+    body: "markdown",
+    supportsFaq: false,
+    supportsDisplaySettings: false,
+    supportsPopular: false,
+  },
+  press: {
+    contentType: "press",
+    editor: "text-media",
+    body: "markdown",
+    supportsFaq: false,
+    supportsDisplaySettings: false,
+    supportsPopular: false,
+  },
+  site_update: {
+    contentType: "site_update",
+    editor: "text-media",
+    body: "markdown",
+    supportsFaq: false,
+    supportsDisplaySettings: false,
+    supportsPopular: false,
+  },
+  video: {
+    contentType: "video",
+    editor: "video",
+    body: "video",
+    supportsFaq: false,
+    supportsDisplaySettings: false,
+    supportsPopular: false,
+  },
+  gallery: {
+    contentType: "gallery",
+    editor: "gallery",
+    body: "gallery",
+    supportsFaq: false,
+    supportsDisplaySettings: false,
+    supportsPopular: false,
+  },
+} as const satisfies Record<ContentType, ContentEditorAdapter>;
+
+const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
+  article: "مقال",
+  news: "خبر",
+  press: "بيان صحفي",
+  site_update: "تحديث تنفيذ",
+  video: "فيديو",
+  gallery: "معرض صور",
+};
 
 export const CONTENT_TYPE_OPTIONS: ReadonlyArray<{
   value: ContentType;
   label: string;
   editor: ContentEditorKind;
-}> = [
-  { value: "article", label: "مقال", editor: "article" },
-  { value: "news", label: "خبر", editor: "text-media" },
-  { value: "press", label: "بيان صحفي", editor: "text-media" },
-  { value: "site_update", label: "تحديث تنفيذ", editor: "text-media" },
-  { value: "video", label: "فيديو", editor: "video" },
-  { value: "gallery", label: "معرض صور", editor: "gallery" },
-];
+}> = CONTENT_TYPES.map((value) => ({
+  value,
+  label: CONTENT_TYPE_LABELS[value],
+  editor: CONTENT_EDITOR_ADAPTERS[value].editor,
+}));
 
 const CONTENT_TYPE_SET = new Set<string>(CONTENT_TYPES);
-const EDITOR_BY_CONTENT_TYPE = new Map(
-  CONTENT_TYPE_OPTIONS.map((option) => [option.value, option.editor] as const),
-);
 
 export function isContentType(value: unknown): value is ContentType {
   return typeof value === "string" && CONTENT_TYPE_SET.has(value);
 }
 
 export function resolveContentEditor(contentType: ContentType): ContentEditorKind | null {
-  return EDITOR_BY_CONTENT_TYPE.get(contentType) ?? null;
+  return CONTENT_EDITOR_ADAPTERS[contentType]?.editor ?? null;
+}
+
+export function getContentEditorAdapter(contentType: ContentType) {
+  return CONTENT_EDITOR_ADAPTERS[contentType];
 }
 
 export function getContentTypeLabel(contentType?: string | null) {

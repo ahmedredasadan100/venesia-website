@@ -15,10 +15,11 @@ export async function getTopicById(id: string) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "id, title, slug, excerpt, content, image, image_alt, media_payload, category_slug, series_id, status, published_at, published_by, date_label, deleted_at, seo_title, seo_description, focus_keyword, seo_keywords, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_faq_on_page, show_faq_title_on_page",
+      "id, title, slug, excerpt, content, image, image_alt, media_payload, category_id, category_slug, series_id, status, published_at, published_by, date_label, deleted_at, seo_title, seo_description, focus_keyword, seo_keywords, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_faq_on_page, show_faq_title_on_page",
     )
     .eq("id", id)
     .eq("content_type", "article")
+    .is("deleted_at", null)
     .maybeSingle<TopicRow>();
 
   if (error) {
@@ -55,28 +56,30 @@ async function loadTopicCategoriesForValidation() {
   return (data ?? []) as ArticleTopicCategoryRecord[];
 }
 
-export async function getCategory(categorySlug: string, currentCategorySlug?: string | null) {
+export async function getCategory(categoryId: number | null, currentCategoryId?: number | null) {
   const categories = await loadTopicCategoriesForValidation();
-  if (categorySlug === currentCategorySlug) {
-    const current = categories.find((category) => category.slug === categorySlug);
+  if (categoryId === currentCategoryId) {
+    const current = categories.find((category) => category.id === categoryId);
     if (current) return { id: current.id, name: current.name, slug: current.slug };
   }
-  const result = resolveArticleTopicCategory(categorySlug, categories);
+  const category = categories.find((item) => item.id === categoryId);
+  const result = resolveArticleTopicCategory(category?.slug ?? "", categories);
 
   if (!result.ok) {
-    logError("getCategory rejected article category", new Error(result.message), { categorySlug });
+    logError("getCategory rejected article category", new Error(result.message), { categoryId });
     return null;
   }
 
   return result.category;
 }
 
-export async function getCategoryValidationError(categorySlug: string, currentCategorySlug?: string | null) {
+export async function getCategoryValidationError(categoryId: number | null, currentCategoryId?: number | null) {
   const categories = await loadTopicCategoriesForValidation();
-  if (categorySlug === currentCategorySlug && categories.some((category) => category.slug === categorySlug)) {
+  if (categoryId === currentCategoryId && categories.some((category) => category.id === categoryId)) {
     return null;
   }
-  const result = resolveArticleTopicCategory(categorySlug, categories);
+  const category = categories.find((item) => item.id === categoryId);
+  const result = resolveArticleTopicCategory(category?.slug ?? "", categories);
   return result.ok ? null : result.message;
 }
 

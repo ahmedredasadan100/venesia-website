@@ -236,11 +236,11 @@ check(
 );
 
 check(
-  "Form Runtime closure claim is limited to reference consumers and Redirect create/edit",
+  "Form Runtime closure claim includes the bounded unified-content adoption",
   ADMIN_FORM_SYSTEM_CLOSURE.scope ===
-      "reference_consumers_and_redirect_create_edit" &&
+      "reference_consumers_redirect_and_unified_content_editors" &&
     ADMIN_FORM_SYSTEM_CLOSURE.allowedClaim ===
-      "seo_redirect_create_edit_adopted",
+      "unified_content_editors_adopted",
 );
 check(
   "global Form Runtime closure is explicitly forbidden",
@@ -269,11 +269,12 @@ const expectedClassifications: Record<
     "topic-category-create-edit",
     "topic-series-create-edit",
   ],
-  shared_adopter: ["redirects-create-edit", "projects-create-edit"],
-  legacy_generic_gap: [
+  shared_adopter: [
+    "redirects-create-edit",
+    "projects-create-edit",
     "topic-media-create-edit",
-    "pages-quick-create",
   ],
+  legacy_generic_gap: ["pages-quick-create"],
   specialized_exception: [
     "page-composition-and-seo",
     "block-template-builders-and-editors",
@@ -334,16 +335,23 @@ check(
   unclassifiedFormMutationOwners.length === 0,
 );
 const sharedReferenceSources = sourcePathsFor("shared_reference");
+const contentEditorShell = read(
+  "src/components/admin/content/editors/ContentEditorShell.tsx",
+);
 check(
   "all reference consumers delegate their only form to AdminFormRuntime",
   sharedReferenceSources.every((sourceFile) => {
     const source = read(sourceFile);
-    return (
+    const delegatesDirectly =
       occurrenceCount(source, /<AdminFormRuntime\b/g) === 1 &&
-      occurrenceCount(source, /<AdminFormActions\b/g) === 1 &&
-      !source.includes("<form")
-    );
-  }),
+      occurrenceCount(source, /<AdminFormActions\b/g) === 1;
+    const delegatesThroughContentShell =
+      occurrenceCount(source, /<ContentEditorShell\b/g) === 1;
+    return (delegatesDirectly || delegatesThroughContentShell) && !source.includes("<form");
+  }) &&
+    occurrenceCount(contentEditorShell, /<AdminFormRuntime\b/g) === 1 &&
+    occurrenceCount(contentEditorShell, /<AdminFormActions\b/g) === 1 &&
+    !contentEditorShell.includes("<form"),
 );
 
 const articleCreate = read(
@@ -368,26 +376,26 @@ const createPageModal = read(
   "src/app/admin/pages-blocks/pages/CreatePageModal.tsx",
 );
 const topicFormDefinition = read(
-  "src/components/admin/content/editors/article/topic-form-definition.ts",
+  "src/components/admin/content/editors/content-form-definition.ts",
 );
 const topicCategorySelect = read(
-  "src/components/admin/content/editors/article/ArticleTopicCategorySelect.tsx",
+  "src/components/admin/content/editors/ContentCategorySelect.tsx",
 );
 const topicSeriesSelect = read(
   "src/components/admin/content/editors/article/TopicSeriesFields.tsx",
 );
 const topicTabs = read(
-  "src/components/admin/content/editors/article/TopicEditTabs.tsx",
+  "src/components/admin/content/editors/ContentEditorShell.tsx",
 );
 const topicBasicPanel = read(
-  "src/components/admin/content/editors/article/TopicBasicDataPanel.tsx",
+  "src/components/admin/content/editors/ContentBasicDataPanel.tsx",
 );
 const topicSeoPanel = read("src/components/admin/SeoPanel.tsx");
 const sharedEntitySeoPanel = read(
   "src/components/admin/seo/AdminEntitySeoPanel.tsx",
 );
 const topicPublishingOptions = read(
-  "src/components/admin/content/editors/article/TopicPublishingOptions.tsx",
+  "src/components/admin/content/editors/ContentPublishingOptions.tsx",
 );
 const topicPublishChecklist = read(
   "src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx",
@@ -411,28 +419,28 @@ const inlineListboxHandler = adminListboxSelect.slice(
 );
 check(
   "Topic Article create and edit share the unified action and mode contract",
-  articleCreate.includes("action={saveTopicForm}") &&
+  articleCreate.includes("action={saveContentForm}") &&
     articleCreate.includes('mode="create"') &&
-    articleEdit.includes("action={saveTopicForm}") &&
+    articleEdit.includes("action={saveContentForm}") &&
     articleEdit.includes('mode="edit"'),
 );
 check(
   "Topic Article Create and Edit mount one shared editor identity",
   [articleCreate, articleEdit].every((source) =>
     [
-      "TopicEditTabs",
-      "TopicBasicDataPanel",
+      "ContentEditorShell",
+      "ContentBasicDataPanel",
       "TopicMarkdownEditor",
       "FaqEditor",
       "SeoPanel",
-      "TopicPublishingOptions",
+      "ContentPublishingOptions",
       "TopicPublishChecklistPanel",
     ].every(
       (owner) => occurrenceCount(source, new RegExp(`<${owner}\\b`, "g")) === 1,
     ),
   ) &&
     topicTabs.includes('variant="editor"') &&
-    topicBasicPanel.includes('data-topic-basic-presentation="editor"') &&
+    topicBasicPanel.includes('data-content-basic-presentation="editor"') &&
     occurrenceCount(topicSeoPanel, /<AdminEntitySeoPanel/g) === 1 &&
     occurrenceCount(topicSeoPanel, /<AdminFormLayout/g) === 0 &&
     occurrenceCount(topicSeoPanel, /<AdminSingleOpenAccordion/g) === 0 &&
@@ -440,7 +448,7 @@ check(
     occurrenceCount(sharedEntitySeoPanel, /<AdminSingleOpenAccordion/g) === 1 &&
     sharedEntitySeoPanel.includes('defaultOpenId="search-result-preview"') &&
     sharedEntitySeoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
-    topicPublishingOptions.includes('data-topic-publishing-presentation="integrated"') &&
+    topicPublishingOptions.includes('data-content-publishing-presentation="integrated"') &&
     topicPublishChecklist.includes('data-topic-publish-review-presentation="embedded"'),
 );
 check(
@@ -463,10 +471,14 @@ check(
 );
 check(
   "Topic mode identity, Preview, and media-signal differences remain declarative and unique",
-  occurrenceCount(articleCreate, /name="content_type"/g) === 1 &&
-    occurrenceCount(articleCreate, /name="id"/g) === 0 &&
-    occurrenceCount(articleEdit, /name="content_type"/g) === 1 &&
-    occurrenceCount(articleEdit, /name="id"/g) === 1 &&
+  occurrenceCount(contentEditorShell, /name="content_type"/g) === 1 &&
+    occurrenceCount(contentEditorShell, /name="id"/g) === 1 &&
+    articleCreate.includes('mode="create"') &&
+    articleCreate.includes('contentType="article"') &&
+    !articleCreate.includes("entityId=") &&
+    articleEdit.includes('mode="edit"') &&
+    articleEdit.includes('contentType="article"') &&
+    articleEdit.includes("entityId={topic.id}") &&
     occurrenceCount(articleCreate, /<AdminEntityPreviewActions\b/g) === 0 &&
     occurrenceCount(articleEdit, /<AdminEntityPreviewActions\b/g) === 1 &&
     [articleCreate, articleEdit].every(
@@ -482,15 +494,15 @@ check(
 check(
   "Topic taxonomy errors target one stable visible dropdown presentation",
   topicFormDefinition.includes(
-    'category_slug: { tabId: "basic", targetId: "topic-category-listbox" }',
+    'category_id: { tabId: "basic", targetId: "content-category-listbox" }',
   ) &&
     topicFormDefinition.includes(
-      'series_id: { tabId: "basic", targetId: "topic-series-listbox" }',
+      'series_id: { tabId: "basic", targetId: "content-series-listbox" }',
     ) &&
-    topicCategorySelect.includes('id="topic-category-popover"') &&
-    topicCategorySelect.includes('triggerId="topic-category-listbox"') &&
-    topicSeriesSelect.includes('id="topic-series-popover"') &&
-    topicSeriesSelect.includes('triggerId="topic-series-listbox"') &&
+    topicCategorySelect.includes('id="content-category-popover"') &&
+    topicCategorySelect.includes('triggerId="content-category-listbox"') &&
+    topicSeriesSelect.includes('id="content-series-popover"') &&
+    topicSeriesSelect.includes('triggerId="content-series-listbox"') &&
     ![topicCategorySelect, topicSeriesSelect].some(
       (source) =>
         /(?:^|[<\s])presentation=/m.test(source) ||
@@ -562,25 +574,23 @@ check(
     [articleCreate, articleEdit].every(
       (source) =>
         source.includes("<AdminPageExperience") &&
-        source.includes("className={ADMIN_FORM_STACK_CLASS_NAME}") &&
         !source.includes('<main className="space-y-7">'),
     ) &&
+    contentEditorShell.includes("className={ADMIN_FORM_STACK_CLASS_NAME}") &&
     [categoryForm, seriesForm].every((source) =>
       source.includes("className={ADMIN_FORM_STACK_CLASS_NAME}"),
     ),
 );
 check(
-  "Media Topic Create and Edit reuse shared presentation owners without changing their legacy form lifecycle classification",
+  "Media Topic Create and Edit delegate lifecycle and presentation to the unified content owners",
   [
-    "<AdminFormLayout",
-    "<AdminFormSection",
-    "<AdminFormField",
-    "<AdminFormListboxSelect",
-    "<AdminFormSwitch",
-    "<AdminStickyFormBar",
-    "className={ADMIN_FORM_STACK_CLASS_NAME}",
+    "<ContentEditorShell",
+    "<ContentBasicDataPanel",
+    "<ContentPublishingOptions",
+    "<MediaEntitySeoPanel",
   ].every((marker) => mediaContentForm.includes(marker)) &&
-    !mediaContentForm.includes("<AdminFormSelect") &&
+    !mediaContentForm.includes("<form") &&
+    !mediaContentForm.includes("<AdminStickyFormBar") &&
     !mediaContentForm.includes('className="w-full rounded-2xl border border-white/10 bg-black/30'),
 );
 check(
@@ -723,7 +733,7 @@ check(
 );
 
 const publishingOptions = read(
-  "src/components/admin/content/editors/article/TopicPublishingOptions.tsx",
+  "src/components/admin/content/editors/ContentPublishingOptions.tsx",
 );
 check(
   "Form feedback uses the required provider, publishes initial route errors, and keeps the newest channel visible",
@@ -742,7 +752,7 @@ check(
   [
     'name="is_featured"',
     'name="is_popular"',
-    'name="is_published"',
+    'name="status"',
     "TopicDateLabelField",
   ].every((marker) => publishingOptions.includes(marker)) &&
     !publishingOptions.includes("SaveBar"),
@@ -765,9 +775,7 @@ check(
     "publishedAt: parseFormPublishedDate(formData)",
   ) &&
     articleSaveHelpers.includes("published_at: resolveTopicPublishedAt({") &&
-    publishingOptions.includes(
-      "disabled={pending || Boolean(publishedAt)}",
-    ) &&
+    publishingOptions.includes("disabled={Boolean(publishedAt)}") &&
     submittedPublicationDate === "2026-08-15" &&
     firstPublishedAt === "2026-08-15T12:00:00.000Z" &&
     resolveTopicPublishedAt({
@@ -959,8 +967,7 @@ check(
 const topicPreviewActionIndex = articleEdit.indexOf(
   "<AdminEntityPreviewActions",
 );
-const topicFormRuntimeIndex = articleEdit.indexOf("<AdminFormRuntime");
-const topicFormRuntimeEndIndex = articleEdit.lastIndexOf("</AdminFormRuntime>");
+const topicFormRuntimeIndex = articleEdit.indexOf("<ContentEditorShell");
 check(
   "Topic Article mounts the shared Preview/Public adopter outside Form Runtime",
   articleEdit.includes("buildAdminContentPreviewCapability") &&
@@ -971,10 +978,7 @@ check(
     occurrenceCount(articleEdit, /<AdminEntityPreviewActions\b/g) === 1 &&
     topicPreviewActionIndex >= 0 &&
     topicPreviewActionIndex < topicFormRuntimeIndex &&
-    topicFormRuntimeEndIndex > topicFormRuntimeIndex &&
-    !articleEdit
-      .slice(topicFormRuntimeIndex, topicFormRuntimeEndIndex)
-      .includes("AdminEntityPreviewActions"),
+    occurrenceCount(articleEdit, /<ContentEditorShell\b/g) === 1,
 );
 
 const categoryRowActions = read(
@@ -1044,7 +1048,10 @@ check(
     !existsSync(
       absolutePath("src/app/admin/content/topics/article-actions/status.ts"),
     ) &&
-    unifiedAction.includes("export async function saveTopicForm"),
+    unifiedAction.includes("export async function saveArticleContentAdapter") &&
+    read("src/app/admin/content/topics/editor-actions/save.ts").includes(
+      "export async function saveContentForm",
+    ),
 );
 check(
   "publish preflight runs before Storage and database writes",

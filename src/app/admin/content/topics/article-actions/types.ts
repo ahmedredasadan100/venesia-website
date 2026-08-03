@@ -16,6 +16,7 @@ export type TopicRow = {
   show_excerpt_on_page?: boolean | null;
   show_faq_on_page?: boolean | null;
   show_faq_title_on_page?: boolean | null;
+  category_id?: number | null;
   category_slug: string | null;
   series_id?: number | null;
   status: TopicStatus | string | null;

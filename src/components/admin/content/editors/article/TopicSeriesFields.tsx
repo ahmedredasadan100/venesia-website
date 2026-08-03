@@ -29,8 +29,8 @@ export default function TopicSeriesFields({ options, defaultSeriesId = "", defau
       <span className="text-xs font-medium text-white/58">السلسلة (اختياري)</span>
       <input ref={hiddenRef} type="hidden" name="series_id" value={value} />
       <AdminListboxSelect
-        id="topic-series-popover"
-        triggerId="topic-series-listbox"
+        id="content-series-popover"
+        triggerId="content-series-listbox"
         value={value}
         options={options.map((option) => ({ value: String(option.id), label: option.name }))}
         onChange={update}

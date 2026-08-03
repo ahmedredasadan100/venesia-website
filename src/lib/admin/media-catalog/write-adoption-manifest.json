@@ -40,8 +40,7 @@
       "sourceFiles": [
         "src/app/admin/content/topics/actions.ts",
         "src/app/admin/content/topics/article-actions/save.ts",
-        "src/app/admin/content/topics/media-actions/create.ts",
-        "src/app/admin/content/topics/media-actions/update.ts"
+        "src/app/admin/content/topics/media-actions/save.ts"
       ],
       "rationale": "Topic create, update, and duplicate paths acquire a write lease from the provider-owned intended row before the Domain commit and synchronize under that lease."
     },

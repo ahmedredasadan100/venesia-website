@@ -19,7 +19,6 @@ import {
 } from "../../../../../lib/seo/entity-seo-types";
 import {
   buildTopicWritePayload,
-  getBoolean,
   getNormalizedStatus,
   getPayload,
   preserveImage,
@@ -35,9 +34,9 @@ import {
   getSeries,
   getTopicById,
 } from "./validation";
-import { revalidateTopicPaths } from "./revalidate";
+import { revalidateUnifiedContentPaths } from "../editor-actions/revalidate";
 import type { TopicPayload } from "./helpers";
-import type { TopicRow, TopicStatus } from "./types";
+import type { TopicStatus } from "./types";
 
 type FieldErrors = Record<string, string[]>;
 
@@ -98,8 +97,8 @@ function validateTopicFields(
       "استخدم حروفًا إنجليزية صغيرة وأرقامًا وشرطات فقط.",
     );
   }
-  if (!payload.categorySlug) {
-    addFieldError(fieldErrors, "category_slug", "التصنيف مطلوب.");
+  if (!payload.categoryId) {
+    addFieldError(fieldErrors, "category_id", "التصنيف مطلوب.");
   }
   if (partialFaq) {
     addFieldError(
@@ -165,30 +164,6 @@ function validateTopicFields(
   return fieldErrors;
 }
 
-function resolveRequestedStatus(options: {
-  mode: AdminFormMode;
-  currentTopic: TopicRow | null;
-  publishRequested: boolean;
-}): TopicStatus {
-  const { mode, currentTopic, publishRequested } = options;
-  if (mode === "create") return publishRequested ? "published" : "draft";
-
-  const currentStatus = getNormalizedStatus(
-    String(currentTopic?.status ?? "draft"),
-    "draft",
-  );
-  if (currentStatus === "archived") return "archived";
-  if (publishRequested) return "published";
-  if (
-    currentStatus === "published" ||
-    currentStatus === "unpublished" ||
-    Boolean(currentTopic?.published_by)
-  ) {
-    return "unpublished";
-  }
-  return "draft";
-}
-
 function successMessage(mode: AdminFormMode, status: TopicStatus) {
   if (mode === "create") {
     return status === "published"
@@ -220,7 +195,7 @@ function auditOperation(
   return "update";
 }
 
-export async function saveTopicForm(
+export async function saveArticleContentAdapter(
   previousState: AdminFormActionState,
   formData: FormData,
 ): Promise<AdminFormActionState> {
@@ -243,12 +218,10 @@ export async function saveTopicForm(
 
   const payload = getPayload(formData);
   const partialFaq = hasPartialFaq(formData);
-  const publishRequested = getBoolean(formData, "is_published");
-  const nextStatus = resolveRequestedStatus({
-    mode,
-    currentTopic,
-    publishRequested,
-  });
+  const nextStatus = getNormalizedStatus(
+    String(formData.get("status") ?? "draft"),
+    "draft",
+  );
 
   const baseErrors = validateTopicFields(payload, false, partialFaq);
   if (Object.keys(baseErrors).length) {
@@ -263,17 +236,17 @@ export async function saveTopicForm(
   }
 
   const category = await getCategory(
-    payload.categorySlug,
-    currentTopic?.category_slug,
+    payload.categoryId,
+    currentTopic?.category_id,
   );
   if (!category) {
     const categoryError = await getCategoryValidationError(
-      payload.categorySlug,
-      currentTopic?.category_slug,
+      payload.categoryId,
+      currentTopic?.category_id,
     );
     const message =
       categoryError ?? "التصنيف المختار غير موجود أو غير مفعل.";
-    return formFailure(message, { category_slug: [message] });
+    return formFailure(message, { category_id: [message] });
   }
 
   const series = await getSeries(payload.seriesId, currentTopic?.series_id);
@@ -411,7 +384,8 @@ export async function saveTopicForm(
   const savedSlug = coordinated.value.slug;
   const mediaSynchronization = coordinated.mediaSynchronization;
 
-  revalidateTopicPaths({
+  revalidateUnifiedContentPaths({
+    contentType: "article",
     id: entityId,
     oldSlug: currentTopic?.slug,
     newSlug: savedSlug,

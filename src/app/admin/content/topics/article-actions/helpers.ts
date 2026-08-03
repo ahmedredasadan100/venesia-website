@@ -140,6 +140,7 @@ export function getPayload(formData: FormData) {
   const rawSlug = getString(formData, "slug");
   const slug = rawSlug ? createSlug(rawSlug) : createSlug(title);
   const seriesId = getString(formData, "series_id");
+  const categoryId = getString(formData, "category_id");
   const legacySeries = getString(formData, "legacy_series");
   const legacySeriesSlug = getString(formData, "legacy_series_slug");
   const seo = readEntitySeoFormData(formData);
@@ -152,7 +153,8 @@ export function getPayload(formData: FormData) {
     image: getString(formData, "image"),
     imageFieldPresent: formData.has("image"),
     imageAlt: getString(formData, "image_alt"),
-    categorySlug: getString(formData, "category_slug"),
+    categoryId:
+      categoryId && validateId(categoryId) ? Number(categoryId) : null,
     seriesId: seriesId && validateId(seriesId) ? Number(seriesId) : null,
     legacySeries: legacySeries || null,
     legacySeriesSlug: legacySeriesSlug ? createSlug(legacySeriesSlug) : null,
@@ -181,7 +183,7 @@ function payloadToPublishInput(payload: TopicPayload): TopicPublishInput {
     content: payload.content,
     image: payload.image,
     imageAlt: payload.imageAlt,
-    categorySlug: payload.categorySlug,
+    categorySlug: payload.categoryId ? String(payload.categoryId) : "",
     seoTitle: payload.seoTitle,
     seoDescription: payload.seoDescription,
     focusKeyword: payload.focusKeyword,

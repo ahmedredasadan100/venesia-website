@@ -445,11 +445,15 @@ check(
 );
 
 const articleSave = read("src/app/admin/content/topics/article-actions/save.ts");
-const mediaCreate = read("src/app/admin/content/topics/media-actions/create.ts");
-const mediaUpdate = read("src/app/admin/content/topics/media-actions/update.ts");
+const mediaSave = read("src/app/admin/content/topics/media-actions/save.ts");
 const articleModeBranches = findIfElseBranches(
   articleSave,
   "src/app/admin/content/topics/article-actions/save.ts",
+  'mode === "create"',
+);
+const mediaModeBranches = findIfElseBranches(
+  mediaSave,
+  "src/app/admin/content/topics/media-actions/save.ts",
   'mode === "create"',
 );
 check(
@@ -473,25 +477,27 @@ check(
 );
 check(
   "Media create action must insert both stable creator and updater actor IDs",
-  containsAll(mediaCreate, [
+  containsAll(mediaModeBranches.then, [
     '.from("topics")',
     ".insert({",
     "created_by: actor.id",
     "updated_by: actor.id",
-  ]),
+  ]) && !mediaModeBranches.then.includes(".update({"),
 );
 check(
   "Media update action must update only the stable updater actor ID",
-  containsAll(mediaUpdate, [
+  containsAll(mediaModeBranches.else, [
     '.from("topics")',
     ".update(",
     "updated_by: actor.id",
-  ]) && !mediaUpdate.includes("created_by: actor.id"),
+  ]) &&
+    !mediaModeBranches.else.includes("created_by: actor.id") &&
+    !mediaModeBranches.else.includes(".insert({"),
 );
 check(
   "Draft saves must not assign a publisher",
   articleSave.includes('nextStatus === "published" ? actor.id : null') &&
-    mediaCreate.includes('payload.status === "published" ? actor.id : null'),
+    mediaSave.includes('payload.status === "published" ? actor.id : null'),
 );
 
 const migration = read("sql/migrations/20260717070000_unified_content_engine_foundation.sql");
@@ -542,11 +548,11 @@ check(
   "Existing inactive media categories must remain editable",
   mediaValidation.includes("currentCategoryId?: number | null") &&
     mediaValidation.includes("normalizedId !== currentCategoryId") &&
-    mediaUpdate.includes("currentTopic.category_id"),
+    mediaSave.includes("currentTopic?.category_id"),
 );
 check(
   "Existing inactive article categories must remain editable",
-  editorRoute.includes("category.slug === topic.category_slug") &&
+  editorRoute.includes("category.id === topic.category_id") &&
     editorRoute.includes("{ ...category, is_active: true }"),
 );
 

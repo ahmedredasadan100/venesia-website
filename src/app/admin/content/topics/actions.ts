@@ -24,7 +24,11 @@ import {
   adminContentTopicPath,
 } from "../../../../lib/admin/content-routes";
 import { getContentPublicVisibilityState } from "../../../../lib/content-public-visibility";
-import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
+import {
+  revalidateMediaCenterCache,
+  revalidateTopicsCache,
+} from "../../../../lib/cache/revalidate-public-cache-tags";
+import { revalidateMediaCenterPublicPaths } from "../../../../lib/media-center/revalidate-public-paths";
 import {
   TOPICS_LIST_VIEW_KEY,
   TOPICS_PREFERENCE_COLUMN_KEYS,
@@ -75,9 +79,7 @@ function getPublishFocusTarget(
   message: string,
 ) {
   if (!message.includes("Alt Text")) return undefined;
-  return topic.content_type === "article"
-    ? "topic-image-alt"
-    : "media-image-alt";
+  return topic.content_type ? "topic-image-alt" : undefined;
 }
 
 function invalidMutation(message = "تعذر تنفيذ العملية."): AdminActionResult {
@@ -108,6 +110,9 @@ async function finishMutation(input: {
   metadata?: Record<string, unknown>;
 }) {
   revalidateTopicsCache();
+  revalidateMediaCenterCache();
+  revalidateMediaCenterPublicPaths();
+  revalidatePath("/topics");
   revalidatePath(ADMIN_CONTENT_ROUTES.topics);
   if (input.entityId) revalidatePath(adminContentTopicPath(input.entityId));
   await recordCmsAdminAudit(

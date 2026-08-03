@@ -47,11 +47,11 @@ type CorrectionTarget = {
 };
 
 const CHECKLIST_CORRECTION_TARGETS: Record<string, CorrectionTarget> = {
-  title: { tabId: "basic", targetId: "topic-title" },
+  title: { tabId: "basic", targetId: "content-title" },
   slug: { tabId: "basic", targetId: "topic-slug" },
-  category: { tabId: "basic", targetId: "topic-category-listbox" },
-  excerpt: { tabId: "basic", targetId: "topic-excerpt" },
-  image: { tabId: "basic", targetId: "topic-image-field" },
+  category: { tabId: "basic", targetId: "content-category-listbox" },
+  excerpt: { tabId: "basic", targetId: "content-excerpt" },
+  image: { tabId: "basic", targetId: "content-image-field" },
   "image-alt": { tabId: "basic", targetId: "topic-image-alt" },
   content: { tabId: "basic", targetId: "topic-content-markdown" },
   "seo-title": { tabId: "seo", targetId: "topic-seo-title" },
@@ -87,7 +87,7 @@ function faq(form: HTMLFormElement): TopicFaqItem[] {
 }
 
 function read(form: HTMLFormElement, seed: SummaryState): SummaryState {
-  const categoryControl = form.querySelector('select[name="category_slug"]');
+  const categoryControl = form.querySelector('select[name="category_id"]');
   const category =
     categoryControl instanceof HTMLSelectElement
       ? categoryControl.selectedOptions.item(0)?.textContent?.trim() || seed.category
@@ -101,14 +101,16 @@ function read(form: HTMLFormElement, seed: SummaryState): SummaryState {
     content: field(form, "content"),
     image: field(form, "image", seed.image),
     imageAlt: field(form, "image_alt"),
-    categorySlug: field(form, "category_slug"),
+    categorySlug: field(form, "category_id"),
     seoTitle: field(form, "seo_title"),
     seoDescription: field(form, "seo_description"),
     focusKeyword: field(form, "focus_keyword"),
     faq: faq(form),
     category,
     publishedAt: field(form, "published_at", seed.publishedAt),
-    published: checked(form, "is_published", seed.published),
+    published:
+      field(form, "status", seed.published ? "published" : "draft") ===
+      "published",
     featured: checked(form, "is_featured", seed.featured),
     showTitle: checked(form, "show_title_on_page", seed.showTitle),
     showImage: checked(form, "show_image_on_page", seed.showImage),

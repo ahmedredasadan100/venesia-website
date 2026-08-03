@@ -10,18 +10,19 @@ import {
   getContentTypeLabel,
   type MediaEditableContentType,
 } from "./media-content-config";
+import { CONTENT_EDITOR_NAVIGATION_EVENT } from "../content-editor-navigation";
 
 const MEDIA_SEO_FIELD_IDS = {
-  seoTitle: "media-seo-title",
-  seoDescription: "media-seo-description",
-  focusKeyword: "media-focus-keyword",
-  seoKeywords: "media-seo-keywords",
-  canonicalUrl: "media-canonical-url",
-  robotsSection: "media-seo-robots",
-  robotsIndexListbox: "media-robots-index-listbox",
-  robotsIndexFocusTarget: "media-robots-index",
-  robotsFollowListbox: "media-robots-follow-listbox",
-  robotsFollowFocusTarget: "media-robots-follow",
+  seoTitle: "content-seo-title",
+  seoDescription: "content-seo-description",
+  focusKeyword: "content-focus-keyword",
+  seoKeywords: "content-seo-keywords",
+  canonicalUrl: "content-canonical-url",
+  robotsSection: "content-seo-robots",
+  robotsIndexListbox: "content-robots-index-listbox",
+  robotsIndexFocusTarget: "content-robots-index",
+  robotsFollowListbox: "content-robots-follow-listbox",
+  robotsFollowFocusTarget: "content-robots-follow",
 } satisfies AdminEntitySeoFieldIds;
 
 export type MediaEntitySeoValues = {
@@ -49,13 +50,20 @@ export default function MediaEntitySeoPanel({
   contentType: MediaEditableContentType;
   values?: MediaEntitySeoValues | null;
 }) {
+  const bodyCorrectionTarget =
+    contentType === "video"
+      ? "video_url"
+      : contentType === "gallery"
+        ? "gallery-editor"
+        : "topic-content-markdown";
+
   return (
     <AdminEntitySeoPanel
       id="media-entity-seo-panel"
       entityLabel={getContentTypeLabel(contentType)}
       publicPathPrefix={resolvePublicContentBasePath(contentType)}
       slugPlaceholder="content-slug"
-      navigationEventName="admin-media-entity-seo-navigation"
+      navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}
       sourceFieldNames={{
         title: "title",
         description: "excerpt",
@@ -69,8 +77,8 @@ export default function MediaEntitySeoPanel({
       social={{
         mediaBrowseFolder: "images/topics/seo",
         fieldIds: {
-          imageSection: "media-og-image",
-          imageAlt: "media-og-image-alt",
+          imageSection: "content-og-image",
+          imageAlt: "content-og-image-alt",
         },
       }}
       initial={{
@@ -96,10 +104,10 @@ export default function MediaEntitySeoPanel({
         "focus-keyword": { tabId: "seo", targetId: MEDIA_SEO_FIELD_IDS.focusKeyword },
         "keyword-title": { tabId: "seo", targetId: MEDIA_SEO_FIELD_IDS.seoTitle },
         "keyword-description": { tabId: "seo", targetId: MEDIA_SEO_FIELD_IDS.seoDescription },
-        "keyword-content": { tabId: "content", targetId: "topic-content-markdown" },
-        image: { tabId: "seo", targetId: "media-og-image" },
-        "image-alt": { tabId: "seo", targetId: "media-og-image-alt" },
-        slug: { tabId: "content", targetId: "topic-slug" },
+        "keyword-content": { tabId: "basic", targetId: bodyCorrectionTarget },
+        image: { tabId: "seo", targetId: "content-og-image" },
+        "image-alt": { tabId: "seo", targetId: "content-og-image-alt" },
+        slug: { tabId: "basic", targetId: "topic-slug" },
         "seo-keywords": { tabId: "seo", targetId: MEDIA_SEO_FIELD_IDS.seoKeywords },
       }}
     />

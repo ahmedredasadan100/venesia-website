@@ -252,7 +252,7 @@ export function buildMediaWritePayload(
       status: payload.status,
       nowIso: now,
     }),
-    deleted_at: payload.status === "archived" ? now : null,
+    deleted_at: currentTopic?.deleted_at ?? null,
     updated_at: now,
   };
 }
