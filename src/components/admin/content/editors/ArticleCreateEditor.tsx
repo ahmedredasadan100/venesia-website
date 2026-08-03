@@ -112,7 +112,6 @@ export default function ArticleCreateEditor({
                   robotsIndex={null}
                   robotsFollow={null}
                   faq={[]}
-                  hideImageAltField
                 />
               ),
             },

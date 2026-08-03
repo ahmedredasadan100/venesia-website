@@ -5,6 +5,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 const editor = read("src/components/admin/content/editors/article/TopicMarkdownEditor.tsx");
 const faq = read("src/components/admin/content/editors/article/FaqEditor.tsx");
 const seo = read("src/components/admin/SeoPanel.tsx");
+const sharedSeo = read("src/components/admin/seo/AdminEntitySeoPanel.tsx");
 const review = read("src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx");
 const publishingOptions = read("src/components/admin/content/editors/article/TopicPublishingOptions.tsx");
 const create = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
@@ -34,7 +35,7 @@ check("redundant add-content and quote-content toolbar actions are absent", !edi
 check("editor top cards include all heading counts and real internal-link count", ["H1", "H2", "H3", "روابط داخلية"].every((label) => editor.includes(`label="${label}"`)) && editor.includes("markdownInternalLinks + htmlInternalLinks") && editor.includes("stats.internalLinks"));
 check("zero internal links use the light warning state", editor.includes("warning={stats.internalLinks === 0}"));
 check("lower content analysis is fully removed", ["قراءة فنية سريعة", "تحليل مباشر", "data-topic-content-analysis", "AnalysisCard", "analysisPortalTarget"].every((token) => !editor.includes(token)));
-check("Focus Keyword density exists only in SEO and reuses its analysis", !editor.includes("keywordDensity") && seo.includes("analysis.keywordDensity") && seo.includes("data-topic-seo-keyword-density"));
+check("Focus Keyword density exists only in SEO and reuses its analysis", !editor.includes("keywordDensity") && seo.includes("topicAnalysis.keywordDensity") && sharedSeo.includes('data-admin-entity-seo-metric={metric.id}'));
 check("content tab excludes FAQ counter", !editor.includes("أسئلة FAQ"));
 check("FAQ uses shared confirmation", faq.includes("AdminConfirmDialog") && !faq.includes("window.confirm"));
 check("FAQ supports reorder", faq.includes("draggable") && faq.includes("onDrop"));
@@ -47,10 +48,10 @@ check("empty FAQ deletion is preserved as empty", helper.includes("faqEditorPres
 check("public FAQ honors visibility", publicPage.includes("topic.showFaqOnPage && topic.faq.length"));
 check("FAQ migration is additive and defaults visible", migration.includes("show_faq_on_page boolean not null default true"));
 check("FAQ title visibility is additive and honored publicly", migration.includes("show_faq_title_on_page boolean not null default true") && publicPage.includes("topic.showFaqTitleOnPage"));
-for (const name of ["seo_title", "seo_description", "focus_keyword", "seo_keywords"]) check(`SEO field: ${name}`, seo.includes(`name=\"${name}\"`));
+for (const name of ["seo_title", "seo_description", "focus_keyword", "seo_keywords"]) check(`SEO field adapter: ${name}`, seo.includes(`\"${name}\"`));
 check("SEO excludes duplicate inputs", !seo.includes('name="slug"') && !seo.includes('name="image_alt"'));
-check("SEO shows public topic path", seo.includes("/topics/${live.slug.trim()"));
-check("SEO only renders SEO issues", seo.includes("analysis.issues.seo") && !seo.includes("analysis.issues.content") && !seo.includes("analysis.issues.readiness"));
+check("SEO adapter provides the public Topic path to the shared preview owner", seo.includes('publicPathPrefix="/topics"') && sharedSeo.includes("live.slug.trim() || slugPlaceholder"));
+check("SEO adapter adds only typed Topic analysis while the shared owner renders all issues", seo.includes("topicAnalysis.issues.seo.filter") && seo.includes("topicAnalysis.issues.content.find") && !seo.includes("topicAnalysis.issues.readiness") && sharedSeo.includes("analysis.issues.map"));
 check("review separates blockers", review.includes("التنبيهات") || review.includes("تنبيه مانع"));
 check("review separates optional improvements", review.includes("تحسينات اختيارية"));
 check("review includes read-only summary", review.includes("ملخص الموضوع") && review.includes("حالة SEO") && review.includes("الأسئلة الشائعة"));

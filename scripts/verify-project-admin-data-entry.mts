@@ -1052,19 +1052,22 @@ check(
     form.includes("<ProjectSeoPanel") &&
     projectSeoPanel.includes("<AdminEntitySeoPanel") &&
     projectSeoPanel.includes('slugPlaceholder="project-slug"') &&
-    projectSeoPanel.includes('mediaBrowseFolder="images/projects/seo"') &&
+    projectSeoPanel.includes('mediaBrowseFolder: "images/projects/seo"') &&
     projectSeoPanel.includes("fieldNames={PROJECT_SEO_FIELD_NAMES}") &&
     projectSeoPanel.includes("fieldIds={PROJECT_SEO_FIELD_IDS}") &&
     seoPanel.match(/<AdminFormLayout/g)?.length === 1 &&
     seoPanel.match(/<AdminSingleOpenAccordion/g)?.length === 1 &&
     seoPanel.includes('defaultOpenId="search-result-preview"') &&
     ["search-result-preview", "open-graph-preview", "live-seo-analysis"].every((id) => seoPanel.includes(`id: "${id}"`)) &&
-    ["معاينة نتائج البحث", "معاينة Open Graph", "تحليل SEO المباشر"].every((label) => seoPanel.includes(`label: "${label}"`)) &&
+    ["معاينة نتائج البحث", "معاينة المشاركة الاجتماعية (Open Graph)", "تحليل SEO المباشر"].every((label) => seoPanel.includes(label)) &&
     entitySeoPrimaryStart >= 0 &&
     entitySeoReturnStart > entitySeoPrimaryStart &&
     entitySeoHelperStart > entitySeoReturnStart &&
-    ["seoTitle", "seoDescription", "focusKeyword", "seoKeywords", "robotsIndex", "robotsFollow", "canonicalUrl", "ogImage", "ogImageAlt"].every(
+    ["seoTitle", "seoDescription", "focusKeyword", "seoKeywords", "robotsIndex", "robotsFollow", "canonicalUrl"].every(
       (field) => entitySeoPrimaryRender.includes(`fieldNames.${field}`) && !entitySeoHelperRender.includes(`fieldNames.${field}`),
+    ) &&
+    ["name={social.fieldNames.image}", "name={social.fieldNames.imageAlt}"].every(
+      (binding) => entitySeoPrimaryRender.includes(binding) && !entitySeoHelperRender.includes(binding),
     ) &&
     entitySeoRobotsIndexPosition >= 0 &&
     entitySeoRobotsIndexPosition < entitySeoRobotsFollowPosition &&
@@ -1072,7 +1075,7 @@ check(
     seoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
     !seoPanel.includes("البيانات الأساسية لتحسين محركات البحث") &&
     !seoPanel.includes("خصص عنوان ووصف وكلمات") &&
-    !entitySeoHelperRender.includes("navigationEventName=") &&
+    entitySeoHelperRender.includes("navigationEventName={navigationEventName}") &&
     !["seo-basics", "social-sharing", "analysis-preview"].some((id) => seoPanel.includes(`id: "${id}"`)) &&
     !seoPanel.includes("project-") &&
     !seoPanel.includes("images/projects"),
