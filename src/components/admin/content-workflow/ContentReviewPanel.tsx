@@ -199,36 +199,6 @@ function formatAuditTimestamp(value?: string | null) {
   }
 }
 
-function submitWithPublicationStatus(
-  formId: string,
-  nextStatus: "published" | "draft",
-) {
-  const form = document.getElementById(formId);
-  if (!(form instanceof HTMLFormElement)) return;
-
-  const publicationToggle = form.querySelector<HTMLInputElement>(
-    'input[name="content_publication_toggle"]',
-  );
-  const statusInput = form.querySelector<HTMLInputElement>('input[name="status"]');
-  if (publicationToggle) {
-    publicationToggle.checked = nextStatus === "published";
-    publicationToggle.dispatchEvent(new Event("input", { bubbles: true }));
-    publicationToggle.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-  if (statusInput) statusInput.value = nextStatus;
-
-  const saveButton = form.querySelector<HTMLButtonElement>(
-    '[data-admin-form-action="save"]',
-  );
-  form.requestSubmit(saveButton ?? undefined);
-}
-
-function requestEditorClose(formId: string) {
-  const form = document.getElementById(formId);
-  if (!(form instanceof HTMLFormElement)) return;
-  form.querySelector<HTMLButtonElement>('[data-admin-form-action="close"]')?.click();
-}
-
 export default function ContentReviewPanel({
   formId,
   initial,
@@ -239,7 +209,6 @@ export default function ContentReviewPanel({
   featured = false,
   popular = false,
   updatedAt,
-  contentTypeLabel,
   initialDisplay,
 }: ContentReviewPanelProps) {
   const seed = useMemo<ReviewState>(
@@ -273,6 +242,7 @@ export default function ContentReviewPanel({
 
   const checks = useMemo(() => buildContentReviewChecks(input), [input]);
   const score = useMemo(() => getContentReviewScore(checks), [checks]);
+  const blockingIssues = checks.filter((item) => item.status === "fail");
   const suggestions = checks.filter(
     (item) => item.status === "warn" || item.status === "info",
   );
@@ -289,56 +259,6 @@ export default function ContentReviewPanel({
 
   return (
     <section className="space-y-5" data-content-review-capability data-content-review-presentation="dashboard">
-      <header className="overflow-visible rounded-[26px] border border-[#D8B87A]/25 bg-[radial-gradient(circle_at_top_right,rgba(216,184,122,0.16),transparent_34%),linear-gradient(135deg,rgba(11,15,21,0.98),rgba(22,25,30,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.28)] md:p-7">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <span className="inline-flex rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] px-3 py-1 text-[11px] font-semibold text-[#E7CD98]">
-              {contentTypeLabel}
-            </span>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white md:text-3xl">
-              مراجعة قبل النشر
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-white/48">
-              تحقق من جاهزية المحتوى قبل نشره.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2" data-content-review-actions>
-            <button
-              type="button"
-              onClick={() => submitWithPublicationStatus(formId, "published")}
-              className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#D8B87A] px-5 py-2.5 text-sm font-semibold text-[#07101A] transition hover:bg-[#E6CB91] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2D99B]/75"
-              data-content-review-action="publish"
-            >
-              نشر الآن
-            </button>
-            <button
-              type="button"
-              onClick={() => submitWithPublicationStatus(formId, "draft")}
-              className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/15 bg-white/[0.035] px-5 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/28 hover:bg-white/[0.065] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/60"
-              data-content-review-action="draft"
-            >
-              حفظ المسودة
-            </button>
-            <details className="group relative" data-content-review-action="more">
-              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center rounded-full border border-white/12 px-5 py-2.5 text-sm font-semibold text-white/58 transition hover:border-white/25 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/60 [&::-webkit-details-marker]:hidden">
-                إجراءات أخرى
-                <span aria-hidden="true" className="ms-2 text-white/35 transition group-open:rotate-180">⌄</span>
-              </summary>
-              <div className="absolute end-0 z-20 mt-2 min-w-48 rounded-2xl border border-white/12 bg-[#0A0E14] p-2 shadow-[0_20px_55px_rgba(0,0,0,0.48)]">
-                <button
-                  type="button"
-                  onClick={() => requestEditorClose(formId)}
-                  className="w-full rounded-xl px-3 py-2.5 text-start text-sm text-white/68 transition hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
-                >
-                  إغلاق المحرر
-                </button>
-              </div>
-            </details>
-          </div>
-        </div>
-      </header>
-
       <section aria-labelledby="content-review-decisions-title">
         <div className="mb-3 flex items-end justify-between gap-3">
           <div>
@@ -352,28 +272,49 @@ export default function ContentReviewPanel({
           <p className="hidden text-xs text-white/35 sm:block">تبقى هذه القرارات مكشوفة دائمًا.</p>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-content-review-decisions>
-          <article className="flex min-h-40 items-center justify-between gap-5 rounded-[22px] border border-[#D8B87A]/24 bg-[#D8B87A]/[0.065] p-5" data-content-review-decision="score">
-            <div>
-              <p className="text-sm font-semibold text-white/82">درجة جاهزية النشر</p>
-              <p className="mt-2 max-w-56 text-xs leading-5 text-white/42">
-                الدرجة إرشادية ولا تمنع النشر وحدها.
-              </p>
+        <div
+          className="grid items-stretch gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,1fr)]"
+          data-content-review-decisions
+        >
+          <article className="flex min-w-0 flex-col rounded-[22px] border border-[#D8B87A]/24 bg-[#D8B87A]/[0.065] p-4 md:p-5" data-content-review-decision="score">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white/82">درجة جاهزية النشر</p>
+                <p className="mt-1.5 text-xs leading-5 text-white/42">
+                  الدرجة إرشادية ولا تمنع النشر وحدها.
+                </p>
+                <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold ${blockingIssues.length ? "border-red-300/20 bg-red-300/[0.07] text-red-100/75" : "border-emerald-300/20 bg-emerald-300/[0.07] text-emerald-100/75"}`}>
+                  {blockingIssues.length ? "النشر يتطلب إصلاحًا" : "النشر متاح"}
+                </span>
+              </div>
+              <div
+                className="grid size-20 shrink-0 place-items-center rounded-full p-1.5"
+                style={{ background: `conic-gradient(#D8B87A ${score}%, rgba(255,255,255,.08) ${score}% 100%)` }}
+                aria-label={`درجة جاهزية النشر ${score} من 100`}
+              >
+                <span className="grid size-full place-items-center rounded-full bg-[#0A0E14] font-en text-xl font-semibold text-white">
+                  {score}
+                </span>
+              </div>
             </div>
-            <div
-              className="grid size-24 shrink-0 place-items-center rounded-full p-[7px]"
-              style={{ background: `conic-gradient(#D8B87A ${score}%, rgba(255,255,255,.08) ${score}% 100%)` }}
-              aria-label={`درجة جاهزية النشر ${score} من 100`}
+            <dl className="mt-4 grid grid-cols-2 gap-2">
+              <ScoreDecision label="المشكلات" value={blockingIssues.length} />
+              <ScoreDecision label="التحسينات" value={suggestions.length} />
+            </dl>
+            <button
+              type="button"
+              onClick={() => document.getElementById("content-review-analysis")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              aria-controls="content-review-analysis"
+              className="mt-4 inline-flex min-h-9 self-start items-center justify-center rounded-full border border-[#D8B87A]/25 px-4 py-2 text-xs font-semibold text-[#EED49B] transition hover:border-[#D8B87A]/45 hover:bg-[#D8B87A]/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
+              data-content-review-score-details
             >
-              <span className="grid size-full place-items-center rounded-full bg-[#0A0E14] font-en text-2xl font-semibold text-white">
-                {score}
-              </span>
-            </div>
+              عرض التفاصيل
+            </button>
           </article>
 
           {publishingOptions}
 
-          <article className="flex min-h-40 flex-col rounded-[22px] border border-white/10 bg-[#090D13]/88 p-5" data-content-review-decision="display-settings">
+          <article className="flex min-w-0 flex-col rounded-[22px] border border-white/10 bg-[#090D13]/88 p-4" data-content-review-decision="display-settings">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white/82">إعدادات العرض</p>
@@ -383,7 +324,7 @@ export default function ContentReviewPanel({
                 3 خيارات
               </span>
             </div>
-            <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <dl className="mt-3 space-y-2">
               <DisplayDecision label="إظهار العنوان" enabled={input.showTitle} />
               <DisplayDecision label="إظهار الصورة" enabled={input.showImage} />
               <DisplayDecision label="إظهار المقتطف" enabled={input.showExcerpt} />
@@ -392,13 +333,13 @@ export default function ContentReviewPanel({
               tabId="basic"
               targetId="content-display-settings"
               label="تعديل الإعدادات"
-              className="mt-4 self-start rounded-full px-4 py-2"
+              className="mt-3 self-start rounded-full px-4 py-2"
             />
           </article>
         </div>
       </section>
 
-      <section aria-labelledby="content-review-analysis-title">
+      <section id="content-review-analysis" aria-labelledby="content-review-analysis-title">
         <div className="mb-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#D8B87A]/65">
             التحليلات
@@ -466,11 +407,20 @@ export default function ContentReviewPanel({
 
 function DisplayDecision({ label, enabled }: { label: string; enabled: boolean }) {
   return (
-    <div className="rounded-xl border border-white/8 bg-black/20 px-2 py-2.5">
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
       <dt className="text-[10px] leading-4 text-white/42">{label}</dt>
-      <dd className={`mt-1 text-xs font-semibold ${enabled ? "text-emerald-200/80" : "text-white/32"}`}>
+      <dd className={`shrink-0 text-[11px] font-semibold ${enabled ? "text-emerald-200/80" : "text-white/32"}`}>
         {enabled ? "ظاهر" : "مخفي"}
       </dd>
+    </div>
+  );
+}
+
+function ScoreDecision({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2.5">
+      <dt className="text-[10px] text-white/38">{label}</dt>
+      <dd className="mt-1 font-en text-base font-semibold text-white/78">{value}</dd>
     </div>
   );
 }
