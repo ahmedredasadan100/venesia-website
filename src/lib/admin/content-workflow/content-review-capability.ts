@@ -5,7 +5,10 @@ import {
   validateVideoPayload,
   type MediaTopicPayload,
 } from "../media-topic-payload";
-import { ENTITY_SEO_LIMITS } from "../../seo/entity-seo-types";
+import {
+  ENTITY_SEO_LIMITS,
+  validateEntitySeoValues,
+} from "../../seo/entity-seo-types";
 
 export type ContentReviewStatus = "pass" | "warn" | "fail" | "info";
 export type ContentReviewSeverity = "success" | "error" | "warning" | "info";
@@ -20,6 +23,7 @@ export type ContentReviewCheck = {
   label: string;
   status: ContentReviewStatus;
   severity: ContentReviewSeverity;
+  blocksPublish: boolean;
   hint: string;
   field?: string;
   correctionTarget?: ContentReviewCorrectionTarget;
@@ -135,83 +139,8 @@ function effectiveImageAlt(input: ContentReviewInput) {
   return "";
 }
 
-function canonicalIsValid(value: string) {
-  if (!value.trim()) return true;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 export function getContentDraftValidationError(input: ContentReviewInput): string | null {
-  if (!input.title.trim()) return "العنوان مطلوب.";
-  if (!input.slug.trim()) return "الرابط مطلوب.";
-  if (!validateContentSlug(input.slug)) {
-    return "الـ Slug يجب أن يتكوّن من أحرف إنجليزية صغيرة وأرقام وشرطات فقط.";
-  }
-  if (!input.categorySlug.trim()) return "التصنيف مطلوب.";
-  return null;
-}
-
-export function getContentPublishValidationError(input: ContentReviewInput): string | null {
-  const draftError = getContentDraftValidationError(input);
-  if (draftError) return draftError;
-  const seoTitleLength = input.seoTitle.trim().length;
-  const seoDescriptionLength = input.seoDescription.trim().length;
-  if (!input.excerpt.trim() || input.excerpt.trim().length < 20) {
-    return "الوصف المختصر مطلوب ولا يقل عن 20 حرفًا.";
-  }
-
-  if (input.contentType === "video" || input.contentType === "gallery") {
-    const matchError = assertPayloadMatchesContentType(input.contentType, input.mediaPayload ?? null);
-    if (matchError) return matchError;
-    if (input.contentType === "video" && input.mediaPayload?.kind === "video") {
-      const videoError = validateVideoPayload(input.mediaPayload, { published: true });
-      if (videoError) return videoError;
-    }
-    if (input.contentType === "gallery" && input.mediaPayload?.kind === "gallery") {
-      const galleryError = validateGalleryPayload(input.mediaPayload, { published: true });
-      if (galleryError) return galleryError;
-      if (input.mediaPayload.images.some((item) => !item.alt?.trim())) {
-        return "النص البديل مطلوب لكل صورة في المعرض قبل النشر.";
-      }
-    }
-  } else if (!input.content.trim()) {
-    return "نص المحتوى مطلوب قبل النشر.";
-  }
-
-  if (!effectiveImage(input)) return "صورة الغلاف مطلوبة قبل النشر.";
-  if (!effectiveImageAlt(input)) return "وصف الصورة Alt Text مطلوب قبل النشر.";
-  if (!input.focusKeyword.trim()) return "Focus Keyword مطلوب قبل النشر.";
-  if (!input.seoTitle.trim()) return "SEO Title مطلوب قبل النشر.";
-  if (
-    seoTitleLength < ENTITY_SEO_LIMITS.title.min ||
-    seoTitleLength > ENTITY_SEO_LIMITS.title.max
-  ) {
-    return `SEO Title يجب أن يكون بين ${ENTITY_SEO_LIMITS.title.min} و${ENTITY_SEO_LIMITS.title.max} حرفًا.`;
-  }
-  if (!input.seoDescription.trim()) return "SEO Description مطلوب قبل النشر.";
-  if (
-    seoDescriptionLength < ENTITY_SEO_LIMITS.description.min ||
-    seoDescriptionLength > ENTITY_SEO_LIMITS.description.max
-  ) {
-    return `SEO Description يجب أن يكون بين ${ENTITY_SEO_LIMITS.description.min} و${ENTITY_SEO_LIMITS.description.max} حرفًا.`;
-  }
-  if (!canonicalIsValid(input.canonicalUrl)) return "الرابط الأساسي يجب أن يبدأ بـ http أو https.";
-  if (input.ogImage.trim() && !input.ogImageAlt.trim()) {
-    return "النص البديل لصورة المشاركة مطلوب عند اختيار الصورة.";
-  }
-  if (
-    input.contentType === "article" &&
-    (input.faq ?? []).some(
-      (item) => Boolean(item.question?.trim()) !== Boolean(item.answer?.trim()),
-    )
-  ) {
-    return "أكمل السؤال والإجابة لكل عنصر FAQ أو احذف الصف الناقص.";
-  }
-  return null;
+  return getContentDraftBlockingChecks(input)[0]?.hint ?? null;
 }
 
 export function buildContentReviewChecks(input: ContentReviewInput): ContentReviewCheck[] {
@@ -219,11 +148,25 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
   const imageAlt = effectiveImageAlt(input);
   const wordCount = countWords(input.content);
   const internalLinks = countInternalLinks(input.content);
+  const entitySeoIssues = new Map(
+    validateEntitySeoValues({
+      seoTitle: input.seoTitle,
+      seoDescription: input.seoDescription,
+      focusKeyword: input.focusKeyword,
+      seoKeywords: [],
+      canonicalUrl: input.canonicalUrl,
+      robotsIndex: null,
+      robotsFollow: null,
+      ogImage: input.ogImage,
+      ogImageAlt: input.ogImageAlt,
+    }).map((issue) => [issue.field, issue.message]),
+  );
   const checks: ContentReviewCheck[] = [
     check(input, {
       id: "title",
       label: "العنوان",
       status: input.title.trim() ? "pass" : "fail",
+      blocksPublish: true,
       hint: input.title.trim() ? "العنوان موجود." : "أضف عنوانًا واضحًا للمحتوى.",
       field: "title",
     }),
@@ -231,6 +174,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       id: "slug",
       label: "Slug",
       status: input.slug.trim() && validateContentSlug(input.slug) ? "pass" : "fail",
+      blocksPublish: true,
       hint: input.slug.trim() && validateContentSlug(input.slug)
         ? "صيغة الرابط صحيحة."
         : "استخدم أحرفًا إنجليزية صغيرة وأرقامًا وشرطات فقط.",
@@ -240,6 +184,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       id: "category",
       label: "التصنيف",
       status: input.categorySlug.trim() ? "pass" : "fail",
+      blocksPublish: true,
       hint: input.categorySlug.trim() ? "تم اختيار التصنيف." : "اختر تصنيفًا نشطًا.",
       field: "category_id",
     }),
@@ -247,6 +192,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       id: "excerpt",
       label: "المقتطف",
       status: input.excerpt.trim().length >= 20 ? "pass" : "fail",
+      blocksPublish: true,
       hint: input.excerpt.trim().length >= 20
         ? "المقتطف جاهز للنشر."
         : "أضف مقتطفًا لا يقل عن 20 حرفًا.",
@@ -256,6 +202,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       id: "image",
       label: "صورة الغلاف",
       status: image ? "pass" : "fail",
+      blocksPublish: true,
       hint: image ? "صورة الغلاف متوفرة." : "أضف صورة غلاف قبل النشر.",
       field: "image",
     }),
@@ -263,6 +210,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       id: "image-alt",
       label: "Alt Text",
       status: image && imageAlt ? "pass" : "fail",
+      blocksPublish: true,
       hint: !image
         ? "أضف صورة الغلاف أولًا ثم اكتب وصفها البديل."
         : imageAlt
@@ -275,27 +223,42 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
   if (input.contentType === "video") {
     const videoPayload = input.mediaPayload?.kind === "video" ? input.mediaPayload : null;
     const videoUrl = videoPayload?.video_url.trim() ?? "";
+    const videoError = videoPayload
+      ? validateVideoPayload(videoPayload, { published: true })
+      : assertPayloadMatchesContentType(input.contentType, input.mediaPayload ?? null);
     checks.push(check(input, {
       id: "video-url",
       label: "رابط YouTube",
-      status: videoUrl && videoPayload && !validateVideoPayload(videoPayload, { published: true }) ? "pass" : "fail",
-      hint: videoUrl ? "رابط الفيديو متوفر وصالح." : "أضف رابط YouTube صالحًا.",
+      status: videoUrl && !videoError ? "pass" : "fail",
+      blocksPublish: true,
+      hint: videoError ?? (videoUrl ? "رابط الفيديو متوفر وصالح." : "أضف رابط YouTube صالحًا."),
       field: "video_url",
     }));
   } else if (input.contentType === "gallery") {
     const images = input.mediaPayload?.kind === "gallery" ? input.mediaPayload.images : [];
+    const galleryError = input.mediaPayload?.kind === "gallery"
+      ? validateGalleryPayload(input.mediaPayload, { published: true })
+      : assertPayloadMatchesContentType(input.contentType, input.mediaPayload ?? null);
     checks.push(check(input, {
       id: "gallery-images",
       label: "صور المعرض",
-      status: images.length > 0 ? "pass" : "fail",
-      hint: images.length > 0 ? `${images.length} صورة في المعرض.` : "أضف صورة واحدة على الأقل.",
+      status: images.length > 0 && !galleryError ? "pass" : "fail",
+      blocksPublish: true,
+      hint: galleryError ?? (images.length > 0 ? `${images.length} صورة في المعرض.` : "أضف صورة واحدة على الأقل."),
       field: "gallery_image_url",
     }));
     checks.push(check(input, {
       id: "gallery-alt",
       label: "Alt لكل صور المعرض",
-      status: images.length > 0 && images.every((item) => Boolean(item.alt?.trim())) ? "pass" : "fail",
-      hint: images.length > 0 && images.every((item) => Boolean(item.alt?.trim()))
+      status: images.length === 0
+        ? "info"
+        : images.every((item) => Boolean(item.alt?.trim()))
+          ? "pass"
+          : "fail",
+      blocksPublish: true,
+      hint: images.length === 0
+        ? "أضف صور المعرض أولًا ثم اكتب وصفًا بديلًا لكل صورة."
+        : images.every((item) => Boolean(item.alt?.trim()))
         ? "كل صور المعرض لها وصف بديل."
         : "أضف وصفًا بديلًا لكل صورة في المعرض.",
       field: "gallery_image_alt",
@@ -305,6 +268,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       id: "content",
       label: "جاهزية المحتوى",
       status: !input.content.trim() ? "fail" : wordCount >= 300 ? "pass" : "warn",
+      blocksPublish: true,
       hint: !input.content.trim()
         ? "أضف نص المحتوى قبل النشر."
         : wordCount >= 300
@@ -318,48 +282,50 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
     check(input, {
       id: "seo-title",
       label: "SEO Title",
-      status: input.seoTitle.trim().length >= ENTITY_SEO_LIMITS.title.min && input.seoTitle.trim().length <= ENTITY_SEO_LIMITS.title.max
+      status: input.seoTitle.trim().length >= ENTITY_SEO_LIMITS.title.min && !entitySeoIssues.has("seo_title")
         ? "pass"
         : "fail",
-      hint: input.seoTitle.trim()
+      blocksPublish: true,
+      hint: entitySeoIssues.get("seo_title") ?? (input.seoTitle.trim()
         ? `${input.seoTitle.trim().length} حرف — النطاق المطلوب ${ENTITY_SEO_LIMITS.title.min}–${ENTITY_SEO_LIMITS.title.max}.`
-        : "أضف SEO Title قبل النشر.",
+        : "أضف SEO Title قبل النشر."),
       field: "seo_title",
     }),
     check(input, {
       id: "seo-description",
       label: "SEO Description",
-      status: input.seoDescription.trim().length >= ENTITY_SEO_LIMITS.description.min && input.seoDescription.trim().length <= ENTITY_SEO_LIMITS.description.max
+      status: input.seoDescription.trim().length >= ENTITY_SEO_LIMITS.description.min && !entitySeoIssues.has("seo_description")
         ? "pass"
         : "fail",
-      hint: input.seoDescription.trim()
+      blocksPublish: true,
+      hint: entitySeoIssues.get("seo_description") ?? (input.seoDescription.trim()
         ? `${input.seoDescription.trim().length} حرف — النطاق المطلوب ${ENTITY_SEO_LIMITS.description.min}–${ENTITY_SEO_LIMITS.description.max}.`
-        : "أضف SEO Description قبل النشر.",
+        : "أضف SEO Description قبل النشر."),
       field: "seo_description",
     }),
     check(input, {
       id: "focus-keyword",
       label: "Focus Keyword",
       status: input.focusKeyword.trim() ? "pass" : "fail",
+      blocksPublish: true,
       hint: input.focusKeyword.trim() ? "الكلمة المفتاحية محددة." : "حدد الكلمة المفتاحية الأساسية.",
       field: "focus_keyword",
     }),
     check(input, {
       id: "canonical-url",
       label: "Canonical URL",
-      status: canonicalIsValid(input.canonicalUrl) ? "pass" : "fail",
-      hint: canonicalIsValid(input.canonicalUrl)
-        ? "الرابط الأساسي صالح أو سيُولّد تلقائيًا."
-        : "استخدم رابطًا يبدأ بـ http أو https.",
+      status: entitySeoIssues.has("canonical_url") ? "fail" : "pass",
+      blocksPublish: true,
+      hint: entitySeoIssues.get("canonical_url") ??
+        "الرابط الأساسي صالح أو سيُولّد تلقائيًا.",
       field: "canonical_url",
     }),
     check(input, {
       id: "og-image-alt",
       label: "Alt لصورة المشاركة",
-      status: input.ogImage.trim() && !input.ogImageAlt.trim() ? "fail" : "pass",
-      hint: input.ogImage.trim() && !input.ogImageAlt.trim()
-        ? "أضف النص البديل لصورة المشاركة."
-        : "عقد صورة المشاركة مكتمل.",
+      status: entitySeoIssues.has("og_image_alt") ? "fail" : "pass",
+      blocksPublish: true,
+      hint: entitySeoIssues.get("og_image_alt") ?? "عقد صورة المشاركة مكتمل.",
       field: "og_image_alt",
     }),
   );
@@ -373,6 +339,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       id: "faq",
       label: "الأسئلة الشائعة",
       status: partialFaq ? "fail" : "pass",
+      blocksPublish: true,
       hint: partialFaq
         ? "أكمل السؤال والإجابة لكل صف أو احذف الصف الناقص."
         : "عقد FAQ مكتمل؛ يظل القسم اختياريًا.",
@@ -385,6 +352,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       id: "internal-links",
       label: "الروابط الداخلية",
       status: internalLinks > 0 ? "pass" : "warn",
+      blocksPublish: false,
       hint: internalLinks > 0
         ? `${internalLinks} رابط داخلي مرتبط بالمحتوى.`
         : "أضف رابطًا داخليًا ذا صلة عندما يكون ذلك مناسبًا.",
@@ -402,4 +370,36 @@ export function getContentReviewScore(checks: readonly ContentReviewCheck[]) {
     0,
   );
   return Math.round((earned / Math.max(1, scored.length)) * 100);
+}
+
+export function getContentPublishBlockingChecks(
+  input: ContentReviewInput,
+): ContentReviewCheck[] {
+  return buildContentReviewChecks(input).filter(
+    (item) => item.blocksPublish && item.status === "fail",
+  );
+}
+
+export function getContentDraftBlockingChecks(
+  input: ContentReviewInput,
+): ContentReviewCheck[] {
+  return buildContentReviewChecks(input).filter((item) => {
+    if (item.status !== "fail") return false;
+    if (["title", "slug", "category", "canonical-url", "og-image-alt", "faq"].includes(item.id)) {
+      return true;
+    }
+    if (item.id === "seo-title") {
+      return input.seoTitle.trim().length > ENTITY_SEO_LIMITS.title.max;
+    }
+    if (item.id === "seo-description") {
+      return input.seoDescription.trim().length > ENTITY_SEO_LIMITS.description.max;
+    }
+    return false;
+  });
+}
+
+export function getContentPublishValidationError(
+  input: ContentReviewInput,
+): string | null {
+  return getContentPublishBlockingChecks(input)[0]?.hint ?? null;
 }

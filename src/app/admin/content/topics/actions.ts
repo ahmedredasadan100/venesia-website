@@ -11,11 +11,11 @@ import {
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import {
-  getMediaPublishValidationError,
+  getMediaPublishBlockingChecks,
   mediaRowToPublishInput,
 } from "../../../../lib/admin/content-workflow/media-publish-validation";
 import {
-  getTopicPublishValidationError,
+  getTopicPublishBlockingChecks,
   topicRowToPublishInput,
 } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import { isContentType } from "../../../../lib/admin/content/content-types";
@@ -64,22 +64,29 @@ async function loadTopic(id: number) {
   return data;
 }
 
-function getPublishError(topic: Record<string, unknown>) {
-  const contentType = topic.content_type;
-  if (!isContentType(contentType)) return "نوع المحتوى غير مدعوم.";
-  if (contentType === "article") {
-    return getTopicPublishValidationError(topicRowToPublishInput(topic));
-  }
-  const input = mediaRowToPublishInput(topic);
-  return input ? getMediaPublishValidationError(input) : "بيانات المحتوى غير صالحة للنشر.";
-}
+type PublishPreflightFailure = {
+  message: string;
+  focusTarget?: string;
+};
 
-function getPublishFocusTarget(
+function getPublishFailure(
   topic: Record<string, unknown>,
-  message: string,
-) {
-  if (!message.includes("Alt Text")) return undefined;
-  return topic.content_type ? "topic-image-alt" : undefined;
+): PublishPreflightFailure | null {
+  const contentType = topic.content_type;
+  if (!isContentType(contentType)) {
+    return { message: "نوع المحتوى غير مدعوم." };
+  }
+  const issue = contentType === "article"
+    ? getTopicPublishBlockingChecks(topicRowToPublishInput(topic))[0]
+    : (() => {
+        const input = mediaRowToPublishInput(topic);
+        return input ? getMediaPublishBlockingChecks(input)[0] : null;
+      })();
+  if (!issue) return null;
+  return {
+    message: issue.hint,
+    focusTarget: issue.correctionTarget?.targetId,
+  };
 }
 
 function invalidMutation(message = "تعذر تنفيذ العملية."): AdminActionResult {
@@ -156,15 +163,15 @@ export async function setUnifiedContentStatus(
   }
 
   if (nextStatus === "published") {
-    const publishError = getPublishError(topic);
-    if (publishError) {
+    const publishFailure = getPublishFailure(topic);
+    if (publishFailure) {
       return adminActionFailure(
         "تعذر نشر المحتوى",
-        publishError,
+        publishFailure.message,
         {
           code: "publish_validation",
           entityId: id,
-          focusTarget: getPublishFocusTarget(topic, publishError),
+          focusTarget: publishFailure.focusTarget,
         },
       );
     }
@@ -404,16 +411,16 @@ export async function bulkUpdateUnifiedContent(
       );
     }
     const invalid = (data ?? [])
-      .map((topic) => ({ topic, error: getPublishError(topic) }))
-      .find((entry) => entry.error);
-    if (invalid?.error) {
+      .map((topic) => ({ topic, failure: getPublishFailure(topic) }))
+      .find((entry) => entry.failure);
+    if (invalid?.failure) {
       return adminActionFailure(
         "تعذر نشر المحتوى",
-        invalid.error,
+        invalid.failure.message,
         {
           code: "publish_validation",
           entityId: Number(invalid.topic.id),
-          focusTarget: getPublishFocusTarget(invalid.topic, invalid.error),
+          focusTarget: invalid.failure.focusTarget,
         },
       );
     }

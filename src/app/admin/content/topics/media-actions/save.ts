@@ -13,8 +13,6 @@ import {
   MediaReferenceWriteLeaseError,
 } from "../../../../../lib/admin/media-catalog/write-lease";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { validateEntitySeoValues } from "../../../../../lib/seo/entity-seo-types";
-import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import {
   isMediaEditableContentType,
   MEDIA_CONTENT_TYPE_ERROR,
@@ -22,14 +20,12 @@ import {
 } from "../../../../../components/admin/content/editors/media/media-content-config";
 import {
   buildMediaWritePayload,
+  getDraftValidationChecks,
   getPayload,
-  getPublishedValidationError,
-  getValidationError,
+  getPublishedValidationChecks,
   resolveWriteMediaPayload,
   uploadMediaImage,
   validateId,
-  validateSlug,
-  type MediaPayload,
 } from "./helpers";
 import {
   ensureUniqueSlug,
@@ -66,55 +62,6 @@ function buildFormFailure(
   };
 }
 
-function validateBaseFields(payload: MediaPayload) {
-  const fieldErrors: FieldErrors = {};
-  for (const issue of validateEntitySeoValues(payload)) {
-    addFieldError(fieldErrors, issue.field, issue.message);
-  }
-  if (!payload.title) {
-    addFieldError(fieldErrors, "title", "العنوان مطلوب.");
-  }
-  if (!payload.slug) {
-    addFieldError(fieldErrors, "slug", "الرابط مطلوب.");
-  } else if (!validateSlug(payload.slug)) {
-    addFieldError(
-      fieldErrors,
-      "slug",
-      "استخدم حروفًا إنجليزية صغيرة وأرقامًا وشرطات فقط.",
-    );
-  }
-  if (!payload.categoryId || !validateId(payload.categoryId)) {
-    addFieldError(fieldErrors, "category_id", "التصنيف مطلوب.");
-  }
-  return fieldErrors;
-}
-
-function publishField(
-  contentType: string,
-  payload: MediaPayload,
-  mediaPayload: MediaTopicPayload | null,
-) {
-  if (payload.excerpt.trim().length < 20) return "excerpt";
-  if (contentType === "video" && mediaPayload?.kind === "video" && !mediaPayload.video_url.trim()) {
-    return "video_url";
-  }
-  if (contentType === "gallery") {
-    if (mediaPayload?.kind !== "gallery" || mediaPayload.images.length === 0) {
-      return "gallery_image_url";
-    }
-    if (mediaPayload.images.some((item) => !item.alt?.trim())) {
-      return "gallery_image_alt";
-    }
-  }
-  if (!["video", "gallery"].includes(contentType) && !payload.content) return "content";
-  if (!payload.image) return "image";
-  if (!payload.imageAlt) return "image_alt";
-  if (!payload.focusKeyword) return "focus_keyword";
-  if (!payload.seoTitle || payload.seoTitle.length < 45) return "seo_title";
-  if (!payload.seoDescription || payload.seoDescription.length < 120) return "seo_description";
-  return "status";
-}
-
 function successMessage(mode: AdminFormMode, status: string) {
   if (mode === "create") {
     return status === "published"
@@ -149,23 +96,6 @@ export async function saveMediaContentAdapter(
   }
 
   const payload = getPayload(formData);
-  const baseErrors = validateBaseFields(payload);
-  if (Object.keys(baseErrors).length) {
-    return failure(
-      "راجع الحقول الموضحة ثم حاول مرة أخرى.",
-      baseErrors,
-    );
-  }
-  const baseError = getValidationError(payload);
-  if (baseError) return failure(baseError);
-
-  try {
-    payload.image = await uploadMediaImage(formData, payload.slug);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "تعذر رفع الصورة.";
-    return failure(message, { image: [message] });
-  }
   if (!formData.has("image") && currentTopic) {
     payload.image = String(currentTopic.image ?? "");
   }
@@ -178,6 +108,50 @@ export async function saveMediaContentAdapter(
     });
   }
 
+  const writePayload = resolveWriteMediaPayload(
+    requestedType,
+    formData,
+    payload,
+  );
+  if (!writePayload.ok) {
+    const field = requestedType === "video"
+      ? "video_url"
+      : requestedType === "gallery"
+        ? "gallery_image_url"
+        : "content";
+    return failure(writePayload.message, { [field]: [writePayload.message] });
+  }
+
+  const draftIssues = getDraftValidationChecks(
+    requestedType,
+    writePayload.mediaPayload,
+    payload,
+  );
+  if (draftIssues.length) {
+    const fieldErrors = draftIssues.reduce<FieldErrors>((errors, issue) => {
+      addFieldError(errors, issue.field ?? "status", issue.hint);
+      return errors;
+    }, {});
+    return failure("راجع الحقول الموضحة ثم حاول مرة أخرى.", fieldErrors);
+  }
+
+  const publishIssues = getPublishedValidationChecks(
+    requestedType,
+    writePayload.mediaPayload,
+    payload.status,
+    payload,
+  );
+  if (publishIssues.length) {
+    const fieldErrors = publishIssues.reduce<FieldErrors>((errors, issue) => {
+      addFieldError(errors, issue.field ?? "status", issue.hint);
+      return errors;
+    }, {});
+    return failure(
+      "تعذر النشر. أكمل الحقول المطلوبة ثم احفظ مرة أخرى.",
+      fieldErrors,
+    );
+  }
+
   const section = await resolveMediaSection(
     payload.categoryId,
     requestedType,
@@ -185,35 +159,6 @@ export async function saveMediaContentAdapter(
   );
   if (!section.ok) {
     return failure(section.message, { category_id: [section.message] });
-  }
-
-  const writePayload = resolveWriteMediaPayload(
-    section.contentType,
-    formData,
-    payload,
-  );
-  if (!writePayload.ok) {
-    const field = section.contentType === "video"
-      ? "video_url"
-      : section.contentType === "gallery"
-        ? "gallery_image_url"
-        : "content";
-    return failure(writePayload.message, { [field]: [writePayload.message] });
-  }
-
-  const publishError = getPublishedValidationError(
-    section.contentType,
-    writePayload.mediaPayload,
-    payload.status,
-    payload,
-  );
-  if (publishError) {
-    const field = publishField(
-      section.contentType,
-      payload,
-      writePayload.mediaPayload,
-    );
-    return failure(publishError, { [field]: [publishError] });
   }
 
   const isUniqueSlug = await ensureUniqueSlug(payload.slug, id || undefined);
@@ -240,6 +185,15 @@ export async function saveMediaContentAdapter(
     return failure("السلسلة المختارة غير موجودة أو غير مفعلة.", {
       series_id: ["اختر سلسلة متاحة أو اترك الحقل فارغًا."],
     });
+  }
+
+  try {
+    const uploadedImage = await uploadMediaImage(formData, payload.slug);
+    if (uploadedImage) payload.image = uploadedImage;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "تعذر رفع الصورة.";
+    return failure(message, { image: [message] });
   }
 
   const now = new Date().toISOString();

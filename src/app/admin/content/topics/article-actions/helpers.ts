@@ -5,7 +5,9 @@ import {
   toEntitySeoPersistence,
 } from "../../../../../lib/seo/entity-seo-types";
 import {
+  getTopicDraftBlockingChecks,
   getTopicDraftValidationError,
+  getTopicPublishBlockingChecks,
   getTopicPublishOnlyValidationError,
   getTopicPublishValidationError,
   validateSlugFormat,
@@ -128,7 +130,7 @@ function getFaq(formData: FormData) {
       question: question.trim(),
       answer: (answers[index] ?? "").trim(),
     }))
-    .filter((item) => item.question && item.answer);
+    .filter((item) => item.question || item.answer);
 }
 
 export function getNormalizedStatus(value: string, fallback: TopicStatus = "draft") {
@@ -187,12 +189,19 @@ function payloadToPublishInput(payload: TopicPayload): TopicPublishInput {
     seoTitle: payload.seoTitle,
     seoDescription: payload.seoDescription,
     focusKeyword: payload.focusKeyword,
+    canonicalUrl: payload.canonicalUrl,
+    ogImage: payload.ogImage,
+    ogImageAlt: payload.ogImageAlt,
     faq: payload.faq,
   };
 }
 
 export function getDraftValidationError(payload: TopicPayload) {
   return getTopicDraftValidationError(payloadToPublishInput(payload));
+}
+
+export function getDraftBlockingChecks(payload: TopicPayload) {
+  return getTopicDraftBlockingChecks(payloadToPublishInput(payload));
 }
 
 export function getPublishOnlyValidationError(payload: TopicPayload) {
@@ -206,6 +215,10 @@ export function getValidationError(payload: TopicPayload, mode: "save" | "publis
 
 export function getPublishValidationError(payload: TopicPayload) {
   return getTopicPublishValidationError(payloadToPublishInput(payload));
+}
+
+export function getPublishBlockingChecks(payload: TopicPayload) {
+  return getTopicPublishBlockingChecks(payloadToPublishInput(payload));
 }
 
 export function preserveImage(nextValue: string, currentValue: string, imageFieldPresent: boolean) {

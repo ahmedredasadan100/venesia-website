@@ -1,6 +1,8 @@
 import {
   buildContentReviewChecks,
+  getContentDraftBlockingChecks,
   getContentDraftValidationError,
+  getContentPublishBlockingChecks,
   getContentPublishValidationError,
   validateContentSlug,
   type ContentReviewFaqItem,
@@ -43,22 +45,26 @@ export function getTopicDraftValidationError(input: TopicPublishInput) {
   return getContentDraftValidationError(toContentReviewInput(input));
 }
 
+export function getTopicDraftBlockingChecks(input: TopicPublishInput) {
+  return getContentDraftBlockingChecks(toContentReviewInput(input));
+}
+
 export function getTopicPublishReadyError(input: TopicPublishInput): string | null {
-  const checks = buildContentReviewChecks(toContentReviewInput(input));
-  return checks.find(
+  return getTopicPublishBlockingChecks(input).find(
     (item) =>
-      item.status === "fail" &&
       ["title", "slug", "category", "excerpt", "content", "image", "image-alt", "faq"].includes(item.id),
   )?.hint ?? null;
 }
 
 export function getTopicPublishOnlyValidationError(input: TopicPublishInput): string | null {
-  const checks = buildContentReviewChecks(toContentReviewInput(input));
-  return checks.find(
+  return getTopicPublishBlockingChecks(input).find(
     (item) =>
-      item.status === "fail" &&
       ["seo-title", "seo-description", "focus-keyword", "canonical-url", "og-image-alt"].includes(item.id),
   )?.hint ?? null;
+}
+
+export function getTopicPublishBlockingChecks(input: TopicPublishInput) {
+  return getContentPublishBlockingChecks(toContentReviewInput(input));
 }
 
 export function getTopicPublishValidationError(input: TopicPublishInput) {
