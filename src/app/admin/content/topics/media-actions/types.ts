@@ -26,7 +26,13 @@ export type MediaTopicRow = {
   content_type: string | null;
   status: MediaStatus | string | null;
   is_featured: boolean | null;
+  is_popular: boolean | null;
   published_at: string | null;
+  date_label: string | null;
+  updated_at: string | null;
+  show_title_on_page: boolean | null;
+  show_image_on_page: boolean | null;
+  show_excerpt_on_page: boolean | null;
   deleted_at?: string | null;
   media_payload: MediaTopicPayload | null;
   seo_title?: string | null;

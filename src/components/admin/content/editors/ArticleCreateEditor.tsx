@@ -8,14 +8,14 @@ import FaqEditor from "./article/FaqEditor";
 import ContentBasicDataPanel from "./ContentBasicDataPanel";
 import ContentEditorShell from "./ContentEditorShell";
 import ContentPublishingOptions from "./ContentPublishingOptions";
+import ContentDisplaySettings from "./ContentDisplaySettings";
 import TopicMarkdownEditor from "./article/TopicMarkdownEditor";
-import TopicPublishChecklistPanel from "../../content-workflow/TopicPublishChecklistPanel";
+import ContentReviewPanel from "../../content-workflow/ContentReviewPanel";
 import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import { saveContentForm } from "../../../../app/admin/content/topics/editor-actions/save";
 import type { ArticleEditorCategory, ArticleEditorSeries } from "./ArticleEditor";
 import { createAdminFormErrorState } from "../../../../lib/admin/form-runtime";
 import TopicMediaCatalogSyncSignal from "./article/TopicMediaCatalogSyncSignal";
-import TopicDisplaySettings from "./article/TopicDisplaySettings";
 import {
   buildAdminCategoryTree,
   flattenAdminCategoryTree,
@@ -85,7 +85,7 @@ export default function ArticleCreateEditor({
                   categories={categoryOptions}
                   series={safeSeries}
                   contentEditor={<TopicMarkdownEditor defaultValue={defaultContent} variant="compact" />}
-                  displaySettings={<TopicDisplaySettings />}
+                  displaySettings={<ContentDisplaySettings />}
                 />
               ),
             },
@@ -136,10 +136,18 @@ export default function ArticleCreateEditor({
                   popular={false}
                   dateLabel={null}
                 >
-                  <TopicPublishChecklistPanel
+                  <ContentReviewPanel
                     formId="topic-create-form"
-                    initial={publishInput}
+                    initial={{
+                      ...publishInput,
+                      contentType: "article",
+                      canonicalUrl: publishInput.canonicalUrl ?? "",
+                      ogImage: publishInput.ogImage ?? "",
+                      ogImageAlt: publishInput.ogImageAlt ?? "",
+                      mediaPayload: null,
+                    }}
                     status="draft"
+                    contentTypeLabel="مقال"
                   />
                 </ContentPublishingOptions>
               ),

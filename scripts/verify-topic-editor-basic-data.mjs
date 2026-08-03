@@ -53,7 +53,7 @@ const [
   read("src/components/admin/content/editors/article/TopicSlugInput.tsx"),
   read("src/components/admin/content/editors/article/TopicImageField.tsx"),
   read("src/components/admin/content/editors/article/TopicMarkdownEditor.tsx"),
-  read("src/components/admin/content/editors/article/TopicDisplaySettings.tsx"),
+  read("src/components/admin/content/editors/ContentDisplaySettings.tsx"),
   read("src/components/admin/content/editors/article/FaqEditor.tsx"),
   read("src/components/admin/content/editors/ContentPublishingOptions.tsx"),
   read("src/app/admin/content/topics/article-actions/helpers.ts"),
@@ -84,7 +84,7 @@ for (const id of ["basic", "faq", "seo", "publish"]) {
 check("shared shell renders declarative editor tabs", shell.includes("<AdminModuleTabs") && shell.includes('variant="editor"') && shell.includes("tabs={tabs}"));
 check("legacy content tab remains absent", !createEditor.includes('id: "content"') && !editEditor.includes('id: "content"'));
 
-check("article adapters mount every article-specific capability once", [createEditor, editEditor].every((source) => ["ContentBasicDataPanel", "TopicMarkdownEditor", "FaqEditor", "SeoPanel", "ContentPublishingOptions", "TopicPublishChecklistPanel"].every((owner) => source.match(new RegExp(`<${owner}\\b`, "g"))?.length === 1)));
+check("article adapters mount every article-specific capability once", [createEditor, editEditor].every((source) => ["ContentBasicDataPanel", "TopicMarkdownEditor", "FaqEditor", "SeoPanel", "ContentPublishingOptions", "ContentReviewPanel"].every((owner) => source.match(new RegExp(`<${owner}\\b`, "g"))?.length === 1)));
 check("shared basic owner keeps title, excerpt, slug, image, category, series and injected body", basicPanel.includes('name="title"') && basicPanel.includes('name="excerpt"') && basicPanel.includes("<TopicSlugInput") && basicPanel.includes("<TopicImageField") && basicPanel.includes("<ContentCategorySelect") && basicPanel.includes("<TopicSeriesFields") && basicPanel.match(/\{contentEditor\}/g)?.length === 1);
 check("content type remains display-only inside the common identity", basicPanel.includes("<TopicContentTypeControl") && !typeControl.includes("name="));
 check("category submits a single stable category_id control", categorySelect.match(/<select\b/g)?.length === 1 && categorySelect.includes('name="category_id"') && categorySelect.includes('triggerId="content-category-listbox"'));
@@ -94,10 +94,10 @@ check("slug keeps automatic and manual modes", slugInput.includes("setIsManual(f
 check("image owner preserves one image and alt submission contract", imageField.match(/<AdminMediaImageField/g)?.length === 1 && imageField.match(/<textarea\b[^>]*name="image_alt"/g)?.length === 1);
 check("Markdown is the sole article content field owner", markdownEditor.match(/type="hidden" name="content"/g)?.length === 1 && !/<textarea[^>]*name="content"/.test(markdownEditor));
 check("FAQ retains one owner for each visibility setting", faqEditor.match(/name="show_faq_on_page"/g)?.length === 1 && faqEditor.match(/name="show_faq_title_on_page"/g)?.length === 1);
-check("article display controls stay optional at the shared basic boundary", basicPanel.includes("displaySettings?: ReactNode") && basicPanel.includes("{displaySettings ? (") && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.match(new RegExp(`name="${name}"`, "g"))?.length === 1));
+check("shared display controls stay injectable at the shared basic boundary", basicPanel.includes("displaySettings?: ReactNode") && basicPanel.includes("{displaySettings ? (") && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.match(new RegExp(`name="${name}"`, "g"))?.length === 1));
 
 check("navigation maps shared and typed validation failures", ['category_id: { tabId: "basic", targetId: "content-category-listbox" }', 'series_id: { tabId: "basic", targetId: "content-series-listbox" }', 'status: { tabId: "publish", targetId: "content-status" }'].every((marker) => formDefinition.includes(marker)));
-check("publishing uses a status enum plus article-only options", publishingOptions.includes('name="status"') && publishingOptions.includes('name="is_featured"') && publishingOptions.includes('name="is_popular"') && publishingOptions.includes("TopicDateLabelField") && !publishingOptions.includes('name="is_published"'));
+check("publishing uses one status contract plus shared publishing options", publishingOptions.includes('name="status"') && publishingOptions.includes('name="is_featured"') && publishingOptions.includes('name="is_popular"') && publishingOptions.includes("TopicDateLabelField") && !publishingOptions.includes('name="is_published"'));
 check("article payload reads category_id while the shared publishing owner submits status", helpers.includes('getString(formData, "category_id")') && publishingOptions.includes('name="status"'));
 check("article validation loads category_id and excludes soft-deleted rows", validation.includes("category_id") && validation.includes('.is("deleted_at", null)'));
 

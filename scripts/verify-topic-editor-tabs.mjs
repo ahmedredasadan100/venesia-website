@@ -6,7 +6,7 @@ const editor = read("src/components/admin/content/editors/article/TopicMarkdownE
 const faq = read("src/components/admin/content/editors/article/FaqEditor.tsx");
 const seo = read("src/components/admin/SeoPanel.tsx");
 const sharedSeo = read("src/components/admin/seo/AdminEntitySeoPanel.tsx");
-const review = read("src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx");
+const review = read("src/components/admin/content-workflow/ContentReviewPanel.tsx");
 const publishing = read("src/components/admin/content/editors/ContentPublishingOptions.tsx");
 const create = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
 const edit = read("src/components/admin/content/editors/ArticleEditor.tsx");
@@ -15,7 +15,7 @@ const basic = read("src/components/admin/content/editors/ContentBasicDataPanel.t
 const helper = read("src/app/admin/content/topics/article-actions/helpers.ts");
 const publicPage = read("src/app/(site)/topics/[slug]/page.tsx");
 const migration = read("sql/migrations/20260721143000_topics_page_display_settings.sql");
-const displaySettings = read("src/components/admin/content/editors/article/TopicDisplaySettings.tsx");
+const displaySettings = read("src/components/admin/content/editors/ContentDisplaySettings.tsx");
 const topicSwitch = read("src/components/admin/content/editors/article/TopicFormSwitch.tsx");
 const sharedSwitch = read("src/components/admin/ui/AdminFormSwitch.tsx");
 const previewCapability = read("src/lib/admin/interaction-system/entity-preview-capability.ts");
@@ -54,13 +54,13 @@ check("SEO adapter adds typed topic analysis to the shared panel", seo.includes(
 
 check("publishing owns status, featured, popular and date without a save engine", publishing.includes('name="status"') && publishing.includes('name="is_featured"') && publishing.includes('name="is_popular"') && publishing.includes("TopicDateLabelField") && !publishing.includes("SaveBar"));
 check("publishing and display switches delegate to the shared switch DOM", topicSwitch.match(/<AdminFormSwitch\b/g)?.length === 1 && !topicSwitch.includes("<input") && sharedSwitch.match(/type="checkbox"/g)?.length === 1 && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.includes(`name="${name}"`)));
-check("review stays read-only and separates blockers from improvements", review.includes("التنبيهات") && review.includes("تحسينات اختيارية") && review.includes("ملخص الموضوع"));
-check("article adapters nest review in the shared publishing owner", [create, edit].every((source) => /<ContentPublishingOptions\b[\s\S]*?<TopicPublishChecklistPanel\b[\s\S]*?<\/ContentPublishingOptions>/.test(source)));
+check("review stays read-only and separates validation from advisory improvements", review.includes("مشاكل Validation") && review.includes("تحسينات إرشادية") && review.includes("فحوص مكتملة") && !review.includes('name="status"'));
+check("article adapters nest the shared review in the shared publishing owner", [create, edit].every((source) => /<ContentPublishingOptions\b[\s\S]*?<ContentReviewPanel\b[\s\S]*?<\/ContentPublishingOptions>/.test(source)));
 
 check("create and edit use exactly one unified shell", [create, edit].every((source) => source.match(/<ContentEditorShell\b/g)?.length === 1));
 check("shell owns one shared tab renderer and one action row", shell.match(/<AdminModuleTabs\b/g)?.length === 1 && shell.match(/<AdminFormActions\s*\/>/g)?.length === 1);
 check("shell binds tab navigation to one shared event", shell.includes("navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}") && navigationEvent.includes('"content-editor:navigate"'));
-check("create and edit mount every article tab capability once", [create, edit].every((source) => ["ContentBasicDataPanel", "TopicMarkdownEditor", "FaqEditor", "SeoPanel", "ContentPublishingOptions", "TopicPublishChecklistPanel"].every((token) => source.match(new RegExp(`<${token}\\b`, "g"))?.length === 1)));
+check("create and edit mount every article tab capability once", [create, edit].every((source) => ["ContentBasicDataPanel", "TopicMarkdownEditor", "FaqEditor", "SeoPanel", "ContentPublishingOptions", "ContentReviewPanel"].every((token) => source.match(new RegExp(`<${token}\\b`, "g"))?.length === 1)));
 check("create and edit keep the same four tabs in order", [create, edit].every((source) => ["basic", "faq", "seo", "publish"].every((id, index, ids) => source.indexOf(`id: "${id}"`) >= 0 && (index === 0 || source.indexOf(`id: "${ids[index - 1]}"`) < source.indexOf(`id: "${id}"`)))));
 check("tab content has no legacy fifth content tab", !create.includes('id: "content"') && !edit.includes('id: "content"'));
 check("basic tab injects the canonical Markdown owner", basic.includes("contentEditor") && create.match(/<TopicMarkdownEditor/g)?.length === 1 && edit.match(/<TopicMarkdownEditor/g)?.length === 1);

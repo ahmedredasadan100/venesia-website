@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-const categorySelect = read("src/components/admin/content/editors/ContentCategorySelect.tsx");
-const checklist = read("src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx");
+const review = read("src/components/admin/content-workflow/ContentReviewPanel.tsx");
+const capability = read("src/lib/admin/content-workflow/content-review-capability.ts");
+const publishing = read("src/components/admin/content/editors/ContentPublishingOptions.tsx");
+const display = read("src/components/admin/content/editors/ContentDisplaySettings.tsx");
 const createEditor = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
 const editEditor = read("src/components/admin/content/editors/ArticleEditor.tsx");
-const basicPanel = read("src/components/admin/content/editors/ContentBasicDataPanel.tsx");
-const helpers = read("src/app/admin/content/topics/article-actions/helpers.ts");
-const publishingOptions = read("src/components/admin/content/editors/ContentPublishingOptions.tsx");
-const faqEditor = read("src/components/admin/content/editors/article/FaqEditor.tsx");
+const mediaEditor = read("src/components/admin/content/editors/media/MediaContentForm.tsx");
+const mediaHelpers = read("src/app/admin/content/topics/media-actions/helpers.ts");
+const mediaLoader = read("src/lib/media-center/unified-provider.ts");
+const mediaDetail = read("src/components/media-center/MediaDetailPage.tsx");
 
 let passed = 0;
 function check(label, condition) {
@@ -18,23 +20,22 @@ function check(label, condition) {
   console.log(`PASS ${label}`);
 }
 
-check("category submits through one real select field", categorySelect.match(/<select\b/g)?.length === 1 && categorySelect.includes('name="category_id"') && !categorySelect.includes('type="hidden" name="category_id"'));
-check("shared basic owner mounts one category control", basicPanel.match(/<ContentCategorySelect\b/g)?.length === 1);
-check("article create and edit each mount one shared basic owner", [createEditor, editEditor].every((source) => source.match(/<ContentBasicDataPanel\b/g)?.length === 1));
-check("checklist queries the category_id select explicitly", checklist.includes('form.querySelector(\'select[name="category_id"]\')'));
-check("checklist validates category control type and selected option", checklist.includes("categoryControl instanceof HTMLSelectElement") && checklist.includes("selectedOptions.item(0)") && !checklist.includes("selectedOptions[0]"));
-check("checklist form helpers narrow named controls safely", checklist.includes("item instanceof HTMLInputElement") && checklist.includes("item instanceof HTMLTextAreaElement") && checklist.includes("item instanceof HTMLSelectElement"));
-check("category changes notify the mounted checklist", categorySelect.includes('dispatchEvent(new Event("change", { bubbles: true }))'));
-check("category correction targets the unified visible listbox", checklist.includes('category: { tabId: "basic", targetId: "content-category-listbox" }') && categorySelect.includes('triggerId="content-category-listbox"'));
-check("article save payload binds the category ID contract", helpers.includes('getString(formData, "category_id")') && helpers.includes("categoryId:"));
-
-check("checklist reads live publication date and status", checklist.includes('publishedAt: field(form, "published_at", seed.publishedAt)') && checklist.includes('field(form, "status", seed.published ? "published" : "draft")') && checklist.includes('const publishDate = dateLabel || input.publishedAt || "غير محدد"'));
-check("create and edit embed review inside the shared publishing owner", [createEditor, editEditor].every((source) => /<ContentPublishingOptions\b[\s\S]*?<TopicPublishChecklistPanel\b[\s\S]*?<\/ContentPublishingOptions>/.test(source)) && checklist.includes('data-topic-publish-review-presentation="embedded"'));
-check("review keeps blockers, tasks, improvements, and summary", ["data-topic-publish-blockers", "data-topic-publishing-tasks", "data-topic-publish-improvements", "data-topic-publish-summary"].every((marker) => checklist.includes(marker)));
-check("review keeps semantic status headers", checklist.match(/<ReviewCardHeader/g)?.length === 4 && checklist.includes("data-topic-publish-card-header") && checklist.includes("data-topic-publish-card-status"));
-check("shared publishing owns one status control and optional article fields", /<AdminFormListboxSelect[\s\S]*?name="status"/.test(publishingOptions) && publishingOptions.match(/name="is_featured"/g)?.length === 1 && publishingOptions.match(/name="is_popular"/g)?.length === 1 && publishingOptions.includes("TopicDateLabelField"));
-check("shared publishing does not duplicate FAQ visibility", !publishingOptions.includes('name="show_faq_on_page"') && faqEditor.match(/name="show_faq_on_page"/g)?.length === 1);
-check("FAQ remains live and read-only inside review", checklist.includes('faqVisible: checked(form, "show_faq_on_page", seed.faqVisible)') && checklist.includes("input.faqVisible"));
-check("create defaults and edit hydration use the same publishing owner", createEditor.includes('<ContentPublishingOptions\n                  status="draft"') && editEditor.includes("<ContentPublishingOptions") && editEditor.includes("featured={Boolean(topic.is_featured)}") && editEditor.includes("popular={Boolean(topic.is_popular)}") && editEditor.includes("publishedAt={topic.published_at}"));
+check("one content Review owner serves article and all media editors", [createEditor, editEditor, mediaEditor].every((source) => source.match(/<ContentReviewPanel\b/g)?.length === 1));
+check("Review is embedded once inside the shared publishing owner", [createEditor, editEditor, mediaEditor].every((source) => /<ContentPublishingOptions\b[\s\S]*?<ContentReviewPanel\b[\s\S]*?<\/ContentPublishingOptions>/.test(source)));
+check("retired content Review owners are absent", !existsSync(new URL("../src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx", import.meta.url)) && !existsSync(new URL("../src/components/admin/content-workflow/MediaPublishChecklistPanel.tsx", import.meta.url)));
+check("Review exposes an advisory score and the exact non-blocking guidance", review.includes("درجة جاهزية المحتوى") && review.includes("الدرجة إرشادية ولا تمنع النشر وحدها."));
+check("Review uses the shared single-open accordion and severity issue cards", review.includes("<AdminSingleOpenAccordion") && review.includes("data-content-review-issue") && review.includes("data-content-review-severity"));
+check("every actionable Review issue delegates to the shared Fix button", review.includes("<ContentCorrectionButton") && read("src/components/admin/content/editors/ContentCorrectionButton.tsx").includes("إصلاح"));
+const legacyWarningCta = ["راجع", "التنبيهات"].join(" ");
+check("forbidden legacy warning CTA is absent", !review.includes(legacyWarningCta) && !capability.includes(legacyWarningCta));
+check("one correction registry covers common SEO FAQ video and gallery targets", ["content-title", "content-category-listbox", "content-seo-title", "topic-faq-editor", "video_url", "gallery-editor"].every((target) => capability.includes(target)));
+check("one analysis owner contains common checks plus typed rich-media checks", ["buildContentReviewChecks", 'input.contentType === "video"', 'input.contentType === "gallery"', 'input.contentType === "article"'].every((token) => capability.includes(token)));
+check("publishing UX is a binary switch while preserving the status field contract", publishing.includes('name="content_publication_toggle"') && publishing.includes('<input type="hidden" name="status"') && publishing.includes('published ? "published" : unpublishedStatus') && !publishing.includes("AdminFormListboxSelect"));
+check("archive is outside the editor publication choice", publishing.includes("الأرشفة عملية مستقلة من إجراءات قائمة المحتوى") && !publishing.includes('{ value: "archived"'));
+check("featured popular and visible date render for every content type", ["is_featured", "is_popular", "TopicDateLabelField"].every((token) => publishing.includes(token)) && mediaEditor.includes("popular={Boolean(values?.is_popular)}") && mediaEditor.includes("publishedAt={values?.published_at}"));
+check("one display settings owner is mounted by article and media", [createEditor, editEditor, mediaEditor].every((source) => source.includes("<ContentDisplaySettings")) && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => display.includes(`name="${name}"`)));
+check("media persistence saves the full shared publishing and display contract", ["is_popular: payload.isPopular", "date_label: payload.dateLabel", "formPublishedDate: payload.publishedAt", "show_title_on_page: payload.showTitleOnPage", "show_image_on_page: payload.showImageOnPage", "show_excerpt_on_page: payload.showExcerptOnPage"].every((token) => mediaHelpers.includes(token)));
+check("media public detail read model selects all display flags", ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((field) => mediaLoader.includes(field)));
+check("media public detail applies all display flags", ["showTitle={item.showTitleOnPage !== false}", "showHeroImage={item.showImageOnPage !== false}", "showSubtitle={item.showExcerptOnPage !== false}"].every((token) => mediaDetail.includes(token)));
 
 console.log(`verify:topic-publish-checklist passed (${passed} assertions)`);

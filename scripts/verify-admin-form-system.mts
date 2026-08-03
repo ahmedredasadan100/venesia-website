@@ -398,7 +398,7 @@ const topicPublishingOptions = read(
   "src/components/admin/content/editors/ContentPublishingOptions.tsx",
 );
 const topicPublishChecklist = read(
-  "src/components/admin/content-workflow/TopicPublishChecklistPanel.tsx",
+  "src/components/admin/content-workflow/ContentReviewPanel.tsx",
 );
 const topicMediaSyncSignal = read(
   "src/components/admin/content/editors/article/TopicMediaCatalogSyncSignal.tsx",
@@ -434,7 +434,7 @@ check(
       "FaqEditor",
       "SeoPanel",
       "ContentPublishingOptions",
-      "TopicPublishChecklistPanel",
+      "ContentReviewPanel",
     ].every(
       (owner) => occurrenceCount(source, new RegExp(`<${owner}\\b`, "g")) === 1,
     ),
@@ -449,7 +449,7 @@ check(
     sharedEntitySeoPanel.includes('defaultOpenId="search-result-preview"') &&
     sharedEntitySeoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
     topicPublishingOptions.includes('data-content-publishing-presentation="integrated"') &&
-    topicPublishChecklist.includes('data-topic-publish-review-presentation="embedded"'),
+    topicPublishChecklist.includes("data-content-review-capability"),
 );
 check(
   "retired Topic presentation branches cannot fork Create from Edit",
@@ -587,6 +587,7 @@ check(
     "<ContentEditorShell",
     "<ContentBasicDataPanel",
     "<ContentPublishingOptions",
+    "<ContentReviewPanel",
     "<MediaEntitySeoPanel",
   ].every((marker) => mediaContentForm.includes(marker)) &&
     !mediaContentForm.includes("<form") &&

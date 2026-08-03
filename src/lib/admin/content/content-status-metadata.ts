@@ -13,7 +13,7 @@ export const CONTENT_STATUS_METADATA: Record<
   { label: string; tone: ContentStatusTone }
 > = {
   published: { label: "منشور", tone: "green" },
-  unpublished: { label: "مخفي", tone: "gold" },
+  unpublished: { label: "غير منشور", tone: "gold" },
   draft: { label: "مسودة", tone: "blue" },
   archived: { label: "مؤرشف", tone: "muted" },
 };

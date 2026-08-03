@@ -13,7 +13,7 @@ import {
   type MediaPublishInput,
 } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { validateSlugFormat } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
-import { resolveTopicPublishedAt } from "../../../../../lib/content-dates";
+import { parseFormPublishedDate, resolveTopicPublishedAt } from "../../../../../lib/content-dates";
 import {
   readEntitySeoFormData,
   toEntitySeoPersistence,
@@ -140,6 +140,12 @@ export function getPayload(formData: FormData) {
     seriesId: getString(formData, "series_id"),
     status: getNormalizedStatus(getString(formData, "status"), "draft"),
     isFeatured: getBoolean(formData, "is_featured"),
+    isPopular: getBoolean(formData, "is_popular"),
+    publishedAt: parseFormPublishedDate(formData),
+    dateLabel: getString(formData, "date_label") || null,
+    showTitleOnPage: getBoolean(formData, "show_title_on_page"),
+    showImageOnPage: getBoolean(formData, "show_image_on_page"),
+    showExcerptOnPage: getBoolean(formData, "show_excerpt_on_page"),
     ...seo,
   };
 }
@@ -159,6 +165,12 @@ export function getValidationError(payload: MediaPayload) {
     categorySlug: payload.categoryId,
     contentType: "news",
     mediaPayload: null,
+    seoTitle: payload.seoTitle,
+    seoDescription: payload.seoDescription,
+    focusKeyword: payload.focusKeyword,
+    canonicalUrl: payload.canonicalUrl,
+    ogImage: payload.ogImage,
+    ogImageAlt: payload.ogImageAlt,
   });
 }
 
@@ -177,6 +189,12 @@ function payloadToMediaPublishInput(
     categorySlug: payload.categoryId,
     contentType,
     mediaPayload,
+    seoTitle: payload.seoTitle,
+    seoDescription: payload.seoDescription,
+    focusKeyword: payload.focusKeyword,
+    canonicalUrl: payload.canonicalUrl,
+    ogImage: payload.ogImage,
+    ogImageAlt: payload.ogImageAlt,
   };
 }
 
@@ -207,6 +225,7 @@ export function resolveWriteMediaPayload(
 
   if (contentType === "gallery" && mediaPayload?.kind === "gallery") {
     payload.image = resolveCoverImageForGallery(payload.image, mediaPayload);
+    payload.imageAlt = payload.imageAlt.trim() || mediaPayload.images[0]?.alt?.trim() || "";
     return { ok: true as const, mediaPayload };
   }
 
@@ -240,14 +259,17 @@ export function buildMediaWritePayload(
     series_id: series?.id ?? null,
     series: series?.name ?? null,
     series_slug: series?.slug ?? null,
-    date_label: null,
+    date_label: payload.dateLabel,
     status: payload.status,
     ...seo,
     faq: Array.isArray(currentTopic?.faq) ? currentTopic.faq : [],
     is_featured: payload.isFeatured,
-    is_popular: false,
+    is_popular: payload.isPopular,
+    show_title_on_page: payload.showTitleOnPage,
+    show_image_on_page: payload.showImageOnPage,
+    show_excerpt_on_page: payload.showExcerptOnPage,
     published_at: resolveTopicPublishedAt({
-      formPublishedDate: null,
+      formPublishedDate: payload.publishedAt,
       currentPublishedAt: currentTopic?.published_at ?? null,
       status: payload.status,
       nowIso: now,

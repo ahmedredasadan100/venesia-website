@@ -63,6 +63,9 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
       subtitle={item.excerpt}
       heroImage={item.image}
       breadcrumbCurrentLabel={item.title}
+      showTitle={item.showTitleOnPage !== false}
+      showHeroImage={item.showImageOnPage !== false}
+      showSubtitle={item.showExcerptOnPage !== false}
     >
       {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}
       <JsonLd data={pageJsonLd} />
@@ -77,6 +80,9 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
           content={content}
           config={config}
           relatedItems={relatedItems}
+          showTitle={item.showTitleOnPage !== false}
+          showImage={item.showImageOnPage !== false}
+          showExcerpt={item.showExcerptOnPage !== false}
         />
       </MediaPageShell>
     </InternalPageLayout>

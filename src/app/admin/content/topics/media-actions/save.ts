@@ -94,12 +94,24 @@ function publishField(
   payload: MediaPayload,
   mediaPayload: MediaTopicPayload | null,
 ) {
-  if (contentType === "video") return "video_url";
-  if (contentType === "gallery") return "gallery_image_url";
-  if (!payload.content) return "content";
+  if (payload.excerpt.trim().length < 20) return "excerpt";
+  if (contentType === "video" && mediaPayload?.kind === "video" && !mediaPayload.video_url.trim()) {
+    return "video_url";
+  }
+  if (contentType === "gallery") {
+    if (mediaPayload?.kind !== "gallery" || mediaPayload.images.length === 0) {
+      return "gallery_image_url";
+    }
+    if (mediaPayload.images.some((item) => !item.alt?.trim())) {
+      return "gallery_image_alt";
+    }
+  }
+  if (!["video", "gallery"].includes(contentType) && !payload.content) return "content";
   if (!payload.image) return "image";
   if (!payload.imageAlt) return "image_alt";
-  void mediaPayload;
+  if (!payload.focusKeyword) return "focus_keyword";
+  if (!payload.seoTitle || payload.seoTitle.length < 45) return "seo_title";
+  if (!payload.seoDescription || payload.seoDescription.length < 120) return "seo_description";
   return "status";
 }
 

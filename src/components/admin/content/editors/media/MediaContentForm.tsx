@@ -6,15 +6,16 @@ import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-pay
 import { mediaRowToPublishInput } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { saveContentForm } from "../../../../../app/admin/content/topics/editor-actions/save";
 import ContentTemplatePicker from "../../../content-workflow/ContentTemplatePicker";
-import MediaPublishChecklistPanel from "../../../content-workflow/MediaPublishChecklistPanel";
+import ContentReviewPanel from "../../../content-workflow/ContentReviewPanel";
 import ContentBasicDataPanel from "../ContentBasicDataPanel";
+import ContentDisplaySettings from "../ContentDisplaySettings";
 import ContentEditorShell from "../ContentEditorShell";
 import ContentPublishingOptions from "../ContentPublishingOptions";
 import TopicMarkdownEditor from "../article/TopicMarkdownEditor";
 import MediaEntitySeoPanel from "./MediaEntitySeoPanel";
 import MediaGalleryFields from "./MediaGalleryFields";
 import MediaVideoFields from "./MediaVideoFields";
-import type { MediaEditableContentType } from "./media-content-config";
+import { getContentTypeLabel, type MediaEditableContentType } from "./media-content-config";
 
 export type MediaContentFormValues = {
   id?: number;
@@ -31,6 +32,13 @@ export type MediaContentFormValues = {
   series_slug?: string | null;
   status?: string | null;
   is_featured?: boolean | null;
+  is_popular?: boolean | null;
+  published_at?: string | null;
+  date_label?: string | null;
+  updated_at?: string | null;
+  show_title_on_page?: boolean | null;
+  show_image_on_page?: boolean | null;
+  show_excerpt_on_page?: boolean | null;
   media_payload?: MediaTopicPayload | null;
   seo_title?: string | null;
   seo_description?: string | null;
@@ -117,6 +125,12 @@ export default function MediaContentForm({
     category_slug: selectedCategory?.slug ?? values?.category_slug ?? "",
     content_type: contentType,
     media_payload: values?.media_payload,
+    seo_title: values?.seo_title,
+    seo_description: values?.seo_description,
+    focus_keyword: values?.focus_keyword,
+    canonical_url: values?.canonical_url,
+    og_image: values?.og_image,
+    og_image_alt: values?.og_image_alt,
   }) ?? {
     title: "",
     slug: "",
@@ -127,6 +141,12 @@ export default function MediaContentForm({
     categorySlug: selectedCategory?.slug ?? "",
     contentType,
     mediaPayload: null,
+    seoTitle: "",
+    seoDescription: "",
+    focusKeyword: "",
+    canonicalUrl: "",
+    ogImage: "",
+    ogImageAlt: "",
   };
 
   const bodyEditor =
@@ -185,6 +205,13 @@ export default function MediaContentForm({
                 categories={categories}
                 series={availableSeries}
                 contentEditor={bodyEditor}
+                displaySettings={
+                  <ContentDisplaySettings
+                    showTitle={values?.show_title_on_page}
+                    showImage={values?.show_image_on_page}
+                    showExcerpt={values?.show_excerpt_on_page}
+                  />
+                }
                 values={{
                   title: values?.title,
                   slug: values?.slug,
@@ -224,10 +251,27 @@ export default function MediaContentForm({
               <ContentPublishingOptions
                 status={values?.status ?? "draft"}
                 featured={Boolean(values?.is_featured)}
+                popular={Boolean(values?.is_popular)}
+                publishedAt={values?.published_at}
+                dateLabel={values?.date_label}
               >
-                <MediaPublishChecklistPanel
+                <ContentReviewPanel
                   formId={formId}
                   initial={publishInitial}
+                  status={values?.status ?? "draft"}
+                  publishedAt={values?.published_at}
+                  dateLabel={values?.date_label}
+                  featured={Boolean(values?.is_featured)}
+                  popular={Boolean(values?.is_popular)}
+                  updatedAt={values?.updated_at}
+                  contentTypeLabel={getContentTypeLabel(contentType)}
+                  categoryLabel={selectedCategory?.name ?? "—"}
+                  seriesLabel={values?.series ?? "—"}
+                  initialDisplay={{
+                    title: values?.show_title_on_page,
+                    image: values?.show_image_on_page,
+                    excerpt: values?.show_excerpt_on_page,
+                  }}
                 />
               </ContentPublishingOptions>
             ),

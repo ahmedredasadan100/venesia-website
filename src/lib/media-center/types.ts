@@ -33,6 +33,9 @@ export type MediaContentItem = {
   imageAlt?: string;
   ogImage?: string;
   ogImageAlt?: string;
+  showTitleOnPage?: boolean;
+  showImageOnPage?: boolean;
+  showExcerptOnPage?: boolean;
 };
 
 export type MediaNewsItem = MediaContentItem;

@@ -9,14 +9,14 @@ import FaqEditor from "./article/FaqEditor";
 import ContentBasicDataPanel from "./ContentBasicDataPanel";
 import ContentEditorShell from "./ContentEditorShell";
 import ContentPublishingOptions from "./ContentPublishingOptions";
+import ContentDisplaySettings from "./ContentDisplaySettings";
 import TopicMarkdownEditor from "./article/TopicMarkdownEditor";
-import TopicPublishChecklistPanel from "../../content-workflow/TopicPublishChecklistPanel";
+import ContentReviewPanel from "../../content-workflow/ContentReviewPanel";
 import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import { saveContentForm } from "../../../../app/admin/content/topics/editor-actions/save";
 import { buildAdminContentPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
 import { createAdminFormErrorState } from "../../../../lib/admin/form-runtime";
 import TopicMediaCatalogSyncSignal from "./article/TopicMediaCatalogSyncSignal";
-import TopicDisplaySettings from "./article/TopicDisplaySettings";
 import {
   buildAdminCategoryTree,
   flattenAdminCategoryTree,
@@ -163,7 +163,7 @@ export default function ArticleEditor({
                   series={safeSeries}
                   contentEditor={<TopicMarkdownEditor defaultValue={topic.content ?? ""} variant="compact" />}
                   displaySettings={
-                    <TopicDisplaySettings
+                    <ContentDisplaySettings
                       showTitle={topic.show_title_on_page}
                       showImage={topic.show_image_on_page}
                       showExcerpt={topic.show_excerpt_on_page}
@@ -232,17 +232,26 @@ export default function ArticleEditor({
                   publishedAt={topic.published_at}
                   dateLabel={topic.date_label}
                 >
-                  <TopicPublishChecklistPanel
+                  <ContentReviewPanel
                     formId="topic-edit-form"
-                    initial={publishInput}
+                    initial={{
+                      ...publishInput,
+                      contentType: "article",
+                      canonicalUrl: publishInput.canonicalUrl ?? "",
+                      ogImage: publishInput.ogImage ?? "",
+                      ogImageAlt: publishInput.ogImageAlt ?? "",
+                      mediaPayload: null,
+                    }}
                     status={status}
                     publishedAt={topic.published_at}
                     dateLabel={topic.date_label}
                     featured={Boolean(topic.is_featured)}
+                    popular={Boolean(topic.is_popular)}
                     updatedAt={topic.updated_at}
+                    contentTypeLabel="مقال"
                     categoryLabel={selectedCategory}
                     seriesLabel={topic.series ?? "—"}
-                    initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }}
+                    initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page }}
                   />
                 </ContentPublishingOptions>
               ),
