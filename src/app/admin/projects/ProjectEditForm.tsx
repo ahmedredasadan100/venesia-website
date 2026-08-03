@@ -37,6 +37,7 @@ import {
   PROJECT_ENTRY_TAB_IDS,
   type ProjectEntryBundle,
 } from "../../../lib/admin/projects/project-entry-contract";
+import { ADMIN_ENTITY_REVIEW_TAB_LABEL } from "../../../lib/admin/review/entity-review-presentation";
 import { useAdminEntityListInvalidation } from "../../../lib/admin/entity-list/data-engine/client-controller";
 import type {
   AdminFormActionState,
@@ -397,7 +398,7 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
       ),
     },
     { id: PROJECT_ENTRY_TAB_IDS.seo, navigationLabel: "SEO", sectionHeading: "تحسين محركات البحث والمشاركة", sectionDescription: "بيانات الظهور في البحث والمشاركة الاجتماعية والتحليل المباشر.", icon: "seo" as const, content: <ProjectSeoPanel project={bundle.project} /> },
-    { id: PROJECT_ENTRY_TAB_IDS.review, navigationLabel: "المراجعة والنشر", sectionHeading: "مراجعة المشروع وحالة الظهور", sectionDescription: "راجع متطلبات العرض العام وحدد حالة النشر والتمييز قبل الحفظ.", icon: "publish" as const, content: <ProjectPublishChecklistPanel formId={formId} initial={bundle} /> },
+    { id: PROJECT_ENTRY_TAB_IDS.review, navigationLabel: ADMIN_ENTITY_REVIEW_TAB_LABEL, sectionHeading: "مراجعة المشروع وحالة الظهور", sectionDescription: "راجع متطلبات العرض العام وحدد حالة النشر والتمييز قبل الحفظ.", icon: "publish" as const, content: <ProjectPublishChecklistPanel formId={formId} initial={bundle} /> },
   ];
 
   return (

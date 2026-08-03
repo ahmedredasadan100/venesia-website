@@ -13,6 +13,7 @@ import AdminModuleTabs, {
 import { ADMIN_FORM_STACK_CLASS_NAME } from "../../ui";
 import { CONTENT_EDITOR_NAVIGATION_EVENT } from "./content-editor-navigation";
 import { CONTENT_FORM_NAVIGATION } from "./content-form-definition";
+import { ADMIN_ENTITY_REVIEW_TAB_LABEL } from "../../../../lib/admin/review/entity-review-presentation";
 
 type ContentEditorShellProps = {
   action: AdminFormAction;
@@ -27,6 +28,7 @@ type ContentEditorShellProps = {
 };
 
 const CONTENT_REVIEW_TAB_SECTION = {
+  navigationLabel: ADMIN_ENTITY_REVIEW_TAB_LABEL,
   sectionHeading: "مراجعة المحتوى وحالة النشر",
   sectionDescription:
     "راجع جاهزية المحتوى وإعدادات الظهور، ثم عالج الملاحظات قبل النشر.",
@@ -45,7 +47,14 @@ export default function ContentEditorShell({
   beforeTabs,
 }: ContentEditorShellProps) {
   const presentedTabs: AdminModuleTab[] = tabs.map((tab) =>
-    tab.id === "publish" ? { ...tab, ...CONTENT_REVIEW_TAB_SECTION } : tab,
+    tab.id === "publish"
+      ? {
+          id: tab.id,
+          indicator: tab.indicator,
+          content: tab.content,
+          ...CONTENT_REVIEW_TAB_SECTION,
+        }
+      : tab,
   );
 
   return (

@@ -9,23 +9,22 @@ import {
   ENTITY_SEO_LIMITS,
   validateEntitySeoValues,
 } from "../../seo/entity-seo-types";
+import {
+  getEntityReviewScore,
+  type EntityReviewCheck,
+  type EntityReviewCorrectionTarget,
+  type EntityReviewSeverity,
+  type EntityReviewStatus,
+} from "../review/entity-review-presentation";
 
-export type ContentReviewStatus = "pass" | "warn" | "fail" | "info";
-export type ContentReviewSeverity = "success" | "error" | "warning" | "info";
+export type ContentReviewStatus = EntityReviewStatus;
+export type ContentReviewSeverity = EntityReviewSeverity;
 
-export type ContentReviewCorrectionTarget = {
+export type ContentReviewCorrectionTarget = EntityReviewCorrectionTarget & {
   tabId: "basic" | "faq" | "seo" | "publish";
-  targetId: string;
 };
 
-export type ContentReviewCheck = {
-  id: string;
-  label: string;
-  status: ContentReviewStatus;
-  severity: ContentReviewSeverity;
-  blocksPublish: boolean;
-  hint: string;
-  field?: string;
+export type ContentReviewCheck = Omit<EntityReviewCheck, "correctionTarget"> & {
   correctionTarget?: ContentReviewCorrectionTarget;
 };
 
@@ -364,12 +363,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
 }
 
 export function getContentReviewScore(checks: readonly ContentReviewCheck[]) {
-  const scored = checks.filter((item) => item.status !== "info");
-  const earned = scored.reduce(
-    (total, item) => total + (item.status === "pass" ? 1 : item.status === "warn" ? 0.5 : 0),
-    0,
-  );
-  return Math.round((earned / Math.max(1, scored.length)) * 100);
+  return getEntityReviewScore(checks);
 }
 
 export function getContentPublishBlockingChecks(
