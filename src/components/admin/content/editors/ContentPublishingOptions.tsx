@@ -6,6 +6,19 @@ import AdminFormSwitch from "../../ui/AdminFormSwitch";
 import TopicDateLabelField from "./article/TopicDateLabelField";
 import TopicFormSwitch from "./article/TopicFormSwitch";
 
+function formatPublishTime(value?: string | null) {
+  if (!value) return null;
+  try {
+    return new Intl.DateTimeFormat("ar-EG", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "Africa/Cairo",
+    }).format(new Date(value));
+  } catch {
+    return null;
+  }
+}
+
 export default function ContentPublishingOptions({
   status = "draft",
   featured = false,
@@ -25,11 +38,22 @@ export default function ContentPublishingOptions({
     : status === "draft"
       ? "draft"
       : "unpublished";
+  const lastPublishTime = formatPublishTime(publishedAt);
 
   return (
     <>
-      <input type="hidden" name="status" value={published ? "published" : unpublishedStatus} />
-      <div className="min-w-0" data-content-publishing-options data-content-review-decision="publication-status">
+      <article
+        className="flex min-w-0 flex-col rounded-[22px] border border-white/10 bg-[#090D13]/88 p-4"
+        data-content-publishing-options
+        data-content-review-decision="publication-schedule"
+      >
+        <input type="hidden" name="status" value={published ? "published" : unpublishedStatus} />
+        <div>
+          <p className="text-sm font-semibold text-white/82">حالة النشر والتاريخ</p>
+          <p className="mt-1 text-xs leading-5 text-white/38">
+            حالة المحتوى وموعد ظهوره العام.
+          </p>
+        </div>
         <AdminFormSwitch
           id="content-status"
           name="content_publication_toggle"
@@ -37,40 +61,55 @@ export default function ContentPublishingOptions({
           checked={published}
           onChange={(event) => setPublished(event.target.checked)}
           surface
-          className="min-h-40"
+          className="mt-3 border-white/8 bg-black/20 px-3 py-2.5"
           describedBy="content-publication-hint"
         />
-        <p id="content-publication-hint" className="mt-2 px-1 text-[11px] leading-5 text-white/38">
+        <div className="mt-2">
+          <TopicDateLabelField
+            defaultValue={dateLabel}
+            publishedAt={publishedAt}
+            disabled={Boolean(publishedAt)}
+            className="border-white/8 bg-black/20 px-3 py-3"
+          />
+        </div>
+        <p className="mt-2 text-[10px] leading-5 text-white/38">
+          {lastPublishTime ? `آخر نشر · ${lastPublishTime}` : "لم يُنشر بعد"}
+        </p>
+        <p id="content-publication-hint" className="mt-1 text-[10px] leading-5 text-white/32">
           الأرشفة عملية مستقلة من إجراءات قائمة المحتوى.
         </p>
         <AdminFormError name="status" />
-      </div>
-      <div className="min-w-0" data-content-review-decision="featured">
-        <TopicFormSwitch
-          name="is_featured"
-          label="مميز"
-          defaultChecked={featured}
-          surface
-          className="min-h-40"
-        />
-      </div>
-      <div className="min-w-0" data-content-review-decision="popular">
-        <TopicFormSwitch
-          name="is_popular"
-          label="شائع"
-          defaultChecked={popular}
-          surface
-          className="min-h-40"
-        />
-      </div>
-      <div className="min-w-0" data-content-review-decision="publish-date">
-        <TopicDateLabelField
-          defaultValue={dateLabel}
-          publishedAt={publishedAt}
-          disabled={Boolean(publishedAt)}
-          className="min-h-40 border-[#D8B87A]/30 bg-[#D8B87A]/[0.06] px-4 py-4"
-        />
-      </div>
+      </article>
+
+      <article
+        className="flex min-w-0 flex-col rounded-[22px] border border-white/10 bg-[#090D13]/88 p-4"
+        data-content-review-decision="featured-popular"
+      >
+        <div>
+          <p className="text-sm font-semibold text-white/82">التمييز والانتشار</p>
+          <p className="mt-1 text-xs leading-5 text-white/38">تحكم مباشر في المميز والشائع.</p>
+        </div>
+        <div className="mt-3 space-y-2">
+          <div data-content-review-field="featured">
+            <TopicFormSwitch
+              name="is_featured"
+              label="مميز"
+              defaultChecked={featured}
+              surface
+              className="border-white/8 bg-black/20 px-3 py-2.5"
+            />
+          </div>
+          <div data-content-review-field="popular">
+            <TopicFormSwitch
+              name="is_popular"
+              label="شائع"
+              defaultChecked={popular}
+              surface
+              className="border-white/8 bg-black/20 px-3 py-2.5"
+            />
+          </div>
+        </div>
+      </article>
     </>
   );
 }
