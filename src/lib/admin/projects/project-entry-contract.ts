@@ -1,5 +1,9 @@
 import { validateSlugFormat } from "../slug";
 import { stripHtml } from "../../rich-text/html-utils";
+import {
+  isProjectPublicationStatus,
+  type ProjectPublicationStatus,
+} from "./project-publishing-capability";
 
 export type ProjectType = "residential" | "commercial";
 export type ProjectLocationLevel =
@@ -60,6 +64,10 @@ export type ProjectEntryRoot = {
   robots_follow: boolean | null;
   og_image: string;
   og_image_alt: string;
+  publication_status: ProjectPublicationStatus;
+  published_at: string | null;
+  published_by: number | null;
+  featured: boolean;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -158,9 +166,30 @@ export const PROJECT_ENTRY_TAB_IDS = {
   delivery: "delivery",
   media: "media",
   seo: "seo",
+  review: "review",
 } as const;
 
 export const PROJECT_ENTRY_NAVIGATION_EVENT = "admin-project-entry:navigate";
+
+export const PROJECT_ENTRY_FOCUS_TARGETS: Record<string, string> = {
+  image: "image-field",
+  hero_image: "hero_image-field",
+  small_box_image: "small_box_image-field",
+  overview_main_image: "overview_main_image-field",
+  overview_body: "overview_body-editor",
+  delivery_body: "delivery_body-editor",
+  seo_title: "project-seo-title",
+  seo_description: "project-seo-description",
+  focus_keyword: "project-focus-keyword",
+  seo_keywords: "project-seo-keywords",
+  canonical_url: "project-canonical-url",
+  robots_index: "project-robots-index",
+  robots_follow: "project-robots-follow",
+  og_image: "project-og-image",
+  og_image_alt: "project-og-image-alt",
+  publication_status: "project-publication-status",
+  featured: "project-featured",
+};
 
 export const PROJECT_ENTRY_FIELD_TABS: Record<string, string> = {
   arabic_name: PROJECT_ENTRY_TAB_IDS.basic,
@@ -219,6 +248,8 @@ export const PROJECT_ENTRY_FIELD_TABS: Record<string, string> = {
   robots_follow: PROJECT_ENTRY_TAB_IDS.seo,
   og_image: PROJECT_ENTRY_TAB_IDS.seo,
   og_image_alt: PROJECT_ENTRY_TAB_IDS.seo,
+  publication_status: PROJECT_ENTRY_TAB_IDS.review,
+  featured: PROJECT_ENTRY_TAB_IDS.review,
 };
 
 export function createEmptyProjectEntry(
@@ -265,6 +296,10 @@ export function createEmptyProjectEntry(
       robots_follow: null,
       og_image: "",
       og_image_alt: "",
+      publication_status: "draft",
+      published_at: null,
+      published_by: null,
+      featured: false,
       created_at: null,
       updated_at: null,
     },
@@ -296,6 +331,10 @@ function readString(formData: FormData, name: string) {
 
 function readAll(formData: FormData, name: string) {
   return formData.getAll(name).map((value) => String(value).trim());
+}
+
+function readLastString(formData: FormData, name: string) {
+  return readAll(formData, name).at(-1) ?? "";
 }
 
 function readOptionalId(value: string): number | null {
@@ -462,6 +501,10 @@ export function projectEntryPayloadFromFormData(
       poster_alt: videoPosterAlts[index] ?? "",
     }),
   );
+  const publicationStatus = (readLastString(
+    formData,
+    "publication_status",
+  ) || "draft") as ProjectPublicationStatus;
 
   return {
     project: {
@@ -505,6 +548,10 @@ export function projectEntryPayloadFromFormData(
       robots_follow: readNullableBoolean(readString(formData, "robots_follow")),
       og_image: readString(formData, "og_image"),
       og_image_alt: readString(formData, "og_image_alt"),
+      publication_status: publicationStatus,
+      published_at: null,
+      published_by: null,
+      featured: readBoolean(readLastString(formData, "featured")),
       created_at: null,
       updated_at: null,
     },
@@ -568,6 +615,9 @@ export function validateProjectEntryPayload(
 
   if (project.type !== "residential" && project.type !== "commercial") {
     addError(errors, "type", "اختر نوع المشروع: سكني أو تجاري.");
+  }
+  if (!isProjectPublicationStatus(project.publication_status)) {
+    addError(errors, "publication_status", "حالة ظهور المشروع غير صالحة.");
   }
 
   if (!project.arabic_name) addError(errors, "arabic_name", "اسم المشروع بالعربية مطلوب.");
@@ -765,7 +815,7 @@ export function projectEntryFirstErrorTarget(errors: ProjectEntryFieldErrors) {
   const field = Object.keys(errors)[0];
   if (!field) return null;
   return {
-    focusTarget: field,
+    focusTarget: PROJECT_ENTRY_FOCUS_TARGETS[field] ?? field,
     tabTarget: PROJECT_ENTRY_FIELD_TABS[field] ?? PROJECT_ENTRY_TAB_IDS.basic,
   };
 }

@@ -18,6 +18,7 @@ import {
   ProjectVideoCollectionEditor,
 } from "../../../components/admin/projects/entry/ProjectMediaEditors";
 import ProjectSeoPanel from "../../../components/admin/projects/entry/ProjectSeoPanel";
+import ProjectPublishChecklistPanel from "../../../components/admin/projects/ProjectPublishChecklistPanel";
 import {
   AdminFormActions,
   AdminFormError,
@@ -31,6 +32,7 @@ import {
 } from "../../../components/admin/ui";
 import {
   PROJECT_ENTRY_FIELD_TABS,
+  PROJECT_ENTRY_FOCUS_TARGETS,
   PROJECT_ENTRY_NAVIGATION_EVENT,
   PROJECT_ENTRY_TAB_IDS,
   type ProjectEntryBundle,
@@ -53,24 +55,6 @@ const PROJECT_TYPE_OPTIONS = [
   { value: "residential", label: "سكني" },
   { value: "commercial", label: "تجاري" },
 ] as const;
-
-const PROJECT_ENTRY_FOCUS_TARGETS: Record<string, string> = {
-  image: "image-field",
-  hero_image: "hero_image-field",
-  small_box_image: "small_box_image-field",
-  overview_main_image: "overview_main_image-field",
-  overview_body: "overview_body-editor",
-  delivery_body: "delivery_body-editor",
-  seo_title: "project-seo-title",
-  seo_description: "project-seo-description",
-  focus_keyword: "project-focus-keyword",
-  seo_keywords: "project-seo-keywords",
-  canonical_url: "project-canonical-url",
-  robots_index: "project-robots-index",
-  robots_follow: "project-robots-follow",
-  og_image: "project-og-image",
-  og_image_alt: "project-og-image-alt",
-};
 
 const PROJECT_ENTRY_NAVIGATION: AdminFormNavigationContract = {
   eventName: PROJECT_ENTRY_NAVIGATION_EVENT,
@@ -348,6 +332,7 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
   }));
   const invalidateProjectsList = useAdminEntityListInvalidation("projects");
   const mode = bundle.project.id === null ? "create" : "edit";
+  const formId = mode === "create" ? "project-create-form" : "project-edit-form";
   const closeHref = bundle.project.type === "commercial"
     ? "/admin/projects/commercial"
     : "/admin/projects/residential";
@@ -412,6 +397,7 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
       ),
     },
     { id: PROJECT_ENTRY_TAB_IDS.seo, navigationLabel: "SEO", sectionHeading: "تحسين محركات البحث والمشاركة", sectionDescription: "بيانات الظهور في البحث والمشاركة الاجتماعية والتحليل المباشر.", icon: "seo" as const, content: <ProjectSeoPanel project={bundle.project} /> },
+    { id: PROJECT_ENTRY_TAB_IDS.review, navigationLabel: "المراجعة والنشر", sectionHeading: "مراجعة المشروع وحالة الظهور", sectionDescription: "راجع متطلبات العرض العام وحدد حالة النشر والتمييز قبل الحفظ.", icon: "publish" as const, content: <ProjectPublishChecklistPanel formId={formId} initial={bundle} /> },
   ];
 
   return (
@@ -423,7 +409,7 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
       closeHref={closeHref}
       onSuccess={handleSaveSuccess}
       navigation={PROJECT_ENTRY_NAVIGATION}
-      formId={mode === "create" ? "project-create-form" : "project-edit-form"}
+      formId={formId}
       className={ADMIN_FORM_STACK_CLASS_NAME}
     >
       {bundle.project.id ? <input type="hidden" name="id" value={bundle.project.id} /> : null}

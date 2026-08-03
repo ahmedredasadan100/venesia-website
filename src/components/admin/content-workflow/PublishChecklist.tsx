@@ -9,6 +9,7 @@ type PublishChecklistProps = {
   title?: string;
   items: PublishChecklistItem[];
   compact?: boolean;
+  onFixItem?: (item: PublishChecklistItem) => void;
 };
 
 function statusIcon(status: PublishChecklistStatus) {
@@ -29,6 +30,7 @@ export default function PublishChecklist({
   title = "قائمة الجاهزية للنشر",
   items,
   compact = false,
+  onFixItem,
 }: PublishChecklistProps) {
   const ready = useMemo(() => isPublishChecklistReady(items), [items]);
   const failCount = useMemo(() => countChecklistStatus(items, "fail"), [items]);
@@ -78,6 +80,15 @@ export default function PublishChecklist({
               <div className="min-w-0">
                 <p className="text-sm font-semibold">{item.label}</p>
                 <p className="mt-1 text-xs leading-6 opacity-80">{item.hint}</p>
+                {onFixItem && item.fixable ? (
+                  <button
+                    type="button"
+                    onClick={() => onFixItem(item)}
+                    className="mt-2 cursor-pointer rounded-lg border border-current/20 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/50"
+                  >
+                    إصلاح الحقل
+                  </button>
+                ) : null}
               </div>
             </div>
           </li>

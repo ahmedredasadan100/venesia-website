@@ -5,7 +5,7 @@ import ProjectTrackSkeleton from "../../../../components/track/ProjectTrackSkele
 import {
   getProjectHref,
 } from "../../../../lib/projects/public-helpers";
-import { loadProjectBySlug } from "../../../../lib/projects/load-published-projects";
+import { loadTrackProjectBySlug } from "../../../../lib/projects/load-published-projects";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { buildMetadata } from "../../../../lib/seo/build-metadata";
 
@@ -21,7 +21,7 @@ export async function generateMetadata({
   params,
 }: ProjectTrackPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const project = await loadProjectBySlug(slug);
+  const project = await loadTrackProjectBySlug(slug);
 
   if (!project) {
     return buildMetadata({
@@ -42,7 +42,7 @@ export async function generateMetadata({
 
 export default async function ProjectTrackPage({ params }: ProjectTrackPageProps) {
   const { slug } = await params;
-  const project = await loadProjectBySlug(slug);
+  const project = await loadTrackProjectBySlug(slug);
 
   if (!project) {
     notFound();

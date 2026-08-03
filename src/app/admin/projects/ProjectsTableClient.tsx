@@ -44,6 +44,7 @@ import {
   restoreProjectsTablePreferences,
   saveProjectsTablePreferences,
   setProjectFeaturedAjax,
+  setProjectPublicationAjax,
 } from "./actions";
 import {
   createProjectColumns,
@@ -67,6 +68,18 @@ type ProjectsTableClientProps = {
 };
 
 const PROJECT_FILTERS: readonly AdminEntityFilterDef[] = [
+  {
+    id: "project-publication-status",
+    paramKey: "publication_status",
+    label: "حالة النشر",
+    placeholder: "حالة النشر",
+    type: "status",
+    options: [
+      { value: "draft", label: "مسودة" },
+      { value: "published", label: "منشور" },
+      { value: "unpublished", label: "غير منشور" },
+    ],
+  },
   {
     id: "project-featured",
     paramKey: "featured",
@@ -92,6 +105,8 @@ function toGridRow(row: ProjectEntityListRow): ProjectGridRow {
     main_area_name: row.main_area_name,
     sub_area_name: row.sub_area_name,
     featured: row.featured,
+    publication_status: row.publication_status,
+    published_at: row.published_at,
     updated_at: row.updated_at,
   };
 }
@@ -247,6 +262,85 @@ export default function ProjectsTableClient({
     [instant],
   );
 
+  const setProjectVisibility = useCallback(
+    async (
+      item: ProjectGridRow,
+      visible: boolean,
+    ): Promise<AdminActionResult> => {
+      const nextStatus = visible
+        ? "published"
+        : item.publication_status === "draft"
+          ? "draft"
+          : "unpublished";
+      try {
+        const result = await instant.mutateAsync({
+          rowId: item.id,
+          action: "visibility",
+          optimistic: (cache) =>
+            cache.patchRows((row) =>
+              row.id === item.id
+                ? { ...row, publication_status: nextStatus }
+                : row,
+            ),
+          execute: () => setProjectPublicationAjax(item.id, visible),
+          reconcileSuccess: (confirmed, tools) => {
+            const authoritativeStatus = confirmed.publication_status;
+            if (
+              authoritativeStatus !== "draft" &&
+              authoritativeStatus !== "published" &&
+              authoritativeStatus !== "unpublished"
+            ) return;
+            tools.cache.patchRows((row) =>
+              row.id === item.id
+                ? {
+                    ...row,
+                    publication_status: authoritativeStatus,
+                    published_at:
+                      typeof confirmed.published_at === "string"
+                        ? confirmed.published_at
+                        : row.published_at,
+                    featured:
+                      typeof confirmed.featured === "boolean"
+                        ? confirmed.featured
+                        : row.featured,
+                    updated_at:
+                      typeof confirmed.updated_at === "string"
+                        ? confirmed.updated_at
+                        : row.updated_at,
+                  }
+                : row,
+            );
+          },
+        });
+        const authoritativeStatus =
+          result.publication_status === "draft" ||
+          result.publication_status === "published" ||
+          result.publication_status === "unpublished"
+            ? result.publication_status
+            : nextStatus;
+        return {
+          ok: true,
+          feedbackStatus: result.feedbackStatus,
+          title:
+            authoritativeStatus === "published"
+              ? "تم نشر المشروع"
+              : "تم إخفاء المشروع",
+          message: result.message,
+          code:
+            authoritativeStatus === "published" ? "published" : "unpublished",
+          entityId: item.id,
+        };
+      } catch (error) {
+        return adminActionFailure(
+          visible ? "تعذر نشر المشروع" : "تعذر إخفاء المشروع",
+          error instanceof Error ? error.message : "تعذر تحديث حالة النشر.",
+          { entityId: item.id },
+        );
+      }
+    },
+    [instant],
+  );
+
   const copyProjectPublicLink = useCallback(
     async (item: ProjectGridRow): Promise<AdminActionResult> => {
       try {
@@ -285,6 +379,7 @@ export default function ProjectsTableClient({
         onDelete: deleteProject,
         onDuplicate: duplicateProject,
         onToggleFeatured: toggleProjectFeatured,
+        onVisibility: setProjectVisibility,
       }),
     [
       copyProjectPublicLink,
@@ -293,6 +388,7 @@ export default function ProjectsTableClient({
       instant.bulkPending,
       instant.rowPending,
       toggleProjectFeatured,
+      setProjectVisibility,
     ],
   );
   const initialFeedback = useMemo(
@@ -317,7 +413,7 @@ export default function ProjectsTableClient({
               ? "إدارة المشاريع السكنية"
               : "إدارة المشاريع التجارية"
           }
-          description="قائمة إدخال المشاريع بالمخطط النظيف. النشر والمراجعة والتحديثات التنفيذية ليست جزءًا من هذه المرحلة."
+          description="قائمة موحدة لإدارة بيانات المشاريع وحالة ظهورها العام والتمييز."
           meta={`${controller.result.pagination.totalRows} مشروع`}
         />
       </AdminEntityListPrimarySection>
@@ -343,7 +439,10 @@ export default function ProjectsTableClient({
               pending: controller.isFetching,
             },
             filters: PROJECT_FILTERS,
-            values: { featured: controller.query.filters.featured },
+            values: {
+              featured: controller.query.filters.featured,
+              publication_status: controller.query.filters.publicationStatus,
+            },
             onQueryPatch: (patch, behavior = "push") => {
               const search =
                 "q" in patch ? (patch.q ?? "").trim() : controller.query.search;
@@ -353,9 +452,17 @@ export default function ProjectsTableClient({
                     ? patch.featured
                     : "all"
                   : controller.query.filters.featured;
+              const publicationStatus =
+                "publication_status" in patch
+                  ? patch.publication_status === "draft" ||
+                    patch.publication_status === "published" ||
+                    patch.publication_status === "unpublished"
+                    ? patch.publication_status
+                    : "all"
+                  : controller.query.filters.publicationStatus;
               controller.setSearchAndFilters(
                 search,
-                { projectType: type, featured },
+                { projectType: type, featured, publicationStatus },
                 behavior,
               );
             },

@@ -165,6 +165,7 @@ const approvedProjectTabIds = [
   "delivery",
   "media",
   "seo",
+  "review",
 ] as const;
 const declaredProjectTabIds = Array.from(
   form.matchAll(/\bid:\s*PROJECT_ENTRY_TAB_IDS\.([a-z_]+)\s*,/g),
@@ -899,7 +900,7 @@ check(
     migration.includes("map_zoom smallint not null"),
 );
 check(
-  "exactly seven approved Project tab IDs are declared without duplicates or extra workflow tabs",
+  "exactly eight approved Project tab IDs are declared without duplicates",
   declaredProjectTabIds.length === approvedProjectTabIds.length &&
     new Set(declaredProjectTabIds).size === approvedProjectTabIds.length &&
     declaredProjectTabIds.every((tabId) => approvedProjectTabIds.includes(tabId as (typeof approvedProjectTabIds)[number])),
@@ -925,14 +926,14 @@ check(
 );
 check(
   "Project tab metadata adopts the shared navigation, heading, and semantic-icon contract",
-  ["البيانات", "الموقع", "نظرة عامة", "المساحات", "المواصفات", "الميديا", "SEO"].every((label) =>
+  ["البيانات", "الموقع", "نظرة عامة", "المساحات", "المواصفات", "الميديا", "SEO", "المراجعة والنشر"].every((label) =>
     form.includes(`navigationLabel: "${label}"`),
   ) &&
-    ["البيانات الأساسية للمشروع", "بيانات الموقع الأساسية", "النظرة العامة ومميزات المشروع", "المساحات والمخططات", "مواصفات التنفيذ والتسليم", "الصور والفيديو", "تحسين محركات البحث والمشاركة"].every((heading) =>
+    ["البيانات الأساسية للمشروع", "بيانات الموقع الأساسية", "النظرة العامة ومميزات المشروع", "المساحات والمخططات", "مواصفات التنفيذ والتسليم", "الصور والفيديو", "تحسين محركات البحث والمشاركة", "مراجعة المشروع وحالة الظهور"].every((heading) =>
       form.includes(`sectionHeading: "${heading}"`),
     ) &&
     form.includes('sectionDescription: "حدّد الموقع الإداري والإحداثيات والطرق والمعالم المحيطة بالمشروع."') &&
-    ["content", "location", "overview", "plans", "specifications", "media", "seo"].every((icon) =>
+    ["content", "location", "overview", "plans", "specifications", "media", "seo", "publish"].every((icon) =>
       form.includes(`icon: "${icon}" as const`),
     ) &&
     moduleTabs.includes("AdminModuleTabIconName") &&

@@ -60,6 +60,9 @@ const duplication = read(
 const featuredAction = read(
   "src/app/admin/projects/project-actions/featured.ts",
 );
+const publicationAction = read(
+  "src/app/admin/projects/project-actions/publication.ts",
+);
 const residentialPage = read(
   "src/app/admin/projects/residential/page.tsx",
 );
@@ -72,6 +75,9 @@ const migration = read(
 const rowActionsMigration = read(
   "sql/migrations/20260731100000_project_row_actions_capability.sql",
 );
+const publishingMigration = read(
+  "sql/migrations/20260803120000_project_publishing_visibility_capability.sql",
+);
 const publicLoader = read("src/lib/projects/load-published-projects.ts");
 const publicMapper = read("src/lib/projects/map-public-project.ts");
 const publicHelpers = read("src/lib/projects/public-helpers.ts");
@@ -79,47 +85,60 @@ const deleteProjectRpc = ["delete", "project", "admin", "entry"].join("_");
 const directProjectDelete = [".fr", 'om("projects")', ".del", "ete()"].join("");
 
 check(
-  adapter.includes('.from("projects")') &&
-    adapter.includes('{ count: "exact" }'),
-  "Project list reads the clean projects table with an exact count",
+  adapter.includes('.rpc("admin_list_projects"') &&
+    adapter.includes("projectEntityListRpcResultSchema") &&
+    adapter.includes("total_count"),
+  "Project list reads one authoritative publication-aware RPC result",
 );
 check(
-  !adapter.includes('rpc("admin_list_projects"'),
-  "Project list does not recreate or call the removed compatibility RPC",
+  publishingMigration.includes(
+    "create or replace function public.admin_list_projects",
+  ) &&
+    publishingMigration.includes(
+      "grant execute on function public.admin_list_projects(integer, integer, text, text, text, text, text, text) to service_role",
+    ),
+  "Project publishing migration owns the service-role Admin list read model",
 );
 check(
   [
     "english_name",
     "location_label",
     "featured",
+    "publication_status",
+    "published_at",
     "updated_at",
   ].every((field) => adapter.includes(field)),
   "Project list selects clean-schema identity and display fields",
 );
 check(
   [
-    "publication_status",
     "homepage_order",
     "map_area",
-    "status",
+    "implementation_status",
+    "list_mode",
   ].every((field) => !adapter.includes(field)),
   "Project list adapter has no removed legacy-column dependency",
 );
 check(
-  adapter.includes('.eq("type", query.filters.projectType)'),
+  adapter.includes("p_project_type: query.filters.projectType"),
   "Project type remains server-scoped in the adapter",
 );
 check(
-  adapter.includes("buildAdminListSearchOrFilter") &&
-    adapter.includes('["arabic_name", "english_name", "slug", "code"]') &&
-    !adapter.includes("sanitizeProjectSearch"),
-  "Search delegates semantic-safe PostgREST escaping for identity fields",
+  adapter.includes("p_search: query.search") &&
+    publishingMigration.includes("v_search_pattern") &&
+    publishingMigration.includes("project.arabic_name ilike v_search_pattern") &&
+    publishingMigration.includes("project.english_name ilike v_search_pattern") &&
+    publishingMigration.includes("project.slug ilike v_search_pattern"),
+  "Search delegates escaped identity matching to the authoritative read model",
 );
 check(
-  adapter.includes('.eq("featured", query.filters.featured === "yes")') &&
+  adapter.includes("p_featured: query.filters.featured") &&
+    adapter.includes("p_publication_status: query.filters.publicationStatus") &&
     contract.includes('featured: "all"') &&
-    client.includes('paramKey: "featured"'),
-  "Featured filter is declared, normalized, and applied before pagination",
+    contract.includes('publicationStatus: "all"') &&
+    client.includes('paramKey: "featured"') &&
+    client.includes('paramKey: "publication_status"'),
+  "Featured and publication filters are declared and applied before pagination",
 );
 check(
   adapter.includes("loadNormalizedAdminEntityListPage") &&
@@ -127,23 +146,26 @@ check(
   "Out-of-range pages delegate bounded normalization to Data Runtime",
 );
 check(
-  adapter.includes(".order(query.sort.field") &&
-    adapter.includes('.order("id"'),
-  "Sorting has a deterministic id tie-breaker",
+  publishingMigration.includes("p_sort_field = 'publication_status'") &&
+    publishingMigration.includes("p_sort_field = 'published_at'") &&
+    publishingMigration.includes("project.id desc"),
+  "Authoritative sorting covers publication fields with a deterministic id tie-breaker",
 );
 check(
   contract.includes('"updated_at", direction: "desc"') &&
-    !contract.includes("publication_status") &&
+    contract.includes('"publication_status"') &&
+    contract.includes('"published_at"') &&
     !contract.includes("implementation_status") &&
     !contract.includes("list_mode"),
-  "Project query contract exposes only clean-schema filters and sorts",
+  "Project query contract exposes the clean publication filters and sorts",
 );
 check(
   types.includes("english_name: string") &&
     types.includes("location_label: string") &&
     types.includes("featured: boolean") &&
-    !types.includes("publication_status"),
-  "Project list row type matches the clean schema",
+    types.includes("publication_status: ProjectPublicationStatus") &&
+    types.includes("published_at: string | null"),
+  "Project list row type matches the publication-aware schema",
 );
 check(
   client.includes("useAdminEntityListController") &&
@@ -173,29 +195,31 @@ check(
   client.includes("deleteProjectAjax") &&
     client.includes("duplicateProjectAjax") &&
     client.includes("setProjectFeaturedAjax") &&
+    client.includes("setProjectPublicationAjax") &&
     client.includes("navigator.clipboard.writeText") &&
     !client.includes("bulkProjectsActionAjax") &&
     !client.includes("toggleProjectPublicationAjax"),
-  "The shared Project client binds copy, duplicate, featured, and delete without legacy bulk/publication commands",
+  "The shared Project client binds copy, publication, duplicate, featured, and delete without legacy commands",
 );
 check(
   !client.includes("AdminBulkActionBar") &&
-    !client.includes("publication_status") &&
+    client.includes('paramKey: "publication_status"') &&
     !client.includes("implementation_status") &&
     !client.includes("list_mode"),
-  "Legacy bulk and publication filters are absent from the list UI",
+  "The list UI exposes the owned publication filter without legacy workflow filters",
 );
 check(
     table.includes("AdminDataGridRowActions") &&
     table.includes('href: `/admin/projects/${row.id}`') &&
-    table.includes("getProjectHref(row)") &&
+    table.includes("getProjectPreviewCapability") &&
     table.includes('title: "معلومات المشروع"') &&
     table.includes("copyPublicLink:") &&
-    table.includes('visibility: { access: "hidden" }') &&
+    table.includes("visibility:") &&
+    table.includes("onVisibility") &&
     table.includes("onToggleFeatured") &&
     table.includes("onDuplicate") &&
     table.includes('archive: { access: "hidden" }'),
-  "Rows expose one shared Edit, Preview, Information, Copy Link, Featured, Duplicate, and Delete declaration",
+  "Rows expose one shared Edit, Preview, Information, Copy Link, Visibility, Featured, Duplicate, and Delete declaration",
 );
 check(
   client.includes("<AdminEntityList") &&
@@ -210,19 +234,20 @@ check(
 check(
   [
     '"project"',
+    '"publication_status"',
     '"featured"',
     '"city"',
     '"main_area"',
     '"sub_area"',
     '"english_name"',
     '"slug"',
+    '"published_at"',
     '"updated_at"',
     '"actions"',
   ].every((column) => config.includes(column)) &&
-    !config.includes("publication_status") &&
     !config.includes('| "status"') &&
     !config.includes('| "location"'),
-  "Column preferences contain only supported Project read-model columns",
+  "Column preferences contain the supported publication-aware Project columns",
 );
 check(
   residentialPage.includes("loadProjectsEntityListResult(initialQuery)") &&
@@ -242,12 +267,14 @@ check(
   !actions.includes("bulkProjectsActionAjax") &&
     actions.includes("duplicateProjectAjax") &&
     actions.includes("setProjectFeaturedAjax") &&
+    actions.includes("setProjectPublicationAjax") &&
     !actions.includes("toggleProjectPublicationAjax") &&
     !actionIndex.includes("bulkProjectsActionAjax") &&
     actionIndex.includes("duplicateProjectAjax") &&
     actionIndex.includes("setProjectFeaturedAjax") &&
+    actionIndex.includes("setProjectPublicationAjax") &&
     !actionIndex.includes("toggleProjectPublicationAjax"),
-  "Project action boundary exports only approved row commands and excludes legacy bulk/publication commands",
+  "Project action boundary exports the approved publication row command and excludes legacy commands",
 );
 checkAbsent(
   "src/app/admin/projects/project-actions/status.ts",
@@ -290,6 +317,14 @@ check(
   "Featured command writes desired authoritative state through the authenticated audited Project boundary",
 );
 check(
+  publicationAction.includes("requireAdminSession") &&
+    publicationAction.includes("validateProjectEntryPayload") &&
+    /\.rpc\(\s*"set_project_publication_admin_entry"/.test(publicationAction) &&
+    publicationAction.includes('buildCmsAuditAction(') &&
+    publicationAction.includes("revalidateProjectPaths"),
+  "Publication command validates readiness and writes through the authenticated audited Project boundary",
+);
+check(
   rowActionsMigration.includes("add column if not exists featured boolean") &&
     rowActionsMigration.includes("alter column featured set default false") &&
     rowActionsMigration.includes("alter column featured set not null") &&
@@ -301,12 +336,13 @@ check(
   "Additive migration owns featured truth and transaction-complete aggregate duplication",
 );
 check(
-  publicLoader.includes('"slug", "featured"') &&
+  publicLoader.includes('"publication_status", "published_at"') &&
+    publicLoader.includes('.eq("publication_status", "published")') &&
     publicMapper.includes("featured: project.featured === true") &&
     publicHelpers.includes("projects.filter((project) => project.featured)") &&
     publicHelpers.includes("return `/projects/${project.slug}`") &&
     publicHelpers.includes("return absoluteUrlWithBase(getProjectHref(project))"),
-  "Public Project loader, mapper, featured selection, and absolute public-link route share authoritative Project data",
+  "Public Project loader filters authoritative publication before mapping and shared public-link derivation",
 );
 checkAbsent(
   "scripts/qa-admin-instant-projects.mjs",
@@ -314,22 +350,28 @@ checkAbsent(
 );
 check(
   migration.includes("drop function if exists public.admin_list_projects") &&
-    !migration.includes("create or replace function public.admin_list_projects"),
-  "The clean migration drops rather than replaces the legacy list RPC",
+    !migration.includes("create or replace function public.admin_list_projects") &&
+    publishingMigration.includes(
+      "create or replace function public.admin_list_projects",
+    ) &&
+    publishingMigration.includes("p_publication_status text default 'all'"),
+  "The publishing capability restores a new publication-owned list RPC after the legacy RPC removal",
 );
 
 const normalized = normalizeAdminEntityListQuery(
   projectsQueryContract,
-  "type=commercial&q=  Nile   Tower  &page=2&limit=20&sort=english_name_asc",
+  "type=commercial&q=  Nile   Tower  &page=2&limit=20&sort=english_name_asc&featured=yes&publication_status=published",
 );
 check(
   normalized.filters.projectType === "commercial" &&
+    normalized.filters.featured === "yes" &&
+    normalized.filters.publicationStatus === "published" &&
     normalized.search === "Nile Tower" &&
     normalized.page === 2 &&
     normalized.pageSize === 20 &&
     normalized.sort.field === "english_name" &&
     normalized.sort.direction === "asc",
-  "Clean Project URL state normalizes search, paging, type, and sort",
+  "Project URL state normalizes search, publication filters, paging, type, and sort",
 );
 check(
   withLockedProjectType(normalized.filters, "residential").projectType ===
@@ -343,21 +385,22 @@ const written = writeAdminEntityListQuery(
 check(
   written.get("type") === "commercial" &&
     written.get("q") === "Nile Tower" &&
-    written.get("publication_status") === null,
-  "Clean Project URL serialization never emits legacy publication state",
+    written.get("featured") === "yes" &&
+    written.get("publication_status") === "published",
+  "Project URL serialization preserves authoritative publication state",
 );
-let oldParamRejected = false;
+let invalidPublicationRejected = false;
 try {
   parseAdminEntityListRequestQuery(
     projectsQueryContract,
-    "type=residential&publication_status=published",
+    "type=residential&publication_status=archived",
   );
 } catch {
-  oldParamRejected = true;
+  invalidPublicationRejected = true;
 }
 check(
-  oldParamRejected,
-  "Strict Project request boundary rejects removed publication parameters",
+  invalidPublicationRejected,
+  "Strict Project request boundary rejects unsupported publication states",
 );
 
 if (failures.length > 0) {

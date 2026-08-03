@@ -126,6 +126,9 @@ const projectsListConfig = read(
 const projectsListAdapter = read(
   "src/lib/admin/projects/entity-list-adapter.ts",
 );
+const projectPublishingMigration = read(
+  "sql/migrations/20260803120000_project_publishing_visibility_capability.sql",
+);
 const activityLogClient = read("src/app/admin/activity-log/ActivityLogClient.tsx");
 const activityLogPage = read("src/app/admin/activity-log/page.tsx");
 const activityLogPreferences = read(
@@ -567,6 +570,7 @@ check(
     ]) &&
     appearsInOrder(projectsListConfig, [
       'key: "project"',
+      'key: "publication_status"',
       'key: "featured"',
       'key: "city"',
       'key: "main_area"',
@@ -618,13 +622,22 @@ check(
 );
 
 check(
-  "Project list reads existing location relations and fails closed on absent status",
-  projectsListAdapter.includes("projects_city_id_fkey") &&
-    projectsListAdapter.includes("projects_main_area_id_fkey") &&
-    projectsListAdapter.includes("projects_sub_area_id_fkey") &&
-    projectsListAdapter.includes('city_name: city?.name_ar ?? "—"') &&
-    !projectsListConfig.includes('| "status"') &&
-    collectionAdoptionManifest.includes(
+  "Project list delegates location labels and authoritative publication state to its RPC read model",
+  projectsListAdapter.includes('rpc("admin_list_projects"') &&
+    projectPublishingMigration.includes(
+      "left join public.project_locations city on city.id = project.city_id",
+    ) &&
+    projectPublishingMigration.includes(
+      "left join public.project_locations main_area on main_area.id = project.main_area_id",
+    ) &&
+    projectPublishingMigration.includes(
+      "left join public.project_locations sub_area on sub_area.id = project.sub_area_id",
+    ) &&
+    projectPublishingMigration.includes(
+      "project.featured, project.publication_status",
+    ) &&
+    projectsListConfig.includes('| "publication_status"') &&
+    !collectionAdoptionManifest.includes(
       "PROJECT_STATUS_REQUIRES_DOMAIN_AND_MIGRATION_DECISION",
     ),
 );

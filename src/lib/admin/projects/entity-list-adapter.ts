@@ -6,7 +6,6 @@ import {
   loadNormalizedAdminEntityListPage,
   type AdminEntityListAdapter,
 } from "../entity-list/data-engine/adapter";
-import { buildAdminListSearchOrFilter } from "../admin-list-search";
 import {
   createAdminEntityListResultSchema,
   type AdminEntityListQuery,
@@ -35,25 +34,16 @@ const projectEntityListRowSchema = z.object({
   main_area_name: z.string(),
   sub_area_name: z.string(),
   featured: z.boolean(),
+  publication_status: z.enum(["draft", "published", "unpublished"]),
+  published_at: z.string().nullable(),
   updated_at: z.string(),
 });
 
-const projectLocationRelationSchema = z
-  .object({ name_ar: z.string().min(1) })
-  .nullable();
-
-const projectEntityListDatabaseRowSchema = z.object({
-  id: z.coerce.number().int().positive(),
-  type: z.enum(["residential", "commercial"]),
-  slug: z.string().min(1),
-  arabic_name: z.string().min(1),
-  english_name: z.string().min(1),
-  location_label: z.string(),
-  featured: z.boolean(),
-  updated_at: z.string(),
-  city: projectLocationRelationSchema,
-  main_area: projectLocationRelationSchema,
-  sub_area: projectLocationRelationSchema,
+const projectEntityListRpcResultSchema = z.object({
+  rows: z.array(projectEntityListRowSchema),
+  total_count: z.coerce.number().int().nonnegative(),
+  page: z.coerce.number().int().positive(),
+  metrics: z.object({ total: z.coerce.number().int().nonnegative() }),
 });
 
 const projectEntityListMetricsSchema = z.object({
@@ -88,49 +78,23 @@ async function loadProjectsPage(
   query: AdminEntityListQuery<ProjectFilters, ProjectSortField>,
   page: number,
 ) {
-  const from = (page - 1) * query.pageSize;
-  const to = from + query.pageSize - 1;
-  const searchFilter = buildAdminListSearchOrFilter(
-    ["arabic_name", "english_name", "slug", "code"],
-    query.search,
-  );
-  const ascending = query.sort.direction === "asc";
-
-  let request = getSupabaseAdmin()
-    .from("projects")
-    .select(
-      "id, type, slug, arabic_name, english_name, location_label, featured, updated_at, city:project_locations!projects_city_id_fkey(name_ar), main_area:project_locations!projects_main_area_id_fkey(name_ar), sub_area:project_locations!projects_sub_area_id_fkey(name_ar)",
-      { count: "exact" },
-    )
-    .eq("type", query.filters.projectType);
-
-  if (query.filters.featured !== "all") {
-    request = request.eq("featured", query.filters.featured === "yes");
-  }
-
-  if (searchFilter) request = request.or(searchFilter);
-
-  const { data, error, count } = await request
-    .order(query.sort.field, { ascending, nullsFirst: false })
-    .order("id", { ascending })
-    .range(from, to);
+  const { data, error } = await getSupabaseAdmin().rpc("admin_list_projects", {
+    p_page: page,
+    p_page_size: query.pageSize,
+    p_sort_field: query.sort.field,
+    p_sort_direction: query.sort.direction,
+    p_project_type: query.filters.projectType,
+    p_search: query.search,
+    p_publication_status: query.filters.publicationStatus,
+    p_featured: query.filters.featured,
+  });
 
   if (error) throw new ProjectsEntityListDatabaseError(error);
-
-  const databaseRows = z
-    .array(projectEntityListDatabaseRowSchema)
-    .parse(data ?? []);
+  const parsed = projectEntityListRpcResultSchema.parse(data);
 
   return {
-    rows: databaseRows.map(({ city, main_area, sub_area, ...row }) =>
-      projectEntityListRowSchema.parse({
-        ...row,
-        city_name: city?.name_ar ?? "—",
-        main_area_name: main_area?.name_ar ?? "—",
-        sub_area_name: sub_area?.name_ar ?? "—",
-      }),
-    ),
-    totalRows: count ?? 0,
+    rows: parsed.rows,
+    totalRows: parsed.total_count,
   };
 }
 

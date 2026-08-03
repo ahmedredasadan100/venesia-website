@@ -1,14 +1,15 @@
 import type { Project, ProjectCategory } from "./public-types";
 import { PROJECT_CATEGORY_LABELS } from "./public-helpers";
 import type { FloorPlanSpec } from "./floor-plan-specs";
+import type { ProjectPublicationStatus } from "../admin/projects/project-publishing-capability";
+
+export type { ProjectPublicationStatus } from "../admin/projects/project-publishing-capability";
 
 export type ProjectStatus =
   | "under-construction"
   | "excavation"
   | "near-delivery"
   | "delivered";
-
-export type ProjectPublicationStatus = "draft" | "published" | "unpublished" | "archived";
 
 export type ProjectMediaCollection = "overview" | "delivery_specs" | "gallery";
 
@@ -44,6 +45,8 @@ export type ProjectRow = {
   floors_label: string | null;
   brochure_url: string | null;
   publication_status: ProjectPublicationStatus;
+  published_at: string | null;
+  published_by: number | null;
   overview_title: string | null;
   overview_body: string | null;
   overview_bullets: string[];
@@ -105,6 +108,7 @@ export type ProjectListRow = {
   map_area: string;
   featured: boolean;
   publication_status: ProjectPublicationStatus;
+  published_at: string | null;
   updated_at: string;
 };
 
@@ -164,6 +168,8 @@ export function mapStaticProjectToDbRow(project: Project) {
     floors_label: null,
     brochure_url: project.brochureUrl ?? null,
     publication_status: "published" as ProjectPublicationStatus,
+    published_at: now,
+    published_by: null,
     overview_title: details?.overview.title ?? null,
     overview_body: details?.overview.body ?? null,
     overview_bullets: details?.overview.bullets ?? [],
@@ -221,6 +227,8 @@ export function parseProjectRow(raw: Record<string, unknown>): ProjectRow {
     floors_label: raw.floors_label ? String(raw.floors_label) : null,
     brochure_url: raw.brochure_url ? String(raw.brochure_url) : null,
     publication_status: (raw.publication_status as ProjectPublicationStatus) ?? "draft",
+    published_at: raw.published_at ? String(raw.published_at) : null,
+    published_by: raw.published_by ? Number(raw.published_by) : null,
     overview_title: raw.overview_title ? String(raw.overview_title) : null,
     overview_body: raw.overview_body ? String(raw.overview_body) : null,
     overview_bullets: parseJsonArray<string>(raw.overview_bullets),

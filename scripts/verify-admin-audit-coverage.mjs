@@ -26,6 +26,7 @@ const TARGET_FILES = [
   "src/app/admin/content/topics/actions.ts",
   "src/app/admin/content/categories/actions.ts",
   "src/app/admin/projects/project-actions/save-entry.ts",
+  "src/app/admin/projects/project-actions/publication.ts",
   "src/app/admin/projects/project-actions/delete.ts",
   "src/app/admin/content/series/actions.ts",
   "src/app/admin/pages-blocks/menus/menu-actions/save.ts",

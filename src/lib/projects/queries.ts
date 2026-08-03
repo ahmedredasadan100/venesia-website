@@ -11,7 +11,7 @@ import {
 } from "./types";
 
 const LIST_COLUMNS =
-  "id, code, slug, arabic_name, location_label, map_area, featured, publication_status, updated_at";
+  "id, code, slug, arabic_name, location_label, map_area, featured, publication_status, published_at, updated_at";
 
 const CHILD_LOAD_FAILED_AR = "تعذر تحميل بيانات المشروع الفرعية. حاول مرة أخرى.";
 

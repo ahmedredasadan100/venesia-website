@@ -34,6 +34,7 @@
     "verify:content-taxonomy": "node --experimental-strip-types scripts/verify-content-taxonomy-system.mts",
     "verify:admin-form-system": "node --experimental-strip-types scripts/verify-admin-form-system.mts",
     "verify:project-admin-data-entry": "node --experimental-strip-types scripts/verify-project-admin-data-entry.mts",
+    "verify:project-publishing-capability": "node --experimental-strip-types scripts/verify-project-publishing-capability.mts",
     "verify:venesia-modal-accessibility": "node --experimental-strip-types scripts/verify-venesia-modal-accessibility.mts",
     "verify:seo-redirect-form-runtime": "node --experimental-strip-types scripts/verify-seo-redirect-form-runtime.mts",
     "qa:admin-form-runtime": "node --experimental-strip-types scripts/qa-admin-form-runtime-behavior.mts",
@@ -70,8 +71,8 @@
     "verify:project-child-fail-closed": "node scripts/verify-project-child-fail-closed.mjs",
     "verify:projects-hub-readiness": "node scripts/verify-projects-hub-readiness.mjs",
     "verify:admin-runtime": "npm run verify:admin-entity-list && npm run verify:admin-collection-toolbar && npm run verify:admin-shell-system && npm run verify:admin-data-engine-contracts && npm run verify:admin-row-actions && npm run verify:content-taxonomy && npm run verify:admin-instant-pages && npm run qa:admin-instant-pages && npm run verify:admin-instant-projects",
-    "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:media-library-system && npm run verify:media-delete-saga && npm run verify:media-write-adoption && npm run verify:media-coordination-rpc-acl && npm run verify:media-coordination-sql && npm run verify:media-coordination-postgres && npm run verify:media-live-qa-guards && npm run verify:unified-content && npm run verify:topic-editor-basic-data && npm run verify:topic-editor-tabs && npm run verify:topic-publish-checklist && npm run verify:topic-seo-review && npm run verify:topic-image-clear-persistence && npm run verify:admin-form-system && npm run verify:project-admin-data-entry && npm run verify:venesia-modal-accessibility && npm run verify:seo-redirect-form-runtime && npm run verify:admin-runtime && npm run verify:audit-coverage",
-    "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:media-library-system && npm run verify:media-delete-saga && npm run verify:media-write-adoption && npm run verify:media-coordination-rpc-acl && npm run verify:media-coordination-sql && npm run verify:media-coordination-postgres && npm run verify:media-live-qa-guards && npm run verify:unified-content && npm run verify:topic-editor-basic-data && npm run verify:topic-editor-tabs && npm run verify:topic-publish-checklist && npm run verify:topic-seo-review && npm run verify:topic-image-clear-persistence && npm run verify:admin-form-system && npm run verify:project-admin-data-entry && npm run verify:venesia-modal-accessibility && npm run verify:seo-redirect-form-runtime && npm run verify:audit-coverage && npm run verify:admin-runtime && npm run build"
+    "verify": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:media-library-system && npm run verify:media-delete-saga && npm run verify:media-write-adoption && npm run verify:media-coordination-rpc-acl && npm run verify:media-coordination-sql && npm run verify:media-coordination-postgres && npm run verify:media-live-qa-guards && npm run verify:unified-content && npm run verify:topic-editor-basic-data && npm run verify:topic-editor-tabs && npm run verify:topic-publish-checklist && npm run verify:topic-seo-review && npm run verify:topic-image-clear-persistence && npm run verify:admin-form-system && npm run verify:project-admin-data-entry && npm run verify:project-publishing-capability && npm run verify:venesia-modal-accessibility && npm run verify:seo-redirect-form-runtime && npm run verify:admin-runtime && npm run verify:audit-coverage",
+    "ci:check": "npm run lint && npm run typecheck && npm run verify:migrations && npm run verify:legacy-media-admin && npm run verify:production-media-storage && npm run verify:media-library-system && npm run verify:media-delete-saga && npm run verify:media-write-adoption && npm run verify:media-coordination-rpc-acl && npm run verify:media-coordination-sql && npm run verify:media-coordination-postgres && npm run verify:media-live-qa-guards && npm run verify:unified-content && npm run verify:topic-editor-basic-data && npm run verify:topic-editor-tabs && npm run verify:topic-publish-checklist && npm run verify:topic-seo-review && npm run verify:topic-image-clear-persistence && npm run verify:admin-form-system && npm run verify:project-admin-data-entry && npm run verify:project-publishing-capability && npm run verify:venesia-modal-accessibility && npm run verify:seo-redirect-form-runtime && npm run verify:audit-coverage && npm run verify:admin-runtime && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -90,6 +91,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
@@ -97,6 +99,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "pg": "^8.22.0",
     "playwright": "^1.61.1",
     "tailwindcss": "^4",
     "typescript": "^5"
