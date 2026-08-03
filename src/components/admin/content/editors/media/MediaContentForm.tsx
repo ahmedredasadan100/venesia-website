@@ -243,37 +243,35 @@ export default function MediaContentForm({
           {
             id: "publish",
             navigationLabel: "المراجعة",
-            sectionHeading: "مراجعة الجاهزية والنشر",
-            sectionDescription:
-              "راجع الحالة ونتائج التحقق قبل حفظ قرار النشر.",
             icon: "publish",
             content: (
-              <ContentPublishingOptions
+              <ContentReviewPanel
+                formId={formId}
+                initial={publishInitial}
+                publishingOptions={
+                  <ContentPublishingOptions
+                    status={values?.status ?? "draft"}
+                    featured={Boolean(values?.is_featured)}
+                    popular={Boolean(values?.is_popular)}
+                    publishedAt={values?.published_at}
+                    dateLabel={values?.date_label}
+                  />
+                }
                 status={values?.status ?? "draft"}
-                featured={Boolean(values?.is_featured)}
-                popular={Boolean(values?.is_popular)}
                 publishedAt={values?.published_at}
                 dateLabel={values?.date_label}
-              >
-                <ContentReviewPanel
-                  formId={formId}
-                  initial={publishInitial}
-                  status={values?.status ?? "draft"}
-                  publishedAt={values?.published_at}
-                  dateLabel={values?.date_label}
-                  featured={Boolean(values?.is_featured)}
-                  popular={Boolean(values?.is_popular)}
-                  updatedAt={values?.updated_at}
-                  contentTypeLabel={getContentTypeLabel(contentType)}
-                  categoryLabel={selectedCategory?.name ?? "—"}
-                  seriesLabel={values?.series ?? "—"}
-                  initialDisplay={{
-                    title: values?.show_title_on_page,
-                    image: values?.show_image_on_page,
-                    excerpt: values?.show_excerpt_on_page,
-                  }}
-                />
-              </ContentPublishingOptions>
+                featured={Boolean(values?.is_featured)}
+                popular={Boolean(values?.is_popular)}
+                updatedAt={values?.updated_at}
+                contentTypeLabel={getContentTypeLabel(contentType)}
+                categoryLabel={selectedCategory?.name ?? "—"}
+                seriesLabel={values?.series ?? "—"}
+                initialDisplay={{
+                  title: values?.show_title_on_page,
+                  image: values?.show_image_on_page,
+                  excerpt: values?.show_excerpt_on_page,
+                }}
+              />
             ),
           },
         ]}

@@ -54,8 +54,8 @@ check("SEO adapter adds typed topic analysis to the shared panel", seo.includes(
 
 check("publishing owns status, featured, popular and date without a save engine", publishing.includes('name="status"') && publishing.includes('name="is_featured"') && publishing.includes('name="is_popular"') && publishing.includes("TopicDateLabelField") && !publishing.includes("SaveBar"));
 check("publishing and display switches delegate to the shared switch DOM", topicSwitch.match(/<AdminFormSwitch\b/g)?.length === 1 && !topicSwitch.includes("<input") && sharedSwitch.match(/type="checkbox"/g)?.length === 1 && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.includes(`name="${name}"`)));
-check("review stays read-only and separates validation from advisory improvements", review.includes("مشاكل Validation") && review.includes("تحسينات إرشادية") && review.includes("فحوص مكتملة") && !review.includes('name="status"'));
-check("article adapters nest the shared review in the shared publishing owner", [create, edit].every((source) => /<ContentPublishingOptions\b[\s\S]*?<ContentReviewPanel\b[\s\S]*?<\/ContentPublishingOptions>/.test(source)));
+check("review stays read-only and separates four typed analysis cards", ["جاهزية المحتوى", "جاهزية الصورة وAlt", "تحليل SEO", "التحقق العام (Validation)"].every((label) => review.includes(label)) && review.includes("ANALYSIS_CARDS") && !review.includes('<input type="hidden" name="status"') && !review.includes("AdminSingleOpenAccordion"));
+check("article adapters slot the shared publishing owner into the shared dashboard", [create, edit].every((source) => /<ContentReviewPanel\b[\s\S]*?publishingOptions=\{[\s\S]*?<ContentPublishingOptions\b/.test(source)));
 
 check("create and edit use exactly one unified shell", [create, edit].every((source) => source.match(/<ContentEditorShell\b/g)?.length === 1));
 check("shell owns one shared tab renderer and one action row", shell.match(/<AdminModuleTabs\b/g)?.length === 1 && shell.match(/<AdminFormActions\s*\/>/g)?.length === 1);

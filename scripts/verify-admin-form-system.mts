@@ -448,8 +448,10 @@ check(
     occurrenceCount(sharedEntitySeoPanel, /<AdminSingleOpenAccordion/g) === 1 &&
     sharedEntitySeoPanel.includes('defaultOpenId="search-result-preview"') &&
     sharedEntitySeoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
-    topicPublishingOptions.includes('data-content-publishing-presentation="integrated"') &&
-    topicPublishChecklist.includes("data-content-review-capability"),
+    topicPublishingOptions.includes("data-content-publishing-options") &&
+    topicPublishChecklist.includes("data-content-review-capability") &&
+    topicPublishChecklist.includes('data-content-review-presentation="dashboard"') &&
+    !topicPublishChecklist.includes("AdminSingleOpenAccordion"),
 );
 check(
   "retired Topic presentation branches cannot fork Create from Edit",

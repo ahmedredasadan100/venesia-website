@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   buildContentReviewChecks,
@@ -10,12 +10,9 @@ import {
   type ContentReviewInput,
 } from "../../../lib/admin/content-workflow/content-review-capability";
 import type { MediaTopicPayload } from "../../../lib/admin/media-topic-payload";
-import { AdminSingleOpenAccordion } from "../ui";
 import ContentCorrectionButton from "../content/editors/ContentCorrectionButton";
 
 type ReviewState = ContentReviewInput & {
-  category: string;
-  series: string;
   status: string;
   publishedAt: string;
   featured: boolean;
@@ -28,6 +25,7 @@ type ReviewState = ContentReviewInput & {
 type ContentReviewPanelProps = {
   formId: string;
   initial: ContentReviewInput;
+  publishingOptions: ReactNode;
   status?: string | null;
   publishedAt?: string | null;
   dateLabel?: string | null;
@@ -43,6 +41,47 @@ type ContentReviewPanelProps = {
     excerpt?: boolean | null;
   };
 };
+
+type AnalysisCardDefinition = {
+  id: "content" | "image" | "seo" | "validation";
+  title: string;
+  description: string;
+  checkIds: readonly string[];
+};
+
+const ANALYSIS_CARDS: readonly AnalysisCardDefinition[] = [
+  {
+    id: "content",
+    title: "جاهزية المحتوى",
+    description: "اكتمال مادة المحتوى والمتطلبات الخاصة بنوعها.",
+    checkIds: ["content", "video-url", "gallery-images", "faq"],
+  },
+  {
+    id: "image",
+    title: "جاهزية الصورة وAlt",
+    description: "توفر الصورة ووصفها البديل للعرض وإتاحة الوصول.",
+    checkIds: ["image", "image-alt", "gallery-alt"],
+  },
+  {
+    id: "seo",
+    title: "تحليل SEO",
+    description: "سلامة بيانات البحث والمشاركة والربط الداخلي.",
+    checkIds: [
+      "seo-title",
+      "seo-description",
+      "focus-keyword",
+      "canonical-url",
+      "og-image-alt",
+      "internal-links",
+    ],
+  },
+  {
+    id: "validation",
+    title: "التحقق العام (Validation)",
+    description: "الحقول الأساسية التي تحكم قبول الحفظ والنشر.",
+    checkIds: ["title", "slug", "category", "excerpt"],
+  },
+] as const;
 
 function field(form: HTMLFormElement, name: string, fallback = "") {
   const item = form.elements.namedItem(name);
@@ -109,10 +148,6 @@ function readMediaPayload(
 }
 
 function read(form: HTMLFormElement, seed: ReviewState): ReviewState {
-  const categoryControl = form.querySelector('select[name="category_id"]');
-  const category = categoryControl instanceof HTMLSelectElement
-    ? categoryControl.selectedOptions.item(0)?.textContent?.trim() || seed.category
-    : seed.category;
   return {
     ...seed,
     title: field(form, "title", seed.title),
@@ -130,7 +165,6 @@ function read(form: HTMLFormElement, seed: ReviewState): ReviewState {
     ogImageAlt: field(form, "og_image_alt", seed.ogImageAlt),
     faq: seed.contentType === "article" ? readFaq(form) : [],
     mediaPayload: readMediaPayload(form, seed.contentType),
-    category,
     status: checked(form, "content_publication_toggle", seed.status === "published")
       ? "published"
       : field(form, "status", seed.status),
@@ -165,9 +199,40 @@ function formatAuditTimestamp(value?: string | null) {
   }
 }
 
+function submitWithPublicationStatus(
+  formId: string,
+  nextStatus: "published" | "draft",
+) {
+  const form = document.getElementById(formId);
+  if (!(form instanceof HTMLFormElement)) return;
+
+  const publicationToggle = form.querySelector<HTMLInputElement>(
+    'input[name="content_publication_toggle"]',
+  );
+  const statusInput = form.querySelector<HTMLInputElement>('input[name="status"]');
+  if (publicationToggle) {
+    publicationToggle.checked = nextStatus === "published";
+    publicationToggle.dispatchEvent(new Event("input", { bubbles: true }));
+    publicationToggle.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  if (statusInput) statusInput.value = nextStatus;
+
+  const saveButton = form.querySelector<HTMLButtonElement>(
+    '[data-admin-form-action="save"]',
+  );
+  form.requestSubmit(saveButton ?? undefined);
+}
+
+function requestEditorClose(formId: string) {
+  const form = document.getElementById(formId);
+  if (!(form instanceof HTMLFormElement)) return;
+  form.querySelector<HTMLButtonElement>('[data-admin-form-action="close"]')?.click();
+}
+
 export default function ContentReviewPanel({
   formId,
   initial,
+  publishingOptions,
   status = "draft",
   publishedAt,
   dateLabel,
@@ -175,15 +240,11 @@ export default function ContentReviewPanel({
   popular = false,
   updatedAt,
   contentTypeLabel,
-  seriesLabel = "—",
-  categoryLabel = "—",
   initialDisplay,
 }: ContentReviewPanelProps) {
   const seed = useMemo<ReviewState>(
     () => ({
       ...initial,
-      category: categoryLabel,
-      series: seriesLabel,
       status: status ?? "draft",
       publishedAt: publishedAt?.slice(0, 10) ?? "",
       featured,
@@ -192,9 +253,10 @@ export default function ContentReviewPanel({
       showImage: initialDisplay?.image !== false,
       showExcerpt: initialDisplay?.excerpt !== false,
     }),
-    [initial, categoryLabel, seriesLabel, status, publishedAt, featured, popular, initialDisplay],
+    [initial, status, publishedAt, featured, popular, initialDisplay],
   );
   const [input, setInput] = useState(seed);
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     const form = document.getElementById(formId) as HTMLFormElement | null;
@@ -211,77 +273,312 @@ export default function ContentReviewPanel({
 
   const checks = useMemo(() => buildContentReviewChecks(input), [input]);
   const score = useMemo(() => getContentReviewScore(checks), [checks]);
-  const blockers = checks.filter((item) => item.status === "fail");
-  const improvements = checks.filter((item) => item.status === "warn" || item.status === "info");
-  const passed = checks.filter((item) => item.status === "pass");
+  const suggestions = checks.filter(
+    (item) => item.status === "warn" || item.status === "info",
+  );
   const visibleDate = dateLabel || input.publishedAt || "سيُحدد عند أول نشر";
 
+  function toggleCard(cardId: string) {
+    setExpandedCards((current) => {
+      const next = new Set(current);
+      if (next.has(cardId)) next.delete(cardId);
+      else next.add(cardId);
+      return next;
+    });
+  }
+
   return (
-    <section className="space-y-4" data-content-review-capability>
-      <div className="rounded-2xl border border-[#D8B87A]/22 bg-[#D8B87A]/[0.06] p-4 md:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-white/75">درجة جاهزية المحتوى</p>
-            <p className="mt-1 text-xs leading-6 text-white/45">
-              الدرجة إرشادية ولا تمنع النشر وحدها. قواعد Validation المبيّنة كأخطاء هي التي تحكم الحفظ والنشر.
+    <section className="space-y-5" data-content-review-capability data-content-review-presentation="dashboard">
+      <header className="overflow-visible rounded-[26px] border border-[#D8B87A]/25 bg-[radial-gradient(circle_at_top_right,rgba(216,184,122,0.16),transparent_34%),linear-gradient(135deg,rgba(11,15,21,0.98),rgba(22,25,30,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.28)] md:p-7">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <span className="inline-flex rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] px-3 py-1 text-[11px] font-semibold text-[#E7CD98]">
+              {contentTypeLabel}
+            </span>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white md:text-3xl">
+              مراجعة قبل النشر
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-white/48">
+              تحقق من جاهزية المحتوى قبل نشره.
             </p>
           </div>
-          <div className="flex size-20 items-center justify-center rounded-full border-[7px] border-[#D8B87A]/60 bg-black/25 font-en text-xl font-semibold text-white">
-            {score}
+
+          <div className="flex flex-wrap items-center gap-2" data-content-review-actions>
+            <button
+              type="button"
+              onClick={() => submitWithPublicationStatus(formId, "published")}
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#D8B87A] px-5 py-2.5 text-sm font-semibold text-[#07101A] transition hover:bg-[#E6CB91] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2D99B]/75"
+              data-content-review-action="publish"
+            >
+              نشر الآن
+            </button>
+            <button
+              type="button"
+              onClick={() => submitWithPublicationStatus(formId, "draft")}
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/15 bg-white/[0.035] px-5 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/28 hover:bg-white/[0.065] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/60"
+              data-content-review-action="draft"
+            >
+              حفظ المسودة
+            </button>
+            <details className="group relative" data-content-review-action="more">
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center rounded-full border border-white/12 px-5 py-2.5 text-sm font-semibold text-white/58 transition hover:border-white/25 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/60 [&::-webkit-details-marker]:hidden">
+                إجراءات أخرى
+                <span aria-hidden="true" className="ms-2 text-white/35 transition group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="absolute end-0 z-20 mt-2 min-w-48 rounded-2xl border border-white/12 bg-[#0A0E14] p-2 shadow-[0_20px_55px_rgba(0,0,0,0.48)]">
+                <button
+                  type="button"
+                  onClick={() => requestEditorClose(formId)}
+                  className="w-full rounded-xl px-3 py-2.5 text-start text-sm text-white/68 transition hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
+                >
+                  إغلاق المحرر
+                </button>
+              </div>
+            </details>
           </div>
         </div>
-        <dl className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <ReviewMetric label="الحالة" value={statusLabel(input.status)} />
-          <ReviewMetric label="النوع" value={contentTypeLabel} />
-          <ReviewMetric label="المميز / الشائع" value={`${input.featured ? "مميز" : "عادي"} · ${input.popular ? "شائع" : "غير شائع"}`} />
-          <ReviewMetric label="تاريخ النشر" value={visibleDate} />
-          <ReviewMetric label="التصنيف" value={input.category} />
-          <ReviewMetric label="السلسلة" value={input.series} />
-          <ReviewMetric label="إعدادات العرض" value={`${input.showTitle ? "عنوان" : "—"} · ${input.showImage ? "صورة" : "—"} · ${input.showExcerpt ? "مقتطف" : "—"}`} />
-          <ReviewMetric label="آخر تحديث" value={formatAuditTimestamp(updatedAt)} />
-        </dl>
-      </div>
+      </header>
 
-      <AdminSingleOpenAccordion
-        ariaLabel="تفاصيل مراجعة المحتوى والنشر"
-        defaultOpenId={blockers.length ? "review-errors" : improvements.length ? "review-improvements" : "review-passed"}
-        items={[
-          {
-            id: "review-errors",
-            label: `مشاكل Validation (${blockers.length})`,
-            description: "المشاكل التي يجب إصلاحها قبل قبول النشر.",
-            content: <ReviewIssueList items={blockers} empty="لا توجد مشاكل مانعة." />,
-          },
-          {
-            id: "review-improvements",
-            label: `تحسينات إرشادية (${improvements.length})`,
-            description: "تحسينات جودة لا تمنع النشر وحدها.",
-            content: <ReviewIssueList items={improvements} empty="لا توجد تحسينات معلّقة." />,
-          },
-          {
-            id: "review-passed",
-            label: `فحوص مكتملة (${passed.length})`,
-            description: "العقود التي تحققت في الحالة الحالية.",
-            content: <ReviewIssueList items={passed} empty="لا توجد فحوص مكتملة بعد." />,
-          },
-        ]}
-      />
+      <section aria-labelledby="content-review-decisions-title">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#D8B87A]/65">
+              قرارات سريعة
+            </p>
+            <h2 id="content-review-decisions-title" className="mt-1 text-lg font-semibold text-white/88">
+              حالة المحتوى والعرض
+            </h2>
+          </div>
+          <p className="hidden text-xs text-white/35 sm:block">تبقى هذه القرارات مكشوفة دائمًا.</p>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-content-review-decisions>
+          <article className="flex min-h-40 items-center justify-between gap-5 rounded-[22px] border border-[#D8B87A]/24 bg-[#D8B87A]/[0.065] p-5" data-content-review-decision="score">
+            <div>
+              <p className="text-sm font-semibold text-white/82">درجة جاهزية النشر</p>
+              <p className="mt-2 max-w-56 text-xs leading-5 text-white/42">
+                الدرجة إرشادية ولا تمنع النشر وحدها.
+              </p>
+            </div>
+            <div
+              className="grid size-24 shrink-0 place-items-center rounded-full p-[7px]"
+              style={{ background: `conic-gradient(#D8B87A ${score}%, rgba(255,255,255,.08) ${score}% 100%)` }}
+              aria-label={`درجة جاهزية النشر ${score} من 100`}
+            >
+              <span className="grid size-full place-items-center rounded-full bg-[#0A0E14] font-en text-2xl font-semibold text-white">
+                {score}
+              </span>
+            </div>
+          </article>
+
+          {publishingOptions}
+
+          <article className="flex min-h-40 flex-col rounded-[22px] border border-white/10 bg-[#090D13]/88 p-5" data-content-review-decision="display-settings">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white/82">إعدادات العرض</p>
+                <p className="mt-1 text-xs leading-5 text-white/38">ما سيظهر داخل صفحة المحتوى.</p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[10px] text-white/45">
+                3 خيارات
+              </span>
+            </div>
+            <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <DisplayDecision label="إظهار العنوان" enabled={input.showTitle} />
+              <DisplayDecision label="إظهار الصورة" enabled={input.showImage} />
+              <DisplayDecision label="إظهار المقتطف" enabled={input.showExcerpt} />
+            </dl>
+            <ContentCorrectionButton
+              tabId="basic"
+              targetId="content-display-settings"
+              label="تعديل الإعدادات"
+              className="mt-4 self-start rounded-full px-4 py-2"
+            />
+          </article>
+        </div>
+      </section>
+
+      <section aria-labelledby="content-review-analysis-title">
+        <div className="mb-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#D8B87A]/65">
+            التحليلات
+          </p>
+          <h2 id="content-review-analysis-title" className="mt-1 text-lg font-semibold text-white/88">
+            مؤشرات الجاهزية
+          </h2>
+        </div>
+        <div className="grid items-start gap-4 lg:grid-cols-2" data-content-review-analysis-grid>
+          {ANALYSIS_CARDS.map((definition) => {
+            const items = checks.filter((item) => definition.checkIds.includes(item.id));
+            return (
+              <ReviewAnalysisCard
+                key={definition.id}
+                definition={definition}
+                items={items}
+                expanded={expandedCards.has(definition.id)}
+                onToggle={() => toggleCard(definition.id)}
+              />
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <section className="rounded-[22px] border border-white/10 bg-[#090D13]/82 p-5" aria-labelledby="content-review-notes-title" data-content-review-notes>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#D8B87A]/65">إرشادات</p>
+              <h2 id="content-review-notes-title" className="mt-1 text-base font-semibold text-white/85">ملاحظات عامة</h2>
+            </div>
+            <span className="rounded-full border border-white/10 px-2.5 py-1 font-en text-[11px] text-white/45">
+              {suggestions.length}
+            </span>
+          </div>
+          {suggestions.length ? (
+            <ul className="mt-4 space-y-3">
+              {suggestions.map((item) => (
+                <li key={item.id} className="flex gap-3 text-sm leading-6 text-white/55">
+                  <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-[#D8B87A]/75" />
+                  <span><strong className="font-semibold text-white/72">{item.label}:</strong> {item.hint}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] p-4 text-sm text-emerald-100/70">
+              لا توجد اقتراحات غير مانعة في الحالة الحالية.
+            </p>
+          )}
+        </section>
+
+        <section className="rounded-[22px] border border-white/10 bg-[#090D13]/82 p-5" aria-labelledby="content-review-log-title" data-content-review-log>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#D8B87A]/65">عرض فقط</p>
+          <h2 id="content-review-log-title" className="mt-1 text-base font-semibold text-white/85">سجل المراجعة</h2>
+          <ol className="mt-4 space-y-0">
+            <TimelineEntry title="آخر حفظ" value={formatAuditTimestamp(updatedAt)} />
+            <TimelineEntry title="حالة النشر الحالية" value={statusLabel(input.status)} />
+            <TimelineEntry title="تاريخ النشر" value={visibleDate} last />
+          </ol>
+        </section>
+      </div>
     </section>
   );
 }
 
-function ReviewMetric({ label, value }: { label: string; value: string }) {
+function DisplayDecision({ label, enabled }: { label: string; enabled: boolean }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-      <dt className="text-[11px] text-white/35">{label}</dt>
-      <dd className="mt-1 text-sm font-medium text-white/72">{value}</dd>
+    <div className="rounded-xl border border-white/8 bg-black/20 px-2 py-2.5">
+      <dt className="text-[10px] leading-4 text-white/42">{label}</dt>
+      <dd className={`mt-1 text-xs font-semibold ${enabled ? "text-emerald-200/80" : "text-white/32"}`}>
+        {enabled ? "ظاهر" : "مخفي"}
+      </dd>
     </div>
   );
 }
 
-function ReviewIssueList({ items, empty }: { items: ContentReviewCheck[]; empty: string }) {
+function ReviewAnalysisCard({
+  definition,
+  items,
+  expanded,
+  onToggle,
+}: {
+  definition: AnalysisCardDefinition;
+  items: ContentReviewCheck[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const score = getContentReviewScore(items);
+  const issues = items.filter((item) => item.status !== "pass");
+  const errors = issues.filter((item) => item.status === "fail").length;
+  const warnings = issues.filter((item) => item.status === "warn").length;
+  const improvements = issues.filter((item) => item.status === "info").length;
+  const topIssue = issues.find((item) => item.status === "fail") ?? issues[0];
+  const panelId = `content-review-analysis-${definition.id}`;
+
+  return (
+    <article
+      className="overflow-hidden rounded-[22px] border border-white/10 bg-[#090D13]/88 shadow-[0_18px_44px_rgba(0,0,0,0.18)]"
+      data-content-review-analysis={definition.id}
+      data-content-review-expanded={expanded ? "true" : "false"}
+    >
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-white/88">{definition.title}</h3>
+            <p className="mt-1 text-xs leading-5 text-white/38">{definition.description}</p>
+          </div>
+          <div className="grid size-14 shrink-0 place-items-center rounded-2xl border border-[#D8B87A]/22 bg-[#D8B87A]/[0.075] font-en text-lg font-semibold text-[#F0D69F]">
+            {score}
+          </div>
+        </div>
+
+        <dl className="mt-5 grid grid-cols-3 gap-2">
+          <AnalysisCount label="الأخطاء" value={errors} tone="error" />
+          <AnalysisCount label="التنبيهات" value={warnings} tone="warning" />
+          <AnalysisCount label="التحسينات" value={improvements} tone="info" />
+        </dl>
+
+        <div className="mt-4 rounded-xl border border-white/8 bg-black/20 p-3.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">أهم مشكلة</p>
+          {topIssue ? (
+            <div className="mt-1.5">
+              <p className="text-sm font-semibold text-white/72">{topIssue.label}</p>
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/42">{topIssue.hint}</p>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-sm font-medium text-emerald-200/70">لا توجد مشكلات حالية.</p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className="mt-4 inline-flex min-h-10 items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/[0.065] px-4 py-2 text-xs font-semibold text-[#EED49B] transition hover:border-[#D8B87A]/45 hover:bg-[#D8B87A]/[0.11] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
+        >
+          {expanded ? "إخفاء التفاصيل" : "عرض التفاصيل"}
+          <span aria-hidden="true" className={`ms-2 transition ${expanded ? "rotate-180" : ""}`}>⌄</span>
+        </button>
+      </div>
+
+      {expanded ? (
+        <div id={panelId} className="border-t border-white/10 bg-black/15 p-5" role="region" aria-label={`تفاصيل ${definition.title}`}>
+          <ReviewIssueList items={issues} />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function AnalysisCount({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "error" | "warning" | "info";
+}) {
+  const toneClassName = tone === "error"
+    ? "text-red-200/80"
+    : tone === "warning"
+      ? "text-amber-200/80"
+      : "text-sky-200/75";
+  return (
+    <div className="rounded-xl border border-white/8 bg-white/[0.025] px-2 py-2.5 text-center">
+      <dt className="text-[10px] leading-4 text-white/35">{label}</dt>
+      <dd className={`mt-1 font-en text-base font-semibold ${toneClassName}`}>{value}</dd>
+    </div>
+  );
+}
+
+function ReviewIssueList({ items }: { items: ContentReviewCheck[] }) {
   if (!items.length) {
-    return <p className="rounded-xl border border-emerald-400/15 bg-emerald-400/8 p-4 text-sm text-emerald-100/75">{empty}</p>;
+    return (
+      <p className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] p-4 text-sm text-emerald-100/75">
+        لا توجد مشكلات في هذا التحليل.
+      </p>
+    );
   }
   return (
     <div className="space-y-2">
@@ -292,36 +589,32 @@ function ReviewIssueList({ items, empty }: { items: ContentReviewCheck[]; empty:
 
 function ReviewIssueCard({ item }: { item: ContentReviewCheck }) {
   const tone = item.severity === "error"
-    ? "border-red-400/20 bg-red-400/8"
+    ? "border-red-400/20 bg-red-400/[0.07]"
     : item.severity === "warning"
-      ? "border-[#D8B87A]/18 bg-[#D8B87A]/8"
-      : item.severity === "success"
-        ? "border-emerald-400/15 bg-emerald-400/8"
-        : "border-white/10 bg-white/[0.025]";
+      ? "border-[#D8B87A]/18 bg-[#D8B87A]/[0.07]"
+      : "border-sky-300/15 bg-sky-300/[0.055]";
   const severityLabel = item.severity === "error"
     ? "خطأ"
     : item.severity === "warning"
-      ? "تحسين"
-      : item.severity === "success"
-        ? "مكتمل"
-        : "إرشاد";
+      ? "تنبيه"
+      : "تحسين";
   return (
     <article
       className={`rounded-xl border px-4 py-3 ${tone}`}
       data-content-review-issue={item.id}
       data-content-review-severity={item.severity}
     >
-      <div className="flex items-start justify-between gap-3">
-        <details className="min-w-0 flex-1">
-          <summary className="cursor-pointer text-sm font-medium text-white/78">
-            {item.label}
-            <span className="ms-2 rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-normal text-white/42">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-sm font-semibold text-white/78">{item.label}</h4>
+            <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/42">
               {severityLabel}
             </span>
-          </summary>
-          <p className="mt-2 text-xs leading-6 text-white/48">{item.hint}</p>
-        </details>
-        {item.status !== "pass" && item.correctionTarget ? (
+          </div>
+          <p className="mt-1.5 text-xs leading-6 text-white/48">{item.hint}</p>
+        </div>
+        {item.correctionTarget ? (
           <ContentCorrectionButton
             tabId={item.correctionTarget.tabId}
             targetId={item.correctionTarget.targetId}
@@ -329,5 +622,18 @@ function ReviewIssueCard({ item }: { item: ContentReviewCheck }) {
         ) : null}
       </div>
     </article>
+  );
+}
+
+function TimelineEntry({ title, value, last = false }: { title: string; value: string; last?: boolean }) {
+  return (
+    <li className="relative flex gap-3 pb-5 last:pb-0">
+      {!last ? <span aria-hidden="true" className="absolute top-3 bottom-0 start-[5px] w-px bg-white/10" /> : null}
+      <span aria-hidden="true" className="relative mt-1.5 size-3 shrink-0 rounded-full border-2 border-[#D8B87A]/70 bg-[#0A0E14]" />
+      <div>
+        <p className="text-sm font-semibold text-white/68">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-white/38">{value}</p>
+      </div>
+    </li>
   );
 }
