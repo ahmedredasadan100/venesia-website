@@ -1,6 +1,5 @@
 import AdminNotice from "../../../../../components/admin/AdminNotice";
 import ArticleCreateEditor from "../../../../../components/admin/content/editors/ArticleCreateEditor";
-import TopicContentTypeControl from "../../../../../components/admin/content/editors/TopicContentTypeControl";
 import {
   AdminActionButton,
   AdminPageContextHeader,
@@ -45,7 +44,11 @@ export default async function NewUnifiedContentPage({
         .order("name", { ascending: true }),
     ]);
   const categories = flattenAdminCategoryTree(
-    buildAdminCategoryTree((categoryRows ?? []) as AdminContentCategory[]),
+    buildAdminCategoryTree(
+      ((categoryRows ?? []) as AdminContentCategory[]).filter(
+        (category) => category.is_active !== false,
+      ),
+    ),
   );
   const series = (seriesRows ?? []) as Array<{
     id: number;
@@ -85,13 +88,13 @@ export default async function NewUnifiedContentPage({
       />
       {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء المحتوى" message={errorMessage} /> : null}
       {loadError ? <AdminNotice variant="danger" title="تعذر تحميل التصنيفات أو السلاسل" message={loadError} /> : null}
-      <TopicContentTypeControl value={contentType} mode="create" />
       {!loadError ? (
         <MediaContentForm
           mode="create"
           contentType={contentType}
           categories={categories}
           series={series}
+          errorMessage={errorMessage}
         />
       ) : null}
     </AdminPageExperience>

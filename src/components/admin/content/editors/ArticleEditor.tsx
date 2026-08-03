@@ -1,26 +1,26 @@
 import {
   AdminActionButton,
   AdminEntityPreviewActions,
-  AdminFormActions,
   AdminPageContextHeader,
   AdminPageExperience,
-  ADMIN_FORM_STACK_CLASS_NAME,
 } from "../../ui";
-import AdminFormRuntime from "../../ui/AdminFormRuntime";
 import SeoPanel from "../../SeoPanel";
 import FaqEditor from "./article/FaqEditor";
-import TopicEditTabs from "./article/TopicEditTabs";
-import TopicBasicDataPanel from "./article/TopicBasicDataPanel";
+import ContentBasicDataPanel from "./ContentBasicDataPanel";
+import ContentEditorShell from "./ContentEditorShell";
+import ContentPublishingOptions from "./ContentPublishingOptions";
 import TopicMarkdownEditor from "./article/TopicMarkdownEditor";
-import { buildArticleTopicCategoryFilterGroups } from "../../../../lib/admin/article-topic-categories";
 import TopicPublishChecklistPanel from "../../content-workflow/TopicPublishChecklistPanel";
 import { topicRowToPublishInput } from "../../../../lib/admin/content-workflow/topic-publish-validation";
-import { saveTopicForm } from "../../../../app/admin/content/topics/article-actions";
-import TopicPublishingOptions from "./article/TopicPublishingOptions";
-import { TOPIC_FORM_NAVIGATION } from "./article/topic-form-definition";
+import { saveContentForm } from "../../../../app/admin/content/topics/editor-actions/save";
 import { buildAdminContentPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
 import { createAdminFormErrorState } from "../../../../lib/admin/form-runtime";
 import TopicMediaCatalogSyncSignal from "./article/TopicMediaCatalogSyncSignal";
+import TopicDisplaySettings from "./article/TopicDisplaySettings";
+import {
+  buildAdminCategoryTree,
+  flattenAdminCategoryTree,
+} from "../../../../lib/admin/content/category-hierarchy";
 
 type TopicFaqItem = { question?: string; answer?: string };
 export type ArticleEditorCategory = {
@@ -40,6 +40,7 @@ export type ArticleEditorTopic = {
   content: string | null;
   image: string | null;
   image_alt: string | null;
+  category_id: number | null;
   category_slug: string | null;
   series_id: number | null;
   series: string | null;
@@ -94,7 +95,9 @@ export default function ArticleEditor({
   returnPath?: string;
 }) {
   const safeCategories = categories;
-  const categoryGroups = buildArticleTopicCategoryFilterGroups(safeCategories);
+  const categoryOptions = flattenAdminCategoryTree(
+    buildAdminCategoryTree(safeCategories),
+  );
   const safeSeries = series;
   const faq = getFaq(topic.faq);
   const seoKeywords = getSeoKeywords(topic.seo_keywords);
@@ -128,9 +131,8 @@ export default function ArticleEditor({
 
       <TopicMediaCatalogSyncSignal formId="topic-edit-form" />
 
-      <AdminFormRuntime
-        key={topic.id}
-        action={saveTopicForm}
+      <ContentEditorShell
+        action={saveContentForm}
         initialState={
           errorMessage
             ? createAdminFormErrorState(
@@ -141,17 +143,11 @@ export default function ArticleEditor({
             : undefined
         }
         mode="edit"
-        entityKey="topic"
+        contentType="article"
+        entityId={topic.id}
         closeHref={returnPath}
-        navigation={TOPIC_FORM_NAVIGATION}
         formId="topic-edit-form"
-        className={ADMIN_FORM_STACK_CLASS_NAME}
-      >
-        <input type="hidden" name="id" value={topic.id} />
-        <input type="hidden" name="content_type" value="article" />
-
-        <TopicEditTabs
-          tabs={[
+        tabs={[
             {
               id: "basic",
               navigationLabel: "المحتوى",
@@ -159,26 +155,30 @@ export default function ArticleEditor({
               sectionDescription: "حدّث المحتوى الأساسي والتصنيف والصورة وإعدادات الظهور.",
               icon: "content",
               content: (
-                <TopicBasicDataPanel
+                <ContentBasicDataPanel
                   formId="topic-edit-form"
                   contentType="article"
-                  contentTypeMode="edit"
-                  categoryGroups={categoryGroups}
+                  mode="edit"
+                  categories={categoryOptions}
                   series={safeSeries}
                   contentEditor={<TopicMarkdownEditor defaultValue={topic.content ?? ""} variant="compact" />}
+                  displaySettings={
+                    <TopicDisplaySettings
+                      showTitle={topic.show_title_on_page}
+                      showImage={topic.show_image_on_page}
+                      showExcerpt={topic.show_excerpt_on_page}
+                    />
+                  }
                   values={{
                     title: topic.title,
                     slug: topic.slug,
                     excerpt: topic.excerpt,
                     image: topic.image,
                     imageAlt: topic.image_alt,
-                    categorySlug: topic.category_slug,
+                    categoryId: topic.category_id,
                     seriesId: topic.series_id,
                     series: topic.series,
                     seriesSlug: topic.series_slug,
-                    showTitle: topic.show_title_on_page,
-                    showImage: topic.show_image_on_page,
-                    showExcerpt: topic.show_excerpt_on_page,
                   }}
                 />
               ),
@@ -225,7 +225,7 @@ export default function ArticleEditor({
               sectionDescription: "راجع الحالة والملخص والتحذيرات قبل حفظ قرار النشر.",
               icon: "publish",
               content: (
-                <TopicPublishingOptions
+                <ContentPublishingOptions
                   status={status}
                   featured={Boolean(topic.is_featured)}
                   popular={Boolean(topic.is_popular)}
@@ -244,13 +244,11 @@ export default function ArticleEditor({
                     seriesLabel={topic.series ?? "—"}
                     initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page, faq: topic.show_faq_on_page }}
                   />
-                </TopicPublishingOptions>
+                </ContentPublishingOptions>
               ),
             },
-          ]}
-        />
-        <AdminFormActions />
-      </AdminFormRuntime>
+        ]}
+      />
     </AdminPageExperience>
   );
 }

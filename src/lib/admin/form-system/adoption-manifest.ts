@@ -32,10 +32,10 @@ export const ADMIN_FORM_RUNTIME_MODULE = {
 } as const;
 
 export const ADMIN_FORM_SYSTEM_CLOSURE = {
-  phase: "SEO Redirect Create/Edit - Form Runtime Adoption",
+  phase: "Unified Content Editors - Form Runtime Adoption",
   module: ADMIN_FORM_RUNTIME_MODULE.id,
-  scope: "reference_consumers_and_redirect_create_edit",
-  allowedClaim: "seo_redirect_create_edit_adopted",
+  scope: "reference_consumers_redirect_and_unified_content_editors",
+  allowedClaim: "unified_content_editors_adopted",
   globalClosed: false,
   globalClosureBlockers: [
     "Legacy generic Admin forms remain outside the Form Runtime module.",
@@ -77,7 +77,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "topic-media-create-edit",
     label: "Media Topic create and edit",
-    classification: "legacy_generic_gap",
+    classification: "shared_adopter",
     sourceFiles: [
       "src/components/admin/content/editors/media/MediaContentForm.tsx",
     ],
@@ -94,7 +94,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "gallery:edit",
     ],
     rationale:
-      "Generic create/edit form still owns its local form lifecycle and must be migrated in a later adoption phase.",
+      "All five media content types use ContentEditorShell, AdminFormRuntime, structured save feedback, dirty protection, and Create-to-Edit handoff.",
   },
   {
     id: "projects-create-edit",

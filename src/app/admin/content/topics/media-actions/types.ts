@@ -27,6 +27,7 @@ export type MediaTopicRow = {
   status: MediaStatus | string | null;
   is_featured: boolean | null;
   published_at: string | null;
+  deleted_at?: string | null;
   media_payload: MediaTopicPayload | null;
   seo_title?: string | null;
   seo_description?: string | null;

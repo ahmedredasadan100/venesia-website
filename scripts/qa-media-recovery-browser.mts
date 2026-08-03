@@ -500,7 +500,7 @@ async function uploadThroughMediaUi(page: Page, authority: MediaQaAuthority, fil
 }
 
 async function chooseAssetInTopicPicker(page: Page, asset: FixtureAsset) {
-  const imagePanel = page.locator("#topic-image-field");
+  const imagePanel = page.locator("#content-image-field");
   await imagePanel.locator('button[type="button"]').first().click();
   const picker = page.locator("[data-media-picker-root]");
   await picker.waitFor({ state: "visible" });
@@ -521,7 +521,7 @@ async function chooseAssetInTopicPicker(page: Page, asset: FixtureAsset) {
 async function assertTopicImageValue(page: Page, expected: string) {
   await page.waitForFunction(
     ({ selector, value }) => (document.querySelector(selector) as HTMLInputElement | null)?.value === value,
-    { selector: '#topic-image-field input[name="image"]', value: expected },
+    { selector: '#content-image-field input[name="image"]', value: expected },
   );
 }
 
@@ -1195,7 +1195,7 @@ async function run() {
     assert(unlinkNavigation && unlinkNavigation.status() < 400);
     assertApprovedPageLocation(unlinkPage, authority, topicPath, "Unlink Topic navigation");
     await assertTopicImageValue(unlinkPage, asset.publicUrl);
-    await unlinkPage.locator("#topic-image-field").getByRole("button", { name: "إزالة", exact: true }).click();
+    await unlinkPage.locator("#content-image-field").getByRole("button", { name: "إزالة", exact: true }).click();
     await assertTopicImageValue(unlinkPage, "");
     const automaticLibraryRefresh = scenarioPage.waitForResponse((response) => (
       response.request().method() === "GET"

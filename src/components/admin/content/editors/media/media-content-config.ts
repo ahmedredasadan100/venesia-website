@@ -1,7 +1,13 @@
-import { getContentTypeLabel as getUnifiedContentTypeLabel } from "../../../../../lib/admin/content/content-types";
+import {
+  CONTENT_TYPES,
+  getContentTypeLabel as getUnifiedContentTypeLabel,
+  type ContentType,
+} from "../../../../../lib/admin/content/content-types";
 
-export const MEDIA_EDITABLE_CONTENT_TYPES = ["news", "press", "site_update", "video", "gallery"] as const;
-export type MediaEditableContentType = (typeof MEDIA_EDITABLE_CONTENT_TYPES)[number];
+export type MediaEditableContentType = Exclude<ContentType, "article">;
+export const MEDIA_EDITABLE_CONTENT_TYPES = CONTENT_TYPES.filter(
+  (contentType): contentType is MediaEditableContentType => contentType !== "article",
+);
 
 export const MEDIA_CONTENT_TYPE_ERROR =
   "نوع المحتوى غير مسموح. يُسمح فقط بـ news و press و site_update و video و gallery.";

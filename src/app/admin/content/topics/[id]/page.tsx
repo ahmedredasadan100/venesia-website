@@ -20,7 +20,6 @@ import { getContentTypeLabel, resolveContentEditor } from "../../../../../lib/ad
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
-import TopicContentTypeControl from "../../../../../components/admin/content/editors/TopicContentTypeControl";
 import { isMediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import {
@@ -80,10 +79,10 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
   const selectableCategories = categories
     .filter(
       (category) =>
-        category.is_active !== false || category.slug === topic.category_slug,
+        category.is_active !== false || category.id === topic.category_id,
     )
     .map((category) =>
-      category.slug === topic.category_slug
+      category.id === topic.category_id
         ? { ...category, is_active: true }
         : category,
     );
@@ -115,7 +114,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
 
   if (!isMediaEditableContentType(topic.content_type)) notFound();
   const flattenedCategories = flattenAdminCategoryTree(
-    buildAdminCategoryTree(categories),
+    buildAdminCategoryTree(selectableCategories),
   );
 
   return (
@@ -150,13 +149,13 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
         <AdminNotice variant="success" message="تم حفظ التغييرات بنجاح." />
       ) : null}
       {errorMessage ? <AdminNotice variant="danger" title="تعذر حفظ المحتوى" message={errorMessage} /> : null}
-      <TopicContentTypeControl value={topic.content_type} mode="edit" />
       <MediaContentForm
         mode="edit"
         contentType={topic.content_type}
         categories={flattenedCategories}
         series={allSeries}
         returnPath={returnPath}
+        errorMessage={errorMessage}
         values={{
           id: topic.id,
           title: topic.title,
@@ -168,6 +167,8 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
           category_id: topic.category_id,
           category_slug: topic.category_slug,
           series_id: topic.series_id,
+          series: topic.series,
+          series_slug: topic.series_slug,
           status: topic.status,
           is_featured: topic.is_featured,
           media_payload: (topic.media_payload as MediaTopicPayload | null) ?? null,

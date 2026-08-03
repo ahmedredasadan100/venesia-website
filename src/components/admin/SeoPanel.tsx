@@ -12,7 +12,7 @@ import AdminEntitySeoPanel, {
   type AdminEntitySeoFieldNames,
 } from "./seo/AdminEntitySeoPanel";
 import { ENTITY_SEO_FIELD_NAMES } from "../../lib/seo/entity-seo-types";
-import { TOPIC_EDITOR_NAVIGATION_EVENT } from "./content/editors/article/topic-editor-navigation";
+import { CONTENT_EDITOR_NAVIGATION_EVENT } from "./content/editors/content-editor-navigation";
 
 type SeoPanelProps = {
   title: string;
@@ -40,37 +40,37 @@ type TopicSeoAnalysisState = {
 const TOPIC_SEO_FIELD_NAMES = ENTITY_SEO_FIELD_NAMES satisfies AdminEntitySeoFieldNames;
 
 const TOPIC_SEO_FIELD_IDS = {
-  seoTitle: "topic-seo-title",
-  seoDescription: "topic-seo-description",
-  focusKeyword: "topic-focus-keyword",
-  seoKeywords: "topic-seo-keywords",
-  canonicalUrl: "topic-canonical-url",
-  robotsSection: "topic-seo-overrides",
-  robotsIndexListbox: "topic-robots-index-listbox",
-  robotsIndexFocusTarget: "topic-robots-index",
-  robotsFollowListbox: "topic-robots-follow-listbox",
-  robotsFollowFocusTarget: "topic-robots-follow",
+  seoTitle: "content-seo-title",
+  seoDescription: "content-seo-description",
+  focusKeyword: "content-focus-keyword",
+  seoKeywords: "content-seo-keywords",
+  canonicalUrl: "content-canonical-url",
+  robotsSection: "content-seo-overrides",
+  robotsIndexListbox: "content-robots-index-listbox",
+  robotsIndexFocusTarget: "content-robots-index",
+  robotsFollowListbox: "content-robots-follow-listbox",
+  robotsFollowFocusTarget: "content-robots-follow",
 } satisfies AdminEntitySeoFieldIds;
 
 const TOPIC_SEO_CORRECTION_TARGETS = {
-  "seo-title-length": { tabId: "seo", targetId: "topic-seo-title" },
+  "seo-title-length": { tabId: "seo", targetId: "content-seo-title" },
   "meta-description-length": {
     tabId: "seo",
-    targetId: "topic-seo-description",
+    targetId: "content-seo-description",
   },
-  "focus-keyword": { tabId: "seo", targetId: "topic-focus-keyword" },
-  "keyword-title": { tabId: "seo", targetId: "topic-seo-title" },
+  "focus-keyword": { tabId: "seo", targetId: "content-focus-keyword" },
+  "keyword-title": { tabId: "seo", targetId: "content-seo-title" },
   "keyword-description": {
     tabId: "seo",
-    targetId: "topic-seo-description",
+    targetId: "content-seo-description",
   },
   "keyword-content": { tabId: "basic", targetId: "topic-content-markdown" },
   "keyword-intro": { tabId: "basic", targetId: "topic-content-markdown" },
-  image: { tabId: "seo", targetId: "topic-og-image" },
-  "image-alt": { tabId: "seo", targetId: "topic-og-image-alt" },
-  "image-alt-length": { tabId: "seo", targetId: "topic-og-image-alt" },
+  image: { tabId: "seo", targetId: "content-og-image" },
+  "image-alt": { tabId: "seo", targetId: "content-og-image-alt" },
+  "image-alt-length": { tabId: "seo", targetId: "content-og-image-alt" },
   "keyword-alt": { tabId: "basic", targetId: "topic-image-alt" },
-  "seo-keywords": { tabId: "seo", targetId: "topic-seo-keywords" },
+  "seo-keywords": { tabId: "seo", targetId: "content-seo-keywords" },
   slug: { tabId: "basic", targetId: "topic-slug" },
   "keyword-density": { tabId: "basic", targetId: "topic-content-markdown" },
   faq: { tabId: "faq", targetId: "topic-faq-editor" },
@@ -177,7 +177,7 @@ export default function SeoPanel(props: SeoPanelProps) {
       entityLabel="الموضوع"
       publicPathPrefix="/topics"
       slugPlaceholder="your-slug"
-      navigationEventName={TOPIC_EDITOR_NAVIGATION_EVENT}
+      navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}
       sourceFieldNames={{
         title: "title",
         description: "excerpt",
@@ -191,8 +191,8 @@ export default function SeoPanel(props: SeoPanelProps) {
       social={{
         mediaBrowseFolder: "images/topics/seo",
         fieldIds: {
-          imageSection: "topic-og-image",
-          imageAlt: "topic-og-image-alt",
+          imageSection: "content-og-image",
+          imageAlt: "content-og-image-alt",
         },
       }}
       initial={{

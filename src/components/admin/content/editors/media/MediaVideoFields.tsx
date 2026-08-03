@@ -27,6 +27,7 @@ export default function MediaVideoFields({
       <label className="block lg:col-span-2">
         <span className="text-sm font-medium text-white/70">رابط YouTube</span>
         <input
+          id="video_url"
           name="video_url"
           type="url"
           defaultValue={defaultVideoUrl ?? ""}
@@ -39,6 +40,7 @@ export default function MediaVideoFields({
       <label className="block">
         <span className="text-sm font-medium text-white/70">المدة (اختياري)</span>
         <input
+          id="video_duration"
           name="video_duration"
           defaultValue={defaultDuration ?? ""}
           placeholder="مثل: 3:45"
@@ -46,7 +48,7 @@ export default function MediaVideoFields({
         />
       </label>
 
-      <div>
+      <div id="video_thumbnail" className="scroll-mt-24">
         <AdminMediaImageField
           name="video_thumbnail"
           label="صورة مصغّرة (اختياري)"
