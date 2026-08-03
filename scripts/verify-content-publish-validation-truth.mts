@@ -41,6 +41,8 @@ type ReviewInput = import("../src/lib/admin/content-workflow/content-review-capa
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const capability = read("src/lib/admin/content-workflow/content-review-capability.ts");
 const review = read("src/components/admin/content-workflow/ContentReviewPanel.tsx");
+const sharedReview = read("src/components/admin/review/AdminEntityReviewPanel.tsx");
+const reviewContract = read("src/lib/admin/review/entity-review-presentation.ts");
 const articleSave = read("src/app/admin/content/topics/article-actions/save.ts");
 const mediaSave = read("src/app/admin/content/topics/media-actions/save.ts");
 const listActions = read("src/app/admin/content/topics/actions.ts");
@@ -259,17 +261,17 @@ check(
 
 check(
   "Review Validation summarizes every failed blocksPublish check without changing dashboard geometry",
-  review.includes("item.blocksPublish && item.status === \"fail\"") &&
-    review.includes("items={blockingIssues}") &&
-    review.includes("lg:grid-cols-3") &&
-    review.includes("data-content-review-validation-row") &&
+  sharedReview.includes("item.blocksPublish && item.status === \"fail\"") &&
+    sharedReview.includes("items={blockingIssues}") &&
+    sharedReview.includes("lg:grid-cols-3") &&
+    sharedReview.includes("data-admin-entity-review-validation-row") &&
     review.includes('data-content-review-presentation="dashboard"') &&
-    review.includes("ملخص الحالة") &&
-    !review.includes("سجل المراجعة"),
+    sharedReview.includes("ملخص الحالة") &&
+    !sharedReview.includes("سجل المراجعة"),
 );
 check(
   "Review and server consumers use explicit blocking semantics instead of severity",
-  capability.includes("blocksPublish: boolean") &&
+  reviewContract.includes("blocksPublish: boolean") &&
     capability.includes('item.blocksPublish && item.status === "fail"') &&
     [articleSave, mediaSave, listActions].every((source) => source.includes("PublishBlockingChecks") || source.includes("PublishedValidationChecks")),
 );

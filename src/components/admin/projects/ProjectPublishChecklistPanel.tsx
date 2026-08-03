@@ -15,15 +15,40 @@ import {
   getProjectPublishingReadiness,
   resolveProjectPublicationStatusForVisibility,
 } from "../../../lib/admin/projects/project-publishing-capability";
+import type {
+  EntityReviewAnalysisCardDefinition,
+  EntityReviewCheck,
+} from "../../../lib/admin/review/entity-review-presentation";
 import { formatAdminDateTime } from "../../../lib/content-dates";
-import PublishChecklist from "../content-workflow/PublishChecklist";
-import type { PublishChecklistItem } from "../../../lib/admin/content-workflow/publish-checklist-types";
+import AdminEntityReviewPanel, {
+  AdminEntityReviewDecisionCard,
+} from "../review/AdminEntityReviewPanel";
 import { AdminFormSwitch, AdminStatusPill } from "../ui";
 
 type ProjectPublishChecklistPanelProps = {
   formId: string;
   initial: ProjectEntryPayload;
 };
+
+type ProjectReviewGroup = "content" | "image" | "seo";
+
+const SEO_FIELDS = new Set([
+  "seo_title",
+  "seo_description",
+  "focus_keyword",
+  "seo_keywords",
+  "canonical_url",
+  "robots_index",
+  "robots_follow",
+  "og_image",
+  "og_image_alt",
+]);
+
+function reviewGroupForField(field: string): ProjectReviewGroup {
+  if (SEO_FIELDS.has(field)) return "seo";
+  if (/(image|media|video|poster)/.test(field)) return "image";
+  return "content";
+}
 
 function buildSnapshot(payload: ProjectEntryPayload) {
   return {
@@ -36,38 +61,67 @@ function buildSnapshot(payload: ProjectEntryPayload) {
   };
 }
 
-function checklistItems(
+function projectReviewChecks(
   snapshot: ReturnType<typeof buildSnapshot>,
-): PublishChecklistItem[] {
-  const blockerItems: PublishChecklistItem[] = snapshot.readiness.blockers.map((blocker, index) => ({
-    id: `${blocker.code}:${blocker.field}:${index}`,
+): EntityReviewCheck[] {
+  const blockerChecks = snapshot.readiness.blockers.map((blocker, index) => ({
+    id: `project:${reviewGroupForField(blocker.field)}:blocker:${blocker.field}:${index}`,
     label: "متطلب نشر إلزامي",
     hint: blocker.message,
     status: "fail" as const,
+    severity: "error" as const,
+    blocksPublish: true,
     field: blocker.field,
-    fixable: true,
+    correctionTarget: {
+      tabId: PROJECT_ENTRY_FIELD_TABS[blocker.field] ?? "basic",
+      targetId: PROJECT_ENTRY_FOCUS_TARGETS[blocker.field] ?? blocker.field,
+    },
   }));
-  const warningItems: PublishChecklistItem[] = snapshot.readiness.warnings.map((warning) => ({
-    id: warning.code,
-    label: "تحسين موصى به",
+  const warningChecks = snapshot.readiness.warnings.map((warning) => ({
+    id: `project:seo:warning:${warning.code}`,
+    label: "تحسين SEO موصى به",
     hint: warning.message,
     status: "warn" as const,
+    severity: "warning" as const,
+    blocksPublish: false,
     field: warning.field,
-    fixable: true,
+    correctionTarget: {
+      tabId: PROJECT_ENTRY_FIELD_TABS[warning.field] ?? "seo",
+      targetId: PROJECT_ENTRY_FOCUS_TARGETS[warning.field] ?? warning.field,
+    },
   }));
 
-  if (!blockerItems.length) {
-    blockerItems.push({
-      id: "PROJECT_PUBLISH_READY",
-      label: "بيانات العرض العام مكتملة",
-      hint: "لا توجد متطلبات إلزامية تمنع نشر المشروع.",
-      status: "pass",
-      field: "",
-      fixable: false,
-    });
-  }
+  return [...blockerChecks, ...warningChecks];
+}
 
-  return [...blockerItems, ...warningItems];
+function guidanceCards(
+  checks: readonly EntityReviewCheck[],
+): readonly EntityReviewAnalysisCardDefinition[] {
+  const idsFor = (group: ProjectReviewGroup) =>
+    checks
+      .filter((check) => check.id.startsWith(`project:${group}:`))
+      .map((check) => check.id);
+
+  return [
+    {
+      id: "content",
+      title: "جاهزية محتوى المشروع",
+      description: "اكتمال بيانات المشروع وأقسامه ومحتواه التعريفي.",
+      checkIds: idsFor("content"),
+    },
+    {
+      id: "image",
+      title: "جاهزية الصور وAlt وHero وGallery",
+      description: "سلامة الصور والوسائط والنصوص البديلة المرتبطة بها.",
+      checkIds: idsFor("image"),
+    },
+    {
+      id: "seo",
+      title: "تحليل SEO",
+      description: "نفس بيانات SEO المشتركة المستخدمة في محرر المشروع.",
+      checkIds: idsFor("seo"),
+    },
+  ];
 }
 
 export default function ProjectPublishChecklistPanel({
@@ -92,7 +146,8 @@ export default function ProjectPublishChecklistPanel({
     };
   }, [formId]);
 
-  const items = useMemo(() => checklistItems(snapshot), [snapshot]);
+  const checks = useMemo(() => projectReviewChecks(snapshot), [snapshot]);
+  const cards = useMemo(() => guidanceCards(checks), [checks]);
   const project = snapshot.payload.project;
   const publication = getProjectPublicationMetadata(project.publication_status);
   const hiddenStatus = resolveProjectPublicationStatusForVisibility(
@@ -101,67 +156,25 @@ export default function ProjectPublishChecklistPanel({
   );
   const publicPath = project.slug ? `/projects/${project.slug}` : "—";
 
-  function fixItem(item: PublishChecklistItem) {
-    if (!item.field) return;
-    window.dispatchEvent(
-      new CustomEvent(PROJECT_ENTRY_NAVIGATION_EVENT, {
-        detail: {
-          tabId: PROJECT_ENTRY_FIELD_TABS[item.field] ?? "basic",
-          targetId: PROJECT_ENTRY_FOCUS_TARGETS[item.field] ?? item.field,
-        },
-      }),
-    );
-  }
-
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
-      <div className="space-y-4">
-        <section className="rounded-[24px] border border-white/10 bg-[#080B10]/92 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.18em] text-[#D8B87A]/65">
-                حالة الظهور
-              </p>
-              <h3 className="mt-2 text-lg font-semibold text-white">
-                النشر الحالي للمشروع
-              </h3>
-            </div>
-            <AdminStatusPill tone={publication.tone}>
-              {publication.label}
-            </AdminStatusPill>
-          </div>
-          <dl className="mt-5 grid gap-3 text-sm">
-            <div className="flex items-start justify-between gap-4 border-t border-white/8 pt-3">
-              <dt className="text-white/45">الظهور العام</dt>
-              <dd className="font-semibold text-white/75">{publication.publicLabel}</dd>
-            </div>
-            <div className="flex items-start justify-between gap-4 border-t border-white/8 pt-3">
-              <dt className="text-white/45">تاريخ أول نشر</dt>
-              <dd className="text-left font-en text-white/70" dir="ltr">
-                {formatAdminDateTime(initial.project.published_at)}
-              </dd>
-            </div>
-            <div className="flex items-start justify-between gap-4 border-t border-white/8 pt-3">
-              <dt className="text-white/45">الرابط العام</dt>
-              <dd className="min-w-0 truncate text-left font-en text-[#D8B87A]/80" dir="ltr" title={publicPath}>
-                {publicPath}
-              </dd>
-            </div>
-            <div className="flex items-start justify-between gap-4 border-t border-white/8 pt-3">
-              <dt className="text-white/45">الحالة المميزة</dt>
-              <dd className="font-semibold text-white/75">
-                {project.featured ? "مميز" : "غير مميز"}
-              </dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="rounded-[24px] border border-[#D8B87A]/14 bg-[#080B10]/92 p-5">
-          <h3 className="text-lg font-semibold text-white">خيارات الظهور</h3>
-          <p className="mt-1 text-sm leading-6 text-white/45">
-            تُحفظ الحالة والتمييز مع Project Aggregate من زر الحفظ نفسه.
-          </p>
-          <div className="mt-4 space-y-3">
+    <AdminEntityReviewPanel
+      entityKey="project"
+      navigationEventName={PROJECT_ENTRY_NAVIGATION_EVENT}
+      decisionTitle="حالة المشروع والعرض"
+      checks={checks}
+      guidanceCards={cards}
+      decisionCards={
+        <>
+          <AdminEntityReviewDecisionCard
+            id="publication-status"
+            title="حالة النشر"
+            description="تحكم في ظهور المشروع للعامة."
+            badge={
+              <AdminStatusPill tone={publication.tone}>
+                {publication.label}
+              </AdminStatusPill>
+            }
+          >
             <AdminFormSwitch
               id="project-publication-status"
               name="publication_status"
@@ -169,15 +182,40 @@ export default function ProjectPublishChecklistPanel({
               uncheckedValue={hiddenStatus}
               defaultChecked={initial.project.publication_status === "published"}
               surface
+              className="mt-3 border-white/8 bg-black/20 px-3 py-2.5"
               label={
                 <span>
-                  <strong className="block text-sm text-white/82">إظهار المشروع للعامة</strong>
+                  <strong className="block text-sm text-white/82">
+                    {project.publication_status === "published" ? "منشور" : "غير منشور"}
+                  </strong>
                   <span className="mt-1 block text-xs text-white/42">
-                    النشر يتطلب اكتمال كل المتطلبات الإلزامية أدناه.
+                    النشر يتطلب اكتمال كل المتطلبات الإلزامية.
                   </span>
                 </span>
               }
             />
+          </AdminEntityReviewDecisionCard>
+
+          <AdminEntityReviewDecisionCard
+            id="publication-date"
+            title="تاريخ النشر"
+            description="بيانات أول نشر والرابط العام."
+          >
+            <dl className="mt-3 space-y-2">
+              <ProjectDecision
+                label="أول نشر"
+                value={formatAdminDateTime(initial.project.published_at)}
+                ltr
+              />
+              <ProjectDecision label="الرابط العام" value={publicPath} ltr />
+            </dl>
+          </AdminEntityReviewDecisionCard>
+
+          <AdminEntityReviewDecisionCard
+            id="featured"
+            title="مميز"
+            description="التمييز مستقل عن حالة النشر."
+          >
             <AdminFormSwitch
               id="project-featured"
               name="featured"
@@ -185,24 +223,53 @@ export default function ProjectPublishChecklistPanel({
               uncheckedValue="false"
               defaultChecked={initial.project.featured}
               surface
-              label={
-                <span>
-                  <strong className="block text-sm text-white/82">مشروع مميز</strong>
-                  <span className="mt-1 block text-xs text-white/42">
-                    التمييز مستقل، ولا يسبب ظهور المشروع ما لم يكن منشورًا.
-                  </span>
-                </span>
-              }
+              className="mt-3 border-white/8 bg-black/20 px-3 py-2.5"
+              label={project.featured ? "مشروع مميز" : "غير مميز"}
             />
-          </div>
-        </section>
-      </div>
+          </AdminEntityReviewDecisionCard>
+        </>
+      }
+      validationDescription="يعرض متطلبات الحقول والقيم التي تمنع نشر المشروع فعليًا وفق Validation Truth الحالية."
+      summaryEntries={[
+        {
+          id: "last-save",
+          title: "آخر حفظ",
+          value: formatAdminDateTime(initial.project.updated_at),
+        },
+        {
+          id: "status",
+          title: "حالة النشر الحالية",
+          value: publication.label,
+        },
+        {
+          id: "publish-date",
+          title: "تاريخ أول نشر",
+          value: formatAdminDateTime(initial.project.published_at),
+        },
+      ]}
+    />
+  );
+}
 
-      <PublishChecklist
-        title="مراجعة جاهزية المشروع للنشر"
-        items={items}
-        onFixItem={fixItem}
-      />
+function ProjectDecision({
+  label,
+  value,
+  ltr = false,
+}: {
+  label: string;
+  value: string;
+  ltr?: boolean;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+      <dt className="text-[10px] leading-4 text-white/42">{label}</dt>
+      <dd
+        className="mt-1 min-w-0 truncate text-xs font-semibold text-white/72"
+        dir={ltr ? "ltr" : undefined}
+        title={value}
+      >
+        {value}
+      </dd>
     </div>
   );
 }

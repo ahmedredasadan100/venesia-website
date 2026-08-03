@@ -122,6 +122,9 @@ const constraintDefinitionSemanticSelfTest = spawnSync(
 );
 const form = read(formPath);
 const contract = read(contractPath);
+const sharedReviewContract = read(
+  "src/lib/admin/review/entity-review-presentation.ts",
+);
 const action = read(actionPath);
 const repeaters = read(repeatersPath);
 const mediaEditors = read(mediaEditorsPath);
@@ -926,9 +929,11 @@ check(
 );
 check(
   "Project tab metadata adopts the shared navigation, heading, and semantic-icon contract",
-  ["البيانات", "الموقع", "نظرة عامة", "المساحات", "المواصفات", "الميديا", "SEO", "المراجعة والنشر"].every((label) =>
+  ["البيانات", "الموقع", "نظرة عامة", "المساحات", "المواصفات", "الميديا", "SEO"].every((label) =>
     form.includes(`navigationLabel: "${label}"`),
   ) &&
+    form.includes("navigationLabel: ADMIN_ENTITY_REVIEW_TAB_LABEL") &&
+    sharedReviewContract.includes('ADMIN_ENTITY_REVIEW_TAB_LABEL = "المراجعة والنشر"') &&
     ["البيانات الأساسية للمشروع", "بيانات الموقع الأساسية", "النظرة العامة ومميزات المشروع", "المساحات والمخططات", "مواصفات التنفيذ والتسليم", "الصور والفيديو", "تحسين محركات البحث والمشاركة", "مراجعة المشروع وحالة الظهور"].every((heading) =>
       form.includes(`sectionHeading: "${heading}"`),
     ) &&

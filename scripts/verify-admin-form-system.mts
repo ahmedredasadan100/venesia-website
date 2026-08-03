@@ -400,6 +400,9 @@ const topicPublishingOptions = read(
 const topicPublishChecklist = read(
   "src/components/admin/content-workflow/ContentReviewPanel.tsx",
 );
+const sharedEntityReviewPanel = read(
+  "src/components/admin/review/AdminEntityReviewPanel.tsx",
+);
 const topicMediaSyncSignal = read(
   "src/components/admin/content/editors/article/TopicMediaCatalogSyncSignal.tsx",
 );
@@ -451,7 +454,11 @@ check(
     topicPublishingOptions.includes("data-content-publishing-options") &&
     topicPublishChecklist.includes("data-content-review-capability") &&
     topicPublishChecklist.includes('data-content-review-presentation="dashboard"') &&
-    !topicPublishChecklist.includes("AdminSingleOpenAccordion"),
+    topicPublishChecklist.includes("<AdminEntityReviewPanel") &&
+    sharedEntityReviewPanel.includes('data-admin-entity-review-presentation="dashboard"') &&
+    ![topicPublishChecklist, sharedEntityReviewPanel].some((source) =>
+      source.includes("AdminSingleOpenAccordion"),
+    ),
 );
 check(
   "retired Topic presentation branches cannot fork Create from Edit",

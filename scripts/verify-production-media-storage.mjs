@@ -274,11 +274,15 @@ const entitySeoContract = loadTypeScriptModule("src/lib/seo/entity-seo-types.ts"
 const mediaTopicPayloadContract = loadTypeScriptModule(
   "src/lib/admin/media-topic-payload.ts",
 );
+const entityReviewPresentationContract = loadTypeScriptModule(
+  "src/lib/admin/review/entity-review-presentation.ts",
+);
 const contentReviewContract = loadTypeScriptModule(
   "src/lib/admin/content-workflow/content-review-capability.ts",
   {
     "../media-topic-payload": mediaTopicPayloadContract,
     "../../seo/entity-seo-types": entitySeoContract,
+    "../review/entity-review-presentation": entityReviewPresentationContract,
   },
 );
 const topicValidation = loadTypeScriptModule(

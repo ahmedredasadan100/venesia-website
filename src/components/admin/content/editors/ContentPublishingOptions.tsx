@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AdminFormError } from "../../ui/AdminFormRuntime";
 import AdminFormSwitch from "../../ui/AdminFormSwitch";
+import { AdminEntityReviewDecisionCard } from "../../review/AdminEntityReviewPanel";
 import TopicDateLabelField from "./article/TopicDateLabelField";
 import TopicFormSwitch from "./article/TopicFormSwitch";
 
@@ -42,18 +43,17 @@ export default function ContentPublishingOptions({
 
   return (
     <>
-      <article
-        className="flex min-w-0 flex-col rounded-[22px] border border-white/10 bg-[#090D13]/88 p-4"
-        data-content-publishing-options
-        data-content-review-decision="publication-schedule"
+      <AdminEntityReviewDecisionCard
+        id="publication-schedule"
+        title="حالة النشر والتاريخ"
+        description="حالة المحتوى وموعد ظهوره العام."
       >
-        <input type="hidden" name="status" value={published ? "published" : unpublishedStatus} />
-        <div>
-          <p className="text-sm font-semibold text-white/82">حالة النشر والتاريخ</p>
-          <p className="mt-1 text-xs leading-5 text-white/38">
-            حالة المحتوى وموعد ظهوره العام.
-          </p>
-        </div>
+        <input
+          type="hidden"
+          name="status"
+          value={published ? "published" : unpublishedStatus}
+          data-content-publishing-options
+        />
         <AdminFormSwitch
           id="content-status"
           name="content_publication_toggle"
@@ -79,16 +79,13 @@ export default function ContentPublishingOptions({
           الأرشفة عملية مستقلة من إجراءات قائمة المحتوى.
         </p>
         <AdminFormError name="status" />
-      </article>
+      </AdminEntityReviewDecisionCard>
 
-      <article
-        className="flex min-w-0 flex-col rounded-[22px] border border-white/10 bg-[#090D13]/88 p-4"
-        data-content-review-decision="featured-popular"
+      <AdminEntityReviewDecisionCard
+        id="featured-popular"
+        title="التمييز والانتشار"
+        description="تحكم مباشر في المميز والشائع."
       >
-        <div>
-          <p className="text-sm font-semibold text-white/82">التمييز والانتشار</p>
-          <p className="mt-1 text-xs leading-5 text-white/38">تحكم مباشر في المميز والشائع.</p>
-        </div>
         <div className="mt-3 space-y-2">
           <div data-content-review-field="featured">
             <TopicFormSwitch
@@ -109,7 +106,7 @@ export default function ContentPublishingOptions({
             />
           </div>
         </div>
-      </article>
+      </AdminEntityReviewDecisionCard>
     </>
   );
 }
