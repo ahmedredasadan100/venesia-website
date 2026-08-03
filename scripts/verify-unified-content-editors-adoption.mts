@@ -261,7 +261,7 @@ check(
     "duplicateUnifiedContent",
     "softDeleteUnifiedContent",
     "bulkUpdateUnifiedContent",
-    "getPublishError",
+    "getPublishFailure",
   ]),
 );
 

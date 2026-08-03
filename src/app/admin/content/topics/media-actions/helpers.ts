@@ -8,7 +8,8 @@ import {
   type MediaTopicPayload,
 } from "../../../../../lib/admin/media-topic-payload";
 import {
-  getMediaBaseValidationError,
+  getMediaDraftBlockingChecks,
+  getMediaPublishBlockingChecks,
   getMediaPublishValidationError as validateMediaPublishInput,
   type MediaPublishInput,
 } from "../../../../../lib/admin/content-workflow/media-publish-validation";
@@ -17,7 +18,6 @@ import { parseFormPublishedDate, resolveTopicPublishedAt } from "../../../../../
 import {
   readEntitySeoFormData,
   toEntitySeoPersistence,
-  validateEntitySeoValues,
 } from "../../../../../lib/seo/entity-seo-types";
 import type { MediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 import type { MediaStatus, MediaTopicRow } from "./types";
@@ -152,28 +152,6 @@ export function getPayload(formData: FormData) {
 
 export type MediaPayload = ReturnType<typeof getPayload>;
 
-export function getValidationError(payload: MediaPayload) {
-  const seoIssue = validateEntitySeoValues(payload)[0];
-  if (seoIssue) return seoIssue.message;
-  return getMediaBaseValidationError({
-    title: payload.title,
-    slug: payload.slug,
-    excerpt: payload.excerpt,
-    content: payload.content,
-    image: payload.image,
-    imageAlt: payload.imageAlt,
-    categorySlug: payload.categoryId,
-    contentType: "news",
-    mediaPayload: null,
-    seoTitle: payload.seoTitle,
-    seoDescription: payload.seoDescription,
-    focusKeyword: payload.focusKeyword,
-    canonicalUrl: payload.canonicalUrl,
-    ogImage: payload.ogImage,
-    ogImageAlt: payload.ogImageAlt,
-  });
-}
-
 function payloadToMediaPublishInput(
   payload: MediaPayload,
   mediaPayload: MediaTopicPayload | null,
@@ -186,7 +164,7 @@ function payloadToMediaPublishInput(
     content: payload.content,
     image: payload.image,
     imageAlt: payload.imageAlt,
-    categorySlug: payload.categoryId,
+    categorySlug: validateId(payload.categoryId) ? payload.categoryId : "",
     contentType,
     mediaPayload,
     seoTitle: payload.seoTitle,
@@ -206,6 +184,28 @@ export function getPublishedValidationError(
 ) {
   if (status !== "published") return null;
   return validateMediaPublishInput(payloadToMediaPublishInput(payload, mediaPayload, contentType));
+}
+
+export function getPublishedValidationChecks(
+  contentType: MediaEditableContentType,
+  mediaPayload: MediaTopicPayload | null,
+  status: MediaStatus,
+  payload: MediaPayload,
+) {
+  if (status !== "published") return [];
+  return getMediaPublishBlockingChecks(
+    payloadToMediaPublishInput(payload, mediaPayload, contentType),
+  );
+}
+
+export function getDraftValidationChecks(
+  contentType: MediaEditableContentType,
+  mediaPayload: MediaTopicPayload | null,
+  payload: MediaPayload,
+) {
+  return getMediaDraftBlockingChecks(
+    payloadToMediaPublishInput(payload, mediaPayload, contentType),
+  );
 }
 
 export function resolveWriteMediaPayload(

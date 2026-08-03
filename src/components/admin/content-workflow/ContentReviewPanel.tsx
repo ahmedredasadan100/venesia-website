@@ -78,8 +78,8 @@ const ANALYSIS_CARDS: readonly AnalysisCardDefinition[] = [
   {
     id: "validation",
     title: "التحقق العام (Validation)",
-    description: "الحقول الأساسية التي تحكم قبول الحفظ والنشر.",
-    checkIds: ["title", "slug", "category", "excerpt"],
+    description: "ملخص موانع النشر من بيانات النموذج؛ يتحقق الخادم نهائيًا من القيود الحية عند الحفظ.",
+    checkIds: [],
   },
 ] as const;
 
@@ -245,7 +245,9 @@ export default function ContentReviewPanel({
 
   const checks = useMemo(() => buildContentReviewChecks(input), [input]);
   const score = useMemo(() => getContentReviewScore(checks), [checks]);
-  const blockingIssues = checks.filter((item) => item.status === "fail");
+  const blockingIssues = checks.filter(
+    (item) => item.blocksPublish && item.status === "fail",
+  );
   const suggestions = checks.filter(
     (item) => item.status === "warn" || item.status === "info",
   );
@@ -373,7 +375,7 @@ export default function ContentReviewPanel({
         <div className="mt-4" data-content-review-validation-row>
           <ReviewAnalysisCard
             definition={VALIDATION_ANALYSIS_CARD}
-            items={checks.filter((item) => VALIDATION_ANALYSIS_CARD.checkIds.includes(item.id))}
+            items={blockingIssues}
             expanded={expandedCards.has(VALIDATION_ANALYSIS_CARD.id)}
             onToggle={() => toggleCard(VALIDATION_ANALYSIS_CARD.id)}
             variant="validation"
@@ -408,9 +410,9 @@ export default function ContentReviewPanel({
           )}
         </section>
 
-        <section className="rounded-[22px] border border-white/10 bg-[#090D13]/82 p-5" aria-labelledby="content-review-log-title" data-content-review-log>
+        <section className="rounded-[22px] border border-white/10 bg-[#090D13]/82 p-5" aria-labelledby="content-review-status-summary-title" data-content-review-status-summary>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#D8B87A]/65">عرض فقط</p>
-          <h2 id="content-review-log-title" className="mt-1 text-base font-semibold text-white/85">سجل المراجعة</h2>
+          <h2 id="content-review-status-summary-title" className="mt-1 text-base font-semibold text-white/85">ملخص الحالة</h2>
           <ol className="mt-4 space-y-0">
             <TimelineEntry title="آخر حفظ" value={formatAuditTimestamp(updatedAt)} />
             <TimelineEntry title="حالة النشر الحالية" value={statusLabel(input.status)} />
@@ -457,12 +459,16 @@ function ReviewAnalysisCard({
 }) {
   const score = getContentReviewScore(items);
   const issues = items.filter((item) => item.status !== "pass");
-  const errors = issues.filter((item) => item.status === "fail").length;
+  const errors = issues.filter(
+    (item) => item.blocksPublish && item.status === "fail",
+  ).length;
   const warnings = issues.filter((item) => item.status === "warn").length;
   const improvements = issues.filter((item) => item.status === "info").length;
   const topIssue = issues.find((item) => item.status === "fail") ?? issues[0];
   const panelId = `content-review-analysis-${definition.id}`;
-  const publicationBlocked = errors > 0;
+  const publicationBlocked = items.some(
+    (item) => item.blocksPublish && item.status === "fail",
+  );
 
   return (
     <article

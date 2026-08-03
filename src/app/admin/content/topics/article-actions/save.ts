@@ -14,18 +14,15 @@ import {
 } from "../../../../../lib/admin/media-catalog/write-lease";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
-  ENTITY_SEO_LIMITS,
-  validateEntitySeoValues,
-} from "../../../../../lib/seo/entity-seo-types";
-import {
   buildTopicWritePayload,
+  getDraftBlockingChecks,
+  getPublishBlockingChecks,
   getNormalizedStatus,
   getPayload,
   preserveImage,
   preserveText,
   uploadTopicImage,
   validateId,
-  validateSlug,
 } from "./helpers";
 import {
   ensureUniqueSlug,
@@ -66,101 +63,17 @@ function addFieldError(
   fieldErrors[field] = [...(fieldErrors[field] ?? []), message];
 }
 
-function hasPartialFaq(formData: FormData) {
-  const questions = formData.getAll("faq_question").map(String);
-  const answers = formData.getAll("faq_answer").map(String);
-  const count = Math.max(questions.length, answers.length);
-  return Array.from({ length: count }, (_, index) => ({
-    question: questions[index]?.trim() ?? "",
-    answer: answers[index]?.trim() ?? "",
-  })).some((item) => Boolean(item.question) !== Boolean(item.answer));
-}
-
 function validateTopicFields(
   payload: TopicPayload,
   publishing: boolean,
-  partialFaq: boolean,
 ) {
   const fieldErrors: FieldErrors = {};
-
-  for (const issue of validateEntitySeoValues(payload)) {
-    addFieldError(fieldErrors, issue.field, issue.message);
+  const issues = publishing
+    ? getPublishBlockingChecks(payload)
+    : getDraftBlockingChecks(payload);
+  for (const issue of issues) {
+    addFieldError(fieldErrors, issue.field ?? "status", issue.hint);
   }
-
-  if (!payload.title) addFieldError(fieldErrors, "title", "العنوان مطلوب.");
-  if (!payload.slug) {
-    addFieldError(fieldErrors, "slug", "الرابط مطلوب.");
-  } else if (!validateSlug(payload.slug)) {
-    addFieldError(
-      fieldErrors,
-      "slug",
-      "استخدم حروفًا إنجليزية صغيرة وأرقامًا وشرطات فقط.",
-    );
-  }
-  if (!payload.categoryId) {
-    addFieldError(fieldErrors, "category_id", "التصنيف مطلوب.");
-  }
-  if (partialFaq) {
-    addFieldError(
-      fieldErrors,
-      "faq_question",
-      "أكمل السؤال والإجابة لكل عنصر FAQ أو احذف الصف الناقص.",
-    );
-  }
-
-  if (!publishing) return fieldErrors;
-
-  if (!payload.content.trim()) {
-    addFieldError(fieldErrors, "content", "محتوى الموضوع مطلوب قبل النشر.");
-  }
-  if (payload.excerpt.trim().length < 20) {
-    addFieldError(
-      fieldErrors,
-      "excerpt",
-      "الوصف المختصر مطلوب ولا يقل عن 20 حرفًا.",
-    );
-  }
-  if (!payload.image.trim()) {
-    addFieldError(fieldErrors, "image", "الصورة الرئيسية مطلوبة.");
-  } else if (!payload.imageAlt.trim()) {
-    addFieldError(
-      fieldErrors,
-      "image_alt",
-      "وصف الصورة Alt Text مطلوب قبل النشر.",
-    );
-  }
-  if (!payload.focusKeyword.trim()) {
-    addFieldError(
-      fieldErrors,
-      "focus_keyword",
-      "Focus Keyword مطلوب قبل النشر.",
-    );
-  }
-  if (!payload.seoTitle.trim()) {
-    addFieldError(fieldErrors, "seo_title", "SEO Title مطلوب قبل النشر.");
-  } else if (payload.seoTitle.length < ENTITY_SEO_LIMITS.title.min) {
-    addFieldError(
-      fieldErrors,
-      "seo_title",
-      `يجب ألا يقل SEO Title عن ${ENTITY_SEO_LIMITS.title.min} حرفًا.`,
-    );
-  }
-  if (!payload.seoDescription.trim()) {
-    addFieldError(
-      fieldErrors,
-      "seo_description",
-      "SEO Description مطلوب قبل النشر.",
-    );
-  } else if (
-    payload.seoDescription.length < ENTITY_SEO_LIMITS.description.min
-  ) {
-    addFieldError(
-      fieldErrors,
-      "seo_description",
-      `يجب ألا يقل SEO Description عن ${ENTITY_SEO_LIMITS.description.min} حرفًا.`,
-    );
-  }
-
   return fieldErrors;
 }
 
@@ -217,13 +130,12 @@ export async function saveArticleContentAdapter(
   }
 
   const payload = getPayload(formData);
-  const partialFaq = hasPartialFaq(formData);
   const nextStatus = getNormalizedStatus(
     String(formData.get("status") ?? "draft"),
     "draft",
   );
 
-  const baseErrors = validateTopicFields(payload, false, partialFaq);
+  const baseErrors = validateTopicFields(payload, false);
   if (Object.keys(baseErrors).length) {
     return formFailure("راجع الحقول الموضحة ثم حاول مرة أخرى.", baseErrors);
   }
@@ -277,7 +189,6 @@ export async function saveArticleContentAdapter(
   const publishErrors = validateTopicFields(
     hasPendingImageUpload ? { ...payload, image: "pending-upload" } : payload,
     nextStatus === "published",
-    partialFaq,
   );
   if (Object.keys(publishErrors).length) {
     return formFailure(
