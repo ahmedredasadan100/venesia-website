@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useRef, useState, useTransition } from "react";
+import AdminEntityListFilters from "../entity-list/AdminEntityListFilters";
 import {
   AdminFeedbackRegion,
   useAdminFeedback,
@@ -14,6 +15,7 @@ import {
   ADMIN_FORM,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminBulkActionBar,
+  AdminColumnVisibilityMenu,
   AdminDataGrid,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
@@ -24,6 +26,8 @@ import {
   AdminDataGridRow,
   AdminDataGridRowActions,
   AdminDataGridStatusCell,
+  AdminFormError,
+  AdminFormRuntime,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   AdminPageExperience,
@@ -36,8 +40,25 @@ import {
   type AdminRowActionsCapability,
   useAdminGridSelection,
 } from "../ui";
+import type { AdminFormRuntimeHandle } from "../ui/AdminFormRuntime";
 import { PlusIcon } from "../AdminRowActions";
+import type { AdminFormAction } from "../../../lib/admin/form-runtime";
+import {
+  adminCollectionSearchIncludes,
+  applyAdminEntityUrlPatch,
+  useAdminBoundedClientPagination,
+} from "../../../lib/admin/entity-list";
+import {
+  getPageCompositionColumnPreferenceConfig,
+  getPageCompositionDefaultColumnKeys,
+  normalizePageCompositionVisibleColumnKeys,
+  type PageCompositionColumnPreferenceId,
+} from "../../../lib/page-blocks/admin-collection-columns";
 import { statusMeta } from "../../../lib/page-blocks/admin-utils";
+import {
+  restorePageCompositionColumnPreferences,
+  savePageCompositionColumnPreferences,
+} from "../../../app/admin/pages-blocks/column-preferences";
 
 export type BlockModuleRow = {
   id: number;
@@ -49,11 +70,11 @@ export type BlockModuleRow = {
 };
 
 type BlockModuleManagerClientProps = {
-  moduleKey: "content" | "cta" | "cards" | "breadcrumb" | "feed";
+  moduleKey: "cta" | "cards" | "breadcrumb" | "feed";
   moduleTitle: string;
   moduleDescription: string;
   rows: BlockModuleRow[];
-  createAction: (formData: FormData) => Promise<void>;
+  createAction: AdminFormAction;
   deleteAction: (formData: FormData) => Promise<void>;
   duplicateAction: (formData: FormData) => Promise<void>;
   toggleAction: (formData: FormData) => Promise<void>;
@@ -62,10 +83,20 @@ type BlockModuleManagerClientProps = {
   variantOptions: Array<[string, string]>;
   loadError?: string | null;
   mediaSynchronizationWarning?: boolean;
+  initialVisibleColumns?: readonly string[] | null;
+  preferenceError?: string | null;
 };
 
-const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} minmax(180px,1fr) 120px ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
+const COLUMN_PREFERENCE_ID_BY_MODULE = {
+  breadcrumb: "breadcrumbTemplates",
+  cards: "cardsTemplates",
+  cta: "ctaTemplates",
+  feed: "feedTemplates",
+} as const satisfies Record<
+  BlockModuleManagerClientProps["moduleKey"],
+  PageCompositionColumnPreferenceId
+>;
 
 function mutationFormData(fields: Record<string, string | number>) {
   const formData = new FormData();
@@ -89,22 +120,65 @@ export default function BlockModuleManagerClient({
   variantOptions,
   loadError = null,
   mediaSynchronizationWarning = false,
+  initialVisibleColumns = null,
+  preferenceError = null,
 }: BlockModuleManagerClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const feedbackChannel = `block-manager:${moduleKey}`;
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const createRuntimeRef = useRef<AdminFormRuntimeHandle>(null);
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const [isRefreshPending, startRefreshTransition] = useTransition();
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const resolvedCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedRows = useMemo(
-    () => rows.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
-    [pageSize, resolvedCurrentPage, rows],
+  const columnPreferenceId = COLUMN_PREFERENCE_ID_BY_MODULE[moduleKey];
+  const columnConfig = getPageCompositionColumnPreferenceConfig(columnPreferenceId);
+  const defaultColumns = getPageCompositionDefaultColumnKeys(columnPreferenceId);
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+    normalizePageCompositionVisibleColumnKeys(
+      columnPreferenceId,
+      initialVisibleColumns,
+    ),
   );
-  const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
+  const visibleColumnSet = useMemo(
+    () => new Set(visibleColumns),
+    [visibleColumns],
+  );
+  const gridColumns = useMemo(
+    () =>
+      [
+        ADMIN_DATA_GRID_COLUMNS.checkbox,
+        ADMIN_DATA_GRID_COLUMNS.primaryStandard,
+        visibleColumnSet.has("slug") ? "minmax(180px,1fr)" : null,
+        visibleColumnSet.has("variant") ? "120px" : null,
+        visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusStandard : null,
+        ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
+      ]
+        .filter((column) => column !== null)
+        .join(" "),
+    [visibleColumnSet],
+  );
+  const search = searchParams.get("q") ?? "";
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) =>
+        adminCollectionSearchIncludes(
+          `${row.name} ${row.slug} ${row.description ?? ""} ${row.variant}`,
+          search,
+        ),
+      ),
+    [rows, search],
+  );
+  const pagination = useAdminBoundedClientPagination({
+    rows: filteredRows,
+    datasetKey: `${moduleKey}|${search}|${filteredRows.map((row) => row.id).sort().join("|")}`,
+    defaultPageSize: PAGE_SIZE,
+  });
+  const paginatedRows = pagination.rows;
+  const visibleIds = useMemo(
+    () => paginatedRows.map((row) => row.id),
+    [paginatedRows],
+  );
   const selection = useAdminGridSelection<number>(visibleIds);
   const isBusy = pendingRowId !== null || isRefreshPending;
   const loadFeedback = useMemo(
@@ -166,6 +240,10 @@ export default function BlockModuleManagerClient({
     }
   }
 
+  function requestCreateClose() {
+    createRuntimeRef.current?.requestClose();
+  }
+
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageHeader
@@ -192,33 +270,92 @@ export default function BlockModuleManagerClient({
         feedback={loadFeedback}
       />
 
+      <AdminFeedbackRegion
+        channel={`${feedbackChannel}:columns`}
+        label={`حالة تفضيلات أعمدة ${moduleTitle}`}
+        feedback={
+          preferenceError
+            ? {
+                variant: "warning",
+                title: "تعذر تحميل تفضيلات الأعمدة",
+                message: preferenceError,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "persistent",
+              }
+            : null
+        }
+      />
+
       {mediaWarningNotice}
 
-      <AdminBulkActionBar
-        selectedIds={selection.selectedIds}
-        entityLabel="بلوك"
-        options={[
-          { value: "publish", label: "نشر" },
-          { value: "hide", label: "إخفاء" },
-          { value: "draft", label: "مسودة" },
-          { value: "delete", label: "حذف" },
-        ]}
-        onClearSelection={selection.clearSelection}
-        isBusy={isBusy}
-        onExecute={async (action, ids) => {
-          const formData = new FormData();
-          formData.set("bulk_action", action);
-          ids.forEach((id) => formData.append("ids", String(id)));
-          const succeeded = await runMutation(null, () => bulkAction(formData), "تم تنفيذ الإجراء الجماعي على البلوكات المحددة.");
-          if (!succeeded) {
-            if (action === "delete") throw new Error("bulk block delete failed");
-            return;
-          }
-          selection.clearSelection();
+      <AdminEntityListFilters
+        basePath={`/admin/pages-blocks/blocks/${moduleKey}`}
+        search={{
+          value: search,
+          placeholder: "ابحث باسم البلوك أو الـslug أو الـvariant…",
+          minLength: 1,
+          pending: isBusy,
+        }}
+        filters={[]}
+        values={{}}
+        columnsControl={
+          <AdminColumnVisibilityMenu
+            columns={columnConfig.columns}
+            visibleColumns={visibleColumns}
+            defaultColumns={defaultColumns}
+            onChange={setVisibleColumns}
+            onPersist={(next) =>
+              savePageCompositionColumnPreferences(columnPreferenceId, next)
+            }
+            onRestore={() =>
+              restorePageCompositionColumnPreferences(columnPreferenceId)
+            }
+          />
+        }
+        contextOverrideActive={selection.selectedIds.length > 0}
+        contextOverride={
+          <AdminBulkActionBar
+            selectedIds={selection.selectedIds}
+            entityLabel="بلوك"
+            options={[
+              { value: "publish", label: "نشر" },
+              { value: "hide", label: "إخفاء" },
+              { value: "draft", label: "مسودة" },
+              { value: "delete", label: "حذف" },
+            ]}
+            onClearSelection={selection.clearSelection}
+            isBusy={isBusy}
+            onExecute={async (action, ids) => {
+              const formData = new FormData();
+              formData.set("bulk_action", action);
+              ids.forEach((id) => formData.append("ids", String(id)));
+              const succeeded = await runMutation(null, () => bulkAction(formData), "تم تنفيذ الإجراء الجماعي على البلوكات المحددة.");
+              if (!succeeded) {
+                if (action === "delete") throw new Error("bulk block delete failed");
+                return;
+              }
+              selection.clearSelection();
+            }}
+          />
+        }
+        onQueryPatch={(patch, behavior = "push") => {
+          const next = applyAdminEntityUrlPatch(
+            new URLSearchParams(window.location.search),
+            patch,
+          );
+          const query = next.toString();
+          window.history[
+            behavior === "replace" ? "replaceState" : "pushState"
+          ](
+            window.history.state,
+            "",
+            `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+          );
         }}
       />
 
-      <AdminDataGrid summary={rows.length ? `${rows.length} بلوك` : undefined}>
+      <AdminDataGrid className="!rounded-t-none !border-t-0" summary={filteredRows.length ? `${filteredRows.length} بلوك` : undefined}>
         <AdminDataGridHeader columns={gridColumns}>
           <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
@@ -229,9 +366,15 @@ export default function BlockModuleManagerClient({
             />
           </AdminDataGridCheckboxCell>
           <AdminDataGridPrimaryCell>الاسم</AdminDataGridPrimaryCell>
-          <AdminDataGridCenterCell>Slug</AdminDataGridCenterCell>
-          <AdminDataGridCenterCell>Variant</AdminDataGridCenterCell>
-          <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+          {visibleColumnSet.has("slug") ? (
+            <AdminDataGridCenterCell>Slug</AdminDataGridCenterCell>
+          ) : null}
+          {visibleColumnSet.has("variant") ? (
+            <AdminDataGridCenterCell>Variant</AdminDataGridCenterCell>
+          ) : null}
+          {visibleColumnSet.has("status") ? (
+            <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+          ) : null}
           <div className="text-center">الإجراءات</div>
         </AdminDataGridHeader>
 
@@ -329,43 +472,46 @@ export default function BlockModuleManagerClient({
                 {row.description ? <p className="mt-1 line-clamp-1 text-xs text-white/36">{row.description}</p> : null}
               </AdminDataGridPrimaryCell>
 
-              <AdminDataGridCenterCell>
-                <Link
-                  href={`/admin/pages-blocks/blocks/${moduleKey}/${row.id}`}
-                  className="font-en text-xs text-[#D8B87A]/78 transition hover:text-[#D8B87A]"
-                >
-                  {row.slug}
-                </Link>
-              </AdminDataGridCenterCell>
+              {visibleColumnSet.has("slug") ? (
+                <AdminDataGridCenterCell>
+                  <Link
+                    href={`/admin/pages-blocks/blocks/${moduleKey}/${row.id}`}
+                    className="font-en text-xs text-[#D8B87A]/78 transition hover:text-[#D8B87A]"
+                  >
+                    {row.slug}
+                  </Link>
+                </AdminDataGridCenterCell>
+              ) : null}
 
-              <AdminDataGridCenterCell className="text-white/58">{row.variant}</AdminDataGridCenterCell>
+              {visibleColumnSet.has("variant") ? (
+                <AdminDataGridCenterCell className="text-white/58">{row.variant}</AdminDataGridCenterCell>
+              ) : null}
 
-              <AdminDataGridStatusCell className="flex-col gap-1">
-                <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-                {row.status !== "published" ? (
-                  <p className="mt-1 text-[10px] leading-5 text-amber-200/75">غير منشور — لن يظهر على الصفحات العامة.</p>
-                ) : null}
-              </AdminDataGridStatusCell>
+              {visibleColumnSet.has("status") ? (
+                <AdminDataGridStatusCell className="flex-col gap-1">
+                  <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+                  {row.status !== "published" ? (
+                    <p className="mt-1 text-[10px] leading-5 text-amber-200/75">غير منشور — لن يظهر على الصفحات العامة.</p>
+                  ) : null}
+                </AdminDataGridStatusCell>
+              ) : null}
 
               <AdminDataGridRowActions capability={capability} size="compact" />
             </AdminDataGridRow>
           );
         })}
 
-        {!rows.length ? <AdminDataGridEmpty>لا توجد بلوكات بعد.</AdminDataGridEmpty> : null}
+        {!filteredRows.length ? <AdminDataGridEmpty>لا توجد بلوكات مطابقة.</AdminDataGridEmpty> : null}
       </AdminDataGrid>
 
       <AdminTablePagination
         basePath={`/admin/pages-blocks/blocks/${moduleKey}`}
-        currentPage={resolvedCurrentPage}
-        totalPages={totalPages}
-        totalCount={rows.length}
-        pageSize={String(pageSize)}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(nextPageSize) => {
-          setPageSize(nextPageSize);
-          setCurrentPage(1);
-        }}
+        currentPage={pagination.page}
+        totalPages={pagination.totalPages}
+        totalCount={pagination.totalCount}
+        pageSize={String(pagination.pageSize)}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
         pending={isBusy}
       />
 
@@ -374,68 +520,106 @@ export default function BlockModuleManagerClient({
         title="إضافة بلوك جديد"
         description="أنشئ القالب ثم عدّل المحتوى واربطه بالصفحات. البلوكات الجديدة تُنشأ كمسودة."
         size="md"
-        onClose={() => setShowCreateModal(false)}
-        footer={(
-          <>
-            <AdminModalCancelButton onClick={() => setShowCreateModal(false)}>إلغاء</AdminModalCancelButton>
-            <AdminModalPrimaryButton type="submit" form={`create-${moduleKey}-block-form`}>
-              إنشاء وفتح
-            </AdminModalPrimaryButton>
-          </>
-        )}
+        onClose={requestCreateClose}
       >
-        <form id={`create-${moduleKey}-block-form`} action={createAction} className={ADMIN_FORM.grid}>
-          <label className={adminFormLabelClassName()}>
-            الاسم
-            <input name="name" required className={adminFormFieldClassName()} />
-          </label>
-          <label className={adminFormLabelClassName()}>
-            Slug
-            <input
-              name="slug"
-              dir="ltr"
-              placeholder={`${moduleKey}-example`}
-              className={adminFormFieldClassName("text-left font-en")}
-            />
-          </label>
-          <label className={adminFormLabelClassName()}>
-            {moduleKey === "feed" ? "Feed Type" : "Variant"}
-            <select
-              name={moduleKey === "feed" ? "feed_type" : "variant"}
-              defaultValue={defaultVariant}
-              className={adminFormFieldClassName()}
-            >
-              {variantOptions.map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-          </label>
-          {moduleKey === "feed" ? (
+        <AdminFormRuntime
+          action={createAction}
+          mode="create"
+          entityKey={`${moduleKey}-block-quick-create`}
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => setShowCreateModal(false)}
+          runtimeRef={createRuntimeRef}
+          formId={`create-${moduleKey}-block-form`}
+          className={ADMIN_FORM.grid}
+        >
+          {({ fieldErrors, pending, requestClose }) => (
             <>
+              <AdminFormError />
               <label className={adminFormLabelClassName()}>
-                Widget Title
+                الاسم
                 <input
-                  name="widget_title"
+                  name="name"
                   required
-                  placeholder="أحدث الموضوعات"
-                  className={adminFormFieldClassName()}
+                  className={adminFormFieldClassName(
+                    fieldErrors.name?.length ? "border-red-400/40" : "",
+                  )}
+                  aria-invalid={Boolean(fieldErrors.name?.length)}
+                  aria-describedby={fieldErrors.name?.length ? "name-error" : undefined}
                 />
+                <AdminFormError name="name" />
               </label>
               <label className={adminFormLabelClassName()}>
-                Limit
+                Slug
                 <input
-                  name="limit"
-                  type="number"
-                  min={1}
-                  defaultValue={3}
-                  className={adminFormFieldClassName()}
+                  name="slug"
+                  dir="ltr"
+                  placeholder={`${moduleKey}-example`}
+                  className={adminFormFieldClassName(
+                    `text-left font-en ${fieldErrors.slug?.length ? "border-red-400/40" : ""}`,
+                  )}
+                  aria-invalid={Boolean(fieldErrors.slug?.length)}
+                  aria-describedby={fieldErrors.slug?.length ? "slug-error" : undefined}
                 />
+                <AdminFormError name="slug" />
               </label>
+              <label className={adminFormLabelClassName()}>
+                {moduleKey === "feed" ? "Feed Type" : "Variant"}
+                <select
+                  name={moduleKey === "feed" ? "feed_type" : "variant"}
+                  defaultValue={defaultVariant}
+                  className={adminFormFieldClassName()}
+                >
+                  {variantOptions.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              {moduleKey === "feed" ? (
+                <>
+                  <label className={adminFormLabelClassName()}>
+                    Widget Title
+                    <input
+                      name="widget_title"
+                      required
+                      placeholder="أحدث الموضوعات"
+                      className={adminFormFieldClassName(
+                        fieldErrors.widget_title?.length ? "border-red-400/40" : "",
+                      )}
+                      aria-invalid={Boolean(fieldErrors.widget_title?.length)}
+                      aria-describedby={fieldErrors.widget_title?.length ? "widget_title-error" : undefined}
+                    />
+                    <AdminFormError name="widget_title" />
+                  </label>
+                  <label className={adminFormLabelClassName()}>
+                    Limit
+                    <input
+                      name="limit"
+                      type="number"
+                      min={1}
+                      defaultValue={3}
+                      className={adminFormFieldClassName(
+                        fieldErrors.limit?.length ? "border-red-400/40" : "",
+                      )}
+                      aria-invalid={Boolean(fieldErrors.limit?.length)}
+                      aria-describedby={fieldErrors.limit?.length ? "limit-error" : undefined}
+                    />
+                    <AdminFormError name="limit" />
+                  </label>
+                </>
+              ) : null}
+              <input type="hidden" name="status" value="draft" />
+              <input type="hidden" name="style_preset" value="premium-dark" />
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+                <AdminModalCancelButton onClick={requestClose} disabled={pending}>
+                  إلغاء
+                </AdminModalCancelButton>
+                <AdminModalPrimaryButton type="submit" disabled={pending}>
+                  {pending ? "جار الإنشاء..." : "إنشاء وفتح"}
+                </AdminModalPrimaryButton>
+              </div>
             </>
-          ) : null}
-          <input type="hidden" name="status" value="draft" />
-          <input type="hidden" name="style_preset" value="premium-dark" />
-        </form>
+          )}
+        </AdminFormRuntime>
       </VenesiaModal>
     </AdminPageExperience>
   );

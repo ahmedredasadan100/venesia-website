@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import {
   synchronizeMediaReferenceWriteScopesAfterDomainMutation,
@@ -58,44 +59,131 @@ async function ensureUniqueSlug(slug: string, id?: number) {
   return !data;
 }
 
-export async function createFeedModule(formData: FormData) {
+export type CreateFeedModuleFormActionState = AdminFormActionState;
+
+function createFeedModuleFailure(
+  revision: number,
+  message: string,
+  field?: "name" | "slug" | "widget_title" | "limit",
+): CreateFeedModuleFormActionState {
+  return {
+    status: "error",
+    mode: "create",
+    revision,
+    title: "تعذر إنشاء Feed Module",
+    message,
+    ...(field
+      ? { fieldErrors: { [field]: [message] }, focusTarget: field }
+      : {}),
+  };
+}
+
+function createFeedModuleSuccess(
+  revision: number,
+  id: number,
+  mediaWarning: boolean,
+  infrastructureWarning?: string,
+): CreateFeedModuleFormActionState {
+  const warning = mediaWarning || Boolean(infrastructureWarning);
+  return {
+    status: warning ? "warning" : "success",
+    mode: "create",
+    revision,
+    title: warning ? "تم إنشاء Feed Module مع تنبيه" : "تم إنشاء Feed Module",
+    message:
+      infrastructureWarning ??
+      (mediaWarning
+        ? "تم إنشاء الموديول، لكن مزامنة مراجع الوسائط تحتاج إلى مراجعة."
+        : "تم إنشاء الموديول كمسودة بنجاح."),
+    code: warning ? "created_with_warning" : "created",
+    entityId: id,
+    editHref: `/admin/pages-blocks/blocks/feed/${id}${mediaWarning ? "?notice=saved_with_media_sync_warning" : ""}`,
+    savedRevision: `${id}:${revision}`,
+  };
+}
+
+export async function createFeedModule(
+  previousState: CreateFeedModuleFormActionState,
+  formData: FormData,
+): Promise<CreateFeedModuleFormActionState> {
+  const revision = previousState.revision + 1;
   const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
+  const widgetTitle = cleanText(formData.get("widget_title"));
+  const limit = Number(cleanText(formData.get("limit")));
 
-  if (!name || !slug) throw new Error("اسم الموديول والـ slug مطلوبين.");
-  if (!(await ensureUniqueSlug(slug))) throw new Error("الـ slug مستخدم بالفعل.");
+  if (!name) return createFeedModuleFailure(revision, "اسم الموديول مطلوب.", "name");
+  if (!slug) return createFeedModuleFailure(revision, "اكتب slug صالحًا للموديول.", "slug");
+  if (!widgetTitle) {
+    return createFeedModuleFailure(
+      revision,
+      "عنوان الـWidget مطلوب.",
+      "widget_title",
+    );
+  }
+  if (!Number.isInteger(limit) || limit < 1) {
+    return createFeedModuleFailure(
+      revision,
+      "Limit يجب أن يكون رقمًا صحيحًا أكبر من أو يساوي 1.",
+      "limit",
+    );
+  }
+  if (!(await ensureUniqueSlug(slug))) {
+    return createFeedModuleFailure(revision, "الـ slug مستخدم بالفعل.", "slug");
+  }
 
-  const nextRow = {
-    name,
-    slug,
-    description: cleanText(formData.get("description")) || null,
-    status: getStatus(cleanText(formData.get("status")) || "draft"),
-    feed_type: readFeedType(formData.get("feed_type")),
-    config: await sanitizeFeedModuleConfig(formData),
-  };
-  const provisionalIdentity = `create:${crypto.randomUUID()}`;
-  const coordinated = await coordinateMediaReferenceEntityMutation({
-    domainKey: "feed_module_templates",
-    leaseEntityIdentity: provisionalIdentity,
-    intendedRow: nextRow,
-    actorId: actor.id,
-    requestIdentity: `feed-module:create:${provisionalIdentity}`,
-    mutate: async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("feed_module_templates")
-        .insert(nextRow)
-        .select("id")
-        .single<{ id: number }>();
-      if (error || !data) throw new Error(error?.message ?? "Unable to create feed module.");
-      return data;
-    },
-    resolveEntityIdentity: (value) => String(value.id),
-  });
-  const data = coordinated.value;
+  let createdId: number | null = null;
+  let mediaWarning = false;
+  try {
+    const nextRow = {
+      name,
+      slug,
+      description: cleanText(formData.get("description")) || null,
+      status: getStatus(cleanText(formData.get("status")) || "draft"),
+      feed_type: readFeedType(formData.get("feed_type")),
+      config: await sanitizeFeedModuleConfig(formData),
+    };
+    const provisionalIdentity = `create:${crypto.randomUUID()}`;
+    const coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "feed_module_templates",
+      leaseEntityIdentity: provisionalIdentity,
+      intendedRow: nextRow,
+      actorId: actor.id,
+      requestIdentity: `feed-module:create:${provisionalIdentity}`,
+      mutate: async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from("feed_module_templates")
+          .insert(nextRow)
+          .select("id")
+          .single<{ id: number }>();
+        if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء Feed Module.");
+        return data;
+      },
+      resolveEntityIdentity: (value) => String(value.id),
+    });
+    const data = coordinated.value;
+    createdId = data.id;
+    mediaWarning = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
 
-  await revalidateBlockModulePaths("feed");
-  redirect(`/admin/pages-blocks/blocks/feed/${data.id}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "?notice=saved_with_media_sync_warning" : ""}`);
+    await revalidateBlockModulePaths("feed");
+    return createFeedModuleSuccess(revision, data.id, mediaWarning);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "تعذر إنشاء Feed Module. حاول مرة أخرى.";
+    if (createdId) {
+      return createFeedModuleSuccess(
+        revision,
+        createdId,
+        mediaWarning,
+        `تم إنشاء الموديول، لكن تعذر إكمال التحقق اللاحق: ${message}`,
+      );
+    }
+    return createFeedModuleFailure(
+      revision,
+      message,
+      message.toLowerCase().includes("slug") ? "slug" : undefined,
+    );
+  }
 }
 
 export async function updateFeedModule(formData: FormData) {

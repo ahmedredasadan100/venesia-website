@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import {
   synchronizeMediaReferenceWriteScopesAfterDomainMutation,
@@ -57,45 +58,116 @@ async function ensureUniqueSlug(slug: string, id?: number) {
   return !data;
 }
 
-export async function createBreadcrumbBlock(formData: FormData) {
+export type CreateBreadcrumbBlockFormActionState = AdminFormActionState;
+
+function createBreadcrumbBlockFailure(
+  revision: number,
+  message: string,
+  field?: "name" | "slug",
+): CreateBreadcrumbBlockFormActionState {
+  return {
+    status: "error",
+    mode: "create",
+    revision,
+    title: "تعذر إنشاء بلوك Breadcrumb",
+    message,
+    ...(field
+      ? { fieldErrors: { [field]: [message] }, focusTarget: field }
+      : {}),
+  };
+}
+
+function createBreadcrumbBlockSuccess(
+  revision: number,
+  id: number,
+  mediaWarning: boolean,
+  infrastructureWarning?: string,
+): CreateBreadcrumbBlockFormActionState {
+  const warning = mediaWarning || Boolean(infrastructureWarning);
+  return {
+    status: warning ? "warning" : "success",
+    mode: "create",
+    revision,
+    title: warning ? "تم إنشاء بلوك Breadcrumb مع تنبيه" : "تم إنشاء بلوك Breadcrumb",
+    message:
+      infrastructureWarning ??
+      (mediaWarning
+        ? "تم إنشاء البلوك، لكن مزامنة مراجع الوسائط تحتاج إلى مراجعة."
+        : "تم إنشاء البلوك كمسودة بنجاح."),
+    code: warning ? "created_with_warning" : "created",
+    entityId: id,
+    editHref: `/admin/pages-blocks/blocks/breadcrumb/${id}${mediaWarning ? "?notice=saved_with_media_sync_warning" : ""}`,
+    savedRevision: `${id}:${revision}`,
+  };
+}
+
+export async function createBreadcrumbBlock(
+  previousState: CreateBreadcrumbBlockFormActionState,
+  formData: FormData,
+): Promise<CreateBreadcrumbBlockFormActionState> {
+  const revision = previousState.revision + 1;
   const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
-  if (!name || !slug) throw new Error("اسم البلوك والـ slug مطلوبين.");
-  if (!(await ensureUniqueSlug(slug))) throw new Error("الـ slug مستخدم بالفعل.");
+  if (!name) return createBreadcrumbBlockFailure(revision, "اسم البلوك مطلوب.", "name");
+  if (!slug) return createBreadcrumbBlockFailure(revision, "اكتب slug صالحًا للبلوك.", "slug");
+  if (!(await ensureUniqueSlug(slug))) {
+    return createBreadcrumbBlockFailure(revision, "الـ slug مستخدم بالفعل.", "slug");
+  }
 
-  const nextRow = {
-    name,
-    slug,
-    description: cleanText(formData.get("description")) || null,
-    variant: cleanText(formData.get("variant")) || "hero-inline",
-    style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-    status: getStatus(cleanText(formData.get("status")) || "draft"),
-    config: buildBreadcrumbConfig(formData),
-  };
-  const provisionalIdentity = `create:${crypto.randomUUID()}`;
-  const coordinated = await coordinateMediaReferenceEntityMutation({
-    domainKey: "breadcrumb_block_templates",
-    leaseEntityIdentity: provisionalIdentity,
-    intendedRow: nextRow,
-    actorId: actor.id,
-    requestIdentity: `breadcrumb-block:create:${provisionalIdentity}`,
-    mutate: async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("breadcrumb_block_templates")
-        .insert(nextRow)
-        .select("id")
-        .single<{ id: number }>();
-      if (error || !data) throw new Error(error?.message ?? "Unable to create breadcrumb block.");
-      return data;
-    },
-    resolveEntityIdentity: (value) => String(value.id),
-  });
-  const data = coordinated.value;
+  let createdId: number | null = null;
+  let mediaWarning = false;
+  try {
+    const nextRow = {
+      name,
+      slug,
+      description: cleanText(formData.get("description")) || null,
+      variant: cleanText(formData.get("variant")) || "hero-inline",
+      style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
+      status: getStatus(cleanText(formData.get("status")) || "draft"),
+      config: buildBreadcrumbConfig(formData),
+    };
+    const provisionalIdentity = `create:${crypto.randomUUID()}`;
+    const coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "breadcrumb_block_templates",
+      leaseEntityIdentity: provisionalIdentity,
+      intendedRow: nextRow,
+      actorId: actor.id,
+      requestIdentity: `breadcrumb-block:create:${provisionalIdentity}`,
+      mutate: async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from("breadcrumb_block_templates")
+          .insert(nextRow)
+          .select("id")
+          .single<{ id: number }>();
+        if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء بلوك Breadcrumb.");
+        return data;
+      },
+      resolveEntityIdentity: (value) => String(value.id),
+    });
+    const data = coordinated.value;
+    createdId = data.id;
+    mediaWarning = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
 
-  await revalidateBlockModulePaths("breadcrumb");
-  redirect(`/admin/pages-blocks/blocks/breadcrumb/${data.id}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "?notice=saved_with_media_sync_warning" : ""}`);
+    await revalidateBlockModulePaths("breadcrumb");
+    return createBreadcrumbBlockSuccess(revision, data.id, mediaWarning);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "تعذر إنشاء بلوك Breadcrumb. حاول مرة أخرى.";
+    if (createdId) {
+      return createBreadcrumbBlockSuccess(
+        revision,
+        createdId,
+        mediaWarning,
+        `تم إنشاء البلوك، لكن تعذر إكمال التحقق اللاحق: ${message}`,
+      );
+    }
+    return createBreadcrumbBlockFailure(
+      revision,
+      message,
+      message.toLowerCase().includes("slug") ? "slug" : undefined,
+    );
+  }
 }
 
 export async function updateBreadcrumbBlock(formData: FormData) {

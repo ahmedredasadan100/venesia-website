@@ -257,9 +257,10 @@ check(
     ),
 );
 check(
-  "Menu Items manifest declares its concrete fixed-column contract truthfully",
-  menuItemsManifest.includes('columnVisibility: "fixed_no_optional_columns"') &&
-    !menuItemsManifest.includes('columnVisibility: "shared_optional_columns"'),
+  "Menu Items manifest and consumer declare shared typed column preferences truthfully",
+  menuItemsManifest.includes('columnVisibility: "shared_optional_columns"') &&
+    menuItemsGrid.includes("AdminColumnVisibilityMenu") &&
+    menuItemsGrid.includes("savePageCompositionColumnPreferences"),
 );
 
 const failed = checks.filter((item) => !item.ok);

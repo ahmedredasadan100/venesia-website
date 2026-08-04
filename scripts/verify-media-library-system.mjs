@@ -795,10 +795,11 @@ check("physical move retains the new identity when Domain compensation is incomp
 
 const core = source("src/components/admin/media/MediaLibraryCore.tsx");
 const picker = source("src/components/admin/media/AdminMediaPickerModal.tsx");
+const sharedModal = source("src/components/admin/VenesiaModal.tsx");
 check("Manage and Select reuse one Media Library core", core.includes("data-media-library-mode") && picker.includes("<MediaLibraryCore"));
 check("picker selection changes a field only after explicit confirmation", picker.includes("onConfirmSelection") && core.includes("تأكيد الاختيار"));
 check("media previews use optimized next/image with responsive sizes", core.includes('from "next/image"') && core.includes("sizes={") && !core.includes("unoptimized"));
-check("picker traps focus, supports Escape, and restores focus", picker.includes('event.key === "Escape"') && picker.includes("event.key !== \"Tab\"") && picker.includes("previousFocus"));
+check("picker delegates focus trapping, Escape, and focus return to VenesiaModal", picker.includes("<VenesiaModal") && picker.includes("closeOnEscape") && !picker.includes("createPortal") && !picker.includes("document.addEventListener") && sharedModal.includes('event.key === "Escape" && closeOnEscape') && sharedModal.includes("focusReturnSnapshotRef"));
 check("multi-upload, folders, smart views, metadata and safe replacement are present", ["uploadFiles", "createFolder", "SMART_VIEWS", "updateMetadata", "stageReplacement"].every((token) => core.includes(token)));
 check("physical rename and move controls stay out of Select Mode", core.includes('mode === "manage" && selectedAssets.length === 1') && !picker.includes("move_asset"));
 check("summary and folder counters consume the merged read model", core.includes("data.summary.totalBytes") && core.includes("item.totalAssetCount") && core.includes("item.totalBytes"));
@@ -1006,7 +1007,7 @@ await mediaSettingsPolicyModule.saveMediaSettings(fixtureSettings);
 const reloadedFixtureSettings = await mediaSettingsPolicyModule.loadMediaSettings();
 assert.deepEqual(reloadedFixtureSettings, fixtureSettings);
 check("Media Settings success, validation, persistence reload, and no-audit-on-failure contracts pass with safe fixtures", true);
-check("shared picker portals to the viewport, locks the root scroller, and keeps one themed media scroller", picker.includes("createPortal") && picker.includes('root.style.overflow = "hidden"') && picker.includes("data-media-picker-scroll") && picker.includes("admin-scrollbar") && !picker.includes("overflow-x-hidden") && !core.includes("overflow-x-hidden"));
+check("shared picker adopts the viewport modal owner, locks the root scroller, and keeps one themed media scroller", picker.includes("<VenesiaModal") && picker.includes('size="xl"') && picker.includes('bodyClassName="flex flex-col !overflow-hidden !p-0"') && picker.includes("data-media-picker-scroll") && picker.includes("admin-scrollbar") && picker.includes("flex-1 overflow-y-auto") && sharedModal.includes('root.style.overflow = "hidden"') && sharedModal.includes('document.body.style.overflow = "hidden"') && !picker.includes("overflow-x-hidden") && !core.includes("overflow-x-hidden"));
 check("duplicate media-browse route is closed", !existsSync(resolve(ROOT, "src/app/api/admin/media-browse/route.ts")));
 check("topics-without-image report exists with server pagination", existsSync(resolve(ROOT, "src/app/admin/reports/topics-without-image/page.tsx")) && source("src/lib/admin/media-catalog/reports.ts").includes("range(from, from + pageSize - 1)"));
 

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 
 import AdminPageHeader from "../../../../../components/admin/AdminPageHeader";
 import { AdminPageExperience } from "../../../../../components/admin/ui";
+import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
+import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 
 import MenuBuilderClient from "../MenuBuilderClient";
@@ -21,9 +23,12 @@ export default async function Page({
   const menuId = Number(id);
   if (!Number.isFinite(menuId)) notFound();
 
-  const [menuResult, itemsResult] = await Promise.all([
+  const [menuResult, itemsResult, preference] = await Promise.all([
     getSupabaseAdmin().from("menus").select("id, name, slug, location, is_active").eq("id", menuId).maybeSingle(),
     getSupabaseAdmin().from("menu_items").select("*").eq("menu_id", menuId).order("sort_order", { ascending: true }),
+    readAdminColumnPreferences(
+      getPageCompositionColumnPreferenceConfig("menuItems").viewKey,
+    ),
   ]);
 
   if (!menuResult.data) notFound();
@@ -51,6 +56,8 @@ export default async function Page({
             ? `حدث خطأ أثناء قراءة عناصر القائمة: ${itemsResult.error.message}`
             : null
         }
+        initialVisibleColumns={preference.visibleColumns}
+        preferenceError={preference.error}
       />
     </AdminPageExperience>
   );

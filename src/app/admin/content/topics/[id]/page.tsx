@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import AdminNotice from "../../../../../components/admin/AdminNotice";
 import ArticleEditor, {
   type ArticleEditorCategory,
@@ -8,6 +7,7 @@ import ArticleEditor, {
 } from "../../../../../components/admin/content/editors/ArticleEditor";
 import {
   AdminActionButton,
+  AdminEntityPreviewActions,
   AdminPageContextHeader,
   AdminPageExperience,
 } from "../../../../../components/admin/ui";
@@ -26,6 +26,7 @@ import {
   ADMIN_CONTENT_ROUTES,
   isAdminContentReturnPath,
 } from "../../../../../lib/admin/content-routes";
+import { buildAdminContentPreviewCapability } from "../../../../../lib/admin/content/entity-preview-capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -128,14 +129,16 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
             <AdminActionButton href={returnPath} variant="dark">عرض الموضوعات</AdminActionButton>
             <AdminActionButton href="/admin/content/topics/new" variant="dark">إضافة محتوى</AdminActionButton>
             <AdminActionButton href="/admin/content/categories" variant="dark">إدارة التصنيفات</AdminActionButton>
-            <Link
-              href={`/admin/content/topics/${topic.id}/preview`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18"
-            >
-              معاينة داخلية
-            </Link>
+            <AdminEntityPreviewActions
+              capability={buildAdminContentPreviewCapability({
+                entityType: "topic",
+                id: topic.id,
+                contentType: topic.content_type,
+                slug: topic.slug,
+                publicationStatus: topic.status,
+                allowedActions: ["internal-preview"],
+              })}
+            />
           </>
         }
       />

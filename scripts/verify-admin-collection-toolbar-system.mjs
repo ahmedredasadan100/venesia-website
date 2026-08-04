@@ -127,6 +127,7 @@ const entityListAdopters = [
   "src/app/admin/seo/redirects/RedirectsClient.tsx",
   "src/app/admin/activity-log/ActivityLogClient.tsx",
   "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+  "src/app/admin/users-roles/UsersManagementClient.tsx",
 ];
 check(
   "Every server-page Entity List adopter delegates layout to toolbar props",
@@ -143,13 +144,14 @@ check(
 );
 
 const boundedAdopters = [
-  "src/app/admin/users-roles/UsersManagementClient.tsx",
   "src/components/admin/media/MediaLibraryCore.tsx",
   "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
   "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
   "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
   "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
   "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+  "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+  "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
 ];
 check(
   "Every bounded or specialized adopter uses the shared toolbar owner",
@@ -164,12 +166,13 @@ check(
 check(
   "Bounded adopters filter before the shared pagination slice",
   [
-    "src/app/admin/users-roles/UsersManagementClient.tsx",
     "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
     "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
     "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
     "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
     "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+    "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+    "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
   ].every((path) => {
     const source = read(path);
     return source.includes("useAdminBoundedClientPagination") &&

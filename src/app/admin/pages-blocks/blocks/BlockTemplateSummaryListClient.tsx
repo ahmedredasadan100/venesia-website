@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
+import AdminEntityListFilters from "../../../../components/admin/entity-list/AdminEntityListFilters";
 import MediaSynchronizationWarningNotice from "../../../../components/admin/media/MediaSynchronizationWarningNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  AdminColumnVisibilityMenu,
   AdminDataGrid,
   AdminDataGridCenterCell,
   AdminDataGridEmpty,
@@ -23,7 +26,22 @@ import {
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
+import {
+  adminCollectionSearchIncludes,
+  applyAdminEntityUrlPatch,
+  useAdminBoundedClientPagination,
+} from "../../../../lib/admin/entity-list";
+import {
+  getPageCompositionColumnPreferenceConfig,
+  getPageCompositionDefaultColumnKeys,
+  normalizePageCompositionVisibleColumnKeys,
+  type PageCompositionColumnPreferenceId,
+} from "../../../../lib/page-blocks/admin-collection-columns";
 import { statusMeta } from "../../../../lib/page-blocks/admin-utils";
+import {
+  restorePageCompositionColumnPreferences,
+  savePageCompositionColumnPreferences,
+} from "../column-preferences";
 
 type BlockTemplateSummaryRow = {
   id: number;
@@ -41,10 +59,18 @@ type BlockTemplateSummaryListClientProps = {
   rows: BlockTemplateSummaryRow[];
   errorMessage?: string | null;
   mediaSynchronizationWarning?: boolean;
+  initialVisibleColumns?: readonly string[] | null;
+  preferenceError?: string | null;
 };
 
-const columns = `${ADMIN_DATA_GRID_COLUMNS.primaryStandard} ${ADMIN_DATA_GRID_COLUMNS.slug} 160px ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
+const COLUMN_PREFERENCE_ID_BY_MODULE = {
+  "media-hub": "mediaHubTemplates",
+  "media-sidebar": "mediaSidebarTemplates",
+} as const satisfies Record<
+  BlockTemplateSummaryListClientProps["moduleKey"],
+  PageCompositionColumnPreferenceId
+>;
 
 export default function BlockTemplateSummaryListClient({
   moduleKey,
@@ -54,15 +80,53 @@ export default function BlockTemplateSummaryListClient({
   rows,
   errorMessage = null,
   mediaSynchronizationWarning = false,
+  initialVisibleColumns = null,
+  preferenceError = null,
 }: BlockTemplateSummaryListClientProps) {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const resolvedCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedRows = useMemo(
-    () => rows.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
-    [pageSize, resolvedCurrentPage, rows],
+  const searchParams = useSearchParams();
+  const columnPreferenceId = COLUMN_PREFERENCE_ID_BY_MODULE[moduleKey];
+  const columnConfig = getPageCompositionColumnPreferenceConfig(columnPreferenceId);
+  const defaultColumns = getPageCompositionDefaultColumnKeys(columnPreferenceId);
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+    normalizePageCompositionVisibleColumnKeys(
+      columnPreferenceId,
+      initialVisibleColumns,
+    ),
   );
+  const visibleColumnSet = useMemo(
+    () => new Set(visibleColumns),
+    [visibleColumns],
+  );
+  const columns = useMemo(
+    () =>
+      [
+        ADMIN_DATA_GRID_COLUMNS.primaryStandard,
+        visibleColumnSet.has("slug") ? ADMIN_DATA_GRID_COLUMNS.slug : null,
+        visibleColumnSet.has("detail") ? "160px" : null,
+        visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusStandard : null,
+        ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
+      ]
+        .filter((column) => column !== null)
+        .join(" "),
+    [visibleColumnSet],
+  );
+  const search = searchParams.get("q") ?? "";
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) =>
+        adminCollectionSearchIncludes(
+          `${row.name} ${row.slug} ${row.detail} ${row.status}`,
+          search,
+        ),
+      ),
+    [rows, search],
+  );
+  const pagination = useAdminBoundedClientPagination({
+    rows: filteredRows,
+    datasetKey: `${moduleKey}|${search}|${filteredRows.map((row) => row.id).sort().join("|")}`,
+    defaultPageSize: PAGE_SIZE,
+  });
+  const paginatedRows = pagination.rows;
   const basePath = `/admin/pages-blocks/blocks/${moduleKey}`;
 
   return (
@@ -91,14 +155,76 @@ export default function BlockTemplateSummaryListClient({
         }
       />
 
+      <AdminFeedbackRegion
+        channel={`block-manager:${moduleKey}:columns`}
+        label={`حالة تفضيلات أعمدة ${title}`}
+        feedback={
+          preferenceError
+            ? {
+                variant: "warning",
+                title: "تعذر تحميل تفضيلات الأعمدة",
+                message: preferenceError,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "persistent",
+              }
+            : null
+        }
+      />
+
       <MediaSynchronizationWarningNotice visible={mediaSynchronizationWarning} />
 
-      <AdminDataGrid summary={rows.length ? `${rows.length} بلوك` : undefined}>
+      <AdminEntityListFilters
+        basePath={basePath}
+        search={{
+          value: search,
+          placeholder: "ابحث باسم القالب أو الـslug أو التفاصيل…",
+          minLength: 1,
+        }}
+        filters={[]}
+        values={{}}
+        columnsControl={
+          <AdminColumnVisibilityMenu
+            columns={columnConfig.columns}
+            visibleColumns={visibleColumns}
+            defaultColumns={defaultColumns}
+            onChange={setVisibleColumns}
+            onPersist={(next) =>
+              savePageCompositionColumnPreferences(columnPreferenceId, next)
+            }
+            onRestore={() =>
+              restorePageCompositionColumnPreferences(columnPreferenceId)
+            }
+          />
+        }
+        onQueryPatch={(patch, behavior = "push") => {
+          const next = applyAdminEntityUrlPatch(
+            new URLSearchParams(window.location.search),
+            patch,
+          );
+          const query = next.toString();
+          window.history[
+            behavior === "replace" ? "replaceState" : "pushState"
+          ](
+            window.history.state,
+            "",
+            `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+          );
+        }}
+      />
+
+      <AdminDataGrid className="!rounded-t-none !border-t-0" summary={filteredRows.length ? `${filteredRows.length} بلوك` : undefined}>
         <AdminDataGridHeader columns={columns}>
           <AdminDataGridPrimaryCell>الاسم</AdminDataGridPrimaryCell>
-          <AdminDataGridCenterCell>Slug</AdminDataGridCenterCell>
-          <AdminDataGridCenterCell>{detailLabel}</AdminDataGridCenterCell>
-          <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+          {visibleColumnSet.has("slug") ? (
+            <AdminDataGridCenterCell>Slug</AdminDataGridCenterCell>
+          ) : null}
+          {visibleColumnSet.has("detail") ? (
+            <AdminDataGridCenterCell>{detailLabel}</AdminDataGridCenterCell>
+          ) : null}
+          {visibleColumnSet.has("status") ? (
+            <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+          ) : null}
           <div className="text-center">الإجراءات</div>
         </AdminDataGridHeader>
 
@@ -143,15 +269,21 @@ export default function BlockTemplateSummaryListClient({
                   {row.name}
                 </Link>
               </AdminDataGridPrimaryCell>
-              <AdminDataGridCenterCell className="font-en truncate text-xs text-white/45">
-                {row.slug}
-              </AdminDataGridCenterCell>
-              <AdminDataGridCenterCell className="truncate text-sm text-white/58">
-                {row.detail}
-              </AdminDataGridCenterCell>
-              <AdminDataGridStatusCell>
-                <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-              </AdminDataGridStatusCell>
+              {visibleColumnSet.has("slug") ? (
+                <AdminDataGridCenterCell className="font-en truncate text-xs text-white/45">
+                  {row.slug}
+                </AdminDataGridCenterCell>
+              ) : null}
+              {visibleColumnSet.has("detail") ? (
+                <AdminDataGridCenterCell className="truncate text-sm text-white/58">
+                  {row.detail}
+                </AdminDataGridCenterCell>
+              ) : null}
+              {visibleColumnSet.has("status") ? (
+                <AdminDataGridStatusCell>
+                  <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+                </AdminDataGridStatusCell>
+              ) : null}
               <AdminDataGridRowActions capability={capability} size="compact" />
             </AdminDataGridRow>
           );
@@ -164,15 +296,12 @@ export default function BlockTemplateSummaryListClient({
 
       <AdminTablePagination
         basePath={basePath}
-        currentPage={resolvedCurrentPage}
-        totalPages={totalPages}
-        totalCount={rows.length}
-        pageSize={String(pageSize)}
-        onPageChange={setCurrentPage}
-        onPageSizeChange={(nextPageSize) => {
-          setPageSize(nextPageSize);
-          setCurrentPage(1);
-        }}
+        currentPage={pagination.page}
+        totalPages={pagination.totalPages}
+        totalCount={pagination.totalCount}
+        pageSize={String(pagination.pageSize)}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
       />
     </AdminPageExperience>
   );

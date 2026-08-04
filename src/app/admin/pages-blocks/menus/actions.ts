@@ -1,6 +1,5 @@
 export {
   bulkMenuAction,
-  checkMenuSlugAvailable,
   clearMenuItems,
   createMenu,
   createMenuItem,
@@ -14,3 +13,5 @@ export {
   updateMenu,
   updateMenuItem,
 } from "./menu-actions/index";
+
+export type { CreateMenuFormActionState } from "./menu-actions/index";

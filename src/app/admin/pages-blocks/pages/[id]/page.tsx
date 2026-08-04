@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
 import { AdminPageExperience, AdminPageHeader } from "../../../../../components/admin/ui";
+import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageModuleAssignmentsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
+import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import PageBlocksClient from "./PageBlocksClient";
 
@@ -52,11 +54,17 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     notFound();
   }
 
-  const { data: page, error: pageError } = await getSupabaseAdmin()
-    .from("pages")
-    .select("id,title,slug,path,page_type,status,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt")
-    .eq("id", pageId)
-    .maybeSingle();
+  const [pageResult, preference] = await Promise.all([
+    getSupabaseAdmin()
+      .from("pages")
+      .select("id,title,slug,path,page_type,status,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt")
+      .eq("id", pageId)
+      .maybeSingle(),
+    readAdminColumnPreferences(
+      getPageCompositionColumnPreferenceConfig("pageAssignments").viewKey,
+    ),
+  ]);
+  const { data: page, error: pageError } = pageResult;
 
   if (pageError) {
     return (
@@ -108,6 +116,8 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
         error: seoError,
       }}
       initialTabId={resolveInitialTabId(resolvedSearchParams?.tab, Boolean(seoNotice || seoError))}
+      initialVisibleColumns={preference.visibleColumns}
+      preferenceError={preference.error}
     />
   );
 }

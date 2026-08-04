@@ -15,14 +15,13 @@ import {
 import type { AdminTableSortDirection } from "../../../../../../components/admin/table-engine";
 import { normalizeBoolean } from "../../../../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
+import type { PageCompositionColumnKey } from "../../../../../../lib/page-blocks/admin-collection-columns";
 import PageBlocksAssignmentRow from "./PageBlocksAssignmentRow";
 import { assignmentRowId, isManageableAssignment } from "./page-blocks-utils";
 
 type SortKey = "module_kind" | "template_name" | "visibility";
 
 // 150px = secondary module-type column (no dedicated preset).
-const gridColumns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryStandard} 150px ${ADMIN_DATA_GRID_COLUMNS.statusCompact} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
-
 type PageBlocksAssignmentsGridProps = {
   rows: PageBlockAssignmentRow[];
   totalCount: number;
@@ -38,6 +37,7 @@ type PageBlocksAssignmentsGridProps = {
   onToggleVisibility: (row: PageBlockAssignmentRow) => void;
   onDuplicate: (row: PageBlockAssignmentRow) => void;
   onDelete: (row: PageBlockAssignmentRow) => void;
+  visibleColumns: ReadonlySet<PageCompositionColumnKey<"pageAssignments">>;
 };
 
 export default function PageBlocksAssignmentsGrid({
@@ -55,7 +55,18 @@ export default function PageBlocksAssignmentsGrid({
   onToggleVisibility,
   onDuplicate,
   onDelete,
+  visibleColumns,
 }: PageBlocksAssignmentsGridProps) {
+  const gridColumns = [
+    ADMIN_DATA_GRID_COLUMNS.checkbox,
+    ADMIN_DATA_GRID_COLUMNS.primaryStandard,
+    visibleColumns.has("module") ? "150px" : null,
+    visibleColumns.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusCompact : null,
+    ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
+  ]
+    .filter((column): column is string => Boolean(column))
+    .join(" ");
+
   function sortProps(key: SortKey) {
     return {
       active: sort.key === key,
@@ -78,12 +89,16 @@ export default function PageBlocksAssignmentsGrid({
         <AdminDataGridPrimaryCell>
           <AdminDataGridSortLabel {...sortProps("template_name")} className="justify-end">القالب</AdminDataGridSortLabel>
         </AdminDataGridPrimaryCell>
-        <AdminDataGridCenterCell>
-          <AdminDataGridSortLabel {...sortProps("module_kind")} className="justify-center">النوع</AdminDataGridSortLabel>
-        </AdminDataGridCenterCell>
-        <AdminDataGridCenterCell>
-          <AdminDataGridSortLabel {...sortProps("visibility")} className="justify-center">الحالة</AdminDataGridSortLabel>
-        </AdminDataGridCenterCell>
+        {visibleColumns.has("module") ? (
+          <AdminDataGridCenterCell>
+            <AdminDataGridSortLabel {...sortProps("module_kind")} className="justify-center">النوع</AdminDataGridSortLabel>
+          </AdminDataGridCenterCell>
+        ) : null}
+        {visibleColumns.has("status") ? (
+          <AdminDataGridCenterCell>
+            <AdminDataGridSortLabel {...sortProps("visibility")} className="justify-center">الحالة</AdminDataGridSortLabel>
+          </AdminDataGridCenterCell>
+        ) : null}
         <div className="text-center">الإجراءات</div>
       </AdminDataGridHeader>
 
@@ -107,6 +122,8 @@ export default function PageBlocksAssignmentsGrid({
             onToggleVisibility={() => onToggleVisibility(row)}
             onDuplicate={() => onDuplicate(row)}
             onDelete={() => onDelete(row)}
+            showModule={visibleColumns.has("module")}
+            showStatus={visibleColumns.has("status")}
           />
         );
       })}

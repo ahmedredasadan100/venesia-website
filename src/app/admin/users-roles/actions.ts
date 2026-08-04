@@ -11,15 +11,27 @@ import {
   adminResetUserPassword,
   createAdminUser,
   deleteAdminUser,
-  listAdminUsers,
   setAdminUserActiveStatus,
   updateAdminUserProfile,
   type AdminUserListItem,
 } from "../../../lib/admin/users/admin-users-management";
+import type { AdminFormActionState } from "../../../lib/admin/form-runtime";
+import { saveAdminColumnPreferences } from "../../../lib/admin/preferences/admin-column-preferences";
 import {
   AdminUserCreateValidationError,
+  normalizeAdminFullName,
+  validateAdminEmail,
+  validateAdminFullName,
+  validateAdminOptionalPasswordFields,
+  validateAdminUsername,
   type AdminUserCreateFieldErrors,
 } from "../../../lib/admin/users/admin-users-validation";
+import {
+  getAdminUsersDefaultColumnKeys,
+  getAdminUsersPreferenceColumnKeys,
+  ADMIN_USERS_LIST_VIEW_KEY,
+  type AdminUserColumnKey,
+} from "../../../lib/admin/users/list-config";
 
 export type CreateAdminUserActionResult =
   | { success: true; user: AdminUserListItem }
@@ -43,11 +55,6 @@ function buildProfileChangeMetadata(
     metadata.sessions_invalidated = true;
   }
   return metadata;
-}
-
-export async function listAdminUsersAction(): Promise<AdminUserListItem[]> {
-  await requireAdminSession();
-  return listAdminUsers();
 }
 
 export async function createAdminUserAction(input: {
@@ -82,6 +89,152 @@ export async function createAdminUserAction(input: {
       return { success: false, fieldErrors: error.fieldErrors };
     }
     throw error;
+  }
+}
+
+function readFormString(formData: FormData, name: string) {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : "";
+}
+
+function readFormBoolean(formData: FormData, name: string) {
+  const values = formData.getAll(name);
+  return values.at(-1) === "true";
+}
+
+function mapFieldErrors(
+  errors: Record<string, string | undefined>,
+): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(errors)
+      .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      .map(([field, message]) => [field, [message]]),
+  );
+}
+
+function formError<TResult>(
+  previousState: AdminFormActionState<TResult>,
+  mode: "create" | "edit",
+  input: {
+    title?: string;
+    message?: string;
+    fieldErrors?: Record<string, string[]>;
+    focusTarget?: string;
+  },
+): AdminFormActionState<TResult> {
+  return {
+    status: "error",
+    mode,
+    revision: previousState.revision + 1,
+    title: input.title,
+    message: input.message,
+    fieldErrors: input.fieldErrors,
+    focusTarget: input.focusTarget,
+  };
+}
+
+export async function createAdminUserFormAction(
+  previousState: AdminFormActionState<AdminUserListItem>,
+  formData: FormData,
+): Promise<AdminFormActionState<AdminUserListItem>> {
+  try {
+    const result = await createAdminUserAction({
+      username: readFormString(formData, "username"),
+      email: readFormString(formData, "email"),
+      full_name: readFormString(formData, "full_name"),
+      password: readFormString(formData, "password"),
+      confirmPassword: readFormString(formData, "confirmPassword"),
+    });
+
+    if (!result.success) {
+      const fieldErrors = mapFieldErrors(result.fieldErrors);
+      return formError(previousState, "create", {
+        fieldErrors,
+        focusTarget: Object.keys(fieldErrors)[0],
+      });
+    }
+
+    return {
+      status: "success",
+      mode: "create",
+      revision: previousState.revision + 1,
+      title: "تم إنشاء المستخدم",
+      message: `تم إنشاء المستخدم «${result.user.username}».`,
+      entityId: result.user.id,
+      savedRevision: result.user.updated_at,
+      result: result.user,
+    };
+  } catch (error) {
+    return formError(previousState, "create", {
+      title: "تعذر إنشاء المستخدم",
+      message:
+        error instanceof Error ? error.message : "تعذر إنشاء المستخدم.",
+    });
+  }
+}
+
+export async function updateAdminUserFormAction(
+  previousState: AdminFormActionState<AdminUserListItem>,
+  formData: FormData,
+): Promise<AdminFormActionState<AdminUserListItem>> {
+  await requireAdminSession();
+  const id = Number(readFormString(formData, "id"));
+  const username = readFormString(formData, "username");
+  const email = readFormString(formData, "email");
+  const fullName = readFormString(formData, "full_name");
+  const password = readFormString(formData, "password");
+  const confirmPassword = readFormString(formData, "confirmPassword");
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return formError(previousState, "edit", {
+      title: "تعذر تحديث المستخدم",
+      message: "معرّف المستخدم غير صالح. حدّث الصفحة وحاول مرة أخرى.",
+    });
+  }
+
+  const fieldErrors = mapFieldErrors({
+    username: validateAdminUsername(username) ?? undefined,
+    email: validateAdminEmail(email) ?? undefined,
+    full_name:
+      validateAdminFullName(normalizeAdminFullName(fullName)) ?? undefined,
+    ...validateAdminOptionalPasswordFields(password, confirmPassword),
+  });
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return formError(previousState, "edit", {
+      fieldErrors,
+      focusTarget: Object.keys(fieldErrors)[0],
+    });
+  }
+
+  try {
+    const user = await updateAdminUserAction({
+      id,
+      username,
+      email,
+      full_name: fullName,
+      is_active: readFormBoolean(formData, "is_active"),
+      ...(password.trim()
+        ? { password, confirmPassword }
+        : {}),
+    });
+
+    return {
+      status: "success",
+      mode: "edit",
+      revision: previousState.revision + 1,
+      title: "تم تحديث المستخدم",
+      message: `تم تحديث المستخدم «${user.username}».`,
+      entityId: user.id,
+      savedRevision: user.updated_at,
+      result: user,
+    };
+  } catch (error) {
+    return formError(previousState, "edit", {
+      title: "تعذر تحديث المستخدم",
+      message:
+        error instanceof Error ? error.message : "تعذر تحديث المستخدم.",
+    });
   }
 }
 
@@ -235,4 +388,20 @@ export async function setAdminUserPasswordAction(input: {
 
   revalidatePath("/admin/users-roles");
   return user;
+}
+
+export async function saveAdminUsersTablePreferences(
+  visibleColumns: string[],
+) {
+  return saveAdminColumnPreferences({
+    viewKey: ADMIN_USERS_LIST_VIEW_KEY,
+    visibleColumns,
+    allowedColumns: getAdminUsersPreferenceColumnKeys(),
+  });
+}
+
+export async function restoreAdminUsersTablePreferences() {
+  return saveAdminUsersTablePreferences([
+    ...getAdminUsersDefaultColumnKeys(),
+  ] as AdminUserColumnKey[]);
 }

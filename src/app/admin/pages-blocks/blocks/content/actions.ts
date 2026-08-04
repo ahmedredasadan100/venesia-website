@@ -8,6 +8,7 @@ import {
 } from "../../../../../lib/admin/media-catalog/synchronization";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
+import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
@@ -613,56 +614,133 @@ async function ensureUniqueSlug(slug: string, id?: number) {
   return !data;
 }
 
-export async function createContentBlock(formData: FormData) {
+export type CreateContentBlockFormActionState = AdminFormActionState;
+
+function createContentBlockFailure(
+  revision: number,
+  message: string,
+  field?: "name" | "slug",
+): CreateContentBlockFormActionState {
+  return {
+    status: "error",
+    mode: "create",
+    revision,
+    title: "تعذر إنشاء بلوك المحتوى",
+    message,
+    ...(field
+      ? { fieldErrors: { [field]: [message] }, focusTarget: field }
+      : {}),
+  };
+}
+
+function createContentBlockSuccess(
+  revision: number,
+  id: number,
+  mediaSynchronizationWarning: boolean,
+  infrastructureWarning?: string,
+): CreateContentBlockFormActionState {
+  const warning = mediaSynchronizationWarning || Boolean(infrastructureWarning);
+  return {
+    status: warning ? "warning" : "success",
+    mode: "create",
+    revision,
+    title: warning ? "تم إنشاء بلوك المحتوى مع تنبيه" : "تم إنشاء بلوك المحتوى",
+    message:
+      infrastructureWarning ??
+      (mediaSynchronizationWarning
+        ? "تم إنشاء البلوك، لكن مزامنة مراجع الوسائط تحتاج إلى مراجعة."
+        : "تم إنشاء البلوك كمسودة بنجاح."),
+    code: warning ? "created_with_warning" : "created",
+    entityId: id,
+    editHref: `/admin/pages-blocks/blocks/content/${id}${mediaSynchronizationWarning ? "?notice=saved_with_media_sync_warning" : ""}`,
+    savedRevision: `${id}:${revision}`,
+  };
+}
+
+export async function createContentBlock(
+  previousState: CreateContentBlockFormActionState,
+  formData: FormData,
+): Promise<CreateContentBlockFormActionState> {
+  const revision = previousState.revision + 1;
   const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
 
-  if (!name || !slug) throw new Error("اسم البلوك والـ slug مطلوبين.");
-  if (!(await ensureUniqueSlug(slug))) throw new Error("الـ slug مستخدم بالفعل.");
+  if (!name) return createContentBlockFailure(revision, "اسم البلوك مطلوب.", "name");
+  if (!slug) return createContentBlockFailure(revision, "اكتب slug صالحًا للبلوك.", "slug");
+  if (!(await ensureUniqueSlug(slug))) {
+    return createContentBlockFailure(revision, "الـ slug مستخدم بالفعل.", "slug");
+  }
 
-  const variantInput = cleanText(formData.get("variant")) || null;
-  const variant = resolveStructuredVariant(slug, variantInput);
+  let createdId: number | null = null;
+  let mediaSynchronizationWarning = false;
+  try {
+    const variantInput = cleanText(formData.get("variant")) || null;
+    const variant = resolveStructuredVariant(slug, variantInput);
 
-  const nextRow = {
-    name,
-    slug,
-    description: readTemplateInternalDescription(formData),
-    variant,
-    style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-    status: getStatus(cleanText(formData.get("status")) || "draft"),
-    config: await buildContentConfig(formData, slug),
-  };
-  const provisionalIdentity = `create:${crypto.randomUUID()}`;
-  const coordinated = await coordinateMediaReferenceEntityMutation({
-    domainKey: "content_block_templates",
-    leaseEntityIdentity: provisionalIdentity,
-    intendedRow: nextRow,
-    actorId: actor.id,
-    requestIdentity: `content-block:create:${provisionalIdentity}`,
-    mutate: async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("content_block_templates")
-        .insert(nextRow)
-        .select("id")
-        .single<{ id: number }>();
-      if (error || !data) throw new Error(error?.message ?? "Unable to create content block.");
-      return data;
-    },
-    resolveEntityIdentity: (value) => String(value.id),
-  });
-  const data = coordinated.value;
+    const nextRow = {
+      name,
+      slug,
+      description: readTemplateInternalDescription(formData),
+      variant,
+      style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
+      status: getStatus(cleanText(formData.get("status")) || "draft"),
+      config: await buildContentConfig(formData, slug),
+    };
+    const provisionalIdentity = `create:${crypto.randomUUID()}`;
+    const coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "content_block_templates",
+      leaseEntityIdentity: provisionalIdentity,
+      intendedRow: nextRow,
+      actorId: actor.id,
+      requestIdentity: `content-block:create:${provisionalIdentity}`,
+      mutate: async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from("content_block_templates")
+          .insert(nextRow)
+          .select("id")
+          .single<{ id: number }>();
+        if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء بلوك المحتوى.");
+        return data;
+      },
+      resolveEntityIdentity: (value) => String(value.id),
+    });
+    const data = coordinated.value;
+    createdId = data.id;
+    mediaSynchronizationWarning =
+      coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
 
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("content_block_template", "create"),
-    entityType: "content_block_template",
-    entityId: data.id,
-    entityLabel: name,
-    metadata: { slug, variant },
-  });
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("content_block_template", "create"),
+      entityType: "content_block_template",
+      entityId: data.id,
+      entityLabel: name,
+      metadata: { slug, variant },
+    });
 
-  await revalidateBlockModulePaths("content");
-  redirect(`/admin/pages-blocks/blocks/content/${data.id}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "?notice=saved_with_media_sync_warning" : ""}`);
+    await revalidateBlockModulePaths("content");
+    return createContentBlockSuccess(
+      revision,
+      data.id,
+      mediaSynchronizationWarning,
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "تعذر إنشاء بلوك المحتوى. حاول مرة أخرى.";
+    if (createdId) {
+      return createContentBlockSuccess(
+        revision,
+        createdId,
+        mediaSynchronizationWarning,
+        `تم إنشاء البلوك، لكن تعذر إكمال التحقق اللاحق: ${message}`,
+      );
+    }
+    return createContentBlockFailure(
+      revision,
+      message,
+      message.toLowerCase().includes("slug") ? "slug" : undefined,
+    );
+  }
 }
 
 export async function updateContentBlock(formData: FormData) {

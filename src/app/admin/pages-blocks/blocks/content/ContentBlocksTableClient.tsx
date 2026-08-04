@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
 import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
@@ -16,6 +16,7 @@ import {
   ADMIN_FORM,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminBulkActionBar,
+  AdminColumnVisibilityMenu,
   AdminDataGrid,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
@@ -27,6 +28,8 @@ import {
   AdminDataGridRowActions,
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
+  AdminFormError,
+  AdminFormRuntime,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   AdminPageExperience,
@@ -39,6 +42,7 @@ import {
   type AdminRowActionsCapability,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
+import type { AdminFormRuntimeHandle } from "../../../../../components/admin/ui/AdminFormRuntime";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
 import {
   adminCollectionSearchIncludes,
@@ -46,7 +50,16 @@ import {
   useAdminBoundedClientPagination,
   type AdminEntityFilterDef,
 } from "../../../../../lib/admin/entity-list";
+import {
+  getPageCompositionColumnPreferenceConfig,
+  getPageCompositionDefaultColumnKeys,
+  normalizePageCompositionVisibleColumnKeys,
+} from "../../../../../lib/page-blocks/admin-collection-columns";
 import { statusMeta } from "../../../../../lib/page-blocks/admin-utils";
+import {
+  restorePageCompositionColumnPreferences,
+  savePageCompositionColumnPreferences,
+} from "../../column-preferences";
 import {
   bulkContentBlocks,
   createContentBlock,
@@ -70,13 +83,14 @@ type ContentSortKey = "name" | "slug" | "variant" | "status" | "updated_at";
 /**
  * RTL table: الاسم (1fr, يمين) → … → الإجراءات (ثابت، شمال).
  */
-const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} 96px ${ADMIN_DATA_GRID_COLUMNS.statusStandard} 120px ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
 
 type ContentBlocksTableClientProps = {
   rows: ContentBlockRow[];
   loadError?: string | null;
   mediaSynchronizationWarning?: boolean;
+  initialVisibleColumns?: readonly string[] | null;
+  preferenceError?: string | null;
 };
 
 function variantLabel(variant: string) {
@@ -93,11 +107,41 @@ export default function ContentBlocksTableClient({
   rows,
   loadError = null,
   mediaSynchronizationWarning = false,
+  initialVisibleColumns = null,
+  preferenceError = null,
 }: ContentBlocksTableClientProps) {
   const feedbackChannel = "block-manager:content";
   const searchParams = useSearchParams();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const createRuntimeRef = useRef<AdminFormRuntimeHandle>(null);
+  const columnConfig = getPageCompositionColumnPreferenceConfig("contentTemplates");
+  const defaultColumns = getPageCompositionDefaultColumnKeys("contentTemplates");
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+    normalizePageCompositionVisibleColumnKeys(
+      "contentTemplates",
+      initialVisibleColumns,
+    ),
+  );
+  const visibleColumnSet = useMemo(
+    () => new Set(visibleColumns),
+    [visibleColumns],
+  );
+  const columns = useMemo(
+    () =>
+      [
+        ADMIN_DATA_GRID_COLUMNS.checkbox,
+        ADMIN_DATA_GRID_COLUMNS.primaryCompact,
+        visibleColumnSet.has("slug") ? ADMIN_DATA_GRID_COLUMNS.slugCompact : null,
+        visibleColumnSet.has("variant") ? "96px" : null,
+        visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusStandard : null,
+        visibleColumnSet.has("updatedAt") ? "120px" : null,
+        ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
+      ]
+        .filter((column) => column !== null)
+        .join(" "),
+    [visibleColumnSet],
+  );
 
   const sortAccessors = useMemo(
     () => ({
@@ -217,6 +261,10 @@ export default function ContentBlocksTableClient({
     } as const;
   }
 
+  function requestCreateClose() {
+    createRuntimeRef.current?.requestClose();
+  }
+
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageHeader
@@ -244,6 +292,23 @@ export default function ContentBlocksTableClient({
           feedback={loadFeedback}
         />
 
+        <AdminFeedbackRegion
+          channel={`${feedbackChannel}:columns`}
+          label="حالة تفضيلات أعمدة بلوكات المحتوى"
+          feedback={
+            preferenceError
+              ? {
+                  variant: "warning",
+                  title: "تعذر تحميل تفضيلات الأعمدة",
+                  message: preferenceError,
+                  layout: "inline",
+                  dismissible: true,
+                  lifecycle: "persistent",
+                }
+              : null
+          }
+        />
+
         {mediaWarningNotice}
 
         <AdminEntityListFilters
@@ -251,6 +316,23 @@ export default function ContentBlocksTableClient({
           search={{ value: search, placeholder: "ابحث باسم البلوك أو المعرّف الداخلي…", minLength: 1, pending: table.isPending }}
           filters={filters}
           values={{ status, variant }}
+          columnsControl={
+            <AdminColumnVisibilityMenu
+              columns={columnConfig.columns}
+              visibleColumns={visibleColumns}
+              defaultColumns={defaultColumns}
+              onChange={setVisibleColumns}
+              onPersist={(next) =>
+                savePageCompositionColumnPreferences(
+                  "contentTemplates",
+                  next,
+                )
+              }
+              onRestore={() =>
+                restorePageCompositionColumnPreferences("contentTemplates")
+              }
+            />
+          }
           contextOverrideActive={selection.selectedIds.length > 0}
           contextOverride={
             <AdminBulkActionBar
@@ -316,26 +398,34 @@ export default function ContentBlocksTableClient({
                 الاسم
               </AdminDataGridSortLabel>
             </AdminDataGridPrimaryCell>
-            <AdminDataGridCenterCell>
-              <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
-                Slug
-              </AdminDataGridSortLabel>
-            </AdminDataGridCenterCell>
-            <AdminDataGridCenterCell>
-              <AdminDataGridSortLabel {...sortProps("variant")} className="justify-center">
-                Variant
-              </AdminDataGridSortLabel>
-            </AdminDataGridCenterCell>
-            <AdminDataGridCenterCell>
-              <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
-                الحالة
-              </AdminDataGridSortLabel>
-            </AdminDataGridCenterCell>
-            <AdminDataGridCenterCell>
-              <AdminDataGridSortLabel {...sortProps("updated_at")} className="justify-center">
-                التحديث
-              </AdminDataGridSortLabel>
-            </AdminDataGridCenterCell>
+            {visibleColumnSet.has("slug") ? (
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
+                  Slug
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
+            ) : null}
+            {visibleColumnSet.has("variant") ? (
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel {...sortProps("variant")} className="justify-center">
+                  Variant
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
+            ) : null}
+            {visibleColumnSet.has("status") ? (
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
+                  الحالة
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
+            ) : null}
+            {visibleColumnSet.has("updatedAt") ? (
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel {...sortProps("updated_at")} className="justify-center">
+                  التحديث
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
+            ) : null}
             <div className="text-center">الإجراءات</div>
           </AdminDataGridHeader>
 
@@ -431,19 +521,27 @@ export default function ContentBlocksTableClient({
                     ) : null}
                   </AdminDataGridPrimaryCell>
 
-                  <AdminDataGridCenterCell>
-                    <span className="font-en block truncate text-xs text-white/42">{row.slug}</span>
-                  </AdminDataGridCenterCell>
+                  {visibleColumnSet.has("slug") ? (
+                    <AdminDataGridCenterCell>
+                      <span className="font-en block truncate text-xs text-white/42">{row.slug}</span>
+                    </AdminDataGridCenterCell>
+                  ) : null}
 
-                  <AdminDataGridCenterCell className="truncate text-sm text-white/55">{variantLabel(row.variant)}</AdminDataGridCenterCell>
+                  {visibleColumnSet.has("variant") ? (
+                    <AdminDataGridCenterCell className="truncate text-sm text-white/55">{variantLabel(row.variant)}</AdminDataGridCenterCell>
+                  ) : null}
 
-                  <AdminDataGridStatusCell>
-                    <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-                  </AdminDataGridStatusCell>
+                  {visibleColumnSet.has("status") ? (
+                    <AdminDataGridStatusCell>
+                      <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+                    </AdminDataGridStatusCell>
+                  ) : null}
 
-                  <AdminDataGridCenterCell className="font-en text-xs tabular-nums text-white/55">
-                    {formatUpdatedAt(row.updated_at)}
-                  </AdminDataGridCenterCell>
+                  {visibleColumnSet.has("updatedAt") ? (
+                    <AdminDataGridCenterCell className="font-en text-xs tabular-nums text-white/55">
+                      {formatUpdatedAt(row.updated_at)}
+                    </AdminDataGridCenterCell>
+                  ) : null}
 
                   <AdminDataGridRowActions capability={capability} size="compact" />
                 </AdminDataGridRow>
@@ -471,38 +569,71 @@ export default function ContentBlocksTableClient({
         title="إضافة بلوك جديد"
         description="أنشئ القالب ثم عدّل المحتوى واربطه بالصفحات. البلوكات الجديدة تُنشأ كمسودة."
         size="md"
-        onClose={() => setShowCreateModal(false)}
-        footer={(
-          <>
-            <AdminModalCancelButton onClick={() => setShowCreateModal(false)}>إلغاء</AdminModalCancelButton>
-            <AdminModalPrimaryButton type="submit" form="create-content-block-form">
-              إنشاء وفتح
-            </AdminModalPrimaryButton>
-          </>
-        )}
+        onClose={requestCreateClose}
       >
-        <form id="create-content-block-form" action={createContentBlock} className={ADMIN_FORM.grid}>
-          <label className={adminFormLabelClassName()}>
-            الاسم
-            <input name="name" required className={adminFormFieldClassName()} />
-          </label>
-          <label className={adminFormLabelClassName()}>
-            Slug
-            <input name="slug" dir="ltr" placeholder="content-example" className={adminFormFieldClassName("text-left font-en")} />
-          </label>
-          <label className={adminFormLabelClassName()}>
-            Variant
-            <select name="variant" defaultValue="default" className={adminFormFieldClassName()}>
-              {VARIANT_OPTIONS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <input type="hidden" name="status" value="draft" />
-          <input type="hidden" name="style_preset" value="premium-dark" />
-        </form>
+        <AdminFormRuntime
+          action={createContentBlock}
+          mode="create"
+          entityKey="content-block-quick-create"
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => setShowCreateModal(false)}
+          runtimeRef={createRuntimeRef}
+          formId="create-content-block-form"
+          className={ADMIN_FORM.grid}
+        >
+          {({ fieldErrors, pending, requestClose }) => (
+            <>
+              <AdminFormError />
+              <label className={adminFormLabelClassName()}>
+                الاسم
+                <input
+                  name="name"
+                  required
+                  className={adminFormFieldClassName(
+                    fieldErrors.name?.length ? "border-red-400/40" : "",
+                  )}
+                  aria-invalid={Boolean(fieldErrors.name?.length)}
+                  aria-describedby={fieldErrors.name?.length ? "name-error" : undefined}
+                />
+                <AdminFormError name="name" />
+              </label>
+              <label className={adminFormLabelClassName()}>
+                Slug
+                <input
+                  name="slug"
+                  dir="ltr"
+                  placeholder="content-example"
+                  className={adminFormFieldClassName(
+                    `text-left font-en ${fieldErrors.slug?.length ? "border-red-400/40" : ""}`,
+                  )}
+                  aria-invalid={Boolean(fieldErrors.slug?.length)}
+                  aria-describedby={fieldErrors.slug?.length ? "slug-error" : undefined}
+                />
+                <AdminFormError name="slug" />
+              </label>
+              <label className={adminFormLabelClassName()}>
+                Variant
+                <select name="variant" defaultValue="default" className={adminFormFieldClassName()}>
+                  {VARIANT_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <input type="hidden" name="status" value="draft" />
+              <input type="hidden" name="style_preset" value="premium-dark" />
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+                <AdminModalCancelButton onClick={requestClose} disabled={pending}>
+                  إلغاء
+                </AdminModalCancelButton>
+                <AdminModalPrimaryButton type="submit" disabled={pending}>
+                  {pending ? "جار الإنشاء..." : "إنشاء وفتح"}
+                </AdminModalPrimaryButton>
+              </div>
+            </>
+          )}
+        </AdminFormRuntime>
       </VenesiaModal>
     </AdminPageExperience>
   );

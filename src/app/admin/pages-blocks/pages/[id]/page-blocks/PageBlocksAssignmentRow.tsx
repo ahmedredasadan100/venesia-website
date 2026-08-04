@@ -28,6 +28,8 @@ type PageBlocksAssignmentRowProps = {
   onToggleVisibility: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  showModule: boolean;
+  showStatus: boolean;
 };
 
 export default function PageBlocksAssignmentRow({
@@ -44,6 +46,8 @@ export default function PageBlocksAssignmentRow({
   onToggleVisibility,
   onDuplicate,
   onDelete,
+  showModule,
+  showStatus,
 }: PageBlocksAssignmentRowProps) {
   const hidden = { access: "hidden" as const };
   const capability: AdminRowActionsCapability = {
@@ -141,15 +145,19 @@ export default function PageBlocksAssignmentRow({
         ) : null}
       </AdminDataGridPrimaryCell>
 
-      <AdminDataGridCenterCell className="truncate text-sm font-semibold text-white/75">
-        {moduleKindLabel(row.module_kind)}
-      </AdminDataGridCenterCell>
+      {showModule ? (
+        <AdminDataGridCenterCell className="truncate text-sm font-semibold text-white/75">
+          {moduleKindLabel(row.module_kind)}
+        </AdminDataGridCenterCell>
+      ) : null}
 
-      <AdminDataGridStatusCell>
-        <AdminStatusPill tone={isVisible ? "green" : "muted"}>
-          {isVisible ? "ظاهر" : "مخفي"}
-        </AdminStatusPill>
-      </AdminDataGridStatusCell>
+      {showStatus ? (
+        <AdminDataGridStatusCell>
+          <AdminStatusPill tone={isVisible ? "green" : "muted"}>
+            {isVisible ? "ظاهر" : "مخفي"}
+          </AdminStatusPill>
+        </AdminDataGridStatusCell>
+      ) : null}
 
       <AdminDataGridRowActions capability={capability} size="compact" />
     </AdminDataGridRow>

@@ -1,155 +1,149 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
-
 import { AdminMediaImageField } from "../../../../components/admin/media";
 import {
-  AdminFeedbackChannelViewport,
-  useAdminFeedback,
-} from "../../../../components/admin/AdminFeedbackProvider";
+  AdminFormActions,
+  AdminFormError,
+  AdminFormField,
+  AdminFormGrid,
+  AdminFormRuntime,
+  AdminFormSection,
+  adminFormFieldClassName,
+} from "../../../../components/admin/ui";
 import type { ResolvedAdminCompanyConfig } from "../../../../lib/admin/shell/contracts";
-import {
-  ADMIN_COMPANY_ACTION_INITIAL,
-  updateAdminCompanyAction,
-} from "./actions";
-
-const inputClass =
-  "w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[var(--admin-accent)]/45";
-const FEEDBACK_CHANNEL = "settings-general-company";
-
-function TextField({
-  name,
-  label,
-  defaultValue,
-  dir,
-}: {
-  name: string;
-  label: string;
-  defaultValue: string;
-  dir?: "ltr" | "rtl";
-}) {
-  return (
-    <label className="space-y-2">
-      <span className="block text-xs font-semibold text-white/55">{label}</span>
-      <input
-        name={name}
-        defaultValue={defaultValue}
-        required
-        dir={dir}
-        className={inputClass}
-      />
-    </label>
-  );
-}
+import { updateAdminCompanyAction } from "./actions";
 
 export default function CompanyIdentityPanel({
   company,
 }: {
   company: ResolvedAdminCompanyConfig;
 }) {
-  const { clearFeedback, publishFeedback } = useAdminFeedback();
-  const [state, formAction, pending] = useActionState(
-    updateAdminCompanyAction,
-    ADMIN_COMPANY_ACTION_INITIAL,
-  );
-
-  useEffect(() => {
-    if (state.status === "idle") return;
-    clearFeedback(FEEDBACK_CHANNEL);
-    const variant =
-      state.status === "error"
-        ? "danger"
-        : state.status === "warning"
-          ? "warning"
-          : "success";
-    publishFeedback(
-      {
-        variant,
-        title:
-          variant === "danger"
-            ? "تعذر حفظ هوية لوحة الإدارة"
-            : variant === "warning"
-              ? "تم الحفظ مع تنبيه"
-              : "تم حفظ هوية لوحة الإدارة",
-        message: state.message,
-        layout: "inline",
-        dismissible: true,
-        lifecycle: variant === "danger" ? "persistent" : "manual",
-      },
-      {
-        channel: FEEDBACK_CHANNEL,
-        placement: "inline",
-        critical: variant === "danger",
-        reveal: variant === "danger",
-      },
-    );
-  }, [clearFeedback, publishFeedback, state]);
+  const textFields = [
+    { name: "key", label: "Company key", value: company.key, dir: "ltr" as const },
+    { name: "name", label: "اسم الشركة", value: company.name },
+    { name: "adminLabel", label: "عنوان الإدارة", value: company.adminLabel },
+    { name: "cmsLabel", label: "CMS label", value: company.cmsLabel, dir: "ltr" as const },
+    {
+      name: "publicWebsiteUrl",
+      label: "رابط الموقع العام",
+      value: company.publicWebsiteUrl,
+      dir: "ltr" as const,
+    },
+  ];
+  const colorFields = [
+    ["accentColor", "اللون الأساسي", company.accentColor],
+    ["accentStrongColor", "اللون البارز", company.accentStrongColor],
+    ["surfaceColor", "لون الخلفية", company.surfaceColor],
+  ] as const;
 
   return (
-    <section className="admin-premium-card space-y-5 rounded-[28px] p-5" data-admin-company-settings>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-white">هوية لوحة الإدارة</h2>
-          <p className="mt-1 text-sm leading-7 text-white/50">
-            الهوية والألوان والشعارات هنا تخص الـAdmin Shell ولا تغير بيانات المحتوى.
-          </p>
-        </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/45">
-          المصدر: {company.source}
-        </span>
-      </div>
+    <section data-admin-company-settings>
+      <AdminFormRuntime
+        action={updateAdminCompanyAction}
+        mode="edit"
+        entityKey="admin-company-identity"
+        closeHref="/admin"
+        className="space-y-6"
+      >
+        {({ fieldErrors }) => (
+          <>
+            <AdminFormSection
+              title="هوية لوحة الإدارة"
+              description="الهوية والألوان والشعارات هنا تخص الـAdmin Shell ولا تغير بيانات المحتوى."
+              actions={
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/45">
+                  المصدر: {company.source}
+                </span>
+              }
+            >
+              <AdminFormError className="mb-5" />
 
-      <AdminFeedbackChannelViewport
-        channel={FEEDBACK_CHANNEL}
-        label="نتيجة حفظ هوية لوحة الإدارة"
-      />
+              <AdminFormGrid>
+                {textFields.map(({ name, label, value, dir }) => (
+                  <AdminFormField key={name} label={label} required>
+                    <input
+                      name={name}
+                      defaultValue={value}
+                      required
+                      dir={dir}
+                      className={adminFormFieldClassName(
+                        fieldErrors[name]?.length ? "border-red-400/40" : "",
+                      )}
+                      aria-invalid={Boolean(fieldErrors[name]?.length)}
+                      aria-describedby={
+                        fieldErrors[name]?.length ? `${name}-error` : undefined
+                      }
+                    />
+                    <AdminFormError name={name} />
+                  </AdminFormField>
+                ))}
+              </AdminFormGrid>
 
-      <form action={formAction} className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2">
-          <TextField name="key" label="Company key" defaultValue={company.key} dir="ltr" />
-          <TextField name="name" label="اسم الشركة" defaultValue={company.name} />
-          <TextField name="adminLabel" label="عنوان الإدارة" defaultValue={company.adminLabel} />
-          <TextField name="cmsLabel" label="CMS label" defaultValue={company.cmsLabel} dir="ltr" />
-          <TextField name="publicWebsiteUrl" label="رابط الموقع العام" defaultValue={company.publicWebsiteUrl} dir="ltr" />
-        </div>
+              <AdminFormGrid className="mt-6">
+                <div>
+                  <AdminMediaImageField
+                    name="logoUrl"
+                    label="الشعار الرئيسي"
+                    defaultValue={company.logoUrl}
+                    browseFolder="images"
+                  />
+                  <AdminFormError name="logoUrl" />
+                </div>
+                <div>
+                  <AdminMediaImageField
+                    name="compactLogoUrl"
+                    label="الشعار المصغر"
+                    defaultValue={company.compactLogoUrl}
+                    browseFolder="images"
+                  />
+                  <AdminFormError name="compactLogoUrl" />
+                </div>
+              </AdminFormGrid>
 
-        <div className="grid gap-5 md:grid-cols-2">
-          <AdminMediaImageField
-            name="logoUrl"
-            label="الشعار الرئيسي"
-            defaultValue={company.logoUrl}
-            browseFolder="images"
-          />
-          <AdminMediaImageField
-            name="compactLogoUrl"
-            label="الشعار المصغر"
-            defaultValue={company.compactLogoUrl}
-            browseFolder="images"
-          />
-        </div>
+              <AdminFormGrid columns={3} className="mt-6">
+                {colorFields.map(([name, label, value]) => (
+                  <AdminFormField key={name} label={label} required>
+                    <span
+                      className={`flex items-center gap-3 rounded-2xl border bg-black/25 p-2 ${
+                        fieldErrors[name]?.length
+                          ? "border-red-400/40"
+                          : "border-white/10"
+                      }`}
+                    >
+                      <input
+                        name={name}
+                        type="color"
+                        defaultValue={value}
+                        className="size-10 rounded-xl border-0 bg-transparent"
+                        aria-label={label}
+                        aria-invalid={Boolean(fieldErrors[name]?.length)}
+                        aria-describedby={
+                          fieldErrors[name]?.length ? `${name}-error` : undefined
+                        }
+                      />
+                      <span
+                        dir="ltr"
+                        className="min-w-0 flex-1 px-2 text-sm text-white/65"
+                      >
+                        {value}
+                      </span>
+                    </span>
+                    <AdminFormError name={name} />
+                  </AdminFormField>
+                ))}
+              </AdminFormGrid>
+            </AdminFormSection>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            ["accentColor", "اللون الأساسي", company.accentColor],
-            ["accentStrongColor", "اللون البارز", company.accentStrongColor],
-            ["surfaceColor", "لون الخلفية", company.surfaceColor],
-          ].map(([name, label, value]) => (
-            <label key={name} className="space-y-2">
-              <span className="block text-xs font-semibold text-white/55">{label}</span>
-              <span className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-2">
-                <input name={name} type="color" defaultValue={value} className="size-10 rounded-xl border-0 bg-transparent" aria-label={label} />
-                <span dir="ltr" className="min-w-0 flex-1 px-2 text-sm text-white/65">{value}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-white/10 pt-5">
-          <button type="submit" disabled={pending} className="rounded-2xl bg-[var(--admin-accent)] px-5 py-3 text-sm font-bold text-[#05070B] transition hover:brightness-110 disabled:opacity-50">
-            {pending ? "جارٍ الحفظ…" : "حفظ هوية الإدارة"}
-          </button>
-        </div>
-      </form>
+            <AdminFormActions
+              submitLabel="حفظ هوية الإدارة"
+              pendingLabel="جارٍ الحفظ…"
+              closeLabel="العودة إلى لوحة الإدارة"
+              title="إجراءات هوية لوحة الإدارة"
+              description="احفظ الهوية أو عد إلى لوحة الإدارة دون تغيير القيم المحفوظة."
+            />
+          </>
+        )}
+      </AdminFormRuntime>
     </section>
   );
 }

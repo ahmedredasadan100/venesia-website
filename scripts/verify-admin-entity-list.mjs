@@ -146,6 +146,12 @@ const topicsWithoutImagePreferences = read(
 const collectionAdoptionManifest = read(
   "src/lib/admin/interaction-system/adoption-manifest.ts",
 );
+const pageCompositionColumnConfig = read(
+  "src/lib/page-blocks/admin-collection-columns.ts",
+);
+const pageCompositionColumnActions = read(
+  "src/app/admin/pages-blocks/column-preferences.ts",
+);
 const pageBlockAdminUtils = read("src/lib/page-blocks/admin-utils.ts");
 const pagesClient = read(
   "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
@@ -643,14 +649,29 @@ check(
 );
 
 check(
-  "Specialized DataGrid consumers declare adapter ownership gaps instead of local preference patches",
-  [
+  "Specialized DataGrid consumers adopt typed preferences through the shared persistence owner",
+  ![
     "PAGE_COMPOSITION_TEMPLATE_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
     "MENU_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
     "MENU_ITEM_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
     "PAGE_COMPOSITION_ASSIGNMENT_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
     "IDENTITY_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
-  ].every((gap) => collectionAdoptionManifest.includes(gap)) &&
+  ].some((gap) => collectionAdoptionManifest.includes(gap)) &&
+    [
+      "contentTemplates",
+      "heroTemplates",
+      "breadcrumbTemplates",
+      "cardsTemplates",
+      "ctaTemplates",
+      "feedTemplates",
+      "mediaHubTemplates",
+      "mediaSidebarTemplates",
+      "menus",
+      "menuItems",
+      "pageAssignments",
+    ].every((id) => pageCompositionColumnConfig.includes(`${id}:`)) &&
+    pageCompositionColumnActions.includes("saveAdminColumnPreferences") &&
+    pageCompositionColumnActions.includes("allowedColumns:") &&
     collectionAdoptionManifest.includes("globalClosed: false"),
 );
 

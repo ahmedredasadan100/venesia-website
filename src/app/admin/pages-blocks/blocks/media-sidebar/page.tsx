@@ -1,4 +1,6 @@
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
+import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import BlockTemplateSummaryListClient from "../BlockTemplateSummaryListClient";
 
 export const dynamic = "force-dynamic";
@@ -7,10 +9,16 @@ type PageProps = { searchParams?: Promise<{ notice?: string }> | { notice?: stri
 
 export default async function MediaSidebarModulesPage({ searchParams }: PageProps) {
   const query = searchParams ? await searchParams : {};
-  const { data: templates, error } = await getSupabaseAdmin()
-    .from("media_sidebar_module_templates")
-    .select("id,name,slug,widget_key,status,sort_order")
-    .order("sort_order");
+  const [templatesResult, preference] = await Promise.all([
+    getSupabaseAdmin()
+      .from("media_sidebar_module_templates")
+      .select("id,name,slug,widget_key,status,sort_order")
+      .order("sort_order"),
+    readAdminColumnPreferences(
+      getPageCompositionColumnPreferenceConfig("mediaSidebarTemplates").viewKey,
+    ),
+  ]);
+  const { data: templates, error } = templatesResult;
 
   return (
     <BlockTemplateSummaryListClient
@@ -27,6 +35,8 @@ export default async function MediaSidebarModulesPage({ searchParams }: PageProp
       }))}
       errorMessage={error?.message}
       mediaSynchronizationWarning={query.notice === "saved_with_media_sync_warning"}
+      initialVisibleColumns={preference.visibleColumns}
+      preferenceError={preference.error}
     />
   );
 }

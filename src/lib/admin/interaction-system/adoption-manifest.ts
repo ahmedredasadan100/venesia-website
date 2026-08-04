@@ -37,7 +37,6 @@ export const ADMIN_INTERACTION_SYSTEM = {
   globalClosureBlockers: [
     "Authenticated Browser acceptance on the final working tree is still required.",
     "Atomic reorder contracts are not available for Page Assignment and Menu Item free drag.",
-    "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
   ],
 } as const;
 
@@ -162,12 +161,16 @@ export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
   {
     id: "topic-media-edit-preview",
     capability: "entity_preview_public",
-    status: "gap",
+    status: "adopted",
     capabilityOwner: "shared_capabilities",
-    consumerBoundary: "legacy_entity_page",
-    sourceFiles: ["src/app/admin/content/topics/[id]/page.tsx"],
+    consumerBoundary: "form_runtime_reference_consumer",
+    sourceFiles: [
+      "src/app/admin/content/topics/[id]/page.tsx",
+      "src/lib/admin/content/entity-preview-capabilities.ts",
+      "src/components/admin/ui/AdminEntityPreviewActions.tsx",
+    ],
     rationale:
-      "The legacy Media Topic editor still renders its internal preview action locally and remains outside this correction pass.",
+      "Media Topic Edit delegates internal Preview resolution and rendering to the same shared capability as Article Edit.",
   },
   {
     id: "topic-category-collection-preview",
@@ -459,6 +462,34 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         "Redirects uses shared presentation and confirmation while the Data Runtime owns pending and reconciliation around validated, audited domain commands.",
     },
     {
+      entity: "admin_users",
+      status: "adopted",
+      consumerSourceFile:
+        "src/app/admin/users-roles/UsersManagementClient.tsx",
+      sourceFiles: [
+        "src/app/admin/users-roles/UsersManagementClient.tsx",
+        "src/app/admin/users-roles/actions.ts",
+        "src/lib/admin/users/entity-list-adapter.ts",
+      ],
+      manualOrder: false,
+      actions: {
+        edit: "adopted",
+        preview: "hidden",
+        information: "adopted",
+        copyPublicLink: "hidden",
+        visibility: "adopted",
+        featured: "hidden",
+        duplicate: "hidden",
+        archive: "hidden",
+        delete: "adopted",
+      },
+      owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
+      confirmationActions: ["delete"],
+      auditedActions: ["visibility", "delete"],
+      rationale:
+        "Admin Users delegates collection commands and confirmation presentation to the shared capability while the existing Auth domain retains validation, session invalidation, self-protection, audit, and privileged writes.",
+    },
+    {
       entity: "topics_without_image",
       status: "adopted",
       consumerSourceFile:
@@ -633,7 +664,6 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   globalClosureBlockers: [
     "Authenticated Browser QA for every generic adopter on the final working tree is still required.",
     "Page Assignment and Menu Item free drag require an authoritative atomic reorder mutation contract; adjacent multi-write swaps cannot close this item.",
-    "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
   ],
   genericAdoptionGaps: [],
   canonicalSectionGap: "gap-7",
@@ -1081,16 +1111,14 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "specialized",
       layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
-      requiredAdoption: [
-        "PAGE_COMPOSITION_TEMPLATE_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
-      ],
+      requiredAdoption: [],
       exceptionRationale: null,
       rationale:
         "All eight template libraries share Collection presentation while their loaders and mutations remain owned by Page Composition.",
@@ -1166,16 +1194,14 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "specialized",
       layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
-      requiredAdoption: [
-        "MENU_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
-      ],
+      requiredAdoption: [],
       exceptionRationale: null,
       rationale:
         "The menu records adopt shared collection presentation while menu mutations remain with the Menu domain owner.",
@@ -1230,7 +1256,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
@@ -1239,7 +1265,6 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       layoutOwner: "AdminDataGrid Contract",
       requiredAdoption: [
         "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
-        "MENU_ITEM_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
       ],
       exceptionRationale: null,
       rationale:
@@ -1295,7 +1320,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
@@ -1304,7 +1329,6 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       layoutOwner: "AdminPageExperience + Page composition assignment content",
       requiredAdoption: [
         "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
-        "PAGE_COMPOSITION_ASSIGNMENT_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
       ],
       exceptionRationale: null,
       rationale:
@@ -1408,35 +1432,31 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "Identity mutations, role validation, session invalidation, and self-protection remain with Auth and Permissions owners.",
       ],
       id: "users-and-roles",
-      gridOwner: "AdminDataGrid",
-      workflowClassification:
-        "specialized_data_owner_shared_collection_presentation",
-      generic: false,
+      workflowClassification: "full_collection_adoption",
+      generic: true,
       routes: ["/admin/users-roles"],
       pageSourceFiles: ["src/app/admin/users-roles/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/users-roles/UsersManagementClient.tsx",
       ],
-      sourceOwner: "Identity lifecycle loaders and privileged actions",
+      sourceOwner:
+        "src/lib/admin/users/entity-list-adapter.ts#adminUsersEntityListAdapter",
       headerOwner: "AdminPageContextHeader",
-      engineLabel: null,
+      engineLabel: "ADMIN USERS DATA ENGINE",
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
-      queryMode: "bounded-client",
-      layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
-      requiredAdoption: [
-        "IDENTITY_LIST_REQUIRES_TYPED_COLUMN_PREFERENCES_ADAPTER",
-      ],
-      exceptionRationale:
-        "Status, password, and role commands cross the Auth and Permissions stop boundary.",
+      queryMode: "server-page",
+      layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
-        "User status, password, and role mutations cross the Auth and Permissions boundary and retain their specialized owner.",
+        "The collection adopts the shared Data, Collection, columns, feedback, confirmation, and row-action owners while privileged identity mutations remain with the existing Auth domain.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,

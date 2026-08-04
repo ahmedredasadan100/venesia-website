@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { getAdminUserById, updateAdminUserPassword } from "../auth/admin-users";
 import { hashPassword } from "../auth/password";
+import type { AdminUserEntityListRow } from "./entity-list-contract";
 import {
   AdminUserCreateValidationError,
   hasAdminUserCreateFieldErrors,
@@ -17,17 +18,7 @@ import {
   validateAdminUsername,
 } from "./admin-users-validation";
 
-export type AdminUserListItem = {
-  id: number;
-  email: string;
-  username: string;
-  full_name: string | null;
-  role: string;
-  is_active: boolean;
-  last_login_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type AdminUserListItem = AdminUserEntityListRow;
 
 const LIST_SELECT =
   "id, email, username, full_name, role, is_active, last_login_at, created_at, updated_at";
@@ -49,16 +40,6 @@ function mapListItem(row: Record<string, unknown>): AdminUserListItem {
 function isUniqueViolation(error: { code?: string; message?: string } | null) {
   if (!error) return false;
   return error.code === "23505" || /duplicate key|unique/i.test(error.message ?? "");
-}
-
-export async function listAdminUsers(): Promise<AdminUserListItem[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("admin_users")
-    .select(LIST_SELECT)
-    .order("created_at", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => mapListItem(row as Record<string, unknown>));
 }
 
 export async function countAdminUsers() {
