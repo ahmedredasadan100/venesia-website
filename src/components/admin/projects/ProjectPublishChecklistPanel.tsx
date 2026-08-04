@@ -12,7 +12,6 @@ import {
   type ProjectEntryValidationField,
 } from "../../../lib/admin/projects/project-entry-contract";
 import {
-  getProjectPublicationMetadata,
   getProjectPublishingReadiness,
   resolveProjectPublicationStatusForVisibility,
 } from "../../../lib/admin/projects/project-publishing-capability";
@@ -26,7 +25,7 @@ import { formatAdminDateTime } from "../../../lib/content-dates";
 import AdminEntityReviewPanel, {
   AdminEntityReviewDecisionCard,
 } from "../review/AdminEntityReviewPanel";
-import { AdminFormSwitch, AdminStatusPill } from "../ui";
+import { AdminFormSwitch } from "../ui";
 
 type ProjectPublishChecklistPanelProps = {
   formId: string;
@@ -201,7 +200,6 @@ export default function ProjectPublishChecklistPanel({
 
   const checks = useMemo(() => projectReviewChecks(snapshot), [snapshot]);
   const project = snapshot.payload.project;
-  const publication = getProjectPublicationMetadata(project.publication_status);
   const hiddenStatus = resolveProjectPublicationStatusForVisibility(
     initial.project.publication_status,
     false,
@@ -220,11 +218,6 @@ export default function ProjectPublishChecklistPanel({
             id="publication-schedule"
             title="حالة النشر والتاريخ"
             description="حالة المشروع وبيانات أول ظهور عام."
-            badge={
-              <AdminStatusPill tone={publication.tone}>
-                {publication.label}
-              </AdminStatusPill>
-            }
           >
             <AdminFormSwitch
               id="project-publication-status"
@@ -234,16 +227,8 @@ export default function ProjectPublishChecklistPanel({
               defaultChecked={initial.project.publication_status === "published"}
               surface
               className="mt-3 border-white/8 bg-black/20 px-3 py-2.5"
-              label={
-                <span>
-                  <strong className="block text-sm text-white/82">
-                    {project.publication_status === "published" ? "منشور" : "غير منشور"}
-                  </strong>
-                  <span className="mt-1 block text-xs text-white/42">
-                    النشر يتطلب اكتمال كل المتطلبات الإلزامية.
-                  </span>
-                </span>
-              }
+              label={project.publication_status === "published" ? "منشور" : "غير منشور"}
+              describedBy="project-publication-hint"
             />
             <dl className="mt-2">
               <ProjectDecision
@@ -252,6 +237,12 @@ export default function ProjectPublishChecklistPanel({
                 ltr
               />
             </dl>
+            <p
+              id="project-publication-hint"
+              className="mt-2 text-[10px] leading-5 text-white/38"
+            >
+              النشر يتطلب اكتمال كل المتطلبات الإلزامية.
+            </p>
           </AdminEntityReviewDecisionCard>
 
           <AdminEntityReviewDecisionCard

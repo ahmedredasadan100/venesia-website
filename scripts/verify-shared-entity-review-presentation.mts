@@ -5,6 +5,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
+import {
+  decisionCardElement,
+  decisionCardElementCount,
+  inspectReviewDecisionCard,
+} from "./lib/review-decision-card-structure.mjs";
+
 const require = createRequire(import.meta.url);
 require.extensions[".ts"] = (module, filename) => {
   const source = readFileSync(filename, "utf8");
@@ -37,6 +43,9 @@ const contentShell = read("src/components/admin/content/editors/ContentEditorShe
 const projectForm = read("src/app/admin/projects/ProjectEditForm.tsx");
 const projectSeo = read("src/components/admin/projects/entry/ProjectSeoPanel.tsx");
 const moduleTabs = read("src/components/admin/ui/AdminModuleTabs.tsx");
+const contentPublishing = read(
+  "src/components/admin/content/editors/ContentPublishingOptions.tsx",
+);
 const {
   assessProjectEntryPayload,
   createEmptyProjectEntry,
@@ -44,6 +53,16 @@ const {
 } = require("../src/lib/admin/projects/project-entry-contract.ts") as typeof import("../src/lib/admin/projects/project-entry-contract.ts");
 const { getProjectPublishingReadiness } = require("../src/lib/admin/projects/project-publishing-capability.ts") as typeof import("../src/lib/admin/projects/project-publishing-capability.ts");
 const { getEntityReviewScore } = require("../src/lib/admin/review/entity-review-presentation.ts") as typeof import("../src/lib/admin/review/entity-review-presentation.ts");
+const contentPublicationCard = inspectReviewDecisionCard(
+  contentPublishing,
+  "ContentPublishingOptions.tsx",
+  "publication-schedule",
+);
+const projectPublicationCard = inspectReviewDecisionCard(
+  projectAdapter,
+  "ProjectPublishChecklistPanel.tsx",
+  "publication-schedule",
+);
 
 let passed = 0;
 function check(label: string, condition: unknown) {
@@ -140,6 +159,72 @@ check(
     !projectAdapter.includes("display-settings"),
 );
 check(
+  "Content and Project publication cards have one structural status indicator with no badge drift",
+  [contentPublicationCard, projectPublicationCard].every(
+    (card) =>
+      card.title === "حالة النشر والتاريخ" &&
+      !card.hasBadge &&
+      decisionCardElementCount(card, "AdminFormSwitch") === 1 &&
+      decisionCardElementCount(card, "AdminStatusPill") === 0,
+  ) &&
+    decisionCardElement(contentPublicationCard, "AdminFormSwitch", {
+      name: "content_publication_toggle",
+    })?.attributes.id === "content-status" &&
+    decisionCardElement(projectPublicationCard, "AdminFormSwitch", {
+      name: "publication_status",
+    })?.attributes.id === "project-publication-status",
+);
+const contentStatusSwitch = decisionCardElement(
+  contentPublicationCard,
+  "AdminFormSwitch",
+);
+const contentDateField = decisionCardElement(
+  contentPublicationCard,
+  "TopicDateLabelField",
+);
+const contentStatusHelper = decisionCardElement(contentPublicationCard, "p", {
+  id: "content-publication-hint",
+});
+const projectStatusSwitch = decisionCardElement(
+  projectPublicationCard,
+  "AdminFormSwitch",
+);
+const projectFirstPublish = decisionCardElement(
+  projectPublicationCard,
+  "ProjectDecision",
+  { label: "تاريخ أول نشر" },
+);
+const projectStatusHelper = decisionCardElement(projectPublicationCard, "p", {
+  id: "project-publication-hint",
+});
+check(
+  "the symmetric publication cards keep control then domain date then helper hierarchy",
+  Boolean(
+    contentStatusSwitch &&
+      contentDateField &&
+      contentStatusHelper &&
+      contentStatusSwitch.start < contentDateField.start &&
+      contentDateField.start < contentStatusHelper.start &&
+      projectStatusSwitch &&
+      projectFirstPublish &&
+      projectStatusHelper &&
+      projectStatusSwitch.start < projectFirstPublish.start &&
+      projectFirstPublish.start < projectStatusHelper.start,
+  ),
+);
+check(
+  "remaining decision composition differences are limited to declared domain contracts",
+  decisionCardElementCount(contentPublicationCard, "TopicDateLabelField") === 1 &&
+    decisionCardElementCount(projectPublicationCard, "TopicDateLabelField") === 0 &&
+    decisionCardElementCount(projectPublicationCard, "ProjectDecision") === 1 &&
+    (projectPublicationCard.sourceText.match(/initial\.project\.published_at/g) ?? [])
+      .length === 1 &&
+    contentPublishing.includes('name="is_popular"') &&
+    !projectAdapter.includes("popular") &&
+    projectAdapter.includes('id="public-display"') &&
+    !contentPublishing.includes('id="public-display"'),
+);
+check(
   "Content and Project use the same official analysis titles with domain detail in descriptions",
   [contentAdapter, projectAdapter].every((source) =>
     ["جاهزية المحتوى", "جاهزية الصور وAlt", "تحليل SEO"].every((title) =>
@@ -179,7 +264,11 @@ check(
   !sharedContract.includes("Runtime") &&
     !sharedContract.includes("Engine") &&
     projectContract.includes('PROJECT_ENTRY_NAVIGATION_EVENT = "admin-project-entry:navigate"') &&
-    contentAdapter.includes("CONTENT_EDITOR_NAVIGATION_EVENT"),
+    contentAdapter.includes("CONTENT_EDITOR_NAVIGATION_EVENT") &&
+    !sharedPanel.includes('entityKey === "content"') &&
+    !sharedPanel.includes('entityKey === "project"') &&
+    !sharedPanel.includes("content-review-capability") &&
+    !sharedPanel.includes("project-publishing-capability"),
 );
 
 const emptyProject = createEmptyProjectEntry();
