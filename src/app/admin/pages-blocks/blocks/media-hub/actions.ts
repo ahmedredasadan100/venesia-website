@@ -26,7 +26,7 @@ export async function updateMediaHubModule(formData: FormData) {
   if (!id || !name) throw new Error("بيانات الموديول غير مكتملة.");
 
   const sectionKey = parseMediaHubSectionKey(cleanText(formData.get("section_key")));
-  const dataSource = cleanText(formData.get("data_source")) || "media_items";
+  const dataSource = cleanText(formData.get("data_source")) || "topics";
   const config = buildMediaHubModuleConfig(sectionKey, dataSource, {
     limit: parseNumber(formData.get("limit"), 0),
     sideLimit: parseNumber(formData.get("side_limit"), 0),

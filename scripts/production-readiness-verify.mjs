@@ -88,7 +88,6 @@ const CORE_TABLES = [
   "project_floor_plans",
   "project_delivery_spec_items",
   "project_media",
-  "media_items",
   "topics",
   "menus",
   "menu_items",

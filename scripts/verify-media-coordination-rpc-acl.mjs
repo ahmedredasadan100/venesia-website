@@ -162,7 +162,7 @@ function parseFunctionDefinitions(source, migrationName, migrationOrder) {
 
 function parseAclEvents(source, migrationOrder) {
   const events = [];
-  const pattern = /\b(grant|revoke)\s+(?:execute|all(?:\s+privileges)?)\s+on\s+(?:function|routine)\s+(public\.[^(;]+\([^;]+?\))\s+(?:to|from)\s+([^;]+);/gi;
+  const pattern = /\b(grant|revoke)\s+(?:execute|all(?:\s+privileges)?)\s+on\s+(?:function|routine)\s+(public\.[^(;]+\([^;]*?\))\s+(?:to|from)\s+([^;]+);/gi;
   for (const match of source.matchAll(pattern)) {
     const roles = match[3]
       .replace(/\s+(?:with\s+grant\s+option|cascade|restrict)\s*$/i, "")

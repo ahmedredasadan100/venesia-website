@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { MediaContentItem } from "../../lib/media-center";
+import type { MediaContentItem } from "../../lib/media-center/types";
 
 type RelatedMediaRailProps = {
   title?: string;

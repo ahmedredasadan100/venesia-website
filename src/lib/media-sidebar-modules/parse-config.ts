@@ -1,7 +1,7 @@
 import type { MediaSidebarWidgetKey } from "./types";
 
 export type MediaSidebarModuleConfig = {
-  source: "navigation" | "media_items";
+  source: "navigation" | "topics";
   type?: "news";
   isPopular?: boolean;
   limit?: number;
@@ -16,11 +16,11 @@ export const MEDIA_SIDEBAR_WIDGET_DEFAULTS: Record<
     config: { source: "navigation", menuParent: "/media-center" },
   },
   latest: {
-    config: { source: "media_items", type: "news", limit: 3 },
+    config: { source: "topics", type: "news", limit: 3 },
     defaultLimit: 3,
   },
   popular: {
-    config: { source: "media_items", isPopular: true, limit: 4 },
+    config: { source: "topics", isPopular: true, limit: 4 },
     defaultLimit: 4,
   },
 };
@@ -53,7 +53,7 @@ export function parseMediaSidebarModuleConfig(
   if (widgetKey === "latest") {
     const limit = Number(value.limit);
     return {
-      source: "media_items",
+      source: "topics",
       type: "news",
       limit: Number.isFinite(limit) && limit > 0 ? limit : fallback.limit ?? 3,
     };
@@ -61,7 +61,7 @@ export function parseMediaSidebarModuleConfig(
 
   const limit = Number(value.limit);
   return {
-    source: "media_items",
+    source: "topics",
     isPopular: true,
     limit: Number.isFinite(limit) && limit > 0 ? limit : fallback.limit ?? 4,
   };
@@ -77,17 +77,17 @@ export function buildMediaSidebarModuleConfig(
   }
 
   if (widgetKey === "latest") {
-    if (dataSource !== "media_items") throw new Error("مصدر البيانات غير متوافق مع widget أحدث الأخبار.");
+    if (dataSource !== "topics") throw new Error("مصدر البيانات غير متوافق مع widget أحدث الأخبار.");
     return {
-      source: "media_items",
+      source: "topics",
       type: "news",
       limit: Math.max(1, limitValue || MEDIA_SIDEBAR_WIDGET_DEFAULTS.latest.defaultLimit || 3),
     };
   }
 
-  if (dataSource !== "media_items") throw new Error("مصدر البيانات غير متوافق مع widget الأكثر قراءة.");
+  if (dataSource !== "topics") throw new Error("مصدر البيانات غير متوافق مع widget الأكثر قراءة.");
   return {
-    source: "media_items",
+    source: "topics",
     isPopular: true,
     limit: Math.max(1, limitValue || MEDIA_SIDEBAR_WIDGET_DEFAULTS.popular.defaultLimit || 4),
   };

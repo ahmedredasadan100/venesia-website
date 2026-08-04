@@ -9,7 +9,7 @@ import {
 } from "react";
 import MediaSidebar from "./MediaSidebar";
 import { useMediaCenterCmsBlocks } from "./MediaCenterCmsBlocksContext";
-import type { MediaSidebarItem } from "../../lib/media-center";
+import type { MediaSidebarItem } from "../../lib/media-center/types";
 import type { MediaSidebarModulesState } from "../../lib/media-sidebar-modules/types";
 import { DEFAULT_MEDIA_SIDEBAR_MODULES } from "../../lib/media-sidebar-modules/defaults";
 

@@ -1,8 +1,12 @@
-import type { GalleryMediaPayload, MediaTopicPayload, VideoMediaPayload } from "../admin/media-topic-payload";
+import {
+  normalizeYouTubeUrl,
+  type GalleryMediaPayload,
+  type MediaTopicPayload,
+  type VideoMediaPayload,
+} from "../admin/media-topic-payload";
 import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
-import { toPublicMediaType } from "./content-type-map";
 import { formatDateLabel } from "./format-date-label";
-import type { MediaContentItem } from "./types";
+import { isMediaContentType, type MediaContentItem } from "./types";
 
 const DEFAULT_IMAGE = "/images/venesia-5.png";
 
@@ -34,6 +38,7 @@ export type UnifiedMediaTopicRow = {
   show_title_on_page?: boolean | null;
   show_image_on_page?: boolean | null;
   show_excerpt_on_page?: boolean | null;
+  media_project?: string | null;
 };
 
 function splitMarkdownParagraphs(content: string | null | undefined) {
@@ -83,8 +88,8 @@ function resolveTopicContent(row: UnifiedMediaTopicRow, publicType: MediaContent
 }
 
 export function adaptTopicRowToMediaItem(row: UnifiedMediaTopicRow): MediaContentItem | null {
-  const publicType = toPublicMediaType(row.content_type);
-  if (!publicType) return null;
+  if (!isMediaContentType(row.content_type)) return null;
+  const publicType = row.content_type;
 
   const publishedAt = row.published_at ?? "";
   const videoPayload = publicType === "video" ? resolveVideoPayload(parseMediaPayload(row.media_payload)) : null;
@@ -105,7 +110,9 @@ export function adaptTopicRowToMediaItem(row: UnifiedMediaTopicRow): MediaConten
     type: publicType,
     featured: Boolean(row.is_featured),
     isPopular: Boolean(row.is_popular),
+    project: row.media_project?.trim() || undefined,
     duration: videoPayload?.duration?.trim() || undefined,
+    videoUrl: normalizeYouTubeUrl(videoPayload?.video_url ?? "") ?? undefined,
     content: resolveTopicContent(row, publicType),
     seoTitle: row.seo_title ?? undefined,
     seoDescription: row.seo_description ?? undefined,

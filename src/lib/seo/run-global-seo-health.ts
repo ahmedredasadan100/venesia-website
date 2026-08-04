@@ -5,6 +5,7 @@ import {
   GLOBAL_SEO_PUBLIC_CONSUMERS,
   GLOBAL_SEO_SPECIALIZED_OWNERS,
 } from "../admin/seo/global-seo-adoption-manifest";
+import { normalizeYouTubeUrl } from "../admin/media-topic-payload";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { validateRedirectInput } from "../redirects/validate-redirect";
 import type { UrlRedirectRecord } from "../redirects/redirect-types";
@@ -104,6 +105,13 @@ type InfrastructureProof = {
   admin_views_service_only?: boolean;
   topics_publication_policy?: boolean;
   topics_no_public_writes?: boolean;
+  public_media_single_source?: boolean;
+  public_media_module_contract?: boolean;
+  public_media_link_contract?: boolean;
+  public_media_migrated_category_count?: number;
+  public_media_migrated_count?: number;
+  public_media_seo_normalization_count?: number;
+  public_media_published_count?: number;
 };
 
 async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
@@ -118,8 +126,11 @@ async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
     ["admin_views_service_only", "Admin views service-role only"],
     ["topics_publication_policy", "Anon Topics published/non-deleted only"],
     ["topics_no_public_writes", "Anon/authenticated Topics writes revoked"],
+    ["public_media_single_source", "Public Media single database source"],
+    ["public_media_module_contract", "Public Media module adoption"],
+    ["public_media_link_contract", "Public Media link adoption"],
   ];
-  return entries.map(([key, title]) => ({
+  const checks: GlobalSeoHealthCheck[] = entries.map(([key, title]) => ({
     id: key,
     dimension: "infrastructure",
     status: proof[key] === true ? "pass" : "fail",
@@ -127,15 +138,128 @@ async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
     title,
     detail: proof[key] === true ? "مثبت من قاعدة البيانات الحالية." : "لم يثبت الشرط من قاعدة البيانات الحالية.",
   }));
+  const publishedCount = proof.public_media_published_count;
+  checks.push({
+    id: "public_media_category_migration_audit_evidence",
+    dimension: "infrastructure",
+    status: proof.public_media_migrated_category_count === 13 ? "pass" : "fail",
+    weight: 4,
+    title: "Public Media category migration audit evidence",
+    detail:
+      proof.public_media_migrated_category_count === 13
+        ? "13 سجل Audit تربط كل media_category موروث بتصنيف topic_categories النهائي."
+        : `المتوقع 13 سجل Category Migration Audit؛ المثبت ${String(proof.public_media_migrated_category_count ?? "غير متاح")}.`,
+  });
+  checks.push({
+    id: "public_media_migration_audit_evidence",
+    dimension: "infrastructure",
+    status: proof.public_media_migrated_count === 28 ? "pass" : "fail",
+    weight: 6,
+    title: "Public Media migration audit evidence",
+    detail:
+      proof.public_media_migrated_count === 28
+        ? "28 سجل Audit تربط كل media_item موروث بسجل topics النهائي."
+        : `المتوقع 28 سجل Migration Audit؛ المثبت ${String(proof.public_media_migrated_count ?? "غير متاح")}.`,
+  });
+  checks.push({
+    id: "public_media_seo_normalization_evidence",
+    dimension: "infrastructure",
+    status: proof.public_media_seo_normalization_count === 14 ? "pass" : "fail",
+    weight: 6,
+    title: "Public Media SEO normalization evidence",
+    detail:
+      proof.public_media_seo_normalization_count === 14
+        ? "14 سجل Audit تحفظ عنوان SEO الأصلي والمطبّع، وكل قيمة جديدة لا تتجاوز 60 حرفًا."
+        : `المتوقع 14 سجل Audit صالحًا؛ المثبت ${String(proof.public_media_seo_normalization_count ?? "غير متاح")}.`,
+  });
+  checks.push({
+    id: "public_media_published_inventory",
+    dimension: "infrastructure",
+    status: typeof publishedCount !== "number" ? "fail" : publishedCount > 0 ? "pass" : "warning",
+    weight: 6,
+    title: "Public Media published inventory",
+    detail:
+      typeof publishedCount !== "number"
+        ? "تعذر إثبات عدد عناصر Public Media المنشورة."
+        : `${publishedCount} عنصر Public Media منشور من topics.`
+  });
+  return checks;
+}
+
+async function buildPublicMediaDataChecks(): Promise<GlobalSeoHealthCheck[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select("id,slug,title,excerpt,image,category_id,content_type,media_payload")
+    .in("content_type", ["news", "press", "site_update", "video", "gallery"])
+    .eq("status", "published")
+    .is("deleted_at", null);
+  if (error) {
+    return [{
+      id: "public_media_editorial_contract_query",
+      dimension: "adoption",
+      status: "fail",
+      weight: 10,
+      title: "Public Media editorial contract",
+      detail: error.message,
+    }];
+  }
+
+  const rows = data ?? [];
+  const incomplete = rows.filter((row) =>
+    !row.slug?.trim() || !row.title?.trim() || !row.excerpt?.trim() || !row.image?.trim() || !row.category_id,
+  );
+  const invalidRichPayload = rows.filter((row) => {
+    const payload = row.media_payload;
+    if (row.content_type === "gallery") {
+      return !payload || typeof payload !== "object" || payload.kind !== "gallery" || !Array.isArray(payload.images) || payload.images.length === 0;
+    }
+    if (row.content_type === "video") {
+      return !payload || typeof payload !== "object" || payload.kind !== "video";
+    }
+    return payload !== null;
+  });
+  const videosWithoutUrl = rows.filter((row) => {
+    if (row.content_type !== "video") return false;
+    const payload = row.media_payload;
+    if (!payload || typeof payload !== "object" || payload.kind !== "video") return false;
+    return !normalizeYouTubeUrl(typeof payload.video_url === "string" ? payload.video_url : "");
+  });
+
+  return [
+    {
+      id: "public_media_editorial_contract",
+      dimension: "adoption",
+      status: incomplete.length || invalidRichPayload.length ? "fail" : "pass",
+      weight: 10,
+      title: "Public Media editorial contract",
+      detail: incomplete.length || invalidRichPayload.length
+        ? `${incomplete.length} سجل ناقص و${invalidRichPayload.length} Rich Media payload غير صالح.`
+        : `${rows.length} سجل منشور يطابق عقد Unified Content العام.`,
+      samples: [...incomplete, ...invalidRichPayload].slice(0, 6).map((row) => `${row.content_type}:${row.slug || row.id}`),
+    },
+    {
+      id: "public_media_playable_video_data",
+      dimension: "metadata",
+      status: videosWithoutUrl.length ? "warning" : "pass",
+      weight: 4,
+      title: "Published video source data",
+      detail: videosWithoutUrl.length
+        ? `${videosWithoutUrl.length} فيديو منشور بلا video_url صالح؛ بقي منشورًا لمنع فقد الصفحات، والعرض العام يتوقف بأمان دون fallback. استكمال روابط التشغيل Product/Data Completion.`
+        : "كل فيديو منشور يملك video_url داخل Media payload نفسه.",
+      samples: videosWithoutUrl.slice(0, 6).map((row) => String(row.slug || row.id)),
+      productDecision: videosWithoutUrl.length > 0,
+    },
+  ];
 }
 
 export async function runGlobalSeoHealth(): Promise<GlobalSeoHealthSnapshot> {
   const checkedAt = new Date().toISOString();
-  const [contract, sitemap, redirectChecks, infrastructureChecks] = await Promise.all([
+  const [contract, sitemap, redirectChecks, infrastructureChecks, publicMediaChecks] = await Promise.all([
     loadGlobalSeoEffectiveContractForAdmin(),
     runSitemapDiagnostics(),
     buildRedirectChecks(),
     buildInfrastructureChecks(),
+    buildPublicMediaDataChecks(),
   ]);
   const checks: GlobalSeoHealthCheck[] = [];
   const settings = contract.settings;
@@ -302,6 +426,7 @@ export async function runGlobalSeoHealth(): Promise<GlobalSeoHealthSnapshot> {
     detail: "Global settings وpublic content تستخدم مالك cache tags نفسه مع revalidation صريح للـlayout وrobots وsitemap.",
   });
   checks.push(...infrastructureChecks);
+  checks.push(...publicMediaChecks);
 
   const dimensionScores = Object.fromEntries(
     DIMENSIONS.map((dimension) => [dimension, scoreChecks(checks.filter((check) => check.dimension === dimension))]),

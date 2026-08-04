@@ -1,9 +1,9 @@
 import type { MediaHubSectionKey } from "./types";
 
-export type MediaHubMediaType = "news" | "site-update" | "video" | "gallery" | "press";
+export type MediaHubMediaType = "news" | "site_update" | "video" | "gallery" | "press";
 
 export type MediaHubModuleConfig = {
-  source: "media_items";
+  source: "topics";
   type?: MediaHubMediaType;
   featured?: boolean;
   limit?: number;
@@ -21,24 +21,24 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
   }
 > = {
   featured: {
-    config: { source: "media_items", type: "news", featured: true, sideLimit: 3, listLimit: 4 },
+    config: { source: "topics", type: "news", featured: true, sideLimit: 3, listLimit: 4 },
     defaultSideLimit: 3,
     defaultListLimit: 4,
   },
   "site-updates": {
-    config: { source: "media_items", type: "site-update", limit: 4 },
+    config: { source: "topics", type: "site_update", limit: 4 },
     defaultLimit: 4,
   },
   videos: {
-    config: { source: "media_items", type: "video", limit: 4 },
+    config: { source: "topics", type: "video", limit: 4 },
     defaultLimit: 4,
   },
   gallery: {
-    config: { source: "media_items", type: "gallery", limit: 8 },
+    config: { source: "topics", type: "gallery", limit: 8 },
     defaultLimit: 8,
   },
   press: {
-    config: { source: "media_items", type: "press", limit: 6 },
+    config: { source: "topics", type: "press", limit: 6 },
     defaultLimit: 6,
   },
 };
@@ -65,7 +65,7 @@ export function parseMediaHubModuleConfig(
   if (!raw || typeof raw !== "object") return { ...fallback };
 
   const value = raw as Record<string, unknown>;
-  const source = value.source === "media_items" ? "media_items" : fallback.source;
+  const source = value.source === "topics" ? "topics" : fallback.source;
 
   if (sectionKey === "featured") {
     return {
@@ -77,7 +77,7 @@ export function parseMediaHubModuleConfig(
     };
   }
 
-  const mediaType = sectionKey === "site-updates" ? "site-update" : sectionKey;
+  const mediaType = sectionKey === "site-updates" ? "site_update" : sectionKey;
   return {
     source,
     type: mediaType as MediaHubMediaType,
@@ -90,14 +90,14 @@ export function buildMediaHubModuleConfig(
   dataSource: string,
   limits: { limit?: number; sideLimit?: number; listLimit?: number },
 ): MediaHubModuleConfig {
-  if (dataSource !== "media_items") {
+  if (dataSource !== "topics") {
     throw new Error("مصدر البيانات غير مدعوم حاليًا.");
   }
 
   if (sectionKey === "featured") {
     const defaults = MEDIA_HUB_SECTION_DEFAULTS.featured;
     return {
-      source: "media_items",
+      source: "topics",
       type: "news",
       featured: true,
       sideLimit: Math.max(1, limits.sideLimit || defaults.defaultSideLimit || 3),
@@ -107,8 +107,8 @@ export function buildMediaHubModuleConfig(
 
   const defaults = MEDIA_HUB_SECTION_DEFAULTS[sectionKey];
   return {
-    source: "media_items",
-    type: (sectionKey === "site-updates" ? "site-update" : sectionKey) as MediaHubMediaType,
+    source: "topics",
+    type: (sectionKey === "site-updates" ? "site_update" : sectionKey) as MediaHubMediaType,
     limit: Math.max(1, limits.limit || defaults.defaultLimit || 4),
   };
 }

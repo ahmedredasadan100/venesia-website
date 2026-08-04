@@ -33,7 +33,7 @@ export function getMediaHubModuleSummary(sectionKey: string, description?: strin
 }
 
 export function formatMediaHubDataSource(config: Record<string, unknown>) {
-  return config.source === "media_items" ? "media_items — عناصر المركز الإعلامي" : String(config.source ?? "—");
+  return config.source === "topics" ? "topics — Unified Content" : String(config.source ?? "—");
 }
 
 export function formatMediaHubLimit(config: Record<string, unknown>) {

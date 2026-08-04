@@ -61,7 +61,7 @@ export default function MediaSidebarModuleEditClient({
   const initialConfig = block.config ?? {};
 
   const [widgetKey, setWidgetKey] = useState<MediaSidebarWidgetKey>(initialWidgetKey);
-  const [dataSource, setDataSource] = useState<"navigation" | "media_items">(
+  const [dataSource, setDataSource] = useState<"navigation" | "topics">(
     readInitialDataSource(initialWidgetKey, initialConfig),
   );
   const [limit, setLimit] = useState<number | "">(readInitialLimit(initialWidgetKey, initialConfig));
@@ -78,10 +78,10 @@ export default function MediaSidebarModuleEditClient({
     }
 
     if (widgetKey === "latest") {
-      return [{ value: "media_items", label: "media_items — type: news" }];
+      return [{ value: "topics", label: "topics — type: news" }];
     }
 
-    return [{ value: "media_items", label: "media_items — isPopular: true" }];
+    return [{ value: "topics", label: "topics — isPopular: true" }];
   }, [widgetKey]);
 
   function handleWidgetChange(nextWidgetKey: MediaSidebarWidgetKey) {
@@ -144,7 +144,7 @@ export default function MediaSidebarModuleEditClient({
                       name="data_source"
                       value={dataSource}
                       onChange={(event) =>
-                        setDataSource(event.target.value === "navigation" ? "navigation" : "media_items")
+                        setDataSource(event.target.value === "navigation" ? "navigation" : "topics")
                       }
                       className={fieldClassName()}
                       dir="ltr"

@@ -57,7 +57,7 @@ export default function MediaHubModuleEditClient({
   const parsedInitial = parseMediaHubModuleConfig(initialConfig, initialSectionKey);
 
   const [sectionKey, setSectionKey] = useState<MediaHubSectionKey>(initialSectionKey);
-  const [dataSource, setDataSource] = useState<"media_items">("media_items");
+  const [dataSource, setDataSource] = useState<"topics">("topics");
   const [limit, setLimit] = useState<number | "">(
     typeof parsedInitial.limit === "number" ? parsedInitial.limit : MEDIA_HUB_SECTION_DEFAULTS[initialSectionKey].defaultLimit ?? "",
   );
@@ -76,7 +76,7 @@ export default function MediaHubModuleEditClient({
 
   function handleSectionChange(nextSectionKey: MediaHubSectionKey) {
     setSectionKey(nextSectionKey);
-    setDataSource("media_items");
+    setDataSource("topics");
 
     if (nextSectionKey === "featured") {
       setSideLimit(MEDIA_HUB_SECTION_DEFAULTS.featured.defaultSideLimit ?? 3);
@@ -97,7 +97,7 @@ export default function MediaHubModuleEditClient({
         backLabel="الرجوع لكل Media Hub Modules"
         eyebrow="MEDIA HUB MODULE"
         title={block.name}
-        description="سكشن مركز إعلامي — يعتمد على عناصر media_items المنشورة."
+        description="سكشن مركز إعلامي — يعتمد على Unified Content المنشور في topics."
         status={block.status}
         saved={saved}
         slotContext={getSlotCompatibilityLabel("media-hub")}
@@ -143,11 +143,11 @@ export default function MediaHubModuleEditClient({
                     <select
                       name="data_source"
                       value={dataSource}
-                      onChange={() => setDataSource("media_items")}
+                      onChange={() => setDataSource("topics")}
                       className={fieldClassName()}
                       dir="ltr"
                     >
-                      <option value="media_items">media_items — عناصر المركز الإعلامي</option>
+                      <option value="topics">topics — Unified Content</option>
                     </select>
                   </label>
 

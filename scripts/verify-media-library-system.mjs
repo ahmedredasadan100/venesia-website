@@ -32,6 +32,9 @@ function loadTypeScriptModule(relativePath, dependencies) {
   return commonJsModule.exports;
 }
 
+const contentTypesModule = loadTypeScriptModule("src/lib/admin/content/content-types.ts", {});
+const publicContentPathModule = loadTypeScriptModule("src/lib/content/public-content-path.ts", {});
+
 const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/reference-providers.ts", {
   "server-only": {},
   "node:util": { isDeepStrictEqual },
@@ -47,6 +50,8 @@ const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/referen
     },
   },
   "../../supabase-admin": { getSupabaseAdmin: () => ({}) },
+  "../content/content-types": contentTypesModule,
+  "../../content/public-content-path": publicContentPathModule,
   "./identity": {
     getCanonicalMediaIdentityKey: (identity) => `${identity.provider}:${identity.bucket}:${identity.objectKey}`,
   },
@@ -89,6 +94,8 @@ const usageProviderModule = loadTypeScriptModule("src/lib/admin/media-catalog/re
   "node:util": { isDeepStrictEqual },
   "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
   "../../supabase-admin": { getSupabaseAdmin: () => usageSupabase },
+  "../content/content-types": contentTypesModule,
+  "../../content/public-content-path": publicContentPathModule,
   "./identity": {
     getCanonicalMediaIdentityKey: (identity) => `${identity.provider}:${identity.bucket}:${identity.objectKey}`,
   },

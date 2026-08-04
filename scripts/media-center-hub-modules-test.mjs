@@ -242,14 +242,14 @@ if (!publicRes.ok) {
 
   const originalSiteUpdatesConfig =
     (await getHubTemplateConfig("media-hub-site-updates")) ?? {
-      source: "media_items",
-      type: "site-update",
+      source: "topics",
+      type: "site_update",
       limit: 4,
     };
 
   await setHubTemplateConfig("media-hub-site-updates", {
-    source: "media_items",
-    type: "site-update",
+    source: "topics",
+    type: "site_update",
     limit: 2,
   });
 

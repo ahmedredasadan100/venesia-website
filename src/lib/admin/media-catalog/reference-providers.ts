@@ -4,6 +4,8 @@ import { isDeepStrictEqual } from "node:util";
 
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { isContentType } from "../content/content-types";
+import { resolvePublicContentPath } from "../../content/public-content-path";
 import { getCanonicalMediaIdentityKey } from "./identity";
 import type { CanonicalMediaIdentity, MediaReferenceState } from "./types";
 
@@ -347,12 +349,15 @@ const PROVIDER_CONFIGS = [
     table: "topics",
     entityType: "topic",
     labelField: "title",
-    fields: ["image", "excerpt", "content", "media_payload"],
+    fields: ["image", "excerpt", "content", "media_payload", "og_image"],
     jsonFields: ["media_payload"],
-    extraFields: ["slug"],
+    extraFields: ["slug", "content_type"],
     stateFields: ["status", "deleted_at"],
     editHref: (row) => `/admin/content/topics/${row.id}`,
-    publicHref: (row) => (row.slug ? `/topics/${row.slug}` : null),
+    publicHref: (row) =>
+      row.slug && isContentType(row.content_type)
+        ? resolvePublicContentPath(row.content_type, valueText(row.slug))
+        : null,
   },
   {
     domainKey: "topic_categories",
@@ -362,15 +367,6 @@ const PROVIDER_CONFIGS = [
     fields: ["image"],
     stateFields: ["status"],
     editHref: (row) => `/admin/content/categories/${row.id}`,
-  },
-  {
-    domainKey: "legacy_media_items",
-    table: "media_items",
-    entityType: "legacy_media_item",
-    labelField: "title",
-    fields: ["image", "og_image", "content"],
-    stateFields: ["status", "deleted_at"],
-    editHref: () => "/admin/content/topics",
   },
   {
     domainKey: "projects",

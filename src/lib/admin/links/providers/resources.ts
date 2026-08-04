@@ -1,4 +1,6 @@
 import { getSupabaseAdmin } from "../../../supabase-admin";
+import { isContentType } from "../../content/content-types";
+import { resolvePublicContentPath } from "../../../content/public-content-path";
 import { ADMIN_STATIC_ROUTES } from "../static-routes";
 import type { AdminLinkProvider } from "../types";
 
@@ -93,7 +95,7 @@ export const topicsLinkProvider: AdminLinkProvider = {
   async search(query, limit) {
     const { data, error } = await getSupabaseAdmin()
       .from("topics")
-      .select("id,title,slug,category")
+      .select("id,title,slug,category,content_type")
       .is("deleted_at", null)
       .order("published_at", { ascending: false })
       .limit(200);
@@ -103,22 +105,28 @@ export const topicsLinkProvider: AdminLinkProvider = {
     return (data ?? [])
       .filter((row) => matchesQuery([row.title, row.slug, row.category], query))
       .slice(0, limit)
+      .filter((row) => isContentType(row.content_type))
       .map((row) => ({
         id: `topics:${row.id}`,
         resourceType: "topics" as const,
         resourceId: row.id,
         title: row.title,
         slug: row.slug,
-        publicPath: `/topics/${row.slug}`,
+        publicPath: resolvePublicContentPath(row.content_type, row.slug),
         subtitle: row.category,
+        meta: { content_type: row.content_type },
       }));
   },
   async resolveMany(ids) {
     if (!ids.length) return new Map();
-    const { data, error } = await getSupabaseAdmin().from("topics").select("id,slug").in("id", ids);
+    const { data, error } = await getSupabaseAdmin().from("topics").select("id,slug,content_type").in("id", ids);
     if (error) throw new Error(error.message);
     const map = new Map<number, string>();
-    (data ?? []).forEach((row) => map.set(row.id, `/topics/${row.slug}`));
+    (data ?? []).forEach((row) => {
+      if (isContentType(row.content_type)) {
+        map.set(row.id, resolvePublicContentPath(row.content_type, row.slug));
+      }
+    });
     return map;
   },
 };
@@ -214,58 +222,6 @@ export const seriesLinkProvider: AdminLinkProvider = {
     if (error) throw new Error(error.message);
     const map = new Map<number, string>();
     (data ?? []).forEach((row) => map.set(row.id, `/topics?series=${row.slug}`));
-    return map;
-  },
-};
-
-const MEDIA_TYPE_PATHS: Record<string, string> = {
-  news: "news",
-  video: "videos",
-  gallery: "gallery",
-  press: "press",
-  "site-update": "site-updates",
-};
-
-export const mediaLinkProvider: AdminLinkProvider = {
-  type: "media_items",
-  label: "وسيط",
-  labelPlural: "المركز الإعلامي",
-  async search(query, limit) {
-    const { data, error } = await getSupabaseAdmin()
-      .from("media_items")
-      .select("id,title,slug,type,category")
-      .is("deleted_at", null)
-      .order("published_at", { ascending: false })
-      .limit(200);
-
-    if (error) throw new Error(error.message);
-
-    return (data ?? [])
-      .filter((row) => matchesQuery([row.title, row.slug, row.type, row.category], query))
-      .slice(0, limit)
-      .map((row) => {
-        const segment = MEDIA_TYPE_PATHS[row.type] ?? "news";
-        return {
-          id: `media_items:${row.id}`,
-          resourceType: "media_items" as const,
-          resourceId: row.id,
-          title: row.title,
-          slug: row.slug,
-          publicPath: `/media-center/${segment}/${row.slug}`,
-          subtitle: row.type,
-          meta: { media_type: row.type },
-        };
-      });
-  },
-  async resolveMany(ids) {
-    if (!ids.length) return new Map();
-    const { data, error } = await getSupabaseAdmin().from("media_items").select("id,slug,type").in("id", ids);
-    if (error) throw new Error(error.message);
-    const map = new Map<number, string>();
-    (data ?? []).forEach((row) => {
-      const segment = MEDIA_TYPE_PATHS[row.type] ?? "news";
-      map.set(row.id, `/media-center/${segment}/${row.slug}`);
-    });
     return map;
   },
 };

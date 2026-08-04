@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import type { MediaContentItem } from "../../lib/media-center";
+import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 
 type MediaCenterHubFeaturedProps = {
   featuredItem: MediaContentItem;
@@ -51,7 +51,7 @@ export default function MediaCenterHubFeatured({
             {sideNews.map((item, index) => (
               <Link
                 key={item.id}
-                href={`/media-center/news/${item.slug}`}
+                href={getMediaHref(item)}
                 onMouseEnter={() => setActiveIndex(index)}
                 className="group block"
               >
@@ -110,7 +110,7 @@ export default function MediaCenterHubFeatured({
         </div>
 
         <Link
-          href={`/media-center/news/${activeItem.slug}`}
+          href={getMediaHref(activeItem)}
           className="group order-1 block lg:order-2"
         >
           <article className="relative min-h-[445px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.035]">

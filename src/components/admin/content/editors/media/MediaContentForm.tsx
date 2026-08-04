@@ -1,4 +1,5 @@
 import { createAdminFormErrorState } from "../../../../../lib/admin/form-runtime";
+import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
 import {
   getContentEditorAdapter,
 } from "../../../../../lib/admin/content/content-types";
@@ -11,6 +12,7 @@ import ContentBasicDataPanel from "../ContentBasicDataPanel";
 import ContentDisplaySettings from "../ContentDisplaySettings";
 import ContentEditorShell from "../ContentEditorShell";
 import ContentPublishingOptions from "../ContentPublishingOptions";
+import { AdminFormError } from "../../../ui/AdminFormRuntime";
 import TopicMarkdownEditor from "../article/TopicMarkdownEditor";
 import MediaEntitySeoPanel from "./MediaEntitySeoPanel";
 import MediaGalleryFields from "./MediaGalleryFields";
@@ -40,6 +42,7 @@ export type MediaContentFormValues = {
   show_image_on_page?: boolean | null;
   show_excerpt_on_page?: boolean | null;
   media_payload?: MediaTopicPayload | null;
+  media_project?: string | null;
   seo_title?: string | null;
   seo_description?: string | null;
   focus_keyword?: string | null;
@@ -149,7 +152,7 @@ export default function MediaContentForm({
     ogImageAlt: "",
   };
 
-  const bodyEditor =
+  const specializedBodyEditor =
     adapter.body === "video" ? (
       <div className="space-y-5">
         <MediaVideoFields
@@ -167,6 +170,25 @@ export default function MediaContentForm({
     ) : (
       <TopicMarkdownEditor defaultValue={content} variant="compact" />
     );
+  const bodyEditor = (
+    <div className="space-y-5">
+      {specializedBodyEditor}
+      {contentType === "news" || contentType === "site_update" ? (
+        <label className="block space-y-2">
+          <span className="text-sm font-semibold text-white/75">المشروع المرتبط</span>
+          <input
+            name="media_project"
+            defaultValue={values?.media_project ?? ""}
+            placeholder="مثال: D174"
+            className={adminFormFieldClassName()}
+          />
+          <AdminFormError name="media_project" />
+        </label>
+      ) : (
+        <input type="hidden" name="media_project" value={values?.media_project ?? ""} />
+      )}
+    </div>
+  );
 
   return (
     <>

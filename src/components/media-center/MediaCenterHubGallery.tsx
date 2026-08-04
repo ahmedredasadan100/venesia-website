@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { MediaContentItem } from "../../lib/media-center";
+import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 
 type MediaCenterHubGalleryProps = {
   items: MediaContentItem[];
@@ -39,7 +39,7 @@ export default function MediaCenterHubGallery({
           {sideImages.map((item) => (
             <Link
               key={item.id}
-              href={`/media-center/gallery/${item.slug}`}
+              href={getMediaHref(item)}
               className="group relative min-h-[170px] overflow-hidden rounded-[1.35rem] border border-white/10 bg-white/[0.035]"
             >
               <Image
@@ -69,7 +69,7 @@ export default function MediaCenterHubGallery({
         </div>
 
         <Link
-          href={`/media-center/gallery/${featuredImage.slug}`}
+          href={getMediaHref(featuredImage)}
           className="group relative min-h-[360px] overflow-hidden rounded-[1.35rem] border border-white/10 bg-white/[0.035]"
         >
           <Image

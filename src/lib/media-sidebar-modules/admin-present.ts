@@ -29,7 +29,7 @@ export function getMediaSidebarModuleSummary(widgetKey: string, description?: st
 
 export function formatMediaSidebarDataSource(config: Record<string, unknown>) {
   if (config.source === "navigation") return "navigation / menu — قائمة التنقل";
-  if (config.source === "media_items") return "media_items — عناصر المركز الإعلامي";
+  if (config.source === "topics") return "topics — Unified Content";
   return String(config.source ?? "—");
 }
 

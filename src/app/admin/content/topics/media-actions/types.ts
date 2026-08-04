@@ -35,6 +35,7 @@ export type MediaTopicRow = {
   show_excerpt_on_page: boolean | null;
   deleted_at?: string | null;
   media_payload: MediaTopicPayload | null;
+  media_project?: string | null;
   seo_title?: string | null;
   seo_description?: string | null;
   seo_keywords?: string[] | null;

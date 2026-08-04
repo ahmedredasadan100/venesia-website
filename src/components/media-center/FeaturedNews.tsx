@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { MediaNewsItem } from "../../lib/media-center";
+import { getMediaHref, type MediaNewsItem } from "../../lib/media-center/types";
 
 type FeaturedNewsProps = {
   item: MediaNewsItem;
@@ -41,7 +41,7 @@ export default function FeaturedNews({ item }: FeaturedNewsProps) {
           </p>
 
           <Link
-            href={`/media-center/news/${item.slug}`}
+            href={getMediaHref(item)}
             className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-6 py-3 text-sm font-medium text-[#D8B87A] transition duration-500 hover:border-[#D8B87A]/50 hover:bg-[#D8B87A]/15"
           >
             اقرأ الخبر الكامل

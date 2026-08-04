@@ -46,7 +46,6 @@ const RESOURCE_SIDEBAR: Array<{ id: ExplorerResourceId; label: string }> = [
   { id: "topics", label: "Topics" },
   { id: "topic_categories", label: "Categories" },
   { id: "topic_series", label: "Series" },
-  { id: "media_items", label: "Media" },
   { id: "static_routes", label: "Static Routes" },
   { id: "external", label: "External" },
   { id: "anchor", label: "Anchor" },
@@ -59,7 +58,6 @@ const RESOURCE_LABELS: Record<LinkedResourceType, string> = {
   topics: "موضوع",
   topic_categories: "تصنيف",
   topic_series: "سلسلة",
-  media_items: "وسيط",
   static_routes: "مسار ثابت",
 };
 
@@ -68,7 +66,6 @@ const BROWSEABLE_TYPES = new Set<LinkedResourceType>([
   "projects",
   "topics",
   "topic_series",
-  "media_items",
   "static_routes",
 ]);
 

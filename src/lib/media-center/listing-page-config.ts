@@ -46,7 +46,7 @@ export const MEDIA_LISTING_PAGE_CONFIG = {
     itemsLabel: "بيانات",
   },
   "site-updates": {
-    mediaType: "site-update",
+    mediaType: "site_update",
     cmsPageSlug: "media-center-site-updates",
     basePath: "/media-center/site-updates",
     metadataPath: "/media-center/site-updates",
