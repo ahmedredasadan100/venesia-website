@@ -499,11 +499,10 @@ export default function PagesTableClient({
             toolbar={{
               basePath: "/admin/pages-blocks/pages",
               search: {
-                placeholder: "البحث غير متاح قبل تحديث Read Model",
+                placeholder: "ابحث في الصفحات",
                 value: controller.query.search,
                 minLength: pagesQueryContract.searchMinLength,
                 pending: controller.isFetching,
-                disabled: true,
               },
               filters: [],
               values: {},

@@ -58,6 +58,7 @@ export async function loadPagesEntityListResult(
     p_page_size: query.pageSize,
     p_sort_field: query.sort.field,
     p_sort_direction: query.sort.direction,
+    p_search: query.search,
   });
   if (error) throw new PagesEntityListDatabaseError(error);
 

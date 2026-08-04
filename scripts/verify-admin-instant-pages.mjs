@@ -14,6 +14,7 @@ const [
   adapter,
   migration,
   correctiveMigration,
+  searchMigration,
   company,
   settings,
   contracts,
@@ -31,6 +32,7 @@ const [
   read("src/lib/admin/pages/entity-list-adapter.ts"),
   read("sql/migrations/20260720060000_admin_pages_list_read_model.sql"),
   read("sql/migrations/20260720100000_admin_pages_list_read_model_page_normalization.sql"),
+  read("sql/migrations/20260805120000_admin_pages_search_read_model.sql"),
   read("src/lib/admin/shell/company-config.ts"),
   read("src/app/admin/settings/general/actions.ts"),
   read("src/lib/admin/entity-list/data-engine/contracts.ts"),
@@ -77,6 +79,7 @@ assert.doesNotMatch(mutationCache, /rows:\s*\[\.\.\.inserted/);
 assert.match(controller, /cacheNormalizedAdminEntityListResult/);
 assert.match(normalizedCache, /setQueryData\(normalizedKey, result\)/);
 assert.match(adapter, /\.rpc\("admin_list_pages"/);
+assert.match(adapter, /p_search:\s*query\.search/);
 assert.equal((adapter.match(/\.rpc\(/g) ?? []).length, 1);
 assert.doesNotMatch(adapter, /return loadPagesEntityListResult/);
 assert.match(adapter, /z\.coerce\.number\(\)\.int\(\)\.nonnegative\(\)\.finite\(\)/);
@@ -86,10 +89,18 @@ assert.match(adapter, /page:\s*z\.number\(\)\.int\(\)\.positive\(\)/);
 for (const table of ["page_content_block_assignments", "page_cta_block_assignments", "page_cards_block_assignments", "page_breadcrumb_block_assignments", "page_feed_module_assignments", "page_media_sidebar_module_assignments", "page_media_hub_module_assignments", "hero_assignments"]) assert.ok(migration.includes(table), table);
 assert.match(correctiveMigration, /normalized_state/);
 assert.match(correctiveMigration, /'page', \(select page from normalized_state\)/);
+assert.match(searchMigration, /p_search text default ''/);
+assert.match(searchMigration, /drop function if exists public\.admin_list_pages\(integer, integer, text, text\)/);
+for (const field of ["title", "slug", "path", "page_type", "status"]) {
+  assert.ok(searchMigration.includes(`coalesce(p.${field}, '')`), `search read model missing ${field}`);
+}
+assert.match(searchMigration, /notify pgrst, 'reload schema'/);
+assert.match(searchMigration, /revoke all on function public\.admin_list_pages\(integer, integer, text, text, text\)/);
+assert.match(searchMigration, /grant execute on function public\.admin_list_pages\(integer, integer, text, text, text\)[\s\S]*?to service_role/);
 assert.match(contracts, /isSameAdminEntityListScope/);
 assert.match(company, /unstable_cache/);
 assert.match(company, /ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.match(company, /revalidateTag\(ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.equal((settings.match(/revalidatePath\("\/admin"/g) ?? []).length, 1);
 assert.match(page, /loadPagesEntityListResult/);
-console.log("verify:admin-instant-pages passed (58 structural assertions)");
+console.log("verify:admin-instant-pages passed (69 structural assertions)");
