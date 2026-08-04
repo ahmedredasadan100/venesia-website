@@ -3,6 +3,7 @@
 import { useId, useState, type ReactNode } from "react";
 
 import {
+  ADMIN_ENTITY_REVIEW_VALIDATION_DESCRIPTION,
   getEntityReviewScore,
   type EntityReviewAnalysisCardDefinition,
   type EntityReviewCheck,
@@ -12,11 +13,9 @@ import {
 type AdminEntityReviewPanelProps = {
   entityKey: string;
   navigationEventName: string;
-  decisionTitle: string;
   checks: readonly EntityReviewCheck[];
   guidanceCards: readonly EntityReviewAnalysisCardDefinition[];
   decisionCards: ReactNode;
-  validationDescription: string;
   summaryEntries: readonly EntityReviewSummaryEntry[];
 };
 
@@ -85,11 +84,9 @@ export function AdminEntityReviewCorrectionButton({
 export default function AdminEntityReviewPanel({
   entityKey,
   navigationEventName,
-  decisionTitle,
   checks,
   guidanceCards,
   decisionCards,
-  validationDescription,
   summaryEntries,
 }: AdminEntityReviewPanelProps) {
   const instanceId = useId().replace(/:/g, "");
@@ -103,7 +100,6 @@ export default function AdminEntityReviewPanel({
   const suggestions = checks.filter(
     (item) => item.status === "warn" || item.status === "info",
   );
-  const decisionsTitleId = `${instanceId}-entity-review-decisions-title`;
   const analysisId = `${instanceId}-entity-review-analysis`;
   const analysisTitleId = `${analysisId}-title`;
 
@@ -122,87 +118,68 @@ export default function AdminEntityReviewPanel({
       data-admin-entity-review={entityKey}
       data-admin-entity-review-presentation="dashboard"
     >
-      <section aria-labelledby={decisionsTitleId}>
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#D8B87A]/65">
-              قرارات سريعة
-            </p>
-            <h2
-              id={decisionsTitleId}
-              className="mt-1 text-lg font-semibold text-white/88"
-            >
-              {decisionTitle}
-            </h2>
-          </div>
-          <p className="hidden text-xs text-white/35 sm:block">
-            تبقى هذه القرارات مكشوفة دائمًا.
-          </p>
-        </div>
-
-        <div
-          className="grid items-stretch gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,1fr)]"
-          data-admin-entity-review-decisions
+      <div
+        className="grid items-stretch gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,1fr)]"
+        data-admin-entity-review-decisions
+      >
+        <article
+          className="flex min-w-0 flex-col rounded-[22px] border border-[#D8B87A]/24 bg-[#D8B87A]/[0.065] p-4 md:p-5"
+          data-admin-entity-review-decision="score"
         >
-          <article
-            className="flex min-w-0 flex-col rounded-[22px] border border-[#D8B87A]/24 bg-[#D8B87A]/[0.065] p-4 md:p-5"
-            data-admin-entity-review-decision="score"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-white/82">
-                  درجة جاهزية النشر
-                </p>
-                <p className="mt-1.5 text-xs leading-5 text-white/42">
-                  الدرجة إرشادية ولا تمنع النشر وحدها.
-                </p>
-                <span
-                  className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
-                    blockingIssues.length
-                      ? "border-red-300/20 bg-red-300/[0.07] text-red-100/75"
-                      : "border-emerald-300/20 bg-emerald-300/[0.07] text-emerald-100/75"
-                  }`}
-                >
-                  {blockingIssues.length
-                    ? "النشر يتطلب إصلاحًا"
-                    : "النشر متاح"}
-                </span>
-              </div>
-              <div
-                className="grid size-20 shrink-0 place-items-center rounded-full p-1.5"
-                style={{
-                  background: `conic-gradient(#D8B87A ${score}%, rgba(255,255,255,.08) ${score}% 100%)`,
-                }}
-                aria-label={`درجة جاهزية النشر ${score} من 100`}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white/82">
+                درجة جاهزية النشر
+              </p>
+              <p className="mt-1.5 text-xs leading-5 text-white/42">
+                الدرجة إرشادية ولا تمنع النشر وحدها.
+              </p>
+              <span
+                className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+                  blockingIssues.length
+                    ? "border-red-300/20 bg-red-300/[0.07] text-red-100/75"
+                    : "border-emerald-300/20 bg-emerald-300/[0.07] text-emerald-100/75"
+                }`}
               >
-                <span className="grid size-full place-items-center rounded-full bg-[#0A0E14] font-en text-xl font-semibold text-white">
-                  {score}
-                </span>
-              </div>
+                {blockingIssues.length
+                  ? "النشر يتطلب إصلاحًا"
+                  : "النشر متاح"}
+              </span>
             </div>
-            <dl className="mt-4 grid grid-cols-2 gap-2">
-              <ScoreDecision label="المشكلات" value={blockingIssues.length} />
-              <ScoreDecision label="التحسينات" value={suggestions.length} />
-            </dl>
-            <button
-              type="button"
-              onClick={() =>
-                document.getElementById(analysisId)?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                })
-              }
-              aria-controls={analysisId}
-              className="mt-4 inline-flex min-h-9 self-start items-center justify-center rounded-full border border-[#D8B87A]/25 px-4 py-2 text-xs font-semibold text-[#EED49B] transition hover:border-[#D8B87A]/45 hover:bg-[#D8B87A]/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
-              data-admin-entity-review-score-details
+            <div
+              className="grid size-20 shrink-0 place-items-center rounded-full p-1.5"
+              style={{
+                background: `conic-gradient(#D8B87A ${score}%, rgba(255,255,255,.08) ${score}% 100%)`,
+              }}
+              aria-label={`درجة جاهزية النشر ${score} من 100`}
             >
-              عرض التفاصيل
-            </button>
-          </article>
+              <span className="grid size-full place-items-center rounded-full bg-[#0A0E14] font-en text-xl font-semibold text-white">
+                {score}
+              </span>
+            </div>
+          </div>
+          <dl className="mt-4 grid grid-cols-2 gap-2">
+            <ScoreDecision label="المشكلات" value={blockingIssues.length} />
+            <ScoreDecision label="التحسينات" value={suggestions.length} />
+          </dl>
+          <button
+            type="button"
+            onClick={() =>
+              document.getElementById(analysisId)?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              })
+            }
+            aria-controls={analysisId}
+            className="mt-4 inline-flex min-h-9 self-start items-center justify-center rounded-full border border-[#D8B87A]/25 px-4 py-2 text-xs font-semibold text-[#EED49B] transition hover:border-[#D8B87A]/45 hover:bg-[#D8B87A]/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
+            data-admin-entity-review-score-details
+          >
+            عرض التفاصيل
+          </button>
+        </article>
 
-          {decisionCards}
-        </div>
-      </section>
+        {decisionCards}
+      </div>
 
       <section id={analysisId} aria-labelledby={analysisTitleId}>
         <div className="mb-3">
@@ -222,8 +199,8 @@ export default function AdminEntityReviewPanel({
           data-admin-entity-review-guidance-grid
         >
           {guidanceCards.map((definition) => {
-            const items = checks.filter((item) =>
-              definition.checkIds.includes(item.id),
+            const items = checks.filter(
+              (item) => item.group === definition.group,
             );
             return (
               <ReviewAnalysisCard
@@ -245,7 +222,7 @@ export default function AdminEntityReviewPanel({
             definition={{
               id: "validation",
               title: "التحقق العام (Validation)",
-              description: validationDescription,
+              description: ADMIN_ENTITY_REVIEW_VALIDATION_DESCRIPTION,
               checkIds: [],
             }}
             items={blockingIssues}

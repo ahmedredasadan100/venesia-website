@@ -50,8 +50,19 @@ export type ProjectPublishWarning = {
   message: string;
 };
 
+export type ProjectPublishingCheckStatus = "pass" | "fail" | "warn" | "info";
+
+export type ProjectPublishingCheck = {
+  id: string;
+  field: string;
+  status: ProjectPublishingCheckStatus;
+  blocksPublish: boolean;
+  message: string;
+};
+
 export type ProjectPublishingReadiness = {
   ready: boolean;
+  checks: ProjectPublishingCheck[];
   blockers: ProjectPublishBlocker[];
   warnings: ProjectPublishWarning[];
 };
@@ -129,39 +140,70 @@ export function getProjectPreviewCapability(input: {
 }
 
 export function getProjectPublishingReadiness(input: {
-  fieldErrors: Record<string, string[]>;
+  validationChecks: readonly {
+    id: string;
+    field: string;
+    valid: boolean;
+    messages: readonly string[];
+  }[];
   seoTitle: string;
   seoDescription: string;
 }): ProjectPublishingReadiness {
-  const blockers = Object.entries(input.fieldErrors).flatMap(
-    ([field, messages]) =>
-      messages.map((message) => ({
-        code: PROJECT_PUBLISH_BLOCKER_CODES.invalidField,
-        field,
-        message,
-      })),
+  const validationChecks: ProjectPublishingCheck[] = input.validationChecks.map(
+    (check) => ({
+      id: check.id,
+      field: check.field,
+      status: check.valid ? "pass" : "fail",
+      blocksPublish: true,
+      message: check.valid
+        ? "المتطلب مستوفى وفق Validation Truth الحالية."
+        : check.messages.join(" "),
+    }),
   );
-  const warnings: ProjectPublishWarning[] = [];
-
-  if (!input.seoTitle.trim()) {
-    warnings.push({
-      code: "PROJECT_SEO_TITLE_FALLBACK",
+  const seoChecks: ProjectPublishingCheck[] = [
+    {
+      id: "project-seo:title-override",
       field: "seo_title",
-      message:
-        "سيُستخدم اسم المشروع كعنوان SEO تلقائيًا؛ يفضّل كتابة عنوان مخصص.",
-    });
-  }
-  if (!input.seoDescription.trim()) {
-    warnings.push({
-      code: "PROJECT_SEO_DESCRIPTION_FALLBACK",
+      status: input.seoTitle.trim() ? "pass" : "warn",
+      blocksPublish: false,
+      message: input.seoTitle.trim()
+        ? "تم تحديد عنوان SEO مخصص."
+        : "سيُستخدم اسم المشروع كعنوان SEO تلقائيًا؛ يفضّل كتابة عنوان مخصص.",
+    },
+    {
+      id: "project-seo:description-override",
       field: "seo_description",
-      message:
-        "سيُستخدم الوصف المختصر في نتائج البحث؛ يفضّل كتابة وصف SEO مخصص.",
-    });
-  }
+      status: input.seoDescription.trim() ? "pass" : "warn",
+      blocksPublish: false,
+      message: input.seoDescription.trim()
+        ? "تم تحديد وصف SEO مخصص."
+        : "سيُستخدم الوصف المختصر في نتائج البحث؛ يفضّل كتابة وصف SEO مخصص.",
+    },
+  ];
+  const checks = [...validationChecks, ...seoChecks];
+  const blockers: ProjectPublishBlocker[] = validationChecks.flatMap((check) =>
+    check.status === "fail"
+      ? [{
+          code: PROJECT_PUBLISH_BLOCKER_CODES.invalidField,
+          field: check.field,
+          message: check.message,
+        }]
+      : [],
+  );
+  const warnings: ProjectPublishWarning[] = seoChecks.flatMap((check) => {
+    if (check.status !== "warn") return [];
+    return [{
+      code: check.id === "project-seo:title-override"
+        ? "PROJECT_SEO_TITLE_FALLBACK"
+        : "PROJECT_SEO_DESCRIPTION_FALLBACK",
+      field: check.field as ProjectPublishWarning["field"],
+      message: check.message,
+    }];
+  });
 
   return {
     ready: blockers.length === 0,
+    checks,
     blockers,
     warnings,
   };

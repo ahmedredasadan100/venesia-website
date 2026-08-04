@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  assessProjectEntryPayload,
   PROJECT_ENTRY_FIELD_TABS,
   PROJECT_ENTRY_FOCUS_TARGETS,
   PROJECT_ENTRY_NAVIGATION_EVENT,
   projectEntryPayloadFromFormData,
-  validateProjectEntryPayload,
   type ProjectEntryPayload,
+  type ProjectEntryValidationField,
 } from "../../../lib/admin/projects/project-entry-contract";
 import {
   getProjectPublicationMetadata,
@@ -17,7 +18,9 @@ import {
 } from "../../../lib/admin/projects/project-publishing-capability";
 import type {
   EntityReviewAnalysisCardDefinition,
+  EntityReviewAnalysisGroup,
   EntityReviewCheck,
+  EntityReviewSeverity,
 } from "../../../lib/admin/review/entity-review-presentation";
 import { formatAdminDateTime } from "../../../lib/content-dates";
 import AdminEntityReviewPanel, {
@@ -29,8 +32,6 @@ type ProjectPublishChecklistPanelProps = {
   formId: string;
   initial: ProjectEntryPayload;
 };
-
-type ProjectReviewGroup = "content" | "image" | "seo";
 
 const SEO_FIELDS = new Set([
   "seo_title",
@@ -44,17 +45,78 @@ const SEO_FIELDS = new Set([
   "og_image_alt",
 ]);
 
-function reviewGroupForField(field: string): ProjectReviewGroup {
+const PROJECT_REVIEW_FIELD_LABELS: Partial<
+  Record<ProjectEntryValidationField, string>
+> = {
+  type: "نوع المشروع",
+  publication_status: "حالة النشر",
+  arabic_name: "اسم المشروع بالعربية",
+  english_name: "اسم المشروع بالإنجليزية",
+  slug: "الرابط المختصر",
+  general_description: "الوصف العام",
+  short_description: "وصف الهيرو والبوكس الصغير",
+  image: "صورة الكارت الخارجي",
+  image_alt: "Alt لصورة الكارت الخارجي",
+  hero_image: "صورة الهيرو",
+  hero_image_alt: "Alt لصورة الهيرو",
+  small_box_image: "صورة البوكس الصغير",
+  small_box_image_alt: "Alt لصورة البوكس الصغير",
+  overview_main_image: "الصورة الرئيسية للنظرة العامة",
+  overview_main_image_alt: "Alt لصورة النظرة العامة",
+  governorate_id: "تسلسل موقع المشروع",
+  location_label: "العنوان التفصيلي",
+  google_maps_url: "رابط خرائط جوجل",
+  latitude: "خط العرض",
+  longitude: "خط الطول",
+  map_zoom: "مستوى تقريب الخريطة",
+  location_point_label: "نقاط الموقع",
+  feature_body: "مميزات المشروع",
+  overview_title: "عنوان النظرة العامة",
+  overview_body: "محتوى النظرة العامة",
+  overview_video_url: "فيديو النظرة العامة",
+  floor_plan_name: "المخططات",
+  floor_plan_architectural_image_alt: "Alt للمخطط المعماري",
+  floor_plan_furnishing_image_alt: "Alt لمخطط الفرش",
+  floor_plan_detail_label: "تفاصيل المخططات",
+  delivery_item_body: "بنود التسليم",
+  delivery_title: "عنوان المواصفات والتسليم",
+  delivery_body: "محتوى المواصفات والتسليم",
+  overview_media_image: "صور وسائط النظرة العامة",
+  overview_media_alt_text: "Alt لوسائط النظرة العامة",
+  delivery_media_image: "صور وسائط التسليم",
+  delivery_media_alt_text: "Alt لوسائط التسليم",
+  gallery_media_image: "صور Gallery",
+  gallery_media_alt_text: "Alt لصور Gallery",
+  overview_video_poster_alt: "Alt لغلاف فيديو النظرة العامة",
+  gallery_video_url: "روابط فيديو Gallery",
+  gallery_video_poster_alt: "Alt لأغلفة فيديو Gallery",
+  seo_title: "SEO Title",
+  seo_description: "SEO Description",
+  canonical_url: "Canonical URL",
+  og_image_alt: "Alt لصورة المشاركة",
+  id: "سلامة العناصر المحذوفة",
+};
+
+function reviewGroupForField(field: string): EntityReviewAnalysisGroup {
   if (SEO_FIELDS.has(field)) return "seo";
   if (/(image|media|video|poster)/.test(field)) return "image";
   return "content";
 }
 
+function reviewSeverity(status: EntityReviewCheck["status"]): EntityReviewSeverity {
+  if (status === "pass") return "success";
+  if (status === "fail") return "error";
+  if (status === "warn") return "warning";
+  return "info";
+}
+
 function buildSnapshot(payload: ProjectEntryPayload) {
+  const validation = assessProjectEntryPayload(payload);
   return {
     payload,
+    validation,
     readiness: getProjectPublishingReadiness({
-      fieldErrors: validateProjectEntryPayload(payload),
+      validationChecks: validation.checks,
       seoTitle: payload.project.seo_title,
       seoDescription: payload.project.seo_description,
     }),
@@ -64,65 +126,56 @@ function buildSnapshot(payload: ProjectEntryPayload) {
 function projectReviewChecks(
   snapshot: ReturnType<typeof buildSnapshot>,
 ): EntityReviewCheck[] {
-  const blockerChecks = snapshot.readiness.blockers.map((blocker, index) => ({
-    id: `project:${reviewGroupForField(blocker.field)}:blocker:${blocker.field}:${index}`,
-    label: "متطلب نشر إلزامي",
-    hint: blocker.message,
-    status: "fail" as const,
-    severity: "error" as const,
-    blocksPublish: true,
-    field: blocker.field,
-    correctionTarget: {
-      tabId: PROJECT_ENTRY_FIELD_TABS[blocker.field] ?? "basic",
-      targetId: PROJECT_ENTRY_FOCUS_TARGETS[blocker.field] ?? blocker.field,
-    },
-  }));
-  const warningChecks = snapshot.readiness.warnings.map((warning) => ({
-    id: `project:seo:warning:${warning.code}`,
-    label: "تحسين SEO موصى به",
-    hint: warning.message,
-    status: "warn" as const,
-    severity: "warning" as const,
-    blocksPublish: false,
-    field: warning.field,
-    correctionTarget: {
-      tabId: PROJECT_ENTRY_FIELD_TABS[warning.field] ?? "seo",
-      targetId: PROJECT_ENTRY_FOCUS_TARGETS[warning.field] ?? warning.field,
-    },
-  }));
-
-  return [...blockerChecks, ...warningChecks];
+  return snapshot.readiness.checks.map((check) => {
+    const group = reviewGroupForField(check.field);
+    const tabId = PROJECT_ENTRY_FIELD_TABS[check.field];
+    return {
+      id: check.id,
+      label:
+        PROJECT_REVIEW_FIELD_LABELS[
+          check.field as ProjectEntryValidationField
+        ] ??
+        (group === "seo"
+          ? "سلامة إعدادات SEO"
+          : group === "image"
+            ? "سلامة الصور والوسائط"
+            : "سلامة بيانات المشروع"),
+      hint: check.message,
+      status: check.status,
+      severity: reviewSeverity(check.status),
+      blocksPublish: check.blocksPublish,
+      group,
+      field: check.field,
+      correctionTarget: tabId
+        ? {
+            tabId,
+            targetId: PROJECT_ENTRY_FOCUS_TARGETS[check.field] ?? check.field,
+          }
+        : undefined,
+    };
+  });
 }
 
-function guidanceCards(
-  checks: readonly EntityReviewCheck[],
-): readonly EntityReviewAnalysisCardDefinition[] {
-  const idsFor = (group: ProjectReviewGroup) =>
-    checks
-      .filter((check) => check.id.startsWith(`project:${group}:`))
-      .map((check) => check.id);
-
-  return [
-    {
-      id: "content",
-      title: "جاهزية محتوى المشروع",
-      description: "اكتمال بيانات المشروع وأقسامه ومحتواه التعريفي.",
-      checkIds: idsFor("content"),
-    },
-    {
-      id: "image",
-      title: "جاهزية الصور وAlt وHero وGallery",
-      description: "سلامة الصور والوسائط والنصوص البديلة المرتبطة بها.",
-      checkIds: idsFor("image"),
-    },
-    {
-      id: "seo",
-      title: "تحليل SEO",
-      description: "نفس بيانات SEO المشتركة المستخدمة في محرر المشروع.",
-      checkIds: idsFor("seo"),
-    },
-  ];
-}
+const PROJECT_REVIEW_GUIDANCE_CARDS: readonly EntityReviewAnalysisCardDefinition[] = [
+  {
+    id: "content",
+    title: "جاهزية المحتوى",
+    description: "اكتمال بيانات المشروع وأقسامه ومحتواه التعريفي.",
+    group: "content",
+  },
+  {
+    id: "image",
+    title: "جاهزية الصور وAlt",
+    description: "سلامة صور Hero وGallery وMedia والنصوص البديلة المرتبطة بها.",
+    group: "image",
+  },
+  {
+    id: "seo",
+    title: "تحليل SEO",
+    description: "نفس بيانات SEO المشتركة المستخدمة في محرر المشروع.",
+    group: "seo",
+  },
+] as const;
 
 export default function ProjectPublishChecklistPanel({
   formId,
@@ -147,7 +200,6 @@ export default function ProjectPublishChecklistPanel({
   }, [formId]);
 
   const checks = useMemo(() => projectReviewChecks(snapshot), [snapshot]);
-  const cards = useMemo(() => guidanceCards(checks), [checks]);
   const project = snapshot.payload.project;
   const publication = getProjectPublicationMetadata(project.publication_status);
   const hiddenStatus = resolveProjectPublicationStatusForVisibility(
@@ -160,15 +212,14 @@ export default function ProjectPublishChecklistPanel({
     <AdminEntityReviewPanel
       entityKey="project"
       navigationEventName={PROJECT_ENTRY_NAVIGATION_EVENT}
-      decisionTitle="حالة المشروع والعرض"
       checks={checks}
-      guidanceCards={cards}
+      guidanceCards={PROJECT_REVIEW_GUIDANCE_CARDS}
       decisionCards={
         <>
           <AdminEntityReviewDecisionCard
-            id="publication-status"
-            title="حالة النشر"
-            description="تحكم في ظهور المشروع للعامة."
+            id="publication-schedule"
+            title="حالة النشر والتاريخ"
+            description="حالة المشروع وبيانات أول ظهور عام."
             badge={
               <AdminStatusPill tone={publication.tone}>
                 {publication.label}
@@ -194,26 +245,18 @@ export default function ProjectPublishChecklistPanel({
                 </span>
               }
             />
-          </AdminEntityReviewDecisionCard>
-
-          <AdminEntityReviewDecisionCard
-            id="publication-date"
-            title="تاريخ النشر"
-            description="بيانات أول نشر والرابط العام."
-          >
-            <dl className="mt-3 space-y-2">
+            <dl className="mt-2">
               <ProjectDecision
-                label="أول نشر"
+                label="تاريخ أول نشر"
                 value={formatAdminDateTime(initial.project.published_at)}
                 ltr
               />
-              <ProjectDecision label="الرابط العام" value={publicPath} ltr />
             </dl>
           </AdminEntityReviewDecisionCard>
 
           <AdminEntityReviewDecisionCard
             id="featured"
-            title="مميز"
+            title="التمييز"
             description="التمييز مستقل عن حالة النشر."
           >
             <AdminFormSwitch
@@ -227,9 +270,18 @@ export default function ProjectPublishChecklistPanel({
               label={project.featured ? "مشروع مميز" : "غير مميز"}
             />
           </AdminEntityReviewDecisionCard>
+
+          <AdminEntityReviewDecisionCard
+            id="public-display"
+            title="معلومات العرض العام"
+            description="المسار العام المثبت في عقد المشروع الحالي."
+          >
+            <dl className="mt-3">
+              <ProjectDecision label="الرابط العام" value={publicPath} ltr />
+            </dl>
+          </AdminEntityReviewDecisionCard>
         </>
       }
-      validationDescription="يعرض متطلبات الحقول والقيم التي تمنع نشر المشروع فعليًا وفق Validation Truth الحالية."
       summaryEntries={[
         {
           id: "last-save",
@@ -237,14 +289,14 @@ export default function ProjectPublishChecklistPanel({
           value: formatAdminDateTime(initial.project.updated_at),
         },
         {
-          id: "status",
-          title: "حالة النشر الحالية",
-          value: publication.label,
+          id: "created-at",
+          title: "تاريخ الإنشاء",
+          value: formatAdminDateTime(initial.project.created_at),
         },
         {
-          id: "publish-date",
-          title: "تاريخ أول نشر",
-          value: formatAdminDateTime(initial.project.published_at),
+          id: "project-type",
+          title: "نوع المشروع",
+          value: project.type === "residential" ? "سكني" : "تجاري",
         },
       ]}
     />
