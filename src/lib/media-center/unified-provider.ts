@@ -3,20 +3,17 @@ import "server-only";
 import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { adaptTopicRowToMediaItem, type UnifiedMediaTopicRow } from "./adapt-topic-row";
-import {
-  toTopicsContentType,
-} from "./content-type-map";
 import type { MediaContentItem, MediaContentType } from "./types";
 
 /** Card / list / sidebar / hub fields — excludes body content and SEO blobs. */
 export const UNIFIED_LISTING_SELECT =
-  "id, slug, title, excerpt, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, canonical_url, robots_index, robots_follow";
+  "id, slug, title, excerpt, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, canonical_url, robots_index, robots_follow";
 
 /** Detail page fields — includes full content + SEO. */
 export const UNIFIED_DETAIL_SELECT =
-  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, show_title_on_page, show_image_on_page, show_excerpt_on_page";
+  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, show_title_on_page, show_image_on_page, show_excerpt_on_page";
 
-const UNIFIED_MEDIA_CONTENT_TYPES = ["news", "press", "site_update", "video", "gallery"] as const;
+const UNIFIED_MEDIA_CONTENT_TYPES = ["news", "press", "site_update", "video", "gallery"] as const satisfies readonly MediaContentType[];
 
 type ListingSort = "newest" | "oldest";
 
@@ -31,7 +28,7 @@ function applyTypeFilter<T extends { eq: (column: string, value: string) => T }>
   type?: MediaContentType,
 ) {
   if (!type) return query;
-  return query.eq("content_type", toTopicsContentType(type));
+  return query.eq("content_type", type);
 }
 
 function buildUnifiedMediaQuery(select: string, type?: MediaContentType, ascending = false) {
@@ -62,7 +59,7 @@ export async function unifiedGetMediaItemBySlug(type: MediaContentType, slug: st
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(UNIFIED_DETAIL_SELECT)
-    .eq("content_type", toTopicsContentType(type))
+    .eq("content_type", type)
     .eq("slug", slug)
     .eq("status", "published")
     .is("deleted_at", null)
@@ -80,7 +77,7 @@ export async function unifiedGetMediaStaticParams(type: MediaContentType) {
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select("slug")
-    .eq("content_type", toTopicsContentType(type))
+    .eq("content_type", type)
     .eq("status", "published")
     .is("deleted_at", null);
 

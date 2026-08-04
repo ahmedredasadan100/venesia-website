@@ -8,7 +8,6 @@ export const CMS_BACKUP_TABLES: CmsBackupTable[] = [
   { name: "topics", orderBy: "id" },
   { name: "topic_categories", orderBy: "id" },
   { name: "topic_series", orderBy: "id" },
-  { name: "media_items", orderBy: "id" },
   { name: "pages", orderBy: "id" },
   { name: "page_sections", orderBy: "id" },
   { name: "hero_templates", orderBy: "id" },

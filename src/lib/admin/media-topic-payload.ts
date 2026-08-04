@@ -67,6 +67,18 @@ export function normalizeYouTubeUrl(raw: string): string | null {
   return null;
 }
 
+export function resolveYouTubeEmbedUrl(raw: string): string | null {
+  const normalized = normalizeYouTubeUrl(raw);
+  if (!normalized) return null;
+
+  try {
+    const id = new URL(normalized).searchParams.get("v")?.trim();
+    return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseVideoPayloadFromForm(formData: FormData): VideoMediaPayload {
   const videoUrl = String(formData.get("video_url") ?? "").trim();
   const duration = String(formData.get("video_duration") ?? "").trim();

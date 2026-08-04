@@ -49,7 +49,7 @@ const routeCreate = read("src/app/admin/content/topics/new/page.tsx");
 const routeEdit = read("src/app/admin/content/topics/[id]/page.tsx");
 const listActions = read("src/app/admin/content/topics/actions.ts");
 const publicPaths = read("src/lib/content/public-content-path.ts");
-const mediaMap = read("src/lib/media-center/content-type-map.ts");
+const mediaContract = read("src/lib/media-center/types.ts");
 const topicLoader = read("src/lib/topics/load-public-topics.ts");
 const mediaLoader = read("src/lib/media-center/unified-provider.ts");
 const entitySeo = read("src/components/admin/seo/AdminEntitySeoPanel.tsx");
@@ -278,13 +278,10 @@ check(
 );
 check(
   "all media public consumers map from the same five topic types",
-  containsAll(mediaMap, [
-    'news: "news"',
-    'press: "press"',
-    '"site-update": "site_update"',
-    'video: "video"',
-    'gallery: "gallery"',
-  ]) && mediaLoader.includes("toTopicsContentType"),
+  mediaContract.includes('Exclude<ContentType, "article">') &&
+    mediaContract.includes('site_update: "site-updates"') &&
+    mediaLoader.includes('.from("topics")') &&
+    !mediaLoader.includes("toTopicsContentType"),
 );
 check(
   "every manifest public consumer has a real route",

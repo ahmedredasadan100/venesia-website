@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 import { usePublicNavigation } from "../PublicNavigationProvider";
-import type { MediaSidebarItem } from "../../lib/media-center";
+import type { MediaSidebarItem } from "../../lib/media-center/types";
 import { DEFAULT_MEDIA_SIDEBAR_MODULES } from "../../lib/media-sidebar-modules/defaults";
 import type { MediaSidebarModulesState, MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
 

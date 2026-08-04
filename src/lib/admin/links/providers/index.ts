@@ -1,6 +1,5 @@
 import {
   categoriesLinkProvider,
-  mediaLinkProvider,
   pagesLinkProvider,
   projectsLinkProvider,
   seriesLinkProvider,
@@ -19,7 +18,6 @@ export function ensureAdminLinkProvidersRegistered() {
     topicsLinkProvider,
     categoriesLinkProvider,
     seriesLinkProvider,
-    mediaLinkProvider,
     staticRoutesLinkProvider,
   ].forEach(registerAdminLinkProvider);
   initialized = true;
@@ -27,7 +25,6 @@ export function ensureAdminLinkProvidersRegistered() {
 
 export {
   categoriesLinkProvider,
-  mediaLinkProvider,
   pagesLinkProvider,
   projectsLinkProvider,
   seriesLinkProvider,

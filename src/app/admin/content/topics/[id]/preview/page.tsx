@@ -4,7 +4,10 @@ import { notFound } from "next/navigation";
 import AdminPageHeader from "../../../../../../components/admin/AdminPageHeader";
 import AdminStatusBadge from "../../../../../../components/admin/AdminStatusBadge";
 import AdminCategoryBadge from "../../../../../../components/admin/content/AdminCategoryBadge";
-import type { MediaTopicPayload } from "../../../../../../lib/admin/media-topic-payload";
+import {
+  resolveYouTubeEmbedUrl,
+  type MediaTopicPayload,
+} from "../../../../../../lib/admin/media-topic-payload";
 import { requireAdminSession } from "../../../../../../lib/admin/auth/require-admin-session";
 import { getContentTypeLabel, isContentType } from "../../../../../../lib/admin/content/content-types";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
@@ -111,16 +114,7 @@ function renderMarkdown(content: string) {
 }
 
 function VideoPreview({ url }: { url: string }) {
-  let embedUrl: string | null = null;
-  try {
-    const parsed = new URL(url);
-    const id = parsed.hostname.includes("youtu.be")
-      ? parsed.pathname.replace("/", "")
-      : parsed.searchParams.get("v");
-    embedUrl = id ? `https://www.youtube.com/embed/${id}` : null;
-  } catch {
-    embedUrl = null;
-  }
+  const embedUrl = resolveYouTubeEmbedUrl(url);
   return embedUrl ? (
     <div className="aspect-video overflow-hidden rounded-[24px] border border-white/10">
       <iframe

@@ -183,24 +183,17 @@ if (topic?.slug) {
 }
 
 for (const type of ["news", "videos", "gallery", "press", "site-updates"]) {
+  const contentType = type === "site-updates" ? "site_update" : type === "videos" ? "video" : type;
   const { data: item } = await supabase
-    .from("media_items")
-    .select("slug")
-    .eq("type", type === "site-updates" ? "site-update" : type === "videos" ? "video" : type === "gallery" ? "gallery" : type === "press" ? "press" : "news")
+    .from("topics")
+    .select("slug,content_type")
     .eq("status", "published")
+    .is("deleted_at", null)
+    .eq("content_type", contentType)
     .limit(1)
     .maybeSingle();
 
-  const dbType = type === "site-updates" ? "site-update" : type === "videos" ? "video" : type;
-  const { data: item2 } = await supabase
-    .from("media_items")
-    .select("slug,type")
-    .eq("status", "published")
-    .ilike("type", dbType === "site-update" ? "site-update" : dbType)
-    .limit(1)
-    .maybeSingle();
-
-  const slug = item?.slug ?? item2?.slug;
+  const slug = item?.slug;
   if (slug) {
     const r = await fetchPath(`/media-center/${type}/${slug}`);
     await checkPublicPage(`Media Detail (${type})`, r);

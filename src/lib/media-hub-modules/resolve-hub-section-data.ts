@@ -18,7 +18,7 @@ async function loadHubDataCaches(): Promise<HubDataCaches> {
   const [featuredNews, news, siteUpdates, videos, gallery, press] = await Promise.all([
     getFeaturedNews(),
     getMediaItems("news"),
-    getMediaItems("site-update"),
+    getMediaItems("site_update"),
     getMediaItems("video"),
     getMediaItems("gallery"),
     getMediaItems("press"),

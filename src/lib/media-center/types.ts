@@ -1,9 +1,7 @@
-export type MediaContentType =
-  | "news"
-  | "video"
-  | "gallery"
-  | "press"
-  | "site-update";
+import type { ContentType } from "../admin/content/content-types";
+import { resolvePublicContentPath } from "../content/public-content-path";
+
+export type MediaContentType = Exclude<ContentType, "article">;
 
 export type MediaContentItem = {
   id: string;
@@ -20,6 +18,7 @@ export type MediaContentItem = {
   isPopular?: boolean;
   project?: string;
   duration?: string;
+  videoUrl?: string;
   content?: string[];
   /** Used by hero media_category filter — not rendered in public media UI. */
   categorySlug?: string;
@@ -53,7 +52,7 @@ export const MEDIA_TYPE_PATHS: Record<MediaContentType, string> = {
   video: "videos",
   gallery: "gallery",
   press: "press",
-  "site-update": "site-updates",
+  site_update: "site-updates",
 };
 
 export const MEDIA_CONTENT_TYPES: MediaContentType[] = [
@@ -61,7 +60,7 @@ export const MEDIA_CONTENT_TYPES: MediaContentType[] = [
   "video",
   "gallery",
   "press",
-  "site-update",
+  "site_update",
 ];
 
 export function isMediaContentType(value: string | null | undefined): value is MediaContentType {
@@ -69,6 +68,5 @@ export function isMediaContentType(value: string | null | undefined): value is M
 }
 
 export function getMediaHref(item: Pick<MediaContentItem, "type" | "slug">) {
-  const path = MEDIA_TYPE_PATHS[item.type] ?? "news";
-  return `/media-center/${path}/${item.slug}`;
+  return resolvePublicContentPath(item.type, item.slug);
 }

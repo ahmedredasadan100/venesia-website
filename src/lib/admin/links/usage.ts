@@ -1,6 +1,8 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { isContentType } from "../content/content-types";
+import { resolvePublicContentPath } from "../../content/public-content-path";
 import { deserializeAdminLink } from "./serialize";
 import type { AdminLinkValue, LinkedResourceType } from "./types";
 
@@ -121,8 +123,10 @@ async function resolveResourcePublicPath(query: LinkUsageQuery) {
       return data?.slug ? `/projects/${data.slug}` : null;
     }
     case "topics": {
-      const { data } = await supabase.from("topics").select("slug").eq("id", query.linkedId).maybeSingle();
-      return data?.slug ? `/topics/${data.slug}` : null;
+      const { data } = await supabase.from("topics").select("slug,content_type").eq("id", query.linkedId).maybeSingle();
+      return data?.slug && isContentType(data.content_type)
+        ? resolvePublicContentPath(data.content_type, data.slug)
+        : null;
     }
     case "topic_categories": {
       const { data } = await supabase.from("topic_categories").select("slug").eq("id", query.linkedId).maybeSingle();
@@ -131,27 +135,6 @@ async function resolveResourcePublicPath(query: LinkUsageQuery) {
     case "topic_series": {
       const { data } = await supabase.from("topic_series").select("slug").eq("id", query.linkedId).maybeSingle();
       return data?.slug ? `/topics?series=${data.slug}` : null;
-    }
-    case "media_items": {
-      const { data } = await supabase
-        .from("media_items")
-        .select("slug,type")
-        .eq("id", query.linkedId)
-        .maybeSingle();
-      if (!data?.slug) return null;
-      const segment =
-        data.type === "news"
-          ? "news"
-          : data.type === "video"
-            ? "videos"
-            : data.type === "gallery"
-              ? "gallery"
-              : data.type === "press"
-                ? "press"
-                : data.type === "site-update"
-                  ? "site-updates"
-                  : "news";
-      return `/media-center/${segment}/${data.slug}`;
     }
     default:
       return null;

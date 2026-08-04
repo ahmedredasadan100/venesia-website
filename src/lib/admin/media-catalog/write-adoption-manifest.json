@@ -9,9 +9,8 @@
     "tooling_unadopted"
   ],
   "providerRegistry": [
-    { "domainKey": "topics", "table": "topics", "mediaFields": ["image", "excerpt", "content", "media_payload"] },
+    { "domainKey": "topics", "table": "topics", "mediaFields": ["image", "excerpt", "content", "media_payload", "og_image"] },
     { "domainKey": "topic_categories", "table": "topic_categories", "mediaFields": ["image"] },
-    { "domainKey": "legacy_media_items", "table": "media_items", "mediaFields": ["image", "og_image", "content"] },
     { "domainKey": "projects", "table": "projects", "mediaFields": ["image", "hero_image", "small_box_image", "overview_main_image", "og_image"] },
     { "domainKey": "project_media", "table": "project_media", "mediaFields": ["image"] },
     { "domainKey": "project_floor_plans", "table": "project_floor_plans", "mediaFields": ["architectural_image", "furnishing_image"] },
@@ -33,7 +32,7 @@
       "id": "topic-domain-writes",
       "classification": "adopted",
       "tables": ["topics"],
-      "mediaFields": ["topics.image", "topics.excerpt", "topics.content", "topics.media_payload"],
+      "mediaFields": ["topics.image", "topics.excerpt", "topics.content", "topics.media_payload", "topics.og_image"],
       "acquiresWriteLease": true,
       "completesReferenceSync": true,
       "structuredWarning": true,
@@ -315,15 +314,15 @@
       "rationale": "These files own media capability policy and reconciliation state records, not Domain-provided asset references."
     },
     {
-      "id": "legacy-read-only-providers",
+      "id": "legacy-page-sections-provider",
       "classification": "explicit_exception",
-      "tables": ["media_items", "page_sections"],
-      "mediaFields": ["media_items.image", "media_items.og_image", "media_items.content", "page_sections.config"],
+      "tables": ["page_sections"],
+      "mediaFields": ["page_sections.config"],
       "acquiresWriteLease": false,
       "completesReferenceSync": false,
       "structuredWarning": false,
       "sourceFiles": [],
-      "rationale": "Legacy media_items and page_sections remain discovery-only providers with no active Admin mutation owner."
+      "rationale": "Legacy page_sections remains a discovery-only provider with no active Admin mutation owner; Public Media moved fully into topics."
     },
     {
       "id": "guarded-static-project-reimport",

@@ -80,7 +80,7 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
     heroVariant: "default",
   },
   "site-updates": {
-    mediaType: "site-update",
+    mediaType: "site_update",
     cmsPageSlug: "media-center-site-updates",
     basePath: "/media-center/site-updates",
     layoutEyebrow: "Site Update",

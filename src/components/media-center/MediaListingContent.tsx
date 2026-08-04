@@ -5,7 +5,7 @@ import Link from "next/link";
 import Pagination from "../Pagination";
 import MediaContentCard from "./MediaContentCard";
 import { useMediaSearch } from "./MediaPageShell";
-import type { MediaContentItem } from "../../lib/media-center";
+import type { MediaContentItem } from "../../lib/media-center/types";
 
 type MediaListingContentProps = {
   /** Current server-paginated page items (browse mode). */

@@ -3,7 +3,7 @@ import "server-only";
 import type { MetadataRoute } from "next";
 
 import { SEO_ROUTES } from "../../config/seo/seo-routes";
-import { getMediaItems } from "../media-center";
+import { getMediaHref, getMediaItems } from "../media-center";
 import { logError } from "../logging";
 import { isReservedPublicPath } from "../pages/reserved-public-paths";
 import { loadPublishedProjectSitemapRows } from "../projects/load-published-projects";
@@ -175,18 +175,7 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
     loadSourceEntries("media", async () => {
       const mediaItems = await getMediaItems();
       return mediaItems.filter((item) => item.robotsIndex !== false).map((item) => {
-        const sectionPath =
-          item.type === "news"
-            ? "news"
-            : item.type === "video"
-              ? "videos"
-              : item.type === "gallery"
-                ? "gallery"
-                : item.type === "press"
-                  ? "press"
-                  : "site-updates";
-
-        const path = `/media-center/${sectionPath}/${item.slug}`;
+        const path = getMediaHref(item);
         return {
           url: buildSitemapAbsoluteUrl(path, baseUrl),
           path,
@@ -194,8 +183,8 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
           slug: item.slug,
           canonicalOverride: item.canonicalUrl,
           lastModified: safeDate(item.publishedAt),
-          changeFrequency: item.type === "site-update" ? ("weekly" as const) : ("monthly" as const),
-          priority: item.featured ? 0.8 : item.type === "site-update" ? 0.75 : 0.65,
+          changeFrequency: item.type === "site_update" ? ("weekly" as const) : ("monthly" as const),
+          priority: item.featured ? 0.8 : item.type === "site_update" ? 0.75 : 0.65,
         };
       });
     }),

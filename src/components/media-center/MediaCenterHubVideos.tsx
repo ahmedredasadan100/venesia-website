@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { MediaContentItem } from "../../lib/media-center";
+import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 
 type MediaCenterHubVideosProps = {
   items: MediaContentItem[];
@@ -36,7 +36,7 @@ export default function MediaCenterHubVideos({
 
       <div className="grid gap-4">
         <Link
-          href={`/media-center/videos/${featuredVideo.slug}`}
+          href={getMediaHref(featuredVideo)}
           className="group block"
         >
           <article className="relative min-h-[300px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.035]">
@@ -81,7 +81,7 @@ export default function MediaCenterHubVideos({
           {smallVideos.slice(0, 3).map((item) => (
             <Link
               key={item.id}
-              href={`/media-center/videos/${item.slug}`}
+              href={getMediaHref(item)}
               className="group grid grid-cols-[96px_1fr] gap-3 rounded-[1.1rem] border border-white/10 bg-white/[0.03] p-3 transition duration-500 hover:border-[#D8B87A]/35"
             >
               <div className="relative min-h-[72px] overflow-hidden rounded-xl">

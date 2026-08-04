@@ -1,5 +1,5 @@
 /**
- * Media Center architecture — CMS pages, hero shell, core vs sidebar, no topics.
+ * Media Center architecture — CMS pages, shared public contract, and topics truth.
  * Usage: node scripts/media-center-architecture-test.mjs
  */
 import { createClient } from "@supabase/supabase-js";
@@ -83,7 +83,7 @@ try {
 }
 
 try {
-  const hub = read("src/app/media-center/page.tsx");
+  const hub = read("src/app/(site)/media-center/page.tsx");
   if (hub.includes("getHeroSectionState") && hub.includes("MediaCenterGrid")) {
     pass("Hub uses CMS hero + MediaCenterGrid core");
   } else {
@@ -94,47 +94,41 @@ try {
   } else {
     fail("Hub PageSlotLayout", "mainAfter MediaCenterGrid missing");
   }
-  if (!hub.includes("topics")) pass("Hub avoids topics");
-  else fail("Hub avoids topics", "topics reference found");
 } catch (error) {
   fail("Hub page", error instanceof Error ? error.message : String(error));
 }
 
 const listingRoutes = [
-  { file: "src/app/media-center/news/page.tsx", slug: "media-center-news", core: "MediaListingContent" },
-  { file: "src/app/media-center/videos/page.tsx", slug: "media-center-videos", core: "MediaListingContent" },
-  { file: "src/app/media-center/gallery/page.tsx", slug: "media-center-gallery", core: "MediaListingContent" },
-  { file: "src/app/media-center/press/page.tsx", slug: "media-center-press", core: "MediaListingContent" },
+  { file: "src/app/(site)/media-center/news/page.tsx", slug: "media-center-news", core: "MediaListingPage" },
+  { file: "src/app/(site)/media-center/videos/page.tsx", slug: "media-center-videos", core: "MediaListingPage" },
+  { file: "src/app/(site)/media-center/gallery/page.tsx", slug: "media-center-gallery", core: "MediaListingPage" },
+  { file: "src/app/(site)/media-center/press/page.tsx", slug: "media-center-press", core: "MediaListingPage" },
   {
-    file: "src/app/media-center/site-updates/page.tsx",
+    file: "src/app/(site)/media-center/site-updates/page.tsx",
     slug: "media-center-site-updates",
-    core: "MediaListingContent",
+    core: "MediaListingPage",
   },
 ];
 
 for (const route of listingRoutes) {
   try {
     const source = read(route.file);
-    if (source.includes("MediaCenterShellLayout") && source.includes(`cmsPageSlug="${route.slug}"`)) {
-      pass(`${route.slug} shell layout`);
-    } else {
-      fail(`${route.slug} shell layout`, "MediaCenterShellLayout/cmsPageSlug missing");
-    }
-    if (source.includes("MediaPageShell") && source.includes(route.core)) {
-      pass(`${route.slug} core + sidebar shell`);
-    } else {
-      fail(`${route.slug} core + sidebar shell`, "MediaPageShell/core missing");
-    }
-    if (source.includes("getMediaItems") || source.includes("getMediaSidebarData")) {
-      pass(`${route.slug} media_items data source`);
-    } else {
-      fail(`${route.slug} data source`, "expected getMediaItems/getMediaSidebarData");
-    }
-    if (!source.includes("topics")) pass(`${route.slug} avoids topics`);
-    else fail(`${route.slug} avoids topics`, "topics reference found");
+    if (source.includes("MediaListingPage")) pass(`${route.slug} shared public media consumer`);
+    else fail(`${route.slug} data source`, "expected shared MediaListingPage consumer");
   } catch (error) {
     fail(route.slug, error instanceof Error ? error.message : String(error));
   }
+}
+
+try {
+  const provider = read("src/lib/media-center/unified-provider.ts");
+  if (provider.includes('.from("topics")') && !provider.includes("media_items")) {
+    pass("Public Media reads Unified Content topics only");
+  } else {
+    fail("Public Media data source", "expected topics-only provider");
+  }
+} catch (error) {
+  fail("Public Media provider", error instanceof Error ? error.message : String(error));
 }
 
 try {

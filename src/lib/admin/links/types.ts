@@ -18,7 +18,6 @@ export const LINKED_RESOURCE_TYPES = [
   "topics",
   "topic_categories",
   "topic_series",
-  "media_items",
   "static_routes",
 ] as const;
 

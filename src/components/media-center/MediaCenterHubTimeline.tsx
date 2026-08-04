@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { MediaContentItem } from "../../lib/media-center";
+import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 
 type MediaCenterHubTimelineProps = {
   items: MediaContentItem[];
@@ -34,7 +34,7 @@ export default function MediaCenterHubTimeline({
         {items.map((item) => (
           <Link
             key={item.id}
-            href={`/media-center/site-updates/${item.slug}`}
+            href={getMediaHref(item)}
             className="group relative grid grid-cols-[32px_1fr] gap-4"
           >
             <span className="relative z-10 mt-2 h-7 w-7 rounded-full border border-[#D8B87A]/35 bg-[#05070B] shadow-[0_0_0_6px_rgba(216,184,122,0.06)]" />

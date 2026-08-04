@@ -182,6 +182,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
           show_image_on_page: topic.show_image_on_page,
           show_excerpt_on_page: topic.show_excerpt_on_page,
           media_payload: (topic.media_payload as MediaTopicPayload | null) ?? null,
+          media_project: topic.media_project,
           seo_title: topic.seo_title,
           seo_description: topic.seo_description,
           seo_keywords: Array.isArray(topic.seo_keywords) ? topic.seo_keywords : [],

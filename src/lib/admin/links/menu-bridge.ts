@@ -25,7 +25,6 @@ const INTERNAL_ITEM_TYPES: Record<LinkedResourceType, string> = {
   topics: "topic",
   topic_categories: "topic_category",
   topic_series: "custom",
-  media_items: "custom",
   static_routes: "page",
 };
 

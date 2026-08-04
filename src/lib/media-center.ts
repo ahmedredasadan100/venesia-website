@@ -1,14 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
-import {
-  legacyGetMediaItemBySlug,
-  legacyGetMediaItems,
-  legacyGetMediaItemsLimited,
-  legacyGetMediaListingPage,
-  legacyGetMediaStaticParams,
-} from "./media-center/legacy-provider";
-import { getPublicMediaContentSource, isLegacyFallbackEnabled } from "./media-center/source";
 import type { MediaContentItem, MediaContentType, MediaSidebarItem } from "./media-center/types";
 import {
   getMediaHref,
@@ -34,33 +26,8 @@ export { getMediaHref, MEDIA_TYPE_PATHS, MEDIA_CONTENT_TYPES };
 /** Public listing page size — keep in sync with previous client ITEMS_PER_PAGE. */
 export const MEDIA_LISTING_PAGE_SIZE = 2;
 
-function sortByNewest<T extends { publishedAt: string }>(items: T[]) {
-  return [...items].sort(
-    (left, right) => new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime(),
-  );
-}
-
-async function resolveMediaItemsForType(type: MediaContentType) {
-  const unifiedItems = await unifiedGetMediaItems(type);
-  if (unifiedItems.length > 0 || !isLegacyFallbackEnabled()) {
-    return unifiedItems;
-  }
-  return legacyGetMediaItems(type);
-}
-
 async function resolveMediaItems(type?: MediaContentType) {
-  const source = getPublicMediaContentSource();
-
-  if (source === "legacy") {
-    return legacyGetMediaItems(type);
-  }
-
-  if (type) {
-    return resolveMediaItemsForType(type);
-  }
-
-  const merged = await Promise.all(MEDIA_CONTENT_TYPES.map((mediaType) => resolveMediaItemsForType(mediaType)));
-  return sortByNewest(merged.flat());
+  return unifiedGetMediaItems(type);
 }
 
 /** Lean listing catalog (no body content). Cache key scoped by type. */
@@ -73,18 +40,7 @@ async function resolveMediaItemsCached(type?: MediaContentType) {
 }
 
 async function queryMediaItemBySlug(type: MediaContentType, slug: string) {
-  const source = getPublicMediaContentSource();
-
-  if (source === "legacy") {
-    return legacyGetMediaItemBySlug(type, slug);
-  }
-
-  const unifiedItem = await unifiedGetMediaItemBySlug(type, slug);
-  if (unifiedItem || !isLegacyFallbackEnabled()) {
-    return unifiedItem;
-  }
-
-  return legacyGetMediaItemBySlug(type, slug);
+  return unifiedGetMediaItemBySlug(type, slug);
 }
 
 const resolveMediaItemBySlug = cache(async function resolveMediaItemBySlug(
@@ -99,57 +55,19 @@ const resolveMediaItemBySlug = cache(async function resolveMediaItemBySlug(
 });
 
 async function resolveMediaStaticParams(type: MediaContentType) {
-  const source = getPublicMediaContentSource();
-
-  if (source === "legacy") {
-    return legacyGetMediaStaticParams(type);
-  }
-
-  const unifiedParams = await unifiedGetMediaStaticParams(type);
-  if (unifiedParams.length > 0 || !isLegacyFallbackEnabled()) {
-    return unifiedParams;
-  }
-
-  return legacyGetMediaStaticParams(type);
+  return unifiedGetMediaStaticParams(type);
 }
 
 async function resolveMediaListingPage(
   params: UnifiedMediaListingPageParams,
 ): Promise<UnifiedMediaListingPageResult> {
-  const source = getPublicMediaContentSource();
-
-  if (source === "legacy") {
-    return legacyGetMediaListingPage(params);
-  }
-
-  const unified = await unifiedGetMediaListingPage(params);
-  if (
-    unified.featured ||
-    unified.items.length > 0 ||
-    unified.totalRegular > 0 ||
-    !isLegacyFallbackEnabled()
-  ) {
-    return unified;
-  }
-
-  return legacyGetMediaListingPage(params);
+  return unifiedGetMediaListingPage(params);
 }
 
 async function resolveMediaItemsLimited(
   options: UnifiedMediaLimitedQuery,
 ): Promise<MediaContentItem[]> {
-  const source = getPublicMediaContentSource();
-
-  if (source === "legacy") {
-    return legacyGetMediaItemsLimited(options);
-  }
-
-  const unified = await unifiedGetMediaItemsLimited(options);
-  if (unified.length > 0 || !isLegacyFallbackEnabled()) {
-    return unified;
-  }
-
-  return legacyGetMediaItemsLimited(options);
+  return unifiedGetMediaItemsLimited(options);
 }
 
 export async function getMediaItems(type?: MediaContentType) {

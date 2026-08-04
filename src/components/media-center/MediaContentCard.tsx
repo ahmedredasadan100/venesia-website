@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { MediaContentItem } from "../../lib/media-center";
+import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 
 type MediaContentCardProps = {
   item: MediaContentItem;
@@ -8,24 +8,12 @@ type MediaContentCardProps = {
   actionLabel?: string;
 };
 
-function getDefaultHref(item: MediaContentItem) {
-  if (item.type === "news") return `/media-center/news/${item.slug}`;
-  if (item.type === "video") return `/media-center/videos/${item.slug}`;
-  if (item.type === "gallery") return `/media-center/gallery/${item.slug}`;
-  if (item.type === "press") return `/media-center/press/${item.slug}`;
-  if (item.type === "site-update") {
-    return `/media-center/site-updates/${item.slug}`;
-  }
-
-  return "/media-center";
-}
-
 export default function MediaContentCard({
   item,
   href,
   actionLabel = "قراءة المزيد",
 }: MediaContentCardProps) {
-  const finalHref = href ?? getDefaultHref(item);
+  const finalHref = href ?? getMediaHref(item);
 
   return (
     <Link href={finalHref} className="block h-full">

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { MediaContentItem } from "../../lib/media-center";
+import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 
 type MediaCenterHubPressProps = {
   items: MediaContentItem[];
@@ -84,7 +84,7 @@ export default function MediaCenterHubPress({
         {visibleItems.map((item) => (
           <Link
             key={item.id}
-            href={`/media-center/press/${item.slug}`}
+            href={getMediaHref(item)}
             className="group block"
           >
             <article className="flex h-full flex-col rounded-[1.4rem] border border-white/10 bg-white/[0.035] p-5 transition duration-500 hover:-translate-y-1 hover:border-[#D8B87A]/35">
