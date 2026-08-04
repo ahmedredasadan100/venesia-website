@@ -1,7 +1,7 @@
 "use client";
 
 import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader from "./BlockEditorContextHeader";
+import BlockEditorContextHeader, { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
@@ -49,19 +49,20 @@ export default function CtaModuleEditClient({
         slotContext={getSlotCompatibilityLabel("cta")}
       />
 
-      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      <ModuleDependencyHintsPanel moduleKind="cta" templateSlug={block.slug} />
-
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
         <input type="hidden" name="variant" value={block.variant ?? "band"} />
         <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
 
         <AdminModuleTabs
+          activePanelContext={<BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/cta" saved={saved} />}
           tabs={[
             {
               id: "content",
-              label: "المحتوى",
+              navigationLabel: "المحتوى",
+              sectionHeading: "محتوى الدعوة للإجراء",
+              sectionDescription: "أدر النصوص والأزرار والروابط الأساسية للموديول.",
+              icon: "content",
               content: (
                 <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                   <label className="block space-y-2">
@@ -112,9 +113,14 @@ export default function CtaModuleEditClient({
             },
             {
               id: "meta",
-              label: "الإعدادات",
+              navigationLabel: "الإعدادات",
+              sectionHeading: "إعدادات الموديول",
+              sectionDescription: "أدر الهوية الداخلية وحالة نشر الموديول.",
+              icon: "settings",
               content: (
-                <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <div className="space-y-5">
+                  <ModuleDependencyHintsPanel moduleKind="cta" templateSlug={block.slug} />
+                  <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                   <label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">الاسم</span>
                     <input name="name" defaultValue={block.name} required className={fieldClassName()} />
@@ -140,17 +146,24 @@ export default function CtaModuleEditClient({
                       <option value="gradient">Gradient</option>
                     </select>
                   </label>
-                </section>
+                  </section>
+                </div>
               ),
             },
             {
               id: "pages",
-              label: "يظهر في الصفحات",
+              navigationLabel: "الصفحات",
+              sectionHeading: "الظهور في الصفحات",
+              sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
+              icon: "plans",
               content: (
-                <ModulePageAssignmentsField
-                  pages={assignmentContext.pages}
-                  assignedPageIds={assignedPageIds}
-                />
+                <div className="space-y-5">
+                  <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+                  <ModulePageAssignmentsField
+                    pages={assignmentContext.pages}
+                    assignedPageIds={assignedPageIds}
+                  />
+                </div>
               ),
             },
           ]}

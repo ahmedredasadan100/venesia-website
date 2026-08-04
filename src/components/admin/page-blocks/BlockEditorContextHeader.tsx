@@ -26,16 +26,12 @@ export default function BlockEditorContextHeader({
   title,
   description,
   status,
-  saved,
   slotContext,
   actions,
 }: BlockEditorContextHeaderProps) {
   const statusInfo = status ? statusMeta(status) : null;
-  const feedbackChannel = `block-editor:${backHref}`;
-
   return (
-    <>
-      <AdminPageContextHeader
+    <AdminPageContextHeader
         eyebrow={eyebrow}
         title={title}
         description={
@@ -76,24 +72,28 @@ export default function BlockEditorContextHeader({
           ) : undefined
         }
         actions={actions}
-      />
-      <AdminFeedbackRegion
-        channel={feedbackChannel}
-        label="نتيجة حفظ الموديول"
-        feedback={
-          saved
-            ? {
-                variant: "success",
-                title: "تم الحفظ",
-                message: "تم حفظ الموديول بنجاح.",
-                layout: "inline",
-                dismissible: true,
-                lifecycle: "manual",
-                dismissSearchParams: ["saved"],
-              }
-            : null
-        }
-      />
-    </>
+    />
+  );
+}
+
+export function BlockEditorSaveFeedback({ backHref, saved }: Pick<BlockEditorContextHeaderProps, "backHref" | "saved">) {
+  return (
+    <AdminFeedbackRegion
+      channel={`block-editor:${backHref}`}
+      label="نتيجة حفظ الموديول"
+      feedback={
+        saved
+          ? {
+              variant: "success",
+              title: "تم الحفظ",
+              message: "تم حفظ الموديول بنجاح.",
+              layout: "inline",
+              dismissible: true,
+              lifecycle: "manual",
+              dismissSearchParams: ["saved"],
+            }
+          : null
+      }
+    />
   );
 }

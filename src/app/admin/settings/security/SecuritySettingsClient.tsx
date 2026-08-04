@@ -173,15 +173,14 @@ export default function SecuritySettingsClient({
   const tabs = [
     {
       id: "password",
-      label: "تغيير كلمة المرور",
+      navigationLabel: "كلمة المرور",
+      sectionHeading: "تغيير كلمة المرور",
+      sectionDescription: "عيّن كلمة مرور جديدة بعد التحقق من كلمة المرور الحالية.",
+      icon: "settings" as const,
       content: (
         <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
-          <h2 className="text-lg font-semibold text-white">تغيير كلمة المرور</h2>
-          <p className="mt-2 text-sm leading-7 text-white/55">
-            يُشترط إدخال كلمة المرور الحالية قبل تعيين كلمة مرور جديدة.
-          </p>
           <form
-            className="mt-5 grid max-w-xl gap-4"
+            className="grid max-w-xl gap-4"
             onSubmit={(event) => {
               event.preventDefault();
               resetFeedback();
@@ -254,16 +253,14 @@ export default function SecuritySettingsClient({
     },
     {
       id: "account",
-      label: "بيانات الحساب",
+      navigationLabel: "بيانات الحساب",
+      sectionHeading: "بيانات الحساب الحالي",
+      sectionDescription: "حدّث الاسم الكامل والبريد الإلكتروني؛ تغيير البريد يتطلب كلمة المرور الحالية.",
+      icon: "content" as const,
       content: (
         <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
-          <h2 className="text-lg font-semibold text-white">بيانات الحساب الحالي</h2>
-          <p className="mt-2 text-sm leading-7 text-white/55">
-            يمكنك تعديل الاسم الكامل والبريد الإلكتروني من هنا. تغيير البريد يتطلب كلمة المرور الحالية
-            للتأكيد.
-          </p>
           <form
-            className="mt-5 grid max-w-xl gap-4"
+            className="grid max-w-xl gap-4"
             onSubmit={(event) => {
               event.preventDefault();
               resetFeedback();
@@ -391,15 +388,14 @@ export default function SecuritySettingsClient({
     },
     {
       id: "sessions",
-      label: "الأمان والجلسات",
+      navigationLabel: "الأمان والجلسات",
+      sectionHeading: "الأمان والجلسات",
+      sectionDescription: "راجع آخر دخول وأدر الجلسات النشطة للحساب الحالي.",
+      icon: "publish" as const,
       content: (
         <div className="space-y-5">
           <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
-            <h2 className="text-lg font-semibold text-white">الأمان والجلسات</h2>
-            <p className="mt-2 text-sm leading-7 text-white/55">
-              إدارة بيانات الدخول للحساب الحالي. يُشترط إدخال كلمة المرور الحالية قبل أي تغيير حساس.
-            </p>
-            <div className="mt-5 grid max-w-xl gap-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4 text-sm text-white/62">
+            <div className="grid max-w-xl gap-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4 text-sm text-white/62">
               <p>
                 <span className="text-white/45">آخر دخول: </span>
                 <span className="text-white/80">{formatDate(lastLoginAt)}</span>
@@ -455,14 +451,15 @@ export default function SecuritySettingsClient({
         description="إدارة بيانات الدخول للحساب الحالي. يُشترط إدخال كلمة المرور الحالية قبل أي تغيير حساس."
       />
 
-      <AdminFeedbackChannelViewport
-        channel={FEEDBACK_CHANNEL}
-        label="نتيجة إجراءات إعدادات الأمان"
+      <AdminModuleTabs
+        tabs={tabs}
+        activePanelContext={
+          <AdminFeedbackChannelViewport
+            channel={FEEDBACK_CHANNEL}
+            label="نتيجة إجراءات إعدادات الأمان"
+          />
+        }
       />
-
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
-        <AdminModuleTabs tabs={tabs} />
-      </section>
 
       <AdminConfirmDialog
         open={confirmRevoke}

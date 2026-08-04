@@ -169,11 +169,77 @@ export default function FooterBuilderClient({
 
   const editorTabs = useMemo(
     () => [
+      {
+        id: "overview",
+        navigationLabel: "نظرة عامة",
+        sectionHeading: "ملخص الأعمدة والترتيب",
+        sectionDescription:
+          "راجع ترتيب الأعمدة وحالتها قبل فتح العمود الذي تريد تعديله.",
+        icon: "overview" as const,
+        content: (
+          <AdminCard className="p-5 md:p-6">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {summary.map((item, position) => (
+                <div
+                  key={item.index}
+                  className="rounded-[22px] border border-white/10 bg-white/[0.02] px-4 py-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-semibold text-[#D8B87A]/75">
+                      {FOOTER_COLUMN_LABELS[item.index as FooterSlotIndex]}
+                    </p>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        aria-label={`تحريك ${FOOTER_COLUMN_LABELS[item.index as FooterSlotIndex]} للأمام`}
+                        disabled={position === 0 || isPending}
+                        onClick={() => handleMoveSlot(item.index as FooterSlotIndex, "earlier")}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-xs text-white/55 transition-colors hover:border-white/20 hover:text-white/85 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        ›
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`تحريك ${FOOTER_COLUMN_LABELS[item.index as FooterSlotIndex]} للخلف`}
+                        disabled={position === summary.length - 1 || isPending}
+                        onClick={() => handleMoveSlot(item.index as FooterSlotIndex, "later")}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-xs text-white/55 transition-colors hover:border-white/20 hover:text-white/85 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        ‹
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 min-h-[52px]">
+                    <FooterBlockHeader
+                      variant="admin"
+                      eyebrow={item.eyebrow}
+                      title={item.title}
+                      icon={item.showBrandIcon ? "brand" : "none"}
+                    />
+                    {!item.eyebrow?.trim() && !item.title?.trim() && !item.showBrandIcon ? (
+                      <p className="text-xs text-white/40">{FOOTER_BLOCK_TYPE_LABELS[item.type]}</p>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <AdminStatusPill tone={item.enabled ? "green" : "muted"}>
+                      {item.enabled ? "Active" : "Disabled"}
+                    </AdminStatusPill>
+                    <AdminStatusPill tone="gold">{FOOTER_BLOCK_TYPE_LABELS[item.type]}</AdminStatusPill>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </AdminCard>
+        ),
+      },
       ...sortedSlots.map((slot) => {
         const index = slot.index as FooterSlotIndex;
         return {
           id: `column-${index}`,
-          label: FOOTER_COLUMN_LABELS[index],
+          navigationLabel: FOOTER_COLUMN_LABELS[index],
+          sectionHeading: `تحرير ${FOOTER_COLUMN_LABELS[index]}`,
+          sectionDescription: "اضبط نوع العمود ومحتواه وحالة ظهوره مع الحفاظ على ترتيب الفوتر العام.",
+          icon: "section" as const,
           content: (
             <FooterSlotEditorCard
               slot={slot}
@@ -189,15 +255,12 @@ export default function FooterBuilderClient({
       }),
       {
         id: "contact-data",
-        label: "بيانات التواصل",
+        navigationLabel: "بيانات التواصل",
+        sectionHeading: "بيانات التواصل العامة",
+        sectionDescription: "أدر عناصر التواصل التي تستخدمها أعمدة الفوتر المرتبطة بالمجموعة العامة.",
+        icon: "location" as const,
         content: (
           <AdminCard className="p-5 md:p-6">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-white">بيانات التواصل العامة</h2>
-              <p className="mt-1 text-sm text-white/50">
-                تُستخدم في أي عمود تواصل يعتمد على «المجموعة العامة».
-              </p>
-            </div>
             <ContactItemsField
               items={contactItems}
               onChange={setContactItems}
@@ -208,15 +271,12 @@ export default function FooterBuilderClient({
       },
       {
         id: "social-legal",
-        label: "السوشيال والقانوني",
+        navigationLabel: "السوشيال والقانوني",
+        sectionHeading: "شريط السوشيال والحقوق",
+        sectionDescription: "أدر روابط الشبكات الاجتماعية والنصوص القانونية الظاهرة أسفل أعمدة الفوتر.",
+        icon: "content" as const,
         content: (
           <AdminCard className="p-5 md:p-6">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-white">شريط السوشيال والحقوق</h2>
-              <p className="mt-1 text-sm text-white/50">
-                هذه الإعدادات تخص FooterSocialBar أسفل الأعمدة وليست جزءًا من الأعمدة الأربعة.
-              </p>
-            </div>
             <div className="space-y-6">
               <SocialLinksField links={socialLinks} onChange={setSocialLinks} />
               <LegalFields legal={legal} onChange={setLegal} />
@@ -225,7 +285,7 @@ export default function FooterBuilderClient({
         ),
       },
     ],
-    [contactItems, footerMenuId, legal, menuOptions, quickLinks, slots, socialLinks, sortedSlots],
+    [contactItems, footerMenuId, isPending, legal, menuOptions, quickLinks, slots, socialLinks, sortedSlots, summary],
   );
 
   return (
@@ -247,119 +307,46 @@ export default function FooterBuilderClient({
         }
       />
 
-      <AdminFeedbackRegion
-        channel="footer-builder"
-        label="نتائج إجراءات منشئ الفوتر"
-        feedback={
-          error
-            ? {
-                variant: "danger",
-                title: "تعذر تنفيذ الإجراء",
-                message: error,
-                layout: "inline",
-                dismissible: true,
-                lifecycle: "manual",
-              }
-            : message
-              ? {
-                  variant: messageWarning ? "warning" : "success",
-                  title: messageWarning ? "تم التنفيذ مع تنبيه" : "تم تنفيذ الإجراء",
-                  message,
-                  layout: "inline",
-                  dismissible: true,
-                  lifecycle: "manual",
-                  ...(saved ? { dismissSearchParams: ["saved"] } : {}),
-                }
-              : settings.usesFallback
+      <AdminModuleTabs
+        tabs={editorTabs}
+        activePanelContext={
+          <AdminFeedbackRegion
+            channel="footer-builder"
+            label="نتائج إجراءات منشئ الفوتر"
+            feedback={
+              error
                 ? {
-                    variant: "warning",
-                    title: "تنبيه مصدر إعدادات الفوتر",
-                    message: "بعض مفاتيح الفوتر تُقرأ من fallback — راجع seed/migration عند الحاجة.",
+                    variant: "danger",
+                    title: "تعذر تنفيذ الإجراء",
+                    message: error,
                     layout: "inline",
                     dismissible: true,
-                    lifecycle: "persistent",
+                    lifecycle: "manual",
                   }
-                : null
+                : message
+                  ? {
+                      variant: messageWarning ? "warning" : "success",
+                      title: messageWarning ? "تم التنفيذ مع تنبيه" : "تم تنفيذ الإجراء",
+                      message,
+                      layout: "inline",
+                      dismissible: true,
+                      lifecycle: "manual",
+                      ...(saved ? { dismissSearchParams: ["saved"] } : {}),
+                    }
+                  : settings.usesFallback
+                    ? {
+                        variant: "warning",
+                        title: "تنبيه مصدر إعدادات الفوتر",
+                        message: "بعض مفاتيح الفوتر تُقرأ من fallback — راجع seed/migration عند الحاجة.",
+                        layout: "inline",
+                        dismissible: true,
+                        lifecycle: "persistent",
+                      }
+                    : null
+            }
+          />
         }
       />
-
-      <AdminCard className="p-5 md:p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-white">ملخص الأعمدة والترتيب</h2>
-            <p className="mt-1 text-sm text-white/50">
-              الترتيب هنا يطابق عرض الفوتر العام من اليمين إلى اليسار. غيّر نوع العمود من بطاقته، أو بدّل الترتيب من الأسهم.
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {summary.map((item, position) => (
-            <div
-              key={item.index}
-              className="rounded-[22px] border border-white/10 bg-white/[0.02] px-4 py-4"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-xs font-semibold text-[#D8B87A]/75">
-                  {FOOTER_COLUMN_LABELS[item.index as FooterSlotIndex]}
-                </p>
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    type="button"
-                    aria-label={`تحريك ${FOOTER_COLUMN_LABELS[item.index as FooterSlotIndex]} للأمام`}
-                    disabled={position === 0 || isPending}
-                    onClick={() => handleMoveSlot(item.index as FooterSlotIndex, "earlier")}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-xs text-white/55 transition-colors hover:border-white/20 hover:text-white/85 disabled:cursor-not-allowed disabled:opacity-35"
-                  >
-                    ›
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`تحريك ${FOOTER_COLUMN_LABELS[item.index as FooterSlotIndex]} للخلف`}
-                    disabled={position === summary.length - 1 || isPending}
-                    onClick={() => handleMoveSlot(item.index as FooterSlotIndex, "later")}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-xs text-white/55 transition-colors hover:border-white/20 hover:text-white/85 disabled:cursor-not-allowed disabled:opacity-35"
-                  >
-                    ‹
-                  </button>
-                </div>
-              </div>
-              <div className="mt-3 min-h-[52px]">
-                <FooterBlockHeader
-                  variant="admin"
-                  eyebrow={item.eyebrow}
-                  title={item.title}
-                  icon={item.showBrandIcon ? "brand" : "none"}
-                />
-                {!item.eyebrow?.trim() && !item.title?.trim() && !item.showBrandIcon ? (
-                  <p className="text-xs text-white/40">{FOOTER_BLOCK_TYPE_LABELS[item.type]}</p>
-                ) : null}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <AdminStatusPill tone={item.enabled ? "green" : "muted"}>
-                  {item.enabled ? "Active" : "Disabled"}
-                </AdminStatusPill>
-                <AdminStatusPill tone="gold">{FOOTER_BLOCK_TYPE_LABELS[item.type]}</AdminStatusPill>
-              </div>
-            </div>
-          ))}
-        </div>
-      </AdminCard>
-
-      <AdminCard className="p-5 md:p-6">
-        <div className="mb-5">
-          <h2 className="text-lg font-semibold text-white">تحرير الأعمدة والإعدادات</h2>
-          <p className="mt-1 text-sm text-white/50">
-            افتح التبويب الذي تريد تعديله فقط. التنقل بين التبويبات لا يمس التعديلات غير المحفوظة.
-          </p>
-        </div>
-        <AdminModuleTabs tabs={editorTabs} />
-      </AdminCard>
-
-      <div className="flex justify-end">
-        <AdminActionButton variant="primary" onClick={handleSave} disabled={isPending}>
-          {isPending ? "جارٍ الحفظ..." : "حفظ الفوتر"}
-        </AdminActionButton>
-      </div>
 
       <AdminConfirmDialog
         open={restoreOpen}

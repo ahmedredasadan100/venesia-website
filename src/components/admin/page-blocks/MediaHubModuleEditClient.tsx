@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader from "./BlockEditorContextHeader";
+import BlockEditorContextHeader, { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
@@ -103,17 +103,18 @@ export default function MediaHubModuleEditClient({
         slotContext={getSlotCompatibilityLabel("media-hub")}
       />
 
-      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      <ModuleDependencyHintsPanel moduleKind="media-hub" templateSlug={block.slug} />
-
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
 
         <AdminModuleTabs
+          activePanelContext={<BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/media-hub" saved={saved} />}
           tabs={[
             {
               id: "content",
-              label: "إعدادات الموديول",
+              navigationLabel: "المحتوى",
+              sectionHeading: "إعدادات مركز الميديا",
+              sectionDescription: "حدّد نوع القسم ومصدر البيانات وحدود العناصر المعروضة.",
+              icon: "media",
               content: (
                 <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                   <label className="block space-y-2">
@@ -218,9 +219,14 @@ export default function MediaHubModuleEditClient({
             },
             {
               id: "settings",
-              label: "الإعدادات",
+              navigationLabel: "الإعدادات",
+              sectionHeading: "إعدادات الموديول",
+              sectionDescription: "أدر الوصف الداخلي وحالة نشر الموديول.",
+              icon: "settings",
               content: (
-                <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+                <div className="space-y-5">
+                  <ModuleDependencyHintsPanel moduleKind="media-hub" templateSlug={block.slug} />
+                  <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
                   <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                     <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <label className="block space-y-2">
@@ -244,17 +250,24 @@ export default function MediaHubModuleEditClient({
                       Slot و Sort Order و Visibility تُدار من Pages Manager لكل صفحة على حدة.
                     </p>
                   </section>
+                  </div>
                 </div>
               ),
             },
             {
               id: "pages",
-              label: "يظهر في الصفحات",
+              navigationLabel: "الصفحات",
+              sectionHeading: "الظهور في الصفحات",
+              sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
+              icon: "plans",
               content: (
-                <ModulePageAssignmentsField
-                  pages={assignmentContext.pages}
-                  assignedPageIds={assignedPageIds}
-                />
+                <div className="space-y-5">
+                  <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+                  <ModulePageAssignmentsField
+                    pages={assignmentContext.pages}
+                    assignedPageIds={assignedPageIds}
+                  />
+                </div>
               ),
             },
           ]}

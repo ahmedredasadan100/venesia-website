@@ -414,14 +414,21 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
       className={ADMIN_FORM_STACK_CLASS_NAME}
     >
       {bundle.project.id ? <input type="hidden" name="id" value={bundle.project.id} /> : null}
-      {!bundle.schemaReady ? (
-        <div className="rounded-2xl border border-amber-300/25 bg-amber-400/8 px-4 py-3 text-sm leading-6 text-amber-100/85" role="alert">
-          <strong className="block text-amber-100">مخطط إدخال بيانات المشاريع غير مطبق في قاعدة البيانات الحالية.</strong>
-          <span>{bundle.schemaMessage ?? "يمكن مراجعة الواجهة، لكن الحفظ سيفشل مغلقًا حتى تطبيق الترحيل المعتمد لاحقًا."}</span>
-        </div>
-      ) : null}
       <div className="min-w-0 w-full">
-        <AdminModuleTabs tabs={tabs} variant="editor" navigationEventName={PROJECT_ENTRY_NAVIGATION_EVENT} ariaLabel="أقسام بيانات المشروع" />
+        <AdminModuleTabs
+          tabs={tabs}
+          variant="editor"
+          navigationEventName={PROJECT_ENTRY_NAVIGATION_EVENT}
+          ariaLabel="أقسام بيانات المشروع"
+          activePanelContext={
+            !bundle.schemaReady ? (
+              <div className="rounded-2xl border border-amber-300/25 bg-amber-400/8 px-4 py-3 text-sm leading-6 text-amber-100/85" role="alert">
+                <strong className="block text-amber-100">مخطط إدخال بيانات المشاريع غير مطبق في قاعدة البيانات الحالية.</strong>
+                <span>{bundle.schemaMessage ?? "يمكن مراجعة الواجهة، لكن الحفظ سيفشل مغلقًا حتى تطبيق الترحيل المعتمد لاحقًا."}</span>
+              </div>
+            ) : null
+          }
+        />
       </div>
       <AdminFormError />
       <AdminFormActions submitLabel={mode === "create" ? "إنشاء المشروع" : "حفظ التغييرات"} closeLabel="إغلاق" title={mode === "create" ? "إنشاء المشروع" : "حفظ التغييرات"} description="يحفظ المشروع وجميع العناصر التابعة كعملية ذرية واحدة." />

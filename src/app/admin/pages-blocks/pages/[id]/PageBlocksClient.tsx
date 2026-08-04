@@ -356,43 +356,27 @@ export default function PageBlocksClient({
         onOpenAssignModal={openAssignModal}
       />
 
-      <AdminFeedbackRegion
-        channel={`page-composition:${page.id}`}
-        label="نتائج إجراءات تكوين الصفحة"
-        feedback={
-          actionFeedback
-            ? {
-                variant: actionFeedback.ok ? "success" : "danger",
-                title: actionFeedback.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
-                message: actionFeedback.message,
-                layout: "inline",
-                dismissible: true,
-                lifecycle: "manual",
-              }
-            : null
-        }
-      />
-
-      <AdminFeedbackRegion
-        channel={`page-composition:${page.id}:columns`}
-        label="حالة تفضيلات أعمدة موديولات الصفحة"
-        feedback={
-          preferenceError
-            ? {
-                variant: "warning",
-                title: "تعذر تحميل تفضيلات الأعمدة",
-                message: preferenceError,
-                layout: "inline",
-                dismissible: true,
-                lifecycle: "persistent",
-              }
-            : null
-        }
-      />
-
       <AdminModuleTabs
         initialTabId={initialTabId}
         navigationEventName="admin-page-blocks-navigation"
+        activePanelContext={
+          <AdminFeedbackRegion
+            channel={`page-composition:${page.id}`}
+            label="نتائج إجراءات تكوين الصفحة"
+            feedback={
+              actionFeedback
+                ? {
+                    variant: actionFeedback.ok ? "success" : "danger",
+                    title: actionFeedback.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
+                    message: actionFeedback.message,
+                    layout: "inline",
+                    dismissible: true,
+                    lifecycle: "manual",
+                  }
+                : null
+            }
+          />
+        }
         tabs={[
           {
             id: "seo",
@@ -436,10 +420,26 @@ export default function PageBlocksClient({
             navigationLabel: "الموديولات",
             sectionHeading: "موديولات الصفحة",
             sectionDescription: "أدر الموديولات المرتبطة بالصفحة وترتيبها وحالة ظهورها.",
-            icon: "section",
-            content: (
-              <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <PageModuleKindsBar page={page} usedModuleKinds={usedModuleKinds} />
+              icon: "section",
+              content: (
+                <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
+                  <AdminFeedbackRegion
+                    channel={`page-composition:${page.id}:columns`}
+                    label="حالة تفضيلات أعمدة موديولات الصفحة"
+                    feedback={
+                      preferenceError
+                        ? {
+                            variant: "warning",
+                            title: "تعذر تحميل تفضيلات الأعمدة",
+                            message: preferenceError,
+                            layout: "inline",
+                            dismissible: true,
+                            lifecycle: "persistent",
+                          }
+                        : null
+                    }
+                  />
+                  <PageModuleKindsBar page={page} usedModuleKinds={usedModuleKinds} />
 
                 <AdminEntityListFilters
                   basePath={`/admin/pages-blocks/pages/${page.id}`}

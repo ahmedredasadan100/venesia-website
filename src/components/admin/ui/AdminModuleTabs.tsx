@@ -12,6 +12,7 @@ export type AdminModuleTabIconName =
   | "publish"
   | "section"
   | "seo"
+  | "settings"
   | "specifications";
 
 type AdminModuleTabNavigationLabel =
@@ -39,6 +40,8 @@ export type AdminModuleTab = AdminModuleTabNavigationLabel & {
 
 export type AdminModuleTabsProps = {
   tabs: AdminModuleTab[];
+  /** Section-level feedback or context rendered inside the active panel. */
+  activePanelContext?: ReactNode;
   /** Optional initial tab id; falls back to the first tab. */
   initialTabId?: string;
   /**
@@ -106,6 +109,11 @@ function AdminModuleTabIcon({ name }: { name: AdminModuleTabIconName }) {
         <circle cx="10.75" cy="10.75" r="6.5" />
         <path d="m15.5 15.5 4.25 4.25M8.5 11.25l1.55 1.55 3.2-3.55" />
       </>
+    ) : name === "settings" ? (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55V21h-4v-.08A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.52-1.03H3v-4h.08A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 10 3.05V3h4v.08a1.7 1.7 0 0 0 1.03 1.52 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 7l-.06.06a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z" />
+      </>
     ) : name === "specifications" ? (
       <>
         <path d="M8 5h12M8 12h12M8 19h12" />
@@ -164,7 +172,7 @@ function focusNavigationTarget(targetId: string) {
   });
 }
 
-export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, variant = "editor", navigationEventName, ariaLabel = "أقسام المحرر" }: AdminModuleTabsProps) {
+export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId, nowrap = false, variant = "editor", navigationEventName, ariaLabel = "أقسام المحرر" }: AdminModuleTabsProps) {
   const instanceId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const fallbackId = tabs[0]?.id ?? "";
@@ -326,6 +334,11 @@ export default function AdminModuleTabs({ tabs, initialTabId, nowrap = false, va
                 ) : null}
               </span>
             </header>
+          ) : null}
+          {tab.id === activeId && activePanelContext ? (
+            <div className="mb-5" data-admin-active-panel-context>
+              {activePanelContext}
+            </div>
           ) : null}
           {tab.content}
         </div>
