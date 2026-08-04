@@ -4,6 +4,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  decisionCardElement,
+  decisionCardElementCount,
+  inspectReviewDecisionCard,
+} from "./lib/review-decision-card-structure.mjs";
+
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 
@@ -69,6 +75,11 @@ const revalidation = read(
 const publicCacheRevalidation = read(
   "src/lib/cache/revalidate-public-cache-tags.ts",
 );
+const publicationDecision = inspectReviewDecisionCard(
+  review,
+  "ProjectPublishChecklistPanel.tsx",
+  "publication-schedule",
+);
 
 check(
   "capability owns exactly draft, published, and unpublished",
@@ -91,6 +102,21 @@ check(
   review.includes('name="publication_status"') &&
     review.includes('name="featured"') &&
     !review.includes("formAction"),
+);
+check(
+  "Project Review publication composition exposes one switch, one first-publish value, and no duplicate badge",
+  publicationDecision.title === "حالة النشر والتاريخ" &&
+    !publicationDecision.hasBadge &&
+    decisionCardElementCount(publicationDecision, "AdminStatusPill") === 0 &&
+    decisionCardElementCount(publicationDecision, "AdminFormSwitch") === 1 &&
+    decisionCardElement(publicationDecision, "AdminFormSwitch", {
+      name: "publication_status",
+    })?.attributes.describedBy === "project-publication-hint" &&
+    decisionCardElement(publicationDecision, "ProjectDecision", {
+      label: "تاريخ أول نشر",
+    }) !== undefined &&
+    (publicationDecision.sourceText.match(/initial\.project\.published_at/g) ?? [])
+      .length === 1,
 );
 check(
   "form save passes trusted actor and prior state into the same aggregate RPC",

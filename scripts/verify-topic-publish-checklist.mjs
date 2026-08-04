@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
+import {
+  decisionCardElement,
+  decisionCardElementCount,
+  inspectReviewDecisionCard,
+} from "./lib/review-decision-card-structure.mjs";
+
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const review = read("src/components/admin/content-workflow/ContentReviewPanel.tsx");
 const sharedReview = read("src/components/admin/review/AdminEntityReviewPanel.tsx");
@@ -14,6 +20,11 @@ const mediaEditor = read("src/components/admin/content/editors/media/MediaConten
 const mediaHelpers = read("src/app/admin/content/topics/media-actions/helpers.ts");
 const mediaLoader = read("src/lib/media-center/unified-provider.ts");
 const mediaDetail = read("src/components/media-center/MediaDetailPage.tsx");
+const publicationDecision = inspectReviewDecisionCard(
+  publishing,
+  "ContentPublishingOptions.tsx",
+  "publication-schedule",
+);
 
 let passed = 0;
 function check(label, condition) {
@@ -42,6 +53,7 @@ check("one correction registry covers common SEO FAQ video and gallery targets",
 check("one analysis owner contains common checks plus typed rich-media checks", ["buildContentReviewChecks", 'input.contentType === "video"', 'input.contentType === "gallery"', 'input.contentType === "article"'].every((token) => capability.includes(token)));
 check("publish blocking is explicit and independent from presentation severity", reviewContract.includes("blocksPublish: boolean") && capability.includes("getContentPublishBlockingChecks") && capability.includes('item.blocksPublish && item.status === "fail"') && capability.includes("blocksPublish: false"));
 check("publishing UX is a binary switch while preserving the status field contract", publishing.includes('name="content_publication_toggle"') && publishing.includes('type="hidden"') && publishing.includes('name="status"') && publishing.includes('published ? "published" : unpublishedStatus') && !publishing.includes("AdminFormListboxSelect"));
+check("Content publication composition exposes one switch and no duplicate status badge", publicationDecision.title === "حالة النشر والتاريخ" && !publicationDecision.hasBadge && decisionCardElementCount(publicationDecision, "AdminStatusPill") === 0 && decisionCardElementCount(publicationDecision, "AdminFormSwitch") === 1 && decisionCardElement(publicationDecision, "AdminFormSwitch", { name: "content_publication_toggle" })?.attributes.describedBy === "content-publication-hint" && decisionCardElementCount(publicationDecision, "TopicDateLabelField") === 1);
 check("archive is outside the editor publication choice", publishing.includes("الأرشفة عملية مستقلة من إجراءات قائمة المحتوى") && !publishing.includes('{ value: "archived"'));
 check("featured popular and visible date render for every content type", ["is_featured", "is_popular", "TopicDateLabelField"].every((token) => publishing.includes(token)) && mediaEditor.includes("popular={Boolean(values?.is_popular)}") && mediaEditor.includes("publishedAt={values?.published_at}"));
 check("one display settings owner is mounted by article and media", [createEditor, editEditor, mediaEditor].every((source) => source.includes("<ContentDisplaySettings")) && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => display.includes(`name="${name}"`)));
