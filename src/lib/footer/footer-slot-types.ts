@@ -1,4 +1,4 @@
-import type { FooterBrand, FooterContactItem } from "./types";
+import type { FooterContactItem } from "./types";
 
 export const FOOTER_SLOT_INDICES = [1, 2, 3, 4] as const;
 
@@ -89,10 +89,3 @@ export type FooterSlotsConfig = {
   version: typeof FOOTER_SLOTS_CONFIG_VERSION;
   slots: FooterSlot[];
 };
-
-export type FooterSlotsSource = "database" | "legacy" | "default";
-
-export type FooterLegacyBrandInput = Pick<
-  FooterBrand,
-  "title" | "tagline" | "contactHeading" | "mediaHeading"
->;

@@ -11,7 +11,7 @@ import {
   MEDIA_LISTING_PAGE_CONFIG,
   type MediaListingPageKey,
 } from "../../lib/media-center/listing-page-config";
-import { loadMediaCenterSidebarProps } from "../../lib/media-sidebar-modules/load-media-sidebar-modules";
+import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 
 type MediaListingPageProps = {
   configKey: MediaListingPageKey;
@@ -30,7 +30,7 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
   const requestedPage = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
   const pickFeatured = "showFeaturedNews" in config && Boolean(config.showFeaturedNews);
 
-  const [listing, searchIndex, sidebarProps] = await Promise.all([
+  const [listing, searchIndex, composition] = await Promise.all([
     getMediaListingPage({
       type: config.mediaType,
       page: requestedPage,
@@ -40,8 +40,9 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     }),
     // Lean catalog for client-side sidebar search (no body content).
     getMediaItems(config.mediaType),
-    loadMediaCenterSidebarProps(config.cmsPageSlug),
+    loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
   ]);
+  if (!composition.mediaSidebarModules) return null;
 
   const featuredNews = pickFeatured ? listing.featured : null;
   const searchCatalog = featuredNews
@@ -49,12 +50,8 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     : searchIndex;
 
   return (
-    <MediaCenterShellLayout cmsPageSlug={config.cmsPageSlug}>
-      <MediaPageShell
-        latestNewsSidebar={sidebarProps.latestNewsSidebar}
-        popularMediaSidebarItems={sidebarProps.popularMediaSidebarItems}
-        sidebarModules={sidebarProps.sidebarModules}
-      >
+    <MediaCenterShellLayout cmsPageSlug={config.cmsPageSlug} composition={composition}>
+      <MediaPageShell sidebarModules={composition.mediaSidebarModules}>
         <MediaListingContent
           items={listing.items}
           searchCatalog={searchCatalog}

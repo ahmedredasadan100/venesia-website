@@ -114,7 +114,7 @@ for (const table of CORE_TABLES) {
 }
 
 console.log("\n=== Footer site_settings ===");
-for (const key of ["footer.brand", "footer.contact_items", "footer.social_links", "footer.legal"]) {
+for (const key of ["footer.slots", "footer.contact_items", "footer.social_links", "footer.legal"]) {
   const { data, error } = await supabase.from("site_settings").select("key").eq("key", key).maybeSingle();
   record(`site_settings:${key}`, !error && Boolean(data), error?.message);
 }

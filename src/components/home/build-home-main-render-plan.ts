@@ -1,31 +1,24 @@
 import { getSlotEntries } from "../../lib/page-blocks/page-composition-utils";
 import type { PageComposition } from "../../lib/page-blocks/page-composition-types";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
-import {
-  HOME_MAIN_PLACEMENTS,
-  resolveHomeModuleSlug,
-  type HomeModuleSlug,
-} from "./home-placement-registry";
+import { resolveHomeModuleSlug } from "./home-placement-registry";
 
 export type HomeMainRenderPlanEntry = {
   key: string;
   sortOrder: number;
   slug: string;
-  source: "cms" | "fallback";
+  source: "cms";
   assignmentId?: number;
   block?: ResolvedPageBlock;
 };
 
 /**
  * Builds a sort_order-driven render plan for the home main slot.
- * CMS blocks from composition + static fallbacks only when no assignment exists.
- * Assignments with is_visible=false suppress both CMS and fallback rendering.
+ * CMS blocks from the canonical page-composition contract only.
  */
 export function buildHomeMainRenderPlan(composition: PageComposition): HomeMainRenderPlanEntry[] {
   const entries = getSlotEntries(composition, "main");
   const plan: HomeMainRenderPlanEntry[] = [];
-  const cmsHomeSlugs = new Set<HomeModuleSlug>();
-  const hiddenHomeSlugs = new Set(composition.hiddenHomeModuleSlugs ?? []);
 
   for (const entry of entries) {
     if (entry.kind === "feed") {
@@ -43,7 +36,6 @@ export function buildHomeMainRenderPlan(composition: PageComposition): HomeMainR
 
     const homeSlug = resolveHomeModuleSlug(entry.block);
     if (homeSlug) {
-      cmsHomeSlugs.add(homeSlug);
       plan.push({
         key: `${homeSlug}-${entry.assignmentId}`,
         sortOrder: entry.sortOrder,
@@ -62,18 +54,6 @@ export function buildHomeMainRenderPlan(composition: PageComposition): HomeMainR
       source: "cms",
       assignmentId: entry.assignmentId,
       block: entry.block,
-    });
-  }
-
-  for (const placement of HOME_MAIN_PLACEMENTS) {
-    if (cmsHomeSlugs.has(placement.slug)) continue;
-    if (hiddenHomeSlugs.has(placement.slug)) continue;
-
-    plan.push({
-        key: `${placement.slug}-fallback`,
-        sortOrder: placement.sortOrder,
-        slug: placement.slug,
-        source: "fallback",
     });
   }
 

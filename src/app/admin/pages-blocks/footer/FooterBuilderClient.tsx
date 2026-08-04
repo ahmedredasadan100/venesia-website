@@ -152,11 +152,13 @@ export default function FooterBuilderClient({
   }
 
   const slotsSourceLabel =
-    settings.slotsSource === "database"
+    settings.sourceStatus === "database"
       ? "قاعدة البيانات"
-      : settings.slotsSource === "legacy"
-        ? "Legacy"
-        : "افتراضي";
+      : settings.sourceStatus === "missing"
+        ? "غير محفوظ"
+        : settings.sourceStatus === "invalid"
+          ? "بيانات غير صالحة"
+          : "غير متاح";
 
   function handleMoveSlot(index: FooterSlotIndex, direction: "earlier" | "later") {
     setSlots((current) => moveFooterSlotInOrder(current, index, direction));
@@ -333,11 +335,11 @@ export default function FooterBuilderClient({
                       lifecycle: "manual",
                       ...(saved ? { dismissSearchParams: ["saved"] } : {}),
                     }
-                  : settings.usesFallback
+                  : settings.sourceStatus !== "database"
                     ? {
                         variant: "warning",
                         title: "تنبيه مصدر إعدادات الفوتر",
-                        message: "بعض مفاتيح الفوتر تُقرأ من fallback — راجع seed/migration عند الحاجة.",
+                        message: `لم يُعرض fallback عام. حالة المصدر: ${slotsSourceLabel}. ${settings.sourceIssues.join(" ")}`,
                         layout: "inline",
                         dismissible: true,
                         lifecycle: "persistent",

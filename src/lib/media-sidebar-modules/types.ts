@@ -15,5 +15,6 @@ export type MediaSidebarWidgetState = {
 
 export type MediaSidebarModulesState = {
   widgets: MediaSidebarWidgetState[];
-  usesFallback: boolean;
+  sourceStatus: "database" | "missing" | "error";
+  sourceIssues: string[];
 };

@@ -7,7 +7,7 @@ export const PUBLIC_CACHE_TAG_GROUPS = {
   footer: ["footer", "site-settings"],
   projects: ["projects", "project"],
   media: ["media-center", "media-item", "media-sidebar"],
-  pageComposition: ["page-composition", "hero", "page-blocks", "feed-modules"],
+  pageComposition: ["page-composition", "hero", "page-blocks", "feed-modules", "media-center", "media-sidebar"],
   topics: ["topics", "topic", "topic-related"],
   seo: ["seo-global", "site-settings", "page-seo", "projects", "topics", "media-center"],
 } as const;

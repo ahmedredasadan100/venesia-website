@@ -3,65 +3,85 @@ import "server-only";
 import { cache } from "react";
 import { unstable_cache, unstable_noStore as noStore } from "next/cache";
 
-import { getSupabaseAdmin } from "../supabase-admin";
+import { resolveFooterSettingsLinks } from "../admin/links/block-config-links";
 import { logError } from "../logging";
-import { buildSlotsFromLegacy } from "./build-slots-from-legacy";
+import { getSupabaseAdmin } from "../supabase-admin";
+import { DEFAULT_FOOTER_SLOTS, EMPTY_FOOTER_SETTINGS } from "./defaults";
 import {
-  DEFAULT_FOOTER_BRAND,
-  DEFAULT_FOOTER_CONTACT_ITEMS,
-  DEFAULT_FOOTER_LEGAL,
-  DEFAULT_FOOTER_SETTINGS,
-  DEFAULT_FOOTER_SLOTS,
-  DEFAULT_FOOTER_SOCIAL_LINKS,
-} from "./defaults";
-import {
-  parseFooterBrand,
   parseFooterContactItems,
   parseFooterLegal,
   parseFooterSocialLinks,
 } from "./parse-footer-settings";
-import { parseFooterSlots } from "./parse-footer-slots";
-import type { FooterBrand, FooterSettings } from "./types";
-import {
-  FOOTER_LOADER_SETTING_KEYS,
-  FOOTER_SETTING_KEYS,
-  FOOTER_SLOTS_SETTING_KEY,
-} from "./types";
-import { resolveFooterSettingsLinks } from "../admin/links/block-config-links";
+import type { FooterSlotsConfig } from "./footer-slot-types";
+import type { FooterSettings } from "./types";
+import { FOOTER_LOADER_SETTING_KEYS, FOOTER_SLOTS_SETTING_KEY } from "./types";
 import { validateFooterSlots } from "./validate-footer-slots";
 
-function resolveFooterSlots(
-  rawSlots: unknown,
-  brand: FooterBrand,
-): Pick<FooterSettings, "slots" | "slotsSource"> {
-  if (rawSlots == null) {
-    return { slots: buildSlotsFromLegacy(brand), slotsSource: "legacy" };
+function cloneEmptyFooterSettings(
+  sourceStatus: FooterSettings["sourceStatus"],
+  sourceIssues: string[],
+): FooterSettings {
+  return {
+    ...structuredClone(EMPTY_FOOTER_SETTINGS),
+    sourceStatus,
+    sourceIssues,
+  };
+}
+
+function readCanonicalSlots(value: unknown): { value: FooterSlotsConfig | null; issue?: string } {
+  if (!value || typeof value !== "object") {
+    return { value: null, issue: `${FOOTER_SLOTS_SETTING_KEY} is missing or not an object.` };
   }
 
-  const parsed = parseFooterSlots(rawSlots, brand);
-  const validation = validateFooterSlots(parsed);
-  if (validation.ok) {
-    return { slots: validation.value, slotsSource: "database" };
+  try {
+    const validation = validateFooterSlots(value as FooterSlotsConfig);
+    if (!validation.ok) return { value: null, issue: validation.errors.join(" ") };
+    return { value: validation.value };
+  } catch (error) {
+    return {
+      value: null,
+      issue: error instanceof Error ? error.message : `${FOOTER_SLOTS_SETTING_KEY} is invalid.`,
+    };
   }
-
-  logError("footer.slots validation failed; using legacy builder", new Error(validation.errors.join(" ")));
-  return { slots: buildSlotsFromLegacy(brand), slotsSource: "legacy" };
 }
 
 function buildSettingsFromRows(byKey: Map<string, unknown>): FooterSettings {
-  const brand = parseFooterBrand(byKey.get("footer.brand"), DEFAULT_FOOTER_BRAND);
-  const { slots, slotsSource } = resolveFooterSlots(byKey.get(FOOTER_SLOTS_SETTING_KEY), brand);
-  const hasAllLegacyKeys = FOOTER_SETTING_KEYS.every((key) => byKey.has(key));
-  const hasSlotsKey = byKey.has(FOOTER_SLOTS_SETTING_KEY);
+  const missingKeys = FOOTER_LOADER_SETTING_KEYS.filter((key) => !byKey.has(key));
+  if (missingKeys.length) {
+    return cloneEmptyFooterSettings(
+      "missing",
+      missingKeys.map((key) => `${key} is not persisted.`),
+    );
+  }
+
+  const slots = readCanonicalSlots(byKey.get(FOOTER_SLOTS_SETTING_KEY));
+  const contactItems = parseFooterContactItems(byKey.get("footer.contact_items"), []);
+  const socialLinks = parseFooterSocialLinks(byKey.get("footer.social_links"), []);
+  const legal = parseFooterLegal(byKey.get("footer.legal"), { copyright: "", tagline: "" });
+  const issues = [
+    ...(slots.issue ? [slots.issue] : []),
+    ...(!Array.isArray(byKey.get("footer.contact_items")) || contactItems.length === 0
+      ? ["footer.contact_items is invalid or empty."]
+      : []),
+    ...(!Array.isArray(byKey.get("footer.social_links")) || socialLinks.length === 0
+      ? ["footer.social_links is invalid or empty."]
+      : []),
+    ...(!legal.copyright.trim() || !legal.tagline.trim()
+      ? ["footer.legal is incomplete."]
+      : []),
+  ];
+
+  if (!slots.value || issues.length) {
+    return cloneEmptyFooterSettings("invalid", issues);
+  }
 
   return {
-    brand,
-    contactItems: parseFooterContactItems(byKey.get("footer.contact_items"), DEFAULT_FOOTER_CONTACT_ITEMS),
-    socialLinks: parseFooterSocialLinks(byKey.get("footer.social_links"), DEFAULT_FOOTER_SOCIAL_LINKS),
-    legal: parseFooterLegal(byKey.get("footer.legal"), DEFAULT_FOOTER_LEGAL),
-    slots,
-    slotsSource,
-    usesFallback: !hasAllLegacyKeys || !hasSlotsKey,
+    slots: slots.value,
+    contactItems,
+    socialLinks,
+    legal,
+    sourceStatus: "database",
+    sourceIssues: [],
   };
 }
 
@@ -73,39 +93,36 @@ async function queryFooterSettings(): Promise<FooterSettings> {
 
   if (error) {
     logError("loadFooterSettings failed", error, { resource: "site_settings:footer" });
-    return DEFAULT_FOOTER_SETTINGS;
+    return cloneEmptyFooterSettings("error", [error.message]);
   }
 
   const rows = data ?? [];
   if (!rows.length) {
-    return DEFAULT_FOOTER_SETTINGS;
+    return cloneEmptyFooterSettings("missing", ["No canonical Footer settings are persisted."]);
   }
 
-  const byKey = new Map(rows.map((row) => [row.key, row.value]));
-  const settings = buildSettingsFromRows(byKey);
+  const settings = buildSettingsFromRows(new Map(rows.map((row) => [row.key, row.value])));
+  if (settings.sourceStatus !== "database") return settings;
   return resolveFooterSettingsLinks(settings);
 }
 
 export const loadFooterSettings = cache(async function loadFooterSettings(): Promise<FooterSettings> {
   return unstable_cache(
     async () => queryFooterSettings(),
-    ["public-footer-settings"],
+    ["public-footer-settings-v2"],
     { revalidate: 300, tags: ["footer", "site-settings"] },
   )();
 });
 
 export async function loadFooterSettingsForAdmin(): Promise<FooterSettings> {
   noStore();
-  const settings = await queryFooterSettings();
-  return { ...settings, usesFallback: settings.usesFallback };
+  return queryFooterSettings();
 }
 
 export function loadFooterSettingsFromValues(
   values: Partial<Record<(typeof FOOTER_LOADER_SETTING_KEYS)[number], unknown>>,
 ): FooterSettings {
-  const byKey = new Map<string, unknown>(Object.entries(values));
-  if (!byKey.size) return DEFAULT_FOOTER_SETTINGS;
-  return buildSettingsFromRows(byKey);
+  return buildSettingsFromRows(new Map<string, unknown>(Object.entries(values)));
 }
 
 export { DEFAULT_FOOTER_SLOTS };

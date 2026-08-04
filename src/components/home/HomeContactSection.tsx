@@ -5,7 +5,6 @@ import { Fragment } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-import { HOME_IMAGES } from "../../config/home-images";
 import { buildWhatsAppHref } from "../../lib/contact/build-whatsapp-href";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
 import type { HomeContactContent } from "./home-contact-mappers";
@@ -13,83 +12,19 @@ import { renderContactIcon } from "../page-blocks/contact-icons";
 import { usePublicBrand } from "../PublicBrandProvider";
 import type { GlobalOrganizationIdentity } from "../../lib/seo/resolve-global-organization-identity";
 
-const STATIC_DEFAULTS = {
-  eyebrow: "Venesia Developments",
-  title: "تبحث عن وحدة تناسب\nخطتك القادمة؟",
-  description:
-    "فريقنا الاستشاري جاهز لمساعدتك في اختيار المشروع الأنسب حسب موقعك، ميزانيتك، وهدفك الاستثماري.",
-  button: {
-    label: "تحدث مع مستشار الآن",
-    href: "https://wa.me/201033766876",
-  },
-  note: "احجز استشارتك المجانية",
-  image: HOME_IMAGES.contact,
-  contacts: [
-    {
-      label: "تواصل عبر واتساب",
-      value: "01033766876",
-      href: "https://wa.me/201033766876",
-    },
-    {
-      label: "الخط الساخن",
-      value: "15875",
-      href: "tel:15875",
-    },
-    {
-      label: "البريد الإلكتروني",
-      value: "info@venesia-developments.com",
-      href: "mailto:info@venesia-developments.com",
-    },
-    {
-      label: "ساعات العمل",
-      value: "السبت – الخميس ٩ص – ٦م",
-      href: undefined,
-    },
-  ],
-} satisfies HomeContactContent;
-
 function isExternalHref(href: string) {
   return /^(https?:|mailto:|tel:)/i.test(href);
 }
 
 function resolveHomeContactContent(
-  content: HomeContactContent | null | undefined,
+  content: HomeContactContent,
   identity: GlobalOrganizationIdentity,
 ) {
-  const identityContacts = STATIC_DEFAULTS.contacts.map((item) => {
-    if (item.href?.startsWith("tel:") && identity.phone) {
-      return { ...item, value: identity.phone, href: `tel:${identity.phone.replace(/\s+/g, "")}` };
-    }
-    if (item.href?.startsWith("mailto:") && identity.email) {
-      return { ...item, value: identity.email, href: `mailto:${identity.email}` };
-    }
-    return item;
-  });
-
-  if (!content) {
-    return {
-      ...STATIC_DEFAULTS,
-      eyebrow: identity.displayName || STATIC_DEFAULTS.eyebrow,
-      button: {
-        ...STATIC_DEFAULTS.button,
-        target: undefined as "_self" | "_blank" | undefined,
-      },
-      contacts: identityContacts.map((item) => ({
-        icon: undefined as string | undefined,
-        ...item,
-        secondaryValue: undefined as string | undefined,
-        href: item.href ?? null,
-      })),
-    };
-  }
-
-  const contacts = Array.from({ length: 4 }, (_, index) => {
-    const cms = content.contacts[index];
-    const fallback = identityContacts[index];
-    const label = cms?.label?.trim() || fallback?.label || "";
-    const value = cms?.value?.trim() || fallback?.value || "";
-    const secondaryValue = cms?.secondaryValue?.trim() || undefined;
-    const href = cms?.href?.trim() || fallback?.href || null;
+  const contacts = content.contacts.map((cms) => {
+    const label = cms.label.trim();
+    const value = cms.value.trim();
+    const secondaryValue = cms.secondaryValue?.trim() || undefined;
+    const href = cms.href?.trim() || null;
 
     return {
       icon: cms?.icon?.trim() || undefined,
@@ -101,22 +36,22 @@ function resolveHomeContactContent(
   });
 
   return {
-    eyebrow: content.eyebrow?.trim() || identity.displayName || STATIC_DEFAULTS.eyebrow,
-    title: content.title?.trim() || STATIC_DEFAULTS.title,
-    description: content.description?.trim() || STATIC_DEFAULTS.description,
+    eyebrow: content.eyebrow.trim() || identity.displayName,
+    title: content.title.trim(),
+    description: content.description.trim(),
     button: {
-      label: content.button?.label?.trim() || STATIC_DEFAULTS.button.label,
-      href: content.button?.href?.trim() || STATIC_DEFAULTS.button.href,
-      target: content.button?.target,
+      label: content.button.label.trim(),
+      href: content.button.href.trim(),
+      target: content.button.target,
     },
-    note: content.note?.trim() || STATIC_DEFAULTS.note,
-    image: content.image?.trim() || STATIC_DEFAULTS.image,
+    note: content.note.trim(),
+    image: content.image.trim(),
     contacts,
   };
 }
 
 export type HomeContactSectionProps = {
-  content?: HomeContactContent | null;
+  content: HomeContactContent;
 };
 
 function ContactPhoneLink({
@@ -265,6 +200,7 @@ function HomeContactCtaButton({
 export default function HomeContactSection({ content }: HomeContactSectionProps) {
   const identity = usePublicBrand();
   const resolved = resolveHomeContactContent(content, identity);
+  if (!resolved.image) return null;
   const titleLines = resolved.title.split("\n");
 
   return (

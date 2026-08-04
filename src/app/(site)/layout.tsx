@@ -14,7 +14,7 @@ import {
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 import { resolveGlobalOrganizationIdentity } from "../../lib/seo/resolve-global-organization-identity";
 
-/** DB-backed public layout: cached loaders (300s) with graceful fallbacks when Supabase is unavailable. */
+/** DB-backed public layout. Footer outages fail safe without publishing code-owned composition. */
 export const revalidate = 300;
 
 export default async function SiteLayout({
@@ -41,14 +41,14 @@ export default async function SiteLayout({
   }
 
   if (!footerSettings) {
-    const { DEFAULT_FOOTER_SETTINGS } = await import("../../lib/footer/defaults");
-    footerSettings = DEFAULT_FOOTER_SETTINGS;
+    const { EMPTY_FOOTER_SETTINGS } = await import("../../lib/footer/defaults");
+    footerSettings = structuredClone(EMPTY_FOOTER_SETTINGS);
   }
 
   const footerComposition = await resolveFooterComposition(footerSettings, {
     mainNavItems: navigationItems,
     footerNavItems,
-  }, organizationIdentity);
+  });
 
   const organizationSchema = buildOrganizationSchema(globalSeo);
   const websiteSchema = buildWebsiteSchema(globalSeo);

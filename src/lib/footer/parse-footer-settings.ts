@@ -1,5 +1,4 @@
 import type {
-  FooterBrand,
   FooterContactItem,
   FooterLegal,
   FooterSocialLink,
@@ -63,18 +62,6 @@ export function parseFooterContactItem(record: Record<string, unknown>): FooterC
     value,
     href: href || undefined,
     visible: parseFooterContactItemVisible(record.visible),
-  };
-}
-
-export function parseFooterBrand(value: unknown, fallback: FooterBrand): FooterBrand {
-  if (!value || typeof value !== "object") return fallback;
-
-  const record = value as Record<string, unknown>;
-  return {
-    title: typeof record.title === "string" ? cleanText(record.title) : fallback.title,
-    tagline: cleanText(record.tagline) || fallback.tagline,
-    contactHeading: cleanText(record.contactHeading) || fallback.contactHeading,
-    mediaHeading: cleanText(record.mediaHeading) || fallback.mediaHeading,
   };
 }
 

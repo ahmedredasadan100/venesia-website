@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 import { usePublicNavigation } from "../PublicNavigationProvider";
 import type { MediaSidebarItem } from "../../lib/media-center/types";
-import { DEFAULT_MEDIA_SIDEBAR_MODULES } from "../../lib/media-sidebar-modules/defaults";
 import type { MediaSidebarModulesState, MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
 
 function SidebarPanel({
@@ -162,9 +161,7 @@ function SectionsPanel({
 type MediaSidebarProps = {
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
-  latestNewsSidebar?: MediaSidebarItem[];
-  popularMediaSidebarItems?: MediaSidebarItem[];
-  sidebarModules?: MediaSidebarModulesState;
+  sidebarModules: MediaSidebarModulesState;
 };
 
 function renderWidgetPanel(
@@ -172,8 +169,6 @@ function renderWidgetPanel(
   props: {
     navItems: Array<{ href: string; submenu?: Array<{ href: string; label: string }> }>;
     pathname: string;
-    latestNewsSidebar: MediaSidebarItem[];
-    popularMediaSidebarItems: MediaSidebarItem[];
   },
 ) {
   switch (widget.widgetKey) {
@@ -192,13 +187,13 @@ function renderWidgetPanel(
     case "latest":
       return (
         <SidebarPanel key={`latest-${widget.assignmentId}`} title="أحدث الأخبار">
-          <SidebarMediaList items={widget.items ?? props.latestNewsSidebar} />
+          <SidebarMediaList items={widget.items ?? []} />
         </SidebarPanel>
       );
     case "popular":
       return (
         <SidebarPanel key={`popular-${widget.assignmentId}`} title="الأكثر قراءة">
-          <SidebarMediaList items={widget.items ?? props.popularMediaSidebarItems} showLabel />
+          <SidebarMediaList items={widget.items ?? []} showLabel />
         </SidebarPanel>
       );
     default:
@@ -209,9 +204,7 @@ function renderWidgetPanel(
 export default function MediaSidebar({
   searchQuery = "",
   onSearchChange,
-  latestNewsSidebar = [],
-  popularMediaSidebarItems = [],
-  sidebarModules = DEFAULT_MEDIA_SIDEBAR_MODULES,
+  sidebarModules,
 }: MediaSidebarProps) {
   const pathname = usePathname();
   const navItems = usePublicNavigation();
@@ -259,8 +252,6 @@ export default function MediaSidebar({
         renderWidgetPanel(widget, {
           navItems,
           pathname,
-          latestNewsSidebar,
-          popularMediaSidebarItems,
         }),
       )}
     </aside>

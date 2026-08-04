@@ -30,5 +30,6 @@ export type MediaHubModuleState = {
 
 export type MediaHubModulesState = {
   modules: MediaHubModuleState[];
-  usesFallback: boolean;
+  sourceStatus: "database" | "missing" | "error";
+  sourceIssues: string[];
 };

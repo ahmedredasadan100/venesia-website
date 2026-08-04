@@ -37,35 +37,6 @@ import {
 } from "../../hooks/use-device-capabilities";
 import type { HomeTrustContent, HomeTrustTextAlignment } from "./home-trust-mappers";
 
-const STATIC_DEFAULTS: HomeTrustContent = {
-  eyebrow: "لماذا يثق السوق العقارى في فينيسيا؟",
-  title: "مش بنبيع كلام… التنفيذ بيتكلم.",
-  description:
-    "الموقع هنا لازم يشتغل كدليل ثقة بصري، مش بروشور. كل جزء فيه يقول إن الشركة موجودة، شغالة، وبتبني بجد.",
-  eyebrowBold: false,
-  eyebrowAlignment: "right",
-  titleBold: true,
-  titleAlignment: "right",
-  items: [
-    {
-      title: "أراضي مملوكة",
-      text: "بداية أي ثقة حقيقية تبدأ من أصل واضح ومدفوع.",
-    },
-    {
-      title: "إدارة هندسية",
-      text: "متابعة تنفيذ مش مجرد صور… ده نظام بيشتغل على الأرض.",
-    },
-    {
-      title: "مراحل موثقة",
-      text: "كل مرحلة ليها معنى، وكل خطوة بتثبت إن الوعد بيتحول لحقيقة.",
-    },
-    {
-      title: "رسالة طمأنة",
-      text: "العميل مش محتاج يسمع وعود كتير… محتاج يشوف تنفيذ حقيقي.",
-    },
-  ],
-};
-
 const TEXT_ALIGN_CLASS: Record<HomeTrustTextAlignment, string> = {
   right: "text-right",
   center: "text-center",
@@ -93,25 +64,20 @@ function hasRichTextValue(value?: string | null) {
   return Boolean(stripHtml(trimmed));
 }
 
-function resolveHomeTrustContent(content?: HomeTrustContent | null) {
-  if (!content) return STATIC_DEFAULTS;
-
+function resolveHomeTrustContent(content: HomeTrustContent) {
   const items = content.items.filter((item) => item.title.trim() || item.text.trim());
-  const resolvedItems = items.length ? items : STATIC_DEFAULTS.items;
 
   return {
-    eyebrow: content.eyebrow?.trim() || STATIC_DEFAULTS.eyebrow,
-    title: content.title?.trim() || STATIC_DEFAULTS.title,
-    description: hasRichTextValue(content.description)
-      ? content.description.trim()
-      : STATIC_DEFAULTS.description,
-    eyebrowBold: content.eyebrowBold ?? STATIC_DEFAULTS.eyebrowBold,
-    eyebrowAlignment: content.eyebrowAlignment ?? STATIC_DEFAULTS.eyebrowAlignment,
-    titleBold: content.titleBold ?? STATIC_DEFAULTS.titleBold,
-    titleAlignment: content.titleAlignment ?? STATIC_DEFAULTS.titleAlignment,
-    items: resolvedItems.map((item, index) => ({
-      title: item.title?.trim() || STATIC_DEFAULTS.items[index]?.title || "",
-      text: item.text?.trim() || STATIC_DEFAULTS.items[index]?.text || "",
+    eyebrow: content.eyebrow.trim(),
+    title: content.title.trim(),
+    description: hasRichTextValue(content.description) ? content.description.trim() : "",
+    eyebrowBold: content.eyebrowBold,
+    eyebrowAlignment: content.eyebrowAlignment,
+    titleBold: content.titleBold,
+    titleAlignment: content.titleAlignment,
+    items: items.map((item) => ({
+      title: item.title.trim(),
+      text: item.text.trim(),
       image: item.image?.trim() || undefined,
       imageAlt: item.imageAlt?.trim() || undefined,
     })),
@@ -154,7 +120,7 @@ function TrustCardFaceContent({
 }
 
 export type HomeTrustSectionProps = {
-  content?: HomeTrustContent | null;
+  content: HomeTrustContent;
 };
 
 export default function HomeTrustSection({ content }: HomeTrustSectionProps) {

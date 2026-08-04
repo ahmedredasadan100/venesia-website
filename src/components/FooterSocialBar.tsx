@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 
 import { useFooterSettings } from "./FooterSettingsProvider";
 import type { FooterSocialLink, FooterSocialPlatform } from "../lib/footer/types";
-import { usePublicBrand } from "./PublicBrandProvider";
 
 type FooterSocialBarProps = {
   immediateReveal?: boolean;
@@ -55,14 +54,7 @@ const platformIcons: Record<FooterSocialPlatform, ReactNode> = {
 
 export default function FooterSocialBar({ immediateReveal = false }: FooterSocialBarProps) {
   const settings = useFooterSettings();
-  const identity = usePublicBrand();
-  const identityLinks = identity.socialLinks.flatMap((item): FooterSocialLink[] => {
-    const value = `${item.label} ${item.href}`.toLowerCase();
-    const platform = (["facebook", "instagram", "tiktok", "youtube", "whatsapp"] as const)
-      .find((candidate) => value.includes(candidate));
-    return platform ? [{ platform, label: item.label, href: item.href }] : [];
-  });
-  const links: FooterSocialLink[] = (identityLinks.length ? identityLinks : settings.socialLinks)
+  const links: FooterSocialLink[] = settings.socialLinks
     .filter((item) => item.visible !== false);
 
   return (

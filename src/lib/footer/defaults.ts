@@ -1,12 +1,8 @@
 import type {
-  FooterBrand,
-  FooterContactItem,
-  FooterLegal,
   FooterSettings,
-  FooterSocialLink,
   FooterSocialPlatform,
 } from "./types";
-import { buildSlotsFromLegacy } from "./build-slots-from-legacy";
+import { FOOTER_SLOTS_CONFIG_VERSION, type FooterSlotsConfig } from "./footer-slot-types";
 
 const SOCIAL_PLATFORMS: FooterSocialPlatform[] = [
   "facebook",
@@ -17,88 +13,68 @@ const SOCIAL_PLATFORMS: FooterSocialPlatform[] = [
   "location",
 ];
 
-export const DEFAULT_FOOTER_BRAND: FooterBrand = {
-  title: "Venesia Developments",
-  tagline: "Building trust before concrete.",
-  contactHeading: "تواصل معنا",
-  mediaHeading: "المركز الإعلامي",
+/** Admin-only reset template. It is never used by the public read path. */
+export const DEFAULT_FOOTER_SLOTS: FooterSlotsConfig = {
+  version: FOOTER_SLOTS_CONFIG_VERSION,
+  slots: [
+    {
+      index: 1,
+      enabled: true,
+      type: "text",
+      heading: "Venesia Developments",
+      config: {
+        title: "",
+        body: "Building trust before concrete.",
+        showBrandIcon: true,
+        cta: { enabled: false, label: "", href: "", target: "_self" },
+      },
+    },
+    {
+      index: 2,
+      enabled: true,
+      type: "menu",
+      heading: "القائمة الرئيسية",
+      config: {
+        source: "location",
+        menuId: null,
+        location: "footer",
+        fallbackLocation: "footer",
+        maxItems: null,
+        showOnlyTopLevel: true,
+      },
+    },
+    {
+      index: 3,
+      enabled: true,
+      type: "media",
+      heading: "المركز الإعلامي",
+      config: {
+        source: "main_submenu",
+        parentHref: "/media-center",
+        parentLink: null,
+        menuId: null,
+        manualLinks: [],
+        maxItems: null,
+      },
+    },
+    {
+      index: 4,
+      enabled: true,
+      type: "contact",
+      heading: "تواصل معنا",
+      config: { source: "global", items: [] },
+    },
+  ],
 };
 
-export const DEFAULT_FOOTER_CONTACT_ITEMS: FooterContactItem[] = [
-  {
-    icon: "⌖",
-    label: "العنوان",
-    value: "Street 12, New Cairo 1, Cairo Governorate",
-    href: "https://maps.google.com/?q=Street+12,New+Cairo+1,Cairo+Governorate",
-  },
-  {
-    icon: "✆",
-    label: "الرقم المختصر",
-    value: "15875",
-    href: "tel:15875",
-  },
-  {
-    icon: "✆",
-    label: "موبايل",
-    value: "01033766876",
-    href: "tel:01033766876",
-  },
-  {
-    icon: "✉",
-    label: "البريد الإلكتروني",
-    value: "info@venesia-developments.com",
-    href: "mailto:info@venesia-developments.com",
-  },
-];
-
-export const DEFAULT_FOOTER_SOCIAL_LINKS: FooterSocialLink[] = [
-  {
-    platform: "facebook",
-    label: "Facebook",
-    href: "https://facebook.com/venesia-developments",
-  },
-  {
-    platform: "instagram",
-    label: "Instagram",
-    href: "https://instagram.com/venesia_developments",
-  },
-  {
-    platform: "tiktok",
-    label: "TikTok",
-    href: "https://tiktok.com/@venesiadevelopments",
-  },
-  {
-    platform: "youtube",
-    label: "YouTube",
-    href: "https://youtube.com/@venesia",
-  },
-  {
-    platform: "whatsapp",
-    label: "WhatsApp",
-    href: "https://wa.me/201033766876",
-  },
-  {
-    platform: "location",
-    label: "Location",
-    href: "https://maps.google.com/?q=Street+12,New+Cairo+1,Cairo+Governorate",
-  },
-];
-
-export const DEFAULT_FOOTER_LEGAL: FooterLegal = {
-  copyright: "Venesia Developments. All rights reserved.",
-  tagline: "Trust Built On Ground",
-};
-
-export const DEFAULT_FOOTER_SLOTS = buildSlotsFromLegacy(DEFAULT_FOOTER_BRAND);
-
-export const DEFAULT_FOOTER_SETTINGS: FooterSettings = {
-  brand: DEFAULT_FOOTER_BRAND,
-  contactItems: DEFAULT_FOOTER_CONTACT_ITEMS,
-  socialLinks: DEFAULT_FOOTER_SOCIAL_LINKS,
-  legal: DEFAULT_FOOTER_LEGAL,
-  slots: DEFAULT_FOOTER_SLOTS,
-  slotsSource: "default",
-  usesFallback: true,
+/** Fail-safe outage state: deliberately carries no public composition content. */
+export const EMPTY_FOOTER_SETTINGS: FooterSettings = {
+  contactItems: [],
+  socialLinks: [],
+  legal: { copyright: "", tagline: "" },
+  slots: { version: FOOTER_SLOTS_CONFIG_VERSION, slots: [] },
+  sourceStatus: "error",
+  sourceIssues: ["Footer settings are unavailable."],
 };
 
 export function isSocialPlatform(value: string): value is FooterSocialPlatform {

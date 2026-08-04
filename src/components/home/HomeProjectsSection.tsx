@@ -13,29 +13,8 @@ import { isHtmlContent, stripHtml } from "../../lib/rich-text/html-utils";
 
 export type HomeProjectsSectionProps = {
   projects: HomepageProjectCard[];
-  content?: HomeProjectsContent | null;
+  content: HomeProjectsContent;
 };
-
-const STATIC_DEFAULTS = {
-  eyebrow: "مشاريع قيد المتابعة",
-  title: "مشاريع فينيسيا",
-  intro:
-    "كل مشروع مش مجرد اسم... ده نقطة بناء جديدة في خريطة الشركة، ومتابعة حقيقية للتنفيذ على الأرض.",
-  footerCta: {
-    label: "استعرض كل المشاريع",
-    href: "/projects",
-    target: "_self" as const,
-    alignment: "center" as const,
-  },
-  showEyebrow: true,
-  showTitle: true,
-  showIntro: true,
-  showFooterCta: true,
-  projectsLimit: undefined as number | undefined,
-  cardCtaAlignment: "right" as const,
-  eyebrowBold: true,
-  eyebrowAlignment: "right" as const,
-} satisfies HomeProjectsContent;
 
 /** Shared gold→body rhythm for both header columns (matches intro strong margin). */
 const HEADER_STACK_GAP_PX = 11;
@@ -67,27 +46,25 @@ function hasIntroContent(value: string) {
   return Boolean(stripHtml(trimmed));
 }
 
-function resolveHomeProjectsContent(content?: HomeProjectsContent | null) {
-  if (!content) return STATIC_DEFAULTS;
-
+function resolveHomeProjectsContent(content: HomeProjectsContent) {
   return {
-    eyebrow: content.eyebrow.trim() || STATIC_DEFAULTS.eyebrow,
-    title: content.title.trim() || STATIC_DEFAULTS.title,
-    intro: content.intro.trim() || STATIC_DEFAULTS.intro,
+    eyebrow: content.eyebrow.trim(),
+    title: content.title.trim(),
+    intro: content.intro.trim(),
     footerCta: {
-      label: content.footerCta.label.trim() || STATIC_DEFAULTS.footerCta.label,
-      href: content.footerCta.href.trim() || STATIC_DEFAULTS.footerCta.href,
+      label: content.footerCta.label.trim(),
+      href: content.footerCta.href.trim(),
       target: content.footerCta.target === "_blank" ? ("_blank" as const) : ("_self" as const),
-      alignment: content.footerCta.alignment ?? STATIC_DEFAULTS.footerCta.alignment,
+      alignment: content.footerCta.alignment,
     },
     showEyebrow: content.showEyebrow,
     showTitle: content.showTitle,
     showIntro: content.showIntro,
     showFooterCta: content.showFooterCta,
     projectsLimit: content.projectsLimit,
-    cardCtaAlignment: content.cardCtaAlignment ?? STATIC_DEFAULTS.cardCtaAlignment,
-    eyebrowBold: content.eyebrowBold ?? STATIC_DEFAULTS.eyebrowBold,
-    eyebrowAlignment: content.eyebrowAlignment ?? STATIC_DEFAULTS.eyebrowAlignment,
+    cardCtaAlignment: content.cardCtaAlignment,
+    eyebrowBold: content.eyebrowBold,
+    eyebrowAlignment: content.eyebrowAlignment,
   };
 }
 
