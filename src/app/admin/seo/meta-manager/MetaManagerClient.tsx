@@ -1,225 +1,211 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import type { ReactNode } from "react";
 
-import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
-import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
-import type { GlobalSeoSettings, GlobalSeoSocialLink } from "../../../../lib/seo/global-seo-types";
-import { saveGlobalSeoSettingsAction } from "./actions";
+import AdminFormRuntime, {
+  AdminFormActions,
+  AdminFormError,
+  AdminFormGrid,
+} from "../../../../components/admin/ui/AdminFormRuntime";
+import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
+import { AdminFormField, adminFormFieldClassName } from "../../../../components/admin/ui";
+import type {
+  GlobalSeoEffectiveContract,
+  GlobalSeoFieldKey,
+  GlobalSeoSettingsInput,
+  GlobalSeoSocialLink,
+} from "../../../../lib/seo/global-seo-types";
+import {
+  saveGlobalSeoSettingsAction,
+  type GlobalSeoFormActionState,
+} from "./actions";
 
-type MetaManagerClientProps = {
-  initialSettings: GlobalSeoSettings;
-};
+type MetaManagerClientProps = { contract: GlobalSeoEffectiveContract };
 
-const inputClass =
-  "mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none focus:border-[#D8B87A]/45";
+const sourceLabels = {
+  database: "Database",
+  environment: "Environment",
+  code_fallback: "Code Fallback",
+} as const;
 
-export default function MetaManagerClient({ initialSettings }: MetaManagerClientProps) {
-  const router = useRouter();
-  const [feedback, setFeedback] = useState<AdminActionFeedback | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFeedback(null);
-
-    const formData = new FormData(event.currentTarget);
-
-    startTransition(async () => {
-      try {
-        const result = await saveGlobalSeoSettingsAction(formData);
-        const warning =
-          result.mediaSynchronization.status === "saved_with_media_sync_warning";
-        setFeedback({
-          variant: warning ? "warning" : "success",
-          title: warning ? "تم الحفظ مع تحذير" : "تم حفظ إعدادات SEO",
-          message: warning
-            ? "تم حفظ إعدادات SEO، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا."
-            : "تم حفظ إعدادات SEO العامة.",
-          layout: "inline",
-          dismissible: true,
-          lifecycle: warning ? "persistent" : "manual",
-        });
-        router.refresh();
-      } catch (submitError) {
-        setFeedback({
-          variant: "danger",
-          title: "تعذر حفظ إعدادات SEO",
-          message: submitError instanceof Error ? submitError.message : "تعذر حفظ الإعدادات.",
-          layout: "inline",
-          dismissible: true,
-          lifecycle: "manual",
-        });
-      }
-    });
-  }
-
+function SourceNote({ contract, field }: { contract: GlobalSeoEffectiveContract; field: GlobalSeoFieldKey }) {
+  const source = contract.fields[field];
   return (
-    <form onSubmit={onSubmit} className="space-y-6 pb-10" dir="rtl">
-      <AdminFeedbackRegion
-        channel="seo-meta-manager"
-        label="نتائج حفظ إعدادات SEO العامة"
-        feedback={feedback}
-      />
+    <p className="mt-1 text-xs text-white/42" data-seo-effective-source={source.source}>
+      المصدر الفعلي: <span className="font-en text-white/65">{sourceLabels[source.source]}</span>
+      {source.source === "environment" ? ` · ${source.environmentKey}` : ""}
+      {!source.persisted ? " · الحقل الفارغ يرث هذه القيمة ولا يحفظها ضمنيًا" : ""}
+    </p>
+  );
+}
 
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-6 space-y-5">
-        <h2 className="text-lg font-semibold text-white">القيم الافتراضية</h2>
-        <label className="block text-sm text-white/70">
-          اسم الموقع
-          <input name="site_name" defaultValue={initialSettings.siteName} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          العنوان الافتراضي
-          <input name="default_title" defaultValue={initialSettings.defaultTitle} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          الوصف الافتراضي
-          <textarea
-            name="default_description"
-            rows={4}
-            defaultValue={initialSettings.defaultDescription}
-            className={inputClass}
-          />
-        </label>
-        <label className="block text-sm text-white/70">
-          صورة OG الافتراضية (URL)
-          <input name="default_og_image" defaultValue={initialSettings.defaultOgImage} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          نص بديل لصورة OG الافتراضية
-          <input name="default_og_image_alt" defaultValue={initialSettings.defaultOgImageAlt} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          صورة Twitter الافتراضية (URL)
-          <input
-            name="default_twitter_image"
-            defaultValue={initialSettings.defaultTwitterImage}
-            className={inputClass}
-          />
-        </label>
-        <div className="flex flex-wrap gap-6 text-sm text-white/75">
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="default_robots_index"
-              value="true"
-              defaultChecked={initialSettings.defaultRobotsIndex}
-            />
-            Index افتراضي
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="default_robots_follow"
-              value="true"
-              defaultChecked={initialSettings.defaultRobotsFollow}
-            />
-            Follow افتراضي
-          </label>
-        </div>
-      </section>
+function SectionCard({ children }: { children: ReactNode }) {
+  return <section className="space-y-5 rounded-[24px] border border-white/10 bg-[#080B10]/78 p-5">{children}</section>;
+}
 
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-6 space-y-5">
-        <h2 className="text-lg font-semibold text-white">الروابط الأساسية</h2>
-        <label className="block text-sm text-white/70">
-          Site URL
-          <input name="site_url" defaultValue={initialSettings.siteUrl} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          Canonical Base URL
-          <input
-            name="canonical_base_url"
-            defaultValue={initialSettings.canonicalBaseUrl}
-            className={inputClass}
-          />
-        </label>
-        <label className="block text-sm text-white/70">
-          Twitter Handle
-          <input name="twitter_handle" defaultValue={initialSettings.twitterHandle} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          Google Site Verification
-          <input
-            name="google_site_verification"
-            defaultValue={initialSettings.googleSiteVerification}
-            className={inputClass}
-          />
-        </label>
-        <label className="block text-sm text-white/70">
-          Bing Site Verification
-          <input
-            name="bing_site_verification"
-            defaultValue={initialSettings.bingSiteVerification}
-            className={inputClass}
-          />
-        </label>
-      </section>
+function StringField({ contract, field, name, label, multiline = false, dir }: {
+  contract: GlobalSeoEffectiveContract;
+  field: GlobalSeoFieldKey;
+  name: string;
+  label: string;
+  multiline?: boolean;
+  dir?: "ltr" | "rtl";
+}) {
+  const persisted = contract.persistedSettings[field];
+  const effective = contract.settings[field];
+  const shared = {
+    id: field,
+    name,
+    defaultValue: typeof persisted === "string" ? persisted : "",
+    placeholder: typeof effective === "string" ? effective : "",
+    className: adminFormFieldClassName(),
+    dir,
+  } as const;
+  return (
+    <AdminFormField label={label}>
+      {multiline ? <textarea {...shared} rows={4} /> : <input {...shared} />}
+      <SourceNote contract={contract} field={field} />
+      <AdminFormError name={field} />
+    </AdminFormField>
+  );
+}
 
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-6 space-y-5">
-        <h2 className="text-lg font-semibold text-white">بيانات المنظمة</h2>
-        <label className="block text-sm text-white/70">
-          اسم المنظمة
-          <input name="organization_name" defaultValue={initialSettings.organizationName} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          وصف المنظمة
-          <textarea
-            name="organization_description"
-            rows={3}
-            defaultValue={initialSettings.organizationDescription}
-            className={inputClass}
-          />
-        </label>
-        <label className="block text-sm text-white/70">
-          شعار المنظمة (URL)
-          <input name="organization_logo" defaultValue={initialSettings.organizationLogo} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          الهاتف
-          <input name="organization_phone" defaultValue={initialSettings.organizationPhone} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          البريد الإلكتروني
-          <input name="organization_email" defaultValue={initialSettings.organizationEmail} className={inputClass} />
-        </label>
-        <label className="block text-sm text-white/70">
-          العنوان
-          <input
-            name="organization_address"
-            defaultValue={initialSettings.organizationAddress}
-            className={inputClass}
-          />
-        </label>
-        <div className="space-y-3">
-          <p className="text-sm text-white/70">روابط التواصل الاجتماعي</p>
-          {(initialSettings.organizationSocialLinks.length ? initialSettings.organizationSocialLinks : [{ label: "", href: "" }]).map(
-            (link: GlobalSeoSocialLink, index: number) => (
-              <div key={`${link.label}-${index}`} className="grid gap-3 md:grid-cols-2">
-                <input
-                  name="social_label"
-                  defaultValue={link.label}
-                  placeholder="Label"
-                  className={inputClass}
-                />
-                <input name="social_href" defaultValue={link.href} placeholder="https://..." className={inputClass} />
-              </div>
-            ),
-          )}
-          <div className="grid gap-3 md:grid-cols-2">
-            <input name="social_label" placeholder="Label" className={inputClass} />
-            <input name="social_href" placeholder="https://..." className={inputClass} />
-          </div>
-        </div>
-      </section>
+function BooleanSourceField({ contract, field, name, label }: {
+  contract: GlobalSeoEffectiveContract;
+  field: "defaultRobotsIndex" | "defaultRobotsFollow";
+  name: string;
+  label: string;
+}) {
+  const persisted = contract.persistedSettings[field];
+  return (
+    <AdminFormField label={label}>
+      <select id={field} name={name} defaultValue={typeof persisted === "boolean" ? String(persisted) : "inherit"} className={adminFormFieldClassName()}>
+        <option value="inherit">وراثة Effective Source</option>
+        <option value="true">نعم</option>
+        <option value="false">لا</option>
+      </select>
+      <SourceNote contract={contract} field={field} />
+      <AdminFormError name={field} />
+    </AdminFormField>
+  );
+}
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d] disabled:opacity-60"
-      >
-        {isPending ? "جاري الحفظ…" : "حفظ إعدادات SEO العامة"}
-      </button>
-    </form>
+function DefaultsTab({ contract }: MetaManagerClientProps) {
+  return (
+    <SectionCard>
+      <AdminFormGrid>
+        <StringField contract={contract} field="siteName" name="site_name" label="اسم الموقع" />
+        <StringField contract={contract} field="defaultTitle" name="default_title" label="العنوان الافتراضي" />
+      </AdminFormGrid>
+      <StringField contract={contract} field="defaultDescription" name="default_description" label="الوصف الافتراضي" multiline />
+      <AdminFormGrid>
+        <StringField contract={contract} field="defaultOgImage" name="default_og_image" label="صورة Open Graph" dir="ltr" />
+        <StringField contract={contract} field="defaultTwitterImage" name="default_twitter_image" label="صورة Twitter/X" dir="ltr" />
+        <StringField contract={contract} field="defaultOgImageAlt" name="default_og_image_alt" label="النص البديل الافتراضي" />
+        <StringField contract={contract} field="twitterHandle" name="twitter_handle" label="Twitter/X Handle" dir="ltr" />
+        <BooleanSourceField contract={contract} field="defaultRobotsIndex" name="default_robots_index" label="Index الافتراضي" />
+        <BooleanSourceField contract={contract} field="defaultRobotsFollow" name="default_robots_follow" label="Follow الافتراضي" />
+      </AdminFormGrid>
+    </SectionCard>
+  );
+}
+
+function IdentityTab({ contract }: MetaManagerClientProps) {
+  const persistedLinks = contract.persistedSettings.organizationSocialLinks ?? [];
+  const persistedKnowsAbout = contract.persistedSettings.organizationKnowsAbout ?? [];
+  return (
+    <SectionCard>
+      <AdminFormGrid>
+        <StringField contract={contract} field="organizationName" name="organization_name" label="اسم المؤسسة" />
+        <StringField contract={contract} field="organizationAlternateName" name="organization_alternate_name" label="الاسم البديل" />
+        <StringField contract={contract} field="organizationLegalName" name="organization_legal_name" label="الاسم القانوني" />
+        <StringField contract={contract} field="organizationTagline" name="organization_tagline" label="الشعار النصي" />
+      </AdminFormGrid>
+      <StringField contract={contract} field="organizationDescription" name="organization_description" label="وصف المؤسسة" multiline />
+      <AdminFormGrid>
+        <StringField contract={contract} field="organizationLogo" name="organization_logo" label="شعار المؤسسة" dir="ltr" />
+        <StringField contract={contract} field="organizationAreaServed" name="organization_area_served" label="النطاق الجغرافي" />
+        <StringField contract={contract} field="organizationPhone" name="organization_phone" label="الهاتف الأساسي" dir="ltr" />
+        <StringField contract={contract} field="organizationEmail" name="organization_email" label="البريد الأساسي" dir="ltr" />
+        <StringField contract={contract} field="organizationAddress" name="organization_address" label="العنوان" />
+        <StringField contract={contract} field="organizationAddressLocality" name="organization_address_locality" label="المدينة" />
+        <StringField contract={contract} field="organizationAddressRegion" name="organization_address_region" label="المحافظة/المنطقة" />
+        <StringField contract={contract} field="organizationPostalCode" name="organization_postal_code" label="الرمز البريدي" dir="ltr" />
+        <StringField contract={contract} field="organizationAddressCountry" name="organization_address_country" label="رمز الدولة" dir="ltr" />
+      </AdminFormGrid>
+      <AdminFormField label="مجالات المعرفة — قيمة في كل سطر">
+        <textarea id="organizationKnowsAbout" name="organization_knows_about" rows={5} defaultValue={persistedKnowsAbout.join("\n")} placeholder={contract.settings.organizationKnowsAbout.join("\n")} className={adminFormFieldClassName()} />
+        <SourceNote contract={contract} field="organizationKnowsAbout" />
+        <AdminFormError name="organizationKnowsAbout" />
+      </AdminFormField>
+      <div className="space-y-3">
+        <p className="text-sm font-semibold text-white/75">روابط المؤسسة</p>
+        {(persistedLinks.length ? persistedLinks : [{ label: "", href: "" }]).map((link: GlobalSeoSocialLink, index: number) => (
+          <AdminFormGrid key={`${link.label}-${index}`}>
+            <AdminFormField label="المنصة"><input name="social_label" defaultValue={link.label} className={adminFormFieldClassName()} /></AdminFormField>
+            <AdminFormField label="الرابط"><input name="social_href" defaultValue={link.href} className={adminFormFieldClassName()} dir="ltr" /></AdminFormField>
+          </AdminFormGrid>
+        ))}
+        <SourceNote contract={contract} field="organizationSocialLinks" />
+        <AdminFormError name="organizationSocialLinks" />
+      </div>
+    </SectionCard>
+  );
+}
+
+function CrawlTab({ contract }: MetaManagerClientProps) {
+  return (
+    <SectionCard>
+      <AdminFormGrid>
+        <StringField contract={contract} field="siteUrl" name="site_url" label="Site URL" dir="ltr" />
+        <StringField contract={contract} field="canonicalBaseUrl" name="canonical_base_url" label="Canonical Base URL" dir="ltr" />
+        <StringField contract={contract} field="googleSiteVerification" name="google_site_verification" label="Google Verification" dir="ltr" />
+        <StringField contract={contract} field="bingSiteVerification" name="bing_site_verification" label="Bing Verification" dir="ltr" />
+      </AdminFormGrid>
+      <AdminFormGrid>
+        <AdminFormField label="Robots Allow — مسار في كل سطر">
+          <textarea id="robotsTxtAllow" name="robots_txt_allow" rows={7} defaultValue={(contract.persistedSettings.robotsTxtAllow ?? []).join("\n")} placeholder={contract.settings.robotsTxtAllow.join("\n")} className={adminFormFieldClassName()} dir="ltr" />
+          <SourceNote contract={contract} field="robotsTxtAllow" /><AdminFormError name="robotsTxtAllow" />
+        </AdminFormField>
+        <AdminFormField label="Robots Disallow — مسار في كل سطر">
+          <textarea id="robotsTxtDisallow" name="robots_txt_disallow" rows={7} defaultValue={(contract.persistedSettings.robotsTxtDisallow ?? []).join("\n")} placeholder={contract.settings.robotsTxtDisallow.join("\n")} className={adminFormFieldClassName()} dir="ltr" />
+          <SourceNote contract={contract} field="robotsTxtDisallow" /><AdminFormError name="robotsTxtDisallow" />
+        </AdminFormField>
+      </AdminFormGrid>
+    </SectionCard>
+  );
+}
+
+function PreviewTab({ contract }: MetaManagerClientProps) {
+  const settings = contract.settings;
+  return (
+    <SectionCard>
+      <div className="rounded-2xl border border-white/10 bg-black/25 p-5" dir="rtl">
+        <p className="font-en text-sm text-emerald-300">{settings.canonicalBaseUrl}</p>
+        <h3 className="mt-2 text-xl font-semibold text-[#8AB4F8]">{settings.defaultTitle}</h3>
+        <p className="mt-2 max-w-3xl text-sm leading-7 text-white/62">{settings.defaultDescription}</p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black/25 p-5"><p className="text-xs uppercase tracking-[0.2em] text-white/42">Open Graph</p><p className="mt-3 font-semibold text-white">{settings.defaultTitle}</p><p className="mt-2 text-sm text-white/55">{settings.defaultDescription}</p><p className="mt-3 font-en text-xs text-white/40">{settings.defaultOgImage}</p></div>
+        <div className="rounded-2xl border border-white/10 bg-black/25 p-5"><p className="text-xs uppercase tracking-[0.2em] text-white/42">Organization</p><p className="mt-3 font-semibold text-white">{settings.organizationName}</p><p className="mt-2 text-sm text-white/55">{settings.organizationDescription}</p><p className="mt-3 font-en text-xs text-white/40">{settings.organizationPhone} · {settings.organizationEmail}</p></div>
+      </div>
+      <p className="text-sm leading-7 text-white/45">هذه معاينة للـEffective Contract الحالي. التعديلات غير المحفوظة لا تصبح Effective قبل نجاح الحفظ.</p>
+    </SectionCard>
+  );
+}
+
+export default function MetaManagerClient({ contract }: MetaManagerClientProps) {
+  const initialState: GlobalSeoFormActionState = { status: "idle", mode: "edit", revision: 0 };
+  const tabs = [
+    { id: "defaults", navigationLabel: "Defaults", sectionHeading: "Global SEO Defaults", sectionDescription: "قيم metadata والمشاركة والـrobots الافتراضية مع مصدر كل قيمة.", icon: "seo" as const, content: <DefaultsTab contract={contract} /> },
+    { id: "identity", navigationLabel: "Identity", sectionHeading: "Organization Identity", sectionDescription: "الهوية المنظمة الوحيدة التي يستهلكها Metadata وStructured Data والأسطح العامة.", icon: "content" as const, content: <IdentityTab contract={contract} /> },
+    { id: "crawl", navigationLabel: "Crawl", sectionHeading: "Canonical and Crawl Policy", sectionDescription: "قاعدة الدومين وRobots policy ومفاتيح التحقق دون تعديل Canonical الكيانات.", icon: "section" as const, content: <CrawlTab contract={contract} /> },
+    { id: "preview", navigationLabel: "Preview", sectionHeading: "Effective Preview", sectionDescription: "معاينة القيم الفعلية بعد تطبيق Database ثم Environment ثم Code Fallback.", icon: "overview" as const, content: <PreviewTab contract={contract} /> },
+  ];
+  return (
+    <AdminFormRuntime<GlobalSeoSettingsInput> action={saveGlobalSeoSettingsAction} initialState={initialState} mode="edit" entityKey="global-seo-settings" closeHref="/admin" className="space-y-6 pb-10">
+      <AdminModuleTabs tabs={tabs} initialTabId="defaults" ariaLabel="أقسام Global SEO" />
+      <AdminFormActions submitLabel="حفظ Global SEO" pendingLabel="جارٍ الحفظ…" title="إجراءات Global SEO" description="احفظ القيم المدخلة فقط؛ الحقول الفارغة تستمر في الوراثة ولا تُعرض كقيم persisted." />
+    </AdminFormRuntime>
   );
 }

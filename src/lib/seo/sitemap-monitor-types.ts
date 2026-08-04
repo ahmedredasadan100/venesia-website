@@ -15,6 +15,7 @@ export type SitemapEntry = {
   priority?: number;
   entityId?: number | string;
   slug?: string;
+  canonicalOverride?: string;
 };
 
 export type SitemapMonitorSnapshot = {
@@ -65,4 +66,6 @@ export type SitemapGenerationResult = {
   generationMode: "runtime";
   generatedAt: string;
   error?: string;
+  sourceErrors: Array<{ source: SitemapEntrySource; message: string }>;
+  duplicateUrls: string[];
 };

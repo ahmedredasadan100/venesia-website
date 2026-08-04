@@ -82,11 +82,14 @@ export function resolveSeoMetadata(
   );
 
   const entityOgImage = pickString(input.entitySeo?.ogImage);
-  const image = pickString(
+  const specificImage = pickString(
     entityOgImage,
     input.image,
     input.entitySeo?.image,
     route?.openGraph?.image,
+  );
+  const image = pickString(
+    specificImage,
     global.defaultOgImage,
     SEO_SITE.defaultImage,
   );
@@ -101,7 +104,7 @@ export function resolveSeoMetadata(
   );
 
   const twitterImage = pickString(
-    image,
+    specificImage,
     global.defaultTwitterImage,
     global.defaultOgImage,
     SEO_SITE.defaultImage,
@@ -141,6 +144,10 @@ export function resolveSeoMetadata(
     bingSiteVerification: global.bingSiteVerification || undefined,
     publishedTime: input.publishedTime,
     modifiedTime: input.modifiedTime,
-    authors: input.authors,
+    authors: input.authors?.length
+      ? input.authors
+      : (input.type ?? route?.openGraph?.type) === "article"
+        ? [global.organizationName]
+        : undefined,
   };
 }

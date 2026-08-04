@@ -37,7 +37,7 @@ export const ADMIN_NAVIGATION_REGISTRY: AdminNavigationItem[] = [
     children: [
       { id: "seo-meta", href: "/admin/seo/meta-manager", label: "إعدادات السيو العامة", icon: "•", order: 10, enabled: true, moduleKey: "seo-meta", permission: currentAdminAccess },
       { id: "seo-redirects", href: "/admin/seo/redirects", label: "Redirects", icon: "•", order: 20, enabled: true, moduleKey: "seo-redirects", permission: currentAdminAccess },
-      { id: "seo-sitemap", href: "/admin/seo/sitemap", label: "Sitemap", icon: "•", order: 30, enabled: true, moduleKey: "seo-sitemap", permission: currentAdminAccess },
+      { id: "seo-sitemap", href: "/admin/seo/sitemap", label: "SEO Health", icon: "•", order: 30, enabled: true, moduleKey: "seo-sitemap", permission: currentAdminAccess },
     ],
   },
   { id: "users", href: "/admin/users-roles", label: "المستخدمون والصلاحيات", icon: "◌", order: 60, enabled: true, moduleKey: "users", permission: currentAdminAccess },

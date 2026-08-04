@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
-import { runSitemapDiagnostics } from "../../../../lib/seo/run-sitemap-diagnostics";
-import type { SitemapMonitorSnapshot } from "../../../../lib/seo/sitemap-monitor-types";
+import type { GlobalSeoHealthSnapshot } from "../../../../lib/seo/global-seo-health-types";
+import { runGlobalSeoHealth } from "../../../../lib/seo/run-global-seo-health";
 
-export async function runSitemapCheckAction(): Promise<SitemapMonitorSnapshot> {
+export async function runSitemapCheckAction(): Promise<GlobalSeoHealthSnapshot> {
   await requireAdminSession();
-  const snapshot = await runSitemapDiagnostics();
+  const snapshot = await runGlobalSeoHealth();
   revalidatePath("/admin/seo/sitemap");
   return snapshot;
 }

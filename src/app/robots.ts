@@ -1,23 +1,17 @@
 import type { MetadataRoute } from "next";
 
-import { resolveCanonicalBaseUrl } from "../lib/seo/generate-sitemap-entries";
+import { loadGlobalSeoSettings } from "../lib/seo/load-global-seo-settings";
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
-  const baseUrl = await resolveCanonicalBaseUrl();
+  const global = await loadGlobalSeoSettings();
+  const baseUrl = (global.canonicalBaseUrl || global.siteUrl).replace(/\/$/, "");
 
   return {
     rules: [
       {
         userAgent: "*",
-        allow: "/",
-        disallow: [
-          "/api/",
-          "/_next/",
-          "/admin/",
-          "/maintenance/",
-          "/dashboard/",
-          "/private/",
-        ],
+        allow: global.robotsTxtAllow,
+        disallow: global.robotsTxtDisallow,
       },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,

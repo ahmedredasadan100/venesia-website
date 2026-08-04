@@ -1,6 +1,6 @@
 import "server-only";
 
-import { revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 export const PUBLIC_CACHE_TAG_GROUPS = {
   navigation: ["navigation", "menus"],
@@ -9,6 +9,7 @@ export const PUBLIC_CACHE_TAG_GROUPS = {
   media: ["media-center", "media-item", "media-sidebar"],
   pageComposition: ["page-composition", "hero", "page-blocks", "feed-modules"],
   topics: ["topics", "topic", "topic-related"],
+  seo: ["seo-global", "site-settings", "page-seo", "projects", "topics", "media-center"],
 } as const;
 
 export function revalidatePublicCacheTags(tags: readonly string[]) {
@@ -27,10 +28,12 @@ export function revalidateFooterCache() {
 
 export function revalidateProjectsCache() {
   revalidatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects);
+  revalidatePath("/sitemap.xml");
 }
 
 export function revalidateMediaCenterCache() {
   revalidatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.media);
+  revalidatePath("/sitemap.xml");
 }
 
 export function revalidateTopicsCache() {
@@ -39,6 +42,16 @@ export function revalidateTopicsCache() {
     "media-center",
     "feed-modules",
   ]);
+  revalidatePath("/sitemap.xml");
+}
+
+export function revalidateGlobalSeoCaches() {
+  revalidatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.seo);
+  revalidatePath("/", "layout");
+  revalidatePath("/robots.txt");
+  revalidatePath("/sitemap.xml");
+  revalidatePath("/admin/seo/meta-manager");
+  revalidatePath("/admin/seo/sitemap");
 }
 
 export function revalidatePageCompositionCache() {

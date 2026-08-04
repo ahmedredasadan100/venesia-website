@@ -89,7 +89,8 @@ check(
   "SEO Meta Manager delegates Chrome and feedback to the shared owners",
   seoMetaPage.includes("AdminPageExperience") &&
     seoMetaPage.includes("AdminPageHeader") &&
-    seoMetaClient.includes("AdminFeedbackRegion") &&
+    seoMetaClient.includes("AdminFormRuntime") &&
+    seoMetaClient.includes("AdminFormActions") &&
     !seoMetaClient.includes("<h1") &&
     !seoMetaClient.includes("setNotice") &&
     !seoMetaClient.includes("setError"),

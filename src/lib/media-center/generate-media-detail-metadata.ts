@@ -53,7 +53,6 @@ export async function generateMediaDetailMetadata(
     type: "article",
     publishedTime: item.publishedAt,
     modifiedTime: item.publishedAt,
-    authors: ["Venesia Developments"],
     includePageSeo: false,
   });
 }

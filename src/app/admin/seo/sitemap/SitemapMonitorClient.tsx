@@ -8,17 +8,32 @@ import {
   AdminPageContextHeader,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
-import { SEO_SITE } from "../../../../config/seo/seo-site";
-import {
-  getSitemapSourceLabel,
-  type SitemapMonitorSnapshot,
-} from "../../../../lib/seo/sitemap-monitor-types";
+import type {
+  GlobalSeoHealthCheck,
+  GlobalSeoHealthDimension,
+  GlobalSeoHealthSnapshot,
+} from "../../../../lib/seo/global-seo-health-types";
+import { getSitemapSourceLabel } from "../../../../lib/seo/sitemap-monitor-types";
 
 import { runSitemapCheckAction } from "./actions";
 
 type SitemapMonitorClientProps = {
-  initialSnapshot: SitemapMonitorSnapshot;
+  initialSnapshot: GlobalSeoHealthSnapshot;
 };
+
+const DIMENSION_LABELS: Record<GlobalSeoHealthDimension, string> = {
+  identity: "Identity",
+  metadata: "Metadata",
+  crawl: "Crawl",
+  adoption: "Adoption",
+  infrastructure: "Infrastructure",
+};
+
+const SOURCE_LABELS = {
+  database: "Database",
+  environment: "Environment",
+  code_fallback: "Code fallback",
+} as const;
 
 function formatDate(value: string) {
   try {
@@ -34,22 +49,20 @@ function formatDate(value: string) {
   }
 }
 
-function statusTone(status: SitemapMonitorSnapshot["status"]) {
-  if (status === "healthy") return "green" as const;
+function healthTone(status: GlobalSeoHealthSnapshot["status"] | GlobalSeoHealthCheck["status"]) {
+  if (status === "healthy" || status === "pass") return "green" as const;
   if (status === "warning") return "gold" as const;
   return "red" as const;
 }
 
-function statusLabel(status: SitemapMonitorSnapshot["status"]) {
-  if (status === "healthy") return "سليم";
+function healthLabel(status: GlobalSeoHealthSnapshot["status"] | GlobalSeoHealthCheck["status"]) {
+  if (status === "healthy" || status === "pass") return "سليم";
   if (status === "warning") return "تحذير";
-  return "خطأ";
+  return "فشل";
 }
 
-function severityLabel(severity: "info" | "warning" | "error") {
-  if (severity === "info") return "معلومة";
-  if (severity === "warning") return "تحذير";
-  return "خطأ";
+function getEffectiveValue(snapshot: GlobalSeoHealthSnapshot, field: string) {
+  return snapshot.effectiveSources.find((item) => item.field === field)?.displayValue ?? "";
 }
 
 export default function SitemapMonitorClient({ initialSnapshot }: SitemapMonitorClientProps) {
@@ -58,135 +71,124 @@ export default function SitemapMonitorClient({ initialSnapshot }: SitemapMonitor
 
   function handleRunCheck() {
     startTransition(async () => {
-      const next = await runSitemapCheckAction();
-      setSnapshot(next);
+      setSnapshot(await runSitemapCheckAction());
     });
   }
 
-  const sitemapUrl = `${SEO_SITE.defaultUrl}/sitemap.xml`;
+  const sitemapUrl = `${getEffectiveValue(snapshot, "canonicalBaseUrl").replace(/\/$/, "")}/sitemap.xml`;
 
   return (
     <main className="space-y-7" dir="rtl">
       <AdminPageContextHeader
-        eyebrow="SITEMAP MONITOR"
-        title="مراقبة Sitemap"
-        description="صفحة تشخيصية لملف /sitemap.xml المُولَّد وقت التشغيل. لا تُعدِّل المحتوى أو حقول SEO."
+        eyebrow="GLOBAL SEO HEALTH"
+        title="لوحة صحة SEO العامة"
+        description="تشخيص فعلي للهوية والبيانات الوصفية والزحف والتبنّي والبنية التحتية. التحذيرات الخاصة بالـCanonical تشخيصية فقط ولا تغيّر أي قيمة حية."
         actions={
           <AdminActionButton variant="primary" onClick={handleRunCheck} disabled={isPending}>
-            {isPending ? "جار الفحص..." : "تشغيل فحص Sitemap"}
+            {isPending ? "جارٍ الفحص..." : "تشغيل الفحص الكامل"}
           </AdminActionButton>
         }
       />
 
       <AdminInfoBar
-        label="توليد وقت التشغيل"
-        description="يتم توليد Sitemap تلقائيًا وقت التشغيل من مصادر المحتوى العامة الحالية. هذه الصفحة للمراقبة والتشخيص فقط — وليست محررًا يدويًا لعناوين URL."
+        label="Health Score قائم على Checks حقيقية"
+        description={snapshot.scoreFormula}
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
-          <p className="text-xs text-white/45">الحالة الحالية</p>
-          <div className="mt-3">
-            <AdminStatusPill tone={statusTone(snapshot.status)}>{statusLabel(snapshot.status)}</AdminStatusPill>
-          </div>
+          <p className="text-xs text-white/45">الحالة</p>
+          <div className="mt-3"><AdminStatusPill tone={healthTone(snapshot.status)}>{healthLabel(snapshot.status)}</AdminStatusPill></div>
         </div>
         <div className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
-          <p className="text-xs text-white/45">إجمالي العناوين</p>
-          <p className="mt-3 text-2xl font-bold text-white">{snapshot.totalUrlCount}</p>
+          <p className="text-xs text-white/45">Health Score</p>
+          <p className="mt-3 font-en text-3xl font-bold text-white">{snapshot.score}/100</p>
+        </div>
+        <div className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
+          <p className="text-xs text-white/45">Checks</p>
+          <p className="mt-3 font-en text-2xl font-bold text-white">{snapshot.checks.length}</p>
         </div>
         <div className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
           <p className="text-xs text-white/45">آخر فحص</p>
           <p className="mt-3 text-sm text-white/82">{formatDate(snapshot.checkedAt)}</p>
         </div>
-        <div className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
-          <p className="text-xs text-white/45">وضع التوليد</p>
-          <p className="mt-3 text-sm font-semibold text-white">Runtime-generated</p>
-        </div>
       </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {(Object.entries(snapshot.dimensionScores) as Array<[GlobalSeoHealthDimension, number]>).map(([dimension, score]) => (
+          <div key={dimension} className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
+            <p className="font-en text-xs uppercase tracking-[0.14em] text-white/45">{DIMENSION_LABELS[dimension]}</p>
+            <p className="mt-3 font-en text-2xl font-bold text-white">{score}/100</p>
+          </div>
+        ))}
+      </section>
+
+      {(Object.keys(DIMENSION_LABELS) as GlobalSeoHealthDimension[]).map((dimension) => (
+        <section key={dimension} className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
+          <h2 className="font-en text-lg font-bold text-white">{DIMENSION_LABELS[dimension]}</h2>
+          <div className="mt-4 space-y-3">
+            {snapshot.checks.filter((check) => check.dimension === dimension).map((check) => (
+              <div key={check.id} className="rounded-[14px] border border-white/8 bg-black/20 p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <AdminStatusPill tone={healthTone(check.status)}>{healthLabel(check.status)}</AdminStatusPill>
+                  {check.productDecision ? <AdminStatusPill tone="gold">Product Decision</AdminStatusPill> : null}
+                  <h3 className="text-sm font-bold text-white">{check.title}</h3>
+                  <span className="font-en text-xs text-white/45">weight {check.weight}</span>
+                </div>
+                <p className="mt-2 text-sm leading-7 text-white/68">{check.detail}</p>
+                {check.samples?.length ? (
+                  <ul className="mt-3 space-y-1 font-en text-xs text-white/55" dir="ltr">
+                    {check.samples.map((sample) => <li key={sample}>{sample}</li>)}
+                  </ul>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
 
       <section className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-white">ملف Sitemap الحالي</h2>
-            <p className="mt-1 text-sm text-white/55">افتح الملف العام كما يُقدَّم للزوّار.</p>
+            <h2 className="text-lg font-bold text-white">Effective Source Contract</h2>
+            <p className="mt-1 text-sm text-white/55">Database → Environment → Code Fallback. القيمة الموروثة لا تُعرض كأنها persisted.</p>
           </div>
-          <a
-            href={sitemapUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#080B10]/70 px-4 py-2.5 text-sm font-semibold text-white/72 transition hover:border-white/18 hover:bg-white/[0.05]"
-          >
+          <a href={sitemapUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-2xl border border-white/10 px-4 text-sm font-semibold text-white/72">
             فتح /sitemap.xml
           </a>
+        </div>
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-right text-sm">
+            <thead className="text-xs text-white/45"><tr><th className="p-3">الحقل</th><th className="p-3">المصدر الفعلي</th><th className="p-3">Persisted</th><th className="p-3">Environment key</th><th className="p-3">القيمة الفعلية</th></tr></thead>
+            <tbody>
+              {snapshot.effectiveSources.map((item) => (
+                <tr key={item.field} className="border-t border-white/8">
+                  <td className="p-3 font-en text-white">{item.field}</td>
+                  <td className="p-3"><AdminStatusPill tone={item.source === "database" ? "green" : item.source === "environment" ? "gold" : "muted"}>{SOURCE_LABELS[item.source]}</AdminStatusPill></td>
+                  <td className="p-3 text-white/68">{item.persisted ? "نعم" : "لا"}</td>
+                  <td className="p-3 font-en text-xs text-white/55" dir="ltr">{item.environmentKey}</td>
+                  <td className="max-w-[360px] break-words p-3 text-white/68">{item.displayValue}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
-          <h2 className="text-lg font-bold text-white">العناوين حسب المصدر</h2>
-          <dl className="mt-4 space-y-3">
-            {Object.entries(snapshot.countsBySource).map(([source, count]) => (
-              <div key={source} className="flex items-center justify-between gap-4 text-sm">
-                <dt className="text-white/68">{getSitemapSourceLabel(source as keyof typeof snapshot.countsBySource)}</dt>
-                <dd className="font-en font-semibold text-white">{count}</dd>
-              </div>
+          <h2 className="text-lg font-bold text-white">Sitemap Specialized Owner</h2>
+          <p className="mt-2 text-sm text-white/55">{snapshot.sitemap.totalUrlCount} URL — Runtime-generated</p>
+          <dl className="mt-4 space-y-2">
+            {Object.entries(snapshot.sitemap.countsBySource).map(([source, count]) => (
+              <div key={source} className="flex justify-between gap-4 text-sm"><dt className="text-white/62">{getSitemapSourceLabel(source as keyof typeof snapshot.sitemap.countsBySource)}</dt><dd className="font-en text-white">{count}</dd></div>
             ))}
           </dl>
         </div>
-
         <div className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
-          <h2 className="text-lg font-bold text-white">سجلات مستبعدة (تقديري)</h2>
-          <dl className="mt-4 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-white/68">غير منشور</dt>
-              <dd className="font-en font-semibold text-white">{snapshot.excludedCounts.unpublished}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-white/68">محذوف</dt>
-              <dd className="font-en font-semibold text-white">{snapshot.excludedCounts.deleted}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-white/68">noindex (صفحات متابعة فردية)</dt>
-              <dd className="font-en font-semibold text-white">{snapshot.excludedCounts.noindex}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-white/68">slug غير صالح أو مفقود</dt>
-              <dd className="font-en font-semibold text-white">{snapshot.excludedCounts.invalidOrMissingSlug}</dd>
-            </div>
-          </dl>
+          <h2 className="text-lg font-bold text-white">Google Search Console</h2>
+          <p className="mt-2 text-sm text-white/62">التكامل غير متصل؛ لا يدخل في Health Score لأنه ليس Capability مثبتة في المشروع.</p>
         </div>
-      </section>
-
-      <section className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
-        <h2 className="text-lg font-bold text-white">نتائج الفحص</h2>
-        <div className="mt-4 space-y-3">
-          {snapshot.checks.map((check) => (
-            <div key={check.id} className="rounded-[14px] border border-white/8 bg-black/20 p-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <AdminStatusPill tone={check.severity === "error" ? "red" : check.severity === "warning" ? "gold" : "green"}>
-                  {severityLabel(check.severity)}
-                </AdminStatusPill>
-                <h3 className="text-sm font-bold text-white">{check.title}</h3>
-                {typeof check.count === "number" ? (
-                  <span className="text-xs text-white/45">({check.count})</span>
-                ) : null}
-              </div>
-              <p className="mt-2 text-sm leading-7 text-white/68">{check.detail}</p>
-              {check.samples && check.samples.length > 0 ? (
-                <ul className="mt-3 space-y-1 font-en text-xs text-white/55" dir="ltr">
-                  {check.samples.map((sample) => (
-                    <li key={sample}>{sample}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
-        <h2 className="text-lg font-bold text-white">Google Search Console</h2>
-        <p className="mt-2 text-sm text-white/62">Google Search Console integration is not connected.</p>
       </section>
     </main>
   );

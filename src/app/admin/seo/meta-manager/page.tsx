@@ -1,26 +1,27 @@
 import { AdminPageExperience, AdminPageHeader } from "../../../../components/admin/ui";
-import { loadGlobalSeoSettings } from "../../../../lib/seo/load-global-seo-settings";
-import { getGlobalSeoDefaults } from "../../../../lib/seo/global-seo-defaults";
+import { loadGlobalSeoEffectiveContractForAdmin } from "../../../../lib/seo/load-global-seo-settings";
+import { resolveGlobalSeoEffectiveContract } from "../../../../lib/seo/resolve-global-seo-effective";
 import MetaManagerClient from "./MetaManagerClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function MetaManagerPage() {
-  const settings = await loadGlobalSeoSettings().catch(() => getGlobalSeoDefaults());
+  const contract = await loadGlobalSeoEffectiveContractForAdmin().catch((error) =>
+    resolveGlobalSeoEffectiveContract({
+      databaseStatus: "error",
+      databaseError: error instanceof Error ? error.message : "Unknown database failure",
+    }),
+  );
 
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageHeader
         eyebrow="GLOBAL SEO"
         title="Meta Manager"
-        description={(
-          <>
-            الإعدادات العامة للموقع. القيم الفارغة تعود تلقائيًا إلى ملفات{" "}
-            <code className="text-white/70">config/seo</code>.
-          </>
-        )}
+        description="عقد Global SEO الفعلي بترتيب Database ثم Environment ثم Code Fallback. الحقول الموروثة لا تظهر كأنها قيم محفوظة."
+        meta={contract.databaseStatus === "loaded" ? "Database connected" : `Database ${contract.databaseStatus}`}
       />
-      <MetaManagerClient initialSettings={settings} />
+      <MetaManagerClient contract={contract} />
     </AdminPageExperience>
   );
 }

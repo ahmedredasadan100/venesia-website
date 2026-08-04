@@ -125,6 +125,8 @@ export async function loadPublishedProjects(): Promise<PublicProject[]> {
 export type PublishedProjectSitemapRow = {
   slug: string;
   updatedAt: string;
+  canonicalUrl: string | null;
+  robotsIndex: boolean | null;
 };
 
 export async function loadPublishedProjectSitemapRows(): Promise<
@@ -134,13 +136,15 @@ export async function loadPublishedProjectSitemapRows(): Promise<
     async () => {
       const { data, error } = await getSupabaseAdmin()
         .from("projects")
-        .select("slug,updated_at")
+        .select("slug,updated_at,canonical_url,robots_index")
         .eq("publication_status", "published")
         .order("updated_at", { ascending: false });
       if (error) throwReadError("Published project sitemap query failed", error);
       return (data ?? []).map((row) => ({
         slug: String(row.slug),
         updatedAt: String(row.updated_at),
+        canonicalUrl: typeof row.canonical_url === "string" ? row.canonical_url : null,
+        robotsIndex: typeof row.robots_index === "boolean" ? row.robots_index : null,
       }));
     },
     ["published-project-sitemap-rows"],

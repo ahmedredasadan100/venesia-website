@@ -11,7 +11,6 @@ import {
   buildOrganizationSchema,
   buildWebsiteSchema,
 } from "../../lib/seo/build-jsonld";
-import { buildAiVisibilityJson } from "../../lib/seo/build-ai-visibility";
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 import { resolveGlobalOrganizationIdentity } from "../../lib/seo/resolve-global-organization-identity";
 
@@ -49,18 +48,15 @@ export default async function SiteLayout({
   const footerComposition = await resolveFooterComposition(footerSettings, {
     mainNavItems: navigationItems,
     footerNavItems,
-  });
+  }, organizationIdentity);
 
   const organizationSchema = buildOrganizationSchema(globalSeo);
   const websiteSchema = buildWebsiteSchema(globalSeo);
-  const aiVisibilitySchema = buildAiVisibilityJson();
 
   return (
     <>
       <JsonLd data={organizationSchema} />
       <JsonLd data={websiteSchema} />
-      <JsonLd data={aiVisibilitySchema} />
-
       <PublicNavigationProvider items={navigationItems}>
         <PublicBrandProvider identity={organizationIdentity}>
           <FooterSettingsProvider

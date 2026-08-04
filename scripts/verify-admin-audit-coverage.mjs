@@ -41,6 +41,7 @@ const TARGET_FILES = [
   "src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts",
   "src/app/admin/settings/general/actions.ts",
   "src/app/admin/seo/redirects/actions.ts",
+  "src/app/admin/seo/meta-manager/actions.ts",
 ];
 
 const MUTATION_MARKERS = [".insert(", ".update(", ".delete(", ".upsert("];

@@ -1,4 +1,3 @@
-import { SCHEMA_ORGANIZATION } from "../../config/seo/schema-data";
 import { SEO_DEFAULTS } from "../../config/seo/seo-rules";
 import { SEO_SITE } from "../../config/seo/seo-site";
 import type { GlobalSeoSettings } from "./global-seo-types";
@@ -17,15 +16,40 @@ export function getGlobalSeoDefaults(): GlobalSeoSettings {
     defaultRobotsFollow: true,
     siteUrl,
     canonicalBaseUrl: siteUrl,
-    organizationName: SCHEMA_ORGANIZATION.name,
+    organizationName: SEO_SITE.name,
+    organizationAlternateName: SEO_SITE.arabicName,
+    organizationLegalName: SEO_SITE.legalName,
+    organizationTagline: SEO_SITE.tagline,
     organizationDescription: SEO_DEFAULTS.fallbackDescription,
     organizationLogo: SEO_SITE.logo,
-    organizationPhone: SCHEMA_ORGANIZATION.telephone,
+    organizationPhone: SEO_SITE.contact.phone,
     organizationEmail: "info@venesia-developments.com",
-    organizationAddress: `${SCHEMA_ORGANIZATION.address.addressLocality}, ${SCHEMA_ORGANIZATION.address.addressCountry}`,
+    organizationAddress: "",
+    organizationAddressLocality: SEO_SITE.city,
+    organizationAddressRegion: "Cairo Governorate",
+    organizationPostalCode: "",
+    organizationAddressCountry: SEO_SITE.country,
+    organizationAreaServed: SEO_SITE.contact.areaServed,
+    organizationKnowsAbout: [
+      "Real estate development company in Egypt",
+      "New Cairo real estate developer",
+      "Residential and commercial projects",
+      "Construction progress documentation",
+      "Owned land and execution transparency",
+      "Project updates from construction sites",
+    ],
     organizationSocialLinks: [],
     twitterHandle: SEO_SITE.twitterHandle,
     googleSiteVerification: "",
     bingSiteVerification: "",
+    robotsTxtAllow: ["/"],
+    robotsTxtDisallow: [
+      "/api/",
+      "/_next/",
+      "/admin/",
+      "/maintenance/",
+      "/dashboard/",
+      "/private/",
+    ],
   };
 }

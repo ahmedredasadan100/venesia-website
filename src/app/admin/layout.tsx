@@ -6,17 +6,15 @@ import { ADMIN_NAVIGATION_REGISTRY } from "../../config/admin/navigation";
 import { loadAdminCompanyConfig } from "../../lib/admin/shell/company-config";
 import { resolveAdminNavigation } from "../../lib/admin/shell/navigation";
 import { NO_INDEX_ROBOTS } from "../../config/seo/seo-rules";
-import { buildMetadata } from "../../lib/seo/build-metadata";
 
 /** Admin depends on auth/searchParams/runtime data and must not be statically prerendered. */
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = buildMetadata({
-  path: "/admin",
+export const metadata: Metadata = {
   title: `${ADMIN_COMPANY_DEFAULT.adminLabel} | ${ADMIN_COMPANY_DEFAULT.name}`,
   description: `${ADMIN_COMPANY_DEFAULT.cmsLabel} administration.`,
   robots: NO_INDEX_ROBOTS,
-});
+};
 
 export default async function AdminLayout({
   children,

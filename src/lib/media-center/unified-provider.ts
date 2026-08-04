@@ -10,7 +10,7 @@ import type { MediaContentItem, MediaContentType } from "./types";
 
 /** Card / list / sidebar / hub fields — excludes body content and SEO blobs. */
 export const UNIFIED_LISTING_SELECT =
-  "id, slug, title, excerpt, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload";
+  "id, slug, title, excerpt, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, canonical_url, robots_index, robots_follow";
 
 /** Detail page fields — includes full content + SEO. */
 export const UNIFIED_DETAIL_SELECT =

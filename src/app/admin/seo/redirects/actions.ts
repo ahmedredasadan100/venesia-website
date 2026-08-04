@@ -16,7 +16,6 @@ import {
   REDIRECTS_LIST_VIEW_KEY,
   type RedirectColumnKey,
 } from "../../../../lib/admin/redirects/list-config";
-import { clearActiveRedirectsCache } from "../../../../lib/redirects/load-active-redirects";
 import type { RedirectStatus, UrlRedirectRecord } from "../../../../lib/redirects/redirect-types";
 import {
   validateRedirectInput,
@@ -69,7 +68,6 @@ function getString(formData: FormData, key: string) {
 
 function revalidateRedirectsAdmin() {
   revalidatePath("/admin/seo/redirects");
-  clearActiveRedirectsCache();
 }
 
 function buildRedirectFormFailure(
