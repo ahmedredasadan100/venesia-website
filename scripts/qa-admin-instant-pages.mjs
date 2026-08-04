@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 // Safe database-independent parity proof: the read model must use exactly the
 // same additive assignment sources and hero predicate as the original truth loader.
-const migration = await readFile(new URL("../sql/migrations/20260720060000_admin_pages_list_read_model.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../sql/migrations/20260805120000_admin_pages_search_read_model.sql", import.meta.url), "utf8");
 const original = await readFile(new URL("../src/lib/admin/pages/load-page-module-counts.ts", import.meta.url), "utf8");
 const registry = await readFile(new URL("../src/lib/page-blocks/block-module-registry.ts", import.meta.url), "utf8");
 const mediaSidebarRegistry = await readFile(new URL("../src/lib/media-sidebar-modules/registry.ts", import.meta.url), "utf8");

@@ -197,11 +197,14 @@ check(
     ),
 );
 check(
-  "Pages exposes a truthful disabled search pending Read Model support",
+  "Pages exposes active search through its authoritative Read Model",
   read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx").includes(
-    "البحث غير متاح قبل تحديث Read Model",
+    "ابحث في الصفحات",
   ) &&
-    read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx").includes(
+    !read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx").includes(
+      "البحث غير متاح قبل تحديث Read Model",
+    ) &&
+    !read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx").includes(
       "disabled: true",
     ),
 );

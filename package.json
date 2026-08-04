@@ -50,6 +50,7 @@
     "verify:footer-public-composition-truth-db": "node scripts/verify-footer-public-composition-truth-db.mjs",
     "qa:admin-form-runtime": "node --experimental-strip-types scripts/qa-admin-form-runtime-behavior.mts",
     "verify:admin-instant-pages": "node scripts/verify-admin-instant-pages.mjs",
+    "verify:admin-pages-search-read-model-db": "node scripts/verify-admin-pages-search-read-model-db.mjs",
     "verify:admin-instant-projects": "node --experimental-strip-types scripts/verify-admin-instant-projects.mts",
     "verify:topic-editor-basic-data": "node scripts/verify-topic-editor-basic-data.mjs",
     "verify:topic-editor-tabs": "node scripts/verify-topic-editor-tabs.mjs",
