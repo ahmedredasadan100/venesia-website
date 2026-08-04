@@ -11,6 +11,7 @@ import {
 } from "../../seo/entity-seo-types";
 import {
   getEntityReviewScore,
+  type EntityReviewAnalysisGroup,
   type EntityReviewCheck,
   type EntityReviewCorrectionTarget,
   type EntityReviewSeverity,
@@ -102,13 +103,31 @@ function severity(status: ContentReviewStatus): ContentReviewSeverity {
   return "info";
 }
 
+function reviewGroup(checkId: string): EntityReviewAnalysisGroup {
+  if (["image", "image-alt", "gallery-alt"].includes(checkId)) return "image";
+  if (
+    [
+      "seo-title",
+      "seo-description",
+      "focus-keyword",
+      "canonical-url",
+      "og-image-alt",
+      "internal-links",
+    ].includes(checkId)
+  ) {
+    return "seo";
+  }
+  return "content";
+}
+
 function check(
   input: ContentReviewInput,
-  value: Omit<ContentReviewCheck, "severity" | "correctionTarget">,
+  value: Omit<ContentReviewCheck, "severity" | "correctionTarget" | "group">,
 ): ContentReviewCheck {
   return {
     ...value,
     severity: severity(value.status),
+    group: reviewGroup(value.id),
     correctionTarget: resolveContentReviewCorrectionTarget(input.contentType, value.id),
   };
 }

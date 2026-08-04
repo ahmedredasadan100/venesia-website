@@ -12,9 +12,9 @@ import {
   MediaReferenceWriteLeaseError,
 } from "../../../../lib/admin/media-catalog/write-lease";
 import {
+  assessProjectEntryPayload,
   projectEntryFirstErrorTarget,
   projectEntryPayloadFromFormData,
-  validateProjectEntryPayload,
   type ProjectEntryBundle,
   type ProjectEntryFieldErrors,
 } from "../../../../lib/admin/projects/project-entry-contract";
@@ -139,7 +139,8 @@ export async function saveProjectEntry(
   }
 
   const payload = projectEntryPayloadFromFormData(formData);
-  const fieldErrors = validateProjectEntryPayload(payload);
+  const validation = assessProjectEntryPayload(payload);
+  const fieldErrors = validation.fieldErrors;
   if (Object.keys(fieldErrors).length) {
     return failure(
       mode,
@@ -155,7 +156,7 @@ export async function saveProjectEntry(
   }
 
   const publishingReadiness = getProjectPublishingReadiness({
-    fieldErrors,
+    validationChecks: validation.checks,
     seoTitle: payload.project.seo_title,
     seoDescription: payload.project.seo_description,
   });

@@ -7,8 +7,8 @@ import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-se
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
 import {
+  assessProjectEntryPayload,
   projectEntryFirstErrorTarget,
-  validateProjectEntryPayload,
 } from "../../../../lib/admin/projects/project-entry-contract";
 import { loadProjectEntry } from "../../../../lib/admin/projects/project-entry-data";
 import {
@@ -82,9 +82,10 @@ export async function setProjectPublicationAjax(
   const previousStatus = bundle.project
     .publication_status as ProjectPublicationStatus;
   if (command.data.visible) {
-    const fieldErrors = validateProjectEntryPayload(bundle);
+    const validation = assessProjectEntryPayload(bundle);
+    const fieldErrors = validation.fieldErrors;
     const readiness = getProjectPublishingReadiness({
-      fieldErrors,
+      validationChecks: validation.checks,
       seoTitle: bundle.project.seo_title,
       seoDescription: bundle.project.seo_description,
     });

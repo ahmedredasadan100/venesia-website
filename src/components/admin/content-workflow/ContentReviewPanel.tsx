@@ -50,26 +50,19 @@ const CONTENT_REVIEW_GUIDANCE_CARDS: readonly EntityReviewAnalysisCardDefinition
     id: "content",
     title: "جاهزية المحتوى",
     description: "اكتمال مادة المحتوى والمتطلبات الخاصة بنوعها.",
-    checkIds: ["content", "video-url", "gallery-images", "faq"],
+    group: "content",
   },
   {
     id: "image",
-    title: "جاهزية الصورة وAlt",
+    title: "جاهزية الصور وAlt",
     description: "توفر الصورة ووصفها البديل للعرض وإتاحة الوصول.",
-    checkIds: ["image", "image-alt", "gallery-alt"],
+    group: "image",
   },
   {
     id: "seo",
     title: "تحليل SEO",
     description: "سلامة بيانات البحث والمشاركة والربط الداخلي.",
-    checkIds: [
-      "seo-title",
-      "seo-description",
-      "focus-keyword",
-      "canonical-url",
-      "og-image-alt",
-      "internal-links",
-    ],
+    group: "seo",
   },
 ] as const;
 
@@ -240,7 +233,6 @@ export default function ContentReviewPanel({
       <AdminEntityReviewPanel
         entityKey="content"
         navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}
-        decisionTitle="حالة المحتوى والعرض"
         checks={checks}
         guidanceCards={CONTENT_REVIEW_GUIDANCE_CARDS}
         decisionCards={
@@ -271,7 +263,6 @@ export default function ContentReviewPanel({
             </AdminEntityReviewDecisionCard>
           </>
         }
-        validationDescription="ملخص موانع النشر من بيانات النموذج؛ يتحقق الخادم نهائيًا من القيود الحية عند الحفظ."
         summaryEntries={[
           { id: "last-save", title: "آخر حفظ", value: formatAuditTimestamp(updatedAt) },
           { id: "status", title: "حالة النشر الحالية", value: statusLabel(input.status) },

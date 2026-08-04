@@ -1033,7 +1033,7 @@ check(
 check(
   "save action authenticates, validates, calls the atomic RPC and supports Create-to-Edit",
   action.includes("requireAdminSession") &&
-    action.includes("validateProjectEntryPayload") &&
+    action.includes("assessProjectEntryPayload") &&
     action.includes('"save_project_admin_entry"') &&
     action.includes("editHref"),
 );

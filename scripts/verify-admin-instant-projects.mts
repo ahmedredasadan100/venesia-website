@@ -318,7 +318,8 @@ check(
 );
 check(
   publicationAction.includes("requireAdminSession") &&
-    publicationAction.includes("validateProjectEntryPayload") &&
+    publicationAction.includes("assessProjectEntryPayload") &&
+    publicationAction.includes("getProjectPublishingReadiness") &&
     /\.rpc\(\s*"set_project_publication_admin_entry"/.test(publicationAction) &&
     publicationAction.includes('buildCmsAuditAction(') &&
     publicationAction.includes("revalidateProjectPaths"),

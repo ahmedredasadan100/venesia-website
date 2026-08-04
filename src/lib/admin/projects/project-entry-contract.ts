@@ -162,6 +162,77 @@ export type ProjectEntryBundle = ProjectEntryPayload & {
 
 export type ProjectEntryFieldErrors = Record<string, string[]>;
 
+export const PROJECT_ENTRY_VALIDATION_FIELDS = [
+  "type",
+  "publication_status",
+  "arabic_name",
+  "english_name",
+  "slug",
+  "general_description",
+  "short_description",
+  "image",
+  "image_alt",
+  "hero_image",
+  "hero_image_alt",
+  "small_box_image",
+  "small_box_image_alt",
+  "overview_main_image",
+  "overview_main_image_alt",
+  "governorate_id",
+  "location_label",
+  "google_maps_url",
+  "latitude",
+  "longitude",
+  "map_zoom",
+  "location_point_label",
+  "feature_body",
+  "overview_title",
+  "overview_body",
+  "overview_video_url",
+  "floor_plan_name",
+  "floor_plan_architectural_image_alt",
+  "floor_plan_furnishing_image_alt",
+  "floor_plan_detail_label",
+  "delivery_item_body",
+  "delivery_title",
+  "delivery_body",
+  "overview_media_image",
+  "overview_media_alt_text",
+  "delivery_media_image",
+  "delivery_media_alt_text",
+  "gallery_media_image",
+  "gallery_media_alt_text",
+  "overview_video_poster_alt",
+  "gallery_video_url",
+  "gallery_video_poster_alt",
+  "seo_title",
+  "seo_description",
+  "canonical_url",
+  "og_image_alt",
+  "id",
+] as const;
+
+export type ProjectEntryValidationField =
+  (typeof PROJECT_ENTRY_VALIDATION_FIELDS)[number];
+
+export type ProjectEntryValidationCheck = {
+  id: `project-entry:${ProjectEntryValidationField}`;
+  field: ProjectEntryValidationField;
+  valid: boolean;
+  messages: string[];
+};
+
+export type ProjectEntryValidationAssessment = {
+  fieldErrors: ProjectEntryFieldErrors;
+  checks: ProjectEntryValidationCheck[];
+};
+
+function isProjectEntryValidationField(
+  field: string,
+): field is ProjectEntryValidationField {
+  return (PROJECT_ENTRY_VALIDATION_FIELDS as readonly string[]).includes(field);
+}
+
 export const PROJECT_ENTRY_TAB_IDS = {
   basic: "basic",
   location: "location",
@@ -565,7 +636,7 @@ export function projectEntryPayloadFromFormData(
 
 function addError(
   errors: ProjectEntryFieldErrors,
-  field: string,
+  field: ProjectEntryValidationField,
   message: string,
 ) {
   errors[field] = [...(errors[field] ?? []), message];
@@ -586,7 +657,7 @@ const UUID_PATTERN =
 
 function validateClientKeys(
   errors: ProjectEntryFieldErrors,
-  field: string,
+  field: ProjectEntryValidationField,
   keys: string[],
 ) {
   if (keys.some((key) => !UUID_PATTERN.test(key))) {
@@ -597,7 +668,7 @@ function validateClientKeys(
   }
 }
 
-export function validateProjectEntryPayload(
+function collectProjectEntryFieldErrors(
   payload: ProjectEntryPayload,
 ): ProjectEntryFieldErrors {
   const errors: ProjectEntryFieldErrors = {};
@@ -740,8 +811,8 @@ export function validateProjectEntryPayload(
 
   for (const section of ["overview", "delivery", "gallery"] as const) {
     const items = payload.media.filter((item) => item.section === section);
-    const imageField = `${section}_media_image`;
-    const altField = `${section}_media_alt_text`;
+    const imageField = `${section}_media_image` as const;
+    const altField = `${section}_media_alt_text` as const;
     validateClientKeys(errors, imageField, items.map((item) => item.client_key));
     if (items.some((item) => !item.image)) {
       addError(errors, imageField, "اختر صورة لكل عنصر وسائط أو احذف العنصر الفارغ.");
@@ -752,8 +823,8 @@ export function validateProjectEntryPayload(
   }
   for (const section of ["overview", "gallery"] as const) {
     const items = payload.videos.filter((item) => item.section === section);
-    const urlField = `${section}_video_url`;
-    const posterAltField = `${section}_video_poster_alt`;
+    const urlField = `${section}_video_url` as const;
+    const posterAltField = `${section}_video_poster_alt` as const;
     validateClientKeys(errors, urlField, items.map((item) => item.client_key));
     if (items.some((item) => !isValidHttpUrl(item.video_url) || !item.video_url)) {
       addError(errors, urlField, "أدخل رابط فيديو صالحًا يبدأ بـ http أو https.");
@@ -773,6 +844,11 @@ export function validateProjectEntryPayload(
     ogImage: project.og_image,
     ogImageAlt: project.og_image_alt,
   })) {
+    if (!isProjectEntryValidationField(issue.field)) {
+      throw new Error(
+        `Project validation assessment is missing the Entity SEO field: ${issue.field}`,
+      );
+    }
     addError(errors, issue.field, issue.message);
   }
 
@@ -802,6 +878,30 @@ export function validateProjectEntryPayload(
   }
 
   return errors;
+}
+
+export function assessProjectEntryPayload(
+  payload: ProjectEntryPayload,
+): ProjectEntryValidationAssessment {
+  const fieldErrors = collectProjectEntryFieldErrors(payload);
+  return {
+    fieldErrors,
+    checks: PROJECT_ENTRY_VALIDATION_FIELDS.map((field) => {
+      const messages = fieldErrors[field] ?? [];
+      return {
+        id: `project-entry:${field}`,
+        field,
+        valid: messages.length === 0,
+        messages,
+      };
+    }),
+  };
+}
+
+export function validateProjectEntryPayload(
+  payload: ProjectEntryPayload,
+): ProjectEntryFieldErrors {
+  return assessProjectEntryPayload(payload).fieldErrors;
 }
 
 export function projectEntryFirstErrorTarget(errors: ProjectEntryFieldErrors) {
