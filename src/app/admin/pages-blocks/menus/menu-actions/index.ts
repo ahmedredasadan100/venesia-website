@@ -1,5 +1,5 @@
-export { checkMenuSlugAvailable } from "./slug-check";
 export { createMenu, updateMenu } from "./save";
+export type { CreateMenuFormActionState } from "./save";
 export { toggleMenuVisibility } from "./menu-status";
 export { deleteMenu } from "./delete";
 export { duplicateMenu, duplicateMenuItem } from "./duplicate";

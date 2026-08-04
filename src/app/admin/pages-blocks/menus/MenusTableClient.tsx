@@ -10,6 +10,7 @@ import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
   AdminBulkActionBar,
+  AdminColumnVisibilityMenu,
   AdminDataGridCheckbox,
   AdminDataGrid,
   AdminDataGridCenterCell,
@@ -35,7 +36,16 @@ import {
   useAdminBoundedClientPagination,
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
+import {
+  getPageCompositionColumnPreferenceConfig,
+  getPageCompositionDefaultColumnKeys,
+  normalizePageCompositionVisibleColumnKeys,
+} from "../../../../lib/page-blocks/admin-collection-columns";
 import AddMenuPanelClient from "./AddMenuPanelClient";
+import {
+  restorePageCompositionColumnPreferences,
+  savePageCompositionColumnPreferences,
+} from "../column-preferences";
 import {
   bulkMenuAction,
   deleteMenu,
@@ -57,6 +67,8 @@ type MenusTableClientProps = {
   message?: string | null;
   messageWarning?: boolean;
   loadError?: string | null;
+  initialVisibleColumns?: readonly string[] | null;
+  preferenceError?: string | null;
 };
 
 type MenuSortKey = "name" | "slug" | "item_count" | "status";
@@ -64,7 +76,6 @@ type MenuSortKey = "name" | "slug" | "item_count" | "status";
 /**
  * RTL table: القائمة (1fr, يمين) → … → الإجراءات (ثابت، شمال).
  */
-const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.primaryCompact} ${ADMIN_DATA_GRID_COLUMNS.slugCompact} ${ADMIN_DATA_GRID_COLUMNS.count} ${ADMIN_DATA_GRID_COLUMNS.statusStandard} ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 function mutationFormData(fields: Record<string, string | number | boolean>) {
   const formData = new FormData();
   for (const [key, value] of Object.entries(fields)) formData.set(key, String(value));
@@ -91,9 +102,34 @@ export default function MenusTableClient({
   message,
   messageWarning = false,
   loadError = null,
+  initialVisibleColumns = null,
+  preferenceError = null,
 }: MenusTableClientProps) {
   const searchParams = useSearchParams();
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
+  const columnConfig = getPageCompositionColumnPreferenceConfig("menus");
+  const defaultColumns = getPageCompositionDefaultColumnKeys("menus");
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+    normalizePageCompositionVisibleColumnKeys("menus", initialVisibleColumns),
+  );
+  const visibleColumnSet = useMemo(
+    () => new Set(visibleColumns),
+    [visibleColumns],
+  );
+  const columns = useMemo(
+    () =>
+      [
+        ADMIN_DATA_GRID_COLUMNS.checkbox,
+        ADMIN_DATA_GRID_COLUMNS.primaryCompact,
+        visibleColumnSet.has("slug") ? ADMIN_DATA_GRID_COLUMNS.slugCompact : null,
+        visibleColumnSet.has("itemCount") ? ADMIN_DATA_GRID_COLUMNS.count : null,
+        visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusStandard : null,
+        ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
+      ]
+        .filter((column) => column !== null)
+        .join(" "),
+    [visibleColumnSet],
+  );
   const sortAccessors = useMemo(
     () => ({
       name: (item: MenuListRow) => item.name,
@@ -214,12 +250,43 @@ export default function MenusTableClient({
         }
       />
 
+      <AdminFeedbackRegion
+        channel="menu-builder:list:columns"
+        label="حالة تفضيلات أعمدة القوائم"
+        feedback={
+          preferenceError
+            ? {
+                variant: "warning",
+                title: "تعذر تحميل تفضيلات الأعمدة",
+                message: preferenceError,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "persistent",
+              }
+            : null
+        }
+      />
+
       <div className="space-y-4">
         <AdminEntityListFilters
           basePath="/admin/pages-blocks/menus"
           search={{ value: search, placeholder: "ابحث باسم القائمة أو المفتاح أو الموقع…", minLength: 1 }}
           filters={filters}
           values={{ status, location }}
+          columnsControl={
+            <AdminColumnVisibilityMenu
+              columns={columnConfig.columns}
+              visibleColumns={visibleColumns}
+              defaultColumns={defaultColumns}
+              onChange={setVisibleColumns}
+              onPersist={(next) =>
+                savePageCompositionColumnPreferences("menus", next)
+              }
+              onRestore={() =>
+                restorePageCompositionColumnPreferences("menus")
+              }
+            />
+          }
           contextOverrideActive={selection.selectedIds.length > 0}
           contextOverride={
             <AdminBulkActionBar
@@ -261,21 +328,27 @@ export default function MenusTableClient({
                 القائمة
               </AdminDataGridSortLabel>
             </AdminDataGridPrimaryCell>
-            <AdminDataGridCenterCell>
-              <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
-                Slug
-              </AdminDataGridSortLabel>
-            </AdminDataGridCenterCell>
-            <AdminDataGridCenterCell>
-              <AdminDataGridSortLabel {...sortProps("item_count")} className="justify-center">
-                العناصر
-              </AdminDataGridSortLabel>
-            </AdminDataGridCenterCell>
-            <AdminDataGridCenterCell>
-              <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
-                الحالة
-              </AdminDataGridSortLabel>
-            </AdminDataGridCenterCell>
+            {visibleColumnSet.has("slug") ? (
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
+                  Slug
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
+            ) : null}
+            {visibleColumnSet.has("itemCount") ? (
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel {...sortProps("item_count")} className="justify-center">
+                  العناصر
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
+            ) : null}
+            {visibleColumnSet.has("status") ? (
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
+                  الحالة
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
+            ) : null}
             <div className="text-center">الإجراءات</div>
           </AdminDataGridHeader>
 
@@ -363,17 +436,23 @@ export default function MenusTableClient({
                   <p className="mt-1 truncate text-xs text-white/38">{locationLabel(menu.location)}</p>
                 </AdminDataGridPrimaryCell>
 
-                <AdminDataGridCenterCell>
-                  <span className="font-en block truncate text-xs text-white/42">{menu.slug}</span>
-                </AdminDataGridCenterCell>
+                {visibleColumnSet.has("slug") ? (
+                  <AdminDataGridCenterCell>
+                    <span className="font-en block truncate text-xs text-white/42">{menu.slug}</span>
+                  </AdminDataGridCenterCell>
+                ) : null}
 
-                <AdminDataGridCenterCell className="font-en text-sm tabular-nums text-white/60">{menu.item_count}</AdminDataGridCenterCell>
+                {visibleColumnSet.has("itemCount") ? (
+                  <AdminDataGridCenterCell className="font-en text-sm tabular-nums text-white/60">{menu.item_count}</AdminDataGridCenterCell>
+                ) : null}
 
-                <AdminDataGridStatusCell>
-                  <AdminStatusPill tone={menu.is_active ? "green" : "gold"}>
-                    {menuStatusLabel(menu.is_active)}
-                  </AdminStatusPill>
-                </AdminDataGridStatusCell>
+                {visibleColumnSet.has("status") ? (
+                  <AdminDataGridStatusCell>
+                    <AdminStatusPill tone={menu.is_active ? "green" : "gold"}>
+                      {menuStatusLabel(menu.is_active)}
+                    </AdminStatusPill>
+                  </AdminDataGridStatusCell>
+                ) : null}
 
                 <AdminDataGridRowActions capability={capability} size="compact" />
               </AdminDataGridRow>

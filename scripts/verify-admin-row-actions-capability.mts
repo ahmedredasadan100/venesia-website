@@ -84,6 +84,7 @@ const expectedDataEntities = [
   "redirects",
   "activity_log",
   "topics_without_image",
+  "admin_users",
 ] as const;
 const expectedRowActionEntities = [
   "topics",
@@ -93,6 +94,7 @@ const expectedRowActionEntities = [
   "projects",
   "redirects",
   "topics_without_image",
+  "admin_users",
 ] as const;
 const expectedPrimaryOrder = ["edit", "preview", "more"] as const;
 const expectedMoreOrder = [
@@ -209,6 +211,8 @@ const paths = {
   mediaRecovery:
     "src/app/admin/settings/media/MediaRecoveryCenter.tsx",
   usersRoles: "src/app/admin/users-roles/UsersManagementClient.tsx",
+  usersForm: "src/app/admin/users-roles/AdminUserFormModal.tsx",
+  usersActions: "src/app/admin/users-roles/actions.ts",
 } as const;
 
 for (const [id, sourceFile] of Object.entries(paths)) {
@@ -237,8 +241,10 @@ check(
     ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
       blocker.includes("Atomic reorder contracts"),
     ) &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.includes(
-      "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
+    !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some(
+      (blocker) =>
+        String(blocker) ===
+        "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
     ) &&
     !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
       blocker.startsWith("PROJECT_"),
@@ -391,6 +397,7 @@ const expectedConsumerFiles = new Map<string, string>([
   ["projects", paths.projects],
   ["redirects", paths.redirects],
   ["topics_without_image", paths.topicsWithoutImage],
+  ["admin_users", paths.usersRoles],
 ]);
 
 for (const entry of manifestEntries) {
@@ -467,9 +474,12 @@ for (const entry of manifestEntries) {
       consumer,
     );
   if (supportedMutations.length > 0) {
+    const retainsServerAuditIntegration =
+      relevantSource.includes("recordCmsAdminAudit") ||
+      relevantSource.includes("recordAdminAuditEvent");
     check(
       `${entry.entity} retains server-side Audit integration in its domain sources`,
-      relevantSource.includes("recordCmsAdminAudit"),
+      retainsServerAuditIntegration,
     );
     check(
       `${entry.entity} keeps pending and duplicate-click protection with its declared Data owner`,
@@ -917,6 +927,7 @@ const genericDataEntityByCollectionId = new Map([
   ["seo-redirects", "redirects"],
   ["activity-log", "activity_log"],
   ["topics-without-image-report", "topics_without_image"],
+  ["users-and-roles", "admin_users"],
 ]);
 check(
   "generic inventory and Data Runtime registry cover the same consumers",
@@ -1006,7 +1017,7 @@ check(
       ?.rowActionsState === "not_applicable",
 );
 check(
-  "Collection global closure remains truthful across Browser, reorder, and specialized-grid gaps",
+  "Collection global closure remains truthful across Browser and atomic reorder gaps",
   ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed === false &&
     ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
       blocker.includes("Authenticated Browser QA"),
@@ -1014,8 +1025,10 @@ check(
     ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
       blocker.includes("atomic reorder"),
     ) &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.includes(
-      "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
+    !ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some(
+      (blocker) =>
+        String(blocker) ===
+        "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
     ) &&
     !ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
       blocker.startsWith("PROJECT_"),
@@ -1505,19 +1518,23 @@ check(
     floatingLayerSource.includes("await activeConfirmation.onConfirm()"),
 );
 const usersRolesSource = read(paths.usersRoles);
+const usersFormSource = read(paths.usersForm);
 check(
-  "Users edit status changes adopt shared confirmation with pending, retry, and focus return",
-  usersRolesSource.includes("editForm.is_active !== editUser.is_active") &&
-    usersRolesSource.includes("setConfirmEditStatus(true)") &&
-    usersRolesSource.includes("<AdminConfirmDialog") &&
-    usersRolesSource.includes("pending={editPending}") &&
-    usersRolesSource.includes("onConfirm={executeEditSave}") &&
-    usersRolesSource.includes("throw actionError") &&
-    usersRolesSource.includes("data-admin-users-edit-save") &&
-    usersRolesSource.includes("resolveReturnFocus={() =>") &&
-    usersRolesSource.includes("await updateAdminUserAction({") &&
-    usersRolesSource.includes("await setAdminUserActiveAction(user.id, nextActive)") &&
+  "Users collection and edit status changes adopt shared confirmation with pending, retry, and focus return",
+  usersRolesSource.includes("<AdminEntityList<") &&
+    usersRolesSource.includes("await setAdminUserActiveAction(row.id, nextActive)") &&
+    usersRolesSource.includes("await deleteAdminUserAction(row.id)") &&
+    /confirmation\s*:\s*\{[\s\S]{0,240}?mode\s*:\s*["']shared["']/.test(
+      usersRolesSource,
+    ) &&
+    usersFormSource.includes("<AdminFormRuntime<AdminUserEntityListRow>") &&
+    usersFormSource.includes("<AdminConfirmDialog") &&
+    usersFormSource.includes("pending={pending}") &&
+    usersFormSource.includes("data-admin-users-edit-save") &&
+    usersFormSource.includes("resolveReturnFocus={() =>") &&
+    usersFormSource.includes("getForm(formId)?.requestSubmit()") &&
     !usersRolesSource.includes("window.confirm") &&
+    !usersFormSource.includes("window.confirm") &&
     !usersRolesSource.includes("/api/"),
 );
 check(

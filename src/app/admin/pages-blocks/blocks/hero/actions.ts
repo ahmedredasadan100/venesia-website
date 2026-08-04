@@ -9,6 +9,7 @@ import {
 import { parseAdminLinkFromFormData } from "../../../../../lib/admin/links/form-fields";
 import { serializeAdminLink } from "../../../../../lib/admin/links/serialize";
 import { isAdminLinkEmpty } from "../../../../../lib/admin/links/validate";
+import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -147,60 +148,133 @@ function mediaSynchronizationNotice(
     : null;
 }
 
-export async function createHeroTemplate(formData: FormData) {
+export type CreateHeroTemplateFormActionState = AdminFormActionState;
+
+function createHeroTemplateFailure(
+  revision: number,
+  message: string,
+  field?: "name" | "slug",
+): CreateHeroTemplateFormActionState {
+  return {
+    status: "error",
+    mode: "create",
+    revision,
+    title: "تعذر إنشاء الهيرو",
+    message,
+    ...(field
+      ? { fieldErrors: { [field]: [message] }, focusTarget: field }
+      : {}),
+  };
+}
+
+function createHeroTemplateSuccess(
+  revision: number,
+  id: number,
+  mediaWarning: boolean,
+  infrastructureWarning?: string,
+): CreateHeroTemplateFormActionState {
+  const warning = mediaWarning || Boolean(infrastructureWarning);
+  return {
+    status: warning ? "warning" : "success",
+    mode: "create",
+    revision,
+    title: warning ? "تم إنشاء الهيرو مع تنبيه" : "تم إنشاء الهيرو",
+    message:
+      infrastructureWarning ??
+      (mediaWarning
+        ? "تم إنشاء الهيرو، لكن مزامنة مراجع الوسائط تحتاج إلى مراجعة."
+        : "تم إنشاء الهيرو بنجاح."),
+    code: warning ? "created_with_warning" : "created",
+    entityId: id,
+    editHref: `/admin/pages-blocks/blocks/hero/${id}${mediaWarning ? "?notice=saved_with_media_sync_warning" : ""}`,
+    savedRevision: `${id}:${revision}`,
+  };
+}
+
+export async function createHeroTemplate(
+  previousState: CreateHeroTemplateFormActionState,
+  formData: FormData,
+): Promise<CreateHeroTemplateFormActionState> {
+  const revision = previousState.revision + 1;
   const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const rawSlug = cleanText(formData.get("slug"));
   const slug = slugify(rawSlug || name);
 
-  if (!name || !slug) {
-    throw new Error("اسم الهيرو والـ slug مطلوبين.");
+  if (!name) return createHeroTemplateFailure(revision, "اسم الهيرو مطلوب.", "name");
+  if (!slug) return createHeroTemplateFailure(revision, "اكتب slug صالحًا للهيرو.", "slug");
+
+  let createdId: number | null = null;
+  let mediaWarning = false;
+  try {
+    const { data: existing, error: lookupError } = await getSupabaseAdmin()
+      .from("hero_templates")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (lookupError) throw new Error(lookupError.message);
+    if (existing) {
+      return createHeroTemplateFailure(
+        revision,
+        "الـ slug مستخدم بالفعل في Hero آخر.",
+        "slug",
+      );
+    }
+
+    const nextRow = {
+      name,
+      slug,
+      description: cleanText(formData.get("template_description")) || null,
+      variant: cleanText(formData.get("variant")) || "internal-page",
+      style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
+      source_type: cleanText(formData.get("source_type")) || "manual",
+      limit_count: parseNumber(formData.get("limit_count"), 1),
+      is_visible: formData.get("is_visible") === "on",
+      config: buildHeroConfig(formData),
+    };
+    const provisionalIdentity = `create:${crypto.randomUUID()}`;
+    const coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "hero_templates",
+      leaseEntityIdentity: provisionalIdentity,
+      intendedRow: nextRow,
+      actorId: actor.id,
+      requestIdentity: `hero-template:create:${provisionalIdentity}`,
+      mutate: async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from("hero_templates")
+          .insert(nextRow)
+          .select("id")
+          .single<{ id: number }>();
+        if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء Hero.");
+        return data;
+      },
+      resolveEntityIdentity: (value) => String(value.id),
+    });
+    createdId = coordinated.value.id;
+    mediaWarning = Boolean(mediaSynchronizationNotice(coordinated.mediaSynchronization));
+    await revalidateHeroAdmin();
+    return createHeroTemplateSuccess(
+      revision,
+      coordinated.value.id,
+      mediaWarning,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "تعذر إنشاء الهيرو. حاول مرة أخرى.";
+    if (createdId) {
+      return createHeroTemplateSuccess(
+        revision,
+        createdId,
+        mediaWarning,
+        `تم إنشاء الهيرو، لكن تعذر إكمال التحقق اللاحق: ${message}`,
+      );
+    }
+    return createHeroTemplateFailure(
+      revision,
+      message,
+      message.toLowerCase().includes("slug") ? "slug" : undefined,
+    );
   }
-
-  const { data: existing } = await getSupabaseAdmin()
-    .from("hero_templates")
-    .select("id")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (existing) {
-    throw new Error("الـ slug مستخدم بالفعل في Hero آخر.");
-  }
-
-  const nextRow = {
-    name,
-    slug,
-    description: cleanText(formData.get("template_description")) || null,
-    variant: cleanText(formData.get("variant")) || "internal-page",
-    style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
-    source_type: cleanText(formData.get("source_type")) || "manual",
-    limit_count: parseNumber(formData.get("limit_count"), 1),
-    is_visible: formData.get("is_visible") === "on",
-    config: buildHeroConfig(formData),
-  };
-  const provisionalIdentity = `create:${crypto.randomUUID()}`;
-  const coordinated = await coordinateMediaReferenceEntityMutation({
-    domainKey: "hero_templates",
-    leaseEntityIdentity: provisionalIdentity,
-    intendedRow: nextRow,
-    actorId: actor.id,
-    requestIdentity: `hero-template:create:${provisionalIdentity}`,
-    mutate: async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("hero_templates")
-        .insert(nextRow)
-        .select("id")
-        .single<{ id: number }>();
-      if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء Hero.");
-      return data;
-    },
-    resolveEntityIdentity: (value) => String(value.id),
-  });
-  await revalidateHeroAdmin();
-  const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);
-  redirect(
-    `/admin/pages-blocks/blocks/hero/${coordinated.value.id}${notice ? `?notice=${notice}` : ""}`,
-  );
 }
 
 export async function toggleHeroTemplate(formData: FormData) {

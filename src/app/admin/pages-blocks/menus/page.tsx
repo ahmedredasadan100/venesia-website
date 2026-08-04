@@ -1,4 +1,6 @@
 import { countMenuItemsByMenuIds } from "../../../../lib/admin/menus/count-menu-items";
+import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
+import { getPageCompositionColumnPreferenceConfig } from "../../../../lib/page-blocks/admin-collection-columns";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import MenusTableClient, { type MenuListRow } from "./MenusTableClient";
 
@@ -12,10 +14,16 @@ export default async function MenusPage({
   const query = searchParams ? await searchParams : {};
   const message = query?.message ? decodeURIComponent(query.message) : null;
 
-  const { data: menus, error } = await getSupabaseAdmin()
-    .from("menus")
-    .select("id, name, slug, location, is_active")
-    .order("id", { ascending: true });
+  const [menusResult, preference] = await Promise.all([
+    getSupabaseAdmin()
+      .from("menus")
+      .select("id, name, slug, location, is_active")
+      .order("id", { ascending: true }),
+    readAdminColumnPreferences(
+      getPageCompositionColumnPreferenceConfig("menus").viewKey,
+    ),
+  ]);
+  const { data: menus, error } = menusResult;
 
   const menuRows = menus ?? [];
   const counts = error
@@ -37,6 +45,8 @@ export default async function MenusPage({
       message={message}
       messageWarning={query.notice === "saved_with_media_sync_warning"}
       loadError={error ? `حدث خطأ أثناء قراءة القوائم: ${error.message}` : null}
+      initialVisibleColumns={preference.visibleColumns}
+      preferenceError={preference.error}
     />
   );
 }

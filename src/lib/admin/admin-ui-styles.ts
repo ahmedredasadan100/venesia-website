@@ -25,6 +25,7 @@ export const ADMIN_MODAL_SIZES = {
   sm: "max-w-[420px]",
   md: "max-w-[640px]",
   lg: "max-w-[920px]",
+  xl: "max-w-[1500px]",
 } as const;
 
 export const ADMIN_FORM = {

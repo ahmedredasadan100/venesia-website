@@ -56,7 +56,7 @@ const outsidePanelRecoverySection = keyDownSection.slice(
 );
 const cleanupSection = modal.slice(
   modal.indexOf("return () => {", modal.indexOf("function handleKeyDown")),
-  modal.indexOf("}, [mounted, open])"),
+  modal.indexOf("}, [closeOnEscape, mounted, open])"),
 );
 
 check(
@@ -238,8 +238,10 @@ check(
     formRuntime.includes("focusable?.focus({ preventScroll: true })"),
 );
 check(
-  "existing Escape behavior remains owned by the confirmation dialog only",
-  !modal.includes('event.key === "Escape"') &&
+  "VenesiaModal exposes opt-in topmost Escape while confirmation keeps its independent cancel owner",
+  modal.includes("closeOnEscape?: boolean") &&
+    keyDownSection.includes('event.key === "Escape" && closeOnEscape') &&
+    keyDownSection.includes("closeRef.current()") &&
     confirmDialog.includes('event.key === "Escape"') &&
     confirmDialog.includes("cancelRef.current()"),
 );
@@ -254,7 +256,8 @@ check(
 check(
   "nested-control and disabled-pending VenesiaModal consumers remain represented",
   linkPicker.includes("<AdminMediaPickerModal") &&
-    pendingConsumer.includes("disabled={isPending}") &&
+    pendingConsumer.includes("<AdminFormRuntime") &&
+    pendingConsumer.includes("disabled={pending}") &&
     pendingConsumer.includes("<VenesiaModal"),
 );
 
@@ -273,9 +276,10 @@ const expectedConsumers = [
   "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx",
   "src/app/admin/pages-blocks/pages/CreatePageModal.tsx",
   "src/app/admin/seo/redirects/RedirectFormModal.tsx",
-  "src/app/admin/users-roles/UsersManagementClient.tsx",
+  "src/app/admin/users-roles/AdminUserFormModal.tsx",
   "src/components/admin/content-workflow/BulkPublishValidationModal.tsx",
   "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+  "src/components/admin/media/AdminMediaPickerModal.tsx",
   "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
   "src/components/admin/ui/AdminDuplicateResourceModal.tsx",
   "src/components/admin/ui/AdminLinkPicker.tsx",

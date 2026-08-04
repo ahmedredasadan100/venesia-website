@@ -3,7 +3,6 @@ export {
   assignMediaHubModule,
   assignMediaSidebarModule,
   assignPageBlock,
-  checkPagePathAvailable,
   createPage,
   bulkDeletePagesAjax,
   bulkPageBlockAssignments,
@@ -20,4 +19,7 @@ export {
   updatePageBlockAssignment,
 } from "./page-actions/index";
 
+export type {
+  CreatePageFormActionState,
+} from "./page-actions/index";
 export type { PagesTableResult, PagesTableRow } from "./page-actions/types";

@@ -23,6 +23,8 @@ export type VenesiaModalProps = {
   description?: string;
   eyebrow?: string;
   size?: VenesiaModalSize;
+  closeOnEscape?: boolean;
+  bodyClassName?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
   footer?: ReactNode;
@@ -263,6 +265,8 @@ export default function VenesiaModal({
   description,
   eyebrow = "VENESIA CMS",
   size = "md",
+  closeOnEscape = false,
+  bodyClassName = "",
   initialFocusRef,
   children,
   footer,
@@ -275,10 +279,15 @@ export default function VenesiaModal({
   const returnFocusFrameRef = useRef<number | null>(null);
   const focusReturnSnapshotRef = useRef<FocusReturnSnapshot | null>(null);
   const configuredInitialFocusRef = useRef(initialFocusRef);
+  const closeRef = useRef(onClose);
 
   useEffect(() => {
     configuredInitialFocusRef.current = initialFocusRef;
   }, [initialFocusRef]);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open || !mounted) return;
@@ -292,7 +301,12 @@ export default function VenesiaModal({
       document.activeElement instanceof HTMLElement
         ? captureFocusReturnSnapshot(document.activeElement)
         : null;
-    const previousOverflow = document.body.style.overflow;
+    const root = document.documentElement;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const scrollTop = document.scrollingElement?.scrollTop ?? 0;
+    const scrollLeft = document.scrollingElement?.scrollLeft ?? 0;
+    root.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
 
     const focusFrame = window.requestAnimationFrame(() => {
@@ -314,7 +328,13 @@ export default function VenesiaModal({
 
     function handleKeyDown(event: KeyboardEvent) {
       const panel = panelRef.current;
-      if (event.key !== "Tab" || !panel || !isTopmostDialog(panel)) return;
+      if (!panel || !isTopmostDialog(panel)) return;
+      if (event.key === "Escape" && closeOnEscape) {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
 
       const focusable = getFocusableElements(panel);
       if (!focusable.length) {
@@ -355,7 +375,9 @@ export default function VenesiaModal({
       focusReturnSnapshotRef.current = null;
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      root.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.scrollingElement?.scrollTo({ top: scrollTop, left: scrollLeft });
 
       returnFocusFrameRef.current = window.requestAnimationFrame(() => {
         returnFocusFrameRef.current = null;
@@ -387,7 +409,7 @@ export default function VenesiaModal({
         document.body.focus({ preventScroll: true });
       });
     };
-  }, [mounted, open]);
+  }, [closeOnEscape, mounted, open]);
 
   if (!open || !mounted) return null;
 
@@ -432,7 +454,7 @@ export default function VenesiaModal({
           </button>
         </header>
 
-        <div className={`${ADMIN_MODAL.body} min-h-0 flex-1 overflow-y-auto`}>{children}</div>
+        <div className={`${ADMIN_MODAL.body} min-h-0 flex-1 overflow-y-auto ${bodyClassName}`.trim()}>{children}</div>
 
         {footer ? <footer className={`${ADMIN_MODAL.footer} shrink-0`}>{footer}</footer> : null}
       </section>

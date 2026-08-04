@@ -1,5 +1,6 @@
 export type { PagesTableRow, PagesTableResult } from "./types";
-export { checkPagePathAvailable, createPage } from "./create-page";
+export { createPage } from "./create-page";
+export type { CreatePageFormActionState } from "./create-page";
 export { togglePageStatus } from "./page-status";
 export { bulkDeletePagesAjax, deletePage, deletePages } from "./page-delete";
 export { duplicatePageAjax } from "./page-duplicate";

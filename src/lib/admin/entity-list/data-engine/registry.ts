@@ -8,6 +8,7 @@ import { projectsEntityListAdapter } from "../../projects/entity-list-adapter";
 import { redirectsEntityListAdapter } from "../../redirects/entity-list-adapter";
 import { activityLogEntityListAdapter } from "../../audit/entity-list-adapter";
 import { topicsWithoutImageEntityListAdapter } from "../../media-catalog/topics-without-image-entity-list-adapter";
+import { adminUsersEntityListAdapter } from "../../users/entity-list-adapter";
 import {
   parseAdminEntityListRequestQuery,
   type AdminEntityListQuery,
@@ -24,6 +25,7 @@ export const adminEntityListAdapterRegistry = {
   redirects: redirectsEntityListAdapter,
   activity_log: activityLogEntityListAdapter,
   topics_without_image: topicsWithoutImageEntityListAdapter,
+  admin_users: adminUsersEntityListAdapter,
 } as const;
 
 export type AdminEntityListEntityKey =

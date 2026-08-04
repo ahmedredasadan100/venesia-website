@@ -10,6 +10,7 @@ import AdminModuleTabs from "../../../../../components/admin/ui/AdminModuleTabs"
 import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageVisualSlotMap";
 import {
   AdminBulkActionBar,
+  AdminColumnVisibilityMenu,
   AdminPageExperience,
   AdminTablePagination,
   useAdminGridSelection,
@@ -22,6 +23,11 @@ import {
   type AdminEntityFilterDef,
 } from "../../../../../lib/admin/entity-list";
 import {
+  getPageCompositionColumnPreferenceConfig,
+  getPageCompositionDefaultColumnKeys,
+  normalizePageCompositionVisibleColumnKeys,
+} from "../../../../../lib/page-blocks/admin-collection-columns";
+import {
   moduleKindLabel,
   normalizeBoolean,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -33,6 +39,10 @@ import {
   duplicateAssignedPageModule,
   togglePageBlockAssignment,
 } from "../actions";
+import {
+  restorePageCompositionColumnPreferences,
+  savePageCompositionColumnPreferences,
+} from "../../column-preferences";
 import PageSeoPanel from "./PageSeoPanel";
 import PageBlocksAssignModal from "./page-blocks/PageBlocksAssignModal";
 import PageBlocksAssignmentsGrid from "./page-blocks/PageBlocksAssignmentsGrid";
@@ -81,6 +91,8 @@ type PageBlocksClientProps = {
     error?: string | null;
   };
   initialTabId?: string;
+  initialVisibleColumns?: readonly string[] | null;
+  preferenceError?: string | null;
 };
 
 type SortKey = "module_kind" | "template_name" | "visibility";
@@ -91,6 +103,8 @@ export default function PageBlocksClient({
   templates,
   seo,
   initialTabId,
+  initialVisibleColumns = null,
+  preferenceError = null,
 }: PageBlocksClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -99,6 +113,18 @@ export default function PageBlocksClient({
     ok: boolean;
   } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const columnConfig = getPageCompositionColumnPreferenceConfig("pageAssignments");
+  const defaultColumns = getPageCompositionDefaultColumnKeys("pageAssignments");
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+    normalizePageCompositionVisibleColumnKeys(
+      "pageAssignments",
+      initialVisibleColumns,
+    ),
+  );
+  const visibleColumnSet = useMemo(
+    () => new Set(visibleColumns),
+    [visibleColumns],
+  );
   const previewHref = resolvePagePublicPath(page);
   const setActionMessage = (message: string | null) =>
     setActionFeedback(message ? { message, ok: false } : null);
@@ -347,6 +373,23 @@ export default function PageBlocksClient({
         }
       />
 
+      <AdminFeedbackRegion
+        channel={`page-composition:${page.id}:columns`}
+        label="حالة تفضيلات أعمدة موديولات الصفحة"
+        feedback={
+          preferenceError
+            ? {
+                variant: "warning",
+                title: "تعذر تحميل تفضيلات الأعمدة",
+                message: preferenceError,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "persistent",
+              }
+            : null
+        }
+      />
+
       <AdminModuleTabs
         initialTabId={initialTabId}
         navigationEventName="admin-page-blocks-navigation"
@@ -409,6 +452,25 @@ export default function PageBlocksClient({
                   filters={assignmentFilters}
                   values={{ module_type: moduleType, visibility }}
                   preserveParams={["tab"]}
+                  columnsControl={
+                    <AdminColumnVisibilityMenu
+                      columns={columnConfig.columns}
+                      visibleColumns={visibleColumns}
+                      defaultColumns={defaultColumns}
+                      onChange={setVisibleColumns}
+                      onPersist={(next) =>
+                        savePageCompositionColumnPreferences(
+                          "pageAssignments",
+                          next,
+                        )
+                      }
+                      onRestore={() =>
+                        restorePageCompositionColumnPreferences(
+                          "pageAssignments",
+                        )
+                      }
+                    />
+                  }
                   contextOverrideActive={selection.selectedIds.length > 0}
                   contextOverride={
                     <AdminBulkActionBar
@@ -458,6 +520,7 @@ export default function PageBlocksClient({
                   onToggleVisibility={handleToggleVisibility}
                   onDuplicate={handleDuplicateAssignment}
                   onDelete={handleDeleteAssignment}
+                  visibleColumns={visibleColumnSet}
                 />
 
                 <AdminTablePagination

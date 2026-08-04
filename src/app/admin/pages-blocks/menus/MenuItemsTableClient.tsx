@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import VenesiaModal from "../../../../components/admin/VenesiaModal";
+import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminEntityListFilters from "../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  AdminColumnVisibilityMenu,
   AdminDataGrid,
   AdminDataGridEmpty,
   AdminDataGridHeader,
@@ -24,6 +26,11 @@ import {
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
 import { resolvePublicPreviewHref } from "../../../../lib/admin/links/validate";
+import {
+  getPageCompositionColumnPreferenceConfig,
+  getPageCompositionDefaultColumnKeys,
+  normalizePageCompositionVisibleColumnKeys,
+} from "../../../../lib/page-blocks/admin-collection-columns";
 
 import {
   deleteMenuItem,
@@ -33,9 +40,12 @@ import {
 import MenuItemForm from "./MenuItemForm";
 import type { Menu, MenuItem } from "./menu-builder-shared";
 import { flattenMenuItemsForTable, getMenuItemTypeLabel } from "./menu-builder-shared";
+import {
+  restorePageCompositionColumnPreferences,
+  savePageCompositionColumnPreferences,
+} from "../column-preferences";
 
 const TREE_UNIT = 18;
-const columns = `48px minmax(0,1fr) 88px ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
 const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
 
 function mutationFormData(fields: Record<string, string | number | boolean>) {
@@ -169,13 +179,44 @@ function MenuItemNameCell({
 type MenuItemsTableClientProps = {
   menu: Menu;
   items: MenuItem[];
+  initialVisibleColumns?: readonly string[] | null;
+  preferenceError?: string | null;
 };
 
-export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClientProps) {
+export default function MenuItemsTableClient({
+  menu,
+  items,
+  initialVisibleColumns = null,
+  preferenceError = null,
+}: MenuItemsTableClientProps) {
   const searchParams = useSearchParams();
   const rows = useMemo(() => flattenMenuItemsForTable(items), [items]);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
+  const columnConfig = getPageCompositionColumnPreferenceConfig("menuItems");
+  const defaultColumns = getPageCompositionDefaultColumnKeys("menuItems");
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+    normalizePageCompositionVisibleColumnKeys(
+      "menuItems",
+      initialVisibleColumns,
+    ),
+  );
+  const visibleColumnSet = useMemo(
+    () => new Set(visibleColumns),
+    [visibleColumns],
+  );
+  const columns = useMemo(
+    () =>
+      [
+        visibleColumnSet.has("order") ? "48px" : null,
+        "minmax(0,1fr)",
+        visibleColumnSet.has("status") ? "88px" : null,
+        ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
+      ]
+        .filter((column): column is string => Boolean(column))
+        .join(" "),
+    [visibleColumnSet],
+  );
   const search = searchParams.get("q") ?? "";
   const visibility = searchParams.get("visibility") ?? "all";
   const itemType = searchParams.get("item_type") ?? "all";
@@ -249,11 +290,42 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
         </span>
       </div>
 
+      <AdminFeedbackRegion
+        channel={`menu-builder:${menu.id}:columns`}
+        label="حالة تفضيلات أعمدة عناصر القائمة"
+        feedback={
+          preferenceError
+            ? {
+                variant: "warning",
+                title: "تعذر تحميل تفضيلات الأعمدة",
+                message: preferenceError,
+                layout: "inline",
+                dismissible: true,
+                lifecycle: "persistent",
+              }
+            : null
+        }
+      />
+
       <AdminEntityListFilters
         basePath={`/admin/pages-blocks/menus/${menu.id}`}
         search={{ value: search, placeholder: "ابحث بعنوان العنصر أو الرابط أو الكيان المرتبط…", minLength: 1 }}
         filters={filters}
         values={{ visibility, item_type: itemType }}
+        columnsControl={
+          <AdminColumnVisibilityMenu
+            columns={columnConfig.columns}
+            visibleColumns={visibleColumns}
+            defaultColumns={defaultColumns}
+            onChange={setVisibleColumns}
+            onPersist={(next) =>
+              savePageCompositionColumnPreferences("menuItems", next)
+            }
+            onRestore={() =>
+              restorePageCompositionColumnPreferences("menuItems")
+            }
+          />
+        }
         onQueryPatch={(patch, behavior = "push") => {
           const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
           const query = next.toString();
@@ -267,9 +339,13 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
 
       <AdminDataGrid className="!rounded-t-none !border-t-0">
         <AdminDataGridHeader columns={columns} className="gap-3">
-          <span className="text-center">#</span>
+          {visibleColumnSet.has("order") ? (
+            <span className="text-center">#</span>
+          ) : null}
           <span className="text-right">اسم العنصر</span>
-          <span className="text-center">الحالة</span>
+          {visibleColumnSet.has("status") ? (
+            <span className="text-center">الحالة</span>
+          ) : null}
           <span className="text-center">الإجراءات</span>
         </AdminDataGridHeader>
 
@@ -342,7 +418,9 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
 
             return (
               <AdminDataGridRow key={item.id} columns={columns} className="gap-3">
-                <span className="text-center font-en text-sm text-white/45">{item.sort_order}</span>
+                {visibleColumnSet.has("order") ? (
+                  <span className="text-center font-en text-sm text-white/45">{item.sort_order}</span>
+                ) : null}
 
                 <MenuItemNameCell
                   label={item.label}
@@ -353,11 +431,13 @@ export default function MenuItemsTableClient({ menu, items }: MenuItemsTableClie
                   hasChildren={hasChildren}
                 />
 
-                <span className="flex justify-center">
-                  <AdminStatusPill tone={item.is_visible ? "green" : "muted"}>
-                    {item.is_visible ? "ظاهر" : "مخفي"}
-                  </AdminStatusPill>
-                </span>
+                {visibleColumnSet.has("status") ? (
+                  <span className="flex justify-center">
+                    <AdminStatusPill tone={item.is_visible ? "green" : "muted"}>
+                      {item.is_visible ? "ظاهر" : "مخفي"}
+                    </AdminStatusPill>
+                  </span>
+                ) : null}
 
                 <AdminDataGridRowActions capability={capability} size="compact" />
               </AdminDataGridRow>

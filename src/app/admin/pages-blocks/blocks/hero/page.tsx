@@ -1,4 +1,6 @@
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
+import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import HeroManagerClient from "./HeroManagerClient";
 
 type PageProps = {
@@ -20,11 +22,17 @@ type HeroRow = {
 
 export default async function HeroesManagerPage({ searchParams }: PageProps) {
   const resolvedSearch = searchParams ? await searchParams : {};
-  const { data, error } = await getSupabaseAdmin()
-    .from("hero_templates")
-    .select("id,name,slug,description,is_visible,hero_assignments(id,path,is_active)")
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
+  const [heroesResult, preference] = await Promise.all([
+    getSupabaseAdmin()
+      .from("hero_templates")
+      .select("id,name,slug,description,is_visible,hero_assignments(id,path,is_active)")
+      .order("sort_order", { ascending: true })
+      .order("id", { ascending: true }),
+    readAdminColumnPreferences(
+      getPageCompositionColumnPreferenceConfig("heroTemplates").viewKey,
+    ),
+  ]);
+  const { data, error } = heroesResult;
 
   return (
     <HeroManagerClient
@@ -33,6 +41,8 @@ export default async function HeroesManagerPage({ searchParams }: PageProps) {
       mediaSynchronizationWarning={
         resolvedSearch.notice === "saved_with_media_sync_warning"
       }
+      initialVisibleColumns={preference.visibleColumns}
+      preferenceError={preference.error}
     />
   );
 }

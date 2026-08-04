@@ -101,7 +101,7 @@ check(
 check(
   "Admin Interaction System remains explicitly open",
   ADMIN_INTERACTION_SYSTEM.globalClosed === false &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length >= 3,
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length >= 2,
 );
 
 const expectedInteractionModuleIds = [
@@ -175,7 +175,7 @@ const previewCapabilityAdopter =
   );
 const previewCapabilityGapIds = new Set<string>(
   ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.filter(
-    (entry) => entry.status === "gap",
+    (entry) => String(entry.status) === "gap",
   ).map((entry) => entry.id),
 );
 const previewCapabilityAdoptionIds = new Set<string>(
@@ -200,9 +200,11 @@ check(
     ),
 );
 check(
-  "Media Topic remains the only explicit Preview/Public gap in this scope",
-  previewCapabilityGapIds.size === 1 &&
-    previewCapabilityGapIds.has("topic-media-edit-preview"),
+  "Media Topic closes the remaining Preview/Public adoption gap",
+  previewCapabilityGapIds.size === 0 &&
+    ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.find(
+      (entry) => entry.id === "topic-media-edit-preview",
+    )?.status === "adopted",
 );
 
 check(
@@ -236,16 +238,16 @@ check(
 );
 
 check(
-  "Form Runtime closure claim includes the bounded unified-content adoption",
+  "Form Runtime closure claim includes the bounded shared legacy adoption",
   ADMIN_FORM_SYSTEM_CLOSURE.scope ===
-      "reference_consumers_redirect_and_unified_content_editors" &&
+      "reference_consumers_and_in_scope_generic_legacy_forms" &&
     ADMIN_FORM_SYSTEM_CLOSURE.allowedClaim ===
-      "unified_content_editors_adopted",
+      "shared_legacy_form_adoption_closed",
 );
 check(
   "global Form Runtime closure is explicitly forbidden",
   ADMIN_FORM_SYSTEM_CLOSURE.globalClosed === false &&
-    ADMIN_FORM_SYSTEM_CLOSURE.globalClosureBlockers.length >= 2,
+    ADMIN_FORM_SYSTEM_CLOSURE.globalClosureBlockers.length >= 1,
 );
 check(
   "manifest entry IDs are unique",
@@ -273,15 +275,19 @@ const expectedClassifications: Record<
     "redirects-create-edit",
     "projects-create-edit",
     "topic-media-create-edit",
+    "pages-quick-create",
+    "block-template-create-modals",
+    "menu-quick-create",
+    "company-identity-settings",
+    "users-create-edit",
   ],
-  legacy_generic_gap: ["pages-quick-create"],
+  legacy_generic_gap: [],
   specialized_exception: [
     "page-composition-and-seo",
     "block-template-builders-and-editors",
     "menu-builder",
     "footer-builder",
     "global-seo-settings",
-    "company-identity-settings",
     "media-library-settings",
     "security-settings",
     "users-and-roles",
@@ -309,8 +315,8 @@ for (const [classification, expectedIds] of Object.entries(
 }
 
 check(
-  "remaining generic adoption gaps prevent a global Form Runtime closure claim",
-  sourcePathsFor("legacy_generic_gap").length > 0 &&
+  "in-scope generic adoption gaps are closed without claiming global Form Runtime closure",
+  sourcePathsFor("legacy_generic_gap").length === 0 &&
     ADMIN_FORM_SYSTEM_CLOSURE.globalClosed === false,
 );
 

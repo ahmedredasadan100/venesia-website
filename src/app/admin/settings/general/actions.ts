@@ -11,22 +11,14 @@ import {
   MediaReferenceWriteLeaseError,
 } from "../../../../lib/admin/media-catalog/write-lease";
 import { setMaintenanceModeSetting } from "../../../../lib/maintenance/site-settings";
+import type { AdminFormActionState } from "../../../../lib/admin/form-runtime";
 import {
   parseAdminCompanyIdentity,
   revalidateAdminCompanyConfig,
   saveAdminCompanyConfig,
 } from "../../../../lib/admin/shell/company-config";
 
-export type AdminCompanyActionState = {
-  status: "idle" | "success" | "warning" | "error";
-  message: string;
-  code?: string;
-};
-
-export const ADMIN_COMPANY_ACTION_INITIAL: AdminCompanyActionState = {
-  status: "idle",
-  message: "",
-};
+export type AdminCompanyActionState = AdminFormActionState;
 
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -34,9 +26,11 @@ function formString(formData: FormData, key: string) {
 }
 
 export async function updateAdminCompanyAction(
-  _previous: AdminCompanyActionState,
+  previousState: AdminCompanyActionState,
   formData: FormData,
 ): Promise<AdminCompanyActionState> {
+  const revision = previousState.revision + 1;
+  let persistedCompanyKey: string | null = null;
   try {
     const adminUser = await requireAdminSession();
     const candidate = {
@@ -53,9 +47,20 @@ export async function updateAdminCompanyAction(
     };
     const parsed = parseAdminCompanyIdentity(candidate);
     if (!parsed.success) {
+      const fieldErrors: Record<string, string[]> = {};
+      for (const [field, messages] of Object.entries(
+        parsed.error.flatten().fieldErrors,
+      )) {
+        if (messages?.length) fieldErrors[field] = messages;
+      }
       return {
         status: "error",
+        mode: "edit",
+        revision,
+        title: "تعذر حفظ هوية لوحة الإدارة",
         message: "تحقق من الحقول المطلوبة وألوان الهوية بصيغة #RRGGBB.",
+        fieldErrors,
+        focusTarget: Object.keys(fieldErrors)[0],
       };
     }
 
@@ -68,26 +73,86 @@ export async function updateAdminCompanyAction(
       mutate: () => saveAdminCompanyConfig(parsed.data),
       resolveEntityIdentity: () => "admin.company",
     });
-    revalidateAdminCompanyConfig();
-    await recordCmsAdminAudit({
-      action: buildCmsAuditAction("site_settings", "update"),
-      entityType: "site_settings",
-      entityLabel: "admin.company",
-      metadata: { companyKey: parsed.data.key },
-    });
-    revalidatePath("/admin", "layout");
-    if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
+    persistedCompanyKey = parsed.data.key;
+
+    const postCommitWarnings: string[] = [];
+    try {
+      revalidateAdminCompanyConfig();
+    } catch (error) {
+      console.error("Admin company cache-tag revalidation failed after commit", error);
+      postCommitWarnings.push("تعذر تحديث كاش الهوية فورًا");
+    }
+    try {
+      await recordCmsAdminAudit({
+        action: buildCmsAuditAction("site_settings", "update"),
+        entityType: "site_settings",
+        entityLabel: "admin.company",
+        metadata: { companyKey: parsed.data.key },
+      });
+    } catch (error) {
+      console.error("Admin company audit failed after commit", error);
+      postCommitWarnings.push("تعذر تسجيل حدث التدقيق");
+    }
+    try {
+      revalidatePath("/admin", "layout");
+    } catch (error) {
+      console.error("Admin company layout revalidation failed after commit", error);
+      postCommitWarnings.push("تعذر تحديث واجهة الإدارة فورًا");
+    }
+
+    const mediaSynchronizationWarning =
+      coordinated.mediaSynchronization.status ===
+      "saved_with_media_sync_warning";
+    if (mediaSynchronizationWarning || postCommitWarnings.length > 0) {
+      const warningMessages = [
+        ...(mediaSynchronizationWarning
+          ? [
+              "تعذرت مزامنة ارتباطات الميديا، ولذلك يظل الحذف الآمن متوقفًا",
+            ]
+          : []),
+        ...postCommitWarnings,
+      ];
       return {
         status: "warning",
-        code: "saved_with_media_sync_warning",
-        message:
-          "تم حفظ هوية لوحة الإدارة، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا.",
+        mode: "edit",
+        revision,
+        title: "تم الحفظ مع تنبيه",
+        code:
+          mediaSynchronizationWarning && postCommitWarnings.length === 0
+            ? "saved_with_media_sync_warning"
+            : "saved_with_infrastructure_warning",
+        message: `تم حفظ هوية لوحة الإدارة، لكن ${warningMessages.join(" و")}.`,
+        savedRevision: `${parsed.data.key}:${revision}`,
       };
     }
-    return { status: "success", message: "تم حفظ هوية لوحة الإدارة." };
+    return {
+      status: "success",
+      mode: "edit",
+      revision,
+      title: "تم حفظ هوية لوحة الإدارة",
+      message: "تم حفظ هوية لوحة الإدارة.",
+      code: "updated",
+      savedRevision: `${parsed.data.key}:${revision}`,
+    };
   } catch (error) {
+    if (persistedCompanyKey) {
+      console.error("Admin company follow-up failed after commit", error);
+      return {
+        status: "warning",
+        mode: "edit",
+        revision,
+        title: "تم الحفظ مع تنبيه",
+        code: "saved_with_infrastructure_warning",
+        message:
+          "تم حفظ هوية لوحة الإدارة، لكن تعذر إكمال التحقق اللاحق. حدّث الصفحة قبل إعادة المحاولة.",
+        savedRevision: `${persistedCompanyKey}:${revision}`,
+      };
+    }
     return {
       status: "error",
+      mode: "edit",
+      revision,
+      title: "تعذر حفظ هوية لوحة الإدارة",
       message:
         error instanceof MediaReferenceWriteLeaseError
           ? getMediaReferenceWriteLeaseUserMessage(error.code)

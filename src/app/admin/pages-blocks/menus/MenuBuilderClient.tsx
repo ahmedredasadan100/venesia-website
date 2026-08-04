@@ -19,6 +19,8 @@ type MenuBuilderClientProps = {
   message?: string | null;
   messageWarning?: boolean;
   loadError?: string | null;
+  initialVisibleColumns?: readonly string[] | null;
+  preferenceError?: string | null;
 };
 
 export default function MenuBuilderClient({
@@ -28,6 +30,8 @@ export default function MenuBuilderClient({
   message,
   messageWarning = false,
   loadError = null,
+  initialVisibleColumns = null,
+  preferenceError = null,
 }: MenuBuilderClientProps) {
   const tabs = [
     {
@@ -35,7 +39,12 @@ export default function MenuBuilderClient({
       label: "القائمة الرئيسية",
       content: (
         <AdminCard className="p-5 md:p-6">
-          <MenuItemsTableClient menu={menu} items={items} />
+          <MenuItemsTableClient
+            menu={menu}
+            items={items}
+            initialVisibleColumns={initialVisibleColumns}
+            preferenceError={preferenceError}
+          />
         </AdminCard>
       ),
     },

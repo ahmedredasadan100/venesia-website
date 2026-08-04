@@ -1,90 +1,87 @@
 "use client";
 
-import {
-  useMemo,
-  useState,
-  useTransition,
-  type ReactNode,
-} from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 
-import VenesiaModal, {
-  ADMIN_FORM,
-  AdminModalCancelButton,
-  AdminModalPrimaryButton,
-  adminFormFieldClassName,
-  adminFormLabelClassName,
-} from "../../../components/admin/VenesiaModal";
 import {
-  AdminFeedbackChannelViewport,
-  useAdminFeedback,
-} from "../../../components/admin/AdminFeedbackProvider";
-import { AdminEntityListFilters } from "../../../components/admin/entity-list";
+  AdminEntityList,
+  AdminEntityListPageLayout,
+  AdminEntityListSurface,
+  AdminEntityListTableRegion,
+} from "../../../components/admin/entity-list";
 import {
-  ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   AdminActionButton,
-  AdminConfirmDialog,
-  AdminDataGrid,
-  AdminDataGridEmpty,
-  AdminDataGridHeader,
   AdminDataGridRowActions,
-  AdminDataGridRow,
-  AdminPageHeader,
+  AdminPageContextHeader,
   AdminStatusPill,
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../components/admin/ui";
-import { ADMIN_LIST_PAGE } from "../../../lib/admin/admin-ui-styles";
+import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-feedback";
 import {
-  adminCollectionSearchIncludes,
-  applyAdminEntityUrlPatch,
-  useAdminBoundedClientPagination,
-  type AdminEntityFilterDef,
+  adminActionFailure,
+  adminActionSuccess,
+  type AdminActionResult,
+} from "../../../lib/admin/admin-action-result";
+import type {
+  AdminEntityColumnDef,
+  AdminEntityFilterDef,
 } from "../../../lib/admin/entity-list";
-import type { AdminUserListItem } from "../../../lib/admin/users/admin-users-management";
+import type {
+  AdminEntityListQuery,
+  AdminEntityListResult,
+} from "../../../lib/admin/entity-list/data-engine/contracts";
+import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
+import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
-  hasAdminUserCreateFieldErrors,
-  hasAdminUserEditPasswordFieldErrors,
-  validateAdminCreateUserForm,
-  validateAdminOptionalPasswordFields,
-  type AdminUserCreateField,
-  type AdminUserCreateFieldErrors,
-  type AdminUserEditPasswordField,
-  type AdminUserEditPasswordFieldErrors,
-} from "../../../lib/admin/users/admin-users-validation";
+  ADMIN_USERS_LIST_PAGE_SIZES,
+  adminUserEntityListRowSchema,
+  adminUsersQueryContract,
+  type AdminUserEntityListMetrics,
+  type AdminUserEntityListRow,
+  type AdminUserFilters,
+  type AdminUserSortField,
+  type AdminUserStatusFilter,
+} from "../../../lib/admin/users/entity-list-contract";
+import {
+  ADMIN_USERS_LIST_COLUMN_META,
+  getAdminUsersDefaultColumnKeys,
+  type AdminUserColumnKey,
+} from "../../../lib/admin/users/list-config";
 
+import AdminUserFormModal from "./AdminUserFormModal";
 import {
-  createAdminUserAction,
   deleteAdminUserAction,
+  restoreAdminUsersTablePreferences,
+  saveAdminUsersTablePreferences,
   setAdminUserActiveAction,
-  updateAdminUserAction,
 } from "./actions";
 
 type UsersManagementClientProps = {
-  initialUsers: AdminUserListItem[];
+  initialQuery: AdminEntityListQuery<AdminUserFilters, AdminUserSortField>;
+  initialResult: AdminEntityListResult<
+    AdminUserEntityListRow,
+    AdminUserEntityListMetrics
+  >;
+  initialVisibleColumns?: readonly string[];
+  preferenceError?: string | null;
   currentUserId: number;
   currentUsername: string;
 };
 
-type StatusFilter = "all" | "active" | "inactive";
+const PAGE_SIZE_OPTIONS = ADMIN_USERS_LIST_PAGE_SIZES.map(String);
 
-const FEEDBACK_CHANNEL = "users-roles";
-const PAGE_SIZE_OPTIONS = [10, 20, 30, 50] as const;
-const USER_FILTERS: readonly AdminEntityFilterDef[] = [
-  {
-    id: "users-status",
-    paramKey: "status",
-    label: "الحالة",
-    placeholder: "الحالة",
-    type: "status",
-    options: [
-      { value: "active", label: "نشط" },
-      { value: "inactive", label: "موقوف" },
-    ],
-  },
-];
-
-const columns = `minmax(140px,1.4fr) 90px 100px minmax(120px,1fr) ${ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact}`;
+const STATUS_FILTER: AdminEntityFilterDef = {
+  id: "users-status",
+  paramKey: "status",
+  label: "الحالة",
+  placeholder: "الحالة",
+  type: "status",
+  options: [
+    { value: "active", label: "نشط" },
+    { value: "inactive", label: "موقوف" },
+  ],
+};
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -102,762 +99,527 @@ function formatDate(value?: string | null) {
 }
 
 function roleLabel(role: string) {
-  if (role === "admin") return "مدير";
-  return role;
+  return role === "admin" ? "مدير" : role;
 }
 
-function FormFieldError({ error, children }: { error?: string; children: ReactNode }) {
-  return (
-    <div>
-      {children}
-      {error ? <p className="mt-1 text-right text-[11px] leading-5 text-red-300/90">{error}</p> : null}
-    </div>
-  );
-}
-
-function fieldClassName(hasError: boolean, extra = "") {
-  return adminFormFieldClassName(
-    [hasError ? "border-red-400/40 bg-red-500/[0.03] focus:border-red-400/55" : "", extra]
-      .filter(Boolean)
-      .join(" "),
-  );
+function createAdminUserColumns(input: {
+  currentUserId: number;
+  rowPendingAction: (id: number) => string | null;
+  mutationBusy: boolean;
+  onEdit: (row: AdminUserEntityListRow) => void;
+  onToggle: (row: AdminUserEntityListRow) => Promise<AdminActionResult>;
+  onDelete: (row: AdminUserEntityListRow) => Promise<AdminActionResult>;
+}): AdminEntityColumnDef<
+  AdminUserEntityListRow,
+  AdminUserColumnKey,
+  AdminUserSortField
+>[] {
+  return [
+    {
+      ...ADMIN_USERS_LIST_COLUMN_META.username,
+      minWidth: 160,
+      width: 180,
+      primary: true,
+      sticky: "start",
+      renderCell: ({ row }) => (
+        <span className="block text-right font-semibold text-white">
+          {row.username}
+        </span>
+      ),
+    },
+    {
+      ...ADMIN_USERS_LIST_COLUMN_META.email,
+      minWidth: 220,
+      width: 240,
+      renderCell: ({ row }) => (
+        <span className="block truncate text-left font-en text-sm text-white/72" dir="ltr">
+          {row.email}
+        </span>
+      ),
+    },
+    {
+      ...ADMIN_USERS_LIST_COLUMN_META.fullName,
+      minWidth: 170,
+      width: 190,
+      renderCell: ({ row }) => (
+        <span className="block truncate text-right text-sm text-white/72">
+          {row.full_name || "—"}
+        </span>
+      ),
+    },
+    {
+      ...ADMIN_USERS_LIST_COLUMN_META.role,
+      minWidth: 100,
+      width: 110,
+      renderCell: ({ row }) => (
+        <span className="text-sm text-white/65">{roleLabel(row.role)}</span>
+      ),
+    },
+    {
+      ...ADMIN_USERS_LIST_COLUMN_META.status,
+      minWidth: 108,
+      width: 112,
+      renderCell: ({ row }) => (
+        <AdminStatusPill tone={row.is_active ? "green" : "muted"}>
+          {row.is_active ? "نشط" : "موقوف"}
+        </AdminStatusPill>
+      ),
+    },
+    {
+      ...ADMIN_USERS_LIST_COLUMN_META.lastLogin,
+      minWidth: 164,
+      width: 174,
+      renderCell: ({ row }) => (
+        <span className="block text-right text-sm text-white/55">
+          {formatDate(row.last_login_at)}
+        </span>
+      ),
+    },
+    {
+      ...ADMIN_USERS_LIST_COLUMN_META.created,
+      minWidth: 164,
+      width: 174,
+      renderCell: ({ row }) => (
+        <span className="block text-right text-sm text-white/55">
+          {formatDate(row.created_at)}
+        </span>
+      ),
+    },
+    {
+      ...ADMIN_USERS_LIST_COLUMN_META.actions,
+      minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+      sticky: "end",
+      renderCell: ({ row, onMutationResult }) => {
+        const isSelf = row.id === input.currentUserId;
+        const pendingAction = input.rowPendingAction(row.id);
+        const blockedReason = "انتظر انتهاء الإجراء الحالي.";
+        const capability: AdminRowActionsCapability = {
+          entityType: "admin_user",
+          entityId: row.id,
+          entityLabel: row.username,
+          actions: {
+            edit: input.mutationBusy
+              ? {
+                  access: "disabled",
+                  disabledReason: blockedReason,
+                  pending: Boolean(pendingAction),
+                }
+              : { access: "allowed", onSelect: () => input.onEdit(row) },
+            preview: { access: "hidden" },
+            information: {
+              access: "allowed",
+              title: "معلومات المستخدم",
+              items: [
+                { label: "اسم المستخدم", value: row.username },
+                { label: "البريد الإلكتروني", value: row.email },
+                { label: "الدور", value: roleLabel(row.role) },
+                {
+                  label: "الحالة",
+                  value: row.is_active ? "نشط" : "موقوف",
+                },
+                { label: "آخر دخول", value: formatDate(row.last_login_at) },
+              ],
+            },
+            copyPublicLink: { access: "hidden" },
+            visibility: input.mutationBusy
+              ? {
+                  access: "disabled",
+                  disabledReason: blockedReason,
+                  pending: pendingAction === "visibility",
+                  isVisible: row.is_active,
+                }
+              : isSelf && row.is_active
+                ? {
+                    access: "disabled",
+                    disabledReason: "لا يمكنك تعطيل حسابك الحالي.",
+                    isVisible: true,
+                  }
+                : {
+                    access: "allowed",
+                    isVisible: row.is_active,
+                    onSelect: async () => {
+                      const result = await input.onToggle(row);
+                      onMutationResult?.(result);
+                    },
+                    confirmation: {
+                      mode: "shared",
+                      title: row.is_active
+                        ? "تعطيل المستخدم؟"
+                        : "تفعيل المستخدم؟",
+                      description: row.is_active
+                        ? `سيتم تعطيل «${row.username}» وإبطال جلساته فورًا.`
+                        : `سيتم تفعيل «${row.username}» والسماح له بتسجيل الدخول وفق الصلاحيات الحالية.`,
+                      confirmLabel: row.is_active
+                        ? "تأكيد التعطيل"
+                        : "تأكيد التفعيل",
+                    },
+                  },
+            featured: { access: "hidden" },
+            duplicate: { access: "hidden" },
+            archive: { access: "hidden" },
+            delete: input.mutationBusy
+              ? {
+                  access: "disabled",
+                  disabledReason: blockedReason,
+                  pending: pendingAction === "delete",
+                }
+              : isSelf
+                ? {
+                    access: "disabled",
+                    disabledReason: "لا يمكنك حذف حسابك الحالي.",
+                  }
+                : {
+                    access: "allowed",
+                    onSelect: async () => {
+                      const result = await input.onDelete(row);
+                      onMutationResult?.(result);
+                      if (!result.ok) throw new Error(result.message);
+                    },
+                    confirmation: {
+                      mode: "shared",
+                      title: "حذف المستخدم نهائيًا؟",
+                      description: `سيتم حذف المستخدم «${row.username}» نهائيًا. لا يمكن التراجع عن هذا الإجراء.`,
+                      confirmLabel: "تأكيد الحذف النهائي",
+                    },
+                  },
+          },
+        };
+        return (
+          <AdminDataGridRowActions capability={capability} size="compact" />
+        );
+      },
+    },
+  ];
 }
 
 export default function UsersManagementClient({
-  initialUsers,
+  initialQuery,
+  initialResult,
+  initialVisibleColumns,
+  preferenceError = null,
   currentUserId,
   currentUsername,
 }: UsersManagementClientProps) {
-  const { clearFeedback, publishFeedback } = useAdminFeedback();
-  const searchParams = useSearchParams();
-  const [users, setUsers] = useState(initialUsers);
-  const search = searchParams.get("q") ?? "";
-  const statusFilter: StatusFilter =
-    searchParams.get("status") === "active" ||
-    searchParams.get("status") === "inactive"
-      ? (searchParams.get("status") as StatusFilter)
-      : "all";
-  const roleFilter = searchParams.get("role") ?? "all";
-  const [rowPending, setRowPending] = useState<string | null>(null);
-  const [editPending, setEditPending] = useState(false);
-  const [confirmEditStatus, setConfirmEditStatus] = useState(false);
-  const [isPending, startTransition] = useTransition();
-
+  const controller = useAdminEntityListController({
+    entity: "admin_users",
+    contract: adminUsersQueryContract,
+    initialQuery,
+    initialResult,
+    staleTimeMs: 30_000,
+  });
+  const instant = useAdminEntityInstantMutation<AdminUserEntityListRow>(
+    "admin_users",
+    controller.query,
+  );
   const [createOpen, setCreateOpen] = useState(false);
-  const [editUser, setEditUser] = useState<AdminUserListItem | null>(null);
+  const [editingUser, setEditingUser] =
+    useState<AdminUserEntityListRow | null>(null);
 
-  const [createForm, setCreateForm] = useState({
-    username: "",
-    email: "",
-    full_name: "",
-    password: "",
-    confirmPassword: "",
-  });
-  const [createFieldErrors, setCreateFieldErrors] = useState<AdminUserCreateFieldErrors>({});
+  const toggleUserActive = useCallback(
+    async (row: AdminUserEntityListRow): Promise<AdminActionResult> => {
+      const nextActive = !row.is_active;
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "visibility",
+          optimistic: (cache) => {
+            if (
+              controller.query.filters.status !== "all" &&
+              controller.query.filters.status !==
+                (nextActive ? "active" : "inactive")
+            ) {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((current) =>
+              current.id === row.id
+                ? { ...current, is_active: nextActive }
+                : current,
+            );
+          },
+          execute: async () => {
+            const user = await setAdminUserActiveAction(row.id, nextActive);
+            return {
+              ok: true as const,
+              message: nextActive
+                ? `تم تفعيل المستخدم «${user.username}».`
+                : `تم تعطيل المستخدم «${user.username}» وإبطال جلساته.`,
+              user,
+            };
+          },
+          reconcileSuccess: (confirmed, tools) => {
+            const parsed = adminUserEntityListRowSchema.safeParse(
+              confirmed.user,
+            );
+            if (!parsed.success) return;
+            tools.cache.patchRows((current) =>
+              current.id === parsed.data.id ? parsed.data : current,
+            );
+          },
+        });
+        return adminActionSuccess(
+          nextActive ? "تم تفعيل المستخدم" : "تم تعطيل المستخدم",
+          result.message,
+          {
+            code: nextActive ? "published" : "unpublished",
+            entityId: row.id,
+          },
+        );
+      } catch (error) {
+        return adminActionFailure(
+          "تعذر تحديث حالة المستخدم",
+          error instanceof Error
+            ? error.message
+            : "تعذر تحديث حالة المستخدم.",
+          { entityId: row.id },
+        );
+      }
+    },
+    [controller.query.filters.status, instant],
+  );
 
-  const [editForm, setEditForm] = useState({
-    username: "",
-    email: "",
-    full_name: "",
-    is_active: true,
-  });
+  const deleteUser = useCallback(
+    async (row: AdminUserEntityListRow): Promise<AdminActionResult> => {
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "delete",
+          optimistic: (cache) => cache.removeRows(new Set([row.id])),
+          execute: async () => {
+            const deleted = await deleteAdminUserAction(row.id);
+            return {
+              ok: true as const,
+              message: `تم حذف المستخدم «${deleted.username}».`,
+              deletedId: deleted.id,
+            };
+          },
+        });
+        return adminActionSuccess("تم حذف المستخدم", result.message, {
+          code: "deleted",
+          entityId: row.id,
+        });
+      } catch (error) {
+        return adminActionFailure(
+          "تعذر حذف المستخدم",
+          error instanceof Error ? error.message : "تعذر حذف المستخدم.",
+          { entityId: row.id },
+        );
+      }
+    },
+    [instant],
+  );
 
-  const [editPasswordForm, setEditPasswordForm] = useState({
-    password: "",
-    confirmPassword: "",
-  });
-  const [editPasswordErrors, setEditPasswordErrors] = useState<AdminUserEditPasswordFieldErrors>({});
-  const userFilters = useMemo<readonly AdminEntityFilterDef[]>(
+  const columns = useMemo(
+    () =>
+      createAdminUserColumns({
+        currentUserId,
+        rowPendingAction: (id) =>
+          instant.rowPending?.rowId === id
+            ? instant.rowPending.action
+            : null,
+        mutationBusy:
+          instant.rowPending !== null || instant.bulkPending !== null,
+        onEdit: setEditingUser,
+        onToggle: toggleUserActive,
+        onDelete: deleteUser,
+      }),
+    [
+      currentUserId,
+      deleteUser,
+      instant.bulkPending,
+      instant.rowPending,
+      toggleUserActive,
+    ],
+  );
+  const filters = useMemo<readonly AdminEntityFilterDef[]>(
     () => [
-      ...USER_FILTERS,
+      STATUS_FILTER,
       {
         id: "users-role",
         paramKey: "role",
         label: "الدور",
         placeholder: "الدور",
         type: "single_select",
-        options: [...new Set(users.map((user) => user.role))].map((role) => ({
+        options: (controller.result.metrics?.roles ?? []).map((role) => ({
           value: role,
           label: roleLabel(role),
         })),
       },
     ],
-    [users],
+    [controller.result.metrics?.roles],
   );
-
-  const filteredUsers = useMemo(() => {
-    const query = search.trim();
-    return users.filter((user) => {
-      if (statusFilter === "active" && !user.is_active) return false;
-      if (statusFilter === "inactive" && user.is_active) return false;
-      if (roleFilter !== "all" && user.role !== roleFilter) return false;
-      if (!query) return true;
-      return (
-        adminCollectionSearchIncludes(user.username, query) ||
-        adminCollectionSearchIncludes(user.email, query) ||
-        adminCollectionSearchIncludes(user.full_name ?? "", query)
-      );
-    });
-  }, [roleFilter, search, statusFilter, users]);
-  const pagination = useAdminBoundedClientPagination({
-    rows: filteredUsers,
-    datasetKey: `users:${search}:${statusFilter}:${roleFilter}`,
-    pageSizeOptions: PAGE_SIZE_OPTIONS,
-    defaultPageSize: 10,
-  });
-  const visibleUsers = pagination.rows;
-
-  function resetFeedback() {
-    clearFeedback(FEEDBACK_CHANNEL);
-  }
-
-  function announce(
-    variant: "success" | "danger" | "warning",
-    title: string,
-    message: string,
-  ) {
-    publishFeedback(
-      {
-        variant,
-        title,
-        message,
-        layout: "inline",
-        dismissible: true,
-        lifecycle: variant === "danger" ? "persistent" : "manual",
-      },
-      {
-        channel: FEEDBACK_CHANNEL,
-        placement: "inline",
-        critical: variant === "danger",
-        reveal: variant === "danger",
-      },
-    );
-  }
-
-  function clearCreateFieldError(field: AdminUserCreateField) {
-    setCreateFieldErrors((current) => {
-      if (!current[field]) return current;
-      const next = { ...current };
-      delete next[field];
-      return next;
-    });
-  }
-
-  function updateCreateFormField<K extends keyof typeof createForm>(field: K, value: (typeof createForm)[K]) {
-    setCreateForm((prev) => ({ ...prev, [field]: value }));
-    clearCreateFieldError(field as AdminUserCreateField);
-  }
-
-  function openCreateModal() {
-    resetFeedback();
-    setCreateFieldErrors({});
-    setCreateForm({
-      username: "",
-      email: "",
-      full_name: "",
-      password: "",
-      confirmPassword: "",
-    });
-    setCreateOpen(true);
-  }
-
-  async function handleCreateUser() {
-    resetFeedback();
-
-    const fieldErrors = validateAdminCreateUserForm(createForm);
-    if (hasAdminUserCreateFieldErrors(fieldErrors)) {
-      setCreateFieldErrors(fieldErrors);
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        const result = await createAdminUserAction(createForm);
-        if (!result.success) {
-          setCreateFieldErrors(result.fieldErrors);
-          return;
-        }
-
-        setUsers((prev) => [...prev, result.user].sort((a, b) => a.id - b.id));
-        setCreateOpen(false);
-        setCreateFieldErrors({});
-        announce(
-          "success",
-          "تم إنشاء المستخدم",
-          `تم إنشاء المستخدم «${result.user.username}».`,
-        );
-      } catch (actionError) {
-        announce(
-          "danger",
-          "تعذر إنشاء المستخدم",
-          actionError instanceof Error
-            ? actionError.message
-            : "تعذر إنشاء المستخدم.",
-        );
-      }
-    });
-  }
-
-  function openEditModal(user: AdminUserListItem) {
-    resetFeedback();
-    setConfirmEditStatus(false);
-    setEditUser(user);
-    setEditForm({
-      username: user.username,
-      email: user.email,
-      full_name: user.full_name ?? "",
-      is_active: user.is_active,
-    });
-    setEditPasswordForm({ password: "", confirmPassword: "" });
-    setEditPasswordErrors({});
-  }
-
-  function clearEditPasswordFieldError(field: AdminUserEditPasswordField) {
-    setEditPasswordErrors((current) => {
-      if (!current[field]) return current;
-      const next = { ...current };
-      delete next[field];
-      return next;
-    });
-  }
-
-  function updateEditPasswordField(field: AdminUserEditPasswordField, value: string) {
-    setEditPasswordForm((prev) => ({ ...prev, [field]: value }));
-    clearEditPasswordFieldError(field);
-  }
-
-  function editFormIsValid() {
-    if (!editUser) return false;
-    const passwordFieldErrors =
-      editUser.id === currentUserId
-        ? {}
-        : validateAdminOptionalPasswordFields(editPasswordForm.password, editPasswordForm.confirmPassword);
-
-    if (hasAdminUserEditPasswordFieldErrors(passwordFieldErrors)) {
-      setEditPasswordErrors(passwordFieldErrors);
-      return false;
-    }
-    setEditPasswordErrors({});
-    return true;
-  }
-
-  async function executeEditSave() {
-    if (!editUser || editPending) return;
-    resetFeedback();
-    setEditPending(true);
-    try {
-      const updated = await updateAdminUserAction({
-        id: editUser.id,
-        ...editForm,
-        ...(editUser.id !== currentUserId && editPasswordForm.password.trim()
-          ? {
-              password: editPasswordForm.password,
-              confirmPassword: editPasswordForm.confirmPassword,
-            }
-          : {}),
-      });
-      setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      setConfirmEditStatus(false);
-      setEditUser(null);
-      announce(
-        "success",
-        "تم تحديث المستخدم",
-        `تم تحديث المستخدم «${updated.username}».`,
-      );
-    } catch (actionError) {
-      announce(
-        "danger",
-        "تعذر تحديث المستخدم",
-        actionError instanceof Error
-          ? actionError.message
-          : "تعذر تحديث المستخدم.",
-      );
-      throw actionError;
-    } finally {
-      setEditPending(false);
-    }
-  }
-
-  function handleSaveEdit() {
-    if (!editUser || editPending) return;
-    resetFeedback();
-    if (!editFormIsValid()) return;
-    if (editForm.is_active !== editUser.is_active) {
-      setConfirmEditStatus(true);
-      return;
-    }
-    void executeEditSave().catch(() => undefined);
-  }
-
-  async function toggleUserActive(user: AdminUserListItem) {
-    const nextActive = !user.is_active;
-    const operationKey = `${user.id}:visibility`;
-    resetFeedback();
-    setRowPending(operationKey);
-    try {
-      const updated = await setAdminUserActiveAction(user.id, nextActive);
-      setUsers((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      announce(
-        "success",
-        nextActive ? "تم تفعيل المستخدم" : "تم تعطيل المستخدم",
-        nextActive
-          ? `تم تفعيل المستخدم «${updated.username}».`
-          : `تم تعطيل المستخدم «${updated.username}» وإبطال جلساته.`,
-      );
-    } catch (actionError) {
-      announce(
-        "danger",
-        "تعذر تحديث حالة المستخدم",
-        actionError instanceof Error
-          ? actionError.message
-          : "تعذر تحديث حالة المستخدم.",
-      );
-      throw actionError;
-    } finally {
-      setRowPending(null);
-    }
-  }
-
-  async function deleteUser(user: AdminUserListItem) {
-    const operationKey = `${user.id}:delete`;
-    resetFeedback();
-    setRowPending(operationKey);
-    try {
-      const deleted = await deleteAdminUserAction(user.id);
-      setUsers((current) =>
-        current.filter((item) => item.id !== deleted.id),
-      );
-      announce(
-        "success",
-        "تم حذف المستخدم",
-        `تم حذف المستخدم «${deleted.username}».`,
-      );
-    } catch (actionError) {
-      announce(
-        "danger",
-        "تعذر حذف المستخدم",
-        actionError instanceof Error
-          ? actionError.message
-          : "تعذر حذف المستخدم.",
-      );
-      throw actionError;
-    } finally {
-      setRowPending(null);
-    }
-  }
-
-  function getUserRowActions(
-    user: AdminUserListItem,
-  ): AdminRowActionsCapability {
-    const isSelf = user.id === currentUserId;
-    const visibilityPending = rowPending === `${user.id}:visibility`;
-    const deletePending = rowPending === `${user.id}:delete`;
-    const otherThanVisibilityPending = rowPending !== null && !visibilityPending;
-    const otherThanDeletePending = rowPending !== null && !deletePending;
-    const blockedReason = "انتظر انتهاء الإجراء الحالي.";
-
-    return {
-      entityType: "admin_user",
-      entityId: user.id,
-      entityLabel: user.username,
-      actions: {
-        edit: rowPending
-          ? {
-              access: "disabled",
-              disabledReason: blockedReason,
-              pending: visibilityPending || deletePending,
-            }
-          : { access: "allowed", onSelect: () => openEditModal(user) },
-        preview: { access: "hidden" },
-        information: {
-          access: "allowed",
-          title: "معلومات المستخدم",
-          items: [
-            { label: "اسم المستخدم", value: user.username },
-            { label: "البريد الإلكتروني", value: user.email },
-            { label: "الدور", value: roleLabel(user.role) },
-            {
-              label: "الحالة",
-              value: user.is_active ? "نشط" : "موقوف",
-            },
-            { label: "آخر دخول", value: formatDate(user.last_login_at) },
-          ],
-        },
-        copyPublicLink: { access: "hidden" },
-        visibility: visibilityPending
-          ? {
-              access: "disabled",
-              disabledReason: blockedReason,
-              pending: true,
-              isVisible: user.is_active,
-            }
-          : otherThanVisibilityPending
-            ? {
-                access: "disabled",
-                disabledReason: blockedReason,
-                isVisible: user.is_active,
-              }
-            : isSelf && user.is_active
-              ? {
-                  access: "disabled",
-                  disabledReason: "لا يمكنك تعطيل حسابك الحالي.",
-                  isVisible: true,
-                }
-              : {
-                  access: "allowed",
-                  isVisible: user.is_active,
-                  onSelect: () => toggleUserActive(user),
-                  confirmation: {
-                    mode: "shared",
-                    title: user.is_active
-                      ? "تعطيل المستخدم؟"
-                      : "تفعيل المستخدم؟",
-                    description: user.is_active
-                      ? `سيتم تعطيل «${user.username}» وإبطال جلساته فورًا.`
-                      : `سيتم تفعيل «${user.username}» والسماح له بتسجيل الدخول وفق الصلاحيات الحالية.`,
-                    confirmLabel: user.is_active
-                      ? "تأكيد التعطيل"
-                      : "تأكيد التفعيل",
-                  },
-                },
-        featured: { access: "hidden" },
-        duplicate: { access: "hidden" },
-        archive: { access: "hidden" },
-        delete: deletePending
-          ? {
-              access: "disabled",
-              disabledReason: blockedReason,
-              pending: true,
-            }
-          : otherThanDeletePending
-            ? { access: "disabled", disabledReason: blockedReason }
-            : isSelf
-              ? {
-                  access: "disabled",
-                  disabledReason: "لا يمكنك حذف حسابك الحالي.",
-                }
-              : {
-                  access: "allowed",
-                  onSelect: () => deleteUser(user),
-                  confirmation: {
-                    mode: "shared",
-                    title: "حذف المستخدم نهائيًا؟",
-                    description: `سيتم حذف المستخدم «${user.username}» نهائيًا. لا يمكن التراجع عن هذا الإجراء.`,
-                    confirmLabel: "تأكيد الحذف النهائي",
-                  },
-                },
-      },
-    };
-  }
+  const hasFilters =
+    Boolean(controller.query.search) ||
+    controller.query.filters.status !== "all" ||
+    controller.query.filters.role !== "all";
+  const initialFeedback = useMemo(
+    () =>
+      controller.error || preferenceError
+        ? mapAdminActionResultToFeedback(
+            adminActionFailure(
+              controller.error
+                ? "تعذر تحميل المستخدمين"
+                : "تعذر تحميل تفضيلات الأعمدة",
+              controller.error?.message ??
+                preferenceError ??
+                "تعذر تحميل البيانات.",
+            ),
+          )
+        : null,
+    [controller.error, preferenceError],
+  );
+  const pagination = controller.result.pagination;
 
   return (
-    <div className={ADMIN_LIST_PAGE.wrapper} dir="rtl">
-      <AdminPageHeader
-        title="المستخدمون والصلاحيات"
-        description="إدارة حسابات دخول لوحة التحكم. التعطيل هو الإجراء المعتمد بدل الحذف، ويتم إبطال جلسات المستخدم فورًا عند التعطيل أو تغيير بيانات الدخول."
-        meta={`${users.length} مستخدم`}
-        actions={
-          <AdminActionButton variant="primary" onClick={openCreateModal}>
-            إضافة مستخدم
-          </AdminActionButton>
-        }
-      />
-
-      <AdminFeedbackChannelViewport
-        channel={FEEDBACK_CHANNEL}
-        label="نتيجة إجراءات المستخدمين والصلاحيات"
-      />
-
-      <section>
-        <AdminEntityListFilters
-          basePath="/admin/users-roles"
-          search={{
-            value: search,
-            placeholder: "بحث باسم المستخدم أو البريد أو الاسم الكامل...",
-            minLength: 1,
-          }}
-          filters={userFilters}
-          values={{ status: statusFilter, role: roleFilter }}
-          onQueryPatch={(patch, behavior = "push") => {
-            const next = applyAdminEntityUrlPatch(
-              new URLSearchParams(window.location.search),
-              patch,
-            );
-            const query = next.toString();
-            window.history[
-              behavior === "replace" ? "replaceState" : "pushState"
-            ](
-              window.history.state,
-              "",
-              `${window.location.pathname}${query ? `?${query}` : ""}`,
-            );
-          }}
+    <>
+      <AdminEntityListPageLayout className="pb-10" dir="rtl">
+        <AdminPageContextHeader
+          eyebrow="ADMIN USERS DATA ENGINE"
+          title="المستخدمون والصلاحيات"
+          description="إدارة حسابات دخول لوحة التحكم. التعطيل هو الإجراء المعتمد بدل الحذف، ويتم إبطال جلسات المستخدم فورًا عند التعطيل أو تغيير بيانات الدخول."
+          meta={`${pagination.totalRows} مستخدم`}
+          actions={
+            <AdminActionButton
+              variant="primary"
+              onClick={() => setCreateOpen(true)}
+            >
+              إضافة مستخدم
+            </AdminActionButton>
+          }
         />
 
-        <AdminDataGrid
-          className="!rounded-t-none !border-t-0"
-          summary={`${filteredUsers.length} نتيجة`}
-          scrollLabel="جدول المستخدمين والصلاحيات"
-        >
-          <AdminDataGridHeader columns={columns}>
-            <span>اسم المستخدم</span>
-            <span>الدور</span>
-            <span>الحالة</span>
-            <span>آخر دخول</span>
-            <span className="text-center">الإجراءات</span>
-          </AdminDataGridHeader>
-
-          {filteredUsers.length === 0 ? (
-            <AdminDataGridEmpty>لا يوجد مستخدمون مطابقون للبحث أو الفلتر.</AdminDataGridEmpty>
-          ) : (
-            visibleUsers.map((user) => {
-              return (
-                <AdminDataGridRow key={user.id} columns={columns}>
-                  <span className="font-semibold text-white">{user.username}</span>
-                  <span className="text-white/65">{roleLabel(user.role)}</span>
-                  <span>
-                    <AdminStatusPill tone={user.is_active ? "green" : "muted"}>
-                      {user.is_active ? "نشط" : "موقوف"}
-                    </AdminStatusPill>
-                  </span>
-                  <span className="text-white/55">{formatDate(user.last_login_at)}</span>
-                  <AdminDataGridRowActions
-                    capability={getUserRowActions(user)}
-                    size="compact"
-                    sticky
-                  />
-                </AdminDataGridRow>
-              );
-            })
-          )}
-        </AdminDataGrid>
-
-        <AdminTablePagination
-          basePath="/admin/users-roles"
-          currentPage={pagination.page}
-          totalPages={pagination.totalPages}
-          totalCount={pagination.totalCount}
-          pageSize={String(pagination.pageSize)}
-          pageSizeOptions={PAGE_SIZE_OPTIONS.map(String)}
-          emptySummaryText="لا يوجد مستخدمون مطابقون"
-          pending={rowPending !== null}
-          onPageChange={pagination.setPage}
-          onPageSizeChange={pagination.setPageSize}
-        />
-      </section>
-
-      <VenesiaModal
-        open={createOpen}
-        title="إضافة مستخدم"
-        description="إنشاء حساب أدمن جديد. الدور يُحفظ كبيانات metadata فقط (admin)."
-        size="md"
-        onClose={() => setCreateOpen(false)}
-        footer={
-          <>
-            <AdminModalCancelButton onClick={() => setCreateOpen(false)}>إلغاء</AdminModalCancelButton>
-            <AdminModalPrimaryButton disabled={isPending} onClick={handleCreateUser}>
-              إنشاء المستخدم
-            </AdminModalPrimaryButton>
-          </>
-        }
-      >
-        <div className={ADMIN_FORM.grid}>
-          <FormFieldError error={createFieldErrors.username}>
-            <input
-              value={createForm.username}
-              onChange={(event) => updateCreateFormField("username", event.target.value)}
-              placeholder="اسم المستخدم"
-              aria-invalid={Boolean(createFieldErrors.username)}
-              className={fieldClassName(Boolean(createFieldErrors.username))}
-            />
-          </FormFieldError>
-          <FormFieldError error={createFieldErrors.email}>
-            <input
-              type="email"
-              value={createForm.email}
-              onChange={(event) => updateCreateFormField("email", event.target.value)}
-              placeholder="البريد الإلكتروني"
-              aria-invalid={Boolean(createFieldErrors.email)}
-              className={fieldClassName(Boolean(createFieldErrors.email), "font-en")}
-            />
-          </FormFieldError>
-          <FormFieldError error={createFieldErrors.full_name}>
-            <input
-              value={createForm.full_name}
-              onChange={(event) => updateCreateFormField("full_name", event.target.value)}
-              placeholder="الاسم الكامل (اختياري)"
-              aria-invalid={Boolean(createFieldErrors.full_name)}
-              className={fieldClassName(Boolean(createFieldErrors.full_name))}
-            />
-          </FormFieldError>
-          <FormFieldError error={createFieldErrors.password}>
-            <input
-              type="password"
-              value={createForm.password}
-              onChange={(event) => updateCreateFormField("password", event.target.value)}
-              placeholder="كلمة المرور"
-              aria-invalid={Boolean(createFieldErrors.password)}
-              className={fieldClassName(Boolean(createFieldErrors.password))}
-            />
-          </FormFieldError>
-          <FormFieldError error={createFieldErrors.confirmPassword}>
-            <input
-              type="password"
-              value={createForm.confirmPassword}
-              onChange={(event) => updateCreateFormField("confirmPassword", event.target.value)}
-              placeholder="تأكيد كلمة المرور"
-              aria-invalid={Boolean(createFieldErrors.confirmPassword)}
-              className={fieldClassName(Boolean(createFieldErrors.confirmPassword))}
-            />
-          </FormFieldError>
-        </div>
-      </VenesiaModal>
-
-      <VenesiaModal
-        open={Boolean(editUser)}
-        title="تعديل المستخدم"
-        description={editUser ? `تعديل بيانات «${editUser.username}»` : undefined}
-        size="md"
-        onClose={() => {
-          if (editPending) return;
-          setConfirmEditStatus(false);
-          setEditUser(null);
-        }}
-        footer={
-          <>
-            <AdminModalCancelButton
-              disabled={editPending}
-              onClick={() => {
-                setConfirmEditStatus(false);
-                setEditUser(null);
+        <AdminEntityListSurface consumer="admin-users">
+          <AdminEntityListTableRegion
+            data-admin-entity-list-pending={
+              controller.isFetching ? "true" : "false"
+            }
+          >
+            <AdminEntityList<
+              AdminUserEntityListRow,
+              AdminUserColumnKey,
+              AdminUserSortField,
+              number
+            >
+              listId="admin-users-table"
+              toolbar={{
+                basePath: "/admin/users-roles",
+                preserveParams: ["sort", "limit"],
+                search: {
+                  value: controller.query.search,
+                  placeholder:
+                    "بحث باسم المستخدم أو البريد أو الاسم الكامل...",
+                  minLength: adminUsersQueryContract.searchMinLength,
+                  pending: controller.isFetching,
+                },
+                filters,
+                values: {
+                  status: controller.query.filters.status,
+                  role: controller.query.filters.role,
+                },
+                clearableFilterKeys: ["status", "role"],
+                onQueryPatch: (patch, behavior = "push") => {
+                  const search =
+                    "q" in patch
+                      ? (patch.q ?? "").trim()
+                      : controller.query.search;
+                  const status: AdminUserStatusFilter =
+                    "status" in patch
+                      ? patch.status === "active" ||
+                        patch.status === "inactive"
+                        ? patch.status
+                        : "all"
+                      : controller.query.filters.status;
+                  const role =
+                    "role" in patch
+                      ? typeof patch.role === "string" && patch.role
+                        ? patch.role
+                        : "all"
+                      : controller.query.filters.role;
+                  controller.setSearchAndFilters(
+                    search,
+                    { status, role },
+                    behavior,
+                  );
+                },
               }}
-            >
-              إلغاء
-            </AdminModalCancelButton>
-            <AdminModalPrimaryButton
-              data-admin-users-edit-save=""
-              disabled={isPending || editPending}
-              onClick={handleSaveEdit}
-            >
-              حفظ التعديل
-            </AdminModalPrimaryButton>
-          </>
-        }
-      >
-        <div className={ADMIN_FORM.grid}>
-          <label className={adminFormLabelClassName()}>
-            <span>اسم المستخدم</span>
-            <input
-              value={editForm.username}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, username: event.target.value }))}
-              className={adminFormFieldClassName()}
+              rows={controller.result.rows}
+              columns={columns}
+              getRowId={(row) => row.id}
+              getRowLabel={(row) => row.username}
+              initialVisibleColumns={initialVisibleColumns}
+              defaultVisibleColumns={[
+                ...getAdminUsersDefaultColumnKeys(),
+              ]}
+              onPersistColumns={saveAdminUsersTablePreferences}
+              onRestoreColumns={restoreAdminUsersTablePreferences}
+              enableColumnManagement
+              enableSelection={false}
+              scrollLabel="جدول المستخدمين والصلاحيات"
+              mapResultToFeedback={mapAdminActionResultToFeedback}
+              sort={null}
+              actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
+              initialFeedback={initialFeedback}
+              emptyState={{
+                mode:
+                  pagination.totalRows === 0 && !hasFilters
+                    ? "system"
+                    : "filtered",
+                systemEmpty: (
+                  <p className="text-base font-semibold text-white">
+                    لا يوجد مستخدمون بعد.
+                  </p>
+                ),
+                filteredEmpty: (
+                  <p className="text-base font-semibold text-white">
+                    لا يوجد مستخدمون مطابقون للبحث أو الفلتر.
+                  </p>
+                ),
+              }}
             />
-          </label>
-          <label className={adminFormLabelClassName()}>
-            <span>البريد الإلكتروني</span>
-            <input
-              type="email"
-              value={editForm.email}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, email: event.target.value }))}
-              className={adminFormFieldClassName("font-en")}
-            />
-          </label>
-          <label className={adminFormLabelClassName()}>
-            <span>الاسم الكامل</span>
-            <input
-              value={editForm.full_name}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, full_name: event.target.value }))}
-              className={adminFormFieldClassName()}
-            />
-          </label>
-          <label className={adminFormLabelClassName()}>
-            <span>الدور</span>
-            <input
-              value={editUser ? roleLabel(editUser.role) : "مدير"}
-              readOnly
-              disabled
-              className={adminFormFieldClassName("text-white/55")}
-            />
-          </label>
-          <label className={ADMIN_FORM.checkboxRow}>
-            <span>الحالة</span>
-            <input
-              type="checkbox"
-              checked={editForm.is_active}
-              disabled={editUser?.id === currentUserId}
-              onChange={(event) => setEditForm((prev) => ({ ...prev, is_active: event.target.checked }))}
-              className="h-4 w-4 accent-[#D8B87A]"
-            />
-          </label>
-          {editUser?.id === currentUserId ? (
-            <p className="text-xs text-white/45">لا يمكنك تعطيل حسابك الحالي من هنا.</p>
-          ) : null}
-        </div>
 
-        <div className="mt-5 border-t border-white/8 pt-5">
-          <h3 className="text-sm font-semibold text-white/80">تغيير كلمة المرور</h3>
-          {editUser?.id === currentUserId ? (
-            <p className="mt-2 text-xs leading-6 text-white/45">
-              لتغيير كلمة مرورك استخدم صفحة الأمان في الإعدادات.
-            </p>
-          ) : (
-            <>
-              <p className="mt-1 text-xs leading-6 text-white/45">
-                اترك الحقول فارغة إذا كنت لا تريد تغيير كلمة المرور
-              </p>
-              <div className={`${ADMIN_FORM.grid} mt-4`}>
-                <FormFieldError error={editPasswordErrors.password}>
-                  <label className={adminFormLabelClassName()}>
-                    <span>كلمة المرور الجديدة</span>
-                    <input
-                      type="password"
-                      value={editPasswordForm.password}
-                      onChange={(event) => updateEditPasswordField("password", event.target.value)}
-                      aria-invalid={Boolean(editPasswordErrors.password)}
-                      className={fieldClassName(Boolean(editPasswordErrors.password))}
-                    />
-                  </label>
-                </FormFieldError>
-                <FormFieldError error={editPasswordErrors.confirmPassword}>
-                  <label className={adminFormLabelClassName()}>
-                    <span>تأكيد كلمة المرور</span>
-                    <input
-                      type="password"
-                      value={editPasswordForm.confirmPassword}
-                      onChange={(event) => updateEditPasswordField("confirmPassword", event.target.value)}
-                      aria-invalid={Boolean(editPasswordErrors.confirmPassword)}
-                      className={fieldClassName(Boolean(editPasswordErrors.confirmPassword))}
-                    />
-                  </label>
-                </FormFieldError>
-              </div>
-            </>
-          )}
-        </div>
-      </VenesiaModal>
+            <AdminTablePagination
+              basePath="/admin/users-roles"
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              totalCount={pagination.totalRows}
+              pageSize={String(pagination.pageSize)}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              emptySummaryText="لا يوجد مستخدمون مطابقون"
+              pending={controller.isFetching}
+              onPageChange={controller.setPage}
+              onPageSizeChange={controller.setPageSize}
+            />
+          </AdminEntityListTableRegion>
+        </AdminEntityListSurface>
 
-      <AdminConfirmDialog
-        open={confirmEditStatus && Boolean(editUser)}
-        title={editForm.is_active ? "تفعيل المستخدم ضمن حفظ التعديلات؟" : "تعطيل المستخدم ضمن حفظ التعديلات؟"}
-        description={
-          editForm.is_active
-            ? `سيتم حفظ تعديلات «${editUser?.username ?? "المستخدم"}» وتفعيل الحساب وفق الصلاحيات الحالية.`
-            : `سيتم حفظ تعديلات «${editUser?.username ?? "المستخدم"}» وتعطيل الحساب وإبطال جلساته الحالية.`
-        }
-        confirmLabel={editForm.is_active ? "حفظ وتفعيل المستخدم" : "حفظ وتعطيل المستخدم"}
-        pending={editPending}
-        resolveReturnFocus={() =>
-          document.querySelector<HTMLButtonElement>("[data-admin-users-edit-save]")
-        }
-        onCancel={() => setConfirmEditStatus(false)}
-        onConfirm={executeEditSave}
+        <p className="text-xs text-white/35">
+          المستخدم الحالي:{" "}
+          <span className="text-white/55">{currentUsername}</span>
+        </p>
+      </AdminEntityListPageLayout>
+
+      <AdminUserFormModal
+        key="admin-user-create"
+        open={createOpen}
+        mode="create"
+        currentUserId={currentUserId}
+        onClose={() => setCreateOpen(false)}
+        onSaved={() => {
+          void controller.invalidate();
+        }}
       />
-
-      <p className="text-xs text-white/35">
-        المستخدم الحالي: <span className="text-white/55">{currentUsername}</span>
-      </p>
-    </div>
+      <AdminUserFormModal
+        key={`admin-user-edit:${editingUser?.id ?? "closed"}`}
+        open={Boolean(editingUser)}
+        mode="edit"
+        user={editingUser ?? undefined}
+        currentUserId={currentUserId}
+        onClose={() => setEditingUser(null)}
+        onSaved={() => {
+          void controller.invalidate();
+        }}
+      />
+    </>
   );
 }

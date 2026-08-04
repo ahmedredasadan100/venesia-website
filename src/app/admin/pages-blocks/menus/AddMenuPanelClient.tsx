@@ -1,72 +1,42 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState } from "react";
 
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
-import { validateSlugFormat } from "../../../../lib/admin/slug";
 import {
-  ADMIN_FORM,
   AdminActionButton,
+  AdminFormError,
+  AdminFormField,
+  AdminFormGrid,
+  AdminFormListboxSelect,
+  AdminFormRuntime,
+  AdminFormSwitch,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   AdminSlugField,
   VenesiaModal,
   adminFormFieldClassName,
-  adminFormLabelClassName,
 } from "../../../../components/admin/ui";
-import { checkMenuSlugAvailable, createMenu } from "./actions";
+import type { AdminFormRuntimeHandle } from "../../../../components/admin/ui/AdminFormRuntime";
+import { createMenu } from "./actions";
+
+const MENU_LOCATION_OPTIONS = [
+  { value: "main", label: "Header / Main" },
+  { value: "mobile", label: "Mobile" },
+  { value: "footer", label: "Footer" },
+  { value: "custom", label: "Custom" },
+] as const;
 
 export default function AddMenuPanelClient() {
   const [open, setOpen] = useState(false);
-  const [slug, setSlug] = useState("");
-  const [slugError, setSlugError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
+  const runtimeRef = useRef<AdminFormRuntimeHandle>(null);
 
   function openPanel() {
-    setSlug("");
-    setSlugError(null);
-    setFormError(null);
-    setIsPending(false);
     setOpen(true);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError(null);
-
-    const formData = new FormData(event.currentTarget);
-    const name = String(formData.get("name") ?? "").trim();
-    const slugValue = slug.trim();
-
-    if (!name) {
-      setFormError("اكتب اسم القائمة.");
-      return;
-    }
-
-    const formatError = validateSlugFormat(slugValue);
-    if (formatError) {
-      setSlugError(formatError);
-      return;
-    }
-
-    setSlugError(null);
-    setIsPending(true);
-
-    try {
-      const availability = await checkMenuSlugAvailable(slugValue);
-      if (!availability.available) {
-        setSlugError(availability.message ?? "الـ slug مستخدم بالفعل.");
-        setIsPending(false);
-        return;
-      }
-
-      formData.set("slug", slugValue);
-      await createMenu(formData);
-    } catch {
-      setFormError("تعذر إنشاء القائمة. حاول مرة أخرى.");
-      setIsPending(false);
-    }
+  function requestClose() {
+    runtimeRef.current?.requestClose();
   }
 
   return (
@@ -81,61 +51,78 @@ export default function AddMenuPanelClient() {
         title="إضافة قائمة جديدة"
         description="اعمل قائمة فاضية الآن، وافتحها بعد الإنشاء لإضافة عناصرها."
         size="md"
-        onClose={() => setOpen(false)}
-        footer={
-          <>
-            <AdminModalCancelButton onClick={() => setOpen(false)} disabled={isPending}>
-              إلغاء
-            </AdminModalCancelButton>
-            <AdminModalPrimaryButton type="submit" form="create-menu-form" disabled={isPending}>
-              {isPending ? "جار الإنشاء..." : "إنشاء وفتح القائمة"}
-            </AdminModalPrimaryButton>
-          </>
-        }
+        onClose={requestClose}
       >
-        <form id="create-menu-form" onSubmit={handleSubmit} className={ADMIN_FORM.grid}>
-          {formError ? (
-            <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">
-              {formError}
-            </div>
-          ) : null}
+        <AdminFormRuntime
+          action={createMenu}
+          mode="create"
+          entityKey="menu-quick-create"
+          onClose={() => setOpen(false)}
+          onSuccess={() => setOpen(false)}
+          runtimeRef={runtimeRef}
+          formId="create-menu-form"
+          className="space-y-5"
+        >
+          {({ fieldErrors, pending, requestClose: requestRuntimeClose }) => (
+            <>
+              <AdminFormError />
 
-          <div className={ADMIN_FORM.gridTwoCol}>
-            <label className={adminFormLabelClassName()}>
-              الاسم العربي
-              <input
-                name="name"
-                required
-                placeholder="مثال: القائمة الرئيسية"
-                dir="rtl"
-                className={adminFormFieldClassName()}
+              <AdminFormGrid>
+                <AdminFormField label="الاسم العربي" required>
+                  <input
+                    name="name"
+                    required
+                    placeholder="مثال: القائمة الرئيسية"
+                    dir="rtl"
+                    className={adminFormFieldClassName(
+                      fieldErrors.name?.length ? "border-red-400/40" : "",
+                    )}
+                    aria-invalid={Boolean(fieldErrors.name?.length)}
+                    aria-describedby={
+                      fieldErrors.name?.length ? "name-error" : undefined
+                    }
+                  />
+                  <AdminFormError name="name" />
+                </AdminFormField>
+
+                <AdminSlugField
+                  sourceInputName="name"
+                  error={fieldErrors.slug?.[0] ?? null}
+                />
+              </AdminFormGrid>
+
+              <AdminFormListboxSelect
+                name="location"
+                focusTargetId="location"
+                label="مكان الاستخدام"
+                options={MENU_LOCATION_OPTIONS}
+                defaultValue="main"
+                disabled={pending}
+                error={fieldErrors.location?.[0] ?? null}
               />
-            </label>
 
-            <AdminSlugField
-              key={open ? "menu-slug-open" : "menu-slug-closed"}
-              sourceInputName="name"
-              value={slug}
-              error={slugError}
-              onChange={setSlug}
-            />
-          </div>
+              <AdminFormSwitch
+                name="is_active"
+                label="نشطة"
+                defaultChecked
+                disabled={pending}
+                surface
+              />
 
-          <label className={adminFormLabelClassName()}>
-            مكان الاستخدام
-            <select name="location" defaultValue="main" className={adminFormFieldClassName()}>
-              <option value="main">Header / Main</option>
-              <option value="mobile">Mobile</option>
-              <option value="footer">Footer</option>
-              <option value="custom">Custom</option>
-            </select>
-          </label>
-
-          <label className={ADMIN_FORM.checkboxRow}>
-            <span>نشطة</span>
-            <input type="checkbox" name="is_active" defaultChecked className="size-4 accent-[#D8B87A]" />
-          </label>
-        </form>
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+                <AdminModalCancelButton
+                  onClick={requestRuntimeClose}
+                  disabled={pending}
+                >
+                  إلغاء
+                </AdminModalCancelButton>
+                <AdminModalPrimaryButton type="submit" disabled={pending}>
+                  {pending ? "جار الإنشاء..." : "إنشاء وفتح القائمة"}
+                </AdminModalPrimaryButton>
+              </div>
+            </>
+          )}
+        </AdminFormRuntime>
       </VenesiaModal>
     </>
   );

@@ -32,13 +32,12 @@ export const ADMIN_FORM_RUNTIME_MODULE = {
 } as const;
 
 export const ADMIN_FORM_SYSTEM_CLOSURE = {
-  phase: "Unified Content Editors - Form Runtime Adoption",
+  phase: "Shared Legacy Adoption Closure",
   module: ADMIN_FORM_RUNTIME_MODULE.id,
-  scope: "reference_consumers_redirect_and_unified_content_editors",
-  allowedClaim: "unified_content_editors_adopted",
+  scope: "reference_consumers_and_in_scope_generic_legacy_forms",
+  allowedClaim: "shared_legacy_form_adoption_closed",
   globalClosed: false,
   globalClosureBlockers: [
-    "Legacy generic Admin forms remain outside the Form Runtime module.",
     "Other Admin Interaction System runtimes and capabilities have independent adoption ledgers.",
   ],
 } as const;
@@ -116,11 +115,11 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "pages-quick-create",
     label: "Page quick create",
-    classification: "legacy_generic_gap",
+    classification: "shared_adopter",
     sourceFiles: ["src/app/admin/pages-blocks/pages/CreatePageModal.tsx"],
     surfaces: ["create"],
     rationale:
-      "Generic modal create form remains outside the shared runtime.",
+      "Generic modal create delegates pending, validation focus, feedback, dirty confirmation, and Create-to-Edit handoff to AdminFormRuntime.",
   },
   {
     id: "redirects-create-edit",
@@ -145,13 +144,30 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "Composite page-builder workflow has specialized assignment, ordering, and SEO lifecycles.",
   },
   {
-    id: "block-template-builders-and-editors",
-    label: "Block template builders and editors",
-    classification: "specialized_exception",
+    id: "block-template-create-modals",
+    label: "Block template create modals",
+    classification: "shared_adopter",
     sourceFiles: [
       "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
       "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
       "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+    ],
+    surfaces: [
+      "content:create",
+      "hero:create",
+      "breadcrumb:create",
+      "cards:create",
+      "cta:create",
+      "feed:create",
+    ],
+    rationale:
+      "All generic template-create modals delegate form lifecycle, validation feedback, dirty confirmation, and Create-to-Edit handoff to AdminFormRuntime while schema editors retain their specialized owners.",
+  },
+  {
+    id: "block-template-builders-and-editors",
+    label: "Block template builders and editors",
+    classification: "specialized_exception",
+    sourceFiles: [
       "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
       "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
       "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
@@ -161,22 +177,32 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
       "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
     ],
-    surfaces: ["template-create", "template-edit", "template-command"],
+    surfaces: ["template-edit", "template-command"],
     rationale:
-      "Schema-driven block builders and editors require a dedicated composition contract before shared-runtime adoption.",
+      "Schema-driven block editors retain their dedicated composition contract; their generic create modals are inventoried as shared adopters separately.",
+  },
+  {
+    id: "menu-quick-create",
+    label: "Menu quick create",
+    classification: "shared_adopter",
+    sourceFiles: [
+      "src/app/admin/pages-blocks/menus/AddMenuPanelClient.tsx",
+    ],
+    surfaces: ["menu-create"],
+    rationale:
+      "Generic menu creation delegates pending, validation focus, feedback, dirty confirmation, and Create-to-Edit handoff to AdminFormRuntime.",
   },
   {
     id: "menu-builder",
     label: "Menu builder",
     classification: "specialized_exception",
     sourceFiles: [
-      "src/app/admin/pages-blocks/menus/AddMenuPanelClient.tsx",
       "src/app/admin/pages-blocks/menus/MenuBuilderClient.tsx",
       "src/app/admin/pages-blocks/menus/MenuItemForm.tsx",
       "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
       "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
     ],
-    surfaces: ["menu-create", "menu-edit", "item-edit", "ordering", "row-command"],
+    surfaces: ["menu-edit", "item-edit", "ordering", "row-command"],
     rationale:
       "Hierarchical menu editing and ordering are a specialized builder workflow.",
   },
@@ -204,11 +230,11 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "company-identity-settings",
     label: "Company identity settings",
-    classification: "specialized_exception",
+    classification: "shared_adopter",
     sourceFiles: ["src/app/admin/settings/general/CompanyIdentityPanel.tsx"],
     surfaces: ["singleton-settings"],
     rationale:
-      "Singleton identity settings retain their dedicated settings contract.",
+      "Singleton identity persistence remains domain-owned while its generic edit lifecycle, presentation, feedback, and dirty confirmation delegate to AdminFormRuntime.",
   },
   {
     id: "media-library-settings",
@@ -229,13 +255,24 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "Sensitive security mutations require dedicated validation and session semantics.",
   },
   {
+    id: "users-create-edit",
+    label: "Admin users create and edit",
+    classification: "shared_adopter",
+    sourceFiles: [
+      "src/app/admin/users-roles/AdminUserFormModal.tsx",
+    ],
+    surfaces: ["user-create", "user-edit"],
+    rationale:
+      "Create and edit presentation, pending, validation focus, feedback, dirty confirmation, and modal close lifecycle delegate to AdminFormRuntime; identity, password, session, self-protection, and role policy remain with the existing Auth domain actions.",
+  },
+  {
     id: "users-and-roles",
     label: "Users and roles management",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/users-roles/UsersManagementClient.tsx"],
-    surfaces: ["user-create", "user-edit", "role-change", "status-command"],
+    surfaces: ["identity-collection", "status-command", "delete-command"],
     rationale:
-      "Identity lifecycle and role mutations are specialized; native confirm calls remain recorded debt.",
+      "Identity status and delete commands remain specialized Auth-domain mutations while collection presentation, feedback, and confirmation use the shared owners and create/edit lifecycle is inventoried separately.",
   },
   {
     id: "maintenance-immediate-setting",
