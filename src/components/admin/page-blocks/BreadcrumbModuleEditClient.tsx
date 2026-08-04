@@ -1,7 +1,7 @@
 "use client";
 
 import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader from "./BlockEditorContextHeader";
+import BlockEditorContextHeader, { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
@@ -49,18 +49,19 @@ export default function BreadcrumbModuleEditClient({
         slotContext={getSlotCompatibilityLabel("breadcrumb")}
       />
 
-      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      <ModuleDependencyHintsPanel moduleKind="breadcrumb" templateSlug={block.slug} />
-
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
         <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
 
         <AdminModuleTabs
+          activePanelContext={<BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/breadcrumb" saved={saved} />}
           tabs={[
             {
               id: "content",
-              label: "المحتوى",
+              navigationLabel: "المحتوى",
+              sectionHeading: "محتوى مسار التنقل",
+              sectionDescription: "حدّد مصدر المسار وتسميات عناصره وخيارات ظهوره.",
+              icon: "content",
               content: (
                 <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                   <label className="block space-y-2">
@@ -94,9 +95,14 @@ export default function BreadcrumbModuleEditClient({
             },
             {
               id: "settings",
-              label: "الإعدادات",
+              navigationLabel: "الإعدادات",
+              sectionHeading: "إعدادات الموديول",
+              sectionDescription: "أدر الهوية الداخلية ونمط العرض وحالة النشر.",
+              icon: "settings",
               content: (
-                <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+                <div className="space-y-5">
+                  <ModuleDependencyHintsPanel moduleKind="breadcrumb" templateSlug={block.slug} />
+                  <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
                   <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                     <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <label className="block space-y-2">
@@ -135,17 +141,24 @@ export default function BreadcrumbModuleEditClient({
                       الموديول المخفي أو غير المنشور لا يظهر على الموقع حتى لو كان مربوطًا بصفحة.
                     </p>
                   </section>
+                  </div>
                 </div>
               ),
             },
             {
               id: "pages",
-              label: "يظهر في الصفحات",
+              navigationLabel: "الصفحات",
+              sectionHeading: "الظهور في الصفحات",
+              sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
+              icon: "plans",
               content: (
-                <ModulePageAssignmentsField
-                  pages={assignmentContext.pages}
-                  assignedPageIds={assignedPageIds}
-                />
+                <div className="space-y-5">
+                  <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+                  <ModulePageAssignmentsField
+                    pages={assignmentContext.pages}
+                    assignedPageIds={assignedPageIds}
+                  />
+                </div>
               ),
             },
           ]}

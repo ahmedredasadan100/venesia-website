@@ -3,7 +3,6 @@
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import AdminModuleTabs from "../../ui/AdminModuleTabs";
 import { AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";
@@ -15,16 +14,13 @@ import {
   resolveContactIconKey,
 } from "../../../page-blocks/contact-icons";
 
-type AboutCtaEditorSection = "all" | "text" | "image" | "cta" | "contacts";
+type AboutCtaEditorSection = "text" | "image" | "cta" | "contacts";
 
 type AboutCtaModuleEditorProps = {
   config: AboutCtaModuleConfig;
   editorMode?: "about-cta" | "home-contact";
-  /**
-   * When set for home-contact flat tabs, render only one section.
-   * Defaults to `"all"` for the classic about-cta nested-tab layout.
-   */
-  section?: AboutCtaEditorSection;
+  /** Flat section selected by the specialized editor's shared tabs. */
+  section: AboutCtaEditorSection;
 };
 
 const CONTACT_SLOTS = 4;
@@ -55,7 +51,7 @@ function buildInitialRows(contacts: AboutCtaContactConfig[] | undefined): Contac
 export default function AboutCtaModuleEditor({
   config,
   editorMode = "about-cta",
-  section = "all",
+  section,
 }: AboutCtaModuleEditorProps) {
   const isHomeContact = editorMode === "home-contact";
   const fieldLabels = {
@@ -72,10 +68,10 @@ export default function AboutCtaModuleEditor({
     contactValue: "بيانات التواصل",
   };
   const [contactRows, setContactRows] = useState<ContactRow[]>(() => buildInitialRows(config.contacts));
-  const showText = section === "all" || section === "text";
-  const showImage = section === "all" || section === "image";
-  const showCta = section === "all" || section === "cta";
-  const showContacts = section === "all" || section === "contacts";
+  const showText = section === "text";
+  const showImage = section === "image";
+  const showCta = section === "cta";
+  const showContacts = section === "contacts";
 
   function updateRow(
     uid: string,
@@ -96,7 +92,6 @@ export default function AboutCtaModuleEditor({
 
   const textFields = showText ? (
     <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-      {section === "all" ? <h2 className="text-sm font-semibold text-white">النص الرئيسي</h2> : null}
       <label className="block space-y-2">
         <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
         <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
@@ -129,7 +124,6 @@ export default function AboutCtaModuleEditor({
 
   const ctaFields = showCta ? (
     <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-      {section === "all" ? <h2 className="text-sm font-semibold text-white">الزر والملاحظة</h2> : null}
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
@@ -153,7 +147,6 @@ export default function AboutCtaModuleEditor({
 
   const imageFields = showImage ? (
     <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-      {section === "all" ? <h2 className="text-sm font-semibold text-white">الصورة</h2> : null}
       <AdminMediaImageField
         name="image"
         label="صورة القسم"
@@ -170,7 +163,6 @@ export default function AboutCtaModuleEditor({
 
   const contactsFields = showContacts ? (
     <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-      {section === "all" ? <h2 className="text-sm font-semibold text-white">بيانات التواصل (4 كحد أقصى)</h2> : null}
       <p className="text-xs leading-6 text-white/45">
         اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر. استخدم الأسهم لتغيير ترتيب الظهور.
       </p>
@@ -267,33 +259,12 @@ export default function AboutCtaModuleEditor({
     </section>
   ) : null;
 
-  if (section !== "all") {
-    return (
-      <div className="space-y-6">
-        {textFields}
-        {imageFields}
-        {ctaFields}
-        {contactsFields}
-      </div>
-    );
-  }
-
-  const contentTab = (
-    <div className="space-y-6">
-      {textFields}
-      {ctaFields}
-    </div>
-  );
-
   return (
     <div className="space-y-6">
-      <AdminModuleTabs
-        tabs={[
-          { id: "content", label: "المحتوى الأساسي", content: contentTab },
-          { id: "image", label: "الصورة", content: imageFields },
-          { id: "contacts", label: "بيانات التواصل", content: contactsFields },
-        ]}
-      />
+      {textFields}
+      {imageFields}
+      {ctaFields}
+      {contactsFields}
     </div>
   );
 }

@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
 
 import AdminPageHeader from "../../../../../components/admin/AdminPageHeader";
-import { AdminPageExperience } from "../../../../../components/admin/ui";
+import {
+  AdminActionButton,
+  AdminPageExperience,
+  AdminStatusPill,
+} from "../../../../../components/admin/ui";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
@@ -43,12 +47,21 @@ export default async function Page({
         eyebrow="MENU BUILDER"
         title={`محرر ${menu.name}`}
         description="إدارة عناصر القائمة عبر تبويبات منظمة وجدول إداري موحّد مع بقية لوحة التحكم."
+        meta={
+          <AdminStatusPill tone={databaseReady ? "green" : "gold"}>
+            {databaseReady ? "Database Ready" : "Fallback محتمل حتى تجهز الداتا"}
+          </AdminStatusPill>
+        }
+        actions={
+          <AdminActionButton href="/admin/pages-blocks/menus" variant="ghost">
+            الرجوع لكل القوائم
+          </AdminActionButton>
+        }
       />
 
       <MenuBuilderClient
         menu={menu}
         items={items}
-        databaseReady={databaseReady}
         message={query?.message}
         messageWarning={query?.notice === "saved_with_media_sync_warning"}
         loadError={

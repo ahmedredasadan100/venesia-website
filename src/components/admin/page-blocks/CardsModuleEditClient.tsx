@@ -1,7 +1,7 @@
 "use client";
 
 import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader from "./BlockEditorContextHeader";
+import BlockEditorContextHeader, { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
@@ -48,19 +48,20 @@ export default function CardsModuleEditClient({
         slotContext={getSlotCompatibilityLabel("cards")}
       />
 
-      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      <ModuleDependencyHintsPanel moduleKind="cards" templateSlug={block.slug} />
-
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
         <input type="hidden" name="variant" value={block.variant ?? "glass"} />
         <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
 
         <AdminModuleTabs
+          activePanelContext={<BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/cards" saved={saved} />}
           tabs={[
             {
               id: "content",
-              label: "المحتوى",
+              navigationLabel: "المحتوى",
+              sectionHeading: "محتوى شبكة البطاقات",
+              sectionDescription: "أدر عنوان القسم ووصفه والبطاقات وروابطها.",
+              icon: "content",
               content: (
                 <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
                   <label className="block space-y-2">
@@ -86,10 +87,15 @@ export default function CardsModuleEditClient({
             },
             {
               id: "meta",
-              label: "الإعدادات",
+              navigationLabel: "الإعدادات",
+              sectionHeading: "إعدادات الموديول",
+              sectionDescription: "أدر الهوية الداخلية وحالة النشر وتخطيط الأعمدة.",
+              icon: "settings",
               content: (
-                <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                  <label className="block space-y-2">
+                <div className="space-y-5">
+                  <ModuleDependencyHintsPanel moduleKind="cards" templateSlug={block.slug} />
+                  <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                    <label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">الاسم</span>
                     <input name="name" defaultValue={block.name} required className={fieldClassName()} />
                   </label>
@@ -113,18 +119,25 @@ export default function CardsModuleEditClient({
                       <option value="3">3</option>
                       <option value="4">4</option>
                     </select>
-                  </label>
-                </section>
+                    </label>
+                  </section>
+                </div>
               ),
             },
             {
               id: "pages",
-              label: "يظهر في الصفحات",
+              navigationLabel: "الصفحات",
+              sectionHeading: "الظهور في الصفحات",
+              sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
+              icon: "plans",
               content: (
-                <ModulePageAssignmentsField
-                  pages={assignmentContext.pages}
-                  assignedPageIds={assignedPageIds}
-                />
+                <div className="space-y-5">
+                  <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+                  <ModulePageAssignmentsField
+                    pages={assignmentContext.pages}
+                    assignedPageIds={assignedPageIds}
+                  />
+                </div>
               ),
             },
           ]}

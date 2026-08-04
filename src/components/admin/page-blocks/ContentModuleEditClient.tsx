@@ -241,9 +241,16 @@ export default function ContentModuleEditClient({
 
   const settingsTab = {
     id: "settings",
-    label: "الإعدادات",
+    navigationLabel: "الإعدادات",
+    sectionHeading: "إعدادات الموديول",
+    sectionDescription: "أدر الهوية الداخلية وحالة نشر الموديول.",
+    icon: "settings" as const,
     content: (
-      <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <div className="space-y-5">
+        {usesUnifiedModuleChrome || usesProjectsHubHeader ? null : (
+          <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
+        )}
+        <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">
             {usesAboutStructuredChrome ? "اسم الموديول" : "الاسم"}
@@ -297,15 +304,22 @@ export default function ContentModuleEditClient({
             <option value="archived">أرشيف</option>
           </select>
         </label>
-      </section>
+        </section>
+      </div>
     ),
   };
 
   const pagesTab = {
     id: "pages",
-    label: usesHomeModuleChrome ? "الظهور في الصفحات" : "يظهر في الصفحات",
+    navigationLabel: usesHomeModuleChrome ? "الظهور" : "الصفحات",
+    sectionHeading: "الظهور في الصفحات",
+    sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
+    icon: "plans" as const,
     content: (
-      <ModulePageAssignmentsField pages={assignmentContext.pages} assignedPageIds={assignedPageIds} />
+      <div className="space-y-5">
+        <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
+        <ModulePageAssignmentsField pages={assignmentContext.pages} assignedPageIds={assignedPageIds} />
+      </div>
     ),
   };
 
@@ -313,17 +327,26 @@ export default function ContentModuleEditClient({
     ? [
         {
           id: "text",
-          label: "النص",
+          navigationLabel: "النص",
+          sectionHeading: "نص قسم القصة",
+          sectionDescription: "أدر العنوان والنصوص التعريفية للقسم.",
+          icon: "content" as const,
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="text" />,
         },
         {
           id: "images",
-          label: "الصور",
+          navigationLabel: "الصور",
+          sectionHeading: "صور قسم القصة",
+          sectionDescription: "اختر صور القسم واضبط أوصافها وترتيبها.",
+          icon: "media" as const,
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="images" />,
         },
         {
           id: "cta",
-          label: "الزر والرابط",
+          navigationLabel: "الزر والرابط",
+          sectionHeading: "زر قسم القصة",
+          sectionDescription: "أدر نص زر الإجراء ووجهته.",
+          icon: "section" as const,
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="cta" />,
         },
         pagesTab,
@@ -335,28 +358,102 @@ export default function ContentModuleEditClient({
     ? [
         {
           id: "text",
-          label: "النص",
+          navigationLabel: "النص",
+          sectionHeading: "نص قسم التواصل",
+          sectionDescription: "أدر العنوان والنصوص التعريفية للقسم.",
+          icon: "content" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="text" />,
         },
         {
           id: "image",
-          label: "الصورة",
+          navigationLabel: "الصورة",
+          sectionHeading: "صورة قسم التواصل",
+          sectionDescription: "اختر صورة القسم وأضف وصفها البديل.",
+          icon: "media" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="image" />,
         },
         {
           id: "cta",
-          label: "الزر والرابط",
+          navigationLabel: "الزر والرابط",
+          sectionHeading: "زر قسم التواصل",
+          sectionDescription: "أدر نص زر الإجراء ووجهته والملاحظة المصاحبة.",
+          icon: "section" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="cta" />,
         },
         {
           id: "contacts",
-          label: "وسائل التواصل",
+          navigationLabel: "وسائل التواصل",
+          sectionHeading: "وسائل التواصل",
+          sectionDescription: "أدر بيانات التواصل وترتيب ظهورها وروابطها.",
+          icon: "location" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="contacts" />,
         },
         pagesTab,
         settingsTab,
       ]
     : [];
+
+  const aboutCtaTabs = isAboutCta
+    ? [
+        {
+          id: "text",
+          navigationLabel: "النص",
+          sectionHeading: "نص الدعوة للتواصل",
+          sectionDescription: "أدر العنوان التمهيدي والعنوان والوصف.",
+          icon: "content" as const,
+          content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="text" />,
+        },
+        {
+          id: "image",
+          navigationLabel: "الصورة",
+          sectionHeading: "صورة الدعوة للتواصل",
+          sectionDescription: "اختر صورة القسم وأضف وصفها البديل.",
+          icon: "media" as const,
+          content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="image" />,
+        },
+        {
+          id: "cta",
+          navigationLabel: "الزر والرابط",
+          sectionHeading: "زر الدعوة للتواصل",
+          sectionDescription: "أدر نص زر الإجراء ووجهته والملاحظة المصاحبة.",
+          icon: "section" as const,
+          content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="cta" />,
+        },
+        {
+          id: "contacts",
+          navigationLabel: "وسائل التواصل",
+          sectionHeading: "بيانات التواصل",
+          sectionDescription: "أدر بيانات التواصل وترتيب ظهورها وروابطها.",
+          icon: "location" as const,
+          content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="contacts" />,
+        },
+        pagesTab,
+        settingsTab,
+      ]
+    : [];
+
+  const savedMessage = isAboutIntro
+    ? "تم حفظ موديول من نحن — المقدمة بنجاح."
+    : isAboutIntroSingleImage
+      ? "تم حفظ موديول المحتوى والصورة الواحدة بنجاح."
+      : isVisionGoals
+        ? "تم حفظ موديول الرؤية والأهداف بنجاح."
+        : isAboutCta
+          ? "تم حفظ موديول الدعوة للتواصل بنجاح."
+          : isAboutPrinciples
+            ? "تم حفظ موديول المبادئ بنجاح."
+            : isAboutApproach
+              ? "تم حفظ موديول المنهج بنجاح."
+              : isHomeStory
+                ? "تم حفظ الموديول وتحديث الصفحة الرئيسية بنجاح."
+                : isHomeContact
+                  ? "تم حفظ موديول التواصل وتحديث الصفحة الرئيسية بنجاح."
+                  : isHomeProjects
+                    ? "تم حفظ موديول المشاريع وتحديث الصفحة الرئيسية بنجاح."
+                    : isHomeTrust
+                      ? "تم حفظ موديول الثقة وتحديث الصفحة الرئيسية بنجاح."
+                      : "تم حفظ الموديول بنجاح.";
+  const activePanelContext = saved ? <AdminNotice variant="success" message={savedMessage} /> : null;
 
   return (
     <div className={`space-y-6 ${usesUnifiedModuleChrome ? "pb-28" : "pb-10"}`} dir="rtl">
@@ -563,55 +660,6 @@ export default function ContentModuleEditClient({
         />
       )}
 
-      {isAboutIntro && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول من نحن — المقدمة بنجاح." />
-      ) : null}
-
-      {isAboutIntroSingleImage && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول المحتوى والصورة الواحدة بنجاح." />
-      ) : null}
-
-      {isVisionGoals && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول الرؤية والأهداف بنجاح." />
-      ) : null}
-
-      {isAboutCta && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول الدعوة للتواصل بنجاح." />
-      ) : null}
-
-      {isAboutPrinciples && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول المبادئ بنجاح." />
-      ) : null}
-
-      {isAboutApproach && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول المنهج بنجاح." />
-      ) : null}
-
-      {isHomeStory && saved ? (
-        <AdminNotice variant="success" message="تم حفظ الموديول وتحديث الصفحة الرئيسية بنجاح." />
-      ) : null}
-
-      {isHomeContact && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول التواصل وتحديث الصفحة الرئيسية بنجاح." />
-      ) : null}
-
-      {isHomeProjects && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول المشاريع وتحديث الصفحة الرئيسية بنجاح." />
-      ) : null}
-
-      {isHomeTrust && saved ? (
-        <AdminNotice variant="success" message="تم حفظ موديول الثقة وتحديث الصفحة الرئيسية بنجاح." />
-      ) : null}
-
-      {usesProjectsHubHeader && saved ? (
-        <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
-      ) : null}
-
-      <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-      {usesUnifiedModuleChrome || usesProjectsHubHeader ? null : (
-        <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
-      )}
-
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
         <input
@@ -666,15 +714,21 @@ export default function ContentModuleEditClient({
         {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
 
         {isHomeStory ? (
-          <AdminModuleTabs nowrap tabs={homeStoryTabs} />
+          <AdminModuleTabs nowrap tabs={homeStoryTabs} activePanelContext={activePanelContext} />
         ) : isHomeContact ? (
-          <AdminModuleTabs nowrap tabs={homeContactTabs} />
+          <AdminModuleTabs nowrap tabs={homeContactTabs} activePanelContext={activePanelContext} />
+        ) : isAboutCta ? (
+          <AdminModuleTabs nowrap tabs={aboutCtaTabs} activePanelContext={activePanelContext} />
         ) : (
           <AdminModuleTabs
+            activePanelContext={activePanelContext}
             tabs={[
               {
                 id: "content",
-                label: "المحتوى",
+                navigationLabel: "المحتوى",
+                sectionHeading: "محتوى الموديول",
+                sectionDescription: "أدر المحتوى والإعدادات المتخصصة لهذا الموديول.",
+                icon: "content",
                 content:
                   editorKey === "about-intro" ? (
                     <AboutIntroModuleEditor
@@ -687,11 +741,6 @@ export default function ContentModuleEditClient({
                     />
                   ) : editorKey === "vision-goals" ? (
                     <VisionGoalsModuleEditor config={config as ReturnType<typeof asVisionGoalsConfig>} />
-                  ) : editorKey === "about-cta" ? (
-                    <AboutCtaModuleEditor
-                      config={config as ReturnType<typeof asAboutCtaConfig>}
-                      editorMode="about-cta"
-                    />
                   ) : editorKey === "home-trust" ? (
                     <AboutPrinciplesModuleEditor
                       config={config as ReturnType<typeof asAboutPrinciplesConfig>}
@@ -722,8 +771,8 @@ export default function ContentModuleEditClient({
                     <GenericContentModuleEditor config={config as ReturnType<typeof asContentConfig>} />
                   ),
               },
-              { ...settingsTab, id: "meta", label: "الإعدادات" },
-              { ...pagesTab, id: "pages", label: "يظهر في الصفحات" },
+              { ...settingsTab, id: "meta" },
+              pagesTab,
             ]}
           />
         )}

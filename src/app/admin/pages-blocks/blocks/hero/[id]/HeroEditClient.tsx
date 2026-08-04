@@ -240,7 +240,6 @@ export default function HeroEditClient({
   const orderTab = !isHomeHero ? (
     <div className="mx-auto max-w-5xl">
       <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-        <h2 className="text-base font-semibold text-white">ترتيب عناصر الهيرو</h2>
         <HeroElementOrderEditor defaultOrder={controls.heroElementOrder} />
       </section>
     </div>
@@ -265,41 +264,49 @@ export default function HeroEditClient({
         }
       />
 
-      {mediaSynchronizationWarning ? (
-        <AdminNotice
-          variant="warning"
-          message="تم حفظ بيانات الموديول، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
-        />
-      ) : saved ? (
-        <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
-      ) : null}
-
-      <ModuleCrossPageUsageBanner moduleName={hero.name} assignments={assignmentContext.assignments} />
-
       <form action={updateHeroTemplateDetails}>
         <input type="hidden" name="id" value={hero.id} />
         <input type="hidden" name="style_preset" value={hero.style_preset ?? "cinematic-gold"} />
 
         <AdminModuleTabs
           nowrap
+          activePanelContext={
+            mediaSynchronizationWarning ? (
+              <AdminNotice
+                variant="warning"
+                message="تم حفظ بيانات الموديول، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
+              />
+            ) : saved ? (
+              <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
+            ) : null
+          }
           tabs={[
             {
               id: "content",
-              label: "المحتوى",
+              navigationLabel: "المحتوى",
+              sectionHeading: "محتوى الهيرو",
+              sectionDescription: "أدر النصوص والعناصر الأساسية الظاهرة داخل الهيرو.",
+              icon: "content",
               content: contentTab,
             },
             ...(!isHomeHero
               ? [
                   {
                     id: "order",
-                    label: "ترتيب العناصر",
+                    navigationLabel: "ترتيب العناصر",
+                    sectionHeading: "ترتيب عناصر الهيرو",
+                    sectionDescription: "حدّد ترتيب ظهور عناصر الهيرو للصفحات الداخلية.",
+                    icon: "plans" as const,
                     content: orderTab,
                   },
                 ]
               : []),
             {
               id: "media-desktop",
-              label: "صور الديسكتوب",
+              navigationLabel: "صور الديسكتوب",
+              sectionHeading: "صور الهيرو على الشاشات الكبيرة",
+              sectionDescription: "اختر الصور ورتّبها واضبط موضعها في عرض الديسكتوب.",
+              icon: "media",
               content: (
                 <div className="mx-auto max-w-5xl">
                   <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
@@ -324,7 +331,10 @@ export default function HeroEditClient({
             },
             {
               id: "media-mobile",
-              label: "صور الموبايل",
+              navigationLabel: "صور الموبايل",
+              sectionHeading: "صور الهيرو على الموبايل",
+              sectionDescription: "أضف صورًا بديلة للموبايل أو اتركها فارغة لاستخدام صور الديسكتوب.",
+              icon: "media",
               content: (
                 <div className="mx-auto max-w-5xl">
                   <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
@@ -340,7 +350,10 @@ export default function HeroEditClient({
             },
             {
               id: "buttons",
-              label: "الأزرار",
+              navigationLabel: "الأزرار",
+              sectionHeading: "أزرار الهيرو وروابطها",
+              sectionDescription: "أدر نصوص أزرار الإجراء ووجهاتها.",
+              icon: "section",
               content: (
                 <div className="mx-auto max-w-5xl">
                   <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
@@ -401,11 +414,15 @@ export default function HeroEditClient({
             },
             {
               id: "display",
-              label: "العرض والربط",
+              navigationLabel: "العرض والربط",
+              sectionHeading: "إعدادات العرض والصفحات",
+              sectionDescription: "اضبط حالة الظهور والمصدر وراجع الصفحات المرتبطة بالهيرو.",
+              icon: "settings",
               content: (
-                <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-                    <h2 className="text-lg font-semibold text-white">إعدادات العرض</h2>
+                <div className="mx-auto max-w-5xl space-y-5">
+                  <ModuleCrossPageUsageBanner moduleName={hero.name} assignments={assignmentContext.assignments} />
+                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
 
                     <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
                       <span>إظهار الهيرو</span>
@@ -455,9 +472,10 @@ export default function HeroEditClient({
                         className={fieldClassName("h-11")}
                       />
                     </label>
-                  </section>
+                    </section>
 
-                  <ModulePageAssignmentsField pages={pages} assignedPageIds={assignedPageIds} />
+                    <ModulePageAssignmentsField pages={pages} assignedPageIds={assignedPageIds} />
+                  </div>
                 </div>
               ),
             },

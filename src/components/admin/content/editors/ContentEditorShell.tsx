@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import type { ContentType } from "../../../../lib/admin/content/content-types";
 import type {
   AdminFormAction,
@@ -24,7 +22,6 @@ type ContentEditorShellProps = {
   formId: string;
   tabs: AdminModuleTab[];
   initialState?: AdminFormActionState;
-  beforeTabs?: ReactNode;
 };
 
 const CONTENT_REVIEW_TAB_SECTION = {
@@ -44,7 +41,6 @@ export default function ContentEditorShell({
   formId,
   tabs,
   initialState,
-  beforeTabs,
 }: ContentEditorShellProps) {
   const presentedTabs: AdminModuleTab[] = tabs.map((tab) =>
     tab.id === "publish"
@@ -71,7 +67,6 @@ export default function ContentEditorShell({
     >
       {entityId ? <input type="hidden" name="id" value={entityId} /> : null}
       <input type="hidden" name="content_type" value={contentType} />
-      {beforeTabs}
       <AdminModuleTabs
         tabs={presentedTabs}
         variant="editor"
