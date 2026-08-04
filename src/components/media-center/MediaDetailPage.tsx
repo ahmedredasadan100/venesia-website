@@ -5,7 +5,7 @@ import JsonLd from "../seo/JsonLd";
 import TopicViewTracker from "../content/TopicViewTracker";
 import { getMediaItemBySlug, getMediaItems } from "../../lib/media-center";
 import { MEDIA_DETAIL_PAGE_CONFIG, type MediaDetailPageKey } from "../../lib/media-center/detail-page-config";
-import { loadMediaCenterSidebarProps } from "../../lib/media-sidebar-modules/load-media-sidebar-modules";
+import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 import { buildPageJsonLd } from "../../lib/seo/build-jsonld";
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 import MediaDetailArticle from "./MediaDetailArticle";
@@ -19,15 +19,16 @@ type MediaDetailPageProps = {
 export default async function MediaDetailPage({ configKey, slug }: MediaDetailPageProps) {
   const config = MEDIA_DETAIL_PAGE_CONFIG[configKey];
 
-  const [item, allItems, sidebarProps] = await Promise.all([
+  const [item, allItems, composition] = await Promise.all([
     getMediaItemBySlug(config.mediaType, slug),
     getMediaItems(config.mediaType),
-    loadMediaCenterSidebarProps(config.cmsPageSlug),
+    loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
   ]);
 
   if (!item) {
     notFound();
   }
+  if (!composition.mediaSidebarModules) return null;
 
   const relatedItems = allItems
     .filter((relatedItem) => relatedItem.slug !== item.slug)
@@ -70,11 +71,7 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
       {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}
       <JsonLd data={pageJsonLd} />
 
-      <MediaPageShell
-        latestNewsSidebar={sidebarProps.latestNewsSidebar}
-        popularMediaSidebarItems={sidebarProps.popularMediaSidebarItems}
-        sidebarModules={sidebarProps.sidebarModules}
-      >
+      <MediaPageShell sidebarModules={composition.mediaSidebarModules}>
         <MediaDetailArticle
           item={item}
           content={content}

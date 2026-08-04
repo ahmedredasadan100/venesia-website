@@ -6,7 +6,7 @@ import {
   parseMediaSlotConfig,
   parseMenuSlotConfig,
   parseTextSlotConfig,
-} from "./parse-footer-slots";
+} from "./parse-footer-slot-config";
 
 export type FooterBlockDefinition<T extends FooterBlockType = FooterBlockType> = {
   type: T;

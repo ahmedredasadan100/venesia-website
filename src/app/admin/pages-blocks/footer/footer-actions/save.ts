@@ -2,8 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
-import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
-import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { coordinateMediaReferenceDomainMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import { buildMediaReferenceWriteScope } from "../../../../../lib/admin/media-catalog/reference-providers";
 import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
@@ -19,8 +17,7 @@ import type { FooterBuilderSaveInput } from "./types";
 import {
   sanitizeContactItems,
   sanitizeSocialLinks,
-  syncBrandFromSlots,
-  upsertSettings,
+  saveFooterSettingsWithAudit,
   usesGlobalContactPool,
 } from "./helpers";
 
@@ -39,14 +36,12 @@ export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
     throw new Error("أضف رابط سوشيال واحدًا على الأقل.");
   }
 
-  const brand = syncBrandFromSlots(validatedSlots);
   const legal: FooterLegal = {
     copyright: input.legal.copyright.trim() || "Venesia Developments. All rights reserved.",
     tagline: input.legal.tagline.trim() || "Trust Built On Ground",
   };
   const settings = [
     { key: FOOTER_SLOTS_SETTING_KEY, value: validatedSlots },
-    { key: "footer.brand", value: brand },
     { key: "footer.contact_items", value: contactItems },
     { key: "footer.social_links", value: socialLinks },
     { key: "footer.legal", value: legal },
@@ -66,7 +61,16 @@ export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
         actorId: adminUser.id,
         requestIdentity: `footer:update:${crypto.randomUUID()}`,
         mutate: async () => {
-          await upsertSettings(settings);
+          await saveFooterSettingsWithAudit({
+            settings,
+            actor: adminUser,
+            action: "footer_settings.update",
+            metadata: {
+              slots_count: validatedSlots.slots.length,
+              contact_items_count: contactItems.length,
+              social_links_count: socialLinks.length,
+            },
+          });
           return settings;
         },
         resolveEntityIdentity: () => FOOTER_SLOTS_SETTING_KEY,
@@ -80,17 +84,6 @@ export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
       throw error;
     }
   })();
-
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("footer_settings", "update"),
-    entityType: "footer_settings",
-    entityLabel: FOOTER_SLOTS_SETTING_KEY,
-    metadata: {
-      slots_count: validatedSlots.slots.length,
-      contact_items_count: contactItems.length,
-      social_links_count: socialLinks.length,
-    },
-  });
 
   revalidateFooterPublicPaths();
   revalidatePath("/admin/pages-blocks/footer");

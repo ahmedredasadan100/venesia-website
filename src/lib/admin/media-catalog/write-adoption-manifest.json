@@ -375,8 +375,6 @@
       "structuredWarning": false,
       "sourceFiles": [
         "scripts/about-stability-test.mjs",
-        "scripts/apply-footer-settings-seed.mjs",
-        "scripts/apply-footer-slots-migration.mjs",
         "scripts/apply-home-contact-seed.mjs",
         "scripts/apply-home-main-sort-order.mjs",
         "scripts/apply-home-projects-seed.mjs",
@@ -389,7 +387,6 @@
         "scripts/cleanup-e2e-test-data.mjs",
         "scripts/e2e-topics-feed-test.mjs",
         "scripts/fix-project-image-paths.mjs",
-        "scripts/footer-slots-fallback-test.mjs",
         "scripts/home-hero-stabilization-test.mjs",
         "scripts/home-projects-stabilization-test.mjs",
         "scripts/media-center-admin-public-e2e.mjs",

@@ -1,46 +1,33 @@
-# Footer Builder — internal notes
+# Footer Builder — canonical ownership
 
-## Scope
+## Public contract
 
-Admin UI at `/admin/pages-blocks/footer` for the four public footer columns plus social/legal bar settings.
+The Footer is persisted only in these non-overlapping `site_settings` keys:
 
-**Public footer** (`SiteFooter`, slot renderers) is not edited from here — only `site_settings` values consumed at runtime.
+- `footer.slots` — four-column composition and slot-owned content.
+- `footer.contact_items` — ordered global contact pool referenced by contact slots.
+- `footer.social_links` — ordered social/legal-bar links.
+- `footer.legal` — copyright and footer tagline.
 
-## Column model
+`footer.brand` was removed by `20260805090000_footer_public_composition_truth_closure.sql` after exact parity proof. It must not be recreated.
 
-- Four fixed **positions** (`index` 1–4). Order in the public grid follows `index` ascending (RTL: position 1 is the first column from the right).
-- Each position can be any block type: `text`, `menu`, `contact`, `media`, `custom_links` (Links).
-- Block type controls **content and inner markup style** only (menu line vs media diamond, etc.). Grid, spacing, and responsive layout stay in `SiteFooter`.
+## Read and outage behavior
 
-## Menus vs Links
+`loadFooterSettings()` is the only public Footer settings loader. It accepts the four persisted keys only and reports `database`, `missing`, `invalid`, or `error` through `sourceStatus`.
 
-| Source | Storage | Footer Builder |
-|--------|---------|----------------|
-| **Menu** block | Reads `menus` / `menu_items` via navigation | Select source (`location`, `menu_id`, fallback). **Read-only** preview of footer menu items. **Never writes** `menu_items`. |
-| **Links** block (`custom_links`) | `site_settings` → `footer.slots` | Manual Label + URL rows saved with slots. |
-| **Media** manual links | `site_settings` → slot config | Same as Links but rendered with media column style. |
+Missing, invalid, or unavailable data produces an explicit empty fail-safe state. Public rendering never turns an Admin reset template or code defaults into published content.
 
-Create and edit all real menus in **Menus Admin** (`/admin/pages-blocks/menus`).
+## Persistence and Audit
 
-## Restore Default
+`save_footer_settings(...)` is the service-role-only atomic persistence owner. It accepts canonical Footer keys only and writes the Audit event in the same database transaction. The Admin save and reset actions both use this owner before cache/path revalidation.
 
-`restoreDefaultFooterAction` resets `footer.slots` to `DEFAULT_FOOTER_SLOTS` (Text | Contact | Menu | Media) and syncs `footer.brand` headings from the text/contact/media slots. Does not delete `menu_items` or other legacy keys.
+The Admin “Restore default” button uses `DEFAULT_FOOTER_SLOTS` as an intentional write template. That template is never a public read fallback.
 
-## Fallback behavior
+## Menus and links
 
-`loadFooterSettings()` (`src/lib/footer/load-footer-settings.ts`):
+Menu slots consume the current Navigation owner. The Footer Builder does not write `menu_items`. Manual links remain inside the relevant `footer.slots` config.
 
-1. If `footer.slots` is missing → build slots from `footer.brand` (legacy).
-2. If `footer.slots` is invalid → log error, same legacy build.
-3. Legacy keys (`footer.brand`, `footer.contact_items`, `footer.social_links`, `footer.legal`) remain required for social bar and global contact pool.
+## Verification
 
-## Seed / migration scripts
-
-- `node scripts/apply-footer-settings-seed.mjs` — legacy keys + footer menu in Menus Admin + `footer.slots` **only if missing**.
-- `node scripts/apply-footer-slots-migration.mjs` — `footer.slots` only, idempotent insert.
-- Shared default layout: `scripts/lib/footer-default-slots.mjs` (mirror `src/lib/footer/build-slots-from-legacy.ts`).
-
-## Smoke tests
-
-- `node scripts/footer-settings-test.mjs [port]`
-- `node scripts/footer-slots-fallback-test.mjs [port]` (requires running app; temporarily mutates `footer.slots`)
+- `npm run verify:footer-public-composition-truth`
+- `node --env-file=.env.local scripts/verify-footer-public-composition-truth-db.mjs`

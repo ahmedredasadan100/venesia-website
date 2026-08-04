@@ -9,9 +9,7 @@ import {
 } from "react";
 import MediaSidebar from "./MediaSidebar";
 import { useMediaCenterCmsBlocks } from "./MediaCenterCmsBlocksContext";
-import type { MediaSidebarItem } from "../../lib/media-center/types";
 import type { MediaSidebarModulesState } from "../../lib/media-sidebar-modules/types";
-import { DEFAULT_MEDIA_SIDEBAR_MODULES } from "../../lib/media-sidebar-modules/defaults";
 
 type MediaSearchContextValue = {
   searchQuery: string;
@@ -35,18 +33,14 @@ export function useMediaSearch() {
 
 type MediaPageShellProps = {
   children: ReactNode;
-  latestNewsSidebar?: MediaSidebarItem[];
-  popularMediaSidebarItems?: MediaSidebarItem[];
-  sidebarModules?: MediaSidebarModulesState;
+  sidebarModules: MediaSidebarModulesState;
   prefixBlocks?: ReactNode;
   suffixBlocks?: ReactNode;
 };
 
 export default function MediaPageShell({
   children,
-  latestNewsSidebar = [],
-  popularMediaSidebarItems = [],
-  sidebarModules = DEFAULT_MEDIA_SIDEBAR_MODULES,
+  sidebarModules,
   prefixBlocks: prefixBlocksProp,
   suffixBlocks: suffixBlocksProp,
 }: MediaPageShellProps) {
@@ -68,8 +62,6 @@ export default function MediaPageShell({
             <MediaSidebar
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              latestNewsSidebar={latestNewsSidebar}
-              popularMediaSidebarItems={popularMediaSidebarItems}
               sidebarModules={sidebarModules}
             />
           </div>

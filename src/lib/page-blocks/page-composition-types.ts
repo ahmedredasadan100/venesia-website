@@ -1,8 +1,10 @@
 import type { ResolvedFeedModule } from "../feed-modules/types";
+import type { HeroSectionVisibility } from "../load-hero-section";
+import type { MediaHubModulesState } from "../media-hub-modules/types";
+import type { MediaSidebarModulesState } from "../media-sidebar-modules/types";
 import type { HeroSectionData } from "../page-sections";
-import type { HomeModuleSlug } from "./home-module-slugs";
-import type { ResolvedPageBlock } from "./types";
 import type { PageLayoutSlot } from "./layout-slots";
+import type { ResolvedPageBlock } from "./types";
 
 export type PageLayoutMode = "stack" | "main-sidebar";
 
@@ -32,21 +34,15 @@ export type SlotEntry = HeroSlotEntry | BlockSlotEntry | FeedSlotEntry;
 export type PageComposition = {
   layoutMode: PageLayoutMode;
   slots: Record<PageLayoutSlot, SlotEntry[]>;
-  /**
-   * Assignment rows exist for the page (blocks and/or feeds), before
-   * visibility / published filters. Use to honor CMS-managed pages when
-   * everything is hidden or draft.
-   */
+  heroVisibility: HeroSectionVisibility;
+  mediaHubModules: MediaHubModulesState | null;
+  mediaSidebarModules: MediaSidebarModulesState | null;
+  /** Assignment rows exist before visibility/publication filters. */
   hasAnyAssignmentRows: boolean;
-  /** Visible + published modules that entered slots. */
+  /** Visible and published modules that entered slots. */
   hasRenderableModules: boolean;
-  /** Loader query failure — do not treat as virgin/empty CMS. */
+  /** Any canonical composition query failed. */
   hasCompositionError: boolean;
-  /**
-   * @deprecated Alias of hasRenderableModules. Prefer hasAnyAssignmentRows
-   * when choosing CMS layout vs static shell.
-   */
+  /** @deprecated Alias of hasRenderableModules. */
   hasAssignments: boolean;
-  /** Home modules with an assignment row where is_visible=false — suppress fallback rendering. */
-  hiddenHomeModuleSlugs?: HomeModuleSlug[];
 };

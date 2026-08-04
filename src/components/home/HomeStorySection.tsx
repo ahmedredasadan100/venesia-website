@@ -7,44 +7,8 @@ import RichTextContent from "../content/RichTextContent";
 import { usePressFeedback, useTouchInViewReveal } from "../../hooks/use-press-feedback";
 import type {
   HomeStoryButtonAlignment,
-  HomeStoryButtonIcon,
-  HomeStoryButtonIconPosition,
   HomeStoryContent,
 } from "./home-cms-mappers";
-
-const STATIC_DEFAULTS = {
-  eyebrow: "FROM VISION TO EXECUTION",
-  title: "من المخطط إلى التنفيذ",
-  subtitle: "",
-  body: [
-    "كل مشروع يبدأ بفكرة، لكن القيمة الحقيقية تظهر عندما تتحول الفكرة إلى تنفيذ يمكن متابعته خطوة بخطوة.",
-    "لهذا نوثق مراحل التنفيذ، ونشارك التقدم الفعلي على الأرض، لأن الثقة تُبنى بما يمكن رؤيته لا بما يمكن قوله.",
-  ].join("\n\n"),
-  images: {
-    main: "/images/home/story-main.jpg",
-    secondary: "/images/home/story-secondary.jpg",
-    mainAlt: "",
-    secondaryAlt: "",
-  },
-  button: {
-    label: "شاهد مراحل التنفيذ",
-    href: "/track-your-project",
-    target: "_self" as const,
-    alignment: "right" as const,
-    icon: "none" as const,
-    iconPosition: "right" as const,
-  },
-} satisfies HomeStoryContent & {
-  images: { main: string; secondary: string; mainAlt: string; secondaryAlt: string };
-  button: {
-    label: string;
-    href: string;
-    target: "_self" | "_blank";
-    alignment: HomeStoryButtonAlignment;
-    icon: HomeStoryButtonIcon;
-    iconPosition: HomeStoryButtonIconPosition;
-  };
-};
 
 const BUTTON_ALIGN_CLASS: Record<HomeStoryButtonAlignment, string> = {
   // Section is RTL: flex-start = physical right, flex-end = physical left.
@@ -74,34 +38,30 @@ function StoryCtaArrow({ pointLeft }: { pointLeft: boolean }) {
   );
 }
 
-function resolveHomeStoryContent(content?: HomeStoryContent | null) {
-  if (!content) return STATIC_DEFAULTS;
-
-  const body = content.body?.trim() ? content.body : STATIC_DEFAULTS.body;
-
+function resolveHomeStoryContent(content: HomeStoryContent) {
   return {
-    eyebrow: content.eyebrow?.trim() || STATIC_DEFAULTS.eyebrow,
-    title: content.title?.trim() || STATIC_DEFAULTS.title,
-    body,
+    eyebrow: content.eyebrow.trim(),
+    title: content.title.trim(),
+    body: content.body.trim(),
     images: {
-      main: content.images?.main || STATIC_DEFAULTS.images.main,
-      secondary: content.images?.secondary || STATIC_DEFAULTS.images.secondary,
-      mainAlt: content.images?.mainAlt ?? STATIC_DEFAULTS.images.mainAlt,
-      secondaryAlt: content.images?.secondaryAlt ?? STATIC_DEFAULTS.images.secondaryAlt,
+      main: content.images?.main ?? "",
+      secondary: content.images?.secondary ?? "",
+      mainAlt: content.images?.mainAlt ?? "",
+      secondaryAlt: content.images?.secondaryAlt ?? "",
     },
     button: {
-      label: content.button?.label?.trim() || STATIC_DEFAULTS.button.label,
-      href: content.button?.href?.trim() || STATIC_DEFAULTS.button.href,
+      label: content.button?.label?.trim() ?? "",
+      href: content.button?.href?.trim() ?? "",
       target: content.button?.target === "_blank" ? ("_blank" as const) : ("_self" as const),
-      alignment: content.button?.alignment ?? STATIC_DEFAULTS.button.alignment,
-      icon: content.button?.icon ?? STATIC_DEFAULTS.button.icon,
-      iconPosition: content.button?.iconPosition ?? STATIC_DEFAULTS.button.iconPosition,
+      alignment: content.button?.alignment ?? "right",
+      icon: content.button?.icon ?? "none",
+      iconPosition: content.button?.iconPosition ?? "right",
     },
   };
 }
 
 export type HomeStorySectionProps = {
-  content?: HomeStoryContent | null;
+  content: HomeStoryContent;
 };
 
 function HomeStoryMediaFrame({
@@ -174,6 +134,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
   const showArrow = resolved.button.icon === "arrow";
   const iconOnRight = resolved.button.iconPosition === "right";
   const { ref: mediaRef, inViewProps } = useTouchInViewReveal(0.4);
+  if (!resolved.images.main || !resolved.images.secondary) return null;
 
   return (
     <section className="relative overflow-hidden bg-[#05070B] py-24 text-white max-md:py-10 md:max-lg:py-16">

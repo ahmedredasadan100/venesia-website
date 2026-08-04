@@ -1,7 +1,10 @@
 import "server-only";
 
 import { loadFeedModuleStateForPageSlug } from "../feed-modules/load-feed-modules";
-import { getHeroSectionByPageSlug } from "../load-hero-section";
+import { getHeroSectionState } from "../load-hero-section";
+import { isMediaCenterCmsPageSlug } from "../media-center-page-config";
+import { queryMediaHubModules } from "../media-hub-modules/load-media-hub-modules";
+import { queryMediaSidebarModules } from "../media-sidebar-modules/load-media-sidebar-modules";
 import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageComposition, PageLayoutMode, SlotEntry } from "./page-composition-types";
 import { loadPageBlockStateBySlug } from "./load-page-blocks";
@@ -36,10 +39,13 @@ export async function loadPageCompositionBySlug(
   pageSlug: string,
   layoutMode: PageLayoutMode = "stack",
 ): Promise<PageComposition> {
-  const [hero, blockState, feedState] = await Promise.all([
-    getHeroSectionByPageSlug(pageSlug),
+  const isMediaCenterPage = isMediaCenterCmsPageSlug(pageSlug);
+  const [heroState, blockState, feedState, mediaHubModules, mediaSidebarModules] = await Promise.all([
+    getHeroSectionState(pageSlug),
     loadPageBlockStateBySlug(pageSlug),
     loadFeedModuleStateForPageSlug(pageSlug),
+    isMediaCenterPage && pageSlug === "media-center" ? queryMediaHubModules(pageSlug) : null,
+    isMediaCenterPage ? queryMediaSidebarModules(pageSlug) : null,
   ]);
 
   const slots = emptySlots();
@@ -57,12 +63,12 @@ export async function loadPageCompositionBySlug(
     });
   }
 
-  if (hero) {
+  if (heroState.hero) {
     slots.hero.push({
       kind: "hero",
-      assignmentId: hero.template?.id ?? hero.id,
+      assignmentId: heroState.hero.template?.id ?? heroState.hero.id,
       sortOrder: 0,
-      hero,
+      hero: heroState.hero,
     });
   }
 
@@ -72,16 +78,21 @@ export async function loadPageCompositionBySlug(
 
   const hasAnyAssignmentRows = blockState.hasAnyAssignmentRows || feedState.hasAnyAssignmentRows;
   const hasRenderableModules = blockState.hasRenderableModules || feedState.modules.length > 0;
-  const hasCompositionError = blockState.hasCompositionError || feedState.hasCompositionError;
+  const hasCompositionError =
+    blockState.hasCompositionError ||
+    feedState.hasCompositionError ||
+    mediaHubModules?.sourceStatus === "error" ||
+    mediaSidebarModules?.sourceStatus === "error";
 
   return {
     layoutMode,
     slots,
+    heroVisibility: heroState.visibility,
+    mediaHubModules,
+    mediaSidebarModules,
     hasAnyAssignmentRows,
     hasRenderableModules,
     hasCompositionError,
     hasAssignments: hasRenderableModules,
-    hiddenHomeModuleSlugs:
-      pageSlug === "home" ? blockState.hiddenHomeModuleSlugs : undefined,
   };
 }

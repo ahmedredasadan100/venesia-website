@@ -112,6 +112,14 @@ type InfrastructureProof = {
   public_media_migrated_count?: number;
   public_media_seo_normalization_count?: number;
   public_media_published_count?: number;
+  footer_single_source?: boolean;
+  footer_orphan_setting_count?: number;
+  home_composition_assignment_count?: number;
+  media_hub_composition_assignment_count?: number;
+  media_sidebar_composition_assignment_count?: number;
+  media_hero_composition_assignment_count?: number;
+  public_composition_unresolved_reference_count?: number;
+  footer_public_composition_audit_count?: number;
 };
 
 async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
@@ -129,6 +137,7 @@ async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
     ["public_media_single_source", "Public Media single database source"],
     ["public_media_module_contract", "Public Media module adoption"],
     ["public_media_link_contract", "Public Media link adoption"],
+    ["footer_single_source", "Footer single database source"],
   ];
   const checks: GlobalSeoHealthCheck[] = entries.map(([key, title]) => ({
     id: key,
@@ -182,6 +191,54 @@ async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
       typeof publishedCount !== "number"
         ? "تعذر إثبات عدد عناصر Public Media المنشورة."
         : `${publishedCount} عنصر Public Media منشور من topics.`
+  });
+  const compositionCounts = [
+    ["home_composition_assignment_count", "Home CMS composition", 4],
+    ["media_hub_composition_assignment_count", "Media Hub composition", 5],
+    ["media_sidebar_composition_assignment_count", "Media Sidebar composition", 18],
+    ["media_hero_composition_assignment_count", "Media Center hero composition", 6],
+  ] as const;
+  for (const [key, title, expected] of compositionCounts) {
+    checks.push({
+      id: key,
+      dimension: "infrastructure",
+      status: proof[key] === expected ? "pass" : "fail",
+      weight: 6,
+      title,
+      detail: proof[key] === expected
+        ? `${expected} canonical published assignments are active.`
+        : `Expected ${expected} canonical assignments; database proof returned ${String(proof[key] ?? "unavailable")}.`,
+    });
+  }
+  checks.push({
+    id: "footer_orphan_settings",
+    dimension: "infrastructure",
+    status: proof.footer_orphan_setting_count === 0 ? "pass" : "fail",
+    weight: 6,
+    title: "Footer orphan settings",
+    detail: proof.footer_orphan_setting_count === 0
+      ? "No footer.brand or other diagnosed orphan owner remains."
+      : `${String(proof.footer_orphan_setting_count ?? "unavailable")} orphan Footer setting rows remain.`,
+  });
+  checks.push({
+    id: "public_composition_reference_integrity",
+    dimension: "infrastructure",
+    status: proof.public_composition_unresolved_reference_count === 0 ? "pass" : "fail",
+    weight: 8,
+    title: "Public composition reference integrity",
+    detail: proof.public_composition_unresolved_reference_count === 0
+      ? "All diagnosed Page Composition assignment references resolve to their current owners."
+      : `${String(proof.public_composition_unresolved_reference_count ?? "unavailable")} unresolved assignment references remain.`,
+  });
+  checks.push({
+    id: "footer_public_composition_audit_evidence",
+    dimension: "infrastructure",
+    status: proof.footer_public_composition_audit_count === 2 ? "pass" : "fail",
+    weight: 6,
+    title: "Footer/Public Composition migration evidence",
+    detail: proof.footer_public_composition_audit_count === 2
+      ? "Audit preserves the removed Footer owner and the verified CMS bootstrap-retirement inventory."
+      : `Expected 2 closure Audit rows; database proof returned ${String(proof.footer_public_composition_audit_count ?? "unavailable")}.`,
   });
   return checks;
 }

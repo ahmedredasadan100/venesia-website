@@ -1,11 +1,4 @@
-import type { FooterSlotsConfig, FooterSlotsSource } from "./footer-slot-types";
-
-export type FooterBrand = {
-  title: string;
-  tagline: string;
-  contactHeading: string;
-  mediaHeading: string;
-};
+import type { FooterSlotsConfig } from "./footer-slot-types";
 
 export type FooterContactItem = {
   icon?: string;
@@ -35,20 +28,21 @@ export type FooterLegal = {
   tagline: string;
 };
 
-export type { FooterSlotsConfig, FooterSlotsSource };
+export type { FooterSlotsConfig };
+
+export type FooterSourceStatus = "database" | "missing" | "invalid" | "error";
 
 export type FooterSettings = {
-  brand: FooterBrand;
   contactItems: FooterContactItem[];
   socialLinks: FooterSocialLink[];
   legal: FooterLegal;
   slots: FooterSlotsConfig;
-  slotsSource: FooterSlotsSource;
-  usesFallback: boolean;
+  sourceStatus: FooterSourceStatus;
+  sourceIssues: string[];
 };
 
 export const FOOTER_SETTING_KEYS = [
-  "footer.brand",
+  "footer.slots",
   "footer.contact_items",
   "footer.social_links",
   "footer.legal",
@@ -56,6 +50,6 @@ export const FOOTER_SETTING_KEYS = [
 
 export const FOOTER_SLOTS_SETTING_KEY = "footer.slots" as const;
 
-export const FOOTER_LOADER_SETTING_KEYS = [...FOOTER_SETTING_KEYS, FOOTER_SLOTS_SETTING_KEY] as const;
+export const FOOTER_LOADER_SETTING_KEYS = FOOTER_SETTING_KEYS;
 
 export type FooterSettingKey = (typeof FOOTER_SETTING_KEYS)[number];

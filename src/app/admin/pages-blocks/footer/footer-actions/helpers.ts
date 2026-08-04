@@ -1,53 +1,30 @@
-import {
-  DEFAULT_FOOTER_BRAND,
-  isSocialPlatform,
-} from "../../../../../lib/footer/defaults";
+import { isSocialPlatform } from "../../../../../lib/footer/defaults";
 import type {
   FooterContactSlotConfig,
   FooterSlotsConfig,
-  FooterTextSlotConfig,
 } from "../../../../../lib/footer/footer-slot-types";
 import {
   normalizeFooterContactItem,
 } from "../../../../../lib/footer/parse-footer-settings";
-import type { FooterBrand, FooterContactItem, FooterSocialLink } from "../../../../../lib/footer/types";
+import type { FooterContactItem, FooterSocialLink } from "../../../../../lib/footer/types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import type { AdminUserRecord } from "../../../../../lib/admin/auth/admin-users";
 
-export async function upsertSettings(
-  settings: readonly { key: string; value: unknown }[],
-) {
-  const updatedAt = new Date().toISOString();
-  const { error } = await getSupabaseAdmin()
-    .from("site_settings")
-    .upsert(
-      settings.map((setting) => ({
-        key: setting.key,
-        value: setting.value,
-        updated_at: updatedAt,
-      })),
-      { onConflict: "key" },
-    );
+export async function saveFooterSettingsWithAudit(input: {
+  settings: readonly { key: string; value: unknown }[];
+  actor: AdminUserRecord;
+  action: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const { error } = await getSupabaseAdmin().rpc("save_footer_settings", {
+    p_settings: input.settings,
+    p_actor_admin_user_id: input.actor.id,
+    p_actor_username: input.actor.username,
+    p_action: input.action,
+    p_metadata: input.metadata ?? {},
+  });
 
   if (error) throw new Error(error.message);
-}
-
-export async function upsertSetting(key: string, value: unknown) {
-  await upsertSettings([{ key, value }]);
-}
-
-export function syncBrandFromSlots(slots: FooterSlotsConfig): FooterBrand {
-  const textSlot = slots.slots.find((slot) => slot.type === "text");
-  const contactSlot = slots.slots.find((slot) => slot.type === "contact");
-  const mediaSlot = slots.slots.find((slot) => slot.type === "media");
-  const textConfig =
-    textSlot?.type === "text" ? (textSlot.config as FooterTextSlotConfig) : null;
-
-  return {
-    title: textConfig ? textConfig.title.trim() : DEFAULT_FOOTER_BRAND.title,
-    tagline: textConfig?.body.trim() || DEFAULT_FOOTER_BRAND.tagline,
-    contactHeading: contactSlot?.heading?.trim() || DEFAULT_FOOTER_BRAND.contactHeading,
-    mediaHeading: mediaSlot?.heading?.trim() || DEFAULT_FOOTER_BRAND.mediaHeading,
-  };
 }
 
 export function usesGlobalContactPool(slots: FooterSlotsConfig) {

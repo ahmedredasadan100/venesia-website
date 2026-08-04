@@ -24,10 +24,6 @@ import type {
 } from "./resolved-footer-types";
 import { isFooterContactItemPublic } from "./parse-footer-settings";
 import type { FooterContactItem, FooterSettings } from "./types";
-import {
-  getFallbackGlobalOrganizationIdentity,
-  type GlobalOrganizationIdentity,
-} from "../seo/resolve-global-organization-identity";
 
 export type FooterNavigationContext = {
   mainNavItems: PublicNavigationItem[];
@@ -61,31 +57,10 @@ function mapManualLinksToResolved(links: FooterManualLink[]): ResolvedFooterLink
 function resolveContactItems(
   config: FooterContactSlotConfig,
   globalItems: FooterContactItem[],
-  identity: GlobalOrganizationIdentity,
 ): FooterContactItem[] {
-  const normalizedIdentityPhone = identity.phone.replace(/\D+/g, "");
-  let phoneAdopted = Boolean(
-    normalizedIdentityPhone &&
-      globalItems.some(
-        (item) =>
-          item.href?.startsWith("tel:") && item.value.replace(/\D+/g, "") === normalizedIdentityPhone,
-      ),
-  );
   const items = config.source === "custom"
     ? config.items
-    : globalItems.map((item) => {
-        if (item.href?.startsWith("tel:") && identity.phone && !phoneAdopted) {
-          phoneAdopted = true;
-          return { ...item, value: identity.phone, href: `tel:${identity.phone.replace(/\s+/g, "")}` };
-        }
-        if (item.href?.startsWith("mailto:") && identity.email) {
-          return { ...item, value: identity.email, href: `mailto:${identity.email}` };
-        }
-        if (/maps\.google|maps\.app/i.test(item.href ?? "") && identity.address) {
-          return { ...item, value: identity.address };
-        }
-        return item;
-      });
+    : globalItems;
   return items.filter((item) => isFooterContactItemPublic(item));
 }
 
@@ -112,14 +87,13 @@ function resolveTextSlot(slot: FooterSlot<"text">): ResolvedFooterTextSlot {
 function resolveContactSlot(
   slot: FooterSlot<"contact">,
   globalItems: FooterContactItem[],
-  identity: GlobalOrganizationIdentity,
 ): ResolvedFooterContactSlot {
   return {
     index: slot.index,
     type: "contact",
     heading: slot.heading,
     revealDelay: revealDelayForIndex(slot.index),
-    items: resolveContactItems(slot.config, globalItems, identity),
+    items: resolveContactItems(slot.config, globalItems),
   };
 }
 
@@ -214,7 +188,6 @@ async function resolveSlot(
   slot: FooterSlot,
   settings: FooterSettings,
   nav: FooterNavigationContext,
-  identity: GlobalOrganizationIdentity,
 ): Promise<ResolvedFooterSlot | null> {
   if (!slot.enabled) return null;
 
@@ -222,7 +195,7 @@ async function resolveSlot(
     case "text":
       return resolveTextSlot(slot as FooterSlot<"text">);
     case "contact":
-      return resolveContactSlot(slot as FooterSlot<"contact">, settings.contactItems, identity);
+      return resolveContactSlot(slot as FooterSlot<"contact">, settings.contactItems);
     case "menu":
       return resolveMenuSlot(slot as FooterSlot<"menu">, nav);
     case "media":
@@ -237,10 +210,9 @@ async function resolveSlot(
 export async function resolveFooterComposition(
   settings: FooterSettings,
   nav: FooterNavigationContext,
-  identity: GlobalOrganizationIdentity = getFallbackGlobalOrganizationIdentity(),
 ): Promise<FooterComposition> {
   const resolved = await Promise.all(
-    settings.slots.slots.map((slot) => resolveSlot(slot, settings, nav, identity)),
+    settings.slots.slots.map((slot) => resolveSlot(slot, settings, nav)),
   );
 
   return {
