@@ -1,11 +1,11 @@
-import { runSitemapDiagnostics } from "../../../../lib/seo/run-sitemap-diagnostics";
+import { runGlobalSeoHealth } from "../../../../lib/seo/run-global-seo-health";
 
 import SitemapMonitorClient from "./SitemapMonitorClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function SitemapMonitorPage() {
-  const snapshot = await runSitemapDiagnostics();
+  const snapshot = await runGlobalSeoHealth();
 
   return <SitemapMonitorClient initialSnapshot={snapshot} />;
 }

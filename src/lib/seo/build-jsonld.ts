@@ -16,11 +16,15 @@ export function buildOrganizationSchema(global?: GlobalSeoSettings): JsonLdObjec
     ? resolveGlobalOrganizationIdentity(global)
     : getFallbackGlobalOrganizationIdentity();
   const baseUrl = identity.canonicalBaseUrl || identity.siteUrl || "";
+  const organizationId = baseUrl ? `${baseUrl.replace(/\/$/, "")}#organization` : undefined;
 
   const schema: JsonLdObject = {
     "@context": "https://schema.org",
     "@type": "RealEstateAgent",
+    "@id": organizationId,
     name: identity.displayName,
+    alternateName: identity.arabicName || undefined,
+    legalName: identity.legalName || undefined,
     url: baseUrl || undefined,
   };
 
@@ -42,9 +46,23 @@ export function buildOrganizationSchema(global?: GlobalSeoSettings): JsonLdObjec
   }
 
   if (identity.address) {
+    schema.address = { "@type": "PostalAddress", streetAddress: identity.address };
+  }
+
+  if (
+    identity.address ||
+    identity.addressLocality ||
+    identity.addressRegion ||
+    identity.postalCode ||
+    identity.addressCountry
+  ) {
     schema.address = {
       "@type": "PostalAddress",
-      streetAddress: identity.address,
+      streetAddress: identity.address || undefined,
+      addressLocality: identity.addressLocality || undefined,
+      addressRegion: identity.addressRegion || undefined,
+      postalCode: identity.postalCode || undefined,
+      addressCountry: identity.addressCountry || undefined,
     };
   }
 
@@ -52,12 +70,17 @@ export function buildOrganizationSchema(global?: GlobalSeoSettings): JsonLdObjec
     schema.sameAs = identity.socialLinks.map((item) => item.href);
   }
 
+  if (identity.displayTagline) schema.slogan = identity.displayTagline;
+  if (identity.areaServed) schema.areaServed = identity.areaServed;
+  if (identity.knowsAbout.length) schema.knowsAbout = identity.knowsAbout;
+
   return schema;
 }
 
 export function buildWebsiteSchema(global?: GlobalSeoSettings): JsonLdObject {
   const baseUrl = global?.canonicalBaseUrl || global?.siteUrl || "";
   const siteName = global?.siteName || global?.organizationName || "";
+  const organizationId = baseUrl ? `${baseUrl.replace(/\/$/, "")}#organization` : undefined;
 
   return {
     "@context": "https://schema.org",
@@ -66,8 +89,7 @@ export function buildWebsiteSchema(global?: GlobalSeoSettings): JsonLdObject {
     url: baseUrl || undefined,
     publisher: {
       "@type": "Organization",
-      name: global?.organizationName || siteName,
-      url: baseUrl || undefined,
+      "@id": organizationId,
     },
   };
 }
@@ -87,6 +109,7 @@ export function buildArticleSchema(
   const baseUrl = global?.canonicalBaseUrl || global?.siteUrl || "";
   const publisherName = global?.organizationName || global?.siteName || "";
   const logo = global?.organizationLogo || "";
+  const organizationId = baseUrl ? `${baseUrl.replace(/\/$/, "")}#organization` : undefined;
 
   return {
     "@context": "https://schema.org",
@@ -102,6 +125,7 @@ export function buildArticleSchema(
     },
     publisher: {
       "@type": "Organization",
+      "@id": organizationId,
       name: publisherName,
       ...(logo
         ? {

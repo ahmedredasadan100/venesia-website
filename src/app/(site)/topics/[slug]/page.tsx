@@ -64,7 +64,6 @@ export async function generateMetadata({
     type: "article",
     publishedTime: topic.publishedAt,
     modifiedTime: topic.publishedAt,
-    authors: ["Venesia Developments"],
     includePageSeo: false,
   });
 }

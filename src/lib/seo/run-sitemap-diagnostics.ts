@@ -2,7 +2,6 @@ import "server-only";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import {
-  buildSitemapAbsoluteUrl,
   countEntriesBySource,
   generateSitemapEntries,
   resolveCanonicalBaseUrl,
@@ -38,7 +37,9 @@ async function loadExcludedCounts(): Promise<SitemapExcludedCounts> {
     deletedMediaTopics,
     missingSlugTopics,
     missingSlugProjects,
-    trackNoindexPages,
+    noindexProjects,
+    noindexTopics,
+    noindexPages,
   ] = await Promise.all([
     supabase
       .from("projects")
@@ -68,32 +69,47 @@ async function loadExcludedCounts(): Promise<SitemapExcludedCounts> {
     supabase
       .from("topics")
       .select("id", { count: "exact", head: true })
-      .eq("content_type", "article")
       .or("slug.is.null,slug.eq."),
     supabase
       .from("projects")
       .select("id", { count: "exact", head: true })
       .or("slug.is.null,slug.eq."),
-    supabase
-      .from("projects")
-      .select("slug", { count: "exact", head: true })
+    supabase.from("projects").select("id", { count: "exact", head: true })
       .eq("publication_status", "published")
-      .not("slug", "is", null),
+      .eq("robots_index", false),
+    supabase.from("topics").select("id", { count: "exact", head: true })
+      .eq("status", "published").is("deleted_at", null).eq("robots_index", false),
+    supabase.from("pages").select("id", { count: "exact", head: true })
+      .eq("status", "published").eq("robots_index", false),
   ]);
+
+  const failed = [
+    unpublishedProjects,
+    unpublishedTopics,
+    unpublishedMediaTopics,
+    deletedTopics,
+    deletedMediaTopics,
+    missingSlugTopics,
+    missingSlugProjects,
+    noindexProjects,
+    noindexTopics,
+    noindexPages,
+  ].find((result) => result.error);
+  if (failed?.error) throw new Error(failed.error.message);
 
   const unpublished =
     (unpublishedProjects.count ?? 0) +
     (unpublishedTopics.count ?? 0) +
     (unpublishedMediaTopics.count ?? 0);
 
-  const deleted = (deletedTopics.count ?? 0) + (deletedMediaTopics.count ?? 0);
+  const deleted = deletedTopics.count ?? 0;
 
   const invalidOrMissingSlug = (missingSlugTopics.count ?? 0) + (missingSlugProjects.count ?? 0);
 
   return {
     unpublished,
     deleted,
-    noindex: trackNoindexPages.count ?? 0,
+    noindex: (noindexProjects.count ?? 0) + (noindexTopics.count ?? 0) + (noindexPages.count ?? 0),
     invalidOrMissingSlug,
   };
 }
@@ -102,28 +118,32 @@ async function findMissingPublishedRecords(entries: SitemapEntry[]) {
   const sitemapPaths = new Set(entries.map((entry) => entry.path));
   const missing: string[] = [];
 
-  const { data: projects } = await getSupabaseAdmin()
+  const { data: projects, error: projectsError } = await getSupabaseAdmin()
     .from("projects")
-    .select("slug")
+    .select("slug,robots_index")
     .eq("publication_status", "published")
     .not("slug", "is", null);
 
+  if (projectsError) throw new Error(projectsError.message);
   for (const project of projects ?? []) {
+    if (project.robots_index === false) continue;
     const path = `/projects/${project.slug}`;
     if (!sitemapPaths.has(path)) {
       missing.push(path);
     }
   }
 
-  const { data: topics } = await getSupabaseAdmin()
+  const { data: topics, error: topicsError } = await getSupabaseAdmin()
     .from("topics")
-    .select("slug")
+    .select("slug,robots_index")
     .eq("content_type", "article")
     .eq("status", "published")
     .is("deleted_at", null)
     .not("slug", "is", null);
 
+  if (topicsError) throw new Error(topicsError.message);
   for (const topic of topics ?? []) {
+    if (topic.robots_index === false) continue;
     const path = `/topics/${topic.slug}`;
     if (!sitemapPaths.has(path)) {
       missing.push(path);
@@ -136,39 +156,41 @@ async function findMissingPublishedRecords(entries: SitemapEntry[]) {
 async function findUnpublishedSitemapTargets(entries: SitemapEntry[]) {
   const invalid: string[] = [];
 
-  for (const entry of entries) {
-    if (entry.source === "projects" && entry.slug) {
-      const { data } = await getSupabaseAdmin()
-        .from("projects")
-        .select("publication_status")
-        .eq("slug", entry.slug)
-        .maybeSingle<{ publication_status: string }>();
-      if (!data || data.publication_status !== "published") {
-        invalid.push(entry.path);
-      }
-      continue;
-    }
+  const projectEntries = entries.filter((entry) => entry.source === "projects" && entry.entityId);
+  const topicEntries = entries.filter(
+    (entry) => (entry.source === "articles" || entry.source === "media") && entry.entityId,
+  );
+  const pageEntries = entries.filter((entry) => entry.source === "cms_pages" && entry.entityId);
+  const supabase = getSupabaseAdmin();
+  const [projects, topics, pages] = await Promise.all([
+    projectEntries.length
+      ? supabase.from("projects").select("id,publication_status").in("id", projectEntries.map((entry) => entry.entityId!))
+      : Promise.resolve({ data: [], error: null }),
+    topicEntries.length
+      ? supabase.from("topics").select("id,status,deleted_at").in("id", topicEntries.map((entry) => entry.entityId!))
+      : Promise.resolve({ data: [], error: null }),
+    pageEntries.length
+      ? supabase.from("pages").select("id,status").in("id", pageEntries.map((entry) => entry.entityId!))
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const error = projects.error ?? topics.error ?? pages.error;
+  if (error) throw new Error(error.message);
 
-    if (entry.source === "articles" && entry.slug) {
-      const { data } = await getSupabaseAdmin()
-        .from("topics")
-        .select("status, deleted_at")
-        .eq("slug", entry.slug)
-        .eq("content_type", "article")
-        .maybeSingle<{ status: string; deleted_at: string | null }>();
-      if (!data || data.status !== "published" || data.deleted_at) {
-        invalid.push(entry.path);
-      }
-    }
+  const projectStatus = new Map((projects.data ?? []).map((row) => [String(row.id), row.publication_status]));
+  const topicStatus = new Map((topics.data ?? []).map((row) => [String(row.id), row]));
+  const pageStatus = new Map((pages.data ?? []).map((row) => [String(row.id), row.status]));
+  for (const entry of projectEntries) {
+    if (projectStatus.get(String(entry.entityId)) !== "published") invalid.push(entry.path);
+  }
+  for (const entry of topicEntries) {
+    const row = topicStatus.get(String(entry.entityId));
+    if (!row || row.status !== "published" || row.deleted_at) invalid.push(entry.path);
+  }
+  for (const entry of pageEntries) {
+    if (pageStatus.get(String(entry.entityId)) !== "published") invalid.push(entry.path);
   }
 
   return invalid;
-}
-
-function findNoindexPathsInSitemap(entries: SitemapEntry[]) {
-  return entries
-    .filter((entry) => entry.path.startsWith("/track-your-project/") && entry.path !== "/track-your-project")
-    .map((entry) => entry.path);
 }
 
 function resolveOverallStatus(checks: SitemapCheckItem[]): SitemapMonitorSnapshot["status"] {
@@ -194,12 +216,18 @@ export async function runSitemapDiagnostics(): Promise<SitemapMonitorSnapshot> {
 
   const entries = generation.entries;
   const countsBySource = countEntriesBySource(entries);
-  const excludedCounts = await loadExcludedCounts().catch(() => ({
-    unpublished: 0,
-    deleted: 0,
-    noindex: 0,
-    invalidOrMissingSlug: 0,
-  }));
+  let excludedCounts: SitemapExcludedCounts;
+  try {
+    excludedCounts = await loadExcludedCounts();
+  } catch (error) {
+    excludedCounts = { unpublished: 0, deleted: 0, noindex: 0, invalidOrMissingSlug: 0 };
+    checks.push({
+      id: "excluded_counts_failure",
+      severity: "error",
+      title: "تعذر فحص السجلات المستبعدة",
+      detail: error instanceof Error ? error.message : "Unknown database failure",
+    });
+  }
 
   if (entries.length === 0) {
     checks.push({
@@ -210,13 +238,7 @@ export async function runSitemapDiagnostics(): Promise<SitemapMonitorSnapshot> {
     });
   }
 
-  const urlCounts = new Map<string, number>();
-  for (const entry of entries) {
-    urlCounts.set(entry.url, (urlCounts.get(entry.url) ?? 0) + 1);
-  }
-  const duplicateUrls = [...urlCounts.entries()]
-    .filter(([, count]) => count > 1)
-    .map(([url]) => url);
+  const duplicateUrls = generation.duplicateUrls;
   if (duplicateUrls.length > 0) {
     checks.push({
       id: "duplicate_urls",
@@ -263,19 +285,12 @@ export async function runSitemapDiagnostics(): Promise<SitemapMonitorSnapshot> {
     });
   }
 
-  const noindexInSitemap = findNoindexPathsInSitemap(entries);
-  if (noindexInSitemap.length > 0) {
-    checks.push({
-      id: "noindex_in_sitemap",
-      severity: "error",
-      title: "عناوين noindex داخل Sitemap",
-      detail: "صفحات متابعة المشروع الفردية مضبوطة على noindex ولا ينبغي أن تظهر في Sitemap.",
-      count: noindexInSitemap.length,
-      samples: summarize(noindexInSitemap),
-    });
+  let missingPublished: string[] = [];
+  try {
+    missingPublished = await findMissingPublishedRecords(entries);
+  } catch (error) {
+    checks.push({ id: "missing_published_query", severity: "error", title: "تعذر فحص السجلات المنشورة", detail: error instanceof Error ? error.message : "Unknown database failure" });
   }
-
-  const missingPublished = await findMissingPublishedRecords(entries).catch(() => []);
   if (missingPublished.length > 0) {
     checks.push({
       id: "missing_published_records",
@@ -287,7 +302,12 @@ export async function runSitemapDiagnostics(): Promise<SitemapMonitorSnapshot> {
     });
   }
 
-  const unpublishedTargets = await findUnpublishedSitemapTargets(entries).catch(() => []);
+  let unpublishedTargets: string[] = [];
+  try {
+    unpublishedTargets = await findUnpublishedSitemapTargets(entries);
+  } catch (error) {
+    checks.push({ id: "unpublished_targets_query", severity: "error", title: "تعذر فحص حالة أهداف Sitemap", detail: error instanceof Error ? error.message : "Unknown database failure" });
+  }
   if (unpublishedTargets.length > 0) {
     checks.push({
       id: "unpublished_targets",
@@ -300,14 +320,17 @@ export async function runSitemapDiagnostics(): Promise<SitemapMonitorSnapshot> {
   }
 
   const canonicalMismatches = entries
-    .filter((entry) => entry.url !== buildSitemapAbsoluteUrl(entry.path, canonicalBase))
-    .map((entry) => entry.url);
+    .filter((entry) => {
+      if (!entry.canonicalOverride) return false;
+      return entry.canonicalOverride.replace(/\/$/, "") !== entry.url.replace(/\/$/, "");
+    })
+    .map((entry) => `${entry.path} → ${entry.canonicalOverride}`);
   if (canonicalMismatches.length > 0) {
     checks.push({
-      id: "canonical_mismatch",
+      id: "canonical_product_decision",
       severity: "warning",
-      title: "عدم تطابق عنوان Sitemap مع القاعدة الأساسية",
-      detail: "بعض العناوين لا تُبنى من المسار والنطاق الأساسي المتوقعين.",
+      title: "Canonical drift يحتاج Product Decision",
+      detail: "اكتُشفت Canonical overrides تختلف عن عنوان Sitemap. التشخيص فقط؛ هذه المرحلة لا تعدل القيم الحية.",
       count: canonicalMismatches.length,
       samples: summarize(canonicalMismatches),
     });

@@ -13,10 +13,17 @@ export type GlobalOrganizationIdentity = {
   displayTagline: string;
   mobileShortName: string;
   arabicName: string;
+  legalName: string;
   description: string;
   phone: string;
   email: string;
   address: string;
+  addressLocality: string;
+  addressRegion: string;
+  postalCode: string;
+  addressCountry: string;
+  areaServed: string;
+  knowsAbout: string[];
   logo: string;
   socialLinks: GlobalSeoSocialLink[];
   siteUrl: string;
@@ -60,9 +67,22 @@ export function resolveGlobalOrganizationIdentity(
 
   return {
     displayName,
-    displayTagline: NAVBAR_TAGLINE_FALLBACK,
+    displayTagline: pickNonEmpty(
+      global.organizationTagline,
+      defaults.organizationTagline,
+      NAVBAR_TAGLINE_FALLBACK,
+    ),
     mobileShortName: deriveMobileShortName(displayName),
-    arabicName: pickNonEmpty(global.defaultOgImageAlt, defaults.defaultOgImageAlt, SEO_SITE.arabicName),
+    arabicName: pickNonEmpty(
+      global.organizationAlternateName,
+      defaults.organizationAlternateName,
+      SEO_SITE.arabicName,
+    ),
+    legalName: pickNonEmpty(
+      global.organizationLegalName,
+      defaults.organizationLegalName,
+      SEO_SITE.legalName,
+    ),
     description: pickNonEmpty(
       global.organizationDescription,
       defaults.organizationDescription,
@@ -70,6 +90,24 @@ export function resolveGlobalOrganizationIdentity(
     phone: pickNonEmpty(global.organizationPhone, defaults.organizationPhone),
     email: pickNonEmpty(global.organizationEmail, defaults.organizationEmail),
     address: pickNonEmpty(global.organizationAddress, defaults.organizationAddress),
+    addressLocality: pickNonEmpty(
+      global.organizationAddressLocality,
+      defaults.organizationAddressLocality,
+    ),
+    addressRegion: pickNonEmpty(
+      global.organizationAddressRegion,
+      defaults.organizationAddressRegion,
+    ),
+    postalCode: pickNonEmpty(global.organizationPostalCode, defaults.organizationPostalCode),
+    addressCountry: pickNonEmpty(
+      global.organizationAddressCountry,
+      defaults.organizationAddressCountry,
+    ),
+    areaServed: pickNonEmpty(global.organizationAreaServed, defaults.organizationAreaServed),
+    knowsAbout:
+      global.organizationKnowsAbout?.length > 0
+        ? global.organizationKnowsAbout
+        : defaults.organizationKnowsAbout,
     logo: pickNonEmpty(global.organizationLogo, defaults.organizationLogo, SEO_SITE.logo),
     socialLinks:
       global.organizationSocialLinks?.length > 0

@@ -7,7 +7,7 @@ import {
 } from "../../../../lib/projects/public-helpers";
 import { loadTrackProjectBySlug } from "../../../../lib/projects/load-published-projects";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
-import { buildMetadata } from "../../../../lib/seo/build-metadata";
+import { generatePublicMetadata } from "../../../../lib/seo/generate-public-metadata";
 
 export const revalidate = 300;
 
@@ -24,7 +24,7 @@ export async function generateMetadata({
   const project = await loadTrackProjectBySlug(slug);
 
   if (!project) {
-    return buildMetadata({
+    return generatePublicMetadata({
       path: "/track-your-project",
       title: "متابعة المشروع غير متاحة | فينيسيا للتطوير العقاري",
       description: "صفحة متابعة المشروع غير متاحة حاليًا.",
@@ -32,7 +32,7 @@ export async function generateMetadata({
     });
   }
 
-  return buildMetadata({
+  return generatePublicMetadata({
     path: `/track-your-project/${project.slug}`,
     title: `متابعة ${project.arabicName} | فينيسيا للتطوير العقاري`,
     description: "جاري تحديث بيانات متابعة مراحل التنفيذ لهذا المشروع.",

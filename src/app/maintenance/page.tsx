@@ -1,19 +1,18 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 
 import { NO_INDEX_ROBOTS } from "../../config/seo/seo-rules";
-import { buildMetadata } from "../../lib/seo/build-metadata";
 
 import MaintenanceCountdown from "./MaintenanceCountdown";
 import MaintenanceInstallTeaser from "./MaintenanceInstallTeaser";
 import MaintenanceLoginForm from "./MaintenanceLoginForm";
 import { parseMaintenanceCountdownEnd } from "./parse-countdown-end";
 
-export const metadata = buildMetadata({
-  path: "/maintenance",
+export const metadata: Metadata = {
   title: "الموقع قيد الصيانة | فينيسيا للتطوير العقاري",
   description: "الموقع قيد الصيانة مؤقتًا. أدخل بيانات الدخول للوصول.",
   robots: NO_INDEX_ROBOTS,
-});
+};
 
 export default function MaintenancePage() {
   const countdownEndIso = parseMaintenanceCountdownEnd();

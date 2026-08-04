@@ -182,9 +182,13 @@ check(
     adminPreview.includes("ResidentialProjectDetails"),
 );
 check(
-  "sitemap consumes published rows with authoritative updated timestamps",
+  "sitemap consumes published rows with authoritative timestamps, crawl policy, and diagnostic canonical overrides",
   sitemap.includes("loadPublishedProjectSitemapRows") &&
-    sitemap.includes("new Date(project.updatedAt)") &&
+    sitemap.includes("safeDate(project.updatedAt)") &&
+    sitemap.includes("project.robotsIndex !== false") &&
+    sitemap.includes("canonicalOverride: project.canonicalUrl") &&
+    publicLoader.includes('.select("slug,updated_at,canonical_url,robots_index")') &&
+    publicLoader.includes('.eq("publication_status", "published")') &&
     !sitemap.includes("loadPublishedProjectSlugs"),
 );
 check(

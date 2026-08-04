@@ -10,6 +10,8 @@ import { buildWhatsAppHref } from "../../lib/contact/build-whatsapp-href";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
 import type { HomeContactContent } from "./home-contact-mappers";
 import { renderContactIcon } from "../page-blocks/contact-icons";
+import { usePublicBrand } from "../PublicBrandProvider";
+import type { GlobalOrganizationIdentity } from "../../lib/seo/resolve-global-organization-identity";
 
 const STATIC_DEFAULTS = {
   eyebrow: "Venesia Developments",
@@ -50,15 +52,29 @@ function isExternalHref(href: string) {
   return /^(https?:|mailto:|tel:)/i.test(href);
 }
 
-function resolveHomeContactContent(content?: HomeContactContent | null) {
+function resolveHomeContactContent(
+  content: HomeContactContent | null | undefined,
+  identity: GlobalOrganizationIdentity,
+) {
+  const identityContacts = STATIC_DEFAULTS.contacts.map((item) => {
+    if (item.href?.startsWith("tel:") && identity.phone) {
+      return { ...item, value: identity.phone, href: `tel:${identity.phone.replace(/\s+/g, "")}` };
+    }
+    if (item.href?.startsWith("mailto:") && identity.email) {
+      return { ...item, value: identity.email, href: `mailto:${identity.email}` };
+    }
+    return item;
+  });
+
   if (!content) {
     return {
       ...STATIC_DEFAULTS,
+      eyebrow: identity.displayName || STATIC_DEFAULTS.eyebrow,
       button: {
         ...STATIC_DEFAULTS.button,
         target: undefined as "_self" | "_blank" | undefined,
       },
-      contacts: STATIC_DEFAULTS.contacts.map((item) => ({
+      contacts: identityContacts.map((item) => ({
         icon: undefined as string | undefined,
         ...item,
         secondaryValue: undefined as string | undefined,
@@ -69,7 +85,7 @@ function resolveHomeContactContent(content?: HomeContactContent | null) {
 
   const contacts = Array.from({ length: 4 }, (_, index) => {
     const cms = content.contacts[index];
-    const fallback = STATIC_DEFAULTS.contacts[index];
+    const fallback = identityContacts[index];
     const label = cms?.label?.trim() || fallback?.label || "";
     const value = cms?.value?.trim() || fallback?.value || "";
     const secondaryValue = cms?.secondaryValue?.trim() || undefined;
@@ -85,7 +101,7 @@ function resolveHomeContactContent(content?: HomeContactContent | null) {
   });
 
   return {
-    eyebrow: content.eyebrow?.trim() || STATIC_DEFAULTS.eyebrow,
+    eyebrow: content.eyebrow?.trim() || identity.displayName || STATIC_DEFAULTS.eyebrow,
     title: content.title?.trim() || STATIC_DEFAULTS.title,
     description: content.description?.trim() || STATIC_DEFAULTS.description,
     button: {
@@ -247,7 +263,8 @@ function HomeContactCtaButton({
 }
 
 export default function HomeContactSection({ content }: HomeContactSectionProps) {
-  const resolved = resolveHomeContactContent(content);
+  const identity = usePublicBrand();
+  const resolved = resolveHomeContactContent(content, identity);
   const titleLines = resolved.title.split("\n");
 
   return (
