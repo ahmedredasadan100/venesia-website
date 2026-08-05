@@ -1,20 +1,13 @@
-import AdminNotice from "../../../components/admin/AdminNotice";
 import { AdminInfoBar, AdminPageContextHeader, AdminPageHeader } from "../../../components/admin/ui";
 import { countProjectsByType } from "../../../lib/projects/queries";
-import { getProjectsTableReady } from "../../../lib/projects/seed-from-static-data";
 import ProjectsHubCard from "./projects-table/ProjectsHubCard";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProjectsHubPage() {
-  const tableStatus = await getProjectsTableReady();
-  let counts = { residential: 0, commercial: 0, residentialError: null as string | null, commercialError: null as string | null };
-
-  if (tableStatus.ready) {
-    counts = await countProjectsByType();
-  }
-
-  if (!tableStatus.ready) {
+  const counts = await countProjectsByType();
+  const countError = counts.residentialError ?? counts.commercialError;
+  if (countError) {
     return (
       <main className="space-y-7">
         <AdminPageHeader
@@ -22,11 +15,9 @@ export default async function ProjectsHubPage() {
           title="المشاريع"
           description="مركز إدخال وتعديل المشاريع السكنية والتجارية."
         />
-        <AdminNotice
-          variant="danger"
-          title="جداول المشاريع غير جاهزة"
-          message={`المخطط النظيف غير متاح بعد. الهجرة المحلية المقترحة: sql/migrations/20260728090000_rebuild_project_admin_data_entry.sql — ${tableStatus.error}`}
-        />
+        <div
+          className="rounded-2xl border border-red-300/20 bg-red-400/8 p-5 text-sm text-red-100"
+        >تعذر قراءة مالك المشاريع في قاعدة البيانات: {countError}</div>
       </main>
     );
   }
@@ -42,16 +33,8 @@ export default async function ProjectsHubPage() {
       <AdminInfoBar
         label="Project Admin Data Entry"
         description="الإدخال والتعديل فقط؛ النشر والمراجعة والتحديثات التنفيذية خارج هذه المرحلة."
-        meta={`${counts.residential} Residential / ${counts.commercial} Commercial / ${tableStatus.count} Total`}
+        meta={`${counts.residential} Residential / ${counts.commercial} Commercial / ${counts.total} Total`}
       />
-
-      {tableStatus.count === 0 ? (
-        <AdminNotice
-          variant="danger"
-          title="لا توجد مشاريع في Supabase"
-          message="أضف المشاريع من لوحة التحكم."
-        />
-      ) : null}
 
       <section className="grid gap-5 md:grid-cols-2">
         <ProjectsHubCard

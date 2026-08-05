@@ -57,7 +57,7 @@ export async function updateMediaSidebarModule(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncMediaSidebarModulePageAssignments(id, parsePageIdsFromForm(formData));
+  await syncMediaSidebarModulePageAssignments(id, parsePageIdsFromForm(formData), actor);
   await revalidateBlockModulePaths("media-sidebar");
   revalidatePath(`/admin/pages-blocks/blocks/media-sidebar/${id}`, "page");
   redirect(`/admin/pages-blocks/blocks/media-sidebar/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);

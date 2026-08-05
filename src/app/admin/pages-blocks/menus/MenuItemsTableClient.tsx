@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import VenesiaModal from "../../../../components/admin/VenesiaModal";
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
@@ -11,6 +11,7 @@ import {
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminColumnVisibilityMenu,
   AdminDataGrid,
+  AdminDataGridActionButton,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridRow,
@@ -34,6 +35,7 @@ import {
 
 import {
   deleteMenuItem,
+  reorderMenuItems,
   toggleMenuItemVisibility,
   updateMenuItem,
 } from "./actions";
@@ -190,6 +192,7 @@ export default function MenuItemsTableClient({
   preferenceError = null,
 }: MenuItemsTableClientProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const rows = useMemo(() => flattenMenuItemsForTable(items), [items]);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
@@ -208,7 +211,7 @@ export default function MenuItemsTableClient({
   const columns = useMemo(
     () =>
       [
-        visibleColumnSet.has("order") ? "48px" : null,
+        visibleColumnSet.has("order") ? "72px" : null,
         "minmax(0,1fr)",
         visibleColumnSet.has("status") ? "88px" : null,
         ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
@@ -271,6 +274,30 @@ export default function MenuItemsTableClient({
     setPendingRowId(itemId);
     try {
       await action();
+    } finally {
+      setPendingRowId(null);
+    }
+  }
+
+  async function moveSibling(item: MenuItem, direction: -1 | 1) {
+    const siblings = items
+      .filter((candidate) => candidate.parent_id === item.parent_id)
+      .sort((left, right) => left.sort_order - right.sort_order || left.id - right.id);
+    const index = siblings.findIndex((candidate) => candidate.id === item.id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= siblings.length) return;
+    const ordered = [...siblings];
+    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    setPendingRowId(item.id);
+    try {
+      const result = await reorderMenuItems(
+        menu.id,
+        item.parent_id,
+        ordered.map(({ id, updated_at }) => ({ id, updated_at })),
+      );
+      if (!result.ok) throw new Error(result.message);
+      if (result.warning) console.warn(result.warning);
+      router.refresh();
     } finally {
       setPendingRowId(null);
     }
@@ -419,7 +446,21 @@ export default function MenuItemsTableClient({
             return (
               <AdminDataGridRow key={item.id} columns={columns} className="gap-3">
                 {visibleColumnSet.has("order") ? (
-                  <span className="text-center font-en text-sm text-white/45">{item.sort_order}</span>
+                  <span className="flex items-center justify-center gap-1">
+                    <AdminDataGridActionButton
+                      size="compact"
+                      title="تحريك لأعلى"
+                      disabled={rowPending || !items.some((candidate) => candidate.parent_id === item.parent_id && candidate.sort_order < item.sort_order)}
+                      pending={rowPending}
+                      onClick={() => void moveSibling(item, -1)}
+                    >↑</AdminDataGridActionButton>
+                    <AdminDataGridActionButton
+                      size="compact"
+                      title="تحريك لأسفل"
+                      disabled={rowPending || !items.some((candidate) => candidate.parent_id === item.parent_id && candidate.sort_order > item.sort_order)}
+                      onClick={() => void moveSibling(item, 1)}
+                    >↓</AdminDataGridActionButton>
+                  </span>
                 ) : null}
 
                 <MenuItemNameCell

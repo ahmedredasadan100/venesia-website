@@ -31,6 +31,7 @@ export type ProjectLocationOption = {
 export type ProjectEntryRoot = {
   id: number | null;
   type: ProjectType;
+  code: string;
   arabic_name: string;
   english_name: string;
   slug: string;
@@ -72,6 +73,9 @@ export type ProjectEntryRoot = {
   published_at: string | null;
   published_by: number | null;
   featured: boolean;
+  show_on_homepage: boolean;
+  homepage_order: number;
+  brochure_url: string;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -164,10 +168,13 @@ export type ProjectEntryFieldErrors = Record<string, string[]>;
 
 export const PROJECT_ENTRY_VALIDATION_FIELDS = [
   "type",
+  "code",
   "publication_status",
   "arabic_name",
   "english_name",
   "slug",
+  "homepage_order",
+  "brochure_url",
   "general_description",
   "short_description",
   "image",
@@ -247,6 +254,7 @@ export const PROJECT_ENTRY_TAB_IDS = {
 export const PROJECT_ENTRY_NAVIGATION_EVENT = "admin-project-entry:navigate";
 
 export const PROJECT_ENTRY_FOCUS_TARGETS: Record<string, string> = {
+  code: "project-code",
   image: "image-field",
   hero_image: "hero_image-field",
   small_box_image: "small_box_image-field",
@@ -267,9 +275,13 @@ export const PROJECT_ENTRY_FOCUS_TARGETS: Record<string, string> = {
 };
 
 export const PROJECT_ENTRY_FIELD_TABS: Record<string, string> = {
+  code: PROJECT_ENTRY_TAB_IDS.basic,
   arabic_name: PROJECT_ENTRY_TAB_IDS.basic,
   english_name: PROJECT_ENTRY_TAB_IDS.basic,
   slug: PROJECT_ENTRY_TAB_IDS.basic,
+  show_on_homepage: PROJECT_ENTRY_TAB_IDS.basic,
+  homepage_order: PROJECT_ENTRY_TAB_IDS.basic,
+  brochure_url: PROJECT_ENTRY_TAB_IDS.basic,
   type: PROJECT_ENTRY_TAB_IDS.basic,
   general_description: PROJECT_ENTRY_TAB_IDS.basic,
   short_description: PROJECT_ENTRY_TAB_IDS.basic,
@@ -334,6 +346,7 @@ export function createEmptyProjectEntry(
     project: {
       id: null,
       type,
+      code: "",
       arabic_name: "",
       english_name: "",
       slug: "",
@@ -375,6 +388,9 @@ export function createEmptyProjectEntry(
       published_at: null,
       published_by: null,
       featured: false,
+      show_on_homepage: false,
+      homepage_order: 0,
+      brochure_url: "",
       created_at: null,
       updated_at: null,
     },
@@ -571,6 +587,7 @@ export function projectEntryPayloadFromFormData(
     project: {
       id: readOptionalId(readString(formData, "id")),
       type,
+      code: readString(formData, "code").toUpperCase(),
       arabic_name: readString(formData, "arabic_name"),
       english_name: readString(formData, "english_name"),
       slug: readString(formData, "slug"),
@@ -613,6 +630,9 @@ export function projectEntryPayloadFromFormData(
       published_at: null,
       published_by: null,
       featured: readBoolean(readLastString(formData, "featured")),
+      show_on_homepage: readBoolean(readLastString(formData, "show_on_homepage")),
+      homepage_order: Math.max(0, Number(readString(formData, "homepage_order")) || 0),
+      brochure_url: readString(formData, "brochure_url"),
       created_at: null,
       updated_at: null,
     },
@@ -683,8 +703,17 @@ function collectProjectEntryFieldErrors(
 
   if (!project.arabic_name) addError(errors, "arabic_name", "اسم المشروع بالعربية مطلوب.");
   if (!project.english_name) addError(errors, "english_name", "اسم المشروع بالإنجليزية مطلوب.");
+  if (!/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(project.code)) {
+    addError(errors, "code", "كود المشروع مطلوب ويقبل الحروف الإنجليزية الكبيرة والأرقام والشرطة فقط.");
+  }
   const slugError = validateSlugFormat(project.slug);
   if (slugError) addError(errors, "slug", slugError);
+  if (project.show_on_homepage && project.homepage_order <= 0) {
+    addError(errors, "homepage_order", "ترتيب الصفحة الرئيسية يجب أن يكون أكبر من صفر عند إظهار المشروع.");
+  }
+  if (!isValidHttpUrl(project.brochure_url)) {
+    addError(errors, "brochure_url", "رابط كتيّب المشروع يجب أن يبدأ بـ http أو https.");
+  }
   if (project.general_description.length > 1000) {
     addError(errors, "general_description", "الوصف العام لا يتجاوز 1000 حرف.");
   }

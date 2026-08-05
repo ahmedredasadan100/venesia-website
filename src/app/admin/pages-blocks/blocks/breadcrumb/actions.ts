@@ -208,7 +208,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncBlockModulePageAssignments("breadcrumb", id, parsePageIdsFromForm(formData));
+  await syncBlockModulePageAssignments("breadcrumb", id, parsePageIdsFromForm(formData), actor);
   await revalidateBlockModulePaths("breadcrumb");
   revalidatePath(`/admin/pages-blocks/blocks/breadcrumb/${id}`, "page");
   redirect(`/admin/pages-blocks/blocks/breadcrumb/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);

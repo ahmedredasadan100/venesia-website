@@ -1,8 +1,6 @@
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
-import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
-import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { loadPagesTableRows } from "../../../../../lib/admin/pages/load-pages-table-rows";
-import { BLOCK_MODULE_REGISTRY, ALL_ASSIGNMENT_TABLES } from "../../../../../lib/page-blocks/block-module-registry";
+import { BLOCK_MODULE_REGISTRY } from "../../../../../lib/page-blocks/block-module-registry";
 import {
   MEDIA_HUB_ASSIGNMENT_TABLE,
 } from "../../../../../lib/media-hub-modules/registry";
@@ -26,72 +24,28 @@ export function pagesListPath(options?: { notice?: string; error?: string }) {
   return `/admin/pages-blocks/pages${query ? `?${query}` : ""}`;
 }
 
-export async function auditPageBlockAssignment(
-  verb: "create" | "update" | "delete" | "reorder" | "publish" | "unpublish" | "duplicate",
+export function databaseAssignmentKind(kind: string) {
+  return kind === "media-sidebar" ? "media_sidebar" : kind === "media-hub" ? "media_hub" : kind;
+}
+
+export async function mutatePageComposition(
   pageId: number,
-  assignmentId?: number | null,
-  metadata?: Record<string, unknown>,
+  operation: string,
+  payload: Record<string, unknown>,
+  actor: { id: number; username: string },
 ) {
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("page_block_assignment", verb),
-    entityType: "page_block_assignment",
-    entityId: assignmentId ?? null,
-    metadata: { page_id: pageId, ...metadata },
+  const { data, error } = await getSupabaseAdmin().rpc("mutate_page_composition", {
+    p_page_id: pageId,
+    p_operation: operation,
+    p_payload: payload,
+    p_actor_admin_user_id: actor.id,
+    p_actor_username: actor.username,
   });
-}
-
-export async function copyPageModuleAssignments(sourcePageId: number, targetPageId: number) {
-  for (const table of ALL_ASSIGNMENT_TABLES) {
-    const { data, error } = await getSupabaseAdmin()
-      .from(table)
-      .select("template_id, slot, sort_order, is_visible")
-      .eq("page_id", sourcePageId);
-
-    if (error) throw new Error(error.message);
-    if (!data?.length) continue;
-
-    const { error: insertError } = await getSupabaseAdmin().from(table).insert(
-      data.map((row) => ({
-        page_id: targetPageId,
-        template_id: row.template_id,
-        slot: row.slot,
-        sort_order: row.sort_order,
-        is_visible: false,
-      })),
-    );
-
-    if (insertError) throw new Error(insertError.message);
-  }
-}
-
-export async function copyPageHeroAssignments(
-  sourcePageId: number,
-  targetPageId: number,
-  targetSlug: string,
-  targetPath: string,
-) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("hero_assignments")
-    .select("hero_id, priority")
-    .eq("target_type", "page")
-    .eq("target_id", sourcePageId);
-
   if (error) throw new Error(error.message);
-  if (!data?.length) return;
-
-  const { error: insertError } = await getSupabaseAdmin().from("hero_assignments").insert(
-    data.map((row) => ({
-      hero_id: row.hero_id,
-      target_type: "page",
-      target_id: targetPageId,
-      target_slug: targetSlug,
-      path: targetPath,
-      is_active: false,
-      priority: row.priority,
-    })),
-  );
-
-  if (insertError) throw new Error(insertError.message);
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Page Composition atomic mutation returned an invalid result.");
+  }
+  return data as Record<string, unknown>;
 }
 
 export function isMediaSidebarKind(kind: string) {

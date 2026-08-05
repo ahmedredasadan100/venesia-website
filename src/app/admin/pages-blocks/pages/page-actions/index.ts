@@ -20,3 +20,4 @@ export { togglePageBlockAssignment } from "./assignment-status";
 export { deletePageBlockAssignment } from "./assignment-delete";
 export { duplicateAssignedPageModule } from "./assignment-duplicate";
 export { bulkPageBlockAssignments } from "./bulk";
+export { reorderPageComposition } from "./assignment-reorder";

@@ -17,7 +17,8 @@ import type { ProjectHubFilterId, PublicProject } from "./public-types";
 import { getProjectStats, getProjectsByFilter } from "./public-helpers";
 
 const PUBLIC_PROJECT_COLUMNS = [
-  "id", "type", "arabic_name", "english_name", "slug", "featured",
+  "id", "type", "arabic_name", "english_name", "slug", "code", "featured",
+  "show_on_homepage", "homepage_order", "brochure_url",
   "publication_status", "published_at",
   "general_description", "short_description",
   "image", "image_alt", "hero_image", "hero_image_alt",

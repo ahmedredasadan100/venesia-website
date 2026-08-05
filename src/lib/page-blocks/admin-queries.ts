@@ -47,36 +47,36 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   ] = await Promise.all([
     getSupabaseAdmin()
       .from("page_content_block_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,content_block_templates(name,slug,status,variant)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,content_block_templates(name,slug,status,variant)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_cta_block_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,cta_block_templates(name,slug,status,variant)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,cta_block_templates(name,slug,status,variant)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_cards_block_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,cards_block_templates(name,slug,status,variant)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,cards_block_templates(name,slug,status,variant)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_breadcrumb_block_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,breadcrumb_block_templates(name,slug,status,variant)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,breadcrumb_block_templates(name,slug,status,variant)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_feed_module_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,feed_module_templates(name,slug,status,feed_type)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,feed_module_templates(name,slug,status,feed_type)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("hero_assignments")
-      .select("id,target_id,is_active,priority,hero_templates(id,name,slug,variant,is_visible,sort_order)")
+      .select("id,target_id,is_active,priority,updated_at,hero_templates(id,name,slug,variant,is_visible,sort_order)")
       .eq("target_type", "page")
       .eq("target_id", pageId),
     getSupabaseAdmin()
       .from("page_media_sidebar_module_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,media_sidebar_module_templates(name,slug,status,widget_key)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,media_sidebar_module_templates(name,slug,status,widget_key)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_media_hub_module_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,media_hub_module_templates(name,slug,status,section_key)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,media_hub_module_templates(name,slug,status,section_key)")
       .eq("page_id", pageId),
     getSupabaseAdmin().from("content_block_templates").select("id,name,slug,status").order("name"),
     getSupabaseAdmin().from("cta_block_templates").select("id,name,slug,status").order("name"),
@@ -107,8 +107,9 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       page_id: pageId,
       template_id: template.id,
       slot: "hero",
-      sort_order: template.sort_order ?? row.priority ?? 0,
+      sort_order: Math.max(0, 1000 - Number(row.priority ?? 1000)),
       is_visible: normalizeBoolean(row.is_active, true) && normalizeBoolean(template.is_visible, true),
+      updated_at: String(row.updated_at),
       module_kind: "hero",
       block_type: null,
       template_name: template.name,
@@ -134,6 +135,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
       is_visible: normalizeBoolean(row.is_visible, true),
+      updated_at: String(row.updated_at),
       module_kind: "content",
       block_type: "content",
       template_name: template?.name ?? "—",
@@ -159,6 +161,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
       is_visible: normalizeBoolean(row.is_visible, true),
+      updated_at: String(row.updated_at),
       module_kind: "cta",
       block_type: "cta",
       template_name: template?.name ?? "—",
@@ -184,6 +187,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
       is_visible: normalizeBoolean(row.is_visible, true),
+      updated_at: String(row.updated_at),
       module_kind: "cards",
       block_type: "cards",
       template_name: template?.name ?? "—",
@@ -209,6 +213,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
       is_visible: normalizeBoolean(row.is_visible, true),
+      updated_at: String(row.updated_at),
       module_kind: "breadcrumb",
       block_type: "breadcrumb",
       template_name: template?.name ?? "—",
@@ -234,6 +239,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
       is_visible: normalizeBoolean(row.is_visible, true),
+      updated_at: String(row.updated_at),
       module_kind: "feed",
       block_type: "feed",
       template_name: template?.name ?? "—",
@@ -259,6 +265,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       slot: row.slot,
       sort_order: row.sort_order,
       is_visible: normalizeBoolean(row.is_visible, true),
+      updated_at: String(row.updated_at),
       module_kind: "media-sidebar",
       block_type: null,
       template_name: template?.name ?? "—",
@@ -284,6 +291,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       slot: row.slot,
       sort_order: row.sort_order,
       is_visible: normalizeBoolean(row.is_visible, true),
+      updated_at: String(row.updated_at),
       module_kind: "media-hub",
       block_type: null,
       template_name: template?.name ?? "—",
@@ -296,14 +304,11 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   }
 
   assignments.sort((a, b) => {
-    const kindOrder = (kind: string) => {
-      if (kind === "hero") return -2;
-      if (kind === "breadcrumb") return -1;
-      return 0;
-    };
-    const byKind = kindOrder(a.module_kind) - kindOrder(b.module_kind);
-    if (byKind !== 0) return byKind;
-    return a.sort_order - b.sort_order || a.id - b.id;
+    const slotOrder = (slot: string) => slot === "hero" ? -2 : slot === "top" ? -1 : slot === "main" ? 0 : 1;
+    return slotOrder(a.slot) - slotOrder(b.slot)
+      || a.sort_order - b.sort_order
+      || a.module_kind.localeCompare(b.module_kind)
+      || a.id - b.id;
   });
 
   return {

@@ -235,11 +235,12 @@ check(
 check(
   "Admin Interaction System records truthful Collection adoption blockers",
   ADMIN_INTERACTION_SYSTEM.globalClosed === false &&
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length === 1 &&
     ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.includes(
       "Authenticated Browser acceptance on the final working tree is still required.",
     ) &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
-      blocker.includes("Atomic reorder contracts"),
+    !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
+      blocker.toLowerCase().includes("atomic reorder"),
     ) &&
     !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some(
       (blocker) =>
@@ -1017,13 +1018,14 @@ check(
       ?.rowActionsState === "not_applicable",
 );
 check(
-  "Collection global closure remains truthful across Browser and atomic reorder gaps",
+  "Collection global closure remains truthful with Browser as its only remaining gap",
   ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed === false &&
+    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.length === 1 &&
     ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
       blocker.includes("Authenticated Browser QA"),
     ) &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
-      blocker.includes("atomic reorder"),
+    !ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
+      blocker.toLowerCase().includes("atomic reorder"),
     ) &&
     !ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some(
       (blocker) =>
@@ -1121,16 +1123,15 @@ check(
     ),
 );
 check(
-  "persisted reorder gaps fail closed at the atomic domain contract boundary",
+  "persisted reorder surfaces delegate to their atomic domain contracts",
   ["page-block-assignments", "menu-items"].every((surfaceId) => {
     const surface = collectionSurfaces.find(
       (candidate) => candidate.id === surfaceId,
     );
     return (
-      surface?.reorderOwner === "blocked_atomic_reorder_contract" &&
-      surface.requiredAdoption.includes(
-        "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
-      )
+      surface?.reorderOwner === "domain_owned_atomic_reorder" &&
+      surface.requiredAdoption.length === 0 &&
+      surface.genuineExceptions.length === 0
     );
   }) &&
     collectionSurfaces.find((surface) => surface.id === "footer-manual-links")
@@ -1138,34 +1139,54 @@ check(
 );
 const pageAssignmentsSource = read(paths.pageAssignments);
 const pageAssignmentsGridSource = read(paths.pageAssignmentsGrid);
-const pageAssignmentRowSource = read(paths.pageAssignmentRow);
 const menuItemsSource = read(paths.menuItems);
+const pageReorderPath = join(
+  ROOT,
+  "src/app/admin/pages-blocks/pages/page-actions/assignment-reorder.ts",
+);
+const menuReorderPath = join(
+  ROOT,
+  "src/app/admin/pages-blocks/menus/menu-actions/reorder.ts",
+);
+const pageReorderSource = readFileSync(pageReorderPath, "utf8");
+const menuReorderSource = readFileSync(menuReorderPath, "utf8");
 check(
-  "blocked reorder surfaces expose no non-atomic trigger or write path",
+  "Page and Menu reorder expose only their atomic aggregate mutation paths",
   !existsSync(
     join(
       ROOT,
       "src/app/admin/pages-blocks/pages/[id]/page-blocks/use-page-blocks-reorder.ts",
     ),
   ) &&
-    !existsSync(
+    existsSync(
       join(
         ROOT,
         "src/app/admin/pages-blocks/pages/page-actions/assignment-reorder.ts",
       ),
     ) &&
-    !existsSync(
+    existsSync(
       join(ROOT, "src/app/admin/pages-blocks/menus/menu-actions/reorder.ts"),
     ) &&
-    !pageAssignmentsGridSource.includes("onReorder") &&
-    !pageAssignmentRowSource.includes("canReorderUp") &&
-    !pageAssignmentRowSource.includes("تحريك لأعلى") &&
+    pageReorderSource.includes('mutatePageComposition(pageId, "reorder"') &&
+    menuReorderSource.includes('mutateMenuTree(menuId, "reorder"') &&
+    [pageReorderSource, menuReorderSource].every(
+      (source) =>
+        !source.includes("getSupabaseAdmin") &&
+        !source.includes(".from(") &&
+        !source.includes("Promise.all"),
+    ) &&
+    pageAssignmentsSource.includes("reorderPageComposition(") &&
+    menuItemsSource.includes("reorderMenuItems(") &&
     !menuItemsSource.includes("moveMenuItemSortOrder") &&
     !menuItemsSource.includes("requestSubmit") &&
     !read(paths.pageActions).includes("movePageBlockAssignment") &&
     !read(paths.pageActionIndex).includes("movePageBlockAssignment") &&
     !read(paths.menuActions).includes("moveMenuItemSortOrder") &&
-    !read(paths.menuActionIndex).includes("moveMenuItemSortOrder"),
+    !read(paths.menuActionIndex).includes("moveMenuItemSortOrder") &&
+    read(paths.pageActions).includes("reorderPageComposition") &&
+    read(paths.pageActionIndex).includes("reorderPageComposition") &&
+    read(paths.menuActions).includes("reorderMenuItems") &&
+    read(paths.menuActionIndex).includes("reorderMenuItems"),
 );
 check(
   "Page Assignments adopts the shared bounded-client URL/history owner",

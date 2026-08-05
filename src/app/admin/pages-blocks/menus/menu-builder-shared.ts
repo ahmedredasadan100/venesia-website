@@ -21,6 +21,7 @@ export type MenuItem = {
   style_preset: string | null;
   is_visible: boolean;
   sort_order: number;
+  updated_at: string;
 };
 
 export type TreeMenuItem = MenuItem & { children: TreeMenuItem[] };

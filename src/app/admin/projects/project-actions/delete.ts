@@ -3,7 +3,7 @@
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
-import type { ProjectCategory } from "../../../../config/projects-data";
+import type { ProjectCategory } from "../../../../lib/projects/public-types";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import { withProjectMediaSynchronization } from "./helpers";

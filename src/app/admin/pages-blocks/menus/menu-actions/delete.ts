@@ -3,16 +3,16 @@
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
-  auditMenuAction,
   backToMenus,
   getNumber,
   navigationMutationMessage,
+  mutateMenuTree,
   revalidateNavigation,
   synchronizeDeletedMenuItemReferences,
 } from "./helpers";
 
 export async function deleteMenu(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = getNumber(formData, "id");
   if (!id) backToMenus("القائمة غير موجودة.");
 
@@ -22,17 +22,15 @@ export async function deleteMenu(formData: FormData) {
     .eq("menu_id", id);
   if (itemsReadError) backToMenus(itemsReadError.message);
 
-  // The FK cascade makes the menu and its items one atomic domain deletion.
-  const { error } = await getSupabaseAdmin().from("menus").delete().eq("id", id);
-  if (error) backToMenus(error.message);
+  try {
+    await mutateMenuTree(id, "delete_menu", {}, actor);
+  } catch (error) {
+    backToMenus(error instanceof Error ? error.message : "تعذر حذف القائمة.");
+  }
 
   const mediaSynchronization = await synchronizeDeletedMenuItemReferences(
     (affectedItems ?? []).map((item) => item.id),
   );
-  await auditMenuAction("menu", "delete", {
-    entityId: id,
-    metadata: { deleted_menu_item_count: affectedItems?.length ?? 0 },
-  });
   await revalidateNavigation(mediaSynchronization);
   backToMenus(
     navigationMutationMessage(mediaSynchronization, "تم حذف القائمة."),

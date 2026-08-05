@@ -20,6 +20,14 @@ const rowActionsMigration = readFileSync(rowActionsMigrationUrl, "utf8").replace
   /\r\n?/gu,
   "\n",
 );
+const projectPublishingMigration = readFileSync(
+  new URL("../sql/migrations/20260803120000_project_publishing_visibility_capability.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
+const globalTruthAtomicMigration = readFileSync(
+  new URL("../sql/migrations/20260805180000_global_truth_atomic_operations_closure.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
 
 function sha256(value) {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -31,9 +39,13 @@ function md5(value) {
 
 function extractExpectedFunctionSource(functionName) {
   const startMarker = `create or replace function public.${functionName}(`;
-  const ownerMigration = rowActionsMigration.includes(startMarker)
-    ? rowActionsMigration
-    : finalRebuildMigration;
+  const ownerMigration = globalTruthAtomicMigration.includes(startMarker)
+    ? globalTruthAtomicMigration
+    : projectPublishingMigration.includes(startMarker)
+      ? projectPublishingMigration
+      : rowActionsMigration.includes(startMarker)
+        ? rowActionsMigration
+        : finalRebuildMigration;
   const functionStart = ownerMigration.indexOf(startMarker);
 
   if (functionStart < 0) {
@@ -260,6 +272,9 @@ const expectedColumnDefaults = new Map([
   ["projects.seo_keywords", "'{}'::text[]"],
   ["projects.og_image_alt", "''::text"],
   ["projects.featured", "false"],
+  ["projects.publication_status", "'draft'::text"],
+  ["projects.show_on_homepage", "false"],
+  ["projects.homepage_order", "0"],
   ["projects.created_at", "now()"],
   ["projects.updated_at", "now()"],
   ["project_location_points.client_key", "gen_random_uuid()"],
@@ -289,6 +304,22 @@ const expectedColumnDefaults = new Map([
   ["project_videos.poster_alt", "''::text"],
   ["project_videos.created_at", "now()"],
   ["project_videos.updated_at", "now()"],
+]);
+const expectedColumnComments = new Map([
+  ["projects.code", "Stable Project code. Database-owned and distinct from the presentation name."],
+  ["projects.show_on_homepage", "Database-owned Home Projects membership."],
+  ["projects.homepage_order", "Database-owned Home Projects order; unique for included Projects."],
+]);
+const expectedMissingValueColumnKeys = new Set([
+  "projects.show_on_homepage",
+  "projects.homepage_order",
+]);
+const knownAdditiveConstraintKeys = new Set([
+  "projects.projects_publication_status_check",
+  "projects.projects_published_by_fkey",
+  "projects.projects_code_format_check",
+  "projects.projects_homepage_order_check",
+  "projects.projects_brochure_url_check",
 ]);
 const knownLegacyDefaultColumnKeys = new Set(
   finalNoDefaultColumns.map(
@@ -740,9 +771,9 @@ const report = {
     fixture_text_marker_pattern: fixtureTextMarkerPattern,
     expected_catalog_counts: {
       tables: 9,
-      columns: 115,
-      constraints: 99,
-      indexes: 45,
+      columns: 122,
+      constraints: 104,
+      indexes: 52,
       rls_policies: 0,
       user_triggers: 4,
       functions: 8,
@@ -750,6 +781,8 @@ const report = {
     },
     final_rebuild_sha256: sha256(finalRebuildMigration),
     row_actions_migration_sha256: sha256(rowActionsMigration),
+    project_publishing_migration_sha256: sha256(projectPublishingMigration),
+    global_truth_atomic_migration_sha256: sha256(globalTruthAtomicMigration),
     expected_function_source_sha256: expectedFunctionSourceHashes,
     expected_function_source_md5: expectedFunctionSourceMd5s,
   },
@@ -907,6 +940,8 @@ function buildColumnPropertyDiagnostics(fullReport) {
       column.compression_code,
     );
     const expectedDefault = expectedColumnDefaults.get(key) ?? null;
+    const expectedComment = expectedColumnComments.get(key) ?? null;
+    const expectedMissingValue = expectedMissingValueColumnKeys.has(key);
     const legacyDefaultAllowed =
       knownLegacyDefaultColumnKeys.has(key) &&
       column.default_expression === "''::text";
@@ -1028,14 +1063,14 @@ function buildColumnPropertyDiagnostics(fullReport) {
           "PostgreSQL 17 represents the default statistics target as NULL instead of -1.",
       });
     }
-    if (column.has_missing_value) {
+    if (column.has_missing_value !== expectedMissingValue) {
       addDifference({
         property: "atthasmissing",
-        expected: false,
+        expected: expectedMissingValue,
         actual: column.has_missing_value,
         semanticMatch: false,
         classification: "B. Real Schema Drift",
-        reason: "Column retains an ALTER TABLE missing-value marker.",
+        reason: "Column missing-value state differs from the additive migration contract.",
       });
     }
     if (!aclIsSemanticallyEmpty) {
@@ -1065,14 +1100,14 @@ function buildColumnPropertyDiagnostics(fullReport) {
         reason: "An empty ACL array is equivalent to NULL because the grant audit is empty.",
       });
     }
-    if (column.comment !== null) {
+    if (column.comment !== expectedComment) {
       addDifference({
         property: "column_comment",
-        expected: null,
+        expected: expectedComment,
         actual: column.comment,
         semanticMatch: false,
         classification: "B. Real Schema Drift",
-        reason: "Final rebuild defines no column comments.",
+        reason: "Column comment differs from the reconciled migration contract.",
       });
     }
     if (column.default_expression !== expectedDefault) {
@@ -1096,11 +1131,11 @@ function buildColumnPropertyDiagnostics(fullReport) {
       inheritance_matches:
         column.inheritance_count === 0 && column.is_local,
       acl_matches_semantically: aclIsSemanticallyEmpty,
-      comment_matches: column.comment === null,
+      comment_matches: column.comment === expectedComment,
       default_matches_pre_fix_or_final: defaultMatchesExpected,
       statistics_and_missing_value_match:
         isSemanticallyDefaultStatisticsTarget(column.statistics_target) &&
-        !column.has_missing_value,
+        column.has_missing_value === expectedMissingValue,
       collation_matches: column.uses_type_default_collation,
     };
   });
@@ -1208,7 +1243,8 @@ function buildConstraintDiagnostics(fullReport) {
   const expectedKeys = new Set(expectedConstraintByKey.keys());
   const unexpectedActual = fullReport.constraints.filter(
     (constraint) =>
-      !expectedKeys.has(`${constraint.table_name}.${constraint.constraint_name}`),
+      !expectedKeys.has(`${constraint.table_name}.${constraint.constraint_name}`)
+      && !knownAdditiveConstraintKeys.has(`${constraint.table_name}.${constraint.constraint_name}`),
   );
   const legacyPredicateFailures = shared
     .filter(
@@ -1534,10 +1570,8 @@ function buildParitySummary(fullReport) {
     },
     missing_check_constraints: missingCheckConstraints,
     existing_constraint_diagnostics: {
-      expected_final_count: expectedConstraintManifest.length,
-      actual_final_count: constraintDiagnostics.all.filter(
-        (constraint) => constraint.actual_present,
-      ).length,
+      expected_final_count: expectedConstraintManifest.length + knownAdditiveConstraintKeys.size,
+      actual_final_count: fullReport.constraints.length,
       expected_shared_count: expectedExistingConstraintManifest.length,
       actual_shared_count: constraintDiagnostics.shared.filter(
         (constraint) => constraint.actual_present,
@@ -1608,14 +1642,14 @@ function buildParitySummary(fullReport) {
         ),
       column_defaults_and_not_null_match_final_rebuild: columnDrift.length === 0,
       index_inventory_valid_ready:
-        fullReport.indexes.length === 45 &&
+        fullReport.indexes.length === 52 &&
         fullReport.indexes.every(
           (index) => index.is_valid && index.is_ready && index.is_live,
         ),
       no_rls_policies: fullReport.rls_policies.length === 0,
       primary_foreign_unique_inventory:
         constraintCounts.p === 9 &&
-        constraintCounts.f === 12 &&
+        constraintCounts.f === 13 &&
         constraintCounts.u === 24,
       existing_constraint_metadata:
         constraintDiagnostics.all.length === expectedConstraintManifest.length &&
@@ -1625,7 +1659,8 @@ function buildParitySummary(fullReport) {
             constraint.metadata_differences.length === 0 &&
             constraint.definition_comparison.semantic_match,
         ) &&
-        constraintDiagnostics.unexpectedActual.length === 0,
+        constraintDiagnostics.unexpectedActual.length === 0 &&
+        [...knownAdditiveConstraintKeys].every((key) => actualConstraintKeys.has(key)),
       shared_existing_constraint_metadata:
         constraintDiagnostics.shared.length ===
           expectedExistingConstraintManifest.length &&
@@ -1849,6 +1884,17 @@ function buildAclPass(summary) {
 }
 
 function buildDataIntegrityPass(summary) {
+  const expectedPostClosureRowCounts = new Map([
+    ["project_locations", 9],
+    ["projects", 13],
+    ["project_location_points", 15],
+    ["project_features", 99],
+    ["project_floor_plans", 32],
+    ["project_floor_plan_details", 152],
+    ["project_delivery_items", 102],
+    ["project_media", 137],
+    ["project_videos", 0],
+  ]);
   const rowCounts = new Map(
     summary.data_integrity_snapshot.row_counts.map((entry) => [
       entry.table_name,
@@ -1867,12 +1913,12 @@ function buildDataIntegrityPass(summary) {
       entry,
     ]),
   );
-  const expectedLocationCounts = new Map(
-    expectedReferenceLocations.map((location) => [
-      `${location.level}:true`,
-      1,
-    ]),
-  );
+  const expectedLocationCounts = new Map([
+    ["governorate:true", 1],
+    ["city:true", 1],
+    ["main_area:true", 2],
+    ["sub_area:true", 5],
+  ]);
   const actualLocationCounts = new Map(
     summary.data_integrity_snapshot.location_counts.map((entry) => [
       `${entry.level}:${entry.is_active}`,
@@ -1882,12 +1928,9 @@ function buildDataIntegrityPass(summary) {
   const checks = {
     exact_aggregate_row_counts:
       rowCounts.size === aggregateTables.length &&
-      rowCounts.get("project_locations") === expectedReferenceLocations.length &&
-      aggregateTables
-        .filter((table) => table !== "project_locations")
-        .every((table) => rowCounts.get(table) === 0),
-    no_project_ids:
-      summary.data_integrity_snapshot.project_ids.length === 0,
+      [...expectedPostClosureRowCounts].every(([table, count]) => rowCounts.get(table) === count),
+    project_catalog_ids_complete:
+      summary.data_integrity_snapshot.project_ids.length === 13,
     client_keys_are_complete_unique_and_expected:
       clientKeyStats.size === clientKeyTables.length &&
       clientKeyTables.every((table) => {
@@ -1895,9 +1938,7 @@ function buildDataIntegrityPass(summary) {
         if (!stats) {
           return false;
         }
-        const expectedRows = table === "project_locations"
-          ? expectedReferenceLocations.length
-          : 0;
+        const expectedRows = expectedPostClosureRowCounts.get(table) ?? 0;
         return Number(stats.row_count) === expectedRows &&
           Number(stats.null_count) === 0 &&
           Number(stats.distinct_count) === expectedRows &&
@@ -1921,10 +1962,11 @@ function buildDataIntegrityPass(summary) {
         if (!state) {
           return false;
         }
-        return sequence === "project_locations_id_seq"
-          ? Number(state.last_value) === expectedReferenceLocations.length &&
-              state.is_called === true
-          : Number(state.last_value) === 1 && state.is_called === false;
+        const table = sequence.replace(/_id_seq$/u, "");
+        const expectedRows = expectedPostClosureRowCounts.get(table) ?? 0;
+        return expectedRows === 0
+          ? Number(state.last_value) === 1 && state.is_called === false
+          : Number(state.last_value) >= expectedRows && state.is_called === true;
       }),
     no_qa_marker_residue:
       summary.data_integrity_snapshot.qa_marker_residue.length === 0,

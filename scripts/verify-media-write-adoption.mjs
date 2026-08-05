@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = join(
@@ -12,7 +13,6 @@ const allowedClassifications = new Set([
   "adopted",
   "neutral",
   "explicit_exception",
-  "tooling_unadopted",
 ]);
 const allowedMutationContracts = new Set([
   "explicit_empty_delete",
@@ -64,28 +64,49 @@ function parseProviderRegistry() {
 
 function discoverDirectProviderWriters(providerTables) {
   const writers = new Map();
-  const tableAlternation = [...providerTables]
-    .map((table) => table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("|");
-  const fromPattern = new RegExp(
-    String.raw`\.from\(\s*["'](${tableAlternation})["']\s*\)`,
-    "g",
-  );
-  const mutationPattern = /\.(?:insert|update|upsert|delete)\s*\(/;
+
+  function providerTableFromReceiver(node) {
+    if (
+      ts.isCallExpression(node)
+      && ts.isPropertyAccessExpression(node.expression)
+      && node.expression.name.text === "from"
+      && node.arguments.length === 1
+      && ts.isStringLiteralLike(node.arguments[0])
+      && providerTables.has(node.arguments[0].text)
+    ) {
+      return node.arguments[0].text;
+    }
+    let result = null;
+    ts.forEachChild(node, (child) => {
+      if (result === null) result = providerTableFromReceiver(child);
+    });
+    return result;
+  }
 
   for (const rootName of ["src", "scripts"]) {
     for (const absolutePath of listSourceFiles(join(repoRoot, rootName))) {
       const source = readFileSync(absolutePath, "utf8");
-      fromPattern.lastIndex = 0;
-      for (const match of source.matchAll(fromPattern)) {
-        const remaining = source.slice(match.index, match.index + 900);
-        const statement = remaining.split(";", 1)[0];
-        if (!mutationPattern.test(statement)) continue;
+      const syntaxKind = absolutePath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+      const sourceFile = ts.createSourceFile(absolutePath, source, ts.ScriptTarget.Latest, true, syntaxKind);
+      function visit(node) {
+        if (
+          ts.isCallExpression(node)
+          && ts.isPropertyAccessExpression(node.expression)
+          && new Set(["insert", "update", "upsert", "delete"]).has(node.expression.name.text)
+        ) {
+          const table = providerTableFromReceiver(node.expression.expression);
+          if (!table) {
+            ts.forEachChild(node, visit);
+            return;
+          }
         const relativePath = normalizePath(relative(repoRoot, absolutePath));
         const tables = writers.get(relativePath) ?? new Set();
-        tables.add(match[1]);
+          tables.add(table);
         writers.set(relativePath, tables);
+        }
+        ts.forEachChild(node, visit);
       }
+      visit(sourceFile);
     }
   }
   return writers;
@@ -123,8 +144,8 @@ const synchronizationSource = read("src/lib/admin/media-catalog/synchronization.
 const domainCoordinationSource = read("src/lib/admin/media-catalog/domain-write-coordination.ts");
 
 if (manifest.schemaVersion !== 1) failures.push("Manifest schemaVersion must be 1.");
-if (manifest.globalClosure !== false) {
-  failures.push("Global Media write-coordination closure must remain false while declared gaps exist.");
+if (manifest.globalClosure !== true) {
+  failures.push("Global Media write-coordination closure must be true after the complete writer inventory is closed.");
 }
 if (
   !/const nonEmptyCleanupWarnings = cleanupResults\.flatMap/.test(synchronizationSource)
@@ -218,12 +239,6 @@ for (const owner of manifest.owners ?? []) {
     failures.push(`Adopted owner ${owner.id} must prove lease, reference sync, and structured warning adoption.`);
   }
   if (
-    owner.classification === "tooling_unadopted"
-    && (owner.acquiresWriteLease || owner.completesReferenceSync)
-  ) {
-    failures.push(`Tooling gap ${owner.id} cannot claim write-lease or reference-sync adoption.`);
-  }
-  if (
     owner.requiresExplicitEmptyCleanup !== undefined
     && typeof owner.requiresExplicitEmptyCleanup !== "boolean"
   ) {
@@ -304,6 +319,8 @@ for (const owner of manifest.owners ?? []) {
 
     const selectIndex = actionSource.search(/\.select\(\s*["']id["']\s*\)/);
     const deleteIndex = actionSource.search(/\.delete\(\s*\)/);
+    const atomicRpcIndex = actionSource.search(/await mutatePageComposition\(/);
+    const domainCommitIndex = deleteIndex >= 0 ? deleteIndex : atomicRpcIndex;
     const synchronizeIndex = actionSource.search(
       /synchronizeMediaReferenceWriteScopesAfterDomainMutation\(\s*\[\]\s*,\s*null\s*,/,
     );
@@ -316,18 +333,18 @@ for (const owner of manifest.owners ?? []) {
     const domainPattern = new RegExp(
       String.raw`domainKey:\s*["']${escapeRegExp(mutationPath.domainKey)}["']`,
     );
-    const commitProof = deleteIndex >= 0 && synchronizeIndex > deleteIndex
-      ? actionSource.slice(deleteIndex, synchronizeIndex)
+    const commitProof = domainCommitIndex >= 0 && synchronizeIndex > domainCommitIndex
+      ? actionSource.slice(domainCommitIndex, synchronizeIndex)
       : "";
 
     if (
       selectIndex < 0
-      || deleteIndex <= selectIndex
-      || synchronizeIndex <= deleteIndex
+      || domainCommitIndex <= selectIndex
+      || synchronizeIndex <= domainCommitIndex
       || warningIndex <= synchronizeIndex
       || revalidationIndex <= warningIndex
       || !domainPattern.test(actionSource)
-      || !/if \(error\) throw/.test(commitProof)
+      || (!/if \(error\) throw/.test(commitProof) && !/await mutatePageComposition\(/.test(commitProof))
       || !/catch \(revalidationError\)/.test(actionSource)
     ) {
       failures.push(
@@ -348,7 +365,8 @@ for (const owner of manifest.owners ?? []) {
       mutationPath.contract === "explicit_empty_bulk_delete"
       && (!/const capturedIds = \(existingRows \?\? \[\]\)\.map/.test(actionSource)
         || !/const cleanupIds = \[\.\.\.new Set\(\[\.\.\.capturedIds, \.\.\.ids\]\)\]/.test(actionSource)
-        || !/\.in\(\s*["']id["']\s*,\s*cleanupIds\s*\)/.test(actionSource)
+        || (!/\.in\(\s*["']id["']\s*,\s*cleanupIds\s*\)/.test(actionSource)
+          && !/hero_ids:\s*cleanupIds/.test(actionSource))
         || !/cleanupIds\.map\(/.test(actionSource))
     ) {
       failures.push(`Owner ${owner.id} action ${mutationPath.exportName} does not prove one captured atomic batch delete followed by retry-safe cleanup of every requested identity.`);
@@ -387,11 +405,8 @@ for (const [sourceFile, tables] of directWriters) {
       failures.push(`Provider writer ${sourceFile} adds unclassified table ownership for ${table}.`);
     }
   }
-  if (sourceFile.startsWith("scripts/") && !classifications.has("tooling_unadopted")) {
-    failures.push(`Direct tooling writer ${sourceFile} must remain explicit tooling_unadopted debt.`);
-  }
-  if (sourceFile.startsWith("src/") && classifications.has("tooling_unadopted")) {
-    failures.push(`Runtime writer ${sourceFile} cannot be hidden as tooling_unadopted.`);
+  if (sourceFile.startsWith("scripts/")) {
+    failures.push(`Direct tooling writer ${sourceFile} is forbidden after global closure.`);
   }
 }
 

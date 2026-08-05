@@ -183,7 +183,7 @@ function MainFeaturedCard({
               />
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/10 to-transparent lg:hidden" />
-              {display.showProjectCode ? <ProjectCodeBadge code={project.englishName} hideFrom="lg" /> : null}
+              {display.showProjectCode ? <ProjectCodeBadge code={project.code} hideFrom="lg" /> : null}
 
               <div className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(to_left,rgba(5,7,11,0.80)_0%,rgba(5,7,11,0.38)_42%,rgba(5,7,11,0.04)_100%)] lg:block" />
 

@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import type { ProjectCategory } from "../../../../config/projects-data";
+import type { ProjectCategory } from "../../../../lib/projects/public-types";
 import { revalidateProjectsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { listPath } from "./helpers";

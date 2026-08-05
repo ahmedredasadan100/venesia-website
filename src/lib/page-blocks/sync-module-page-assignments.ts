@@ -7,21 +7,12 @@ import { BLOCK_MODULE_REGISTRY } from "./block-module-registry";
 import { revalidatePageBlocksPath } from "./admin-revalidate";
 import type { PageBlockType } from "./types";
 
+type AssignmentSyncActor = { id: number; username: string };
+
 function defaultSlotForBlockType(blockType: PageBlockType) {
   if (blockType === "breadcrumb") return "hero";
   if (blockType === "feed") return "sidebar";
   return "main";
-}
-
-async function nextSortOrderForTable(pageId: number, table: string) {
-  const { data } = await getSupabaseAdmin()
-    .from(table)
-    .select("sort_order")
-    .eq("page_id", pageId)
-    .order("sort_order", { ascending: false })
-    .limit(1);
-
-  return ((data?.[0]?.sort_order as number | undefined) ?? 0) + 10;
 }
 
 export function parsePageIdsFromForm(formData: FormData) {
@@ -30,75 +21,77 @@ export function parsePageIdsFromForm(formData: FormData) {
 
 async function syncModulePageAssignmentsForTable(
   table: string,
+  kind: string,
   templateId: number,
   pageIds: number[],
   defaultSlot: string,
+  actor: AssignmentSyncActor,
 ) {
   const targetIds = [...new Set(pageIds.filter(Boolean))];
 
   const { data: current, error: currentError } = await getSupabaseAdmin()
     .from(table)
-    .select("id,page_id")
+    .select("page_id")
     .eq("template_id", templateId);
 
   if (currentError) throw new Error(currentError.message);
+  const affectedPageIds = [...new Set([...(current ?? []).map((row) => row.page_id), ...targetIds])].sort(
+    (left, right) => left - right,
+  );
+  if (!affectedPageIds.length) return;
 
-  const currentPageIds = new Set((current ?? []).map((row) => row.page_id));
-  const targetSet = new Set(targetIds);
-  const affectedPageIds = new Set<number>();
-
-  const toRemove = (current ?? []).filter((row) => !targetSet.has(row.page_id));
-  if (toRemove.length) {
-    const { error } = await getSupabaseAdmin()
-      .from(table)
-      .delete()
-      .in(
-        "id",
-        toRemove.map((row) => row.id),
-      );
-
-    if (error) throw new Error(error.message);
-    toRemove.forEach((row) => affectedPageIds.add(row.page_id));
-  }
-
-  const toAdd = targetIds.filter((pageId) => !currentPageIds.has(pageId));
-  for (const pageId of toAdd) {
-    const { error } = await getSupabaseAdmin().from(table).insert({
-      page_id: pageId,
+  const { error } = await getSupabaseAdmin().rpc("mutate_page_composition", {
+    p_page_id: affectedPageIds[0],
+    p_operation: "sync_template_pages",
+    p_payload: {
+      kind,
       template_id: templateId,
-      slot: defaultSlot,
-      sort_order: await nextSortOrderForTable(pageId, table),
-      is_visible: true,
-    });
+      page_ids: targetIds,
+      default_slot: defaultSlot,
+    },
+    p_actor_admin_user_id: actor.id,
+    p_actor_username: actor.username,
+  });
+  if (error) throw new Error(error.message);
 
-    if (error) {
-      if (error.code === "23505") continue;
-      throw new Error(error.message);
-    }
-
-    affectedPageIds.add(pageId);
-  }
-
-  await Promise.all([...affectedPageIds].map((pageId) => revalidatePageBlocksPath(pageId)));
+  await Promise.all(affectedPageIds.map((pageId) => revalidatePageBlocksPath(pageId)));
 }
 
 export async function syncBlockModulePageAssignments(
   blockType: PageBlockType,
   templateId: number,
   pageIds: number[],
+  actor: AssignmentSyncActor,
 ) {
   await syncModulePageAssignmentsForTable(
     BLOCK_MODULE_REGISTRY[blockType].assignmentTable,
+    blockType,
     templateId,
     pageIds,
     defaultSlotForBlockType(blockType),
+    actor,
   );
 }
 
-export async function syncMediaHubModulePageAssignments(templateId: number, pageIds: number[]) {
-  await syncModulePageAssignmentsForTable(MEDIA_HUB_ASSIGNMENT_TABLE, templateId, pageIds, "main");
+export async function syncMediaHubModulePageAssignments(
+  templateId: number,
+  pageIds: number[],
+  actor: AssignmentSyncActor,
+) {
+  await syncModulePageAssignmentsForTable(MEDIA_HUB_ASSIGNMENT_TABLE, "media_hub", templateId, pageIds, "main", actor);
 }
 
-export async function syncMediaSidebarModulePageAssignments(templateId: number, pageIds: number[]) {
-  await syncModulePageAssignmentsForTable(MEDIA_SIDEBAR_ASSIGNMENT_TABLE, templateId, pageIds, "sidebar");
+export async function syncMediaSidebarModulePageAssignments(
+  templateId: number,
+  pageIds: number[],
+  actor: AssignmentSyncActor,
+) {
+  await syncModulePageAssignmentsForTable(
+    MEDIA_SIDEBAR_ASSIGNMENT_TABLE,
+    "media_sidebar",
+    templateId,
+    pageIds,
+    "sidebar",
+    actor,
+  );
 }

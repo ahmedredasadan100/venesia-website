@@ -266,7 +266,7 @@ function ProjectRow({
               />
 
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/10 to-transparent md:hidden" />
-              {display.showProjectCode ? <ProjectCodeBadge code={project.englishName} /> : null}
+              {display.showProjectCode ? <ProjectCodeBadge code={project.code} /> : null}
 
               <div className="pointer-events-none absolute inset-0 hidden bg-gradient-to-l from-transparent via-[#05070B]/20 to-[#05070B]/78 md:block" />
               <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-16 bg-gradient-to-r from-[#05070B] to-transparent md:block" />
@@ -346,7 +346,7 @@ function ProjectCard({
             />
 
             <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent md:hidden" />
-            {display.showProjectCode ? <ProjectCodeBadge code={project.englishName} /> : null}
+            {display.showProjectCode ? <ProjectCodeBadge code={project.code} /> : null}
           </div>
 
           {(display.showProjectLocation || display.showProjectType) ? (

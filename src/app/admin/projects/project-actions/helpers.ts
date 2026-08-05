@@ -1,4 +1,4 @@
-import type { ProjectCategory } from "../../../../config/projects-data";
+import type { ProjectCategory } from "../../../../lib/projects/public-types";
 import { normalizeSlugInput, slugifyFromTitle } from "../../../../lib/admin/slug";
 import type { MediaReferenceSynchronizationResult } from "../../../../lib/admin/media-catalog/synchronization";
 

@@ -55,8 +55,10 @@ export type PublicProject = {
   arabicName: string;
   englishName: string;
   featured: boolean;
-  /** @deprecated Track Your Project is outside this tranche; clean public UI uses englishName. */
   code: string;
+  showOnHomepage: boolean;
+  homepageOrder: number;
+  brochureUrl: string | null;
   generalDescription: string;
   shortDescription: string;
   cardImage: PublicProjectImage;
@@ -102,7 +104,7 @@ export type PublicProject = {
 
 export type HomepageProjectCard = Pick<
   PublicProject,
-  "slug" | "englishName" | "shortDescription" | "cardImage"
+  "slug" | "code" | "englishName" | "shortDescription" | "cardImage"
 > & {
   id: number;
   locationLabel: string;

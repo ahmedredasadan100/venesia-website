@@ -23,6 +23,7 @@ import {
   parseOptionalBool,
 } from "../../../../../lib/hero/hero-content-controls";
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
+import { mutatePageComposition } from "../../pages/page-actions/helpers";
 
 function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -383,7 +384,7 @@ export async function duplicateHeroTemplate(formData: FormData) {
 }
 
 export async function bulkHeroTemplates(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const action = cleanText(formData.get("bulk_action"));
   const rawIds = formData.getAll("ids");
   const ids = (rawIds.length > 1 ? rawIds : String(formData.get("ids") ?? "").split(","))
@@ -411,11 +412,10 @@ export async function bulkHeroTemplates(formData: FormData) {
 
     const capturedIds = (existingRows ?? []).map((row) => Number(row.id));
     const cleanupIds = [...new Set([...capturedIds, ...ids])];
-    const { error } = await getSupabaseAdmin()
-      .from("hero_templates")
-      .delete()
-      .in("id", cleanupIds);
-    if (error) throw new Error(error.message);
+    const { data: anchorPage, error: pageError } = await getSupabaseAdmin()
+      .from("pages").select("id").order("id").limit(1).maybeSingle();
+    if (pageError || !anchorPage) throw new Error(pageError?.message ?? "Page Composition anchor is missing.");
+    await mutatePageComposition(Number(anchorPage.id), "delete_hero_templates", { hero_ids: cleanupIds }, actor);
 
     mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
       [],
@@ -473,6 +473,11 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     config: buildHeroConfig(formData),
     updated_at: new Date().toISOString(),
   };
+  const pageIds = [...new Set(formData.getAll("page_ids").map((value) => Number(value)).filter(Boolean))];
+  const { data: anchorPage, error: anchorError } = pageIds.length
+    ? { data: { id: pageIds[0] }, error: null }
+    : await getSupabaseAdmin().from("pages").select("id").order("id").limit(1).maybeSingle();
+  if (anchorError || !anchorPage) throw new Error(anchorError?.message ?? "Page Composition anchor is missing.");
   const coordinated = await coordinateMediaReferenceEntityMutation({
     domainKey: "hero_templates",
     leaseEntityIdentity: String(id),
@@ -480,47 +485,15 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     actorId: actor.id,
     requestIdentity: `hero-template:update:${id}`,
     mutate: async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("hero_templates")
-        .update(nextRow)
-        .eq("id", id)
-        .select("id")
-        .maybeSingle<{ id: number }>();
-      if (error || !data) throw new Error(error?.message ?? "تعذر تحديث Hero.");
-      return data;
+      await mutatePageComposition(Number(anchorPage.id), "replace_hero_template", {
+        hero_id: id,
+        template: nextRow,
+        page_ids: pageIds,
+      }, actor);
+      return { id };
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
-
-  const pageIds = formData.getAll("page_ids").map((value) => Number(value)).filter(Boolean);
-
-  await getSupabaseAdmin()
-    .from("hero_assignments")
-    .delete()
-    .eq("hero_id", id)
-    .eq("target_type", "page");
-
-  if (pageIds.length) {
-    const { data: pages, error: pagesError } = await getSupabaseAdmin()
-      .from("pages")
-      .select("id,slug,path")
-      .in("id", pageIds);
-
-    if (pagesError) throw new Error(pagesError.message);
-
-    const rows = (pages ?? []).map((page) => ({
-      hero_id: id,
-      target_type: "page",
-      target_id: page.id,
-      target_slug: page.slug,
-      path: page.path,
-      is_active: true,
-      priority: 100,
-    }));
-
-    const { error: assignmentError } = await getSupabaseAdmin().from("hero_assignments").insert(rows);
-    if (assignmentError) throw new Error(assignmentError.message);
-  }
 
   await revalidateHeroAdmin();
   revalidatePath(`/admin/pages-blocks/blocks/hero/${id}`);

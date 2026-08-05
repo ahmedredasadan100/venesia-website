@@ -224,7 +224,7 @@ export async function updateCardsBlock(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncBlockModulePageAssignments("cards", id, parsePageIdsFromForm(formData));
+  await syncBlockModulePageAssignments("cards", id, parsePageIdsFromForm(formData), actor);
   await revalidateBlockModulePaths("cards");
   redirect(`/admin/pages-blocks/blocks/cards/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }

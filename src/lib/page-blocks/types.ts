@@ -68,6 +68,7 @@ export type PageBlockAssignmentRow = {
   slot: string;
   sort_order: number;
   is_visible: boolean;
+  updated_at: string;
   module_kind: PageModuleKind;
   block_type: PageBlockType | null;
   template_name: string;

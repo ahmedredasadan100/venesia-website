@@ -37,6 +37,8 @@ type PageBlocksAssignmentsGridProps = {
   onToggleVisibility: (row: PageBlockAssignmentRow) => void;
   onDuplicate: (row: PageBlockAssignmentRow) => void;
   onDelete: (row: PageBlockAssignmentRow) => void;
+  canMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => boolean;
+  onMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => void;
   visibleColumns: ReadonlySet<PageCompositionColumnKey<"pageAssignments">>;
 };
 
@@ -55,6 +57,8 @@ export default function PageBlocksAssignmentsGrid({
   onToggleVisibility,
   onDuplicate,
   onDelete,
+  canMove,
+  onMove,
   visibleColumns,
 }: PageBlocksAssignmentsGridProps) {
   const gridColumns = [
@@ -122,6 +126,10 @@ export default function PageBlocksAssignmentsGrid({
             onToggleVisibility={() => onToggleVisibility(row)}
             onDuplicate={() => onDuplicate(row)}
             onDelete={() => onDelete(row)}
+            canMoveUp={canMove(row, -1)}
+            canMoveDown={canMove(row, 1)}
+            onMoveUp={() => onMove(row, -1)}
+            onMoveDown={() => onMove(row, 1)}
             showModule={visibleColumns.has("module")}
             showStatus={visibleColumns.has("status")}
           />

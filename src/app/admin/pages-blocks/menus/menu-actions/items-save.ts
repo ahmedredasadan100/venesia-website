@@ -2,14 +2,13 @@
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
-import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
-  auditMenuAction,
   backToMenu,
   getBoolean,
   getNumber,
   getString,
   mediaWriteMutationErrorMessage,
+  mutateMenuTree,
   navigationMutationMessage,
   resolveMenuItemLink,
   revalidateNavigation,
@@ -49,13 +48,8 @@ export async function createMenuItem(formData: FormData) {
         actorId: adminUser.id,
         requestIdentity: `menu_item:create:${crypto.randomUUID()}`,
         mutate: async () => {
-          const { data, error } = await getSupabaseAdmin()
-            .from("menu_items")
-            .insert(intendedRow)
-            .select("id")
-            .single();
-          if (error) throw new Error(error.message);
-          return { id: Number(data.id) };
+          const result = await mutateMenuTree(menuId, "save_item", { item: intendedRow }, adminUser);
+          return { id: Number(result.item_id) };
         },
         resolveEntityIdentity: (value) => String(value.id),
       });
@@ -67,11 +61,6 @@ export async function createMenuItem(formData: FormData) {
     }
   })();
 
-  await auditMenuAction("menu_item", "create", {
-    entityId: coordinated.value.id,
-    entityLabel: label,
-    metadata: { menu_id: menuId },
-  });
   await revalidateNavigation(coordinated.mediaSynchronization);
   backToMenu(
     menuId,
@@ -113,12 +102,13 @@ export async function updateMenuItem(formData: FormData) {
         actorId: adminUser.id,
         requestIdentity: `menu_item:update:${id}:${crypto.randomUUID()}`,
         mutate: async () => {
-          const { error } = await getSupabaseAdmin()
-            .from("menu_items")
-            .update(intendedRow)
-            .eq("id", id);
-          if (error) throw new Error(error.message);
-          return { id };
+          const result = await mutateMenuTree(
+            menuId,
+            "save_item",
+            { item: { id, ...intendedRow } },
+            adminUser,
+          );
+          return { id: Number(result.item_id) };
         },
         resolveEntityIdentity: (value) => String(value.id),
       });
@@ -130,11 +120,6 @@ export async function updateMenuItem(formData: FormData) {
     }
   })();
 
-  await auditMenuAction("menu_item", "update", {
-    entityId: id,
-    entityLabel: label,
-    metadata: { menu_id: menuId },
-  });
   await revalidateNavigation(coordinated.mediaSynchronization);
   backToMenu(
     menuId,

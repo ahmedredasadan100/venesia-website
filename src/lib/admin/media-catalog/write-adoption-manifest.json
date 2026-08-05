@@ -1,12 +1,11 @@
 {
   "schemaVersion": 1,
   "capability": "media_reference_write_coordination",
-  "globalClosure": false,
+  "globalClosure": true,
   "classifications": [
     "adopted",
     "neutral",
-    "explicit_exception",
-    "tooling_unadopted"
+    "explicit_exception"
   ],
   "providerRegistry": [
     { "domainKey": "topics", "table": "topics", "mediaFields": ["image", "excerpt", "content", "media_payload", "og_image"] },
@@ -23,7 +22,6 @@
     { "domainKey": "feed_module_templates", "table": "feed_module_templates", "mediaFields": ["config"] },
     { "domainKey": "media_sidebar_module_templates", "table": "media_sidebar_module_templates", "mediaFields": ["config"] },
     { "domainKey": "media_hub_module_templates", "table": "media_hub_module_templates", "mediaFields": ["config"] },
-    { "domainKey": "page_sections", "table": "page_sections", "mediaFields": ["config"] },
     { "domainKey": "menu_items", "table": "menu_items", "mediaFields": ["href"] },
     { "domainKey": "site_settings", "table": "site_settings", "mediaFields": ["value"] }
   ],
@@ -228,9 +226,10 @@
       "structuredWarning": false,
       "sourceFiles": [
         "src/app/admin/pages-blocks/menus/menu-actions/bulk.ts",
-        "src/app/admin/pages-blocks/menus/menu-actions/items-status.ts"
+        "src/app/admin/pages-blocks/menus/menu-actions/items-status.ts",
+        "src/app/admin/pages-blocks/menus/menu-actions/reorder.ts"
       ],
-      "rationale": "Visibility and status commands do not alter href values; unsafe adjacent-row ordering is intentionally absent until an atomic contract exists."
+      "rationale": "Visibility and atomic reorder commands do not alter the provider-owned href value; ordering is owned by mutate_menu_tree."
     },
     {
       "id": "menu-removal-commands",
@@ -314,28 +313,6 @@
       "rationale": "These files own media capability policy and reconciliation state records, not Domain-provided asset references."
     },
     {
-      "id": "legacy-page-sections-provider",
-      "classification": "explicit_exception",
-      "tables": ["page_sections"],
-      "mediaFields": ["page_sections.config"],
-      "acquiresWriteLease": false,
-      "completesReferenceSync": false,
-      "structuredWarning": false,
-      "sourceFiles": [],
-      "rationale": "Legacy page_sections remains a discovery-only provider with no active Admin mutation owner; Public Media moved fully into topics."
-    },
-    {
-      "id": "guarded-static-project-reimport",
-      "classification": "explicit_exception",
-      "tables": ["projects", "project_media", "project_floor_plans", "project_videos"],
-      "mediaFields": ["projects.image", "projects.hero_image", "projects.small_box_image", "projects.overview_main_image", "projects.og_image", "project_media.image", "project_floor_plans.architectural_image", "project_floor_plans.furnishing_image", "project_videos.poster_image"],
-      "acquiresWriteLease": false,
-      "completesReferenceSync": false,
-      "structuredWarning": false,
-      "sourceFiles": ["src/lib/projects/seed-from-static-data.ts"],
-      "rationale": "The legacy static reimport is environment-gated and remains outside daily Admin mutations; it is not evidence of global write-coordination closure."
-    },
-    {
       "id": "media-special-sagas",
       "classification": "explicit_exception",
       "tables": [],
@@ -349,64 +326,6 @@
         "src/lib/admin/media-catalog/synchronization.ts"
       ],
       "rationale": "Catalog rebind/replace and physical move use dedicated Write Lease coordination, while safe delete uses its fail-closed reservation Saga; these are capability-owned workflows rather than daily Domain mutations."
-    },
-    {
-      "id": "tooling-direct-provider-writes",
-      "classification": "tooling_unadopted",
-      "tables": [
-        "topics",
-        "topic_categories",
-        "projects",
-        "project_media",
-        "project_floor_plans",
-        "hero_templates",
-        "content_block_templates",
-        "cta_block_templates",
-        "breadcrumb_block_templates",
-        "feed_module_templates",
-        "media_sidebar_module_templates",
-        "media_hub_module_templates",
-        "menu_items",
-        "site_settings"
-      ],
-      "mediaFields": ["provider-owned fields vary by script; see providerRegistry"],
-      "acquiresWriteLease": false,
-      "completesReferenceSync": false,
-      "structuredWarning": false,
-      "sourceFiles": [
-        "scripts/about-stability-test.mjs",
-        "scripts/apply-home-contact-seed.mjs",
-        "scripts/apply-home-main-sort-order.mjs",
-        "scripts/apply-home-projects-seed.mjs",
-        "scripts/apply-maintenance-mode-seed.mjs",
-        "scripts/apply-media-center-hub-modules-seed.mjs",
-        "scripts/apply-media-center-listing-modules-seed.mjs",
-        "scripts/apply-media-center-sidebar-modules-seed.mjs",
-        "scripts/apply-pre-launch-data-fixes.mjs",
-        "scripts/apply-track-your-project-seed.mjs",
-        "scripts/cleanup-e2e-test-data.mjs",
-        "scripts/e2e-topics-feed-test.mjs",
-        "scripts/fix-project-image-paths.mjs",
-        "scripts/home-hero-stabilization-test.mjs",
-        "scripts/home-projects-stabilization-test.mjs",
-        "scripts/media-center-admin-public-e2e.mjs",
-        "scripts/media-center-hub-modules-test.mjs",
-        "scripts/media-center-listing-blocks-test.mjs",
-        "scripts/media-center-sidebar-modules-test.mjs",
-        "scripts/projects-single-source-test.mjs",
-        "scripts/qa-admin-content-soft-delete-counts.mjs",
-        "scripts/qa-admin-data-engine-browser-corrections.mjs",
-        "scripts/qa-admin-data-engine-corrections.mjs",
-        "scripts/qa-admin-entity-list-consumers.mjs",
-        "scripts/qa-media-recovery-browser.mts",
-        "scripts/qa-production-media-storage.mjs",
-        "scripts/qa-topics-feedback-system.mjs",
-        "scripts/qa-topics-inline-notice.mjs",
-        "scripts/qa-topics-list-reference.mjs",
-        "scripts/verify-about-hero-independence.mjs",
-        "scripts/verify-unified-content-engine.mjs"
-      ],
-      "rationale": "Historical seed, repair, and QA tooling can write provider tables directly. It is intentionally visible debt and keeps global Media write-coordination closure false until each tool is retired or hardened."
     }
   ]
 }
