@@ -506,6 +506,13 @@ export default function PagesTableClient({
               },
               filters: [],
               values: {},
+              onQueryPatch: (patch, behavior = "push") => {
+                const search =
+                  "q" in patch
+                    ? (patch.q ?? "").trim()
+                    : controller.query.search;
+                controller.setSearchAndFilters(search, {}, behavior);
+              },
             }}
             rows={pages}
             columns={columns}
@@ -565,7 +572,8 @@ export default function PagesTableClient({
             actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
             emptyState={{
               mode:
-                controller.result.pagination.totalRows === 0
+                controller.result.pagination.totalRows === 0 &&
+                !controller.query.search
                   ? "system"
                   : "filtered",
               systemEmpty: (

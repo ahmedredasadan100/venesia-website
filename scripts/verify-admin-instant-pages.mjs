@@ -44,6 +44,14 @@ assert.match(registry, /pages:\s*pagesEntityListAdapter/);
 assert.match(client, /useAdminEntityListController/);
 assert.match(client, /useAdminEntityInstantMutation/);
 assert.match(client, /controller\.query/);
+assert.match(
+  client,
+  /onQueryPatch:\s*\(patch,\s*behavior\s*=\s*"push"\)\s*=>\s*\{[\s\S]*?"q"\s+in\s+patch[\s\S]*?controller\.setSearchAndFilters\(search,\s*\{\},\s*behavior\)/,
+);
+assert.match(
+  client,
+  /controller\.result\.pagination\.totalRows\s*===\s*0\s*&&\s*!controller\.query\.search[\s\S]*?\?\s*"system"\s*:\s*"filtered"/,
+);
 assert.match(client, /<AdminEntityList</);
 assert.match(client, /enableColumnManagement/);
 assert.match(client, /mapAdminActionResultToFeedback/);
@@ -103,4 +111,4 @@ assert.match(company, /ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.match(company, /revalidateTag\(ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.equal((settings.match(/revalidatePath\("\/admin"/g) ?? []).length, 1);
 assert.match(page, /loadPagesEntityListResult/);
-console.log("verify:admin-instant-pages passed (69 structural assertions)");
+console.log("verify:admin-instant-pages passed (71 structural assertions)");
