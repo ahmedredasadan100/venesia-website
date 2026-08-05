@@ -124,6 +124,8 @@ npm run verify:admin-runtime
 
 ```bash
 npm run verify:migrations
+npm run verify:database-reconciliation
+npm run verify:database-reconciliation-live
 npm run verify:legacy-media-admin
 npm run verify:production-media-storage
 npm run verify:media-library-system
@@ -148,7 +150,6 @@ npm run verify:composite-slot-behavior
 npm run verify:assignment-presence
 npm run verify:assignment-presence-behavior
 npm run verify:route-slot-policy
-npm run verify:project-child-fail-closed
 npm run verify:projects-hub-readiness
 ```
 
@@ -373,4 +374,4 @@ For a Documentation Reset correction pass, run in this order:
 6. `git diff --cached --stat`;
 7. `git status --short`.
 
-The accepted Full Repository Audit on baseline `9e420620f4a802dc8f070334c7d8d210a4a693f8` supplies the current finding inventory. Documentation Reset records that inventory and its product deferrals; it does not implement or retest those findings.
+The historical Documentation Reset procedure is retained for that narrow task type only. Current findings and decisions come from `CURRENT_PROJECT_STATE.md`, `ROADMAP_AND_DEBT_REGISTER.md`, executable manifests, and current guards; an old audit baseline must never be treated as live truth.

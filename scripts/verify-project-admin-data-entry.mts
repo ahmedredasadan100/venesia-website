@@ -416,7 +416,9 @@ check(
     schemaParityAudit.includes('"set_project_featured_admin_entry"') &&
     schemaParityAudit.includes('"duplicate_project_admin_entry"') &&
     schemaParityAudit.includes("columns: 122") &&
-    schemaParityAudit.includes("indexes: 52") &&
+    schemaParityAudit.includes("indexes: 54") &&
+    schemaParityAudit.includes("dashboard_truth_migration_sha256") &&
+    schemaParityAudit.includes("reports_analytics_migration_sha256") &&
     schemaParityAudit.includes("functions: 8") &&
     schemaParityAudit.includes('["projects.featured", "false"]'),
 );

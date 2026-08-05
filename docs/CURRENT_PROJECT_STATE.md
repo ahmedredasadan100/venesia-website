@@ -1,140 +1,84 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-07-25
+**Updated:** 2026-08-05
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
-This file contains current operational facts. It must remain short, evidence-backed, and updated after relevant merges, accepted audits, or product-priority decisions.
+This file records the minimum current facts needed to begin work safely. Architecture authority remains `../AI_ARCHITECTURE_PRINCIPLES.md`; executable manifests and guards remain the authority for adopter details.
 
-## Official baseline
+## Official baseline entering final reconciliation
 
 ```text
-47b662d0761adeae15ada412652fc8c92f5e3d53
+62fe0a56c2c61e0660fc2b7c480c49472c1d6080
 ```
 
-This is the official `main` baseline after PR #19 (Documentation Reset).
+The final release commit and automatic Production deployment are recorded by GitHub and Vercel release evidence rather than hard-coded before the expected-head merge exists.
 
-## PR #18 closure
+## Current architecture truth
 
-| Fact | Verified state |
-|---|---|
-| PR | #18 |
-| Pre-merge base | `8442dbcfb0829a578be98ca5258d96cd51cd090c` |
-| Pre-merge head | `e8175b6529159167b108b72a9b6646876f888f06` |
-| Review threads before merge | 0 unresolved |
-| Pre-merge Quality Gate | Success |
-| Vercel Preview before merge | Success |
-| Merge method | Standard Merge Commit with expected-head protection |
-| Squash / Rebase / Auto-merge | Not used |
-| Merge commit / new baseline | `9e420620f4a802dc8f070334c7d8d210a4a693f8` |
-| Main alignment after merge | local main = origin/main = GitHub main |
-| GitHub Quality Gate on merge commit | Success |
-| Production Admin smoke | Skipped because no trusted Admin session was available; this is not a software failure |
+- Unified Content owns administrative article, news, press, site-update, video, and gallery records through `public.topics`.
+- Projects use the database as their only project truth and persist the aggregate through the Project domain RPC owners.
+- Media writes use the Media coordination contract; the global writer-adoption manifest is closed and contains no unadopted tooling owner.
+- Menu ordering and Page Composition assignment ordering use their aggregate atomic mutation RPCs; direct parallel ordering writes are guarded.
+- Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
+- Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
+- Existing `/images/**` and `/files/**` values are an explicit read-compatibility boundary for live content, not a write owner and not permission for filesystem uploads in Production.
 
-PR #18 is closed. Do not reopen its scope or repeat its completed suite without a relevant code change, failed current gate, reproducible regression, contradictory repository evidence, or specific new risk.
+## Production database reconciliation
 
-## Full Repository Audit closure
+The Final Legacy Cleanup reconciliation established the following live facts against the repository migration corpus:
 
-The Full Repository Architecture, Capabilities, Runtime, Pages, Relationships and Performance Audit was completed and accepted on the official baseline.
+| Proof | Reconciled state |
+|---|---:|
+| Repository migration files | 64 |
+| Production registry versions | 64 |
+| Registry SQL provenance | Exact repository SQL for every version |
+| Public tables | 42 |
+| Public tables with RLS enabled | 42 |
+| Public catalog objects with repository provenance | 215 |
+| Invalid, unready, or non-live indexes | 0 |
+| Unvalidated public constraints | 0 |
+| Parallel public function overload names | 0 |
+| Registry reconciliation audit records | At least 1 |
 
-The accepted audit:
+`public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
-- was discovery, inventory, architecture mapping, risk analysis, and roadmap work only;
-- made no implementation, database, storage, deployment, or Production-data change;
-- did not close any System, Runtime, or Capability globally;
-- classified findings as Confirmed Defects, Verification Blockers, Performance Risks, Runtime/Capability Adoption Gaps, Architecture Debt, or Product Decisions;
-- established `ROADMAP_AND_DEBT_REGISTER.md` as the active evidence-backed work ledger.
+The executable owners are:
 
-## Current documentation state
+```text
+scripts/verify-database-reconciliation.mts
+scripts/reconcile-migration-registry.mts
+```
 
-The canonical Documentation Reset merged through PR #19 at the official baseline. It:
+The structural guard is part of `ci:check`. The live guard is a Production/database closure proof and requires `SUPABASE_DB_URL`.
 
-- adds the canonical files listed in `docs/README.md`;
-- intentionally removes legacy reports, dated plans, generated QA evidence, and duplicate documentation owners;
-- preserves removed material in Git history;
-- must not restore a deleted legacy document merely to repair a reference;
-- redirects local QA evidence to `.tmp-qa/` rather than tracked `docs/qa/`.
+## Removed final-cleanup legacy
 
-Documentation Reset closure did not itself implement an audit finding.
+- the zero-consumer `project-children-sync.ts` owner that still called the retired `sync_project_children` RPC;
+- one-off migration apply scripts superseded by the canonical migration corpus and registry reconciler;
+- obsolete Production readiness/final-probe scripts that asserted removed owners or historical fixture values;
+- the unsafe one-off session-guard rewrite helper;
+- tracked QA screenshots and their one-off capture helpers;
+- the heuristic dead-code scanner whose import model produced false architecture claims.
 
-## Active Media Library implementation
+Operational recovery, authentication, and focused current QA tools remain because lack of package registration alone is not evidence that an operations tool is dead.
 
-Implementation is still in progress on branch `codex/media-library-system`, created from the exact official baseline `47b662d0761adeae15ada412652fc8c92f5e3d53`.
+## Current explicit boundaries and non-claims
 
-- No final HEAD or Commit has been accepted as official project state.
-- No Draft PR has been reviewed or accepted.
-- No remote migration application has been proven.
-- No authenticated Browser QA has been accepted.
-- No final Quality Gate has been accepted.
-- No Media foundation or Capability closure claim is valid yet.
-- Official behavior on `main` remains unchanged until verification and merge.
-- Global Media Capability closure remains false.
-
-All implementation and verification evidence on the active branch remains provisional until the required review, exact-head acceptance, and merge gates complete.
-
-## Accepted finding groups
-
-### Active Confirmed Defects
-
-- Media deletion reference safety remains a confirmed defect on official `main`. A correction is in progress on `codex/media-library-system`, but it has not been accepted, merged, or closed.
-- Page/Menu destructive and reorder operations contain non-atomic multi-step behavior.
-
-### Deferred Confirmed Defect
-
-- Projects aggregate save/duplicate atomicity remains a confirmed data-integrity finding: **Deferred by Product Priority**.
-
-### Verification Blockers
-
-- Remote RLS/grants/policies and anonymous access behavior are unverified: **Deferred by Product Priority** with the Security/Users workstream.
-- Server Action exposure requires controlled boundary proof: **Deferred by Product Priority**.
-- Migration files, remote behavior, and migration-registry provenance remain separate facts.
-
-### Performance Risks
-
-- Topics read amplification, Page link resolution, Menu counts, Storage listing, Redirect lookup, and client bundle boundaries require measurement before optimization.
-
-### Runtime and Capability Adoption Gaps
-
-- Form Runtime still has Media Topic, Projects, and Page quick-create generic gaps.
-- Confirmation Runtime still has declared native-confirm debt.
-- Preview/Public View, Publishing, SEO, Visibility, and related capabilities remain partial rather than globally closed.
-
-## Product-priority order
-
-After Documentation Reset closure, the approved sequence is:
-
-1. Media deletion safety and Media Catalog foundation — active implementation in progress; not yet closed or merged.
-2. Page/Menu atomic operations.
-3. Runtime and Capability adoption gaps.
-4. Performance measurement, then evidence-based optimization.
-5. UI/UX, RTL, responsive, keyboard, and accessibility closure.
-6. Projects in the final product stage: **Deferred by Product Priority**.
-7. Security/Users hardening before final launch or multi-user operation: **Deferred by Product Priority**.
-
-Security/Users hardening includes RLS/Grants verification, Permissions/Roles, login rate limiting, and Server Action hardening. Deferral preserves the findings; it does not resolve or downgrade them.
-
-## Current non-claims
-
-This file does not claim that:
-
-- every Admin list uses the Data Runtime;
-- every form uses the Form Runtime;
-- every destructive action uses shared Confirmation;
-- Publishing, SEO, Preview, Slug, Media, Permissions, or any Runtime is globally closed;
-- every migration registry, RLS policy, or Production header is verified;
-- Production Admin smoke passed for PR #18;
-- a deferred finding is fixed, accepted as safe, or removed from the roadmap.
+- Role semantics, rate limiting, compliance-grade blocking audit, and external Analytics provider activation require separate Product/Auth decisions. This cleanup does not invent those policies.
+- No direct Production filesystem upload owner exists; static bundled assets and live legacy read values are not runtime writers.
+- A provider reported as unavailable must remain unavailable/partial; no report may synthesize zeroes, mock analytics, or fake success.
+- A green structural build alone does not prove live database state, authenticated Browser behavior, GitHub checks, Vercel deployment, or Production smoke. Those are separate release proofs.
 
 ## Update protocol
 
-When the baseline or accepted state changes, update:
+After a relevant merge or architecture decision, update only:
 
-1. official baseline;
-2. merge, deployment, and smoke facts;
-3. accepted audit or implementation closure;
-4. active documentation or implementation phase;
-5. product-priority decisions and deferrals;
-6. known non-claims and required proof.
+1. the official entering/current baseline;
+2. current owners and explicit compatibility boundaries;
+3. live database or deployment facts that were actually re-verified;
+4. accepted Product/Auth decisions;
+5. newly opened or closed evidence-backed debt.
 
-Do not copy full PR reports into this file. Record only the facts required to begin the next session safely.
+Do not restore historical PR narratives, generated QA evidence, or duplicate status owners to this file.

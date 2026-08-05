@@ -331,30 +331,32 @@ A current ownership or adoption claim is invalid without:
 9. Is the old owner removed?
 10. Does the closure claim match the full inventory?
 
-## 13. Accepted audit maturity and priority state
+## 13. Current maturity and decision boundaries
 
-The Full Repository Audit completed on baseline `9e420620f4a802dc8f070334c7d8d210a4a693f8`. It mapped current ownership and gaps; it did not close a System, Runtime, or Capability.
+Current closure and adoption details come from executable manifests and guards. This table records ownership only.
 
-| Area | Accepted maturity | Active blocker or gap | Product state |
-|---|---|---|---|
-| Admin Interaction System | Real governance umbrella; not a super-runtime | Global closure remains false while generic adoption gaps and declared debt exist | Active by bounded tranches |
-| Collection and Data Runtimes | Strong shared foundations with registered entity adapters | Performance and consumer parity still require scoped evidence | Active where a consumer fits the contract |
-| Form Runtime | Reference consumers and Redirect adoption are established | Media Topic, Projects, and Page quick-create generic gaps | Active except Projects, which is **Deferred by Product Priority** |
-| Feedback Runtime | Shared owner is established | Browser placement/focus proof remains part of UX closure | Active supporting owner |
-| Confirmation Runtime | Shared accessible owner is established | Four declared native-confirm calls remain in three consumers | Active adoption gap |
-| Media System | Durable provider boundary exists; the Media Catalog/reference-safety implementation remains provisional on the active branch | No accepted final head, merge, remote migration/reconciliation, physical folder/bulk move, project child rebind, or authenticated Browser QA | Active implementation in progress; no foundation closure; global closure false |
-| Taxonomy Domain | Atomic reference-consumer tranche is comparatively mature | No global content/capability closure follows from that tranche | Maintain scoped claims |
-| Page Composition and Menus | Valid specialized workflows | Delete and reorder operations require domain-level atomicity | Second active implementation priority |
-| Projects Domain | Valid project aggregate domain | Root/children save and duplicate atomicity, plus form adoption | **Deferred by Product Priority** until the final product stage |
-| Auth / Users / Security | Authentication foundation exists | RLS/Grants proof, Permissions/Roles, login rate limiting, and Server Action hardening | **Deferred by Product Priority** until before final launch or multi-user operation |
-| Publishing, SEO, Preview, Slug, and Visibility | Capability foundations or partial adoption | Adopter inventory and semantics are not globally closed | Active capability tranches after safety work |
-| Revision History, Localization, and Scheduling | Proposed areas only | No approved full capability contract/product need | Do not create without evidence and ADR where required |
+| Area | Current owner state | Remaining boundary |
+|---|---|---|
+| Admin Interaction System | Governance umbrella over separate Form, Collection, Data, Feedback, Confirmation, and shared-capability owners | It never becomes a super-runtime; adopter claims remain manifest-owned |
+| Collection and Data Runtimes | Shared collection query, cache, optimistic mutation, rollback, and adapter contracts are established | Entity read models and business invariants remain domain-owned |
+| Form Runtime | One shared long-lived create/edit lifecycle owner with registered adopters and explicit specialized exceptions | Specialized composition workflows are not forced into a generic form |
+| Feedback and Confirmation | Shared accessible owners are established; new native confirmation is forbidden | Product-specific input prompts are not destructive confirmation policy |
+| Media System | Durable provider, catalog, reference coordination, delete saga, recovery, and global writer-adoption owners are established | Live legacy paths remain read-only compatibility inputs until their data retirement gate |
+| Taxonomy and Unified Content | One Topics truth with atomic taxonomy domain mutations and specialized editors | Content-type-specific fields remain specialized, not parallel engines |
+| Page Composition and Menus | Specialized domain owners with aggregate atomic mutation RPCs | Shared UI/Data owners may be reused without owning composition truth |
+| Projects Domain | Database-only project truth with atomic aggregate persistence, publication, row actions, and public read contracts | Project-specific invariants remain in the Project domain |
+| Dashboard | `admin_dashboard_truth_v1()` is the request-time KPI/diagnostics read-model owner | Dashboard presentation must not create another KPI source |
+| Reports and Analytics | `admin_reports_truth_v1()` plus the Analytics adapter registry are the reporting/analytics owners | External provider activation is a Product/Auth/Privacy decision; reports never call providers directly |
+| Auth / Users / Security | Server session and user-management foundations exist; all public application tables have live RLS enabled | Role semantics and rate limiting require explicit Product/Security decisions |
+| Database reconciliation | Repository corpus, registry provenance, catalog ownership, validity, and drift are guarded structurally and live | Supabase platform objects remain platform-owned exceptions, not application legacy |
 
 ### Accepted ownership consequences
 
 - Media deletion safety belongs to the Media reference/deletion capability, not to a form or list component.
 - Page/Menu transaction correctness belongs to their domains, not to the shared Form or Data Runtime.
-- Projects findings remain recorded even while their execution is deferred.
-- Security/Users deferral does not convert navigation visibility into authorization or close any security boundary.
+- Project aggregate correctness belongs to the Project domain RPCs, not a resurrected child-sync compatibility owner.
+- Navigation visibility never substitutes for server authorization.
+- Dashboard and Reports may share lower read models, diagnostics, and audit without duplicating their Sources of Truth.
+- Provider-specific Analytics code belongs behind the existing adapter registry, never inside a report.
 - Performance work begins with measurement owned by the relevant read model; it does not justify a new global performance Runtime.
 - UI/UX, RTL, responsive, focus, and accessibility closure require Browser QA after the relevant implementation tranche.
