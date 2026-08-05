@@ -1,390 +1,247 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
-import type {
-  AnalyticsCapabilityState,
-  AnalyticsProviderStatus,
-} from "../../../lib/admin/reports/analytics-contract";
-import type {
-  AdminReportsModel,
-  ReportsSourceStatus,
-} from "../../../lib/admin/reports/reports-contract";
+import { buildAdminReportsOverview } from "../../../lib/admin/reports/reports-overview-presentation";
+import type { AdminReportsModel, ReportsState } from "../../../lib/admin/reports/reports-contract";
 import {
-  AdminMetricCard,
   AdminPageContextHeader,
   AdminPageExperience,
+  AdminStatusPill,
 } from "../ui";
 
-function formatDate(value?: string | null) {
-  if (!value) return "غير متاح";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "غير متاح";
-  return new Intl.DateTimeFormat("ar-EG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function formatBytes(value: string) {
-  const bytes = BigInt(value);
-  if (bytes < BigInt(1024)) return `${bytes} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let amount = Number(bytes);
-  let unit = -1;
-  while (amount >= 1024 && unit < units.length - 1) {
-    amount /= 1024;
-    unit += 1;
-  }
-  return `${amount.toFixed(amount >= 10 ? 1 : 2)} ${units[unit]}`;
-}
-
-function Panel({
-  title,
-  subtitle,
-  children,
-  className = "",
-}: {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={`admin-premium-card rounded-[28px] p-5 ${className}`}>
-      <div className="mb-5">
-        <h2 className="text-base font-semibold text-white">{title}</h2>
-        {subtitle ? <p className="mt-1 text-xs leading-6 text-white/45">{subtitle}</p> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-const STATUS_LABELS: Record<ReportsSourceStatus, string> = {
+const STATE_LABELS: Record<ReportsState, string> = {
   ready: "جاهز",
-  warning: "جزئي",
+  partial: "جزئي",
   unavailable: "غير متاح",
 };
 
-function Status({ status }: { status: ReportsSourceStatus }) {
-  const classes = {
-    ready: "border-emerald-400/24 bg-emerald-400/10 text-emerald-200",
-    warning: "border-amber-400/24 bg-amber-400/10 text-amber-200",
-    unavailable: "border-rose-400/24 bg-rose-400/10 text-rose-200",
-  }[status];
-  return (
-    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${classes}`}>
-      {STATUS_LABELS[status]}
-    </span>
-  );
+const STATE_TONES: Record<ReportsState, "green" | "gold" | "red"> = {
+  ready: "green",
+  partial: "gold",
+  unavailable: "red",
+};
+
+const TONE_CLASSES = {
+  gold: "border-[#D8B87A]/18 from-[#D8B87A]/12 text-[#F0D69D]",
+  blue: "border-blue-400/16 from-blue-400/10 text-blue-200",
+  green: "border-emerald-400/16 from-emerald-400/10 text-emerald-200",
+  amber: "border-amber-400/16 from-amber-400/10 text-amber-200",
+  violet: "border-violet-400/16 from-violet-400/10 text-violet-200",
+  cyan: "border-cyan-400/16 from-cyan-400/10 text-cyan-200",
+  red: "border-rose-400/16 from-rose-400/10 text-rose-200",
+} as const;
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "غير متاح"
+    : new Intl.DateTimeFormat("ar-EG", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
 }
 
-function StateStatus({ state }: { state: AnalyticsCapabilityState }) {
-  return <Status status={state === "ready" ? "ready" : state === "partial" ? "warning" : "unavailable"} />;
-}
-
-function EmptyTruth({ children }: { children: ReactNode }) {
+function SectionHeading({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-[20px] border border-white/10 bg-white/[0.025] px-4 py-6 text-sm leading-7 text-white/50">
-      {children}
+    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <h2 className="text-base font-semibold text-white">{title}</h2>
+      <p className="max-w-2xl text-xs leading-6 text-white/42">{description}</p>
     </div>
   );
 }
 
-function MetricRows({ items }: { items: Array<[string, number | string]> }) {
+function MetricLink({
+  href,
+  label,
+  value,
+  description,
+  tone,
+}: {
+  href: string;
+  label: string;
+  value: number | string;
+  description: string;
+  tone: keyof typeof TONE_CLASSES;
+}) {
   return (
-    <dl className="space-y-2.5">
-      {items.map(([label, value]) => (
-        <div key={label} className="flex items-center justify-between gap-4 rounded-[18px] border border-white/10 bg-white/[0.028] px-4 py-3">
-          <dt className="text-sm leading-6 text-white/58">{label}</dt>
-          <dd className="shrink-0 font-en text-sm font-semibold text-[#D8B87A]">{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <Link
+      href={href}
+      className={`group relative isolate min-h-[138px] overflow-hidden rounded-[26px] border bg-gradient-to-bl to-transparent p-5 shadow-[0_22px_70px_rgba(0,0,0,0.22)] transition hover:-translate-y-1 hover:border-white/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A] ${TONE_CLASSES[tone]}`}
+    >
+      <span className="absolute inset-x-5 bottom-4 h-px origin-right scale-x-0 bg-current opacity-35 transition group-hover:scale-x-100" aria-hidden />
+      <span className="block text-xs font-semibold text-white/54">{label}</span>
+      <span className="mt-4 block font-en text-3xl font-semibold leading-none">{value}</span>
+      <span className="mt-3 block text-xs leading-6 text-white/42">{description}</span>
+    </Link>
   );
 }
 
-function ReportsStateBanner({ model }: { model: AdminReportsModel }) {
-  const content = {
-    ready: ["Reports جاهزة", "كل مصادر التقارير المطلوبة أعادت حقيقة موثوقة في هذا الطلب.", "border-emerald-400/24 bg-emerald-400/[0.07] text-emerald-100"],
-    partial: ["Reports جزئية", "المصادر المتاحة معروضة بحالتها الحقيقية، والمصادر غير المفعلة أوالمتعذرة لم تُستبدل ببيانات وهمية.", "border-amber-400/24 bg-amber-400/[0.07] text-amber-100"],
-    unavailable: ["Reports غير متاحة", "تعذر تكوين أي تقرير موثوق. لا توجد Charts أوأصفار أومحتويات بديلة.", "border-rose-400/24 bg-rose-400/[0.07] text-rose-100"],
-  }[model.state];
+function RecordColumn({
+  title,
+  description,
+  items,
+  emptyHref,
+}: {
+  title: string;
+  description: string;
+  items: Array<{ id: string; title: string; meta: string; href: string }>;
+  emptyHref: string;
+}) {
   return (
-    <section className={`flex flex-col gap-3 rounded-[24px] border px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${content[2]}`} aria-live="polite">
-      <div>
-        <h1 className="text-base font-semibold">{content[0]}</h1>
-        <p className="mt-1 text-xs leading-6 opacity-75">{content[1]}</p>
+    <section className="rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
+      <SectionHeading title={title} description={description} />
+      <div className="space-y-2">
+        {items.length ? items.map((item, index) => (
+          <Link
+            key={item.id}
+            href={item.href}
+            className="group flex items-center gap-3 rounded-[18px] border border-white/9 bg-white/[0.025] px-4 py-3 transition hover:border-[#D8B87A]/26 hover:bg-[#D8B87A]/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]"
+          >
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-white/[0.05] font-en text-[11px] text-white/42 group-hover:text-[#D8B87A]">{index + 1}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-white/75">{item.title}</span>
+              <span className="mt-1 block truncate text-[11px] text-white/38">{item.meta}</span>
+            </span>
+            <span className="text-[#D8B87A]/55 transition group-hover:-translate-x-1" aria-hidden>←</span>
+          </Link>
+        )) : (
+          <Link
+            href={emptyHref}
+            className="block rounded-[18px] border border-dashed border-white/12 px-4 py-7 text-center text-xs leading-6 text-white/42 hover:border-[#D8B87A]/24 hover:text-white/62 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]"
+          >
+            المصدر متاح ولا توجد سجلات في النافذة الحالية. افتح التقرير للتفاصيل.
+          </Link>
+        )}
       </div>
-      <p className="shrink-0 font-en text-xs opacity-65">آخر فحص: {formatDate(model.checkedAt)}</p>
     </section>
   );
 }
 
-const PROVIDER_STATUS_LABELS: Record<AnalyticsProviderStatus, string> = {
-  not_configured: "غير مفعّل",
-  ready: "جاهز",
-  partial: "جزئي",
-  unavailable: "متعذر",
-};
+function OverviewState({ model }: { model: AdminReportsModel }) {
+  const content = {
+    ready: "جميع مصادر النظام المطلوبة أعادت حقيقة موثوقة.",
+    partial: "المصادر المتاحة معروضة كما هي؛ المصادر غير المفعلة لم تُستبدل ببيانات وهمية.",
+    unavailable: "تعذر تكوين نظرة تنفيذية موثوقة، لذلك لم تُعرض أصفار أوCharts بديلة.",
+  }[model.state];
+  return (
+    <Link
+      href="/admin/reports/system?filter=diagnostics"
+      className="flex flex-col gap-3 rounded-[24px] border border-white/10 bg-white/[0.025] px-5 py-4 transition hover:border-[#D8B87A]/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A] sm:flex-row sm:items-center sm:justify-between"
+      aria-label={`حالة التقارير ${STATE_LABELS[model.state]}، فتح تشخيص النظام`}
+    >
+      <span>
+        <span className="block text-sm font-semibold text-white">حالة منظومة التقارير</span>
+        <span className="mt-1 block text-xs leading-6 text-white/46">{content}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-3">
+        <AdminStatusPill tone={STATE_TONES[model.state]}>{STATE_LABELS[model.state]}</AdminStatusPill>
+        <span className="font-en text-[11px] text-white/34">{formatDate(model.checkedAt)}</span>
+      </span>
+    </Link>
+  );
+}
+
+function ProviderStatus({ status }: { status: string }) {
+  const state: ReportsState = status === "ready" ? "ready" : status === "partial" ? "partial" : "unavailable";
+  return <AdminStatusPill tone={STATE_TONES[state]}>{status === "not_configured" ? "غير مفعّل" : STATE_LABELS[state]}</AdminStatusPill>;
+}
 
 export default function AdminReportsView({ model }: { model: AdminReportsModel }) {
-  const dashboard = model.dashboard.data;
-  const reports = model.reports.data;
-  const review = model.contentReview.data;
-  const audit = model.audit.data;
-  const seo = model.seo.data;
-  const analyticsDomains = Object.values(model.analytics.reports);
-
+  const overview = buildAdminReportsOverview(model);
   return (
-    <AdminPageExperience className="pb-10" dir="rtl">
+    <AdminPageExperience className="min-w-0 pb-12" dir="rtl">
       <AdminPageContextHeader
-        eyebrow="REPORTS & ANALYTICS CAPABILITY"
-        title="التقارير والتحليلات"
-        description="تقارير تشغيلية من Read Models وملاك النظام الحقيقيين، مع عقد Analytics موحد يفشل بوضوح عند غياب المزود."
+        eyebrow="REPORTING SYSTEM"
+        title="نظرة عامة على التقارير"
+        description="ملخص تنفيذي قابل للقرار. كل بطاقة تنقلك إلى التقرير والفلتر المرتبطين بها، بينما التفاصيل الكاملة تعيش في صفحاتها المستقلة."
+        meta={`العقد ${model.reports.data?.contractVersion ?? "غير متاح"}`}
       />
-      <div className="space-y-5">
-        <ReportsStateBanner model={model} />
 
-        {dashboard ? (
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6" aria-label="مؤشرات التقارير المشتركة مع Dashboard">
-            <AdminMetricCard label="المحتوى" value={dashboard.kpis.topics.total} tone="gold" align="start" />
-            <AdminMetricCard label="المحتوى المنشور" value={dashboard.kpis.topics.published} tone="green" align="start" />
-            <AdminMetricCard label="المشاريع" value={dashboard.kpis.projects.total} tone="blue" align="start" />
-            <AdminMetricCard label="المشاريع المنشورة" value={dashboard.kpis.projects.published} tone="cyan" align="start" />
-            <AdminMetricCard label="الصفحات" value={dashboard.kpis.pages.total} tone="violet" align="start" />
-            <AdminMetricCard label="أصول الميديا" value={dashboard.kpis.media.total} tone="amber" align="start" />
-          </section>
-        ) : (
-          <EmptyTruth>{model.dashboard.message}</EmptyTruth>
-        )}
+      <OverviewState model={model} />
 
-        <section className="grid gap-5 xl:grid-cols-2">
-          <Panel title="Content Reports" subtitle="الحالة الأساسية من Dashboard، والمراجعة من Content Review Capability نفسها.">
-            {dashboard && reports ? (
-              <div className="space-y-4">
-                <MetricRows items={[
-                  ["منشور", dashboard.kpis.topics.published],
-                  ["مسودات", dashboard.kpis.topics.draft],
-                  ["غير منشور", dashboard.kpis.topics.unpublished],
-                  ["SEO ناقص", reports.content.missingSeo],
-                  ["صور ناقصة", reports.content.missingImages],
-                  ["Alt ناقص", reports.content.missingImageAlt],
-                ]} />
-                {review ? (
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <AdminMetricCard label="تمت مراجعته" value={review.checked} tone="blue" compact />
-                    <AdminMetricCard label="جاهز للنشر" value={review.ready} tone="green" compact />
-                    <AdminMetricCard label="محجوب بالتحقق" value={review.blocked} tone="amber" compact />
-                  </div>
-                ) : <EmptyTruth>{model.contentReview.message}</EmptyTruth>}
-                <Link href="/admin/reports/topics-without-image" className="inline-flex rounded-lg text-xs font-semibold text-[#D8B87A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">
-                  فتح تقرير المحتوى بلا صورة
-                </Link>
-              </div>
-            ) : <EmptyTruth>{model.reports.message}</EmptyTruth>}
-          </Panel>
+      <section aria-label="أهم مؤشرات التقارير">
+        <SectionHeading title="المؤشرات التنفيذية" description="نفس KPIs وSources of Truth المشتركة مع Dashboard والتقارير المتخصصة." />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+          {overview.kpis.map((card) => <MetricLink key={card.id} {...card} />)}
+        </div>
+      </section>
 
-          <Panel title="Projects Reports" subtitle="Data Completeness محسوبة من عقد المشروع الحالي وعلاقاته، وتحديثات التنفيذ من Unified Content.">
-            {dashboard && reports ? (
-              <MetricRows items={[
-                ["منشور", dashboard.kpis.projects.published],
-                ["مسودات", dashboard.kpis.projects.draft],
-                ["مميز", reports.projects.featured],
-                ["مكتمل البيانات", reports.projects.complete],
-                ["ناقص البيانات", reports.projects.incomplete],
-                ["SEO ناقص", reports.projects.missingSeo],
-                ["صور أساسية ناقصة", reports.projects.missingImages],
-                ["Construction Status", "غير متاح كحقل مستقل"],
-                ["تحديثات تنفيذ منشورة", reports.projects.constructionUpdates.published],
-              ]} />
-            ) : <EmptyTruth>{model.reports.message}</EmptyTruth>}
-          </Panel>
-
-          <Panel title="SEO Reports" subtitle="Metadata من Reports Read Model؛ الصحة وSitemap من Global SEO owner.">
-            {reports ? (
-              <div className="space-y-4">
-                <MetricRows items={[
-                  ["محتوى ناقص Metadata", reports.seo.missingMetadata.topics],
-                  ["مشاريع ناقصة Metadata", reports.seo.missingMetadata.projects],
-                  ["صفحات ناقصة Metadata", reports.seo.missingMetadata.pages],
-                  ["Canonical Overrides", reports.seo.canonicalOverrides],
-                  ["منشور قابل للفهرسة", reports.seo.indexability.indexablePublished],
-                  ["منشور Noindex", reports.seo.indexability.noindexPublished],
-                  ["Sitemap Coverage", seo ? seo.sitemap.totalUrlCount : "غير متاح"],
-                ]} />
-                {seo ? (
-                  <p className="rounded-[18px] border border-white/10 px-4 py-3 text-xs leading-6 text-white/52">
-                    SEO Health: <span className="font-en font-semibold text-white/80">{seo.score}%</span> · Sitemap: {seo.sitemap.status}
-                  </p>
-                ) : <EmptyTruth>{model.seo.message}</EmptyTruth>}
-              </div>
-            ) : <EmptyTruth>{model.reports.message}</EmptyTruth>}
-          </Panel>
-
-          <Panel title="Media Reports" subtitle="Catalog، Storage، Reference Sync، Alt وVideo URL من الملاك الحالية.">
-            {reports ? (
-              <div className="space-y-4">
-                <MetricRows items={[
-                  ["حجم معروف", formatBytes(reports.media.storage.knownBytes)],
-                  ["حجم غير معروف", reports.media.storage.unknownByteSize],
-                  ["References مكسورة", reports.media.brokenReferences],
-                  ["Objects مفقودة", reports.media.missingObjects],
-                  ["Alt مفقود", reports.media.missingAlt],
-                  ["Video URLs مفقودة", reports.media.missingVideoUrls],
-                ]} />
-                <div className="flex items-center justify-between gap-3 rounded-[18px] border border-white/10 px-4 py-3">
-                  <p className="text-xs leading-6 text-white/52">{model.media.message}</p>
-                  <Status status={model.media.status} />
-                </div>
-              </div>
-            ) : <EmptyTruth>{model.reports.message}</EmptyTruth>}
-          </Panel>
-
-          <Panel title="Publishing Reports" subtitle="حركة النشر من Database؛ Validation Blocks من Content Review owner.">
-            {reports ? (
-              <div className="space-y-4">
-                <MetricRows items={[
-                  ["محتوى نُشر خلال 30 يومًا", reports.publishing.recentPublishing.topics],
-                  ["مشاريع نُشرت خلال 30 يومًا", reports.publishing.recentPublishing.projects],
-                  ["محتوى Pending", reports.publishing.pendingPublishing.topics],
-                  ["مشاريع Pending", reports.publishing.pendingPublishing.projects],
-                  ["إجمالي المسودات", reports.publishing.drafts.topics + reports.publishing.drafts.projects + reports.publishing.drafts.pages],
-                  ["منشور مع Validation Blocks", review ? review.publishedWithBlocks : "غير متاح"],
-                ]} />
-                {review?.blockingChecks.length ? (
-                  <ul className="flex flex-wrap gap-2" aria-label="أكثر Validation Blocks تكرارًا">
-                    {review.blockingChecks.slice(0, 8).map((item) => (
-                      <li key={item.id} className="rounded-full border border-amber-400/18 bg-amber-400/[0.06] px-3 py-1.5 font-en text-[11px] text-amber-100">
-                        {item.id}: {item.count}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            ) : <EmptyTruth>{model.reports.message}</EmptyTruth>}
-          </Panel>
-
-          <Panel title="Audit Reports" subtitle={audit ? `إجمالي ${audit.total}؛ التجميعات التالية من أحدث ${audit.sampled} حدث.` : undefined}>
-            {audit ? (
-              <div className="space-y-5">
-                <div>
-                  <h3 className="mb-3 text-xs font-semibold text-white/62">Recent Activity</h3>
-                  {audit.recentActivity.length ? (
-                    <ol className="space-y-2">
-                      {audit.recentActivity.slice(0, 5).map((event) => (
-                        <li key={event.id} className="rounded-[18px] border border-white/10 px-4 py-3 text-xs leading-6 text-white/55">
-                          <span className="font-en text-white/75">{event.action}</span> · {event.actor} · {event.entityLabel ?? event.entityType ?? "system"} · {formatDate(event.createdAt)}
-                        </li>
-                      ))}
-                    </ol>
-                  ) : <EmptyTruth>Audit متاح ولا توجد أحداث حالية.</EmptyTruth>}
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <h3 className="mb-3 text-xs font-semibold text-white/62">Entity Activity</h3>
-                    <MetricRows items={audit.entityActivity.slice(0, 5).map((item) => [item.entityType, item.count])} />
-                  </div>
-                  <div>
-                    <h3 className="mb-3 text-xs font-semibold text-white/62">User Activity</h3>
-                    <MetricRows items={audit.userActivity.slice(0, 5).map((item) => [item.actor, item.count])} />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="mb-3 text-xs font-semibold text-white/62">Publishing History</h3>
-                  {audit.publishingHistory.length ? (
-                    <ol className="space-y-2">
-                      {audit.publishingHistory.slice(0, 5).map((event) => (
-                        <li key={event.id} className="rounded-[18px] border border-white/10 px-4 py-3 text-xs leading-6 text-white/55">
-                          <span className="font-en text-white/75">{event.action}</span> · {event.actor} · {event.entityLabel ?? event.entityType ?? "system"} · {formatDate(event.createdAt)}
-                        </li>
-                      ))}
-                    </ol>
-                  ) : <EmptyTruth>Audit متاح، ولا توجد أحداث نشر داخل نافذة العينة الحالية.</EmptyTruth>}
-                </div>
-              </div>
-            ) : <EmptyTruth>{model.audit.message}</EmptyTruth>}
-          </Panel>
-        </section>
-
-        <Panel title="Analytics Reports" subtitle={`العقد ${model.analytics.contractVersion} · لا توجد اتصالات مباشرة بالمزود داخل Reports.`}>
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.025] p-4">
-            <p className="text-sm leading-7 text-white/58">
-              لا تُعرض Charts أوZeros عند غياب المصدر. كل مزود جديد يدخل عبر Adapter Registry الواحد.
-            </p>
-            <StateStatus state={model.analytics.state} />
+      <section className="grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
+        <div className="rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
+          <SectionHeading title="أهم التنبيهات" description="الإشارات ذات القيمة غير الصفرية فقط، مع رابط مباشر إلى نفس سياق المشكلة." />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {overview.alerts.length ? overview.alerts.slice(0, 6).map((alert) => (
+              <MetricLink key={alert.id} {...alert} />
+            )) : (
+              <Link href="/admin/reports/system?filter=diagnostics" className="rounded-[22px] border border-emerald-400/18 bg-emerald-400/[0.055] p-5 text-sm leading-7 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A] sm:col-span-2 xl:col-span-3">
+                لا توجد تنبيهات بقيم موجبة في الحقائق الحالية. افتح تشخيص النظام للتأكد من صحة المصادر.
+              </Link>
+            )}
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {analyticsDomains.map((report) => (
-              <section key={report.domain} className="rounded-[22px] border border-white/10 bg-white/[0.028] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-en text-sm font-semibold capitalize text-white/80">{report.domain}</h3>
-                  <StateStatus state={report.state} />
-                </div>
-                <p className="mt-3 text-xs leading-6 text-white/48">{report.message}</p>
-                {report.metrics.length ? (
-                  <MetricRows items={report.metrics.map((metric) => [metric.label, metric.value])} />
-                ) : null}
-              </section>
+        </div>
+
+        <div className="rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
+          <SectionHeading title="Analytics Providers" description="حالة الـAdapter Registry الواحد؛ ليست أرقام أداء." />
+          <div className="space-y-2">
+            {overview.providers.map((provider) => (
+              <Link key={provider.id} href={provider.href} className="flex items-center justify-between gap-3 rounded-[18px] border border-white/9 bg-white/[0.025] px-4 py-3 transition hover:border-[#D8B87A]/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">
+                <span className="min-w-0">
+                  <span className="block font-en text-xs font-semibold text-white/70">{provider.label}</span>
+                  <span className="mt-1 block truncate text-[10px] text-white/34">{provider.description}</span>
+                </span>
+                <ProviderStatus status={provider.status} />
+              </Link>
             ))}
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="حالة Analytics Providers">
-            {model.analytics.providers.map((provider) => (
-              <div key={provider.provider} className="rounded-[18px] border border-white/10 px-4 py-3">
-                <p className="font-en text-xs font-semibold text-white/70">{provider.label}</p>
-                <p className="mt-1 text-[11px] text-white/40">{PROVIDER_STATUS_LABELS[provider.status]}</p>
-              </div>
-            ))}
-          </div>
-        </Panel>
+        </div>
+      </section>
 
-        <Panel title="System Reports" subtitle="Diagnostics، Migration Health، Sources of Truth، Cache وFailure paths.">
-          <div className="grid gap-4 lg:grid-cols-2">
-            {[
-              model.dashboard,
-              model.reports,
-              model.contentReview,
-              model.audit,
-              model.seo,
-              model.media,
-            ].map((source) => (
-              <div key={source.key} className="rounded-[20px] border border-white/10 bg-white/[0.028] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-white/72">{source.label}</h3>
-                  <Status status={source.status} />
-                </div>
-                <p className="mt-2 text-xs leading-6 text-white/48">{source.message}</p>
-                <p className="mt-2 break-all font-en text-[10px] leading-5 text-white/30">{source.source}</p>
-              </div>
-            ))}
-            <div className="rounded-[20px] border border-emerald-400/18 bg-emerald-400/[0.055] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-white/72">Cache / Revalidation</h3>
-                <Status status="ready" />
-              </div>
-              <p className="mt-2 text-xs leading-6 text-white/48">{model.cache.message}</p>
-              <p className="mt-2 font-en text-[10px] text-white/30">{model.cache.source}</p>
-            </div>
-          </div>
-          {reports ? (
-            <div className="mt-4 rounded-[20px] border border-white/10 p-4">
-              <h3 className="text-sm font-semibold text-white/72">Database / Migration Proof</h3>
-              <MetricRows items={[
-                ["Migration Registered", reports.databaseDiagnostics.migrationRegistered ? "yes" : "no"],
-                ["Dashboard Read Model", reports.databaseDiagnostics.dashboardReadModelAvailable ? "available" : "missing"],
-                ["RPC ACL Service-only", reports.databaseDiagnostics.rpcAclServiceOnly ? "yes" : "no"],
-                ["Missing Indexes", reports.databaseDiagnostics.missingIndexes.length],
-                ["RLS Tables Ready", Object.values(reports.databaseDiagnostics.rls).filter(Boolean).length],
-              ]} />
-              <ul className="mt-4 flex flex-wrap gap-2" aria-label="Sources of Truth">
-                {reports.sourcesOfTruth.map((source) => (
-                  <li key={source} className="rounded-full border border-white/10 px-3 py-1.5 font-en text-[10px] text-white/45">{source}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </Panel>
-      </div>
+      <section>
+        <SectionHeading title="Health" description="قراءة سريعة لصحة المجالات الرئيسية دون تكرار التقرير الكامل." />
+        <div className="grid gap-4 md:grid-cols-3">
+          {overview.health.map((health) => (
+            <Link key={health.id} href={health.href} className="rounded-[24px] border border-white/10 bg-white/[0.025] p-5 transition hover:-translate-y-1 hover:border-[#D8B87A]/24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">
+              <span className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-white/76">{health.label}</span>
+                <AdminStatusPill tone={STATE_TONES[health.state]}>{STATE_LABELS[health.state]}</AdminStatusPill>
+              </span>
+              <span className="mt-3 block text-xs leading-6 text-white/42">{health.description}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-3">
+        <RecordColumn title="أهم المشاريع" description="أحدث المشاريع؛ البطاقة تفتح تقرير المشاريع أولًا." items={overview.projects} emptyHref="/admin/reports/projects" />
+        <RecordColumn title="أهم المحتوى" description="أحدث المحتوى؛ البطاقة تفتح تقرير المحتوى أولًا." items={overview.content} emptyHref="/admin/reports/content" />
+        <RecordColumn title="أهم النشاط" description="أحدث Audit activity من العينة الحالية." items={overview.activity} emptyHref="/admin/reports/audit" />
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-2">
+        <div>
+          <SectionHeading title="أهم مشاكل SEO" description="روابط مباشرة إلى نفس فلتر المشكلة." />
+          <div className="grid gap-3 sm:grid-cols-2">{overview.seoIssues.map((card) => <MetricLink key={card.id} {...card} />)}</div>
+        </div>
+        <div>
+          <SectionHeading title="أهم مشاكل الميديا" description="صحة Reference Sync وMetadata من المالك الحالي." />
+          <div className="grid gap-3 sm:grid-cols-2">{overview.mediaIssues.map((card) => <MetricLink key={card.id} {...card} />)}</div>
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading title="الوصول السريع للتقارير" description="تقارير مستقلة؛ لا Tabs تجمع النظام كله في صفحة واحدة." />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {overview.quickAccess.map((report) => (
+            <Link key={report.id} href={report.href} className="group rounded-[22px] border border-white/10 bg-white/[0.025] p-4 transition hover:-translate-y-1 hover:border-[#D8B87A]/28 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">
+              <span className="grid size-10 place-items-center rounded-2xl border border-[#D8B87A]/18 bg-[#D8B87A]/[0.055] text-lg text-[#D8B87A]" aria-hidden>{report.icon}</span>
+              <span className="mt-4 block text-sm font-semibold text-white/76">{report.label}</span>
+              <span className="mt-2 block text-xs leading-6 text-white/40">{report.description}</span>
+              <span className="mt-3 block text-xs font-semibold text-[#D8B87A]/70 transition group-hover:-translate-x-1">فتح التقرير ←</span>
+            </Link>
+          ))}
+        </div>
+      </section>
     </AdminPageExperience>
   );
 }

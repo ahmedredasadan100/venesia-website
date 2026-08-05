@@ -16,6 +16,7 @@ import type {
   DashboardSourceStatus,
 } from "../dashboard/dashboard-contract";
 import { loadAnalyticsSnapshot } from "./load-analytics";
+import type { AnalyticsQueryContext } from "./analytics-contract";
 import {
   deriveReportsState,
   parseReportsReadModel,
@@ -133,11 +134,13 @@ async function readSeoHealth(): Promise<ReportsSource<Awaited<ReturnType<typeof 
   };
 }
 
-export async function loadAdminReports(): Promise<AdminReportsModel> {
+export async function loadAdminReports(options?: {
+  analytics?: AnalyticsQueryContext;
+}): Promise<AdminReportsModel> {
   await requireAdminSession();
 
   const checkedAt = new Date().toISOString();
-  const analytics = await loadAnalyticsSnapshot();
+  const analytics = await loadAnalyticsSnapshot(options?.analytics);
   const [dashboardResult, reportsResult, reviewResult, auditResult, seoResult] =
     await Promise.allSettled([
       loadAdminDashboardSources(),

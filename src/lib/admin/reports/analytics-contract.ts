@@ -6,6 +6,16 @@ export type AnalyticsProviderStatus =
   | "ready"
   | "partial"
   | "unavailable";
+export type AnalyticsPeriod = "last_30_days" | "last_90_days";
+export type AnalyticsCompare = "none" | "previous_period" | "previous_year";
+export type AnalyticsQueryContext = {
+  period: AnalyticsPeriod;
+  compare: AnalyticsCompare;
+};
+export const DEFAULT_ANALYTICS_QUERY: AnalyticsQueryContext = {
+  period: "last_30_days",
+  compare: "none",
+};
 export type AnalyticsReportDomain = "content" | "projects" | "seo" | "business";
 export type AnalyticsProviderKey =
   | "google_analytics_4"
@@ -45,6 +55,12 @@ export type AnalyticsMetric = {
   periodStart: string;
   periodEnd: string;
   dimensions?: Record<string, string>;
+  comparison?: {
+    value: number;
+    periodStart: string;
+    periodEnd: string;
+    changeRatio?: number;
+  };
 };
 
 export type AnalyticsProviderDefinition = {
@@ -91,7 +107,7 @@ export type AnalyticsProviderResult = {
 
 export interface AnalyticsProviderAdapter {
   readonly provider: AnalyticsProviderKey;
-  load(): Promise<AnalyticsProviderResult>;
+  load(query: AnalyticsQueryContext): Promise<AnalyticsProviderResult>;
 }
 
 export type AnalyticsProviderSnapshot = {
@@ -114,6 +130,7 @@ export type AnalyticsDomainReport = {
 
 export type AnalyticsSnapshot = {
   contractVersion: typeof ANALYTICS_CONTRACT_VERSION;
+  query: AnalyticsQueryContext;
   state: AnalyticsCapabilityState;
   checkedAt: string;
   providers: AnalyticsProviderSnapshot[];
@@ -147,6 +164,7 @@ const METRIC_DOMAINS: Record<AnalyticsMetricKey, AnalyticsReportDomain> = {
 function assertProviderResult(
   definition: AnalyticsProviderDefinition,
   result: AnalyticsProviderResult,
+  query: AnalyticsQueryContext,
 ) {
   if (result.provider !== definition.key) {
     throw new Error(`Analytics adapter ${definition.key} returned another provider identity`);
@@ -167,6 +185,21 @@ function assertProviderResult(
     }
     if (!metric.periodStart || !metric.periodEnd) {
       throw new Error(`Analytics metric ${metric.key} is missing its reporting period`);
+    }
+    if (query.compare === "none" && metric.comparison) {
+      throw new Error(`Analytics metric ${metric.key} returned an unrequested comparison`);
+    }
+    if (query.compare !== "none" && result.status === "ready" && !metric.comparison) {
+      throw new Error(`Ready Analytics metric ${metric.key} is missing its requested comparison`);
+    }
+    if (metric.comparison) {
+      if (!Number.isFinite(metric.comparison.value) ||
+        (metric.comparison.changeRatio != null && !Number.isFinite(metric.comparison.changeRatio))) {
+        throw new Error(`Analytics metric ${metric.key} has an invalid comparison value`);
+      }
+      if (!metric.comparison.periodStart || !metric.comparison.periodEnd) {
+        throw new Error(`Analytics metric ${metric.key} is missing its comparison period`);
+      }
     }
   }
 }
@@ -217,7 +250,11 @@ export function createAnalyticsProviderRegistry(
   }
 
   return {
-    async load(): Promise<AnalyticsSnapshot> {
+    async load(query: AnalyticsQueryContext = DEFAULT_ANALYTICS_QUERY): Promise<AnalyticsSnapshot> {
+      if (!["last_30_days", "last_90_days"].includes(query.period) ||
+        !["none", "previous_period", "previous_year"].includes(query.compare)) {
+        throw new Error("Invalid Analytics query context");
+      }
       const checkedAt = new Date().toISOString();
       const providers = await Promise.all(
         ANALYTICS_PROVIDER_DEFINITIONS.map(async (definition): Promise<AnalyticsProviderSnapshot> => {
@@ -233,8 +270,8 @@ export function createAnalyticsProviderRegistry(
             };
           }
           try {
-            const result = await adapter.load();
-            assertProviderResult(definition, result);
+            const result = await adapter.load(query);
+            assertProviderResult(definition, result, query);
             return { ...definition, ...result };
           } catch {
             return {
@@ -257,6 +294,7 @@ export function createAnalyticsProviderRegistry(
           : "partial";
       return {
         contractVersion: ANALYTICS_CONTRACT_VERSION,
+        query,
         state,
         checkedAt,
         providers,

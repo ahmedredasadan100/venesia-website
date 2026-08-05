@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   createAnalyticsProviderRegistry,
+  type AnalyticsQueryContext,
   type AnalyticsSnapshot,
 } from "./analytics-contract";
 
@@ -9,6 +10,8 @@ import {
 // registered here; Reports never import a provider SDK or provider API.
 const analyticsRegistry = createAnalyticsProviderRegistry([]);
 
-export async function loadAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
-  return analyticsRegistry.load();
+export async function loadAnalyticsSnapshot(
+  query?: AnalyticsQueryContext,
+): Promise<AnalyticsSnapshot> {
+  return analyticsRegistry.load(query);
 }

@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS = {
   adminUserDeactivated: "admin_user.deactivated",
   adminUserPasswordReset: "admin_user.password.reset",
   adminUserDeleted: "admin_user.deleted",
+  reportsExport: "reports.export",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -28,6 +29,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "admin_user.deactivated": "تعطيل مستخدم",
   "admin_user.password.reset": "تغيير كلمة مرور مستخدم",
   "admin_user.deleted": "حذف مستخدم",
+  "reports.export": "تصدير تقرير",
 };
 
 export const AUDIT_ACTION_OPTIONS = Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => ({

@@ -19,6 +19,13 @@ import {
   deriveReportsState,
   parseReportsReadModel,
 } from "../src/lib/admin/reports/reports-contract.ts";
+import {
+  ADMIN_REPORT_DEFINITIONS,
+  ADMIN_REPORT_IDS,
+  REPORT_EXPERIENCE_CAPABILITIES,
+  buildAdminReportHref,
+  resolveAdminReportQuery,
+} from "../src/lib/admin/reports/reports-information-architecture.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const source = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -97,8 +104,54 @@ assert.equal(deriveReportsState(["ready", "unavailable"]), "partial");
 assert.equal(deriveReportsState(["warning", "ready"]), "partial");
 assert.equal(deriveReportsState(["unavailable", "unavailable"]), "unavailable");
 
+assert.deepEqual(ADMIN_REPORT_IDS, [
+  "content",
+  "projects",
+  "analytics",
+  "seo",
+  "media",
+  "publishing",
+  "audit",
+  "system",
+  "business",
+]);
+assert.equal(new Set(ADMIN_REPORT_DEFINITIONS.map((report) => report.href)).size, 9);
+for (const report of ADMIN_REPORT_DEFINITIONS) {
+  assert.equal(report.filters[0]?.id, "all", `${report.id} must expose a canonical all filter`);
+  assert.equal(
+    new Set(report.filters.map((filter) => filter.id)).size,
+    report.filters.length,
+    `${report.id} filter ids must be unique`,
+  );
+}
+assert.deepEqual(resolveAdminReportQuery("content", { filter: "missing_images" }), {
+  state: "valid",
+  context: { filter: "missing_images", period: "current", compare: "none" },
+});
+assert.deepEqual(resolveAdminReportQuery("analytics", {}), {
+  state: "valid",
+  context: { filter: "all", period: "last_30_days", compare: "none" },
+});
+assert.equal(resolveAdminReportQuery("content", { unknown: "x" }).state, "invalid");
+assert.equal(resolveAdminReportQuery("content", { filter: ["all", "draft"] }).state, "invalid");
+assert.equal(resolveAdminReportQuery("content", { filter: "provider" }).state, "invalid");
+assert.equal(resolveAdminReportQuery("content", { period: "last_90_days" }).state, "invalid");
+assert.equal(resolveAdminReportQuery("content", { compare: "previous_period" }).state, "invalid");
+assert.equal(
+  buildAdminReportHref("content", { filter: "missing_images" }),
+  "/admin/reports/content?filter=missing_images",
+);
+assert.equal(
+  new Set(REPORT_EXPERIENCE_CAPABILITIES.map((capability) => capability.key)).size,
+  REPORT_EXPERIENCE_CAPABILITIES.length,
+);
+assert.equal(REPORT_EXPERIENCE_CAPABILITIES.find((item) => item.key === "export")?.state, "ready");
+assert.equal(REPORT_EXPERIENCE_CAPABILITIES.find((item) => item.key === "saved_reports")?.state, "unavailable");
+assert.equal(REPORT_EXPERIENCE_CAPABILITIES.find((item) => item.key === "ai_insights")?.state, "unavailable");
+
 const analytics = await createAnalyticsProviderRegistry([]).load();
 assert.equal(analytics.contractVersion, ANALYTICS_CONTRACT_VERSION);
+assert.deepEqual(analytics.query, { period: "last_30_days", compare: "none" });
 assert.equal(analytics.state, "unavailable", "no configured provider must not become a fake success");
 assert.ok(analytics.providers.every((provider) => provider.status === "not_configured"));
 assert.ok(Object.values(analytics.reports).every((report) => report.state === "unavailable"));
@@ -126,6 +179,38 @@ assert.throws(
   () => createAnalyticsProviderRegistry([invalidReadyAdapter, invalidReadyAdapter]),
   /Duplicate Analytics adapter/,
   "parallel provider owners are rejected",
+);
+await assert.rejects(
+  () => createAnalyticsProviderRegistry([]).load({ period: "invalid" as never, compare: "none" }),
+  /Invalid Analytics query context/,
+);
+const comparisonWithoutBaseline: AnalyticsProviderAdapter = {
+  provider: "google_search_console",
+  async load() {
+    return {
+      provider: "google_search_console",
+      status: "ready",
+      checkedAt: "2026-08-05T23:00:00.000Z",
+      message: "comparison fixture",
+      metrics: [{
+        key: "seo.organic_traffic",
+        label: "Organic traffic",
+        value: 10,
+        unit: "count",
+        periodStart: "2026-07-01",
+        periodEnd: "2026-07-30",
+      }],
+    };
+  },
+};
+const rejectedComparison = await createAnalyticsProviderRegistry([comparisonWithoutBaseline]).load({
+  period: "last_30_days",
+  compare: "previous_period",
+});
+assert.equal(
+  rejectedComparison.providers.find((provider) => provider.provider === "google_search_console")?.status,
+  "unavailable",
+  "ready comparison data must include a real comparison period",
 );
 
 function validContentAssessment(id: number): ContentReviewAssessment {
@@ -182,10 +267,18 @@ assert.equal(auditReport.publishingHistory.length, 10);
 assert.equal(auditReport.entityActivity[0]?.entityType, "topic");
 
 const page = source("src/app/admin/reports/page.tsx");
+const reportPage = source("src/app/admin/reports/[report]/page.tsx");
+const exportRoute = source("src/app/admin/reports/export/route.ts");
 const loader = source("src/lib/admin/reports/load-admin-reports.ts");
 const analyticsRoot = source("src/lib/admin/reports/load-analytics.ts");
 const analyticsContract = source("src/lib/admin/reports/analytics-contract.ts");
 const view = source("src/components/admin/reports/AdminReportsView.tsx");
+const detailView = source("src/components/admin/reports/AdminReportDetailView.tsx");
+const reportActions = source("src/components/admin/reports/AdminReportActions.tsx");
+const informationArchitecture = source("src/lib/admin/reports/reports-information-architecture.ts");
+const overviewPresentation = source("src/lib/admin/reports/reports-overview-presentation.ts");
+const reportPresentation = source("src/lib/admin/reports/reports-presentation.ts");
+const auditActions = source("src/lib/admin/audit/audit-actions.ts");
 const reviewLoader = source("src/lib/admin/content-workflow/load-content-review-report.ts");
 const reviewOwner = source("src/lib/admin/content-workflow/content-review-report.ts");
 const migration = source("sql/migrations/20260805230000_reports_analytics_capability_closure.sql");
@@ -196,6 +289,10 @@ const workflow = source(".github/workflows/quality-gate.yml");
 assert.match(page, /export const dynamic = "force-dynamic"/);
 assert.match(page, /loadAdminReports\(\)/);
 assert.doesNotMatch(page, /AdminPlaceholderPage|getSupabaseAdmin|\.from\(|\.rpc\(/);
+assert.match(reportPage, /resolveAdminReportQuery/);
+assert.match(reportPage, /buildAdminReportPresentation/);
+assert.match(reportPage, /loadAdminReports\(\)/);
+assert.doesNotMatch(reportPage, /getSupabaseAdmin|\.from\(|\.rpc\(/);
 assert.ok(
   loader.indexOf("await requireAdminSession()") < loader.indexOf("Promise.allSettled"),
   "auth must complete before privileged Reports sources start",
@@ -205,7 +302,7 @@ assert.match(loader, /loadAdminDashboardSources\(\)/, "Reports and Dashboard mus
 assert.match(loader, /loadAdminAuditReport\(\)/, "Reports must use the Audit owner");
 assert.match(loader, /runGlobalSeoHealth\(\)/, "Reports must use the SEO owner");
 assert.match(loader, /loadContentReviewReport\(\)/, "Reports must use the current validation owner");
-assert.match(loader, /loadAnalyticsSnapshot\(\)/, "Reports must use one Analytics composition root");
+assert.match(loader, /loadAnalyticsSnapshot\(options\?\.analytics\)/, "Reports must use one Analytics composition root");
 assert.doesNotMatch(loader, /\.from\("admin_audit_logs"\)|\.from\("media_assets"\)/);
 assert.doesNotMatch(loader, /return\s+0|\?\?\s*0|return\s+\[\]|\?\?\s*\[\]/);
 assert.match(reviewLoader, /REVIEW_PAGE_SIZE = 500/);
@@ -225,16 +322,42 @@ assert.match(analyticsContract, /Duplicate Analytics adapter/);
 assert.match(analyticsContract, /"ready" \| "partial" \| "unavailable"/);
 
 assert.doesNotMatch(view, /key=\{index\}|<canvas|AdminPlaceholderPage/i);
-assert.match(view, /لا تُعرض Charts أوZeros عند غياب المصدر/);
-assert.match(view, /غير مفعّل/);
-assert.match(view, /Content Reports/);
-assert.match(view, /Projects Reports/);
-assert.match(view, /SEO Reports/);
-assert.match(view, /Media Reports/);
-assert.match(view, /Publishing Reports/);
-assert.match(view, /Audit Reports/);
-assert.match(view, /System Reports/);
-assert.match(view, /Analytics Reports/);
+assert.match(view, /buildAdminReportsOverview/);
+assert.match(view, /نظرة عامة على التقارير/);
+assert.match(view, /أهم التنبيهات/);
+assert.match(view, /Analytics Providers/);
+assert.match(view, /أهم المشاريع/);
+assert.match(view, /أهم المحتوى/);
+assert.match(view, /أهم النشاط/);
+assert.match(view, /أهم مشاكل SEO/);
+assert.match(view, /أهم مشاكل الميديا/);
+assert.match(view, /الوصول السريع للتقارير/);
+assert.doesNotMatch(view, /Content Reports|Projects Reports|Publishing Reports|Audit Reports|System Reports/);
+assert.match(detailView, /Global Filters/);
+assert.match(detailView, /Action Center/);
+assert.match(detailView, /قابلية التوسع/);
+assert.match(detailView, /REPORT_EXPERIENCE_CAPABILITIES/);
+assert.match(reportActions, /window\.print\(\)/);
+assert.match(informationArchitecture, /saved_reports/);
+assert.match(informationArchitecture, /schedule_reports/);
+assert.match(informationArchitecture, /executive_pdf/);
+assert.match(informationArchitecture, /ai_insights/);
+assert.match(informationArchitecture, /لا يوجد مالك persistence معتمد/);
+assert.doesNotMatch(
+  `${informationArchitecture}\n${overviewPresentation}\n${reportPresentation}`,
+  /getSupabaseAdmin|\.from\(|\.rpc\(/,
+);
+
+assert.ok(
+  exportRoute.indexOf("await requireAdminSession()") < exportRoute.indexOf("loadAdminReports({"),
+  "export must authenticate before privileged report reads",
+);
+assert.match(exportRoute, /buildAdminReportExportRows/);
+assert.match(exportRoute, /AUDIT_ACTIONS\.reportsExport/);
+assert.match(exportRoute, /text\/csv; charset=utf-8/);
+assert.match(exportRoute, /private, no-store/);
+assert.match(exportRoute, /status: 503/);
+assert.match(auditActions, /reportsExport: "reports\.export"/);
 
 assert.match(migration, /security definer/);
 assert.match(migration, /set search_path = ''/);
@@ -246,10 +369,14 @@ assert.match(migration, /relrowsecurity/);
 assert.doesNotMatch(migration, /create table[^;]*(?:analytics|report)/i, "the phase must not add another analytics truth store");
 assert.match(manifest, /src\/lib\/admin\/reports\/load-admin-reports\.ts#loadAdminReports/);
 assert.match(manifest, /src\/components\/admin\/reports\/AdminReportsView\.tsx/);
+assert.match(manifest, /src\/components\/admin\/reports\/AdminReportDetailView\.tsx/);
 assert.match(navigation, /id: "reports-overview"/);
+for (const reportId of ADMIN_REPORT_IDS) {
+  assert.match(navigation, new RegExp(`href: "/admin/reports/${reportId}"`));
+}
 assert.match(workflow, /Reports Analytics · PostgreSQL 15/);
 
-const runtimeSources = `${page}\n${loader}\n${analyticsRoot}\n${view}`;
+const runtimeSources = `${page}\n${reportPage}\n${exportRoute}\n${loader}\n${analyticsRoot}\n${view}\n${detailView}\n${informationArchitecture}\n${overviewPresentation}\n${reportPresentation}`;
 assert.doesNotMatch(runtimeSources, /\b(?:mock|placeholder|dummy|fake)\b/i);
 assert.doesNotMatch(runtimeSources, /unstable_cache|revalidatePath|revalidateTag|router\.refresh/);
 
