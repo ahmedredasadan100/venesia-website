@@ -55,7 +55,8 @@ export const ADMIN_NAVIGATION_REGISTRY: AdminNavigationItem[] = [
   {
     id: "reports", href: "/admin/reports", label: "التقارير", icon: "◒", order: 80, enabled: true, moduleKey: "reports", permission: currentAdminAccess,
     children: [
-      { id: "reports-media-quality", href: "/admin/reports/topics-without-image", label: "موضوعات بلا صورة", icon: "•", order: 10, enabled: true, moduleKey: "reports-media-quality", permission: currentAdminAccess },
+      { id: "reports-overview", href: "/admin/reports", label: "نظرة التقارير", icon: "•", order: 10, enabled: true, moduleKey: "reports-overview", permission: currentAdminAccess },
+      { id: "reports-media-quality", href: "/admin/reports/topics-without-image", label: "موضوعات بلا صورة", icon: "•", order: 20, enabled: true, moduleKey: "reports-media-quality", permission: currentAdminAccess },
     ],
   },
   { id: "activity", href: "/admin/activity-log", label: "سجل النشاط", icon: "☷", order: 90, enabled: true, moduleKey: "activity", permission: currentAdminAccess },

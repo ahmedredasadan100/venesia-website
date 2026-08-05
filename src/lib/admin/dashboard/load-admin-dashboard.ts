@@ -172,7 +172,10 @@ function unavailableSource<T>(
 
 export async function loadAdminDashboard(): Promise<AdminDashboardModel> {
   await requireAdminSession();
+  return loadAdminDashboardSources();
+}
 
+export async function loadAdminDashboardSources(): Promise<AdminDashboardModel> {
   const checkedAt = new Date().toISOString();
   const [readResult, auditResult, mediaResult] = await Promise.allSettled([
     readDashboardTruth(),
