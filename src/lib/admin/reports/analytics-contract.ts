@@ -20,7 +20,10 @@ export type AnalyticsReportDomain = "content" | "projects" | "seo" | "business";
 export type AnalyticsProviderKey =
   | "google_analytics_4"
   | "google_search_console"
-  | "meta_pixel"
+  | "google_ads"
+  | "meta_marketing"
+  | "tiktok_ads"
+  | "snapchat_ads"
   | "microsoft_clarity"
   | "crm";
 
@@ -81,8 +84,23 @@ export const ANALYTICS_PROVIDER_DEFINITIONS = [
     domains: ["seo"],
   },
   {
-    key: "meta_pixel",
-    label: "Meta Pixel",
+    key: "google_ads",
+    label: "Google Ads",
+    domains: ["projects", "business"],
+  },
+  {
+    key: "meta_marketing",
+    label: "Meta Marketing API",
+    domains: ["projects", "business"],
+  },
+  {
+    key: "tiktok_ads",
+    label: "TikTok Ads",
+    domains: ["projects", "business"],
+  },
+  {
+    key: "snapchat_ads",
+    label: "Snapchat Ads",
     domains: ["projects", "business"],
   },
   {
@@ -161,7 +179,7 @@ const METRIC_DOMAINS: Record<AnalyticsMetricKey, AnalyticsReportDomain> = {
   "business.sources": "business",
 };
 
-function assertProviderResult(
+export function assertAnalyticsProviderResult(
   definition: AnalyticsProviderDefinition,
   result: AnalyticsProviderResult,
   query: AnalyticsQueryContext,
@@ -271,7 +289,7 @@ export function createAnalyticsProviderRegistry(
           }
           try {
             const result = await adapter.load(query);
-            assertProviderResult(definition, result, query);
+            assertAnalyticsProviderResult(definition, result, query);
             return { ...definition, ...result };
           } catch {
             return {

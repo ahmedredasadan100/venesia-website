@@ -12,6 +12,17 @@ export const AUDIT_ACTIONS = {
   adminUserPasswordReset: "admin_user.password.reset",
   adminUserDeleted: "admin_user.deleted",
   reportsExport: "reports.export",
+  integrationAuthorizationStarted: "integration.authorization.started",
+  integrationAuthorizationSucceeded: "integration.authorization.succeeded",
+  integrationAuthorizationFailed: "integration.authorization.failed",
+  integrationAssetsDiscovered: "integration.assets.discovered",
+  integrationAssetsDiscoveryFailed: "integration.assets.discovery_failed",
+  integrationAssetsSelected: "integration.assets.selected",
+  integrationTestSucceeded: "integration.test.succeeded",
+  integrationTestFailed: "integration.test.failed",
+  integrationSyncRequested: "integration.sync.requested",
+  integrationDiagnosed: "integration.diagnosed",
+  integrationDisconnected: "integration.disconnected",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -30,6 +41,17 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "admin_user.password.reset": "تغيير كلمة مرور مستخدم",
   "admin_user.deleted": "حذف مستخدم",
   "reports.export": "تصدير تقرير",
+  "integration.authorization.started": "بدء تفويض تكامل خارجي",
+  "integration.authorization.succeeded": "نجاح تفويض تكامل خارجي",
+  "integration.authorization.failed": "فشل تفويض تكامل خارجي",
+  "integration.assets.discovered": "اكتشاف أصول تكامل خارجي",
+  "integration.assets.discovery_failed": "فشل اكتشاف أصول تكامل خارجي",
+  "integration.assets.selected": "اختيار أصول تكامل خارجي",
+  "integration.test.succeeded": "نجاح اختبار تكامل خارجي",
+  "integration.test.failed": "فشل اختبار تكامل خارجي",
+  "integration.sync.requested": "طلب مزامنة تكامل خارجي",
+  "integration.diagnosed": "تشخيص تكامل خارجي",
+  "integration.disconnected": "فصل تكامل خارجي",
 };
 
 export const AUDIT_ACTION_OPTIONS = Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => ({
