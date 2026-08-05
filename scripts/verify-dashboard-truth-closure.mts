@@ -164,6 +164,7 @@ const contract = source("src/lib/admin/dashboard/dashboard-contract.ts");
 const view = source("src/components/admin/dashboard/AdminDashboardView.tsx");
 const collectionManifest = source("src/lib/admin/interaction-system/adoption-manifest.ts");
 const migration = source("sql/migrations/20260805210000_dashboard_truth_closure.sql");
+const liveProof = source("scripts/verify-dashboard-truth-live.mts");
 
 assert.match(page, /export const dynamic = "force-dynamic"/, "Dashboard must be request-time rendered");
 assert.match(page, /loadAdminDashboard\(\)/, "route must delegate to the Dashboard loader");
@@ -213,6 +214,16 @@ assert.match(migration, /revoke all on function public\.admin_dashboard_truth_v1
 assert.match(migration, /supabase_migrations\.schema_migrations/, "registry provenance must be diagnosed live");
 assert.match(migration, /pg_catalog\.pg_indexes/, "required indexes must be diagnosed live");
 assert.match(migration, /relrowsecurity/, "RLS state must be diagnosed live");
+assert.match(
+  liveProof,
+  /canonicalizeMigrationSql[\s\S]*replace\(\/\\r\\n\?\/g, "\\n"\)/,
+  "live migration provenance must be portable across LF and CRLF checkouts",
+);
+assert.match(
+  liveProof,
+  /update\(canonicalizeMigrationSql\(String\(registry\[0\]\?\.statement/,
+  "live registry SQL must be canonicalized before provenance hashing",
+);
 
 const dashboardSources = `${page}\n${loader}\n${contract}\n${view}`;
 assert.doesNotMatch(

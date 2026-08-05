@@ -9,10 +9,12 @@ const connectionString = process.env.SUPABASE_DB_URL;
 if (!connectionString) throw new Error("SUPABASE_DB_URL is required.");
 
 const migrationVersion = "20260805210000";
-const migrationSource = readFileSync(
+const canonicalizeMigrationSql = (source: string) =>
+  source.replace(/^\uFEFF/u, "").replace(/\r\n?/g, "\n");
+const migrationSource = canonicalizeMigrationSql(readFileSync(
   "sql/migrations/20260805210000_dashboard_truth_closure.sql",
   "utf8",
-).replace(/^\uFEFF/u, "");
+));
 const migrationHash = createHash("sha256").update(migrationSource).digest("hex");
 
 const client = new Client({
@@ -33,7 +35,9 @@ try {
   assert.equal(registry[0]?.name, "dashboard_truth_closure");
   assert.equal(Number(registry[0]?.statement_count), 1);
   assert.equal(
-    createHash("sha256").update(String(registry[0]?.statement ?? "")).digest("hex"),
+    createHash("sha256")
+      .update(canonicalizeMigrationSql(String(registry[0]?.statement ?? "")))
+      .digest("hex"),
     migrationHash,
     "live registry SQL must match the repository migration",
   );
