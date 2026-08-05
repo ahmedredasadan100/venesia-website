@@ -37,6 +37,15 @@ const DEFAULT_TITLE = "مشروع مميز";
 const DEFAULT_SUBTITLE = "اختيار يعكس مسار التنفيذ على الأرض";
 const DEFAULT_AUTOPLAY_MS = 6000;
 
+function getVisibleSideProjects<T>(projects: readonly T[], activeIndex: number): T[] {
+  const sideProjectCount = Math.max(0, Math.min(2, projects.length - 1));
+
+  return Array.from(
+    { length: sideProjectCount },
+    (_, sideIndex) => projects[(activeIndex + sideIndex + 1) % projects.length],
+  );
+}
+
 export default function ProjectsFeaturedSection({
   projects,
   title = DEFAULT_TITLE,
@@ -102,9 +111,7 @@ export default function ProjectsFeaturedSection({
 
   const mainProject = projects[activeIndex];
 
-  const visibleSideProjects = [1, 2]
-    .map((offset) => projects[(activeIndex + offset) % projects.length])
-    .filter(Boolean);
+  const visibleSideProjects = getVisibleSideProjects(projects, activeIndex);
 
   const showHeader = showTitle || showSubtitle;
 
