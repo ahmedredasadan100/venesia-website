@@ -12,6 +12,14 @@ const finalRebuildMigration = readFileSync(finalRebuildMigrationUrl, "utf8").rep
   /\r\n?/gu,
   "\n",
 );
+const aclCorrectionMigration = readFileSync(
+  new URL("../sql/migrations/20260729090000_project_admin_entry_acl_correction.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
+const schemaParityForwardMigration = readFileSync(
+  new URL("../sql/migrations/20260729150000_project_admin_schema_parity_forward_fix.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
 const rowActionsMigrationUrl = new URL(
   "../sql/migrations/20260731100000_project_row_actions_capability.sql",
   import.meta.url,
@@ -26,6 +34,14 @@ const projectPublishingMigration = readFileSync(
 ).replace(/\r\n?/gu, "\n");
 const globalTruthAtomicMigration = readFileSync(
   new URL("../sql/migrations/20260805180000_global_truth_atomic_operations_closure.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
+const dashboardTruthMigration = readFileSync(
+  new URL("../sql/migrations/20260805210000_dashboard_truth_closure.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
+const reportsAnalyticsMigration = readFileSync(
+  new URL("../sql/migrations/20260805230000_reports_analytics_capability_closure.sql", import.meta.url),
   "utf8",
 ).replace(/\r\n?/gu, "\n");
 
@@ -125,6 +141,11 @@ const manuallyAppliedMigrationVersions = [
   "20260729090000",
   "20260729150000",
 ];
+const reconciledMigrationSourceHashes = new Map([
+  ["20260728090000", sha256(finalRebuildMigration)],
+  ["20260729090000", sha256(aclCorrectionMigration)],
+  ["20260729150000", sha256(schemaParityForwardMigration)],
+]);
 const runtimeRoles = ["anon", "authenticated", "service_role"];
 const tablePrivileges = [
   "SELECT",
@@ -773,7 +794,7 @@ const report = {
       tables: 9,
       columns: 122,
       constraints: 104,
-      indexes: 52,
+      indexes: 54,
       rls_policies: 0,
       user_triggers: 4,
       functions: 8,
@@ -783,6 +804,8 @@ const report = {
     row_actions_migration_sha256: sha256(rowActionsMigration),
     project_publishing_migration_sha256: sha256(projectPublishingMigration),
     global_truth_atomic_migration_sha256: sha256(globalTruthAtomicMigration),
+    dashboard_truth_migration_sha256: sha256(dashboardTruthMigration),
+    reports_analytics_migration_sha256: sha256(reportsAnalyticsMigration),
     expected_function_source_sha256: expectedFunctionSourceHashes,
     expected_function_source_md5: expectedFunctionSourceMd5s,
   },
@@ -1642,7 +1665,7 @@ function buildParitySummary(fullReport) {
         ),
       column_defaults_and_not_null_match_final_rebuild: columnDrift.length === 0,
       index_inventory_valid_ready:
-        fullReport.indexes.length === 52 &&
+        fullReport.indexes.length === 54 &&
         fullReport.indexes.every(
           (index) => index.is_valid && index.is_ready && index.is_live,
         ),
@@ -2043,6 +2066,13 @@ function buildSchemaDriftRemaining(summary) {
 }
 
 function buildFinalParityGate(summary) {
+  const reconciledMigrationRegistryMatches =
+    summary.migration_registry.length === manuallyAppliedMigrationVersions.length &&
+    summary.migration_registry.every(
+      (entry) =>
+        entry.statements?.length === 1 &&
+        sha256(entry.statements[0]) === reconciledMigrationSourceHashes.get(entry.version),
+    );
   const checks = {
     read_only_transaction: summary.session[0]?.transaction_read_only === "on",
     exact_catalog_counts:
@@ -2055,7 +2085,7 @@ function buildFinalParityGate(summary) {
       summary.schema_drift_remaining.length === 0,
     acl_pass: summary.acl_pass === true,
     data_integrity_pass: summary.data_integrity_pass === true,
-    manual_migrations_absent_from_registry: summary.migration_registry.length === 0,
+    reconciled_migrations_registered_canonically: reconciledMigrationRegistryMatches,
   };
 
   return {

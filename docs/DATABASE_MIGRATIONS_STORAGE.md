@@ -251,26 +251,36 @@ Specific applied migration versions, remote registry facts, schema drift, and op
 
 Do not freeze volatile counts or remote facts inside this safety contract.
 
-## 18. Accepted audit findings and sequencing
+## 18. Current reconciliation owner
 
-The Full Repository Audit completed on baseline `9e420620f4a802dc8f070334c7d8d210a4a693f8`. The following data findings remain open; Documentation Reset does not implement them.
+The repository uses one executable reconciliation guard:
 
-### Confirmed Defects
+```bash
+npm run verify:database-reconciliation
+npm run verify:database-reconciliation-live
+```
 
-- **Media deletion safety:** the defect remains open on official `main`. Typed providers, persisted references, exhaustive scans, and fail-closed deletion are under implementation on the active branch; no accepted foundation or global Media closure follows before review, merge, and remote proof.
-- **Page/Menu atomic operations:** multi-step delete and reorder operations can leave partial domain state. Domain transactions/RPCs must own required all-or-nothing behavior. This is the second active implementation priority.
-- **Projects aggregate atomicity:** root and child persistence can partially succeed. The finding remains confirmed but is **Deferred by Product Priority** until the final product stage.
+Structural mode verifies the canonical migration corpus and retired-owner guards without requiring Production credentials. Live mode opens a read-only transaction and proves:
 
-### Verification Blockers
+- exact repository/registry version order;
+- exact SQL provenance for every registered migration;
+- repository provenance for application-owned public relations, functions, explicit indexes, triggers, and policies;
+- RLS on every public application table;
+- valid/ready/live indexes;
+- validated constraints;
+- no parallel public function overload names;
+- valid current views;
+- the migration-registry reconciliation audit record.
 
-- Repository migrations do not prove remote RLS, grants, policies, anonymous denial, functions, triggers, or Storage state.
-- Migration-file presence, remote behavior, and registry provenance remain separate facts.
-- Security/Users verification, including RLS/Grants, is **Deferred by Product Priority** until before final launch or multi-user operation.
+`scripts/reconcile-migration-registry.mts` is the only registry-repair tool. It requires an explicit `--apply`, takes a transaction-scoped advisory lock plus an exclusive registry lock, validates known aliases before mutation, writes canonical repository SQL, verifies the result before commit, and records one sanitized audit event. It never replays repository migrations or seeds.
 
-### Performance Risks
+Supabase platform-owned `public.rls_auto_enable()` is an explicit catalog exception because the platform event trigger owns it. Application cleanup must not drop it.
 
-- Topics reads and metrics, Page link resolution, Menu counts, Storage listing, and Redirect lookup require query/timing/cardinality measurement before optimization.
-- No index, RPC, cache, or read-model migration should be proposed solely from source size or query-shape suspicion without the required evidence.
+### Remaining decision boundaries
+
+- Migration-file presence, live behavior, registry provenance, Git deployment, and Production smoke remain separate facts even when all are green.
+- Role semantics and login-abuse policy require Product/Security authority; RLS presence does not invent those policies.
+- No index, RPC, cache, or read-model migration is justified solely by source size or query-shape suspicion without measurement.
 
 ### Historical migration references
 
