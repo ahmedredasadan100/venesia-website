@@ -923,8 +923,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       generic: false,
       routes: ["/admin"],
       pageSourceFiles: ["src/app/admin/page.tsx"],
-      presentationSourceFiles: ["src/app/admin/page.tsx"],
-      sourceOwner: "src/app/admin/page.tsx#getDashboardStats",
+      presentationSourceFiles: [
+        "src/components/admin/dashboard/AdminDashboardView.tsx",
+      ],
+      sourceOwner:
+        "src/lib/admin/dashboard/load-admin-dashboard.ts#loadAdminDashboard",
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
       headerState: "adopted",
@@ -936,12 +939,12 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "not_required",
       paginationOwner: "not_applicable",
       queryMode: "small-fixed",
-      layoutOwner: "Admin dashboard composition",
+      layoutOwner: "AdminDashboardView",
       requiredAdoption: [],
       exceptionRationale:
-        "The embedded dashboard snapshot exposes local edit navigation but is not a standalone collection lifecycle.",
+        "The Dashboard view exposes bounded edit navigation but is not a standalone collection lifecycle.",
       rationale:
-        "Recent content and projects are bounded dashboard snapshots with local navigation inside the metrics composition.",
+        "Recent content and projects are bounded read-model snapshots with local navigation inside the Dashboard composition.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,

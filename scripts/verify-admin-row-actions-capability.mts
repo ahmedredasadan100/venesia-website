@@ -997,7 +997,12 @@ check(
 check(
   "dashboard, card catalog, report, and recovery inventory states match their concrete commands",
   collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
-    ?.sourceOwner === "src/app/admin/page.tsx#getDashboardStats" &&
+    ?.sourceOwner ===
+      "src/lib/admin/dashboard/load-admin-dashboard.ts#loadAdminDashboard" &&
+    collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
+      ?.presentationSourceFiles.includes(
+        "src/components/admin/dashboard/AdminDashboardView.tsx",
+      ) &&
     collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
       ?.workflowClassification === "fixed_structure_not_paginated" &&
     collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")

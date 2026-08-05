@@ -67,6 +67,9 @@ jobs:
       - name: Verify Admin Runtime
         run: npm run verify:admin-runtime
 
+      - name: Verify Dashboard Truth closure
+        run: npm run verify:dashboard-truth
+
       - name: Production build
         run: npm run build
 
@@ -116,3 +119,44 @@ jobs:
 
       - name: Verify Media coordination on isolated PostgreSQL 15
         run: npm run verify:media-coordination-postgres
+
+  dashboard-truth-postgres:
+    name: Dashboard Truth · PostgreSQL 15
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: venesia_dashboard_truth_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d venesia_dashboard_truth_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
+
+    env:
+      DASHBOARD_TRUTH_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/venesia_dashboard_truth_ci
+      DASHBOARD_TRUTH_DATABASE_REQUIRED: "1"
+      DASHBOARD_TRUTH_DATABASE_DISPOSABLE: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Dashboard Truth on isolated PostgreSQL 15
+        run: npm run verify:dashboard-truth-postgres
