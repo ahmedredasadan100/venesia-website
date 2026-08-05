@@ -1610,8 +1610,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       generic: false,
       routes: ["/admin/reports"],
       pageSourceFiles: ["src/app/admin/reports/page.tsx"],
-      presentationSourceFiles: ["src/app/admin/reports/page.tsx"],
-      sourceOwner: "Admin report registry",
+      presentationSourceFiles: [
+        "src/components/admin/reports/AdminReportsView.tsx",
+      ],
+      sourceOwner:
+        "src/lib/admin/reports/load-admin-reports.ts#loadAdminReports",
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
       headerState: "adopted",
@@ -1622,13 +1625,13 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       filtersOrToolbar: false,
       paginationState: "not_required",
       paginationOwner: "not_applicable",
-      queryMode: "small-fixed",
-      layoutOwner: "Report navigation cards",
+      queryMode: "specialized",
+      layoutOwner: "AdminPageExperience + AdminReportsView",
       requiredAdoption: [],
       exceptionRationale:
-        "The fixed report registry is a navigation hub rather than record data.",
+        "Reports compose aggregate read models and existing domain diagnostics; they are not a pageable entity collection.",
       rationale:
-        "The hub keeps cards while each report collection is inventoried independently.",
+        "The Reports Capability owns composition and failure semantics while Dashboard, Audit, SEO, Media, Content Review, and Analytics adapters retain their source ownership.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
