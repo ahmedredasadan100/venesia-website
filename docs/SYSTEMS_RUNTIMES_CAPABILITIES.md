@@ -346,7 +346,8 @@ Current closure and adoption details come from executable manifests and guards. 
 | Page Composition and Menus | Specialized domain owners with aggregate atomic mutation RPCs | Shared UI/Data owners may be reused without owning composition truth |
 | Projects Domain | Database-only project truth with atomic aggregate persistence, publication, row actions, and public read contracts | Project-specific invariants remain in the Project domain |
 | Dashboard | `admin_dashboard_truth_v1()` is the request-time KPI/diagnostics read-model owner | Dashboard presentation must not create another KPI source |
-| Reports and Analytics | `admin_reports_truth_v1()` plus the Analytics adapter registry are the reporting/analytics owners | External provider activation is a Product/Auth/Privacy decision; reports never call providers directly |
+| Reports and Analytics | `admin_reports_truth_v1()` plus the Analytics adapter registry and normalized `analytics_provider_read_models` are the reporting/analytics owners | Reports never call providers or infer connection state |
+| External Integrations | `src/lib/admin/integrations` plus `integration_connections` own OAuth, Vault references, asset binding, provider adapters, connection diagnostics, sync leases/retry/backoff, and watermarks | Vercel Cron is a thin trigger; provider metrics cross only through the Analytics ingestion adapter |
 | Auth / Users / Security | Server session and user-management foundations exist; all public application tables have live RLS enabled | Role semantics and rate limiting require explicit Product/Security decisions |
 | Database reconciliation | Repository corpus, registry provenance, catalog ownership, validity, and drift are guarded structurally and live | Supabase platform objects remain platform-owned exceptions, not application legacy |
 
@@ -358,5 +359,6 @@ Current closure and adoption details come from executable manifests and guards. 
 - Navigation visibility never substitutes for server authorization.
 - Dashboard and Reports may share lower read models, diagnostics, and audit without duplicating their Sources of Truth.
 - Provider-specific Analytics code belongs behind the existing adapter registry, never inside a report.
+- Integrations owns connection management and provider synchronization, but Analytics owns normalized report projections; neither side may infer the other's truth or expose provider secrets to clients, logs, or audit.
 - Performance work begins with measurement owned by the relevant read model; it does not justify a new global performance Runtime.
 - UI/UX, RTL, responsive, focus, and accessibility closure require Browser QA after the relevant implementation tranche.
