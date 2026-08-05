@@ -7,7 +7,7 @@ import {
   getProjectsPreferenceColumnKeys,
   type ProjectColumnKey,
 } from "../../../../lib/admin/projects/projects-list-config";
-import type { ProjectCategory } from "../../../../config/projects-data";
+import type { ProjectCategory } from "../../../../lib/projects/public-types";
 
 export async function saveProjectsTablePreferences(
   type: ProjectCategory,

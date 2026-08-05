@@ -36,7 +36,6 @@ export const ADMIN_INTERACTION_SYSTEM = {
   globalClosed: false,
   globalClosureBlockers: [
     "Authenticated Browser acceptance on the final working tree is still required.",
-    "Atomic reorder contracts are not available for Page Assignment and Menu Item free drag.",
   ],
 } as const;
 
@@ -560,8 +559,7 @@ export type AdminCollectionAdoptionState = "adopted" | "not_applicable";
 
 export type AdminCollectionReorderOwner =
   | "not_applicable"
-  | "domain_owned_atomic_reorder"
-  | "blocked_atomic_reorder_contract";
+  | "domain_owned_atomic_reorder";
 
 export type AdminCollectionSurfaceInventoryEntry = {
   id: string;
@@ -663,7 +661,6 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   globalClosed: false,
   globalClosureBlockers: [
     "Authenticated Browser QA for every generic adopter on the final working tree is still required.",
-    "Page Assignment and Menu Item free drag require an authoritative atomic reorder mutation contract; adjacent multi-write swaps cannot close this item.",
   ],
   genericAdoptionGaps: [],
   canonicalSectionGap: "gap-7",
@@ -1236,10 +1233,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
-      reorderOwner: "blocked_atomic_reorder_contract",
-      genuineExceptions: [
-        "Interactive reorder is hidden until the Menu domain owns an atomic hierarchy-aware reorder mutation.",
-      ],
+      reorderOwner: "domain_owned_atomic_reorder",
+      genuineExceptions: [],
       id: "menu-items",
       gridOwner: "AdminDataGrid",
       workflowClassification:
@@ -1263,12 +1258,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationOwner: "AdminTablePagination",
       queryMode: "specialized",
       layoutOwner: "AdminDataGrid Contract",
-      requiredAdoption: [
-        "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
-      ],
+      requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Nested items share grid, actions, pagination, feedback, and confirmation; unsafe non-atomic reorder triggers and write exports are fail-closed.",
+        "Nested items share grid, actions, pagination, feedback, and confirmation; the Menu domain owns one hierarchy-aware atomic reorder mutation.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1300,10 +1293,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
-      reorderOwner: "blocked_atomic_reorder_contract",
-      genuineExceptions: [
-        "Interactive reorder is hidden until Page Composition owns an atomic cross-table reorder mutation.",
-      ],
+      reorderOwner: "domain_owned_atomic_reorder",
+      genuineExceptions: [],
       id: "page-block-assignments",
       gridOwner: "AdminDataGrid",
       workflowClassification:
@@ -1327,12 +1318,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationOwner: "AdminTablePagination",
       queryMode: "bounded-client",
       layoutOwner: "AdminPageExperience + Page composition assignment content",
-      requiredAdoption: [
-        "REORDER_HANDLE_REQUIRES_ATOMIC_REORDER_MUTATION_CONTRACT",
-      ],
+      requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "The complete assignment dataset is paginated by the shared bounded-client URL/history owner; unsafe non-atomic reorder triggers and write exports are fail-closed.",
+        "The complete assignment dataset is paginated by the shared bounded-client URL/history owner; Page Composition owns one cross-table atomic reorder mutation.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,

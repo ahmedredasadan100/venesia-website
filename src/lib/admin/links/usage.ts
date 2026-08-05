@@ -9,7 +9,6 @@ import type { AdminLinkValue, LinkedResourceType } from "./types";
 export type LinkUsageSourceType =
   | "menu_item"
   | "hero_template"
-  | "page_section"
   | "cta_block"
   | "content_block"
   | "cards_block"
@@ -196,30 +195,6 @@ async function scanHeroTemplates(query: LinkUsageQuery, publicPath: string | nul
       adminPath: `/admin/pages-blocks/blocks/hero/${hero.id}`,
     };
 
-    scanAdminLinkValue(config.primaryCtaLink, query, publicPath, { ...base, fieldPath: "config.primaryCtaLink" }, matches);
-    scanAdminLinkValue(config.secondaryCtaLink, query, publicPath, { ...base, fieldPath: "config.secondaryCtaLink" }, matches);
-    scanHrefValue(config.primaryCtaHref, query, publicPath, { ...base, fieldPath: "config.primaryCtaHref" }, matches);
-    scanHrefValue(config.secondaryCtaHref, query, publicPath, { ...base, fieldPath: "config.secondaryCtaHref" }, matches);
-  });
-
-  return matches;
-}
-
-async function scanLegacyPageSections(query: LinkUsageQuery, publicPath: string | null) {
-  const matches: LinkUsageReference[] = [];
-  const { data: sections } = await getSupabaseAdmin()
-    .from("page_sections")
-    .select("id,section_key,config")
-    .eq("section_type", "hero");
-
-  (sections ?? []).forEach((section) => {
-    const config = (section.config ?? {}) as Record<string, unknown>;
-    const base = {
-      sourceType: "page_section" as const,
-      sourceId: section.id,
-      sourceLabel: `Page Section #${section.id} (${section.section_key})`,
-      adminPath: "/admin/pages-blocks/blocks/hero",
-    };
     scanAdminLinkValue(config.primaryCtaLink, query, publicPath, { ...base, fieldPath: "config.primaryCtaLink" }, matches);
     scanAdminLinkValue(config.secondaryCtaLink, query, publicPath, { ...base, fieldPath: "config.secondaryCtaLink" }, matches);
     scanHrefValue(config.primaryCtaHref, query, publicPath, { ...base, fieldPath: "config.primaryCtaHref" }, matches);
@@ -423,7 +398,6 @@ export async function findLinkUsages(query: LinkUsageQuery): Promise<LinkUsageRe
   const batches = await Promise.all([
     scanMenuItems(query, publicPath),
     scanHeroTemplates(query, publicPath),
-    scanLegacyPageSections(query, publicPath),
     scanBlockTemplates("cta_block_templates", "cta_block", "/admin/pages-blocks/blocks/cta", query, publicPath),
     scanBlockTemplates("content_block_templates", "content_block", "/admin/pages-blocks/blocks/content", query, publicPath),
     scanBlockTemplates("cards_block_templates", "cards_block", "/admin/pages-blocks/blocks/cards", query, publicPath),

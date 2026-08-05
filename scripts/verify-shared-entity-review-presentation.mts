@@ -291,6 +291,7 @@ check(
 
 const validProject = createEmptyProjectEntry();
 Object.assign(validProject.project, {
+  code: "VALID-PROJECT",
   arabic_name: "مشروع صالح",
   english_name: "Valid Project",
   slug: "valid-project",
@@ -317,6 +318,7 @@ Object.assign(validProject.project, {
   overview_main_image_alt: "صورة النظرة العامة",
   delivery_title: "التنفيذ والتسليم",
   delivery_body: "<p>تفاصيل التنفيذ والتسليم</p>",
+  brochure_url: "https://example.com/valid-project-brochure.pdf",
   seo_title: "عنوان SEO مخصص للمشروع",
   seo_description: "وصف SEO مخصص للمشروع",
 });

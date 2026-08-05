@@ -8,12 +8,13 @@ import {
   getNumber,
   getString,
   navigationMutationMessage,
+  mutateMenuTree,
   revalidateNavigation,
   synchronizeDeletedMenuItemReferences,
 } from "./helpers";
 
 export async function bulkMenuAction(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const action = getString(formData, "bulk_action");
   const ids = formData
     .getAll("menu_ids")
@@ -48,9 +49,13 @@ export async function bulkMenuAction(formData: FormData) {
       .in("menu_id", ids);
     if (itemsReadError) backToMenus(itemsReadError.message);
 
-    // One menu delete statement atomically cascades to every captured item.
-    const { error } = await getSupabaseAdmin().from("menus").delete().in("id", ids);
-    if (error) backToMenus(error.message);
+    for (const menuId of ids) {
+      try {
+        await mutateMenuTree(menuId, "delete_menu", {}, actor);
+      } catch (error) {
+        backToMenus(error instanceof Error ? error.message : "تعذر حذف القوائم.");
+      }
+    }
 
     const affectedIds = (affectedItems ?? []).map((item) => Number(item.id));
     const mediaSynchronization = await synchronizeDeletedMenuItemReferences(affectedIds);
@@ -71,7 +76,7 @@ export async function bulkMenuAction(formData: FormData) {
 }
 
 export async function clearMenuItems(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = getNumber(formData, "id");
   if (!id) backToMenus("القائمة غير موجودة.");
 
@@ -81,8 +86,11 @@ export async function clearMenuItems(formData: FormData) {
     .eq("menu_id", id);
   if (itemsReadError) backToMenus(itemsReadError.message);
 
-  const { error } = await getSupabaseAdmin().from("menu_items").delete().eq("menu_id", id);
-  if (error) backToMenus(error.message);
+  try {
+    await mutateMenuTree(id, "clear_menu", {}, actor);
+  } catch (error) {
+    backToMenus(error instanceof Error ? error.message : "تعذر تفريغ القائمة.");
+  }
 
   const affectedIds = (affectedItems ?? []).map((item) => Number(item.id));
   const mediaSynchronization = await synchronizeDeletedMenuItemReferences(affectedIds);

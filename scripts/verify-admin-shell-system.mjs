@@ -119,12 +119,17 @@ check(
     rowActionsOwner.includes("sticky={sticky}"),
 );
 check(
-  "Page Composition bulk confirmation awaits success and preserves failure retry",
+  "Page Composition bulk confirmation awaits one atomic mutation and preserves failure retry",
   pageCompositionClient.includes("return new Promise<void>") &&
     pageCompositionClient.includes("await bulkPageBlockAssignments(formData)") &&
     pageCompositionClient.includes('if (action === "delete")') &&
     pageCompositionClient.includes("reject(error)") &&
-    pageCompositionBulkAction.match(/mutationResults\.find\(\(result\) => result\?\.error\)\?\.error/g)?.length === 2 &&
+    pageCompositionClient.indexOf("selection.clearSelection()") >
+      pageCompositionClient.indexOf("await bulkPageBlockAssignments(formData)") &&
+    pageCompositionBulkAction.includes('await mutatePageComposition(pageId, "bulk"') &&
+    !pageCompositionBulkAction.includes("Promise.all") &&
+    !pageCompositionBulkAction.includes("mutationResults") &&
+    !pageCompositionBulkAction.includes(".from(") &&
     pageCompositionBulkAction.includes('throw new Error("Unsupported page block bulk action.")'),
 );
 check(

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import {
   AdminDataGridRowActions,
+  AdminDataGridActionButton,
   AdminDataGridCenterCell,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
@@ -28,6 +29,10 @@ type PageBlocksAssignmentRowProps = {
   onToggleVisibility: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   showModule: boolean;
   showStatus: boolean;
 };
@@ -46,6 +51,10 @@ export default function PageBlocksAssignmentRow({
   onToggleVisibility,
   onDuplicate,
   onDelete,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
   showModule,
   showStatus,
 }: PageBlocksAssignmentRowProps) {
@@ -131,6 +140,10 @@ export default function PageBlocksAssignmentRow({
       </AdminDataGridCheckboxCell>
 
       <AdminDataGridPrimaryCell className="flex items-center gap-2">
+        <span className="flex shrink-0 gap-1">
+          <AdminDataGridActionButton size="compact" title="تحريك لأعلى" disabled={!canMoveUp || isPending} pending={isPending} onClick={onMoveUp}>↑</AdminDataGridActionButton>
+          <AdminDataGridActionButton size="compact" title="تحريك لأسفل" disabled={!canMoveDown || isPending} onClick={onMoveDown}>↓</AdminDataGridActionButton>
+        </span>
         <Link
           href={moduleEditHref(row.module_kind, row.template_id)}
           className="min-w-0 truncate text-sm font-semibold text-white hover:text-[#D8B87A]"

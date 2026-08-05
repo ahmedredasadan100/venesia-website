@@ -205,7 +205,7 @@ export async function updateCtaBlock(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncBlockModulePageAssignments("cta", id, parsePageIdsFromForm(formData));
+  await syncBlockModulePageAssignments("cta", id, parsePageIdsFromForm(formData), actor);
   await revalidateBlockModulePaths("cta");
   redirect(`/admin/pages-blocks/blocks/cta/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }

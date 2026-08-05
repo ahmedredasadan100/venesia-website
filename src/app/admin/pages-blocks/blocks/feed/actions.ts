@@ -223,7 +223,7 @@ export async function updateFeedModule(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncBlockModulePageAssignments("feed", id, parsePageIdsFromForm(formData));
+  await syncBlockModulePageAssignments("feed", id, parsePageIdsFromForm(formData), actor);
   await revalidateBlockModulePaths("feed");
   revalidatePath(`/admin/pages-blocks/blocks/feed/${id}`, "page");
   redirect(`/admin/pages-blocks/blocks/feed/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);

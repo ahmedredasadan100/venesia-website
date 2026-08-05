@@ -99,9 +99,11 @@ check(
     ADMIN_INTERACTION_SYSTEM.ownsRuntime === false,
 );
 check(
-  "Admin Interaction System remains explicitly open",
+  "Admin Interaction System remains explicitly open only for final Browser acceptance",
   ADMIN_INTERACTION_SYSTEM.globalClosed === false &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length >= 2,
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length === 1 &&
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers[0] ===
+      "Authenticated Browser acceptance on the final working tree is still required.",
 );
 
 const expectedInteractionModuleIds = [

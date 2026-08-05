@@ -16,7 +16,7 @@ import {
   adminActionFailure,
   type AdminActionResult,
 } from "../../../lib/admin/admin-action-result";
-import type { ProjectCategory } from "../../../config/projects-data";
+import type { ProjectCategory } from "../../../lib/projects/public-types";
 import type {
   AdminEntityListQuery,
   AdminEntityListResult,

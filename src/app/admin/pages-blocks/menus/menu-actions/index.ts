@@ -8,3 +8,4 @@ export { bulkMenuAction, clearMenuItems } from "./bulk";
 export { createMenuItem, updateMenuItem } from "./items-save";
 export { deleteMenuItem } from "./items-delete";
 export { toggleMenuItemVisibility } from "./items-status";
+export { reorderMenuItems } from "./reorder";

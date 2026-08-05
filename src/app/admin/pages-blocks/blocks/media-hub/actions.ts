@@ -60,7 +60,7 @@ export async function updateMediaHubModule(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncMediaHubModulePageAssignments(id, parsePageIdsFromForm(formData));
+  await syncMediaHubModulePageAssignments(id, parsePageIdsFromForm(formData), actor);
   await revalidateBlockModulePaths("media-hub");
   revalidatePath(`/admin/pages-blocks/blocks/media-hub/${id}`, "page");
   redirect(`/admin/pages-blocks/blocks/media-hub/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);

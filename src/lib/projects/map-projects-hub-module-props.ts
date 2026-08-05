@@ -58,7 +58,7 @@ export type ProjectsHubMapPresentationProps = {
   mapPins: ProjectsHubMapPinConfig[];
 };
 
-/** Presentation defaults matching the current hard-coded public components. */
+/** Presentation-only defaults. Project identities and map pins are database-owned. */
 export const PROJECTS_HUB_HERO_DEFAULTS: ProjectsHubHeroPresentationProps = {
   autoplayMs: 6000,
   emptyState: null,
@@ -109,19 +109,7 @@ export const PROJECTS_HUB_MAP_DEFAULTS: ProjectsHubMapPresentationProps = {
   title: "مشروعاتنا على الخريطة",
   mapImage: PROJECTS_HUB_DEFAULT_MAP_IMAGE,
   exploreButtonLabel: "استكشف على الخريطة",
-  mapPins: [
-    { code: "I87", district: "الحي الأول", right: "20%", top: "50%" },
-    { code: "I76", district: "الحي الأول", right: "27%", top: "45%" },
-    { code: "B84", district: "الحي الأول", right: "34%", top: "52%" },
-    { code: "C35", district: "الحي الثاني", right: "50%", top: "46%" },
-    { code: "J118", district: "الحي الثاني", right: "57%", top: "53%" },
-    { code: "J191", district: "الحي الثاني", right: "63%", top: "46%" },
-    { code: "F92", district: "الحي الرابع", right: "45%", top: "72%" },
-    { code: "F222", district: "الحي الرابع", right: "55%", top: "74%" },
-    { code: "D174", district: "النورث هاوس", right: "38%", top: "25%" },
-    { code: "B137", district: "النورث هاوس", right: "48%", top: "21%" },
-    { code: "B138", district: "النورث هاوس", right: "58%", top: "27%" },
-  ],
+  mapPins: [],
 };
 
 export function mapProjectsHubHeroProps(
@@ -191,7 +179,7 @@ export function mapProjectsHubMapProps(
     title: module.config.title || PROJECTS_HUB_MAP_DEFAULTS.title,
     mapImage: module.config.mapImage || PROJECTS_HUB_MAP_DEFAULTS.mapImage,
     exploreButtonLabel: module.config.exploreButtonLabel || PROJECTS_HUB_MAP_DEFAULTS.exploreButtonLabel,
-    mapPins: module.config.mapPins.length ? module.config.mapPins : PROJECTS_HUB_MAP_DEFAULTS.mapPins,
+    mapPins: module.config.mapPins,
   };
 }
 

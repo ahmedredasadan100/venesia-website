@@ -817,14 +817,9 @@ check(
     bottomStyle.position === "fixed",
 );
 
-const qaConsumers = read("scripts/qa-admin-entity-list-consumers.mjs");
 check(
-  "Consumer QA uses an unconditional isolated 11-row fixture",
-  qaConsumers.includes("Fixture creates exactly 11 flattened category rows") &&
-    qaConsumers.includes("Categories fixture page 1 has exactly 10 rows") &&
-    qaConsumers.includes("Categories fixture page 2 has exactly 1 row") &&
-    !qaConsumers.includes("if (totalCount > 10)") &&
-    qaConsumers.includes("cleanupProof?.ok === true"),
+  "Retired consumer QA cannot restore a direct provider writer",
+  !existsSync(resolve(ROOT, "scripts/qa-admin-entity-list-consumers.mjs")),
 );
 
 const types = read("src/lib/admin/entity-list/types.ts");

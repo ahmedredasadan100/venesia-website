@@ -484,15 +484,6 @@ const PROVIDER_CONFIGS = [
     editHref: (row) => `/admin/pages-blocks/blocks/media-hub/${row.id}`,
   },
   {
-    domainKey: "page_sections",
-    table: "page_sections",
-    entityType: "legacy_page_section",
-    fields: ["config"],
-    jsonFields: ["config"],
-    extraFields: ["page_id"],
-    editHref: () => "/admin/pages-blocks/pages",
-  },
-  {
     domainKey: "menu_items",
     table: "menu_items",
     entityType: "menu_item",

@@ -2,19 +2,13 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
-import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
-import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { revalidatePublicPagesWithBlockAssignments } from "../../../../../lib/page-blocks/admin-revalidate";
 import { getPageDeleteBlockReason } from "../../../../../lib/pages/page-admin-policy";
 import { normalizePath } from "../../../../../lib/seo/seo-utils";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { mutatePageComposition } from "./helpers";
 import type { PageDeleteResult } from "./types";
 
-async function deleteHeroAssignments(pageIds: number[]) {
-  const { error } = await getSupabaseAdmin().from("hero_assignments").delete()
-    .eq("target_type", "page").in("target_id", pageIds);
-  if (error) throw new Error(error.message);
-}
 function revalidateDeletedPublicPath(path?: string | null) {
   if (!path) return;
   const normalized = normalizePath(path);
@@ -23,7 +17,7 @@ function revalidateDeletedPublicPath(path?: string | null) {
 }
 
 export async function deletePages(ids: number[]): Promise<PageDeleteResult> {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const validIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
   if (!validIds.length) return { ok: false, code: "invalid_pages", message: "حدد صفحة واحدة على الأقل." };
   const { data: pages, error } = await getSupabaseAdmin().from("pages")
@@ -39,13 +33,13 @@ export async function deletePages(ids: number[]): Promise<PageDeleteResult> {
   });
   if (!deletable.length) return { ok: false, code: "pages_protected", blockedIds, blockedCount: blockedIds.length, message: "لا يمكن حذف الصفحات المحددة — الصفحة الرئيسية محمية." };
   const deletedIds = deletable.map((page) => page.id);
-  try { await deleteHeroAssignments(deletedIds); } catch (caught) {
-    return { ok: false, code: "hero_delete_failed", message: caught instanceof Error ? caught.message : "تعذر حذف ربط الهيرو." };
+  try {
+    for (const pageId of deletedIds) {
+      await mutatePageComposition(pageId, "delete_page", {}, actor);
+    }
+  } catch (caught) {
+    return { ok: false, code: "page_delete_failed", message: caught instanceof Error ? caught.message : "تعذر حذف الصفحة ذريًا." };
   }
-  const deletion = await getSupabaseAdmin().from("pages").delete().in("id", deletedIds);
-  if (deletion.error) return { ok: false, code: "page_delete_failed", message: deletion.error.message };
-  await recordCmsAdminAudit({ action: buildCmsAuditAction("page", "delete"), entityType: "page",
-    metadata: { page_ids: deletedIds, count: deletedIds.length } });
   deletable.forEach((page) => revalidateDeletedPublicPath(page.path));
   await revalidatePublicPagesWithBlockAssignments();
   const blockedSuffix = blockedIds.length ? ` لم يُحذف ${blockedIds.length} صفحة محمية.` : "";

@@ -200,6 +200,9 @@ function BasicTab({ bundle, mode }: { bundle: ProjectEntryBundle; mode: "create"
             <Field name="english_name" label="اسم المشروع بالإنجليزية" required>
               <input id="english_name" name="english_name" defaultValue={project.english_name} dir="ltr" className={fieldClass} />
             </Field>
+            <Field name="code" label="كود المشروع" required>
+              <input id="project-code" name="code" defaultValue={project.code} dir="ltr" className={fieldClass} autoCapitalize="characters" />
+            </Field>
             <div id="project-slug">
               <AdminSlugField
                 id="slug"
@@ -209,6 +212,19 @@ function BasicTab({ bundle, mode }: { bundle: ProjectEntryBundle; mode: "create"
               />
               <AdminFormError name="slug" />
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field name="homepage_order" label="ترتيب الصفحة الرئيسية">
+                <input id="homepage_order" name="homepage_order" type="number" min={0} step={1} defaultValue={project.homepage_order} dir="ltr" className={fieldClass} />
+              </Field>
+              <label className="flex items-center gap-3 self-end rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/75">
+                <input type="hidden" name="show_on_homepage" value="false" />
+                <input name="show_on_homepage" type="checkbox" value="true" defaultChecked={project.show_on_homepage} className="accent-[#b98724]" />
+                إظهار المشروع في الصفحة الرئيسية
+              </label>
+            </div>
+            <Field name="brochure_url" label="رابط كتيّب المشروع">
+              <input id="brochure_url" name="brochure_url" type="url" defaultValue={project.brochure_url} dir="ltr" className={fieldClass} placeholder="https://" />
+            </Field>
             <div>
               {mode === "create" ? (
                 <div>

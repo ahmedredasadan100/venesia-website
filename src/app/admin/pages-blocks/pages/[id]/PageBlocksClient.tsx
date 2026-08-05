@@ -37,6 +37,7 @@ import {
   bulkPageBlockAssignments,
   deletePageBlockAssignment,
   duplicateAssignedPageModule,
+  reorderPageComposition,
   togglePageBlockAssignment,
 } from "../actions";
 import {
@@ -311,6 +312,38 @@ export default function PageBlocksClient({
     router.refresh();
   }
 
+  function canMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
+    const siblings = assignments
+      .filter((candidate) => candidate.slot === row.slot)
+      .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
+    const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
+    return index >= 0 && index + direction >= 0 && index + direction < siblings.length;
+  }
+
+  function handleMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
+    const siblings = assignments
+      .filter((candidate) => candidate.slot === row.slot)
+      .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
+    const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= siblings.length) return;
+    const ordered = [...siblings];
+    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    startTransition(async () => {
+      const result = await reorderPageComposition(
+        page.id,
+        row.slot,
+        ordered.map((item) => ({ kind: item.module_kind, id: item.id, updated_at: item.updated_at })),
+      );
+      if (!result.ok) {
+        setActionFeedback({ message: result.message, ok: false });
+        return;
+      }
+      setActionFeedback({ message: result.warning ?? "تم حفظ ترتيب الموديولات ذريًا.", ok: true });
+      router.refresh();
+    });
+  }
+
   function handleBulkExecute(action: string, ids: string[]) {
     const formData = new FormData();
     formData.set("page_id", String(page.id));
@@ -520,6 +553,8 @@ export default function PageBlocksClient({
                   onToggleVisibility={handleToggleVisibility}
                   onDuplicate={handleDuplicateAssignment}
                   onDelete={handleDeleteAssignment}
+                  canMove={canMoveAssignment}
+                  onMove={handleMoveAssignment}
                   visibleColumns={visibleColumnSet}
                 />
 

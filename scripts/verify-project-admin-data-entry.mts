@@ -410,12 +410,13 @@ check(
     schemaParityAudit.includes('function_signature_security_owner_and_search_path'),
 );
 check(
-  "schema parity final contract includes the additive Project Row Actions owner",
+  "schema parity final contract includes Project Row Actions and Global Truth owners",
   schemaParityAudit.includes("20260731100000_project_row_actions_capability.sql") &&
+    schemaParityAudit.includes("20260805180000_global_truth_atomic_operations_closure.sql") &&
     schemaParityAudit.includes('"set_project_featured_admin_entry"') &&
     schemaParityAudit.includes('"duplicate_project_admin_entry"') &&
-    schemaParityAudit.includes("columns: 115") &&
-    schemaParityAudit.includes("indexes: 45") &&
+    schemaParityAudit.includes("columns: 122") &&
+    schemaParityAudit.includes("indexes: 52") &&
     schemaParityAudit.includes("functions: 8") &&
     schemaParityAudit.includes('["projects.featured", "false"]'),
 );
@@ -450,17 +451,17 @@ check(
 const expectedDefaultBlock = sliceBetween(
   schemaParityAudit,
   "const expectedColumnDefaults = new Map([",
-  "const knownLegacyDefaultColumnKeys",
+  "const expectedColumnComments",
 );
 check(
   "schema parity audit has the exact final-default and allowed pre-fix counts",
-  (expectedDefaultBlock.match(/^\s*\["[a-z_]+\.[a-z_]+",/gm) ?? []).length === 43 &&
+  (expectedDefaultBlock.match(/^\s*\["[a-z_]+\.[a-z_]+",/gm) ?? []).length === 46 &&
     provenMissingChecks.length === 24 &&
     schemaParityAudit.includes("knownLegacyDefaultColumnKeys") &&
     schemaParityAudit.includes("legacyDefaultAllowed"),
 );
 check(
-  "schema parity audit compares metadata and definitions for all 99 final constraints",
+  "schema parity audit compares the 99 rebuilt and five additive final constraints",
   schemaParityAudit.includes("function extractExpectedConstraintManifest") &&
     schemaParityAudit.includes("constraints.length !== 99") &&
     schemaParityAudit.includes("function buildConstraintDiagnostics") &&
@@ -475,6 +476,7 @@ check(
     schemaParityAudit.includes("expected_final_count") &&
     schemaParityAudit.includes("actual_final_count") &&
     schemaParityAudit.includes("expectedExistingConstraintManifest.length !== 75") &&
+    schemaParityAudit.includes("knownAdditiveConstraintKeys") &&
     schemaParityAudit.includes("if (/\\bunique\\b/iu.test(clause))") &&
     schemaParityAudit.includes("constraint_type") &&
     schemaParityAudit.includes("validated") &&
@@ -561,17 +563,17 @@ check(
     !schemaParityAudit.includes("!paritySummary.expected_pre_fix_gate.passed"),
 );
 check(
-  "schema parity data gate proves the four reference locations, stable sequence state, and no QA residue",
+  "schema parity data gate proves the transferred catalog, stable sequence state, and no QA residue",
   schemaParityAudit.includes("function buildDataIntegrityPass") &&
-    schemaParityAudit.includes("rowCounts.get(\"project_locations\") === expectedReferenceLocations.length") &&
-    schemaParityAudit.includes("summary.data_integrity_snapshot.project_ids.length === 0") &&
+    schemaParityAudit.includes("expectedPostClosureRowCounts") &&
+    schemaParityAudit.includes("summary.data_integrity_snapshot.project_ids.length === 13") &&
     schemaParityAudit.includes("Number(stats.null_count) === 0") &&
     schemaParityAudit.includes("Number(stats.distinct_count) === expectedRows") &&
     schemaParityAudit.includes("Number(stats.duplicate_value_count) === 0") &&
     schemaParityAudit.includes("summary.data_integrity_snapshot.reference_locations.length ===") &&
     schemaParityAudit.includes("location.present && location.matches_expected") &&
-    schemaParityAudit.includes("sequence === \"project_locations_id_seq\"") &&
-    schemaParityAudit.includes("Number(state.last_value) === expectedReferenceLocations.length") &&
+    schemaParityAudit.includes("sequence.replace(/_id_seq$/u, \"\")") &&
+    schemaParityAudit.includes("Number(state.last_value) >= expectedRows") &&
     schemaParityAudit.includes("state.is_called === true") &&
     schemaParityAudit.includes("Number(state.last_value) === 1 && state.is_called === false") &&
     schemaParityAudit.includes("function buildQaMarkerQuery") &&

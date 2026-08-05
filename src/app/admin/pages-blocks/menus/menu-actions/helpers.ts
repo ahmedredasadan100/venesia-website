@@ -38,6 +38,26 @@ export function getBoolean(formData: FormData, key: string) {
   return formData.get(key) === "on" || formData.get(key) === "true";
 }
 
+export async function mutateMenuTree(
+  menuId: number,
+  operation: string,
+  payload: Record<string, unknown>,
+  actor: { id: number; username: string },
+) {
+  const { data, error } = await getSupabaseAdmin().rpc("mutate_menu_tree", {
+    p_menu_id: menuId,
+    p_operation: operation,
+    p_payload: payload,
+    p_actor_admin_user_id: actor.id,
+    p_actor_username: actor.username,
+  });
+  if (error) throw new Error(error.message);
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Menu atomic mutation returned an invalid result.");
+  }
+  return data as Record<string, unknown>;
+}
+
 export async function auditMenuAction(
   entityType: "menu" | "menu_item",
   verb: CmsAuditVerb,

@@ -802,7 +802,7 @@ export async function updateContentBlock(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncBlockModulePageAssignments("content", id, parsePageIdsFromForm(formData));
+  await syncBlockModulePageAssignments("content", id, parsePageIdsFromForm(formData), actor);
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("content_block_template", "update"),
     entityType: "content_block_template",

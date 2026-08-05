@@ -1,4 +1,4 @@
-import type { ProjectCategory } from "../../../config/projects-data";
+import type { ProjectCategory } from "../../../lib/projects/public-types";
 import { PlusIcon } from "../../../components/admin/AdminRowActions";
 import { AdminActionButton } from "../../../components/admin/ui";
 
