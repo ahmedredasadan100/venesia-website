@@ -25,6 +25,12 @@ type AdminMediaImageFieldProps = {
   compactAspectClassName?: string;
   previewLoading?: "lazy" | "eager";
   appearance?: "dark" | "light";
+  altName?: string;
+  defaultAlt?: string;
+  altLabel?: string;
+  altHelperText?: string;
+  onAltValueChange?: (value: string) => void;
+  allowRemove?: boolean;
 };
 
 export default function AdminMediaImageField({
@@ -40,15 +46,28 @@ export default function AdminMediaImageField({
   compactAspectClassName = "aspect-[4/3]",
   previewLoading,
   appearance = "dark",
+  altName,
+  defaultAlt = "",
+  altLabel = "النص البديل للصورة",
+  altHelperText,
+  onAltValueChange,
+  allowRemove = true,
 }: AdminMediaImageFieldProps) {
   const [value, setValue] = useState(defaultValue);
   const [prevDefaultValue, setPrevDefaultValue] = useState(defaultValue);
+  const [altValue, setAltValue] = useState(defaultAlt);
+  const [prevDefaultAlt, setPrevDefaultAlt] = useState(defaultAlt);
   const [pickerOpen, setPickerOpen] = useState(false);
   const valueInputRef = useRef<HTMLInputElement>(null);
+  const altInputRef = useRef<HTMLInputElement>(null);
 
   if (defaultValue !== prevDefaultValue) {
     setPrevDefaultValue(defaultValue);
     setValue(defaultValue);
+  }
+  if (defaultAlt !== prevDefaultAlt) {
+    setPrevDefaultAlt(defaultAlt);
+    setAltValue(defaultAlt);
   }
 
   function updateValue(next: string) {
@@ -58,6 +77,11 @@ export default function AdminMediaImageField({
       valueInputRef.current.dispatchEvent(
         new Event("input", { bubbles: true }),
       );
+    }
+    if (!next && altInputRef.current) {
+      setAltValue("");
+      altInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+      onAltValueChange?.("");
     }
     onValueChange?.(next);
   }
@@ -72,7 +96,7 @@ export default function AdminMediaImageField({
 
   if (variant === "compact") {
     return (
-      <>
+      <div className="space-y-3" data-admin-media-image-field={name}>
         <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
         <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
@@ -94,13 +118,15 @@ export default function AdminMediaImageField({
                 >
                   استبدال
                 </button>
-                <button
-                  type="button"
-                  onClick={() => updateValue("")}
-                  className="cursor-pointer rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] text-white/60 hover:bg-white/10 hover:text-white"
-                >
-                  إزالة
-                </button>
+                {allowRemove ? (
+                  <button
+                    type="button"
+                    onClick={() => updateValue("")}
+                    className="cursor-pointer rounded-lg border border-white/10 bg-black/40 px-2.5 py-1 text-[11px] text-white/60 hover:bg-white/10 hover:text-white"
+                  >
+                    إزالة
+                  </button>
+                ) : null}
               </div>
             </>
           ) : (
@@ -115,43 +141,60 @@ export default function AdminMediaImageField({
           )}
         </div>
 
+        {altName ? (
+          <label className="block space-y-2">
+            <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{altLabel}</span>
+            <input
+              ref={altInputRef}
+              name={altName}
+              value={altValue}
+              onChange={(event) => {
+                setAltValue(event.target.value);
+                onAltValueChange?.(event.target.value);
+              }}
+              className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition ${light ? "border-slate-200 bg-white text-slate-900 focus:border-[#b98724]" : "border-white/10 bg-black/25 text-white focus:border-[#D8B87A]/45"}`}
+            />
+            {altHelperText ? <span className={`block text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{altHelperText}</span> : null}
+          </label>
+        ) : null}
+
         <AdminMediaPickerModal
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           onSelect={updateValue}
           initialFolder={browseFolder}
         />
-      </>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-admin-media-image-field={name}>
       <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
-      {showLabel ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className={`flex flex-wrap items-center gap-3 ${showLabel ? "justify-between" : "justify-end"}`}>
+        {showLabel ? (
           <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{label}</span>
-          <div className="flex flex-wrap gap-2">
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15"
+          >
+            {value ? "استبدال" : "اختيار صورة"}
+          </button>
+          {value && allowRemove ? (
             <button
               type="button"
-              onClick={() => setPickerOpen(true)}
-              className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15"
+              onClick={() => updateValue("")}
+              className={`cursor-pointer rounded-2xl border px-4 py-2 text-sm ${light ? "border-red-200 text-red-600 hover:bg-red-50" : "border-white/10 text-white/55 hover:bg-white/5 hover:text-white"}`}
             >
-              {value ? "استبدال" : "اختيار صورة"}
+              إزالة
             </button>
-            {value ? (
-              <button
-                type="button"
-                onClick={() => updateValue("")}
-                className={`cursor-pointer rounded-2xl border px-4 py-2 text-sm ${light ? "border-red-200 text-red-600 hover:bg-red-50" : "border-white/10 text-white/55 hover:bg-white/5 hover:text-white"}`}
-              >
-                إزالة
-              </button>
-            ) : null}
-          </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
 
       {dimensionHint ? (
         <p className={`text-xs leading-6 ${light ? "text-[#9a6815]" : "text-[#D8B87A]/65"}`}>{DIMENSION_HINTS[dimensionHint]}</p>
@@ -176,6 +219,23 @@ export default function AdminMediaImageField({
           لا توجد صورة محددة
         </button>
       )}
+
+      {altName ? (
+        <label className="block max-w-sm space-y-2" data-admin-media-image-alt-field={altName}>
+          <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{altLabel}</span>
+          <input
+            ref={altInputRef}
+            name={altName}
+            value={altValue}
+            onChange={(event) => {
+              setAltValue(event.target.value);
+              onAltValueChange?.(event.target.value);
+            }}
+            className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition ${light ? "border-slate-200 bg-white text-slate-900 focus:border-[#b98724]" : "border-white/10 bg-black/25 text-white focus:border-[#D8B87A]/45"}`}
+          />
+          {altHelperText ? <span className={`block text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{altHelperText}</span> : null}
+        </label>
+      ) : null}
 
       <AdminMediaPickerModal
         open={pickerOpen}

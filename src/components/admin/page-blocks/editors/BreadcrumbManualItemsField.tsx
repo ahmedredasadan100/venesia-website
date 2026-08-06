@@ -1,40 +1,92 @@
 "use client";
 
+import { useState } from "react";
+
+import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { BreadcrumbBlockItem } from "../../../../lib/page-blocks/configs";
 import { AdminLinkField } from "../../ui";
-import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
+import {
+  ModuleEditorRepeaterCard,
+  ModuleEditorRepeaterGrid,
+} from "../ModuleEditorPresentation";
 
 type BreadcrumbManualItemsFieldProps = {
   items: BreadcrumbBlockItem[];
   maxItems?: number;
 };
 
-function padItems(items: BreadcrumbBlockItem[], maxItems: number) {
-  const rows = [...items].slice(0, maxItems);
-  while (rows.length < Math.min(3, maxItems)) rows.push({});
-  return rows;
-}
+type BreadcrumbEditorItem = BreadcrumbBlockItem & { clientKey: string };
 
 export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: BreadcrumbManualItemsFieldProps) {
-  const rows = padItems(items, maxItems);
+  const [rows, setRows] = useState<BreadcrumbEditorItem[]>(() => {
+    const initial = items.slice(0, maxItems).map((item, index) => ({
+      ...item,
+      clientKey: `saved-breadcrumb-${index}`,
+    }));
+    return initial.length ? initial : [{ clientKey: "empty-breadcrumb-0" }];
+  });
+
+  function updateLabel(index: number, label: string) {
+    setRows((current) => current.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, label } : item,
+    ));
+  }
+
+  function moveItem(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= rows.length) return;
+    setRows((current) => {
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  }
+
+  function addItem() {
+    setRows((current) => current.length >= maxItems
+      ? current
+      : [...current, { clientKey: `new-breadcrumb-${Date.now()}-${current.length}` }]);
+  }
+
+  function removeItem(index: number) {
+    setRows((current) => current.length <= 1
+      ? current
+      : current.filter((_, itemIndex) => itemIndex !== index));
+  }
 
   return (
     <div className="space-y-4">
-      <p className="text-xs leading-6 text-white/45">
-        أضف عناصر المسار يدويًا — اختر كل رابط من النظام بدون كتابة Internal URL.
-      </p>
-      <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs leading-6 text-white/45">
+          للعناصر اليدوية فقط: اختر الرابط من النظام بدل كتابة مسار داخلي.
+        </p>
+        <button
+          type="button"
+          onClick={addItem}
+          disabled={rows.length >= maxItems}
+          className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          إضافة عنصر مسار
+        </button>
+      </div>
+
+      <ModuleEditorRepeaterGrid>
         {rows.map((item, index) => (
-          <div key={index} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-            <p className="text-xs font-semibold text-[#D8B87A]/70">عنصر {index + 1}</p>
+          <ModuleEditorRepeaterCard
+            key={item.clientKey}
+            title={`عنصر ${index + 1}`}
+            actions={(
+              <>
+                <button type="button" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك عنصر المسار ${index + 1} لأعلى`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↑</button>
+                <button type="button" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك عنصر المسار ${index + 1} لأسفل`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↓</button>
+                <button type="button" onClick={() => removeItem(index)} disabled={rows.length <= 1} aria-label={`حذف عنصر المسار ${index + 1}`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">حذف</button>
+              </>
+            )}
+          >
             <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">Label</span>
-              <input
-                name={`manual_item_${index}_label`}
-                defaultValue={item.label ?? ""}
-                className={fieldClassName()}
-              />
+              <span className="text-xs font-semibold text-white/55">التسمية</span>
+              <input name={`manual_item_${index}_label`} value={item.label ?? ""} onChange={(event) => updateLabel(index, event.target.value)} className={fieldClassName()} />
             </label>
             <AdminLinkField
               prefix={`manual_item_${index}`}
@@ -42,9 +94,9 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
               defaultValue={linkDefaultFromContainer(item as Record<string, unknown>)}
               showAnchor
             />
-          </div>
+          </ModuleEditorRepeaterCard>
         ))}
-      </div>
+      </ModuleEditorRepeaterGrid>
     </div>
   );
 }

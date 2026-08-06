@@ -7,6 +7,7 @@ import ts from "typescript";
 import { STRUCTURAL_CONTENT_TEMPLATE_SLUGS } from "../src/lib/page-blocks/module-edit-registry.ts";
 import {
   getModuleEditorHeaderMetadata,
+  getModuleEditorSectionOrder,
   getModuleEditorSectionMetadata,
   getSlotModuleSlugMetadata,
 } from "../src/lib/page-composition/module-registry-metadata.ts";
@@ -24,6 +25,7 @@ function check(label: string, condition: unknown) {
 const sharedTabs = read("src/components/admin/ui/AdminModuleTabs.tsx");
 const contentShell = read("src/components/admin/content/editors/ContentEditorShell.tsx");
 const aboutCta = read("src/components/admin/page-blocks/editors/AboutCtaModuleEditor.tsx");
+const moduleEditorPresentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
 
 const moduleEditorRoots = [
   "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
@@ -465,11 +467,18 @@ const missingMetadataCombinations = moduleEditorMetadataInventory.flatMap(
   ({ moduleKind, moduleSlug, tabIds }) =>
     tabIds.flatMap((tabId) => {
       const metadata = getModuleEditorSectionMetadata(moduleKind, tabId, moduleSlug);
+      const sectionChromeComplete = metadata?.sectionHeadingAr === null
+        ? metadata.sectionDescriptionAr === null
+        : Boolean(
+            metadata?.sectionHeadingAr.trim().length &&
+            (metadata.sectionDescriptionAr === null || metadata.sectionDescriptionAr.trim().length > 0),
+          );
       const complete =
         metadata !== null &&
         metadata.navigationLabelAr.trim().length > 0 &&
-        metadata.sectionHeadingAr.trim().length > 0 &&
-        metadata.sectionDescriptionAr.trim().length > 0 &&
+        sectionChromeComplete &&
+        (metadata.sectionChrome !== "implicit" ||
+          (metadata.sectionHeadingAr === null && metadata.sectionDescriptionAr === null)) &&
         metadata.icon.trim().length > 0;
       return complete ? [] : [`${moduleKind}:${moduleSlug ?? "default"}:${tabId}`];
     }),
@@ -486,6 +495,51 @@ check(
       getModuleEditorHeaderMetadata(moduleKind, moduleSlug, "Module instance") !== null &&
       (moduleSlug === null || getSlotModuleSlugMetadata(moduleSlug) !== null),
   ) && missingMetadataCombinations.length === 0,
+);
+
+const infrastructureRoleByTabId = new Map<string, "settings" | "visibility">([
+  ["meta", "settings"],
+  ["settings", "settings"],
+  ["pages", "visibility"],
+  ["display", "visibility"],
+] as const);
+const misclassifiedInfrastructureTabs = moduleEditorMetadataInventory.flatMap(
+  ({ moduleKind, moduleSlug, tabIds }) =>
+    tabIds.flatMap((tabId) => {
+      const expectedRole = infrastructureRoleByTabId.get(tabId);
+      if (!expectedRole) return [];
+      const metadata = getModuleEditorSectionMetadata(moduleKind, tabId, moduleSlug);
+      return metadata?.operationalRole === expectedRole
+        ? []
+        : [`${moduleKind}:${moduleSlug ?? "default"}:${tabId}`];
+    }),
+);
+
+check(
+  `shared metadata owns canonical domain, Settings, then Pages/Visibility tab order; misclassified=${misclassifiedInfrastructureTabs.join(",") || "none"}`,
+  moduleEditorPresentation.includes("getModuleEditorSectionOrder") &&
+    moduleEditorPresentation.includes("left.order - right.order") &&
+    getModuleEditorSectionOrder({
+      navigationLabelAr: "domain",
+      sectionHeadingAr: null,
+      sectionDescriptionAr: null,
+      icon: "content",
+    }) === 0 &&
+    getModuleEditorSectionOrder({
+      navigationLabelAr: "settings",
+      sectionHeadingAr: null,
+      sectionDescriptionAr: null,
+      icon: "settings",
+      operationalRole: "settings",
+    }) === 1 &&
+    getModuleEditorSectionOrder({
+      navigationLabelAr: "visibility",
+      sectionHeadingAr: null,
+      sectionDescriptionAr: null,
+      icon: "plans",
+      operationalRole: "visibility",
+    }) === 2 &&
+    misclassifiedInfrastructureTabs.length === 0,
 );
 
 check(
@@ -517,16 +571,19 @@ check(
 );
 
 check(
-  "technical identity presentation is explicit and structural content reads registry metadata",
-  read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes("<ModuleEditorTechnicalIdentity") &&
-    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes("moduleSlug={presentationSlug}") &&
+  "locked technical identity stays hidden while genuinely editable identifiers remain visible",
+  !moduleEditorPresentation.includes('"read-only"') &&
+    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes('mode="hidden"') &&
+    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes("usesLockedInternalSlug") &&
+    read("src/app/admin/pages-blocks/blocks/content/actions.ts").includes("slugLocked ? existing.slug : requestedSlug") &&
+    read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx").includes('mode="hidden"') &&
+    moduleEditorSources.every(({ source }) => !source.includes('mode="read-only"')) &&
     [
       "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
       "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
       "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
       "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-    ].every((path) => read(path).includes("<ModuleEditorTechnicalIdentity")) &&
+    ].every((path) => read(path).includes('mode="editable"')) &&
     [
       "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
       "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
@@ -564,7 +621,10 @@ check(
       "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
       "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-    ].every((path) => read(path).includes("AdminFormGrid")),
+    ].every((path) => {
+      const source = read(path);
+      return source.includes("AdminFormGrid") || source.includes("ModuleEditorFieldGrid");
+    }),
 );
 
 console.log(`Shared Specialized Editors Presentation verification passed (${passed} checks).`);

@@ -47,7 +47,7 @@ import {
 import PageSeoPanel from "./PageSeoPanel";
 import PageBlocksAssignModal from "./page-blocks/PageBlocksAssignModal";
 import PageBlocksAssignmentsGrid from "./page-blocks/PageBlocksAssignmentsGrid";
-import PageBlocksHeader, { PageModuleKindsBar } from "./page-blocks/PageBlocksHeader";
+import PageBlocksHeader, { PageModuleKindsSummary } from "./page-blocks/PageBlocksHeader";
 import {
   assignmentRowId,
   isManageableAssignment,
@@ -444,19 +444,20 @@ export default function PageBlocksClient({
             icon: "plans",
             content: (
               <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <PageVisualSlotMap assignments={assignments} />
+                <PageVisualSlotMap assignments={assignments} pageSlug={page.slug} />
               </section>
             ),
           },
           {
             id: "modules",
             navigationLabel: "الموديولات",
-            sectionHeading: "موديولات الصفحة",
+            sectionHeading: `مرجع موديولات الصفحة ${page.title || page.slug}`,
             sectionDescription: "أدر الموديولات المرتبطة بالصفحة وترتيبها وحالة ظهورها.",
-              icon: "section",
-              content: (
-                <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                  <AdminFeedbackRegion
+            sectionSummary: <PageModuleKindsSummary usedModuleKinds={usedModuleKinds} />,
+            icon: "section",
+            content: (
+              <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
+                <AdminFeedbackRegion
                     channel={`page-composition:${page.id}:columns`}
                     label="حالة تفضيلات أعمدة موديولات الصفحة"
                     feedback={
@@ -471,9 +472,7 @@ export default function PageBlocksClient({
                           }
                         : null
                     }
-                  />
-                  <PageModuleKindsBar page={page} usedModuleKinds={usedModuleKinds} />
-
+                />
                 <AdminEntityListFilters
                   basePath={`/admin/pages-blocks/pages/${page.id}`}
                   search={{

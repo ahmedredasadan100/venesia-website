@@ -1,22 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import { AdminFormGrid, AdminFormListboxSelect } from "../ui";
-import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
+import { AdminFormListboxSelect } from "../ui";
 import {
   MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeader,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
   ModuleEditorSettingsComposition,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import {
-  getMediaHubModuleSummary,
   MEDIA_HUB_SECTION_LABELS,
 } from "../../../lib/media-hub-modules/admin-present";
 import {
@@ -26,7 +27,6 @@ import {
 } from "../../../lib/media-hub-modules/parse-config";
 import type { MediaHubSectionKey } from "../../../lib/media-hub-modules/types";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
-import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type MediaHubModuleEditClientProps = {
   block: {
@@ -75,11 +75,6 @@ export default function MediaHubModuleEditClient({
     typeof parsedInitial.listLimit === "number" ? parsedInitial.listLimit : MEDIA_HUB_SECTION_DEFAULTS.featured.defaultListLimit ?? "",
   );
 
-  const summary = useMemo(
-    () => getMediaHubModuleSummary(sectionKey, block.description),
-    [sectionKey, block.description],
-  );
-
   function handleSectionChange(nextSectionKey: MediaHubSectionKey) {
     setSectionKey(nextSectionKey);
     setDataSource("topics");
@@ -105,7 +100,6 @@ export default function MediaHubModuleEditClient({
         backLabel="الرجوع لكل Media Hub Modules"
         status={block.status}
         saved={saved}
-        slotContext={getSlotCompatibilityLabel("media-hub")}
       />
 
       <form action={updateAction}>
@@ -119,30 +113,31 @@ export default function MediaHubModuleEditClient({
               id: "content",
               content: (
                 <ModuleEditorSection>
-                  <label className="block space-y-2">
+                  <ModuleEditorFieldGrid>
+                  <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
                     <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-                  </label>
+                  </label></ModuleEditorField>
 
-                  <AdminFormListboxSelect
+                  <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
                     name="section_key"
                     label="نوع السكشن"
                     value={sectionKey}
                     onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
                     options={SECTION_KEYS.map((key) => ({ value: key, label: MEDIA_HUB_SECTION_LABELS[key] }))}
-                  />
+                  /></ModuleEditorField>
 
-                  <AdminFormListboxSelect
+                  <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
                     name="data_source"
                     label="مصدر البيانات"
                     value={dataSource}
                     onChange={() => setDataSource("topics")}
                     options={[{ value: "topics", label: "topics — Unified Content" }]}
                     dir="ltr"
-                  />
+                  /></ModuleEditorField>
 
                   {sectionKey === "featured" ? (
-                    <AdminFormGrid>
+                    <ModuleEditorField nature="standard" span={6}><div className="grid gap-5 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                       <label className="block space-y-2">
                         <span className="text-xs font-semibold text-white/55">Featured limit — قائمة الأخبار</span>
                         <input
@@ -175,9 +170,9 @@ export default function MediaHubModuleEditClient({
                           dir="ltr"
                         />
                       </label>
-                    </AdminFormGrid>
+                    </div></ModuleEditorField>
                   ) : (
-                    <label className="block space-y-2">
+                    <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Limit</span>
                       <input
                         name="limit"
@@ -192,18 +187,9 @@ export default function MediaHubModuleEditClient({
                         className={fieldClassName()}
                         dir="ltr"
                       />
-                    </label>
+                    </label></ModuleEditorField>
                   )}
-
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">وصف قصير</span>
-                    <textarea
-                      readOnly
-                      value={summary}
-                      rows={3}
-                      className={fieldClassName("cursor-default resize-none text-white/72")}
-                    />
-                  </label>
+                  </ModuleEditorFieldGrid>
                 </ModuleEditorSection>
               ),
             },
@@ -211,10 +197,8 @@ export default function MediaHubModuleEditClient({
               id: "settings",
               content: (
                 <ModuleEditorSettingsComposition
-                  context={<ModuleDependencyHintsPanel moduleKind="media-hub" templateSlug={block.slug} />}
                   primary={
                   <ModuleEditorSection>
-                    <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
                       <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
@@ -224,11 +208,8 @@ export default function MediaHubModuleEditClient({
 
                   secondary={
                   <ModuleEditorSection>
-                    <h2 className="text-lg font-semibold text-white">حالة النشر</h2>
+                    <ModuleEditorSectionHeading intent="settings" className="text-lg">حالة النشر</ModuleEditorSectionHeading>
                     <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
-                    <p className="text-xs leading-6 text-white/42">
-                      Slot و Sort Order و Visibility تُدار من Pages Manager لكل صفحة على حدة.
-                    </p>
                   </ModuleEditorSection>
                   }
                 />

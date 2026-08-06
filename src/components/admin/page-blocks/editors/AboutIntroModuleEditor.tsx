@@ -1,6 +1,13 @@
 "use client";
 
-import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
+  ModuleEditorRepeaterCard,
+  ModuleEditorRepeaterGrid,
+  ModuleEditorSection,
+  ModuleEditorSectionHeading,
+} from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
@@ -155,7 +162,7 @@ export default function AboutIntroModuleEditor({
 
   const fieldLabels = isHomeStory
     ? {
-        eyebrow: "العنوان التمهيدي الصغير",
+        eyebrow: "النص التمهيدي",
         title: "العنوان",
         body: "الوصف",
         bodyHelper: "Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة.",
@@ -168,7 +175,7 @@ export default function AboutIntroModuleEditor({
         clearLink: "مسح الرابط",
       }
     : {
-        eyebrow: "العنوان التمهيدي",
+        eyebrow: "النص التمهيدي",
         title: "العنوان",
         subtitle: "العنوان الفرعي",
         body: "الوصف",
@@ -199,30 +206,28 @@ export default function AboutIntroModuleEditor({
   }
 
   return (
-    <div className={isHomeStory ? "space-y-6" : "mx-auto max-w-5xl space-y-4"}>
+    <div className={isHomeStory ? "space-y-6" : "space-y-4"}>
       {section === "all" ? <input type="hidden" name="config_schema" value="about-intro" /> : null}
       {isHomeStory && section === "all" ? <input type="hidden" name="include_story_cta" value="1" /> : null}
 
       {showText ? (
       <ModuleEditorSection>
-          {section === "all" ? (
-            <h2 className="text-sm font-semibold text-white">{isHomeStory ? "النص" : "محتوى الموديول"}</h2>
-          ) : null}
-          <label className="block max-w-[920px] space-y-1.5">
+          <ModuleEditorFieldGrid>
+          <ModuleEditorField nature="short-text" span={3}><label className="block space-y-1.5">
             <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
             <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
-          </label>
-          <label className="block max-w-[920px] space-y-1.5">
+          </label></ModuleEditorField>
+          <ModuleEditorField nature="short-text" span={4}><label className="block space-y-1.5">
             <span className="text-xs font-semibold text-white/55">{fieldLabels.title}</span>
             <input name="title" defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
-          </label>
+          </label></ModuleEditorField>
           {!isHomeStory ? (
-            <label className="block max-w-[920px] space-y-1.5">
+            <ModuleEditorField nature="short-description" span={5}><label className="block space-y-1.5">
               <span className="text-xs font-semibold text-white/55">{fieldLabels.subtitle}</span>
               <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
-            </label>
+            </label></ModuleEditorField>
           ) : null}
-          <div className="max-w-[920px]">
+          <ModuleEditorField nature="long-content" span={12}><div>
             <AdminRichTextEditor
               name="body"
               label={fieldLabels.body}
@@ -233,16 +238,17 @@ export default function AboutIntroModuleEditor({
               minHeight={160}
               helperText={fieldLabels.bodyHelper}
             />
-          </div>
+          </div></ModuleEditorField>
+          </ModuleEditorFieldGrid>
       </ModuleEditorSection>
       ) : null}
 
       {showImages ? (
       <ModuleEditorSection>
           {section === "all" ? (
-            <h2 className="text-sm font-semibold text-white">
+            <ModuleEditorSectionHeading intent="media-collection">
               {isHomeStory ? "الصور (2 متداخلة)" : "الصور (3 كحد أقصى)"}
-            </h2>
+            </ModuleEditorSectionHeading>
           ) : null}
           <p className="text-xs leading-6 text-white/45">
             {isHomeStory
@@ -269,21 +275,14 @@ export default function AboutIntroModuleEditor({
                   label={fieldLabels.imageMain}
                   showLabel={false}
                   defaultValue={homeStoryImages.main}
+                  altName="image_main_alt"
+                  defaultAlt={homeStoryImages.mainAlt}
+                  altLabel={fieldLabels.imageAlt}
                   onValueChange={(value) => setHomeStoryImages((current) => ({ ...current, main: value }))}
+                  onAltValueChange={(value) => setHomeStoryImages((current) => ({ ...current, mainAlt: value }))}
                   dimensionHint="content"
                   browseFolder="images/home"
                 />
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">{fieldLabels.imageAlt}</span>
-                  <input
-                    name="image_main_alt"
-                    value={homeStoryImages.mainAlt}
-                    onChange={(event) =>
-                      setHomeStoryImages((current) => ({ ...current, mainAlt: event.target.value }))
-                    }
-                    className={fieldClassName()}
-                  />
-                </label>
               </div>
               <div className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
                 <div className="flex items-center justify-between gap-3">
@@ -303,23 +302,18 @@ export default function AboutIntroModuleEditor({
                   label={fieldLabels.imageSecondary}
                   showLabel={false}
                   defaultValue={homeStoryImages.secondary}
+                  altName="image_secondary_alt"
+                  defaultAlt={homeStoryImages.secondaryAlt}
+                  altLabel={fieldLabels.imageAlt}
                   onValueChange={(value) =>
                     setHomeStoryImages((current) => ({ ...current, secondary: value }))
+                  }
+                  onAltValueChange={(value) =>
+                    setHomeStoryImages((current) => ({ ...current, secondaryAlt: value }))
                   }
                   dimensionHint="content"
                   browseFolder="images/home"
                 />
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">{fieldLabels.imageAlt}</span>
-                  <input
-                    name="image_secondary_alt"
-                    value={homeStoryImages.secondaryAlt}
-                    onChange={(event) =>
-                      setHomeStoryImages((current) => ({ ...current, secondaryAlt: event.target.value }))
-                    }
-                    className={fieldClassName()}
-                  />
-                </label>
               </div>
             </div>
           ) : (
@@ -329,6 +323,9 @@ export default function AboutIntroModuleEditor({
                   name="image_main"
                   label={fieldLabels.imageMain}
                   defaultValue={images.main ?? ""}
+                  altName="image_main_alt"
+                  defaultAlt={images.mainAlt ?? ""}
+                  altLabel="النص البديل للصورة 1"
                   dimensionHint="content"
                   browseFolder="images/about"
                 />
@@ -336,6 +333,9 @@ export default function AboutIntroModuleEditor({
                   name="image_secondary"
                   label={fieldLabels.imageSecondary}
                   defaultValue={images.secondary ?? ""}
+                  altName="image_secondary_alt"
+                  defaultAlt={images.secondaryAlt ?? ""}
+                  altLabel="النص البديل للصورة 2"
                   dimensionHint="content"
                   browseFolder="images/about"
                 />
@@ -343,27 +343,12 @@ export default function AboutIntroModuleEditor({
                   name="image_accent"
                   label="الصورة 3 — اللمسة"
                   defaultValue={images.accent ?? ""}
+                  altName="image_accent_alt"
+                  defaultAlt={images.accentAlt ?? ""}
+                  altLabel="النص البديل للصورة 3"
                   dimensionHint="content"
                   browseFolder="images/about"
                 />
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-semibold text-white/55">وصف الصورة 1</span>
-                  <input name="image_main_alt" defaultValue={images.mainAlt ?? ""} className={fieldClassName("h-11")} />
-                </label>
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-semibold text-white/55">وصف الصورة 2</span>
-                  <input
-                    name="image_secondary_alt"
-                    defaultValue={images.secondaryAlt ?? ""}
-                    className={fieldClassName("h-11")}
-                  />
-                </label>
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-semibold text-white/55">وصف الصورة 3</span>
-                  <input name="image_accent_alt" defaultValue={images.accentAlt ?? ""} className={fieldClassName("h-11")} />
-                </label>
               </div>
             </>
           )}
@@ -372,7 +357,7 @@ export default function AboutIntroModuleEditor({
 
       {showCta ? (
       <ModuleEditorSection>
-          {section === "all" ? <h2 className="text-sm font-semibold text-white">زر CTA</h2> : null}
+          {section === "all" ? <ModuleEditorSectionHeading intent="cta">زر CTA</ModuleEditorSectionHeading> : null}
           <div className="space-y-4">
             <label className="block space-y-2">
               <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
@@ -406,11 +391,10 @@ export default function AboutIntroModuleEditor({
 
       {showBeats ? (
       <ModuleEditorSection>
-          <h2 className="text-sm font-semibold text-white">البطاقات (3 كحد أقصى)</h2>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <ModuleEditorSectionHeading intent="repeater">البطاقات (3 كحد أقصى)</ModuleEditorSectionHeading>
+          <ModuleEditorRepeaterGrid>
             {beats.map((beat, index) => (
-              <div key={index} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-                <p className="text-xs font-semibold text-[#D8B87A]/70">بطاقة {index + 1}</p>
+              <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`}>
                 <label className="block space-y-1.5">
                   <span className="text-xs font-semibold text-white/55">الرقم / الشارة</span>
                   <input
@@ -433,9 +417,9 @@ export default function AboutIntroModuleEditor({
                     className={fieldClassName("resize-y leading-7")}
                   />
                 </label>
-              </div>
+              </ModuleEditorRepeaterCard>
             ))}
-          </div>
+          </ModuleEditorRepeaterGrid>
       </ModuleEditorSection>
       ) : null}
     </div>

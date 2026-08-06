@@ -1,10 +1,18 @@
 "use client";
 
-import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
+  ModuleEditorRepeaterCard,
+  ModuleEditorRepeaterGrid,
+  ModuleEditorSection,
+  ModuleEditorSectionHeading,
+} from "../ModuleEditorPresentation";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { VisionGoalsItemConfig, VisionGoalsModuleConfig } from "../../../../lib/page-blocks/configs";
+import { MODULE_EDITOR_TERMINOLOGY } from "../../../../lib/page-blocks/module-editor-presentation-contract";
 
 type VisionGoalsModuleEditorProps = {
   config: VisionGoalsModuleConfig;
@@ -25,53 +33,50 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
       <input type="hidden" name="config_schema" value="vision-goals" />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">النص</h2>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Eyebrow</span>
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
           <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-        </label>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Title</span>
+        </label></ModuleEditorField>
+        <ModuleEditorField nature="short-text" span={9}><label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">العنوان</span>
           <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-        </label>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Intro — فقرتان مفصولتان بسطر فارغ</span>
+        </label></ModuleEditorField>
+        <ModuleEditorField nature="long-content" span={12}><label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.longContent.labelAr} — فقرتان مفصولتان بسطر فارغ</span>
           <textarea
             name="intro"
             defaultValue={(config.intro ?? []).join("\n\n")}
             rows={6}
             className={fieldClassName("resize-y leading-7")}
           />
-        </label>
+        </label></ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">الصورة</h2>
         <AdminMediaImageField
           name="image"
           label="صورة القسم"
           defaultValue={config.image ?? ""}
+          altName="image_alt"
+          defaultAlt={config.imageAlt ?? ""}
           dimensionHint="content"
           browseFolder="images/about"
         />
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">Alt</span>
-          <input name="image_alt" defaultValue={config.imageAlt ?? ""} className={fieldClassName()} />
-        </label>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">رؤيتنا</h2>
+        <ModuleEditorSectionHeading intent="domain">رؤيتنا</ModuleEditorSectionHeading>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عنوان العمود</span>
           <input name="vision_title" defaultValue={config.vision?.title ?? ""} className={fieldClassName()} />
         </label>
-        <div className="grid gap-4 lg:grid-cols-3">
+        <ModuleEditorRepeaterGrid>
           {visionItems.map((item, index) => (
-            <div key={`vision-${index}`} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-              <p className="text-xs font-semibold text-[#D8B87A]/70">بند {index + 1}</p>
+            <ModuleEditorRepeaterCard key={`vision-${index}`} title={`بند ${index + 1}`}>
               <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">Title</span>
+                <span className="text-xs font-semibold text-white/55">العنوان</span>
                 <input
                   name={`vision_item_${index}_title`}
                   defaultValue={item.title ?? ""}
@@ -79,7 +84,7 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">Description</span>
+                <span className="text-xs font-semibold text-white/55">الوصف المختصر</span>
                 <textarea
                   name={`vision_item_${index}_text`}
                   defaultValue={item.text ?? ""}
@@ -87,23 +92,22 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
                   className={fieldClassName("resize-y leading-7")}
                 />
               </label>
-            </div>
+            </ModuleEditorRepeaterCard>
           ))}
-        </div>
+        </ModuleEditorRepeaterGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">أهدافنا</h2>
+        <ModuleEditorSectionHeading intent="domain">أهدافنا</ModuleEditorSectionHeading>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عنوان العمود</span>
           <input name="goals_title" defaultValue={config.goals?.title ?? ""} className={fieldClassName()} />
         </label>
-        <div className="grid gap-4 lg:grid-cols-3">
+        <ModuleEditorRepeaterGrid>
           {goalsItems.map((item, index) => (
-            <div key={`goals-${index}`} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-              <p className="text-xs font-semibold text-[#D8B87A]/70">بند {index + 1}</p>
+            <ModuleEditorRepeaterCard key={`goals-${index}`} title={`بند ${index + 1}`}>
               <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">Title</span>
+                <span className="text-xs font-semibold text-white/55">العنوان</span>
                 <input
                   name={`goals_item_${index}_title`}
                   defaultValue={item.title ?? ""}
@@ -111,7 +115,7 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">Description</span>
+                <span className="text-xs font-semibold text-white/55">الوصف المختصر</span>
                 <textarea
                   name={`goals_item_${index}_text`}
                   defaultValue={item.text ?? ""}
@@ -119,9 +123,9 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
                   className={fieldClassName("resize-y leading-7")}
                 />
               </label>
-            </div>
+            </ModuleEditorRepeaterCard>
           ))}
-        </div>
+        </ModuleEditorRepeaterGrid>
       </ModuleEditorSection>
     </div>
   );

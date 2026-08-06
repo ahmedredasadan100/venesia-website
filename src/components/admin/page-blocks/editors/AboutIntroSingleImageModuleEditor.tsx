@@ -1,6 +1,13 @@
 "use client";
 
-import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
+  ModuleEditorRepeaterCard,
+  ModuleEditorRepeaterGrid,
+  ModuleEditorSection,
+  ModuleEditorSectionHeading,
+} from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
@@ -30,25 +37,25 @@ export default function AboutIntroSingleImageModuleEditor({
   const mainAlt = config.images?.mainAlt ?? "";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="space-y-4">
       {/* config_schema is owned by ContentModuleEditClient — avoid duplicate FormData names */}
       <input type="hidden" name="image_position" value={imagePosition} />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">محتوى الموديول</h2>
-        <label className="block max-w-[920px] space-y-1.5">
-          <span className="text-xs font-semibold text-white/55">العنوان التمهيدي</span>
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="short-text" span={3}><label className="block space-y-1.5">
+          <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
           <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
-        </label>
-        <label className="block max-w-[920px] space-y-1.5">
+        </label></ModuleEditorField>
+        <ModuleEditorField nature="short-text" span={4}><label className="block space-y-1.5">
           <span className="text-xs font-semibold text-white/55">العنوان</span>
           <input name="title" defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
-        </label>
-        <label className="block max-w-[920px] space-y-1.5">
+        </label></ModuleEditorField>
+        <ModuleEditorField nature="short-description" span={5}><label className="block space-y-1.5">
           <span className="text-xs font-semibold text-white/55">العنوان الفرعي</span>
           <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
-        </label>
-        <div className="max-w-[920px]">
+        </label></ModuleEditorField>
+        <ModuleEditorField nature="long-content" span={12}><div>
           <AdminRichTextEditor
             name="body"
             label="الوصف"
@@ -59,22 +66,20 @@ export default function AboutIntroSingleImageModuleEditor({
             minHeight={160}
             helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
           />
-        </div>
+        </div></ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">الصورة</h2>
         <AdminMediaImageField
           name="image_main"
           label="الصورة"
           defaultValue={mainSrc}
+          altName="image_main_alt"
+          defaultAlt={mainAlt}
           dimensionHint="content"
           browseFolder="images/about"
         />
-        <label className="block max-w-[520px] space-y-1.5">
-          <span className="text-xs font-semibold text-white/55">وصف الصورة</span>
-          <input name="image_main_alt" defaultValue={mainAlt} className={fieldClassName("h-11")} />
-        </label>
         <div className="space-y-2">
           <span className="text-xs font-semibold text-white/55">موضع الصورة (سطح المكتب)</span>
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="موضع الصورة">
@@ -111,11 +116,10 @@ export default function AboutIntroSingleImageModuleEditor({
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">البطاقات (3 كحد أقصى)</h2>
-        <div className="grid gap-4 lg:grid-cols-3">
+        <ModuleEditorSectionHeading intent="repeater">البطاقات (3 كحد أقصى)</ModuleEditorSectionHeading>
+        <ModuleEditorRepeaterGrid>
           {beats.map((beat, index) => (
-            <div key={index} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-              <p className="text-xs font-semibold text-[#D8B87A]/70">بطاقة {index + 1}</p>
+            <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`}>
               <label className="block space-y-1.5">
                 <span className="text-xs font-semibold text-white/55">الرقم / الشارة</span>
                 <input
@@ -142,9 +146,9 @@ export default function AboutIntroSingleImageModuleEditor({
                   className={fieldClassName("resize-y leading-7")}
                 />
               </label>
-            </div>
+            </ModuleEditorRepeaterCard>
           ))}
-        </div>
+        </ModuleEditorRepeaterGrid>
       </ModuleEditorSection>
     </div>
   );

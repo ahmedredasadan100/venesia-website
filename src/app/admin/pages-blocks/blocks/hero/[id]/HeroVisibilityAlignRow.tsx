@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
+import { AdminFormSwitch } from "../../../../../../components/admin/ui";
 import type { HeroTextAlignment } from "../../../../../../lib/hero/hero-content-controls";
 
 type HeroVisibilityAlignRowProps = {
@@ -45,11 +46,10 @@ export default function HeroVisibilityAlignRow({
   ];
 
   return (
-    <div className="max-w-[920px] space-y-2">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-semibold text-white/55">{label}</span>
         <input type="hidden" name={alignmentName} value={alignment} />
-        <input type="hidden" name={showName} value={show ? "true" : "false"} />
         <div className="flex shrink-0 flex-wrap gap-1.5" role="toolbar" aria-label={`إعدادات ${label}`}>
           {enableAlignment
             ? alignOptions.map((option) => {
@@ -69,16 +69,15 @@ export default function HeroVisibilityAlignRow({
                 );
               })
             : null}
-          <button
-            type="button"
-            title={show ? "إخفاء العنصر" : "إظهار العنصر"}
-            aria-label={show ? "إخفاء العنصر" : "إظهار العنصر"}
-            aria-pressed={show}
-            onClick={() => setShow((current) => !current)}
-            className={[toolClass(show), "w-auto min-w-10 px-2.5"].join(" ")}
-          >
-            {show ? "إخفاء" : "إظهار"}
-          </button>
+          <AdminFormSwitch
+            name={showName}
+            label={show ? "ظاهر" : "مخفي"}
+            value="true"
+            checked={show}
+            onChange={(event) => setShow(event.target.checked)}
+            surface
+            className="min-w-32"
+          />
         </div>
       </div>
       {children}

@@ -1,6 +1,13 @@
 "use client";
 
-import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
+  ModuleEditorRepeaterCard,
+  ModuleEditorRepeaterGrid,
+  ModuleEditorSection,
+  ModuleEditorSectionHeading,
+} from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
@@ -52,18 +59,20 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
       <input type="hidden" name="pin_count" value={String(pins.length)} />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">خريطة المشروعات</h2>
+        <ModuleEditorSectionHeading intent="domain">خريطة المشروعات</ModuleEditorSectionHeading>
 
-        <label className="block space-y-2">
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="short-text" span={6}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">العنوان</span>
           <input name="title" defaultValue={config.title} className={fieldClassName()} />
-        </label>
+        </label></ModuleEditorField>
 
-        <label className="block space-y-2">
+        <ModuleEditorField nature="short-text" span={6}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">نص زر الاستكشاف</span>
           <input name="explore_button_label" defaultValue={config.exploreButtonLabel} className={fieldClassName()} />
-        </label>
+        </label></ModuleEditorField>
 
+        <ModuleEditorField nature="media">
         <AdminMediaImageField
           name="map_image"
           label="صورة الخريطة"
@@ -71,12 +80,15 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
           browseFolder="images/projects"
           dimensionHint="content"
           helperText={`الافتراضي: ${PROJECTS_HUB_DEFAULT_MAP_IMAGE}`}
+          allowRemove={false}
         />
+        </ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-white">دبابيس الخريطة</h2>
+          <ModuleEditorSectionHeading intent="repeater">دبابيس الخريطة</ModuleEditorSectionHeading>
           <button
             type="button"
             onClick={addPin}
@@ -87,12 +99,13 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
           </button>
         </div>
 
-        <div className="space-y-4">
+        <ModuleEditorRepeaterGrid>
           {pins.map((pin, index) => (
-            <div key={index} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-[#D8B87A]/70">دبوس {index + 1}</p>
-                <div className="flex flex-wrap gap-2">
+            <ModuleEditorRepeaterCard
+              key={index}
+              title={`دبوس ${index + 1}`}
+              actions={(
+                <>
                   <button
                     type="button"
                     onClick={() => movePin(index, -1)}
@@ -117,8 +130,9 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
                   >
                     حذف
                   </button>
-                </div>
-              </div>
+                </>
+              )}
+            >
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-2">
@@ -163,9 +177,9 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
                   />
                 </label>
               </div>
-            </div>
+            </ModuleEditorRepeaterCard>
           ))}
-        </div>
+        </ModuleEditorRepeaterGrid>
       </ModuleEditorSection>
     </div>
   );

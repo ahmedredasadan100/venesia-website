@@ -3,7 +3,6 @@ import Link from "next/link";
 import { PlusIcon } from "../../../../../../components/admin/AdminRowActions";
 import {
   AdminActionButton,
-  AdminInfoBar,
   AdminPageContextHeader,
 } from "../../../../../../components/admin/ui";
 import { moduleKindLabel, moduleListHref } from "../../../../../../lib/page-blocks/admin-utils";
@@ -20,8 +19,7 @@ type PageBlocksHeaderProps = {
   onOpenAssignModal: () => void;
 };
 
-type PageModuleKindsBarProps = {
-  page: Pick<PageBlocksHeaderPage, "title" | "slug">;
+type PageModuleKindsSummaryProps = {
   usedModuleKinds: string[];
 };
 
@@ -33,26 +31,21 @@ function resolveEditorTitle(page: PageBlocksHeaderPage) {
   return `إدارة صفحة ${page.title}`;
 }
 
-export function PageModuleKindsBar({ page, usedModuleKinds }: PageModuleKindsBarProps) {
+export function PageModuleKindsSummary({ usedModuleKinds }: PageModuleKindsSummaryProps) {
   if (!usedModuleKinds.length) return null;
 
   return (
-    <AdminInfoBar
-      label={`مرجع موديولات الصفحة ${page.title || page.slug}`}
-      description={(
-        <span className="flex flex-wrap items-center gap-2">
-          {usedModuleKinds.map((kind) => (
-            <Link
-              key={kind}
-              href={moduleListHref(kind)}
-              className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
-            >
-              {moduleKindLabel(kind)}
-            </Link>
-          ))}
-        </span>
-      )}
-    />
+    <>
+      {usedModuleKinds.map((kind) => (
+        <Link
+          key={kind}
+          href={moduleListHref(kind)}
+          className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
+        >
+          {moduleKindLabel(kind)}
+        </Link>
+      ))}
+    </>
   );
 }
 

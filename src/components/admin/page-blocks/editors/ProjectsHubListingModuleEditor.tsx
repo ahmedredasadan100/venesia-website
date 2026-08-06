@@ -1,8 +1,11 @@
 "use client";
 
 import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeadingVisibilityRow,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../../ui";
 
@@ -40,7 +43,6 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
       <input type="hidden" name="sort" value={config.sort || "homepage_order"} />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">عنوان قسم قائمة المشروعات</h2>
         <p className="text-xs leading-6 text-white/45">
           يتحكّم في عنوان قسم القائمة فقط، وليس في بيانات المشروعات.
         </p>
@@ -69,7 +71,7 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">فلاتر المشروعات</h2>
+        <ModuleEditorSectionHeading intent="domain">فلاتر المشروعات</ModuleEditorSectionHeading>
         <p className="text-xs leading-6 text-white/45">
           خيارات الفلاتر (الكل / سكني / تجاري وأي نوع مدعوم مستقبلاً) تُشتق تلقائياً من أنواع المشروعات
           المحمّلة في صفحة المشروعات.
@@ -83,7 +85,7 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">البيانات الظاهرة داخل بطاقة المشروع</h2>
+        <ModuleEditorSectionHeading intent="domain">البيانات الظاهرة داخل بطاقة المشروع</ModuleEditorSectionHeading>
         <p className="text-xs leading-6 text-white/45">
           إظهار أو إخفاء الحقول المعروضة حالياً داخل البطاقة فقط. لا يغيّر قيم المشروع في قاعدة البيانات.
         </p>
@@ -123,9 +125,10 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">إعدادات عرض القائمة</h2>
+        <ModuleEditorSectionHeading intent="settings">إعدادات عرض القائمة</ModuleEditorSectionHeading>
 
-        <label className="block space-y-2">
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="technical" span={4}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عدد المشروعات في الصفحة</span>
           <input
             name="page_size"
@@ -136,9 +139,9 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
             dir="ltr"
             className={fieldClassName()}
           />
-        </label>
+        </label></ModuleEditorField>
 
-        <AdminFormListboxSelect
+        <ModuleEditorField nature="standard" span={8}><AdminFormListboxSelect
           name="default_view"
           label="وضع العرض الافتراضي"
           defaultValue={config.defaultView}
@@ -146,7 +149,8 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
             value: mode,
             label: mode === "list" ? "قائمة" : "بطاقات",
           }))}
-        />
+        /></ModuleEditorField>
+        </ModuleEditorFieldGrid>
 
         <AdminFormGrid columns={3}>
           <VisibilityToggle

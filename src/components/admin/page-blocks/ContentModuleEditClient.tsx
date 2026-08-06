@@ -5,11 +5,12 @@ import {
   AdminActionButton,
   AdminFormListboxSelect,
 } from "../ui";
-import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import {
   MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorHeader,
   ModuleEditorFeedback,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
@@ -50,9 +51,6 @@ import {
   getContentModuleEditorKey,
   isStructuralContentTemplateSlug,
 } from "../../../lib/page-blocks/module-edit-registry";
-import {
-  getSlotCompatibilityLabel,
-} from "../../../lib/page-composition/slot-module-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 
 type ContentModuleEditClientProps = {
@@ -129,7 +127,6 @@ export default function ContentModuleEditClient({
               }
             : null;
 
-  const usesProjectsHubHeader = Boolean(projectsHubNavigation);
   const isHomeStory = editorKey === "home-story";
   const isHomeContact = editorKey === "home-contact";
   const isHomeProjects = editorKey === "home-projects";
@@ -158,22 +155,30 @@ export default function ContentModuleEditClient({
     id: "settings",
     content: (
       <ModuleEditorSettingsComposition
-        context={usesUnifiedModuleChrome || usesProjectsHubHeader ? null : (
-          <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
-        )}
         primary={
-        <ModuleEditorSection className="max-w-xl">
-        <label className="block space-y-2">
+        <ModuleEditorSection>
+        {usesLockedInternalSlug ? (
+          <ModuleEditorTechnicalIdentity
+            mode="hidden"
+            value={block.slug}
+            inputClassName={fieldClassName()}
+          />
+        ) : null}
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">
             {usesAboutStructuredChrome ? "اسم الموديول" : "الاسم"}
           </span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-        </label>
-        <ModuleEditorTechnicalIdentity
-          mode={usesLockedInternalSlug ? "read-only" : "editable"}
-          value={block.slug}
-          inputClassName={fieldClassName()}
-        />
+        </label></ModuleEditorField>
+        {!usesLockedInternalSlug ? (
+          <ModuleEditorField nature="technical" span={4}><ModuleEditorTechnicalIdentity
+            mode="editable"
+            value={block.slug}
+            inputClassName={fieldClassName()}
+          /></ModuleEditorField>
+        ) : null}
+        <ModuleEditorField nature="short-description" span={4}>
         {usesInternalDescriptionField ? (
           <label className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
@@ -192,12 +197,14 @@ export default function ContentModuleEditClient({
             <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
           </label>
         )}
-        <AdminFormListboxSelect
+        </ModuleEditorField>
+        <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
           name="status"
           label="الحالة"
           defaultValue={block.status}
           options={MODULE_EDITOR_STATUS_OPTIONS}
-        />
+        /></ModuleEditorField>
+        </ModuleEditorFieldGrid>
         </ModuleEditorSection>
         }
       />
@@ -502,7 +509,6 @@ export default function ContentModuleEditClient({
           backLabel="الرجوع لبلوكات المحتوى"
           status={block.status}
           saved={saved}
-          slotContext={getSlotCompatibilityLabel("content")}
         />
       )}
 

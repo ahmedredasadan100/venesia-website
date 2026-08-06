@@ -2,7 +2,7 @@ import {
   normalizeLayoutSlot,
   PAGE_LAYOUT_SLOTS,
   type PageLayoutSlot,
-} from "../page-blocks/layout-slots";
+} from "../page-blocks/layout-slots.ts";
 
 /**
  * Central Route × Module slot capabilities.
@@ -10,15 +10,51 @@ import {
  * Mirrors public renderer behaviour — does not expand public rendering.
  */
 
+type ModuleSlotContract = {
+  allowed: readonly PageLayoutSlot[];
+  preferred: readonly PageLayoutSlot[];
+};
+
+const ALL_NON_HERO_SLOTS: readonly PageLayoutSlot[] = ["main", "sidebar", "bottom", "footer"];
+
+/**
+ * Canonical Module × Slot contract.
+ * The same declaration drives selector order, server validation, and presentation.
+ */
+export const MODULE_SLOT_CONTRACT: Record<string, ModuleSlotContract> = {
+  hero: { allowed: ["hero"], preferred: ["hero"] },
+  breadcrumb: { allowed: ["hero"], preferred: ["hero"] },
+  content: { allowed: ALL_NON_HERO_SLOTS, preferred: ["main", "bottom"] },
+  cta: { allowed: ALL_NON_HERO_SLOTS, preferred: ["main", "bottom"] },
+  cards: { allowed: ALL_NON_HERO_SLOTS, preferred: ["main", "sidebar", "bottom"] },
+  feed: { allowed: ["sidebar"], preferred: ["sidebar"] },
+  "media-sidebar": { allowed: ["sidebar"], preferred: ["sidebar"] },
+  "media-hub": { allowed: ["main"], preferred: ["main"] },
+};
+
 const FREEFORM_KINDS = new Set(["content", "cta", "cards"]);
 
-function kindBaseSlots(moduleKind: string): PageLayoutSlot[] {
+function getModuleSlotContract(moduleKind: string): ModuleSlotContract {
   const kind = moduleKind.trim().toLowerCase();
-  if (kind === "hero" || kind === "breadcrumb") return ["hero"];
-  if (kind === "feed" || kind === "media-sidebar") return ["sidebar"];
-  if (kind === "media-hub") return ["main"];
-  if (FREEFORM_KINDS.has(kind)) return [...PAGE_LAYOUT_SLOTS];
-  return [...PAGE_LAYOUT_SLOTS];
+  return MODULE_SLOT_CONTRACT[kind] ?? {
+    allowed: PAGE_LAYOUT_SLOTS,
+    preferred: ["main"],
+  };
+}
+
+function kindBaseSlots(moduleKind: string): PageLayoutSlot[] {
+  return [...getModuleSlotContract(moduleKind).allowed];
+}
+
+function orderByPreference(
+  slots: readonly PageLayoutSlot[],
+  preferred: readonly PageLayoutSlot[],
+): PageLayoutSlot[] {
+  const rank = new Map(preferred.map((slot, index) => [slot, index]));
+  return [...slots].sort((left, right) =>
+    (rank.get(left) ?? preferred.length + PAGE_LAYOUT_SLOTS.indexOf(left)) -
+    (rank.get(right) ?? preferred.length + PAGE_LAYOUT_SLOTS.indexOf(right)),
+  );
 }
 
 /** Slots that freeform modules (content/cta/cards) may use on a given page slug. */
@@ -54,29 +90,38 @@ export function getAssignableSlotsForRoute(
   const slug = (pageSlug ?? "").trim().toLowerCase();
   const kind = moduleKind.trim().toLowerCase();
   const base = kindBaseSlots(kind);
+  const preferred = getModuleSlotContract(kind).preferred;
 
   if (!slug) {
     // Without a page context, keep kind constraints only (server must resolve slug).
     if (FREEFORM_KINDS.has(kind)) {
-      return base.filter((slot) => slot !== "hero");
+      return orderByPreference(base.filter((slot) => slot !== "hero"), preferred);
     }
-    return base;
+    return orderByPreference(base, preferred);
   }
 
   if (kind === "hero" || kind === "breadcrumb" || kind === "media-hub" || kind === "media-sidebar") {
-    return base;
+    return orderByPreference(base, preferred);
   }
 
   if (kind === "feed") {
-    return routeAllowsCompositionFeed(slug) ? base : [];
+    return routeAllowsCompositionFeed(slug) ? orderByPreference(base, preferred) : [];
   }
 
   if (FREEFORM_KINDS.has(kind)) {
     const allowed = new Set(freeformSlotsForRoute(slug));
-    return base.filter((slot) => allowed.has(slot));
+    return orderByPreference(base.filter((slot) => allowed.has(slot)), preferred);
   }
 
-  return base;
+  return orderByPreference(base, preferred);
+}
+
+export function getPreferredSlotsForModuleKind(
+  moduleKind: string,
+  pageSlug?: string | null,
+): PageLayoutSlot[] {
+  const allowed = new Set(getAssignableSlotsForRoute(pageSlug, moduleKind));
+  return getModuleSlotContract(moduleKind).preferred.filter((slot) => allowed.has(slot));
 }
 
 export function isSlotAllowedForRoute(

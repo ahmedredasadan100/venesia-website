@@ -6,9 +6,12 @@ import { useFormStatus } from "react-dom";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import {
   getModuleEditorHeaderMetadata,
+  getModuleEditorSectionOrder,
   getModuleEditorSectionMetadata,
 } from "../../../lib/page-composition/slot-module-registry";
 import {
+  AdminFormGrid,
+  AdminFormGridItem,
   AdminFormSection,
   AdminFormSwitch,
   AdminPageContextHeader,
@@ -24,12 +27,16 @@ import BlockEditorContextHeader, {
 } from "./BlockEditorContextHeader";
 import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
+import {
+  getModuleEditorFieldSpan,
+  type ModuleEditorFieldNature,
+  type ModuleEditorFieldSpan,
+} from "../../../lib/page-blocks/module-editor-presentation-contract";
 
 export const MODULE_EDITOR_STATUS_OPTIONS = [
   { value: "draft", label: "مسودة" },
   { value: "published", label: "منشور" },
   { value: "unpublished", label: "مخفي" },
-  { value: "archived", label: "أرشيف" },
 ] as const;
 
 type ModuleEditorMetadataScope = {
@@ -84,20 +91,26 @@ export function ModuleEditorTabs({
   tabs,
   ...props
 }: ModuleEditorTabsProps) {
-  const resolvedTabs: AdminModuleTab[] = tabs.map((tab) => {
+  const resolvedTabs = tabs.map((tab, sourceIndex) => {
     const metadata = getModuleEditorSectionMetadata(moduleKind, tab.id, moduleSlug);
     if (!metadata) {
       throw new Error(`Missing Module Editor section metadata for ${moduleKind}:${moduleSlug ?? "default"}:${tab.id}`);
     }
 
     return {
-      ...tab,
-      navigationLabel: metadata.navigationLabelAr,
-      sectionHeading: metadata.sectionHeadingAr,
-      sectionDescription: metadata.sectionDescriptionAr,
-      icon: metadata.icon,
+      sourceIndex,
+      order: getModuleEditorSectionOrder(metadata),
+      tab: {
+        ...tab,
+        navigationLabel: metadata.navigationLabelAr,
+        sectionHeading: metadata.sectionHeadingAr,
+        sectionDescription: metadata.sectionDescriptionAr,
+        icon: metadata.icon,
+      } satisfies AdminModuleTab,
     };
-  });
+  })
+    .sort((left, right) => left.order - right.order || left.sourceIndex - right.sourceIndex)
+    .map(({ tab }) => tab);
 
   return <AdminModuleTabs {...props} tabs={resolvedTabs} />;
 }
@@ -110,6 +123,118 @@ export function ModuleEditorSection({
     <AdminFormSection {...props} variant="module">
       {children}
     </AdminFormSection>
+  );
+}
+
+export type ModuleEditorSectionHeadingIntent =
+  | "domain"
+  | "media-collection"
+  | "repeater"
+  | "cta"
+  | "settings";
+
+export function ModuleEditorSectionHeading({
+  intent,
+  children,
+  className = "text-sm",
+}: {
+  intent: ModuleEditorSectionHeadingIntent;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <h2
+      data-module-editor-section-heading={intent}
+      className={`${className} font-semibold text-white`.trim()}
+    >
+      {children}
+    </h2>
+  );
+}
+
+export function ModuleEditorFieldGrid({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <AdminFormGrid
+      columns={12}
+      className={className}
+    >
+      {children}
+    </AdminFormGrid>
+  );
+}
+
+export function ModuleEditorField({
+  nature,
+  span,
+  children,
+  className = "",
+}: {
+  nature: ModuleEditorFieldNature;
+  span?: ModuleEditorFieldSpan;
+  children: ReactNode;
+  className?: string;
+}) {
+  const resolvedSpan = getModuleEditorFieldSpan(nature, span);
+  return (
+    <AdminFormGridItem
+      span={resolvedSpan}
+      className={className}
+    >
+      <div
+        data-module-editor-field-nature={nature}
+        data-module-editor-field-span={resolvedSpan}
+      >
+        {children}
+      </div>
+    </AdminFormGridItem>
+  );
+}
+
+export function ModuleEditorRepeaterGrid({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      data-module-editor-repeater-grid=""
+      className={`grid gap-4 lg:grid-cols-2 xl:grid-cols-3 ${className}`.trim()}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function ModuleEditorRepeaterCard({
+  title,
+  actions,
+  children,
+  className = "",
+}: {
+  title: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <article
+      data-module-editor-repeater-card=""
+      className={`min-w-0 space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4 ${className}`.trim()}
+    >
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold text-[#D8B87A]/70">{title}</h3>
+        {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+      </header>
+      {children}
+    </article>
   );
 }
 
@@ -210,7 +335,7 @@ export function ModuleEditorTechnicalIdentity({
   label = "المعرّف التقني",
   inputClassName,
 }: {
-  mode: "editable" | "read-only" | "hidden";
+  mode: "editable" | "hidden";
   value: string;
   name?: string;
   label?: ReactNode;
@@ -224,16 +349,10 @@ export function ModuleEditorTechnicalIdentity({
       <input
         name={name}
         defaultValue={value}
-        readOnly={mode === "read-only"}
-        required={mode === "editable"}
+        required
         dir="ltr"
-        className={`${inputClassName} ${mode === "read-only" ? "cursor-default text-white/55" : ""}`.trim()}
+        className={inputClassName}
       />
-      {mode === "read-only" ? (
-        <span className="block text-xs leading-5 text-white/40">
-          معرّف بنيوي للقراءة فقط؛ تغيير نوع الموديول غير مدعوم من هذا المحرر.
-        </span>
-      ) : null}
     </label>
   );
 }

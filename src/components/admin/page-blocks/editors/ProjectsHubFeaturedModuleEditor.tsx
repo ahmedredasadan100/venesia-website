@@ -1,8 +1,11 @@
 "use client";
 
 import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeadingVisibilityRow,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 import {
@@ -80,7 +83,6 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
       <input type="hidden" name="config_schema" value="projects-hub-featured" />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">عنوان قسم المشروعات المميزة</h2>
         <p className="text-xs leading-6 text-white/45">يتحكّم في عنوان القسم فقط، وليس في بيانات المشروعات.</p>
 
         <HeadingFieldRow
@@ -103,7 +105,7 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">البيانات الظاهرة داخل المشروع المميز</h2>
+        <ModuleEditorSectionHeading intent="domain">البيانات الظاهرة داخل المشروع المميز</ModuleEditorSectionHeading>
         <p className="text-xs leading-6 text-white/45">
           إظهار أو إخفاء الحقول المعروضة حالياً داخل البطاقة الرئيسية والبطاقات الجانبية. لا يغيّر قيم المشروع.
         </p>
@@ -148,17 +150,18 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">إعدادات عرض المشروعات المميزة</h2>
+        <ModuleEditorSectionHeading intent="settings">إعدادات عرض المشروعات المميزة</ModuleEditorSectionHeading>
 
-        <AdminFormListboxSelect
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="standard" span={5}><AdminFormListboxSelect
           name="selection_mode"
           label="قاعدة الاختيار"
           defaultValue={config.selectionMode}
           options={FEATURED_SELECTION_MODE_OPTIONS}
           hint="الاختيار يعتمد على حقل featured في سجلات المشروعات — وليس اختياراً يدوياً من هذا المحرر."
-        />
+        /></ModuleEditorField>
 
-        <label className="block space-y-2">
+        <ModuleEditorField nature="technical" span={3}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">الحد الأقصى (اختياري)</span>
           <input
             name="limit"
@@ -170,9 +173,9 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
             dir="ltr"
             className={fieldClassName()}
           />
-        </label>
+        </label></ModuleEditorField>
 
-        <label className="block space-y-2">
+        <ModuleEditorField nature="technical" span={4}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">التشغيل التلقائي (مللي ثانية)</span>
           <input
             name="autoplay_ms"
@@ -184,13 +187,14 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
             dir="ltr"
             className={fieldClassName()}
           />
-        </label>
+        </label></ModuleEditorField>
 
-        <VisibilityToggle
+        <ModuleEditorField nature="binary-state" span={4}><VisibilityToggle
           name="show_slider_dots"
           label="إظهار مؤشرات السلايدر"
           defaultChecked={config.showSliderDots !== false}
-        />
+        /></ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
     </div>
   );

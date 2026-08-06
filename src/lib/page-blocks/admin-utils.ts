@@ -1,7 +1,7 @@
 import type { PageBlockStatus, PageBlockType } from "./types";
 import { getContentStatusMetadata } from "../admin/content/content-status-metadata";
 
-export const BLOCK_STATUSES: PageBlockStatus[] = ["draft", "published", "unpublished", "archived"];
+export const BLOCK_STATUSES: PageBlockStatus[] = ["draft", "published", "unpublished"];
 
 export function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();

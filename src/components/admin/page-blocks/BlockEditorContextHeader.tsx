@@ -10,12 +10,11 @@ import { AdminPageContextHeader, AdminStatusPill } from "../ui";
 export type BlockEditorContextHeaderProps = {
   backHref: string;
   backLabel: string;
-  eyebrow: string;
-  title: string;
-  description?: string;
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
   status?: string;
   saved?: boolean;
-  slotContext?: string | null;
   actions?: ReactNode;
 };
 
@@ -26,52 +25,39 @@ export default function BlockEditorContextHeader({
   title,
   description,
   status,
-  slotContext,
   actions,
 }: BlockEditorContextHeaderProps) {
   const statusInfo = status ? statusMeta(status) : null;
   return (
     <AdminPageContextHeader
-        eyebrow={eyebrow}
-        title={title}
-        description={
-          description || slotContext ? (
-            <>
-              {description}
-              {slotContext ? (
-                <span className="mt-2 block text-xs text-white/40">
-                  الفتحة المفضلة:{" "}
-                  <span className="text-[#D8B87A]/85">{slotContext}</span>
-                </span>
-              ) : null}
-            </>
-          ) : undefined
-        }
-        breadcrumb={
-          <Link
-            href={backHref}
-            className="inline-flex items-center gap-2 transition hover:text-[#D8B87A]"
+      eyebrow={eyebrow}
+      title={title}
+      description={description}
+      breadcrumb={
+        <Link
+          href={backHref}
+          className="inline-flex items-center gap-2 transition hover:text-[#D8B87A]"
+        >
+          <span aria-hidden="true">→</span>
+          {backLabel}
+        </Link>
+      }
+      meta={
+        statusInfo ? (
+          <AdminStatusPill
+            tone={
+              statusInfo.tone === "green"
+                ? "green"
+                : statusInfo.tone === "gold"
+                  ? "gold"
+                  : "muted"
+            }
           >
-            <span aria-hidden="true">→</span>
-            {backLabel}
-          </Link>
-        }
-        meta={
-          statusInfo ? (
-            <AdminStatusPill
-              tone={
-                statusInfo.tone === "green"
-                  ? "green"
-                  : statusInfo.tone === "gold"
-                    ? "gold"
-                    : "muted"
-              }
-            >
-              {statusInfo.label}
-            </AdminStatusPill>
-          ) : undefined
-        }
-        actions={actions}
+            {statusInfo.label}
+          </AdminStatusPill>
+        ) : undefined
+      }
+      actions={actions}
     />
   );
 }

@@ -14,13 +14,7 @@ export default function ModuleCrossPageUsageBanner({
   moduleName,
   assignments,
 }: ModuleCrossPageUsageBannerProps) {
-  if (assignments.length <= 1) {
-    return (
-      <div className="rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/48">
-        هذا الموديول مربوط بصفحة واحدة حاليًا — التعديل يؤثر على هذه الصفحة فقط.
-      </div>
-    );
-  }
+  if (assignments.length <= 1) return null;
 
   return (
     <div className="rounded-[20px] border border-amber-400/20 bg-amber-500/8 px-4 py-4">
