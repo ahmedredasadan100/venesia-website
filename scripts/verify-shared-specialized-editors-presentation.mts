@@ -270,41 +270,222 @@ check(
   }),
 );
 
-const rootMetadataScopes = [
-  { kind: "breadcrumb", sections: ["content", "settings", "pages"] },
-  { kind: "cards", sections: ["content", "meta", "pages"] },
-  { kind: "cta", sections: ["content", "meta", "pages"] },
-  { kind: "feed", sections: ["content", "settings", "pages"] },
-  { kind: "media-hub", sections: ["content", "settings", "pages"] },
-  { kind: "media-sidebar", sections: ["content", "settings", "pages"] },
-  { kind: "hero", sections: ["content", "order", "media-desktop", "media-mobile", "buttons", "display"] },
-] as const;
-
-const specializedContentSectionScopes: Record<string, readonly string[]> = {
-  "home-story": ["text", "images", "cta", "pages", "settings"],
-  "home-contact": ["text", "image", "cta", "contacts", "pages", "settings"],
-  "about-cta": ["text", "image", "cta", "contacts", "pages", "settings"],
+type ModuleEditorMetadataInventoryEntry = {
+  sourcePath: string;
+  moduleKind: string;
+  moduleSlug: string | null;
+  tabIds: readonly string[];
 };
 
-check(
-  "the current module registry is the complete owner of every Module Editor Header and Section Hero definition",
-  rootMetadataScopes.every(
-    ({ kind, sections }) =>
-      getModuleEditorHeaderMetadata(kind, null, "Module instance") !== null &&
-      sections.every((sectionId) => getModuleEditorSectionMetadata(kind, sectionId) !== null),
-  ) &&
-    getModuleEditorHeaderMetadata("content", null, "Generic content") !== null &&
-    ["content", "settings", "pages"].every(
-      (sectionId) => getModuleEditorSectionMetadata("content", sectionId) !== null,
-    ) &&
-    STRUCTURAL_CONTENT_TEMPLATE_SLUGS.every((slug) => {
-      const sections = specializedContentSectionScopes[slug] ?? ["content", "settings", "pages"];
-      return (
-        getSlotModuleSlugMetadata(slug) !== null &&
-        getModuleEditorHeaderMetadata("content", slug, "Module instance") !== null &&
-        sections.every((sectionId) => getModuleEditorSectionMetadata("content", sectionId, slug) !== null)
+function unique(values: readonly string[]) {
+  return [...new Set(values)];
+}
+
+function getJsxAttribute(
+  node: ts.JsxOpeningLikeElement,
+  name: string,
+): ts.JsxAttribute | undefined {
+  return node.attributes.properties.find(
+    (attribute): attribute is ts.JsxAttribute =>
+      ts.isJsxAttribute(attribute) && attribute.name.getText() === name,
+  );
+}
+
+function getJsxStringValue(attribute: ts.JsxAttribute | undefined): string | null {
+  const initializer = attribute?.initializer;
+  if (!initializer) return null;
+  if (ts.isStringLiteral(initializer)) return initializer.text;
+  if (
+    ts.isJsxExpression(initializer) &&
+    initializer.expression &&
+    (ts.isStringLiteral(initializer.expression) || ts.isNoSubstitutionTemplateLiteral(initializer.expression))
+  ) {
+    return initializer.expression.text;
+  }
+  return null;
+}
+
+function collectModuleEditorTabs(path: string) {
+  const source = read(path);
+  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declarations = new Map<string, ts.Expression>();
+
+  function collectDeclarations(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      declarations.set(node.name.text, node.initializer);
+    }
+    ts.forEachChild(node, collectDeclarations);
+  }
+  collectDeclarations(file);
+
+  const cache = new Map<string, readonly string[]>();
+  function resolveTabIds(expression: ts.Expression, resolving = new Set<string>()): readonly string[] {
+    if (
+      ts.isParenthesizedExpression(expression) ||
+      ts.isAsExpression(expression) ||
+      ts.isTypeAssertionExpression(expression) ||
+      ts.isSatisfiesExpression(expression)
+    ) {
+      return resolveTabIds(expression.expression, resolving);
+    }
+
+    if (ts.isConditionalExpression(expression)) {
+      return unique([
+        ...resolveTabIds(expression.whenTrue, resolving),
+        ...resolveTabIds(expression.whenFalse, resolving),
+      ]);
+    }
+
+    if (ts.isIdentifier(expression)) {
+      const cached = cache.get(expression.text);
+      if (cached) return cached;
+      if (resolving.has(expression.text)) return [];
+      const declaration = declarations.get(expression.text);
+      if (!declaration) return [];
+      const resolved = resolveTabIds(declaration, new Set(resolving).add(expression.text));
+      cache.set(expression.text, resolved);
+      return resolved;
+    }
+
+    if (ts.isObjectLiteralExpression(expression)) {
+      const id = expression.properties.find(
+        (property): property is ts.PropertyAssignment =>
+          ts.isPropertyAssignment(property) && property.name.getText(file) === "id",
       );
+      if (
+        id &&
+        (ts.isStringLiteral(id.initializer) || ts.isNoSubstitutionTemplateLiteral(id.initializer))
+      ) {
+        return [id.initializer.text];
+      }
+      return [];
+    }
+
+    if (ts.isArrayLiteralExpression(expression)) {
+      return unique(
+        expression.elements.flatMap((element) =>
+          ts.isSpreadElement(element)
+            ? resolveTabIds(element.expression, resolving)
+            : resolveTabIds(element, resolving),
+        ),
+      );
+    }
+
+    return [];
+  }
+
+  const usages: Array<{
+    moduleKind: string;
+    tabsVariable: string | null;
+    tabIds: readonly string[];
+  }> = [];
+
+  function inspectOpeningElement(node: ts.JsxOpeningLikeElement) {
+    if (node.tagName.getText(file) !== "ModuleEditorTabs") return;
+    const moduleKind = getJsxStringValue(getJsxAttribute(node, "moduleKind"));
+    const tabsAttribute = getJsxAttribute(node, "tabs");
+    const tabsExpression =
+      tabsAttribute?.initializer &&
+      ts.isJsxExpression(tabsAttribute.initializer) &&
+      tabsAttribute.initializer.expression
+        ? tabsAttribute.initializer.expression
+        : null;
+    assert.ok(moduleKind, `${path} must declare a literal ModuleEditorTabs moduleKind`);
+    assert.ok(tabsExpression, `${path} must declare a resolvable ModuleEditorTabs tabs expression`);
+    const tabIds = resolveTabIds(tabsExpression);
+    assert.ok(tabIds.length > 0, `${path} must expose at least one actual ModuleEditorTabs tab id`);
+    usages.push({
+      moduleKind,
+      tabsVariable: ts.isIdentifier(tabsExpression) ? tabsExpression.text : null,
+      tabIds,
+    });
+  }
+
+  function visit(node: ts.Node) {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      inspectOpeningElement(node);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  return usages;
+}
+
+const rootEditorInventory: ModuleEditorMetadataInventoryEntry[] = moduleEditorRoots
+  .filter((path) => !path.endsWith("ContentModuleEditClient.tsx"))
+  .flatMap((sourcePath) =>
+    collectModuleEditorTabs(sourcePath).map(({ moduleKind, tabIds }) => ({
+      sourcePath,
+      moduleKind,
+      moduleSlug: null,
+      tabIds,
+    })),
+  );
+
+const contentEditorPath = "src/components/admin/page-blocks/ContentModuleEditClient.tsx";
+const contentTabUsages = collectModuleEditorTabs(contentEditorPath);
+const contentTabsByVariable = new Map(
+  contentTabUsages
+    .filter((usage) => usage.tabsVariable !== null)
+    .map((usage) => [usage.tabsVariable as string, usage.tabIds]),
+);
+const defaultContentTabs = contentTabUsages.find((usage) => usage.tabsVariable === null)?.tabIds;
+assert.ok(defaultContentTabs, "Content Module Editor must expose its actual default tab ids");
+
+const specializedContentTabVariables: Partial<
+  Record<(typeof STRUCTURAL_CONTENT_TEMPLATE_SLUGS)[number], string>
+> = {
+  "home-story": "homeStoryTabs",
+  "home-contact": "homeContactTabs",
+  "about-cta": "aboutCtaTabs",
+};
+
+const contentEditorInventory: ModuleEditorMetadataInventoryEntry[] = [
+  {
+    sourcePath: contentEditorPath,
+    moduleKind: "content",
+    moduleSlug: null,
+    tabIds: defaultContentTabs,
+  },
+  ...STRUCTURAL_CONTENT_TEMPLATE_SLUGS.map((moduleSlug) => {
+    const tabsVariable = specializedContentTabVariables[moduleSlug];
+    const tabIds = tabsVariable ? contentTabsByVariable.get(tabsVariable) : defaultContentTabs;
+    assert.ok(tabIds, `Content Module Editor tabs are not discoverable for ${moduleSlug}`);
+    return {
+      sourcePath: contentEditorPath,
+      moduleKind: "content",
+      moduleSlug,
+      tabIds,
+    };
+  }),
+];
+
+const moduleEditorMetadataInventory = [...rootEditorInventory, ...contentEditorInventory];
+const missingMetadataCombinations = moduleEditorMetadataInventory.flatMap(
+  ({ moduleKind, moduleSlug, tabIds }) =>
+    tabIds.flatMap((tabId) => {
+      const metadata = getModuleEditorSectionMetadata(moduleKind, tabId, moduleSlug);
+      const complete =
+        metadata !== null &&
+        metadata.navigationLabelAr.trim().length > 0 &&
+        metadata.sectionHeadingAr.trim().length > 0 &&
+        metadata.sectionDescriptionAr.trim().length > 0 &&
+        metadata.icon.trim().length > 0;
+      return complete ? [] : [`${moduleKind}:${moduleSlug ?? "default"}:${tabId}`];
     }),
+);
+
+moduleEditorMetadataInventory.forEach(({ moduleKind, moduleSlug, tabIds }) => {
+  console.log(`INVENTORY ${moduleKind}:${moduleSlug ?? "default"} -> ${tabIds.join(",")}`);
+});
+
+check(
+  `the current module registry completely owns every actual Module Editor Header and Section Hero combination; missing=${missingMetadataCombinations.join(",") || "none"}`,
+  moduleEditorMetadataInventory.every(
+    ({ moduleKind, moduleSlug }) =>
+      getModuleEditorHeaderMetadata(moduleKind, moduleSlug, "Module instance") !== null &&
+      (moduleSlug === null || getSlotModuleSlugMetadata(moduleSlug) !== null),
+  ) && missingMetadataCombinations.length === 0,
 );
 
 check(

@@ -68,6 +68,7 @@ const CONTENT_MODULE_SECTIONS: ModuleEditorSections = {
     sectionDescriptionAr: "أدر المحتوى والإعدادات المتخصصة لهذا الموديول.",
     icon: "content",
   },
+  meta: SETTINGS_SECTION,
   settings: SETTINGS_SECTION,
   pages: PAGES_SECTION,
 };
