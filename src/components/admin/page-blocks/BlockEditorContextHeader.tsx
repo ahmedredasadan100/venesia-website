@@ -7,7 +7,7 @@ import { statusMeta } from "../../../lib/page-blocks/admin-utils";
 import { AdminFeedbackRegion } from "../AdminFeedbackProvider";
 import { AdminPageContextHeader, AdminStatusPill } from "../ui";
 
-type BlockEditorContextHeaderProps = {
+export type BlockEditorContextHeaderProps = {
   backHref: string;
   backLabel: string;
   eyebrow: string;

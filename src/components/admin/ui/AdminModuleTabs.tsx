@@ -1,19 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import type { ModuleEditorIconToken } from "../../../lib/page-composition/slot-module-registry";
 
-export type AdminModuleTabIconName =
-  | "content"
-  | "faq"
-  | "location"
-  | "media"
-  | "overview"
-  | "plans"
-  | "publish"
-  | "section"
-  | "seo"
-  | "settings"
-  | "specifications";
+export type AdminModuleTabIconName = ModuleEditorIconToken;
 
 type AdminModuleTabNavigationLabel =
   | {

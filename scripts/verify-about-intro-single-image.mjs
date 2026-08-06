@@ -38,6 +38,7 @@ function usesSharedStructuralSlugLock(source) {
 }
 
 const client = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
+const presentationRegistry = read("src/lib/page-composition/module-registry-metadata.ts");
 const editor = read(
   "src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx",
 );
@@ -55,7 +56,10 @@ assert(configs.includes("isAboutIntroSingleImageTemplate"), "Config detector mis
 assert(configs.includes("asAboutIntroSingleImageConfig"), "Config parser missing");
 assert(configs.includes("AboutIntroSingleImageModuleConfig"), "Config type missing");
 assert(client.includes("isAboutIntroSingleImage"), "Single-image editor key wiring missing");
-assert(client.includes('title="من نحن — محتوى وصورة واحدة"'), "Single-image header title missing");
+assert(
+  presentationRegistry.includes('labelAr: "من نحن — محتوى وصورة واحدة"'),
+  "Single-image header metadata missing from the shared registry",
+);
 assert(client.includes("AboutIntroSingleImageModuleEditor"), "Single-image editor mount missing");
 assert(editor.includes('name="image_position"'), "imagePosition field missing");
 assert(!editor.includes("image_secondary"), "Single-image editor must not expose secondary image");

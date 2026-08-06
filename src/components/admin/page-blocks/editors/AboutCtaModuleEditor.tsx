@@ -1,9 +1,11 @@
 "use client";
 
+import { ModuleEditorSection } from "../ModuleEditorPresentation";
+
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminLinkField } from "../../ui";
+import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
@@ -91,7 +93,7 @@ export default function AboutCtaModuleEditor({
   }
 
   const textFields = showText ? (
-    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
       <label className="block space-y-2">
         <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
         <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
@@ -119,12 +121,12 @@ export default function AboutCtaModuleEditor({
           className={fieldClassName("resize-y leading-7")}
         />
       </label>
-    </section>
+      </ModuleEditorSection>
   ) : null;
 
   const ctaFields = showCta ? (
-    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-      <div className="grid gap-4 md:grid-cols-2">
+      <ModuleEditorSection>
+      <AdminFormGrid>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
           <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
@@ -137,16 +139,16 @@ export default function AboutCtaModuleEditor({
           defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
           showAnchor
         />
-      </div>
+      </AdminFormGrid>
       <label className="block space-y-2">
         <span className="text-xs font-semibold text-white/55">{fieldLabels.note}</span>
         <input name="note" defaultValue={config.note ?? ""} className={fieldClassName()} />
       </label>
-    </section>
+      </ModuleEditorSection>
   ) : null;
 
   const imageFields = showImage ? (
-    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
       <AdminMediaImageField
         name="image"
         label="صورة القسم"
@@ -158,11 +160,11 @@ export default function AboutCtaModuleEditor({
         <span className="text-xs font-semibold text-white/55">{fieldLabels.imageAlt}</span>
         <input name="image_alt" defaultValue={config.imageAlt ?? ""} className={fieldClassName()} />
       </label>
-    </section>
+      </ModuleEditorSection>
   ) : null;
 
   const contactsFields = showContacts ? (
-    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
       <p className="text-xs leading-6 text-white/45">
         اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر. استخدم الأسهم لتغيير ترتيب الظهور.
       </p>
@@ -225,26 +227,21 @@ export default function AboutCtaModuleEditor({
               </label>
             ) : null}
 
-            <label className="block space-y-2">
+            <div className="block space-y-2">
               <span className="text-xs font-semibold text-white/55">الأيقونة</span>
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8B87A]/22 bg-[#D8B87A]/[0.07] text-[#D8B87A]/75">
                   {renderContactIcon(row.icon)}
                 </span>
-                <select
+                <AdminFormListboxSelect
                   name={`contact_${index}_icon`}
                   value={row.icon}
-                  onChange={(event) => updateRow(row.uid, { icon: event.target.value })}
-                  className={fieldClassName()}
-                >
-                  {CONTACT_ICON_OPTIONS.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => updateRow(row.uid, { icon: value })}
+                  options={CONTACT_ICON_OPTIONS.map((option) => ({ value: option.key, label: option.label }))}
+                  className="min-w-0 flex-1"
+                />
               </div>
-            </label>
+            </div>
 
             {isHomeContact && row.icon === "whatsapp" ? null : (
               <AdminLinkField
@@ -256,7 +253,7 @@ export default function AboutCtaModuleEditor({
           </div>
         ))}
       </div>
-    </section>
+      </ModuleEditorSection>
   ) : null;
 
   return (

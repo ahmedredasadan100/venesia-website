@@ -1,5 +1,8 @@
 "use client";
 
+import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import { AdminFormListboxSelect } from "../../ui";
+
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { ContentBlockConfig } from "../../../../lib/page-blocks/configs";
 
@@ -9,7 +12,7 @@ type GenericContentModuleEditorProps = {
 
 export default function GenericContentModuleEditor({ config }: GenericContentModuleEditorProps) {
   return (
-    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
       <label className="block space-y-2">
         <span className="text-xs font-semibold text-white/55">Eyebrow</span>
         <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
@@ -26,13 +29,15 @@ export default function GenericContentModuleEditor({ config }: GenericContentMod
         <span className="text-xs font-semibold text-white/55">المحتوى — فقرات مفصولة بسطر فارغ</span>
         <textarea name="body" defaultValue={config.body ?? ""} rows={8} className={fieldClassName("resize-y leading-7")} />
       </label>
-      <label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">المحاذاة</span>
-        <select name="alignment" defaultValue={config.alignment ?? "start"} className={fieldClassName()}>
-          <option value="start">بداية</option>
-          <option value="center">وسط</option>
-        </select>
-      </label>
-    </section>
+      <AdminFormListboxSelect
+        name="alignment"
+        label="المحاذاة"
+        defaultValue={config.alignment ?? "start"}
+        options={[
+          { value: "start", label: "بداية" },
+          { value: "center", label: "وسط" },
+        ]}
+      />
+      </ModuleEditorSection>
   );
 }

@@ -3,10 +3,22 @@
 import AdminNotice from "../../../../../../components/admin/AdminNotice";
 import AdminRichTextEditor from "../../../../../../components/admin/AdminRichTextEditor";
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
-import AdminModuleTabs from "../../../../../../components/admin/ui/AdminModuleTabs";
-import ModuleCrossPageUsageBanner from "../../../../../../components/admin/page-blocks/ModuleCrossPageUsageBanner";
-import ModulePageAssignmentsField from "../../../../../../components/admin/page-blocks/ModulePageAssignmentsField";
-import { AdminActionButton, AdminLinkField, AdminPageContextHeader } from "../../../../../../components/admin/ui";
+import {
+  ModuleEditorHeader,
+  ModuleEditorFeedback,
+  ModuleEditorPagesTab,
+  ModuleEditorSaveArea,
+  ModuleEditorSection,
+  ModuleEditorTabs,
+  ModuleEditorTechnicalIdentity,
+} from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
+import {
+  AdminActionButton,
+  AdminFormGrid,
+  AdminFormListboxSelect,
+  AdminFormSwitch,
+  AdminLinkField,
+} from "../../../../../../components/admin/ui";
 import { legacyHrefFromConfig } from "../../../../../../lib/admin/links/serialize";
 import { resolveHeroContentControls } from "../../../../../../lib/hero/hero-content-controls";
 import { fieldClassName, statusMeta } from "../../../../../../lib/page-blocks/admin-utils";
@@ -52,8 +64,6 @@ export default function HeroEditClient({
   config,
   imagesText,
   mobileImagesText,
-  assignedPageIds,
-  pages,
   sourceOptions,
   variantOptions,
   saved,
@@ -68,28 +78,18 @@ export default function HeroEditClient({
 
   const contentTab = (
     <div className="mx-auto max-w-5xl space-y-5">
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-base font-semibold text-white">بيانات الموديول</h2>
-        <div className="grid max-w-[920px] gap-4 md:grid-cols-2">
+        <AdminFormGrid className="max-w-[920px]">
           <label className="space-y-2">
             <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
             <input name="name" defaultValue={hero.name} required className={fieldClassName("h-11")} />
           </label>
-          <label className="space-y-2">
-            <span className="text-xs font-semibold text-white/55">Slug</span>
-            <input
-              name="slug"
-              defaultValue={hero.slug}
-              required
-              readOnly
-              dir="ltr"
-              aria-readonly="true"
-              className={fieldClassName("h-11 cursor-default bg-white/[0.03] text-white/55")}
-            />
-            <span className="block text-xs leading-6 text-white/40">
-              المعرّف التقني للموديول — للقراءة فقط.
-            </span>
-          </label>
+          <ModuleEditorTechnicalIdentity
+            mode="read-only"
+            value={hero.slug}
+            inputClassName={fieldClassName("h-11 bg-white/[0.03]")}
+          />
           <label className="space-y-2 md:col-span-2">
             <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
             <input
@@ -98,11 +98,11 @@ export default function HeroEditClient({
               className={fieldClassName("h-11")}
             />
           </label>
-        </div>
-      </section>
+        </AdminFormGrid>
+      </ModuleEditorSection>
 
       {!isHomeHero ? (
-        <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        <ModuleEditorSection>
           <h2 className="text-base font-semibold text-white">عناصر الهيرو</h2>
 
           <HeroTextFieldRow
@@ -198,14 +198,14 @@ export default function HeroEditClient({
           >
             <p className="text-xs text-white/40">لا يظهر الزر علنًا إلا بعد تعبئة نص ورابط في تبويب الأزرار.</p>
           </HeroVisibilityAlignRow>
-        </section>
+        </ModuleEditorSection>
       ) : (
-        <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        <ModuleEditorSection>
           <AdminNotice
             variant="info"
             message="هيرو الصفحة الرئيسية محمي بقواعده الخاصة. استخدم الحقول الأساسية أدناه دون عناصر التحكم الداخلية."
           />
-          <div className="grid max-w-[920px] gap-4 md:grid-cols-2">
+          <AdminFormGrid className="max-w-[920px]">
             <label className="space-y-2">
               <span className="text-xs font-semibold text-white/55">العنوان التمهيدي</span>
               <input name="eyebrow" defaultValue={String(config.eyebrow ?? "")} className={fieldClassName("h-11")} />
@@ -231,17 +231,17 @@ export default function HeroEditClient({
                 className={fieldClassName("resize-y leading-7")}
               />
             </label>
-          </div>
-        </section>
+          </AdminFormGrid>
+        </ModuleEditorSection>
       )}
     </div>
   );
 
   const orderTab = !isHomeHero ? (
     <div className="mx-auto max-w-5xl">
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <HeroElementOrderEditor defaultOrder={controls.heroElementOrder} />
-      </section>
+      </ModuleEditorSection>
     </div>
   ) : (
     <div className="mx-auto max-w-5xl">
@@ -252,10 +252,9 @@ export default function HeroEditClient({
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <AdminPageContextHeader
-        eyebrow="MODULE EDITOR"
-        title="إدارة موديول الهيرو"
-        description={`${hero.name} — تحكّم في محتوى الموديول وإعداداته وطريقة ظهوره داخل الصفحات المرتبطة به.`}
+      <ModuleEditorHeader
+        moduleKind="hero"
+        entityName={hero.name}
         meta={statusInfo.label}
         actions={
           <AdminActionButton href="/admin/pages-blocks/blocks/hero" variant="dark">
@@ -268,9 +267,10 @@ export default function HeroEditClient({
         <input type="hidden" name="id" value={hero.id} />
         <input type="hidden" name="style_preset" value={hero.style_preset ?? "cinematic-gold"} />
 
-        <AdminModuleTabs
+        <ModuleEditorTabs
+          moduleKind="hero"
           nowrap
-          activePanelContext={
+          activePanelContext={<ModuleEditorFeedback>{
             mediaSynchronizationWarning ? (
               <AdminNotice
                 variant="warning"
@@ -279,37 +279,25 @@ export default function HeroEditClient({
             ) : saved ? (
               <AdminNotice variant="success" message="تم حفظ الموديول بنجاح." />
             ) : null
-          }
+          }</ModuleEditorFeedback>}
           tabs={[
             {
               id: "content",
-              navigationLabel: "المحتوى",
-              sectionHeading: "محتوى الهيرو",
-              sectionDescription: "أدر النصوص والعناصر الأساسية الظاهرة داخل الهيرو.",
-              icon: "content",
               content: contentTab,
             },
             ...(!isHomeHero
               ? [
                   {
                     id: "order",
-                    navigationLabel: "ترتيب العناصر",
-                    sectionHeading: "ترتيب عناصر الهيرو",
-                    sectionDescription: "حدّد ترتيب ظهور عناصر الهيرو للصفحات الداخلية.",
-                    icon: "plans" as const,
                     content: orderTab,
                   },
                 ]
               : []),
             {
               id: "media-desktop",
-              navigationLabel: "صور الديسكتوب",
-              sectionHeading: "صور الهيرو على الشاشات الكبيرة",
-              sectionDescription: "اختر الصور ورتّبها واضبط موضعها في عرض الديسكتوب.",
-              icon: "media",
               content: (
                 <div className="mx-auto max-w-5xl">
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                  <ModuleEditorSection>
                     <AdminImagePathListField
                       name="images"
                       label="صور الهيرو (ديسكتوب)"
@@ -325,58 +313,48 @@ export default function HeroEditClient({
                         className={fieldClassName("h-11")}
                       />
                     </label>
-                  </section>
+                  </ModuleEditorSection>
                 </div>
               ),
             },
             {
               id: "media-mobile",
-              navigationLabel: "صور الموبايل",
-              sectionHeading: "صور الهيرو على الموبايل",
-              sectionDescription: "أضف صورًا بديلة للموبايل أو اتركها فارغة لاستخدام صور الديسكتوب.",
-              icon: "media",
               content: (
                 <div className="mx-auto max-w-5xl">
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                  <ModuleEditorSection>
                     <AdminImagePathListField
                       name="mobile_images"
                       label="صور الهيرو (موبايل)"
                       defaultValue={mobileImagesText}
                       helperText="اختياري. لو تُركت فارغة تُستخدم صور الديسكتوب تلقائيًا على الموبايل. رتّب صور الموبايل بنفس ترتيب الديسكتوب."
                     />
-                  </section>
+                  </ModuleEditorSection>
                 </div>
               ),
             },
             {
               id: "buttons",
-              navigationLabel: "الأزرار",
-              sectionHeading: "أزرار الهيرو وروابطها",
-              sectionDescription: "أدر نصوص أزرار الإجراء ووجهاتها.",
-              icon: "section",
               content: (
                 <div className="mx-auto max-w-5xl">
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                  <ModuleEditorSection>
                     {isHomeHero ? (
-                      <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-                        <span>إظهار أزرار الإجراء في الهيرو</span>
-                        <input
-                          type="checkbox"
-                          name="show_cta"
-                          defaultChecked={
-                            config.showCta === true ||
-                            (config.showCta === undefined &&
-                              Boolean(config.primaryCtaLabel || config.secondaryCtaLabel))
-                          }
-                        />
-                      </label>
+                      <AdminFormSwitch
+                        name="show_cta"
+                        label="إظهار أزرار الإجراء في الهيرو"
+                        defaultChecked={
+                          config.showCta === true ||
+                          (config.showCta === undefined &&
+                            Boolean(config.primaryCtaLabel || config.secondaryCtaLabel))
+                        }
+                        surface
+                      />
                     ) : (
                       <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-xs leading-6 text-white/50">
                         إظهار/إخفاء زر الإجراء ومحاذاته تُداران من تبويب المحتوى. عدّل هنا النصوص والروابط فقط.
                       </p>
                     )}
 
-                    <div className="grid max-w-[920px] gap-4 md:grid-cols-2">
+                    <AdminFormGrid className="max-w-[920px]">
                       <label className="space-y-2">
                         <span className="text-xs font-semibold text-white/55">الزر الأساسي — النص</span>
                         <input
@@ -407,49 +385,32 @@ export default function HeroEditClient({
                         helperText="اختر رابطًا داخليًا من النظام أو أدخل رابطًا خارجيًا."
                         showAnchor
                       />
-                    </div>
-                  </section>
+                    </AdminFormGrid>
+                  </ModuleEditorSection>
                 </div>
               ),
             },
             {
               id: "display",
-              navigationLabel: "العرض والربط",
-              sectionHeading: "إعدادات العرض والصفحات",
-              sectionDescription: "اضبط حالة الظهور والمصدر وراجع الصفحات المرتبطة بالهيرو.",
-              icon: "settings",
               content: (
-                <div className="mx-auto max-w-5xl space-y-5">
-                  <ModuleCrossPageUsageBanner moduleName={hero.name} assignments={assignmentContext.assignments} />
-                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <div className="mx-auto max-w-5xl">
+                  <ModuleEditorPagesTab moduleName={hero.name} assignmentContext={assignmentContext}>
+                    <ModuleEditorSection>
+                    <AdminFormSwitch name="is_visible" label="إظهار الهيرو" defaultChecked={hero.is_visible} surface />
 
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-                      <span>إظهار الهيرو</span>
-                      <input type="checkbox" name="is_visible" defaultChecked={hero.is_visible} />
-                    </label>
+                    <AdminFormListboxSelect
+                      name="variant"
+                      label="Variant"
+                      defaultValue={hero.variant}
+                      options={variantOptions.map(([value, label]) => ({ value, label }))}
+                    />
 
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Variant</span>
-                      <select name="variant" defaultValue={hero.variant} className={fieldClassName("h-11")}>
-                        {variantOptions.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Source</span>
-                      <select name="source_type" defaultValue={hero.source_type} className={fieldClassName("h-11")}>
-                        {sourceOptions.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <AdminFormListboxSelect
+                      name="source_type"
+                      label="Source"
+                      defaultValue={hero.source_type}
+                      options={sourceOptions.map(([value, label]) => ({ value, label }))}
+                    />
 
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Source Slug</span>
@@ -472,24 +433,15 @@ export default function HeroEditClient({
                         className={fieldClassName("h-11")}
                       />
                     </label>
-                    </section>
-
-                    <ModulePageAssignmentsField pages={pages} assignedPageIds={assignedPageIds} />
-                  </div>
+                    </ModuleEditorSection>
+                  </ModuleEditorPagesTab>
                 </div>
               ),
             },
           ]}
         />
 
-        <div className="sticky bottom-4 z-20 mt-6 flex justify-end">
-          <button
-            type="submit"
-            className="rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition hover:bg-[#e5c98d]"
-          >
-            حفظ الهيرو
-          </button>
-        </div>
+        <ModuleEditorSaveArea title="حفظ الهيرو" saveLabel="حفظ الهيرو" />
       </form>
     </div>
   );

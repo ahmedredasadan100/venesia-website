@@ -2,11 +2,18 @@
 
 import { useMemo, useState } from "react";
 
-import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader, { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
-import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
+import { AdminFormGrid, AdminFormListboxSelect } from "../ui";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
-import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
+import {
+  MODULE_EDITOR_STATUS_OPTIONS,
+  ModuleEditorFeedback,
+  ModuleEditorHeader,
+  ModuleEditorPagesTab,
+  ModuleEditorSaveArea,
+  ModuleEditorSection,
+  ModuleEditorSettingsComposition,
+  ModuleEditorTabs,
+} from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import {
   getMediaHubModuleSummary,
@@ -68,7 +75,6 @@ export default function MediaHubModuleEditClient({
     typeof parsedInitial.listLimit === "number" ? parsedInitial.listLimit : MEDIA_HUB_SECTION_DEFAULTS.featured.defaultListLimit ?? "",
   );
 
-  const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
   const summary = useMemo(
     () => getMediaHubModuleSummary(sectionKey, block.description),
     [sectionKey, block.description],
@@ -92,12 +98,11 @@ export default function MediaHubModuleEditClient({
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <BlockEditorContextHeader
+      <ModuleEditorHeader
+        moduleKind="media-hub"
+        entityName={block.name}
         backHref="/admin/pages-blocks/blocks/media-hub"
         backLabel="الرجوع لكل Media Hub Modules"
-        eyebrow="MEDIA HUB MODULE"
-        title={block.name}
-        description="سكشن مركز إعلامي — يعتمد على Unified Content المنشور في topics."
         status={block.status}
         saved={saved}
         slotContext={getSlotCompatibilityLabel("media-hub")}
@@ -106,53 +111,38 @@ export default function MediaHubModuleEditClient({
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
 
-        <AdminModuleTabs
-          activePanelContext={<BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/media-hub" saved={saved} />}
+        <ModuleEditorTabs
+          moduleKind="media-hub"
+          activePanelContext={<ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/media-hub" saved={saved} />}
           tabs={[
             {
               id: "content",
-              navigationLabel: "المحتوى",
-              sectionHeading: "إعدادات مركز الميديا",
-              sectionDescription: "حدّد نوع القسم ومصدر البيانات وحدود العناصر المعروضة.",
-              icon: "media",
               content: (
-                <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <ModuleEditorSection>
                   <label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
                     <input name="name" defaultValue={block.name} required className={fieldClassName()} />
                   </label>
 
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">نوع السكشن</span>
-                    <select
-                      name="section_key"
-                      value={sectionKey}
-                      onChange={(event) => handleSectionChange(readInitialSectionKey(event.target.value))}
-                      className={fieldClassName()}
-                    >
-                      {SECTION_KEYS.map((key) => (
-                        <option key={key} value={key}>
-                          {MEDIA_HUB_SECTION_LABELS[key]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <AdminFormListboxSelect
+                    name="section_key"
+                    label="نوع السكشن"
+                    value={sectionKey}
+                    onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
+                    options={SECTION_KEYS.map((key) => ({ value: key, label: MEDIA_HUB_SECTION_LABELS[key] }))}
+                  />
 
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">مصدر البيانات</span>
-                    <select
-                      name="data_source"
-                      value={dataSource}
-                      onChange={() => setDataSource("topics")}
-                      className={fieldClassName()}
-                      dir="ltr"
-                    >
-                      <option value="topics">topics — Unified Content</option>
-                    </select>
-                  </label>
+                  <AdminFormListboxSelect
+                    name="data_source"
+                    label="مصدر البيانات"
+                    value={dataSource}
+                    onChange={() => setDataSource("topics")}
+                    options={[{ value: "topics", label: "topics — Unified Content" }]}
+                    dir="ltr"
+                  />
 
                   {sectionKey === "featured" ? (
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <AdminFormGrid>
                       <label className="block space-y-2">
                         <span className="text-xs font-semibold text-white/55">Featured limit — قائمة الأخبار</span>
                         <input
@@ -185,7 +175,7 @@ export default function MediaHubModuleEditClient({
                           dir="ltr"
                         />
                       </label>
-                    </div>
+                    </AdminFormGrid>
                   ) : (
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Limit</span>
@@ -214,73 +204,44 @@ export default function MediaHubModuleEditClient({
                       className={fieldClassName("cursor-default resize-none text-white/72")}
                     />
                   </label>
-                </section>
+                </ModuleEditorSection>
               ),
             },
             {
               id: "settings",
-              navigationLabel: "الإعدادات",
-              sectionHeading: "إعدادات الموديول",
-              sectionDescription: "أدر الوصف الداخلي وحالة نشر الموديول.",
-              icon: "settings",
               content: (
-                <div className="space-y-5">
-                  <ModuleDependencyHintsPanel moduleKind="media-hub" templateSlug={block.slug} />
-                  <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <ModuleEditorSettingsComposition
+                  context={<ModuleDependencyHintsPanel moduleKind="media-hub" templateSlug={block.slug} />}
+                  primary={
+                  <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
                       <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
                     </label>
-                  </section>
+                  </ModuleEditorSection>
+                  }
 
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                  secondary={
+                  <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">حالة النشر</h2>
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">حالة الموديول</span>
-                      <select name="status" defaultValue={block.status} className={fieldClassName()}>
-                        <option value="draft">مسودة</option>
-                        <option value="published">منشور</option>
-                        <option value="unpublished">مخفي</option>
-                        <option value="archived">أرشيف</option>
-                      </select>
-                    </label>
+                    <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
                     <p className="text-xs leading-6 text-white/42">
                       Slot و Sort Order و Visibility تُدار من Pages Manager لكل صفحة على حدة.
                     </p>
-                  </section>
-                  </div>
-                </div>
+                  </ModuleEditorSection>
+                  }
+                />
               ),
             },
             {
               id: "pages",
-              navigationLabel: "الصفحات",
-              sectionHeading: "الظهور في الصفحات",
-              sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
-              icon: "plans",
-              content: (
-                <div className="space-y-5">
-                  <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-                  <ModulePageAssignmentsField
-                    pages={assignmentContext.pages}
-                    assignedPageIds={assignedPageIds}
-                  />
-                </div>
-              ),
+              content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
             },
           ]}
         />
 
-        <div className="mt-6 flex justify-end">
-          <button
-            type="submit"
-            className="rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
-          >
-            حفظ الموديول
-          </button>
-        </div>
+        <ModuleEditorSaveArea />
       </form>
     </div>
   );

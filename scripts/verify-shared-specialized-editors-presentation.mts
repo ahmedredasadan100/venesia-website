@@ -4,6 +4,13 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
+import { STRUCTURAL_CONTENT_TEMPLATE_SLUGS } from "../src/lib/page-blocks/module-edit-registry.ts";
+import {
+  getModuleEditorHeaderMetadata,
+  getModuleEditorSectionMetadata,
+  getSlotModuleSlugMetadata,
+} from "../src/lib/page-composition/module-registry-metadata.ts";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
 
@@ -17,6 +24,17 @@ function check(label: string, condition: unknown) {
 const sharedTabs = read("src/components/admin/ui/AdminModuleTabs.tsx");
 const contentShell = read("src/components/admin/content/editors/ContentEditorShell.tsx");
 const aboutCta = read("src/components/admin/page-blocks/editors/AboutCtaModuleEditor.tsx");
+
+const moduleEditorRoots = [
+  "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+  "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+  "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+  "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+  "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+  "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+  "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+] as const;
 
 const specializedConsumers = [
   "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
@@ -35,6 +53,7 @@ const specializedConsumers = [
 ] as const;
 
 const consumerSources = specializedConsumers.map((path) => ({ path, source: read(path) }));
+const moduleEditorRootSet = new Set<string>(moduleEditorRoots);
 
 function tabsAreIndependent(path: string, source: string) {
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -43,7 +62,7 @@ function tabsAreIndependent(path: string, source: string) {
   function visit(node: ts.Node, ancestors: string[]) {
     if (ts.isJsxElement(node)) {
       const name = node.openingElement.tagName.getText(file);
-      if (name === "AdminModuleTabs" && ancestors.some((value) => value === "AdminCard" || value === "section")) {
+      if ((name === "AdminModuleTabs" || name === "ModuleEditorTabs") && ancestors.some((value) => value === "AdminCard" || value === "section")) {
         independent = false;
       }
       for (const child of node.children) visit(child, [...ancestors, name]);
@@ -51,7 +70,7 @@ function tabsAreIndependent(path: string, source: string) {
     }
     if (ts.isJsxSelfClosingElement(node)) {
       const name = node.tagName.getText(file);
-      if (name === "AdminModuleTabs" && ancestors.some((value) => value === "AdminCard" || value === "section")) {
+      if ((name === "AdminModuleTabs" || name === "ModuleEditorTabs") && ancestors.some((value) => value === "AdminCard" || value === "section")) {
         independent = false;
       }
       return;
@@ -61,6 +80,42 @@ function tabsAreIndependent(path: string, source: string) {
 
   visit(file, []);
   return independent;
+}
+
+function moduleEditorMetadataPropsAreDelegated(path: string, source: string) {
+  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let headerCount = 0;
+  let tabsCount = 0;
+  let delegated = true;
+
+  function inspectOpeningElement(node: ts.JsxOpeningLikeElement) {
+    const name = node.tagName.getText(file);
+    if (name !== "ModuleEditorHeader" && name !== "ModuleEditorTabs") return;
+
+    const attributeNames = new Set(
+      node.attributes.properties
+        .filter(ts.isJsxAttribute)
+        .map((attribute) => attribute.name.getText(file)),
+    );
+    delegated = delegated && attributeNames.has("moduleKind");
+
+    if (name === "ModuleEditorHeader") {
+      headerCount += 1;
+      delegated = delegated && attributeNames.has("entityName");
+      delegated = delegated && ["eyebrow", "title", "description"].every((attribute) => !attributeNames.has(attribute));
+    } else {
+      tabsCount += 1;
+    }
+  }
+
+  function visit(node: ts.Node) {
+    if (ts.isJsxElement(node)) inspectOpeningElement(node.openingElement);
+    if (ts.isJsxSelfClosingElement(node)) inspectOpeningElement(node);
+    ts.forEachChild(node, visit);
+  }
+
+  visit(file);
+  return { delegated, headerCount, tabsCount };
 }
 
 check(
@@ -79,10 +134,12 @@ check(
 );
 
 check(
-  "every corrected specialized editor supplies shared Section Hero metadata",
-  consumerSources.every(({ source }) =>
-    ["sectionHeading", "sectionDescription", "icon:"].every((token) => source.includes(token)),
-  ),
+  "specialized consumers outside the Module Editor registry continue to supply their Section Hero metadata",
+  consumerSources
+    .filter(({ path }) => !moduleEditorRootSet.has(path))
+    .every(({ source }) =>
+      ["sectionHeading", "sectionDescription", "icon:"].every((token) => source.includes(token)),
+    ),
 );
 
 check(
@@ -102,8 +159,12 @@ check(
     const heroIndex = Math.max(
       source.indexOf("<BlockEditorContextHeader"),
       source.indexOf("<AdminPageContextHeader"),
+      source.indexOf("<ModuleEditorHeader"),
     );
-    const tabsIndex = source.indexOf("<AdminModuleTabs", heroIndex);
+    const tabsIndex = Math.max(
+      source.indexOf("<AdminModuleTabs", heroIndex),
+      source.indexOf("<ModuleEditorTabs", heroIndex),
+    );
     const preTabs = source.slice(heroIndex, tabsIndex);
     return (
       heroIndex >= 0 &&
@@ -159,6 +220,351 @@ check(
 check(
   "specialized Project Hub Hero has no local header parallel to the shared Section Hero",
   !read("src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx").includes("<h2"),
+);
+
+const moduleEditorRootSources = moduleEditorRoots.map((path) => ({ path, source: read(path) }));
+const moduleEditorFieldOwners = [
+  "src/components/admin/page-blocks/FeedModuleFilterFields.tsx",
+  "src/components/admin/page-blocks/editors/AboutApproachModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutCtaModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutPrinciplesModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
+  "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/ProjectsHubMapModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/VisionGoalsModuleEditor.tsx",
+] as const;
+const moduleEditorFieldSources = moduleEditorFieldOwners.map((path) => ({ path, source: read(path) }));
+const moduleEditorSources = [...moduleEditorRootSources, ...moduleEditorFieldSources];
+
+check(
+  "every Page Blocks module editor root adopts the thin shared header, tabs, feedback, pages, and save composition",
+  moduleEditorRootSources.every(({ source }) =>
+    [
+      "<ModuleEditorHeader",
+      "<ModuleEditorTabs",
+      "<ModuleEditorFeedback",
+      "<ModuleEditorPagesTab",
+      "<ModuleEditorSaveArea",
+    ].every((token) => source.includes(token)),
+  ),
+);
+
+check(
+  "Module Editor consumers delegate Header and Section Hero metadata without local title, description, or icon ownership",
+  moduleEditorRootSources.every(({ path, source }) => {
+    const result = moduleEditorMetadataPropsAreDelegated(path, source);
+    return (
+      result.delegated &&
+      result.headerCount >= 1 &&
+      result.tabsCount >= 1 &&
+      !source.includes("sectionHeading:") &&
+      !source.includes("sectionDescription:") &&
+      !source.includes("navigationLabel:") &&
+      !source.includes("icon:")
+    );
+  }),
+);
+
+type ModuleEditorMetadataInventoryEntry = {
+  sourcePath: string;
+  moduleKind: string;
+  moduleSlug: string | null;
+  tabIds: readonly string[];
+};
+
+function unique(values: readonly string[]) {
+  return [...new Set(values)];
+}
+
+function getJsxAttribute(
+  node: ts.JsxOpeningLikeElement,
+  name: string,
+): ts.JsxAttribute | undefined {
+  return node.attributes.properties.find(
+    (attribute): attribute is ts.JsxAttribute =>
+      ts.isJsxAttribute(attribute) && attribute.name.getText() === name,
+  );
+}
+
+function getJsxStringValue(attribute: ts.JsxAttribute | undefined): string | null {
+  const initializer = attribute?.initializer;
+  if (!initializer) return null;
+  if (ts.isStringLiteral(initializer)) return initializer.text;
+  if (
+    ts.isJsxExpression(initializer) &&
+    initializer.expression &&
+    (ts.isStringLiteral(initializer.expression) || ts.isNoSubstitutionTemplateLiteral(initializer.expression))
+  ) {
+    return initializer.expression.text;
+  }
+  return null;
+}
+
+function collectModuleEditorTabs(path: string) {
+  const source = read(path);
+  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declarations = new Map<string, ts.Expression>();
+
+  function collectDeclarations(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      declarations.set(node.name.text, node.initializer);
+    }
+    ts.forEachChild(node, collectDeclarations);
+  }
+  collectDeclarations(file);
+
+  const cache = new Map<string, readonly string[]>();
+  function resolveTabIds(expression: ts.Expression, resolving = new Set<string>()): readonly string[] {
+    if (
+      ts.isParenthesizedExpression(expression) ||
+      ts.isAsExpression(expression) ||
+      ts.isTypeAssertionExpression(expression) ||
+      ts.isSatisfiesExpression(expression)
+    ) {
+      return resolveTabIds(expression.expression, resolving);
+    }
+
+    if (ts.isConditionalExpression(expression)) {
+      return unique([
+        ...resolveTabIds(expression.whenTrue, resolving),
+        ...resolveTabIds(expression.whenFalse, resolving),
+      ]);
+    }
+
+    if (ts.isIdentifier(expression)) {
+      const cached = cache.get(expression.text);
+      if (cached) return cached;
+      if (resolving.has(expression.text)) return [];
+      const declaration = declarations.get(expression.text);
+      if (!declaration) return [];
+      const resolved = resolveTabIds(declaration, new Set(resolving).add(expression.text));
+      cache.set(expression.text, resolved);
+      return resolved;
+    }
+
+    if (ts.isObjectLiteralExpression(expression)) {
+      const id = expression.properties.find(
+        (property): property is ts.PropertyAssignment =>
+          ts.isPropertyAssignment(property) && property.name.getText(file) === "id",
+      );
+      if (
+        id &&
+        (ts.isStringLiteral(id.initializer) || ts.isNoSubstitutionTemplateLiteral(id.initializer))
+      ) {
+        return [id.initializer.text];
+      }
+      return [];
+    }
+
+    if (ts.isArrayLiteralExpression(expression)) {
+      return unique(
+        expression.elements.flatMap((element) =>
+          ts.isSpreadElement(element)
+            ? resolveTabIds(element.expression, resolving)
+            : resolveTabIds(element, resolving),
+        ),
+      );
+    }
+
+    return [];
+  }
+
+  const usages: Array<{
+    moduleKind: string;
+    tabsVariable: string | null;
+    tabIds: readonly string[];
+  }> = [];
+
+  function inspectOpeningElement(node: ts.JsxOpeningLikeElement) {
+    if (node.tagName.getText(file) !== "ModuleEditorTabs") return;
+    const moduleKind = getJsxStringValue(getJsxAttribute(node, "moduleKind"));
+    const tabsAttribute = getJsxAttribute(node, "tabs");
+    const tabsExpression =
+      tabsAttribute?.initializer &&
+      ts.isJsxExpression(tabsAttribute.initializer) &&
+      tabsAttribute.initializer.expression
+        ? tabsAttribute.initializer.expression
+        : null;
+    assert.ok(moduleKind, `${path} must declare a literal ModuleEditorTabs moduleKind`);
+    assert.ok(tabsExpression, `${path} must declare a resolvable ModuleEditorTabs tabs expression`);
+    const tabIds = resolveTabIds(tabsExpression);
+    assert.ok(tabIds.length > 0, `${path} must expose at least one actual ModuleEditorTabs tab id`);
+    usages.push({
+      moduleKind,
+      tabsVariable: ts.isIdentifier(tabsExpression) ? tabsExpression.text : null,
+      tabIds,
+    });
+  }
+
+  function visit(node: ts.Node) {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      inspectOpeningElement(node);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  return usages;
+}
+
+const rootEditorInventory: ModuleEditorMetadataInventoryEntry[] = moduleEditorRoots
+  .filter((path) => !path.endsWith("ContentModuleEditClient.tsx"))
+  .flatMap((sourcePath) =>
+    collectModuleEditorTabs(sourcePath).map(({ moduleKind, tabIds }) => ({
+      sourcePath,
+      moduleKind,
+      moduleSlug: null,
+      tabIds,
+    })),
+  );
+
+const contentEditorPath = "src/components/admin/page-blocks/ContentModuleEditClient.tsx";
+const contentTabUsages = collectModuleEditorTabs(contentEditorPath);
+const contentTabsByVariable = new Map(
+  contentTabUsages
+    .filter((usage) => usage.tabsVariable !== null)
+    .map((usage) => [usage.tabsVariable as string, usage.tabIds]),
+);
+const defaultContentTabs = contentTabUsages.find((usage) => usage.tabsVariable === null)?.tabIds;
+assert.ok(defaultContentTabs, "Content Module Editor must expose its actual default tab ids");
+
+const specializedContentTabVariables: Partial<
+  Record<(typeof STRUCTURAL_CONTENT_TEMPLATE_SLUGS)[number], string>
+> = {
+  "home-story": "homeStoryTabs",
+  "home-contact": "homeContactTabs",
+  "about-cta": "aboutCtaTabs",
+};
+
+const contentEditorInventory: ModuleEditorMetadataInventoryEntry[] = [
+  {
+    sourcePath: contentEditorPath,
+    moduleKind: "content",
+    moduleSlug: null,
+    tabIds: defaultContentTabs,
+  },
+  ...STRUCTURAL_CONTENT_TEMPLATE_SLUGS.map((moduleSlug) => {
+    const tabsVariable = specializedContentTabVariables[moduleSlug];
+    const tabIds = tabsVariable ? contentTabsByVariable.get(tabsVariable) : defaultContentTabs;
+    assert.ok(tabIds, `Content Module Editor tabs are not discoverable for ${moduleSlug}`);
+    return {
+      sourcePath: contentEditorPath,
+      moduleKind: "content",
+      moduleSlug,
+      tabIds,
+    };
+  }),
+];
+
+const moduleEditorMetadataInventory = [...rootEditorInventory, ...contentEditorInventory];
+const missingMetadataCombinations = moduleEditorMetadataInventory.flatMap(
+  ({ moduleKind, moduleSlug, tabIds }) =>
+    tabIds.flatMap((tabId) => {
+      const metadata = getModuleEditorSectionMetadata(moduleKind, tabId, moduleSlug);
+      const complete =
+        metadata !== null &&
+        metadata.navigationLabelAr.trim().length > 0 &&
+        metadata.sectionHeadingAr.trim().length > 0 &&
+        metadata.sectionDescriptionAr.trim().length > 0 &&
+        metadata.icon.trim().length > 0;
+      return complete ? [] : [`${moduleKind}:${moduleSlug ?? "default"}:${tabId}`];
+    }),
+);
+
+moduleEditorMetadataInventory.forEach(({ moduleKind, moduleSlug, tabIds }) => {
+  console.log(`INVENTORY ${moduleKind}:${moduleSlug ?? "default"} -> ${tabIds.join(",")}`);
+});
+
+check(
+  `the current module registry completely owns every actual Module Editor Header and Section Hero combination; missing=${missingMetadataCombinations.join(",") || "none"}`,
+  moduleEditorMetadataInventory.every(
+    ({ moduleKind, moduleSlug }) =>
+      getModuleEditorHeaderMetadata(moduleKind, moduleSlug, "Module instance") !== null &&
+      (moduleSlug === null || getSlotModuleSlugMetadata(moduleSlug) !== null),
+  ) && missingMetadataCombinations.length === 0,
+);
+
+check(
+  "settings composition is shared by every root with a dedicated Settings tab",
+  moduleEditorRootSources
+    .filter(({ path }) => !path.endsWith("HeroEditClient.tsx"))
+    .every(({ source }) => source.includes("<ModuleEditorSettingsComposition")),
+);
+
+check(
+  "all module-specific section surfaces delegate to the shared Module Editor section owner",
+  moduleEditorFieldSources
+    .filter(({ path }) => !path.endsWith("FeedModuleFilterFields.tsx"))
+    .every(({ source }) => source.includes("<ModuleEditorSection")) &&
+    moduleEditorSources.every(({ source }) =>
+      !source.includes('space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5'),
+    ),
+);
+
+check(
+  "Module Editors contain no native selects and no raw on-off checkboxes",
+  moduleEditorSources.every(({ source }) => !source.includes("<select") && !source.includes('type="checkbox"')),
+);
+
+check(
+  "page assignment multi-selection is the only explicit raw checkbox allowlist",
+  read("src/components/admin/page-blocks/ModulePageAssignmentsField.tsx").includes('name="page_ids"') &&
+    read("src/components/admin/page-blocks/ModulePageAssignmentsField.tsx").match(/type="checkbox"/g)?.length === 1,
+);
+
+check(
+  "technical identity presentation is explicit and structural content reads registry metadata",
+  read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes("<ModuleEditorTechnicalIdentity") &&
+    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes("moduleSlug={presentationSlug}") &&
+    [
+      "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+      "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+      "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+    ].every((path) => read(path).includes("<ModuleEditorTechnicalIdentity")) &&
+    [
+      "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+      "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+    ].every((path) => !read(path).includes('name="slug"')),
+);
+
+check(
+  "shared listboxes, switches, and grids own standard Module Editor controls",
+  [
+    "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+    "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+    "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+    "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+    "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+    "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+    "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+    "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
+    "src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx",
+    "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
+    "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+  ].every((path) => read(path).includes("AdminFormListboxSelect")) &&
+    [
+      "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+      "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
+      "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
+      "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
+      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+    ].every((path) => read(path).includes("AdminFormSwitch")) &&
+    [
+      "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+      "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+      "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
+      "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
+      "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
+      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+    ].every((path) => read(path).includes("AdminFormGrid")),
 );
 
 console.log(`Shared Specialized Editors Presentation verification passed (${passed} checks).`);

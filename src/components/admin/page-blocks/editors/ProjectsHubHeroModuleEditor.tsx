@@ -1,5 +1,8 @@
 "use client";
 
+import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import { AdminFormListboxSelect } from "../../ui";
+
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   PROJECTS_HUB_HERO_SELECTION_MODES,
@@ -15,19 +18,17 @@ export default function ProjectsHubHeroModuleEditor({ config }: ProjectsHubHeroM
     <div className="space-y-6">
       <input type="hidden" name="config_schema" value="projects-hub-hero" />
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">طريقة اختيار الشرائح</span>
-          <select name="selection_mode" defaultValue={config.selectionMode} className={fieldClassName()} dir="ltr">
-            {PROJECTS_HUB_HERO_SELECTION_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode === "auto_residential_with_media"
-                  ? "تلقائي — سكني مع وسائط"
-                  : mode}
-              </option>
-            ))}
-          </select>
-        </label>
+      <ModuleEditorSection>
+        <AdminFormListboxSelect
+          name="selection_mode"
+          label="طريقة اختيار الشرائح"
+          defaultValue={config.selectionMode}
+          options={PROJECTS_HUB_HERO_SELECTION_MODES.map((mode) => ({
+            value: mode,
+            label: mode === "auto_residential_with_media" ? "تلقائي — سكني مع وسائط" : mode,
+          }))}
+          dir="ltr"
+        />
 
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">التشغيل التلقائي (مللي ثانية)</span>
@@ -53,7 +54,7 @@ export default function ProjectsHubHeroModuleEditor({ config }: ProjectsHubHeroM
             className={fieldClassName("resize-y leading-7")}
           />
         </label>
-      </section>
+      </ModuleEditorSection>
     </div>
   );
 }

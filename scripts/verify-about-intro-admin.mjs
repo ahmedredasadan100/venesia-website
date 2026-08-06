@@ -23,19 +23,24 @@ function assert(condition, message) {
 }
 
 const client = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
+const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
+const presentationRegistry = read("src/lib/page-composition/module-registry-metadata.ts");
 const editor = read("src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx");
 const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 const whoWeAre = read("src/components/modules/WhoWeAreModuleSection.tsx");
 const mapper = read("src/components/about/about-cms-mappers.ts");
 
 assert(client.includes('isAboutIntro = editorKey === "about-intro"'), "about-intro chrome flag missing");
-assert(client.includes("AdminPageContextHeader"), "unified AdminPageContextHeader missing");
-assert(client.includes('title="من نحن — المقدمة"'), "Arabic about-intro header title missing");
+assert(presentation.includes("AdminPageContextHeader"), "unified AdminPageContextHeader owner missing");
+assert(
+  presentationRegistry.includes('"about-intro"') && presentationRegistry.includes('labelAr: "من نحن — المقدمة"'),
+  "Arabic about-intro header metadata missing from the shared registry",
+);
 assert(
   client.includes("usesUnifiedModuleChrome || usesProjectsHubHeader ? null"),
   "ModuleDependencyHintsPanel must not render for about-intro",
 );
-assert(client.includes("المعرّف التقني للموديول — للقراءة فقط."), "about-intro slug helper missing");
+assert(presentation.includes("معرّف بنيوي للقراءة فقط"), "shared structural slug helper missing");
 assert(
   client.includes("usesLockedInternalSlug"),
   "about-intro slug must be read-only like home modules",

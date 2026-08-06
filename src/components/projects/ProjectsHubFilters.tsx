@@ -64,14 +64,6 @@ export default function ProjectsHubFilters({
               );
             })}
           </div>
-
-          <button
-            type="button"
-            onClick={() => onFilterChange("all")}
-            className="w-full rounded-xl border border-[#D8B87A]/20 px-5 py-3 text-sm text-[#D8B87A] transition duration-300 hover:border-[#D8B87A]/55 hover:bg-[#D8B87A]/10 md:w-auto"
-          >
-            إعادة تعيين الفلاتر
-          </button>
         </div>
       </div>
     </section>

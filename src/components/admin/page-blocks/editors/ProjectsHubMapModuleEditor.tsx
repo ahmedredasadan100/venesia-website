@@ -1,5 +1,7 @@
 "use client";
 
+import { ModuleEditorSection } from "../ModuleEditorPresentation";
+
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
@@ -49,7 +51,7 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
       <input type="hidden" name="config_schema" value="projects-hub-map" />
       <input type="hidden" name="pin_count" value={String(pins.length)} />
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">خريطة المشروعات</h2>
 
         <label className="block space-y-2">
@@ -70,9 +72,9 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
           dimensionHint="content"
           helperText={`الافتراضي: ${PROJECTS_HUB_DEFAULT_MAP_IMAGE}`}
         />
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-white">دبابيس الخريطة</h2>
           <button
@@ -164,7 +166,7 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
             </div>
           ))}
         </div>
-      </section>
+      </ModuleEditorSection>
     </div>
   );
 }

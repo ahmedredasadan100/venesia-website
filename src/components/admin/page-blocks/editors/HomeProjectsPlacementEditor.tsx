@@ -1,10 +1,15 @@
 "use client";
 
+import {
+  ModuleEditorHeadingVisibilityRow,
+  ModuleEditorSection,
+} from "../ModuleEditorPresentation";
+
 import { useState } from "react";
 
 import AdminNotice from "../../AdminNotice";
 import AdminRichTextEditor from "../../AdminRichTextEditor";
-import { AdminLinkField } from "../../ui";
+import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { HomeProjectsModuleConfig } from "../../../../lib/page-blocks/configs";
@@ -24,12 +29,7 @@ function VisibilityToggle({
   label: string;
   defaultChecked: boolean;
 }) {
-  return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-      <span>{label}</span>
-      <input type="checkbox" name={name} value="true" defaultChecked={defaultChecked} className="cursor-pointer" />
-    </label>
-  );
+  return <AdminFormSwitch name={name} label={label} value="true" defaultChecked={defaultChecked} surface />;
 }
 
 function AlignmentChoice({
@@ -167,7 +167,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
         message="الصور والأكواد والأوصاف وترتيب الظهور تُدار من لوحة المشاريع عبر «الظهور في الصفحة الرئيسية» و«ترتيب الصفحة الرئيسية» — وليس من هذا الموديول."
       />
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">عرض المشاريع</h2>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عدد المشاريع المعروضة</span>
@@ -192,43 +192,41 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
         <p className="text-xs leading-6 text-white/45">
           موضع زر «استكشف المشروع» داخل كل كارت في الصفحة الرئيسية فقط — لا يؤثر على صفحة المشاريع أو المميز.
         </p>
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">نصوص السكشن</h2>
         <p className="text-xs leading-6 text-white/45">
           اترك أي حقل نصي فارغًا لاستخدام النص الافتراضي الحالي على الموقع.
         </p>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <VisibilityToggle
-            name="show_eyebrow"
-            label="إظهار العنوان التمهيدي الصغير"
-            defaultChecked={config.showEyebrow !== false}
-          />
-          <VisibilityToggle name="show_title" label="إظهار العنوان" defaultChecked={config.showTitle !== false} />
-          <VisibilityToggle
-            name="show_intro"
-            label="إظهار النص التمهيدي"
-            defaultChecked={config.showIntro !== false}
-          />
-          <VisibilityToggle
-            name="show_footer_cta"
-            label="إظهار زر أسفل السكشن"
-            defaultChecked={config.showFooterCta !== false}
-          />
-        </div>
-
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان التمهيدي الصغير</span>
-          <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-        </label>
+        <ModuleEditorHeadingVisibilityRow
+          name="show_eyebrow"
+          label="إظهار العنوان التمهيدي الصغير"
+          defaultChecked={config.showEyebrow !== false}
+        >
+          <label className="block min-w-0 space-y-2">
+            <span className="text-xs font-semibold text-white/55">العنوان التمهيدي الصغير</span>
+            <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+          </label>
+        </ModuleEditorHeadingVisibilityRow>
         <EyebrowFormatControls boldDefault={eyebrowBold} alignmentDefault={eyebrowAlignment} />
 
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان</span>
-          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-        </label>
+        <ModuleEditorHeadingVisibilityRow
+          name="show_title"
+          label="إظهار العنوان"
+          defaultChecked={config.showTitle !== false}
+        >
+          <label className="block min-w-0 space-y-2">
+            <span className="text-xs font-semibold text-white/55">العنوان</span>
+            <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
+          </label>
+        </ModuleEditorHeadingVisibilityRow>
+
+        <AdminFormGrid>
+          <VisibilityToggle name="show_intro" label="إظهار النص التمهيدي" defaultChecked={config.showIntro !== false} />
+          <VisibilityToggle name="show_footer_cta" label="إظهار زر أسفل السكشن" defaultChecked={config.showFooterCta !== false} />
+        </AdminFormGrid>
 
         <AdminRichTextEditor
           name="intro"
@@ -239,9 +237,9 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
           minHeight={160}
           helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
         />
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">زر أسفل السكشن</h2>
 
         <label className="block space-y-2">
@@ -261,24 +259,22 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
           defaultValue={linkDefaultFromContainer(config.footerCta as Record<string, unknown>)}
         />
 
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">فتح الرابط</span>
-          <select
-            name="footer_cta_open_target"
-            defaultValue={config.footerCta?.target === "_blank" ? "_blank" : "_self"}
-            className={fieldClassName()}
-          >
-            <option value="_self">نفس النافذة</option>
-            <option value="_blank">نافذة جديدة</option>
-          </select>
-        </label>
+        <AdminFormListboxSelect
+          name="footer_cta_open_target"
+          label="فتح الرابط"
+          defaultValue={config.footerCta?.target === "_blank" ? "_blank" : "_self"}
+          options={[
+            { value: "_self", label: "نفس النافذة" },
+            { value: "_blank", label: "نافذة جديدة" },
+          ]}
+        />
 
         <AlignmentChoice
           name="footer_cta_alignment"
           label="محاذاة الزر"
           defaultValue={buttonAlignment}
         />
-      </section>
+      </ModuleEditorSection>
     </div>
   );
 }

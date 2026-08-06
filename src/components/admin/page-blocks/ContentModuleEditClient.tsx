@@ -1,13 +1,22 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
 import AdminNotice from "../AdminNotice";
-import { AdminActionButton, AdminPageContextHeader, AdminStickyFormBar } from "../ui";
-import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader from "./BlockEditorContextHeader";
-import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
+import {
+  AdminActionButton,
+  AdminFormListboxSelect,
+} from "../ui";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
-import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
+import {
+  MODULE_EDITOR_STATUS_OPTIONS,
+  ModuleEditorHeader,
+  ModuleEditorFeedback,
+  ModuleEditorPagesTab,
+  ModuleEditorSaveArea,
+  ModuleEditorSection,
+  ModuleEditorSettingsComposition,
+  ModuleEditorTabs,
+  ModuleEditorTechnicalIdentity,
+} from "./ModuleEditorPresentation";
 import AboutIntroModuleEditor from "./editors/AboutIntroModuleEditor";
 import AboutIntroSingleImageModuleEditor from "./editors/AboutIntroSingleImageModuleEditor";
 import AboutApproachModuleEditor from "./editors/AboutApproachModuleEditor";
@@ -37,35 +46,14 @@ import {
   asProjectsHubListingConfig,
   asProjectsHubMapConfig,
 } from "../../../lib/page-blocks/projects-hub-config";
-import { getContentModuleEditorKey } from "../../../lib/page-blocks/module-edit-registry";
-import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
+import {
+  getContentModuleEditorKey,
+  isStructuralContentTemplateSlug,
+} from "../../../lib/page-blocks/module-edit-registry";
+import {
+  getSlotCompatibilityLabel,
+} from "../../../lib/page-composition/slot-module-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
-
-function StickyModuleSaveDock({
-  title,
-  description,
-  saveLabel = "حفظ الموديول",
-}: {
-  title: string;
-  description: string;
-  saveLabel?: string;
-}) {
-  const { pending } = useFormStatus();
-
-  return (
-    <AdminStickyFormBar className="mt-8" title={title} description={description}>
-      <button
-        type="submit"
-        disabled={pending}
-        className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-[#D8B87A] px-6 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d] ${
-          pending ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-        }`}
-      >
-        {pending ? "جارٍ الحفظ..." : saveLabel}
-      </button>
-    </AdminStickyFormBar>
-  );
-}
 
 type ContentModuleEditClientProps = {
   block: {
@@ -117,103 +105,31 @@ export default function ContentModuleEditClient({
                       : editorKey === "projects-hub-map"
                         ? asProjectsHubMapConfig(block.config)
                         : asContentConfig(block.config);
-  const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
-  const eyebrow =
-    editorKey === "home-contact"
-      ? "موديول التواصل — الرئيسية"
-      : editorKey === "home-projects"
-        ? "موديول المشروعات — الرئيسية"
-        : editorKey === "home-trust"
-          ? "موديول الثقة — الرئيسية"
-          : editorKey === "home-story"
-            ? "موديول القصة — الرئيسية"
-            : editorKey === "about-intro"
-              ? "موديول محتوى"
-              : editorKey === "about-intro-single-image"
-                ? "موديول محتوى"
-                : editorKey === "vision-goals"
-                  ? "موديول الرؤية والأهداف"
-                  : editorKey === "about-cta"
-                  ? "موديول دعوة للتواصل"
-                  : editorKey === "about-principles"
-                    ? "موديول المبادئ"
-                    : editorKey === "about-approach"
-                      ? "موديول المنهج"
-                      : editorKey === "projects-hub-hero"
-                        ? "هيرو صفحة المشروعات"
-                        : editorKey === "projects-hub-featured"
-                          ? "المشروعات المميزة"
-                          : editorKey === "projects-hub-listing"
-                            ? "قائمة المشروعات"
-                            : editorKey === "projects-hub-map"
-                              ? "خريطة المشروعات"
-                              : "موديول محتوى";
-  const description =
-    editorKey === "home-contact"
-      ? "تحكّم في نصوص وصورة وزر ووسائل التواصل داخل قسم التواصل في الصفحة الرئيسية. كل التغييرات تنعكس على العرض العام بعد الحفظ."
-      : editorKey === "home-projects"
-        ? "تحكّم في نصوص وعرض قسم مشروعات فينيسيا في الصفحة الرئيسية. بيانات المشروعات نفسها تُدار من إدارة المشروعات."
-        : editorKey === "home-trust"
-          ? "لماذا يثق السوق العقاري في فينيسيا؟ — للصفحة الرئيسية فقط."
-          : editorKey === "home-story"
-            ? "تحكّم في نصوص وصور وزر قسم القصة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
-            : editorKey === "about-intro"
-              ? "تحكّم في نصوص وصور وبطاقات قسم من نحن في صفحة من نحن. التغييرات تنعكس على العرض العام بعد الحفظ."
-              : editorKey === "about-intro-single-image"
-                ? "تحكّم في نص ومحتوى وصورة واحدة لقسم من نحن، مع اختيار موضع الصورة يمين أو شمال على سطح المكتب."
-                : editorKey === "vision-goals"
-                  ? "تحكّم في نصوص وصورة قسم الرؤية والأهداف. التغييرات تنعكس على العرض العام بعد الحفظ."
-                  : editorKey === "about-cta"
-                  ? "تحكّم في نصوص وصورة وزر ووسائل التواصل لقسم الدعوة للتواصل. التغييرات تنعكس على العرض العام بعد الحفظ."
-                  : editorKey === "about-principles"
-                    ? "تحكّم في عناوين وبطاقات قسم المبادئ. التغييرات تنعكس على العرض العام بعد الحفظ."
-                    : editorKey === "about-approach"
-                      ? "تحكّم في عنوان ومنهج العمل. افصل الجزء الثاني بشرطة عند الحاجة للتمييز البصري."
-                      : editorKey === "projects-hub-listing"
-                        ? "تحكّم في العناصر الظاهرة داخل قائمة المشروعات. بيانات كل مشروع نفسها تُدار من قسم إدارة المشروعات."
-                        : editorKey.startsWith("projects-hub-")
-                          ? "إعدادات عرض صفحة المشروعات فقط — بيانات المشروعات من إدارة المشروعات."
-                          : "عدّل المحتوى ومواضع العرض من التبويبات أدناه.";
-
-  const projectsHubHeader =
+  const presentationSlug = editorKey === "generic" ? block.slug : editorKey;
+  const projectsHubNavigation =
     editorKey === "projects-hub-hero"
       ? {
-          eyebrow: "هيرو صفحة المشروعات",
-          title: "هيرو صفحة المشروعات",
-          description:
-            "تحكّم في إعدادات عرض هيرو صفحة المشروعات. بيانات المشروعات نفسها تُدار من قسم إدارة المشروعات.",
           backHref: "/admin/pages-blocks/pages/36",
           backLabel: "الرجوع لصفحة المشروعات",
         }
       : editorKey === "projects-hub-featured"
         ? {
-            eyebrow: "المشروعات المميزة",
-            title: "المشروعات المميزة",
-            description:
-              "تحكّم في طريقة عرض قسم المشروعات المميزة. بيانات كل مشروع وحالة التمييز تُدار من قسم إدارة المشروعات.",
             backHref: "/admin/pages-blocks/pages/36",
             backLabel: "الرجوع لصفحة المشروعات",
           }
         : editorKey === "projects-hub-listing"
           ? {
-              eyebrow: "قائمة المشروعات",
-              title: "قائمة المشروعات",
-              description:
-                "تحكّم في العناصر الظاهرة داخل قائمة المشروعات. بيانات كل مشروع نفسها تُدار من قسم إدارة المشروعات.",
               backHref: "/admin/pages-blocks/blocks/content",
               backLabel: "الرجوع لبلوكات المحتوى",
             }
           : editorKey === "projects-hub-map"
             ? {
-                eyebrow: "خريطة المشروعات",
-                title: "خريطة المشروعات",
-                description: "تحكّم في إعدادات عرض خريطة المشروعات وربطها بالمشروعات المسجّلة في النظام.",
                 backHref: "/admin/pages-blocks/pages/36",
                 backLabel: "الرجوع لصفحة المشروعات",
               }
             : null;
 
-  const usesProjectsHubHeader = Boolean(projectsHubHeader);
+  const usesProjectsHubHeader = Boolean(projectsHubNavigation);
   const isHomeStory = editorKey === "home-story";
   const isHomeContact = editorKey === "home-contact";
   const isHomeProjects = editorKey === "home-projects";
@@ -233,50 +149,31 @@ export default function ContentModuleEditClient({
     isHomeProjects ||
     isHomeTrust ||
     usesAboutStructuredChrome;
-  const usesLockedInternalSlug =
-    usesHomeModuleChrome || usesAboutStructuredChrome;
+  const usesLockedInternalSlug = isStructuralContentTemplateSlug(block.slug, block.variant);
   const hubStatus = statusMeta(block.status);
   const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
   const homeContactConfig = isHomeContact ? (config as ReturnType<typeof asAboutCtaConfig>) : null;
 
   const settingsTab = {
     id: "settings",
-    navigationLabel: "الإعدادات",
-    sectionHeading: "إعدادات الموديول",
-    sectionDescription: "أدر الهوية الداخلية وحالة نشر الموديول.",
-    icon: "settings" as const,
     content: (
-      <div className="space-y-5">
-        {usesUnifiedModuleChrome || usesProjectsHubHeader ? null : (
+      <ModuleEditorSettingsComposition
+        context={usesUnifiedModuleChrome || usesProjectsHubHeader ? null : (
           <ModuleDependencyHintsPanel moduleKind="content" templateSlug={block.slug} />
         )}
-        <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+        primary={
+        <ModuleEditorSection className="max-w-xl">
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">
             {usesAboutStructuredChrome ? "اسم الموديول" : "الاسم"}
           </span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
         </label>
-        {usesLockedInternalSlug ? (
-          <div className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">المعرّف التقني</span>
-            <input type="hidden" name="slug" value={block.slug} />
-            <div
-              dir="ltr"
-              className="w-full cursor-default select-text rounded-2xl border border-white/8 bg-[#05070B]/90 px-4 py-3 font-en text-sm text-white/80"
-            >
-              {block.slug}
-            </div>
-            <p className="text-xs leading-6 text-white/45">
-              المعرّف التقني للموديول — للقراءة فقط.
-            </p>
-          </div>
-        ) : (
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">المعرّف التقني</span>
-            <input name="slug" defaultValue={block.slug} required dir="ltr" className={fieldClassName()} />
-          </label>
-        )}
+        <ModuleEditorTechnicalIdentity
+          mode={usesLockedInternalSlug ? "read-only" : "editable"}
+          value={block.slug}
+          inputClassName={fieldClassName()}
+        />
         {usesInternalDescriptionField ? (
           <label className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
@@ -295,58 +192,35 @@ export default function ContentModuleEditClient({
             <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
           </label>
         )}
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">الحالة</span>
-          <select name="status" defaultValue={block.status} className={fieldClassName()}>
-            <option value="draft">مسودة</option>
-            <option value="published">منشور</option>
-            <option value="unpublished">مخفي</option>
-            <option value="archived">أرشيف</option>
-          </select>
-        </label>
-        </section>
-      </div>
+        <AdminFormListboxSelect
+          name="status"
+          label="الحالة"
+          defaultValue={block.status}
+          options={MODULE_EDITOR_STATUS_OPTIONS}
+        />
+        </ModuleEditorSection>
+        }
+      />
     ),
   };
 
   const pagesTab = {
     id: "pages",
-    navigationLabel: usesHomeModuleChrome ? "الظهور" : "الصفحات",
-    sectionHeading: "الظهور في الصفحات",
-    sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
-    icon: "plans" as const,
-    content: (
-      <div className="space-y-5">
-        <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-        <ModulePageAssignmentsField pages={assignmentContext.pages} assignedPageIds={assignedPageIds} />
-      </div>
-    ),
+    content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
   };
 
   const homeStoryTabs = homeStoryConfig
     ? [
         {
           id: "text",
-          navigationLabel: "النص",
-          sectionHeading: "نص قسم القصة",
-          sectionDescription: "أدر العنوان والنصوص التعريفية للقسم.",
-          icon: "content" as const,
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="text" />,
         },
         {
           id: "images",
-          navigationLabel: "الصور",
-          sectionHeading: "صور قسم القصة",
-          sectionDescription: "اختر صور القسم واضبط أوصافها وترتيبها.",
-          icon: "media" as const,
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="images" />,
         },
         {
           id: "cta",
-          navigationLabel: "الزر والرابط",
-          sectionHeading: "زر قسم القصة",
-          sectionDescription: "أدر نص زر الإجراء ووجهته.",
-          icon: "section" as const,
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="cta" />,
         },
         pagesTab,
@@ -358,34 +232,18 @@ export default function ContentModuleEditClient({
     ? [
         {
           id: "text",
-          navigationLabel: "النص",
-          sectionHeading: "نص قسم التواصل",
-          sectionDescription: "أدر العنوان والنصوص التعريفية للقسم.",
-          icon: "content" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="text" />,
         },
         {
           id: "image",
-          navigationLabel: "الصورة",
-          sectionHeading: "صورة قسم التواصل",
-          sectionDescription: "اختر صورة القسم وأضف وصفها البديل.",
-          icon: "media" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="image" />,
         },
         {
           id: "cta",
-          navigationLabel: "الزر والرابط",
-          sectionHeading: "زر قسم التواصل",
-          sectionDescription: "أدر نص زر الإجراء ووجهته والملاحظة المصاحبة.",
-          icon: "section" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="cta" />,
         },
         {
           id: "contacts",
-          navigationLabel: "وسائل التواصل",
-          sectionHeading: "وسائل التواصل",
-          sectionDescription: "أدر بيانات التواصل وترتيب ظهورها وروابطها.",
-          icon: "location" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="contacts" />,
         },
         pagesTab,
@@ -397,34 +255,18 @@ export default function ContentModuleEditClient({
     ? [
         {
           id: "text",
-          navigationLabel: "النص",
-          sectionHeading: "نص الدعوة للتواصل",
-          sectionDescription: "أدر العنوان التمهيدي والعنوان والوصف.",
-          icon: "content" as const,
           content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="text" />,
         },
         {
           id: "image",
-          navigationLabel: "الصورة",
-          sectionHeading: "صورة الدعوة للتواصل",
-          sectionDescription: "اختر صورة القسم وأضف وصفها البديل.",
-          icon: "media" as const,
           content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="image" />,
         },
         {
           id: "cta",
-          navigationLabel: "الزر والرابط",
-          sectionHeading: "زر الدعوة للتواصل",
-          sectionDescription: "أدر نص زر الإجراء ووجهته والملاحظة المصاحبة.",
-          icon: "section" as const,
           content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="cta" />,
         },
         {
           id: "contacts",
-          navigationLabel: "وسائل التواصل",
-          sectionHeading: "بيانات التواصل",
-          sectionDescription: "أدر بيانات التواصل وترتيب ظهورها وروابطها.",
-          icon: "location" as const,
           content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="contacts" />,
         },
         pagesTab,
@@ -453,15 +295,19 @@ export default function ContentModuleEditClient({
                     : isHomeTrust
                       ? "تم حفظ موديول الثقة وتحديث الصفحة الرئيسية بنجاح."
                       : "تم حفظ الموديول بنجاح.";
-  const activePanelContext = saved ? <AdminNotice variant="success" message={savedMessage} /> : null;
+  const activePanelContext = (
+    <ModuleEditorFeedback>
+      {saved ? <AdminNotice variant="success" message={savedMessage} /> : null}
+    </ModuleEditorFeedback>
+  );
 
   return (
     <div className={`space-y-6 ${usesUnifiedModuleChrome ? "pb-28" : "pb-10"}`} dir="rtl">
       {isAboutIntro ? (
-        <AdminPageContextHeader
-          eyebrow="موديول محتوى"
-          title="من نحن — المقدمة"
-          description="تحكّم في نصوص وصور وبطاقات قسم من نحن في صفحة من نحن. التغييرات تنعكس على العرض العام بعد الحفظ."
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -475,10 +321,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isAboutIntroSingleImage ? (
-        <AdminPageContextHeader
-          eyebrow="موديول محتوى"
-          title="من نحن — محتوى وصورة واحدة"
-          description="تحكّم في نص ومحتوى وصورة واحدة لقسم من نحن، مع اختيار موضع الصورة يمين أو شمال على سطح المكتب."
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -492,10 +338,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isVisionGoals ? (
-        <AdminPageContextHeader
-          eyebrow="موديول الرؤية والأهداف"
-          title="الرؤية والأهداف"
-          description="تحكّم في نصوص وصورة قسم الرؤية والأهداف. التغييرات تنعكس على العرض العام بعد الحفظ."
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -509,10 +355,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isAboutCta ? (
-        <AdminPageContextHeader
-          eyebrow="موديول دعوة للتواصل"
-          title={block.name}
-          description={description}
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -526,10 +372,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isAboutPrinciples ? (
-        <AdminPageContextHeader
-          eyebrow="موديول المبادئ"
-          title={block.name}
-          description={description}
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -543,10 +389,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isAboutApproach ? (
-        <AdminPageContextHeader
-          eyebrow="موديول المنهج"
-          title={block.name}
-          description={description}
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -560,10 +406,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isHomeStory ? (
-        <AdminPageContextHeader
-          eyebrow="موديول القصة — الرئيسية"
-          title={block.name}
-          description="تحكّم في نصوص وصور وزر قسم القصة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -577,10 +423,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isHomeContact ? (
-        <AdminPageContextHeader
-          eyebrow="موديول التواصل — الرئيسية"
-          title={block.name}
-          description="تحكّم في نصوص وصورة وزر ووسائل التواصل داخل قسم التواصل في الصفحة الرئيسية. كل التغييرات تنعكس على العرض العام بعد الحفظ."
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -594,10 +440,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isHomeProjects ? (
-        <AdminPageContextHeader
-          eyebrow="موديول المشروعات — الرئيسية"
-          title={block.name}
-          description="تحكّم في نصوص وعرض قسم مشروعات فينيسيا في الصفحة الرئيسية. بيانات المشروعات نفسها تُدار من إدارة المشروعات."
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -611,10 +457,10 @@ export default function ContentModuleEditClient({
           }
         />
       ) : isHomeTrust ? (
-        <AdminPageContextHeader
-          eyebrow="موديول الثقة — الرئيسية"
-          title={block.name}
-          description="تحكّم في نصوص وبطاقات قسم الثقة في الصفحة الرئيسية. كل التغييرات هنا تنعكس على العرض العام بعد الحفظ."
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -627,11 +473,11 @@ export default function ContentModuleEditClient({
             </>
           }
         />
-      ) : projectsHubHeader ? (
-        <AdminPageContextHeader
-          eyebrow={projectsHubHeader.eyebrow}
-          title={projectsHubHeader.title}
-          description={projectsHubHeader.description}
+      ) : projectsHubNavigation ? (
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           meta={hubStatus.label}
           actions={
             <>
@@ -641,19 +487,19 @@ export default function ContentModuleEditClient({
               <AdminActionButton href="/projects" variant="dark">
                 معاينة صفحة المشروعات
               </AdminActionButton>
-              <AdminActionButton href={projectsHubHeader.backHref} variant="ghost">
-                {projectsHubHeader.backLabel}
+              <AdminActionButton href={projectsHubNavigation.backHref} variant="ghost">
+                {projectsHubNavigation.backLabel}
               </AdminActionButton>
             </>
           }
         />
       ) : (
-        <BlockEditorContextHeader
+        <ModuleEditorHeader
+          moduleKind="content"
+          moduleSlug={presentationSlug}
+          entityName={block.name}
           backHref="/admin/pages-blocks/blocks/content"
           backLabel="الرجوع لبلوكات المحتوى"
-          eyebrow={eyebrow}
-          title={block.name}
-          description={description}
           status={block.status}
           saved={saved}
           slotContext={getSlotCompatibilityLabel("content")}
@@ -714,21 +560,19 @@ export default function ContentModuleEditClient({
         {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
 
         {isHomeStory ? (
-          <AdminModuleTabs nowrap tabs={homeStoryTabs} activePanelContext={activePanelContext} />
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeStoryTabs} activePanelContext={activePanelContext} />
         ) : isHomeContact ? (
-          <AdminModuleTabs nowrap tabs={homeContactTabs} activePanelContext={activePanelContext} />
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeContactTabs} activePanelContext={activePanelContext} />
         ) : isAboutCta ? (
-          <AdminModuleTabs nowrap tabs={aboutCtaTabs} activePanelContext={activePanelContext} />
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={aboutCtaTabs} activePanelContext={activePanelContext} />
         ) : (
-          <AdminModuleTabs
+          <ModuleEditorTabs
+            moduleKind="content"
+            moduleSlug={presentationSlug}
             activePanelContext={activePanelContext}
             tabs={[
               {
                 id: "content",
-                navigationLabel: "المحتوى",
-                sectionHeading: "محتوى الموديول",
-                sectionDescription: "أدر المحتوى والإعدادات المتخصصة لهذا الموديول.",
-                icon: "content",
                 content:
                   editorKey === "about-intro" ? (
                     <AboutIntroModuleEditor
@@ -778,40 +622,33 @@ export default function ContentModuleEditClient({
         )}
 
         {isAboutIntro || isAboutIntroSingleImage || isVisionGoals || isAboutCta || isAboutPrinciples || isAboutApproach ? (
-          <StickyModuleSaveDock
+          <ModuleEditorSaveArea
             title="حفظ التعديلات"
             description="يُحدَّث العرض العام بعد اكتمال الحفظ."
             saveLabel="حفظ التعديلات"
           />
         ) : isHomeStory ? (
-          <StickyModuleSaveDock
+          <ModuleEditorSaveArea
             title="حفظ موديول القصة"
             description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
           />
         ) : isHomeContact ? (
-          <StickyModuleSaveDock
+          <ModuleEditorSaveArea
             title="حفظ موديول التواصل"
             description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
           />
         ) : isHomeProjects ? (
-          <StickyModuleSaveDock
+          <ModuleEditorSaveArea
             title="حفظ موديول المشروعات"
             description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
           />
         ) : isHomeTrust ? (
-          <StickyModuleSaveDock
+          <ModuleEditorSaveArea
             title="حفظ موديول الثقة"
             description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
           />
         ) : (
-          <div className="mt-6 flex justify-end">
-            <button
-              type="submit"
-              className="cursor-pointer rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] hover:bg-[#e5c98d]"
-            >
-              حفظ الموديول
-            </button>
-          </div>
+          <ModuleEditorSaveArea />
         )}
       </form>
     </div>

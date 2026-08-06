@@ -1,11 +1,19 @@
 "use client";
 
-import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader, { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
-import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
+import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
-import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
 import FeedModuleFilterFields from "./FeedModuleFilterFields";
+import {
+  MODULE_EDITOR_STATUS_OPTIONS,
+  ModuleEditorFeedback,
+  ModuleEditorHeader,
+  ModuleEditorPagesTab,
+  ModuleEditorSaveArea,
+  ModuleEditorSection,
+  ModuleEditorSettingsComposition,
+  ModuleEditorTabs,
+  ModuleEditorTechnicalIdentity,
+} from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { FeedModuleConfig } from "../../../lib/feed-modules/types";
 import { TOPICS_FEED_TYPES } from "../../../lib/feed-modules/types";
@@ -44,16 +52,13 @@ export default function FeedModuleEditClient({
   saved,
   updateAction,
 }: FeedModuleEditClientProps) {
-  const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
-
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <BlockEditorContextHeader
+      <ModuleEditorHeader
+        moduleKind="feed"
+        entityName={block.name}
         backHref="/admin/pages-blocks/blocks/feed"
         backLabel="الرجوع لكل Feed Modules"
-        eyebrow="FEED MODULE"
-        title={block.name}
-        description="موديول Feed Widget لموضوعات تهمك — يجلب مقالات منشورة من Supabase."
         status={block.status}
         saved={saved}
         slotContext={getSlotCompatibilityLabel("feed")}
@@ -62,17 +67,14 @@ export default function FeedModuleEditClient({
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
 
-        <AdminModuleTabs
-          activePanelContext={<BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/feed" saved={saved} />}
+        <ModuleEditorTabs
+          moduleKind="feed"
+          activePanelContext={<ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/feed" saved={saved} />}
           tabs={[
             {
               id: "content",
-              navigationLabel: "إعدادات Feed",
-              sectionHeading: "محتوى وفلترة الـFeed",
-              sectionDescription: "حدّد مصدر الموضوعات والفلاتر وعدد النتائج وخيارات العرض.",
-              icon: "content",
               content: (
-                <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <ModuleEditorSection>
                   <label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">Widget Title</span>
                     <input
@@ -83,16 +85,15 @@ export default function FeedModuleEditClient({
                     />
                   </label>
 
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Feed Type</span>
-                    <select name="feed_type" defaultValue={block.feed_type} className={fieldClassName()}>
-                      {TOPICS_FEED_TYPES.map((feedType) => (
-                        <option key={feedType} value={feedType}>
-                          {FEED_TYPE_LABELS[feedType] ?? feedType}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <AdminFormListboxSelect
+                    name="feed_type"
+                    label="Feed Type"
+                    defaultValue={block.feed_type}
+                    options={TOPICS_FEED_TYPES.map((feedType) => ({
+                      value: feedType,
+                      label: FEED_TYPE_LABELS[feedType] ?? feedType,
+                    }))}
+                  />
 
                   <FeedModuleFilterFields config={config} filterOptions={filterOptions} />
 
@@ -107,24 +108,13 @@ export default function FeedModuleEditClient({
                     />
                   </label>
 
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-                      <span>Show Image</span>
-                      <input type="checkbox" name="show_image" value="true" defaultChecked={config.presentation.showImage} />
-                    </label>
+                  <AdminFormGrid columns={3}>
+                    <AdminFormSwitch name="show_image" label="Show Image" value="true" defaultChecked={config.presentation.showImage} surface />
+                    <AdminFormSwitch name="show_date" label="Show Date" value="true" defaultChecked={config.presentation.showDate} surface />
+                    <AdminFormSwitch name="show_excerpt" label="Show Excerpt" value="true" defaultChecked={config.presentation.showExcerpt} surface />
+                  </AdminFormGrid>
 
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-                      <span>Show Date</span>
-                      <input type="checkbox" name="show_date" value="true" defaultChecked={config.presentation.showDate} />
-                    </label>
-
-                    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-                      <span>Show Excerpt</span>
-                      <input type="checkbox" name="show_excerpt" value="true" defaultChecked={config.presentation.showExcerpt} />
-                    </label>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <AdminFormGrid>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Eyebrow (Categories / Series)</span>
                       <input name="eyebrow" defaultValue={config.presentation.eyebrow ?? ""} className={fieldClassName()} />
@@ -134,86 +124,54 @@ export default function FeedModuleEditClient({
                       <span className="text-xs font-semibold text-white/55">Series Link Text</span>
                       <input name="link_text" defaultValue={config.presentation.linkText ?? ""} className={fieldClassName()} />
                     </label>
-                  </div>
+                  </AdminFormGrid>
 
                   <p className="text-xs leading-6 text-white/42">
                     Empty Behavior: Hide — إذا لا توجد نتائج، لا يظهر الـ widget على الموقع.
                   </p>
-                </section>
+                </ModuleEditorSection>
               ),
             },
             {
               id: "settings",
-              navigationLabel: "الإعدادات",
-              sectionHeading: "إعدادات الموديول",
-              sectionDescription: "أدر الهوية الداخلية وحالة نشر الموديول.",
-              icon: "settings",
               content: (
-                <div className="space-y-5">
-                  <ModuleDependencyHintsPanel moduleKind="feed" templateSlug={block.slug} />
-                  <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <ModuleEditorSettingsComposition
+                  context={<ModuleDependencyHintsPanel moduleKind="feed" templateSlug={block.slug} />}
+                  primary={
+                  <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">اسم الموديول (Admin)</span>
                       <input name="name" defaultValue={block.name} required className={fieldClassName()} />
                     </label>
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Slug</span>
-                      <input name="slug" defaultValue={block.slug} required dir="ltr" className={fieldClassName()} />
-                    </label>
+                    <ModuleEditorTechnicalIdentity mode="editable" value={block.slug} inputClassName={fieldClassName()} />
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
                       <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
                     </label>
-                  </section>
+                  </ModuleEditorSection>
+                  }
 
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                  secondary={
+                  <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">حالة النشر</h2>
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">حالة الموديول</span>
-                      <select name="status" defaultValue={block.status} className={fieldClassName()}>
-                        <option value="draft">مسودة</option>
-                        <option value="published">منشور</option>
-                        <option value="unpublished">مخفي</option>
-                        <option value="archived">أرشيف</option>
-                      </select>
-                    </label>
+                    <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
                     <p className="text-xs leading-6 text-white/42">
                       Slot و Sort Order و Visibility تُدار من Pages Manager لكل صفحة على حدة.
                     </p>
-                  </section>
-                  </div>
-                </div>
+                  </ModuleEditorSection>
+                  }
+                />
               ),
             },
             {
               id: "pages",
-              navigationLabel: "الصفحات",
-              sectionHeading: "الظهور في الصفحات",
-              sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
-              icon: "plans",
-              content: (
-                <div className="space-y-5">
-                  <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-                  <ModulePageAssignmentsField
-                    pages={assignmentContext.pages}
-                    assignedPageIds={assignedPageIds}
-                  />
-                </div>
-              ),
+              content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
             },
           ]}
         />
 
-        <div className="mt-6 flex justify-end">
-          <button
-            type="submit"
-            className="rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
-          >
-            حفظ الموديول
-          </button>
-        </div>
+        <ModuleEditorSaveArea />
       </form>
     </div>
   );
