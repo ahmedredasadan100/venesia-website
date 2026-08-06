@@ -12,6 +12,7 @@ import {
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
   ModuleEditorSettingsComposition,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
@@ -174,7 +175,7 @@ export default function MediaSidebarModuleEditClient({
 
                   secondary={
                   <ModuleEditorSection>
-                    <h2 className="text-lg font-semibold text-white">حالة النشر</h2>
+                    <ModuleEditorSectionHeading intent="settings" className="text-lg">حالة النشر</ModuleEditorSectionHeading>
                     <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
                   </ModuleEditorSection>
                   }

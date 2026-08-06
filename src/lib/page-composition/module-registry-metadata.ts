@@ -20,6 +20,8 @@ export type ModuleEditorSectionMetadata = {
   sectionHeadingAr: string | null;
   sectionDescriptionAr: string | null;
   icon: ModuleEditorIconToken;
+  operationalRole?: "settings" | "visibility";
+  sectionChrome?: "implicit";
 };
 
 type ModuleEditorSections = Record<string, ModuleEditorSectionMetadata>;
@@ -44,6 +46,7 @@ const SETTINGS_SECTION: ModuleEditorSectionMetadata = {
   sectionHeadingAr: "إعدادات الموديول",
   sectionDescriptionAr: "أدر الهوية الداخلية وحالة نشر الموديول.",
   icon: "settings",
+  operationalRole: "settings",
 };
 
 const PAGES_SECTION: ModuleEditorSectionMetadata = {
@@ -51,6 +54,7 @@ const PAGES_SECTION: ModuleEditorSectionMetadata = {
   sectionHeadingAr: "الظهور في الصفحات",
   sectionDescriptionAr: null,
   icon: "plans",
+  operationalRole: "visibility",
 };
 
 const HOME_PAGES_SECTION: ModuleEditorSectionMetadata = {
@@ -64,6 +68,7 @@ const CONTENT_MODULE_SECTIONS: ModuleEditorSections = {
     sectionHeadingAr: null,
     sectionDescriptionAr: null,
     icon: "content",
+    sectionChrome: "implicit",
   },
   meta: SETTINGS_SECTION,
   settings: SETTINGS_SECTION,
@@ -111,6 +116,7 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
         sectionHeadingAr: "إعدادات العرض والصفحات",
         sectionDescriptionAr: "اضبط حالة الظهور والمصدر وراجع الصفحات المرتبطة بالهيرو.",
         icon: "settings",
+        operationalRole: "visibility",
       },
     },
   },
@@ -233,9 +239,10 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     editorSections: {
       text: {
         navigationLabelAr: "النص",
-        sectionHeadingAr: "نص قسم القصة",
-        sectionDescriptionAr: "أدر العنوان والنصوص التعريفية للقسم.",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
         icon: "content",
+        sectionChrome: "implicit",
       },
       images: {
         navigationLabelAr: "الصور",
@@ -278,15 +285,17 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     editorSections: {
       text: {
         navigationLabelAr: "النص",
-        sectionHeadingAr: "نص قسم التواصل",
-        sectionDescriptionAr: "أدر العنوان والنصوص التعريفية للقسم.",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
         icon: "content",
+        sectionChrome: "implicit",
       },
       image: {
         navigationLabelAr: "الصورة",
-        sectionHeadingAr: "صورة قسم التواصل",
-        sectionDescriptionAr: "اختر صورة القسم وأضف وصفها البديل.",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
         icon: "media",
+        sectionChrome: "implicit",
       },
       cta: {
         navigationLabelAr: "الزر والرابط",
@@ -353,15 +362,17 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     editorSections: {
       text: {
         navigationLabelAr: "النص",
-        sectionHeadingAr: "نص الدعوة للتواصل",
-        sectionDescriptionAr: "أدر العنوان التمهيدي والعنوان والوصف.",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
         icon: "content",
+        sectionChrome: "implicit",
       },
       image: {
         navigationLabelAr: "الصورة",
-        sectionHeadingAr: "صورة الدعوة للتواصل",
-        sectionDescriptionAr: "اختر صورة القسم وأضف وصفها البديل.",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
         icon: "media",
+        sectionChrome: "implicit",
       },
       cta: {
         navigationLabelAr: "الزر والرابط",
@@ -441,6 +452,12 @@ export function getModuleEditorSectionMetadata(
 ): ModuleEditorSectionMetadata | null {
   const slugSection = slug ? getSlotModuleSlugMetadata(slug)?.editorSections?.[sectionId] : null;
   return slugSection ?? getModuleKindMetadata(kind)?.editorSections[sectionId] ?? null;
+}
+
+export function getModuleEditorSectionOrder(metadata: ModuleEditorSectionMetadata) {
+  if (metadata.operationalRole === "settings") return 1;
+  if (metadata.operationalRole === "visibility") return 2;
+  return 0;
 }
 
 export function getSlotCompatibilityLabel(kind: string, pageSlug?: string | null) {

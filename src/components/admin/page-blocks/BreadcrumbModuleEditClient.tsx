@@ -10,6 +10,7 @@ import {
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
   ModuleEditorSettingsComposition,
   ModuleEditorTabs,
   ModuleEditorTechnicalIdentity,
@@ -124,7 +125,7 @@ export default function BreadcrumbModuleEditClient({
 
                   secondary={
                   <ModuleEditorSection>
-                    <h2 className="text-lg font-semibold text-white">إعدادات العرض</h2>
+                    <ModuleEditorSectionHeading intent="settings" className="text-lg">إعدادات العرض</ModuleEditorSectionHeading>
                     <AdminFormListboxSelect
                       name="variant"
                       label="Variant"

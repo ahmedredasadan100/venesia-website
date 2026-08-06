@@ -11,6 +11,7 @@ import {
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
   ModuleEditorTabs,
   ModuleEditorTechnicalIdentity,
 } from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
@@ -81,17 +82,17 @@ export default function HeroEditClient({
   const contentTab = (
     <div className="space-y-5">
       <ModuleEditorSection>
+        <ModuleEditorTechnicalIdentity
+          mode="hidden"
+          value={hero.slug}
+          inputClassName={fieldClassName("h-11")}
+        />
         <ModuleEditorFieldGrid>
-          <ModuleEditorField nature="standard" span={4}><label className="space-y-2">
+          <ModuleEditorField nature="standard" span={6}><label className="space-y-2">
             <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
             <input name="name" defaultValue={hero.name} required className={fieldClassName("h-11")} />
           </label></ModuleEditorField>
-          <ModuleEditorField nature="technical" span={4}><ModuleEditorTechnicalIdentity
-            mode="read-only"
-            value={hero.slug}
-            inputClassName={fieldClassName("h-11 bg-white/[0.03]")}
-          /></ModuleEditorField>
-          <ModuleEditorField nature="short-description" span={4}><label className="space-y-2">
+          <ModuleEditorField nature="short-description" span={6}><label className="space-y-2">
             <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
             <input
               name="template_description"
@@ -104,7 +105,7 @@ export default function HeroEditClient({
 
       {!isHomeHero ? (
         <ModuleEditorSection>
-          <h2 className="text-base font-semibold text-white">عناصر الهيرو</h2>
+          <ModuleEditorSectionHeading intent="domain" className="text-base">عناصر الهيرو</ModuleEditorSectionHeading>
 
           <ModuleEditorFieldGrid>
           <ModuleEditorField nature="short-text" span={6}>

@@ -1,6 +1,11 @@
 "use client";
 
-import { ModuleEditorField, ModuleEditorFieldGrid, ModuleEditorSection } from "../ModuleEditorPresentation";
+import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
+  ModuleEditorSection,
+  ModuleEditorSectionHeading,
+} from "../ModuleEditorPresentation";
 
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { AboutApproachModuleConfig } from "../../../../lib/page-blocks/configs";
@@ -13,7 +18,7 @@ export default function AboutApproachModuleEditor({ config }: AboutApproachModul
   return (
     <div className="space-y-6">
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">منهج العمل</h2>
+        <ModuleEditorSectionHeading intent="domain">منهج العمل</ModuleEditorSectionHeading>
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>

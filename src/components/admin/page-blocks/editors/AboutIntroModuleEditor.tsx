@@ -6,6 +6,7 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
@@ -245,9 +246,9 @@ export default function AboutIntroModuleEditor({
       {showImages ? (
       <ModuleEditorSection>
           {section === "all" ? (
-            <h2 className="text-sm font-semibold text-white">
+            <ModuleEditorSectionHeading intent="media-collection">
               {isHomeStory ? "الصور (2 متداخلة)" : "الصور (3 كحد أقصى)"}
-            </h2>
+            </ModuleEditorSectionHeading>
           ) : null}
           <p className="text-xs leading-6 text-white/45">
             {isHomeStory
@@ -356,7 +357,7 @@ export default function AboutIntroModuleEditor({
 
       {showCta ? (
       <ModuleEditorSection>
-          {section === "all" ? <h2 className="text-sm font-semibold text-white">زر CTA</h2> : null}
+          {section === "all" ? <ModuleEditorSectionHeading intent="cta">زر CTA</ModuleEditorSectionHeading> : null}
           <div className="space-y-4">
             <label className="block space-y-2">
               <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
@@ -390,7 +391,7 @@ export default function AboutIntroModuleEditor({
 
       {showBeats ? (
       <ModuleEditorSection>
-          <h2 className="text-sm font-semibold text-white">البطاقات (3 كحد أقصى)</h2>
+          <ModuleEditorSectionHeading intent="repeater">البطاقات (3 كحد أقصى)</ModuleEditorSectionHeading>
           <ModuleEditorRepeaterGrid>
             {beats.map((beat, index) => (
               <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`}>

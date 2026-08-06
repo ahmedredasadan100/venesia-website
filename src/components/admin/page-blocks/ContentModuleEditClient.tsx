@@ -157,6 +157,13 @@ export default function ContentModuleEditClient({
       <ModuleEditorSettingsComposition
         primary={
         <ModuleEditorSection>
+        {usesLockedInternalSlug ? (
+          <ModuleEditorTechnicalIdentity
+            mode="hidden"
+            value={block.slug}
+            inputClassName={fieldClassName()}
+          />
+        ) : null}
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">
@@ -164,11 +171,13 @@ export default function ContentModuleEditClient({
           </span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
         </label></ModuleEditorField>
-        <ModuleEditorField nature="technical" span={4}><ModuleEditorTechnicalIdentity
-          mode={usesLockedInternalSlug ? "read-only" : "editable"}
-          value={block.slug}
-          inputClassName={fieldClassName()}
-        /></ModuleEditorField>
+        {!usesLockedInternalSlug ? (
+          <ModuleEditorField nature="technical" span={4}><ModuleEditorTechnicalIdentity
+            mode="editable"
+            value={block.slug}
+            inputClassName={fieldClassName()}
+          /></ModuleEditorField>
+        ) : null}
         <ModuleEditorField nature="short-description" span={4}>
         {usesInternalDescriptionField ? (
           <label className="block space-y-2">

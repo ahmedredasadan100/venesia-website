@@ -6,6 +6,7 @@ import { useFormStatus } from "react-dom";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import {
   getModuleEditorHeaderMetadata,
+  getModuleEditorSectionOrder,
   getModuleEditorSectionMetadata,
 } from "../../../lib/page-composition/slot-module-registry";
 import {
@@ -36,7 +37,6 @@ export const MODULE_EDITOR_STATUS_OPTIONS = [
   { value: "draft", label: "مسودة" },
   { value: "published", label: "منشور" },
   { value: "unpublished", label: "مخفي" },
-  { value: "archived", label: "أرشيف" },
 ] as const;
 
 type ModuleEditorMetadataScope = {
@@ -91,20 +91,26 @@ export function ModuleEditorTabs({
   tabs,
   ...props
 }: ModuleEditorTabsProps) {
-  const resolvedTabs: AdminModuleTab[] = tabs.map((tab) => {
+  const resolvedTabs = tabs.map((tab, sourceIndex) => {
     const metadata = getModuleEditorSectionMetadata(moduleKind, tab.id, moduleSlug);
     if (!metadata) {
       throw new Error(`Missing Module Editor section metadata for ${moduleKind}:${moduleSlug ?? "default"}:${tab.id}`);
     }
 
     return {
-      ...tab,
-      navigationLabel: metadata.navigationLabelAr,
-      sectionHeading: metadata.sectionHeadingAr,
-      sectionDescription: metadata.sectionDescriptionAr,
-      icon: metadata.icon,
+      sourceIndex,
+      order: getModuleEditorSectionOrder(metadata),
+      tab: {
+        ...tab,
+        navigationLabel: metadata.navigationLabelAr,
+        sectionHeading: metadata.sectionHeadingAr,
+        sectionDescription: metadata.sectionDescriptionAr,
+        icon: metadata.icon,
+      } satisfies AdminModuleTab,
     };
-  });
+  })
+    .sort((left, right) => left.order - right.order || left.sourceIndex - right.sourceIndex)
+    .map(({ tab }) => tab);
 
   return <AdminModuleTabs {...props} tabs={resolvedTabs} />;
 }
@@ -117,6 +123,32 @@ export function ModuleEditorSection({
     <AdminFormSection {...props} variant="module">
       {children}
     </AdminFormSection>
+  );
+}
+
+export type ModuleEditorSectionHeadingIntent =
+  | "domain"
+  | "media-collection"
+  | "repeater"
+  | "cta"
+  | "settings";
+
+export function ModuleEditorSectionHeading({
+  intent,
+  children,
+  className = "text-sm",
+}: {
+  intent: ModuleEditorSectionHeadingIntent;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <h2
+      data-module-editor-section-heading={intent}
+      className={`${className} font-semibold text-white`.trim()}
+    >
+      {children}
+    </h2>
   );
 }
 
@@ -303,7 +335,7 @@ export function ModuleEditorTechnicalIdentity({
   label = "المعرّف التقني",
   inputClassName,
 }: {
-  mode: "editable" | "read-only" | "hidden";
+  mode: "editable" | "hidden";
   value: string;
   name?: string;
   label?: ReactNode;
@@ -317,16 +349,10 @@ export function ModuleEditorTechnicalIdentity({
       <input
         name={name}
         defaultValue={value}
-        readOnly={mode === "read-only"}
-        required={mode === "editable"}
+        required
         dir="ltr"
-        className={`${inputClassName} ${mode === "read-only" ? "cursor-default text-white/55" : ""}`.trim()}
+        className={inputClassName}
       />
-      {mode === "read-only" ? (
-        <span className="block text-xs leading-5 text-white/40">
-          معرّف بنيوي للقراءة فقط؛ تغيير نوع الموديول غير مدعوم من هذا المحرر.
-        </span>
-      ) : null}
     </label>
   );
 }

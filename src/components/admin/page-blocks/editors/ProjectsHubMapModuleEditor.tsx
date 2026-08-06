@@ -6,6 +6,7 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
@@ -58,7 +59,7 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
       <input type="hidden" name="pin_count" value={String(pins.length)} />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">خريطة المشروعات</h2>
+        <ModuleEditorSectionHeading intent="domain">خريطة المشروعات</ModuleEditorSectionHeading>
 
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={6}><label className="block space-y-2">
@@ -87,7 +88,7 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
 
       <ModuleEditorSection>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-white">دبابيس الخريطة</h2>
+          <ModuleEditorSectionHeading intent="repeater">دبابيس الخريطة</ModuleEditorSectionHeading>
           <button
             type="button"
             onClick={addPin}

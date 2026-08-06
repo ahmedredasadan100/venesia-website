@@ -39,6 +39,7 @@ const mediaSidebarPublicLoader = read("src/lib/media-sidebar-modules/load-media-
 const mediaHubPublicLoader = read("src/lib/media-hub-modules/load-media-hub-modules.ts");
 const mediaSidebarRenderer = read("src/components/media-center/MediaSidebar.tsx");
 const mediaHubRenderPlan = read("src/lib/media-hub-modules/build-media-hub-render-plan.ts");
+const lifecycleMigration = read("sql/migrations/20260807090000_page_block_module_lifecycle_contract.sql");
 
 check(
   "Page Modules summary is owned by the shared Section Hero",
@@ -97,12 +98,14 @@ check(
 );
 
 check(
-  "shared metadata suppresses redundant editor chrome and generic section headings",
+  "semantic section headings are shared and generic editor headings stay suppressed",
   compatibilityPresentation.includes("eyebrowAr: null") &&
     compatibilityPresentation.includes("sectionHeadingAr: null") &&
+    compatibilityPresentation.includes('sectionChrome: "implicit"') &&
+    presentation.includes("ModuleEditorSectionHeading") &&
+    presentation.includes("data-module-editor-section-heading") &&
+    !fieldLayoutSources.includes("<h2") &&
     !compatibilityPresentation.includes('sectionHeadingAr: "محتوى الموديول"') &&
-    !fieldLayoutSources.includes(">بيانات الموديول</h2>") &&
-    !fieldLayoutSources.includes(">محتوى الموديول</h2>") &&
     blockEditorHeader.includes("eyebrow?: ReactNode"),
 );
 
@@ -178,23 +181,30 @@ const statusEditorAdopters = [
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
 ];
 const statusEditorSources = statusEditorAdopters.map(read);
-const statusSchemaSources = [
-  "sql/migrations/20250618100000_page_blocks_phase1.sql",
-  "sql/migrations/20250618500000_breadcrumb_module.sql",
-  "sql/migrations/20250622000000_feed_modules_topics.sql",
-  "sql/migrations/20250625200000_media_sidebar_modules.sql",
-  "sql/migrations/20250625300000_media_hub_modules.sql",
-].map(read);
-const allowedStatusConstraint = "check (status in ('draft', 'published', 'unpublished', 'archived'))";
+const lifecycleTables = [
+  "content_block_templates",
+  "cta_block_templates",
+  "cards_block_templates",
+  "breadcrumb_block_templates",
+  "feed_module_templates",
+  "media_sidebar_module_templates",
+  "media_hub_module_templates",
+] as const;
+const allowedStatusConstraint = "check (status in ('draft', 'published', 'unpublished'))";
 
 check(
-  "persisted module lifecycle keeps the database four-state listbox contract",
-  blockStatusOwner.includes('BLOCK_STATUSES: PageBlockStatus[] = ["draft", "published", "unpublished", "archived"]') &&
-    blockTypes.includes('PageBlockStatus = "draft" | "published" | "unpublished" | "archived"') &&
-    statusSchemaSources.every((source) => source.includes(allowedStatusConstraint)) &&
-    ["draft", "published", "unpublished", "archived"].every((status) =>
+  "persisted module lifecycle keeps the proven three-state database and listbox contract",
+  blockStatusOwner.includes('BLOCK_STATUSES: PageBlockStatus[] = ["draft", "published", "unpublished"]') &&
+    blockTypes.includes('PageBlockStatus = "draft" | "published" | "unpublished"') &&
+    lifecycleTables.every((table) =>
+      lifecycleMigration.includes(`update public.${table} set status = 'unpublished' where status = 'archived'`) &&
+      lifecycleMigration.includes(`constraint ${table}_status_check`) &&
+      lifecycleMigration.includes(allowedStatusConstraint),
+    ) &&
+    ["draft", "published", "unpublished"].every((status) =>
       presentation.includes(`{ value: "${status}"`),
     ) &&
+    !presentation.includes('{ value: "archived"') &&
     statusEditorSources.every((source) =>
       source.includes('name="status"') && source.includes("MODULE_EDITOR_STATUS_OPTIONS"),
     ) &&

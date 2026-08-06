@@ -6,6 +6,7 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
@@ -70,7 +71,6 @@ export default function AboutIntroSingleImageModuleEditor({
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">الصورة</h2>
         <AdminMediaImageField
           name="image_main"
           label="الصورة"
@@ -116,7 +116,7 @@ export default function AboutIntroSingleImageModuleEditor({
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">البطاقات (3 كحد أقصى)</h2>
+        <ModuleEditorSectionHeading intent="repeater">البطاقات (3 كحد أقصى)</ModuleEditorSectionHeading>
         <ModuleEditorRepeaterGrid>
           {beats.map((beat, index) => (
             <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`}>

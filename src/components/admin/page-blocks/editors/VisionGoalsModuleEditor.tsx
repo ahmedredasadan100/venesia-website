@@ -6,6 +6,7 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
@@ -32,7 +33,6 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
       <input type="hidden" name="config_schema" value="vision-goals" />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">النص</h2>
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
@@ -55,7 +55,6 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">الصورة</h2>
         <AdminMediaImageField
           name="image"
           label="صورة القسم"
@@ -68,7 +67,7 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">رؤيتنا</h2>
+        <ModuleEditorSectionHeading intent="domain">رؤيتنا</ModuleEditorSectionHeading>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عنوان العمود</span>
           <input name="vision_title" defaultValue={config.vision?.title ?? ""} className={fieldClassName()} />
@@ -99,7 +98,7 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">أهدافنا</h2>
+        <ModuleEditorSectionHeading intent="domain">أهدافنا</ModuleEditorSectionHeading>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عنوان العمود</span>
           <input name="goals_title" defaultValue={config.goals?.title ?? ""} className={fieldClassName()} />

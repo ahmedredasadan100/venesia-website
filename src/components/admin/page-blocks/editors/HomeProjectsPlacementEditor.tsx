@@ -5,6 +5,7 @@ import {
   ModuleEditorFieldGrid,
   ModuleEditorHeadingVisibilityRow,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
@@ -159,7 +160,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
   return (
     <div className="space-y-6">
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">عرض المشاريع</h2>
+        <ModuleEditorSectionHeading intent="domain">عرض المشاريع</ModuleEditorSectionHeading>
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="technical" span={4}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عدد المشاريع المعروضة</span>
@@ -188,7 +189,6 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">نصوص السكشن</h2>
         <p className="text-xs leading-6 text-white/45">
           اترك أي حقل نصي فارغًا لاستخدام النص الافتراضي الحالي على الموقع.
         </p>
@@ -233,7 +233,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">زر أسفل السكشن</h2>
+        <ModuleEditorSectionHeading intent="cta">زر أسفل السكشن</ModuleEditorSectionHeading>
 
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">نص الزر</span>

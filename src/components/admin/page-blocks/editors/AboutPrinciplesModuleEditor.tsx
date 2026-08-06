@@ -6,6 +6,7 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
@@ -157,7 +158,6 @@ export default function AboutPrinciplesModuleEditor({
       <input type="hidden" name="principle_count" value={String(items.length)} />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">{isHomeTrust ? "نصوص القسم" : "العنوان"}</h2>
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
@@ -203,9 +203,9 @@ export default function AboutPrinciplesModuleEditor({
 
       <ModuleEditorSection>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-white">
+          <ModuleEditorSectionHeading intent="repeater">
             {isHomeTrust ? "بطاقات الثقة (4)" : "المبادئ (حتى 6)"}
-          </h2>
+          </ModuleEditorSectionHeading>
           {!isHomeTrust ? (
             <button
               type="button"

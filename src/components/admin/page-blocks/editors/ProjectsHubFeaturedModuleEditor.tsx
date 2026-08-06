@@ -5,6 +5,7 @@ import {
   ModuleEditorFieldGrid,
   ModuleEditorHeadingVisibilityRow,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 import {
@@ -82,7 +83,6 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
       <input type="hidden" name="config_schema" value="projects-hub-featured" />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">عنوان قسم المشروعات المميزة</h2>
         <p className="text-xs leading-6 text-white/45">يتحكّم في عنوان القسم فقط، وليس في بيانات المشروعات.</p>
 
         <HeadingFieldRow
@@ -105,7 +105,7 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">البيانات الظاهرة داخل المشروع المميز</h2>
+        <ModuleEditorSectionHeading intent="domain">البيانات الظاهرة داخل المشروع المميز</ModuleEditorSectionHeading>
         <p className="text-xs leading-6 text-white/45">
           إظهار أو إخفاء الحقول المعروضة حالياً داخل البطاقة الرئيسية والبطاقات الجانبية. لا يغيّر قيم المشروع.
         </p>
@@ -150,7 +150,7 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">إعدادات عرض المشروعات المميزة</h2>
+        <ModuleEditorSectionHeading intent="settings">إعدادات عرض المشروعات المميزة</ModuleEditorSectionHeading>
 
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="standard" span={5}><AdminFormListboxSelect
