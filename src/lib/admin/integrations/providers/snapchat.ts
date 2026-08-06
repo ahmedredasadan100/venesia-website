@@ -4,15 +4,16 @@ import type { AnalyticsMetric } from "../../reports/analytics-contract";
 import { assertRequiredAssets, type IntegrationAsset } from "../integrations-contract";
 import type { IntegrationProviderAdapter, ProviderRuntimeContext, ProviderSyncResult, ProviderTokenSet } from "../provider-adapter-contract";
 import { formBody, isoAfterSeconds, providerJson } from "../provider-http";
-import { assertGrantedScopes, configuredEnvironment, dateRange, finiteNumber, metric, requireAsset, requireConfigured, splitScopes, uniqueAssets } from "./shared";
+import {
+  requireApplicationConfigurationValue,
+  requireIntegrationApplicationConfiguration,
+  resolveIntegrationApplicationConfiguration,
+} from "../server-configuration-resolver";
+import { assertGrantedScopes, dateRange, finiteNumber, metric, requireAsset, splitScopes, uniqueAssets } from "./shared";
 
 const SNAP_AUTH = "https://accounts.snapchat.com/login/oauth2/authorize";
 const SNAP_TOKEN = "https://accounts.snapchat.com/login/oauth2/access_token";
 const SNAP_API = "https://adsapi.snapchat.com/v1";
-
-function config() {
-  return configuredEnvironment(["SNAPCHAT_MARKETING_CLIENT_ID", "SNAPCHAT_MARKETING_CLIENT_SECRET", "INTEGRATIONS_OAUTH_BASE_URL"]);
-}
 
 function headers(token: string) {
   return { authorization: `Bearer ${token}` };
@@ -141,11 +142,28 @@ async function syncSnap(input: ProviderRuntimeContext): Promise<ProviderSyncResu
 export const snapchatAdsAdapter: IntegrationProviderAdapter = {
   integration: "snapchat_ads",
   analyticsProvider: "snapchat_ads",
-  configuration: config,
-  buildAuthorizationRequest(context) {
-    requireConfigured(config());
+  configuration() {
+    return resolveIntegrationApplicationConfiguration("snapchat_ads");
+  },
+  async testApplicationConfiguration() {
+    const configuration = await resolveIntegrationApplicationConfiguration("snapchat_ads", {
+      includeSecrets: true,
+      allowUntested: true,
+    });
+    if (configuration.missing.length) {
+      return { status: "configuration_invalid", safeErrorCode: "integration_app_configuration_incomplete", message: "Required Snapchat application fields are missing." };
+    }
+    const clientId = requireApplicationConfigurationValue(configuration, "snapchat_client_id");
+    const clientSecret = requireApplicationConfigurationValue(configuration, "snapchat_client_secret");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId) || clientSecret.length < 8) {
+      return { status: "configuration_invalid", safeErrorCode: "snapchat_app_credentials_format_invalid", message: "Snapchat OAuth credential format is invalid." };
+    }
+    return { status: "configuration_saved_waiting_for_authorization", safeErrorCode: null, message: "Snap requires a user authorization code before it can verify the Client ID and Secret." };
+  },
+  async buildAuthorizationRequest(context) {
+    const configuration = await requireIntegrationApplicationConfiguration("snapchat_ads");
     const url = new URL(SNAP_AUTH);
-    url.searchParams.set("client_id", process.env.SNAPCHAT_MARKETING_CLIENT_ID!.trim());
+    url.searchParams.set("client_id", requireApplicationConfigurationValue(configuration, "snapchat_client_id"));
     url.searchParams.set("redirect_uri", context.redirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "snapchat-marketing-api");
@@ -153,10 +171,10 @@ export const snapchatAdsAdapter: IntegrationProviderAdapter = {
     return { url: url.toString(), pkceVerifierRequired: false };
   },
   async exchangeAuthorizationCode(input) {
-    requireConfigured(config());
+    const configuration = await requireIntegrationApplicationConfiguration("snapchat_ads");
     const payload = await providerJson<SnapToken>(SNAP_TOKEN, {
       method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: formBody({ grant_type: "authorization_code", client_id: process.env.SNAPCHAT_MARKETING_CLIENT_ID!.trim(), client_secret: process.env.SNAPCHAT_MARKETING_CLIENT_SECRET!.trim(), code: input.code, redirect_uri: input.redirectUri }),
+      body: formBody({ grant_type: "authorization_code", client_id: requireApplicationConfigurationValue(configuration, "snapchat_client_id"), client_secret: requireApplicationConfigurationValue(configuration, "snapchat_client_secret"), code: input.code, redirect_uri: input.redirectUri }),
     }, "snapchat_oauth_exchange_failed");
     const tokens = snapTokenSet(payload);
     assertGrantedScopes(tokens.grantedScopes, ["snapchat-marketing-api"], "snapchat_oauth_scope_missing");
@@ -164,9 +182,10 @@ export const snapchatAdsAdapter: IntegrationProviderAdapter = {
   },
   async refreshCredential(input) {
     if (!input.refreshToken) throw new Error("snapchat_refresh_token_missing");
+    const configuration = await requireIntegrationApplicationConfiguration("snapchat_ads");
     const payload = await providerJson<SnapToken>(SNAP_TOKEN, {
       method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: formBody({ grant_type: "refresh_token", client_id: process.env.SNAPCHAT_MARKETING_CLIENT_ID!.trim(), client_secret: process.env.SNAPCHAT_MARKETING_CLIENT_SECRET!.trim(), refresh_token: input.refreshToken }),
+      body: formBody({ grant_type: "refresh_token", client_id: requireApplicationConfigurationValue(configuration, "snapchat_client_id"), client_secret: requireApplicationConfigurationValue(configuration, "snapchat_client_secret"), refresh_token: input.refreshToken }),
     }, "snapchat_oauth_refresh_failed");
     return snapTokenSet(payload, input.refreshToken);
   },

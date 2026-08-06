@@ -12,6 +12,12 @@ import {
   type PersistedIntegrationConnection,
 } from "./integrations-contract";
 import { integrationProviderRegistry } from "./provider-registry";
+import {
+  applicationConfigurationProviderForIntegration,
+  isIntegrationAppConfigurationAuthorizationReady,
+  type IntegrationAppConfigurationDiagnostic,
+  unavailableIntegrationAppConfigurationDiagnostic,
+} from "./server-configuration-contract";
 
 function connectionMessage(connection: PersistedIntegrationConnection) {
   if (connection.lastErrorMessage) return connection.lastErrorMessage;
@@ -33,8 +39,9 @@ function platformItem(input: {
   connection: PersistedIntegrationConnection | null;
   checkedAt: string;
   databaseAvailable: boolean;
+  configuration: IntegrationAppConfigurationDiagnostic | null;
 }): IntegrationSnapshotItem {
-  const { definition, connection, checkedAt, databaseAvailable } = input;
+  const { definition, connection, checkedAt, databaseAvailable, configuration } = input;
   if (!definition.liveConnectionSupported) {
     return {
       ...definition,
@@ -51,11 +58,17 @@ function platformItem(input: {
       availableAssets: [],
       selectedAssets: [],
       missingConfiguration: [],
+      appConfigurationStatus: null,
+      appConfigurationSource: "none",
+      appConfigurationLastTestedAt: null,
     };
   }
-  const adapter = integrationProviderRegistry.get(definition.key);
-  const configuration = adapter.configuration();
-  const configureHref = `/admin/settings/integrations/${definition.key}`;
+  if (!configuration) throw new Error(`integration_app_configuration_diagnostic_missing:${definition.key}`);
+  const connectionHref = `/admin/settings/integrations/${definition.key}`;
+  const configurationOwner = applicationConfigurationProviderForIntegration(definition.key);
+  const configurationHref = `/admin/settings/integrations/server-configuration#${definition.key === "whatsapp_business" ? "whatsapp" : configurationOwner}`;
+  const authorizationReady = isIntegrationAppConfigurationAuthorizationReady(configuration);
+  const configureHref = authorizationReady ? connectionHref : configurationHref;
   if (!databaseAvailable) {
     return {
       ...definition,
@@ -72,9 +85,12 @@ function platformItem(input: {
       availableAssets: [],
       selectedAssets: [],
       missingConfiguration: configuration.missing,
+      appConfigurationStatus: configuration.status,
+      appConfigurationSource: configuration.source,
+      appConfigurationLastTestedAt: configuration.lastTestedAt,
     };
   }
-  if (!configuration.configured) {
+  if (!authorizationReady) {
     return {
       ...definition,
       connectionId: connection?.id ?? null,
@@ -90,6 +106,9 @@ function platformItem(input: {
       availableAssets: connection?.assets ?? [],
       selectedAssets: connection?.assets.filter((asset) => asset.selected) ?? [],
       missingConfiguration: configuration.missing,
+      appConfigurationStatus: configuration.status,
+      appConfigurationSource: configuration.source,
+      appConfigurationLastTestedAt: configuration.lastTestedAt,
     };
   }
   if (!connection) {
@@ -108,6 +127,9 @@ function platformItem(input: {
       availableAssets: [],
       selectedAssets: [],
       missingConfiguration: [],
+      appConfigurationStatus: configuration.status,
+      appConfigurationSource: configuration.source,
+      appConfigurationLastTestedAt: configuration.lastTestedAt,
     };
   }
   const status = connection.status as IntegrationConnectionStatus;
@@ -128,15 +150,22 @@ function platformItem(input: {
     availableAssets: connection.assets,
     selectedAssets: connection.assets.filter((asset) => asset.selected),
     missingConfiguration: [],
+    appConfigurationStatus: configuration.status,
+    appConfigurationSource: configuration.source,
+    appConfigurationLastTestedAt: configuration.lastTestedAt,
   };
 }
 
-function unavailableSnapshot(checkedAt: string): IntegrationsSnapshot {
+function unavailableSnapshot(
+  checkedAt: string,
+  configurations: Map<string, IntegrationAppConfigurationDiagnostic>,
+): IntegrationsSnapshot {
   const integrations = INTEGRATION_DEFINITIONS.map((definition) => platformItem({
     definition,
     connection: null,
     checkedAt,
     databaseAvailable: false,
+    configuration: configurations.get(definition.key) ?? null,
   }));
   return {
     contractVersion: INTEGRATIONS_CONTRACT_VERSION,
@@ -168,6 +197,19 @@ function statistics(integrations: IntegrationSnapshotItem[]) {
 export async function loadAdminIntegrationsSnapshot(): Promise<IntegrationsSnapshot> {
   await requireAdminSession();
   const checkedAt = new Date().toISOString();
+  const configurations = new Map<string, IntegrationAppConfigurationDiagnostic>();
+  let configurationDiagnosticsAvailable = true;
+  await Promise.all(integrationProviderRegistry.definitions().map(async (adapter) => {
+    try {
+      configurations.set(adapter.integration, await adapter.configuration());
+    } catch {
+      configurationDiagnosticsAvailable = false;
+      configurations.set(
+        adapter.integration,
+        unavailableIntegrationAppConfigurationDiagnostic(adapter.integration),
+      );
+    }
+  }));
   try {
     const persistence = await loadIntegrationPersistenceSnapshot();
     const integrations = INTEGRATION_DEFINITIONS.map((definition) => platformItem({
@@ -175,12 +217,13 @@ export async function loadAdminIntegrationsSnapshot(): Promise<IntegrationsSnaps
       connection: persistence.connections.find((connection) => connection.integrationKey === definition.key) ?? null,
       checkedAt,
       databaseAvailable: true,
+      configuration: configurations.get(definition.key) ?? null,
     }));
     return {
       contractVersion: INTEGRATIONS_CONTRACT_VERSION,
-      state: persistence.health.valid ? "ready" : "partial",
+      state: persistence.health.valid && configurationDiagnosticsAvailable ? "ready" : "partial",
       checkedAt,
-      security: persistence.health.vaultAvailable ? "guarded" : "needs_attention",
+      security: persistence.health.vaultAvailable && configurationDiagnosticsAvailable ? "guarded" : "needs_attention",
       vaultAvailable: persistence.health.vaultAvailable,
       databaseAvailable: true,
       migrationRegistered: persistence.health.migrationRegistered,
@@ -189,6 +232,6 @@ export async function loadAdminIntegrationsSnapshot(): Promise<IntegrationsSnaps
       integrations,
     };
   } catch {
-    return unavailableSnapshot(checkedAt);
+    return unavailableSnapshot(checkedAt, configurations);
   }
 }

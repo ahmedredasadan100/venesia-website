@@ -292,6 +292,7 @@ const expectedClassifications: Record<
     "global-seo-settings",
     "media-library-settings",
     "security-settings",
+    "integrations-server-configuration",
     "users-and-roles",
   ],
   explicit_exception: [

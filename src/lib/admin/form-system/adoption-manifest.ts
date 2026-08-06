@@ -255,6 +255,17 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "Sensitive security mutations require dedicated validation and session semantics.",
   },
   {
+    id: "integrations-server-configuration",
+    label: "Integrations server configuration",
+    classification: "specialized_exception",
+    sourceFiles: [
+      "src/components/admin/integrations/IntegrationsServerConfiguration.tsx",
+    ],
+    surfaces: ["provider-app-credentials", "vault-replacement", "configuration-test"],
+    rationale:
+      "Provider App credentials use a dedicated Vault-only Aggregate with optimistic concurrency, test rate limits, and no browser-owned secret state; this is not a generic entity create/edit lifecycle.",
+  },
+  {
     id: "users-create-edit",
     label: "Admin users create and edit",
     classification: "shared_adopter",

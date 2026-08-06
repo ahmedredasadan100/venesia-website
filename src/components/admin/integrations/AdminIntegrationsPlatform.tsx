@@ -10,6 +10,7 @@ import type {
   IntegrationSnapshotItem,
   IntegrationsSnapshot,
 } from "../../../lib/admin/integrations/integrations-contract";
+import { isIntegrationAppConfigurationAuthorizationReady } from "../../../lib/admin/integrations/server-configuration-contract";
 import {
   AdminPageContextHeader,
   AdminPageExperience,
@@ -192,6 +193,13 @@ function IntegrationAction({ href, children }: { href: string | null; children: 
 
 function IntegrationCard({ item }: { item: IntegrationSnapshotItem }) {
   const reportsAvailable = item.reportsAvailable;
+  const configureLabel = item.appConfigurationStatus !== null &&
+    isIntegrationAppConfigurationAuthorizationReady({
+      status: item.appConfigurationStatus,
+      lastTestedAt: item.appConfigurationLastTestedAt,
+    })
+    ? "إدارة الاتصال"
+    : "إعداد App";
   return (
     <article className="group relative flex min-h-[300px] flex-col overflow-hidden rounded-[24px] border border-white/9 bg-gradient-to-bl from-white/[0.045] to-[#080B10]/78 p-5 shadow-[0_22px_70px_rgba(0,0,0,.20)] transition hover:-translate-y-1 hover:border-[#D8B87A]/25">
       <div className="absolute inset-x-10 top-0 h-px bg-gradient-to-l from-transparent via-[#D8B87A]/40 to-transparent opacity-0 transition group-hover:opacity-100" aria-hidden="true" />
@@ -219,7 +227,7 @@ function IntegrationCard({ item }: { item: IntegrationSnapshotItem }) {
       </div>
 
       <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
-        <IntegrationAction href={item.configureHref}>الإعدادات</IntegrationAction>
+        <IntegrationAction href={item.configureHref}>{configureLabel}</IntegrationAction>
         <IntegrationAction href={item.testHref}>اختبار الاتصال</IntegrationAction>
         {reportsAvailable ? (
           <Link
@@ -267,6 +275,11 @@ export default function AdminIntegrationsPlatform({ snapshot }: { snapshot: Inte
         title="التكاملات والربط الخارجي"
         description="إدارة جميع اتصالات المنصات الخارجية من مكان واحد. التقارير لا تتصل بالمزودين مباشرة؛ بياناتها تمر فقط عبر Analytics Contract والـAdapter Registry المعتمد."
         meta={`العقد ${snapshot.contractVersion}`}
+        actions={(
+          <Link href="/admin/settings/integrations/server-configuration" className="inline-flex min-h-11 items-center rounded-xl border border-[#D8B87A]/24 px-4 text-xs font-semibold text-[#E8CF9A] hover:border-[#D8B87A]/42 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">
+            إعدادات الربط على السيرفر
+          </Link>
+        )}
         status={snapshot.state === "ready" ? "ready" : "error"}
       />
 
@@ -389,7 +402,8 @@ export default function AdminIntegrationsPlatform({ snapshot }: { snapshot: Inte
             <p className="mt-2 max-w-2xl text-[11px] leading-6 text-white/40">بيانات الاعتماد تبقى خلف Server Adapters. وقت الفحص لا يُحتسب كمزامنة، ولا تحتوي هذه الصفحة على Secrets أو اتصال مباشر بمزود خارجي.</p>
           </div>
         </div>
-        <div className="grid shrink-0 gap-2 sm:grid-cols-3">
+        <div className="grid shrink-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <Link href="/admin/settings/integrations/server-configuration" className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl border border-[#D8B87A]/20 px-4 text-[11px] font-semibold text-[#E4C683] hover:border-[#D8B87A]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">App Configuration</Link>
           <Link href="/admin/settings/security" className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl border border-[#D8B87A]/20 px-4 text-[11px] font-semibold text-[#E4C683] hover:border-[#D8B87A]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">إعدادات الأمان</Link>
           <Link href="/admin/reports/analytics?filter=providers" className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl border border-white/10 px-4 text-[11px] font-semibold text-white/55 hover:border-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">تقارير Analytics</Link>
           <Link href="/admin/reports/system?filter=diagnostics" className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl border border-white/10 px-4 text-[11px] font-semibold text-white/55 hover:border-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">تشخيص المصادر</Link>

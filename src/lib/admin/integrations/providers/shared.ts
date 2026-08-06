@@ -1,34 +1,5 @@
 import type { AnalyticsMetric, AnalyticsQueryContext } from "../../reports/analytics-contract";
-import type { IntegrationAsset, ProviderConfigurationDiagnostic } from "../integrations-contract";
-
-export function configuredEnvironment(required: readonly string[]): ProviderConfigurationDiagnostic {
-  const missing = required.filter((name) => !process.env[name]?.trim());
-  return {
-    configured: missing.length === 0,
-    missing,
-    message: missing.length
-      ? `Missing server configuration: ${missing.join(", ")}`
-      : "Provider application credentials are configured on the server.",
-  };
-}
-
-export function oauthBaseUrl() {
-  const raw = process.env.INTEGRATIONS_OAUTH_BASE_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (!raw) throw new Error("integrations_oauth_base_url_missing");
-  const url = new URL(raw);
-  if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
-    throw new Error("integrations_oauth_base_url_https_required");
-  }
-  return url.origin;
-}
-
-export function callbackUri(integration: string) {
-  return `${oauthBaseUrl()}/api/admin/integrations/${integration}/callback`;
-}
-
-export function requireConfigured(diagnostic: ProviderConfigurationDiagnostic) {
-  if (!diagnostic.configured) throw new Error(`integration_provider_not_configured:${diagnostic.missing.join(",")}`);
-}
+import type { IntegrationAsset } from "../integrations-contract";
 
 export function requireAsset(assets: readonly IntegrationAsset[], type: IntegrationAsset["type"]) {
   const asset = assets.find((candidate) => candidate.type === type && candidate.selected !== false);

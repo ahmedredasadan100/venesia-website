@@ -4,18 +4,14 @@ import type { AnalyticsMetric } from "../../reports/analytics-contract";
 import { assertRequiredAssets, type IntegrationAsset } from "../integrations-contract";
 import type { IntegrationProviderAdapter, ProviderRuntimeContext, ProviderSyncResult, ProviderTokenSet } from "../provider-adapter-contract";
 import { formBody, isoAfterSeconds, providerJson } from "../provider-http";
-import { assertGrantedScopes, configuredEnvironment, dateRange, finiteNumber, metric, requireAsset, requireConfigured, uniqueAssets } from "./shared";
-import { collectMetaGraphPages } from "./meta-graph";
-
-function config() {
-  return configuredEnvironment(["META_APP_ID", "META_APP_SECRET", "META_GRAPH_API_VERSION", "INTEGRATIONS_OAUTH_BASE_URL"]);
-}
-
-function graphBase() {
-  const version = process.env.META_GRAPH_API_VERSION!.trim();
-  if (!/^v\d+\.\d+$/.test(version)) throw new Error("meta_graph_api_version_invalid");
-  return `https://graph.facebook.com/${version}`;
-}
+import { resolveIntegrationApplicationConfiguration } from "../server-configuration-resolver";
+import { assertGrantedScopes, dateRange, finiteNumber, metric, requireAsset, uniqueAssets } from "./shared";
+import {
+  collectMetaGraphPages,
+  metaGraphBase,
+  requireMetaApplicationCredentials,
+  testMetaApplicationConfiguration,
+} from "./meta-graph";
 
 function authHeaders(token: string) {
   return { authorization: `Bearer ${token}` };
@@ -25,7 +21,7 @@ type MetaToken = { access_token?: string; token_type?: string; expires_in?: numb
 
 async function grantedPermissions(accessToken: string) {
   const rows = await collectMetaGraphPages<{ permission?: string; status?: string }>(
-    `${graphBase()}/me/permissions?fields=permission,status&limit=100`,
+    `${metaGraphBase()}/me/permissions?fields=permission,status&limit=100`,
     accessToken,
     "meta_permission_discovery_failed",
   );
@@ -34,7 +30,7 @@ async function grantedPermissions(accessToken: string) {
 
 async function discoverMetaAssets(accessToken: string) {
   const businesses = await collectMetaGraphPages<{ id?: string; name?: string }>(
-    `${graphBase()}/me/businesses?fields=id,name&limit=100`,
+    `${metaGraphBase()}/me/businesses?fields=id,name&limit=100`,
     accessToken,
     "meta_business_discovery_failed",
   );
@@ -43,7 +39,7 @@ async function discoverMetaAssets(accessToken: string) {
     if (!business.id) continue;
     assets.push({ type: "business", externalId: business.id, parentExternalId: null, displayName: business.name ?? business.id, permissions: ["business_management"], metadata: {} });
     const accounts = await collectMetaGraphPages<Record<string, unknown>>(
-      `${graphBase()}/${business.id}/owned_ad_accounts?fields=id,name,account_status,currency,timezone_name&limit=100`,
+      `${metaGraphBase()}/${business.id}/owned_ad_accounts?fields=id,name,account_status,currency,timezone_name&limit=100`,
       accessToken,
       "meta_ad_account_discovery_failed",
     );
@@ -56,7 +52,7 @@ async function discoverMetaAssets(accessToken: string) {
         metadata: { status: Number(account.account_status ?? 0), currency: String(account.currency ?? ""), timeZone: String(account.timezone_name ?? "") },
       });
       const pixels = await collectMetaGraphPages<Record<string, unknown>>(
-        `${graphBase()}/act_${id}/adspixels?fields=id,name,last_fired_time&limit=100`,
+        `${metaGraphBase()}/act_${id}/adspixels?fields=id,name,last_fired_time&limit=100`,
         accessToken,
         "meta_pixel_discovery_failed",
       );
@@ -87,7 +83,7 @@ async function syncMeta(input: ProviderRuntimeContext): Promise<ProviderSyncResu
   const account = requireAsset(input.assets, "ad_account");
   const query = { period: "last_30_days", compare: "none" } as const;
   const range = dateRange(30);
-  const url = new URL(`${graphBase()}/act_${account.externalId}/insights`);
+  const url = new URL(`${metaGraphBase()}/act_${account.externalId}/insights`);
   url.searchParams.set("fields", "campaign_id,campaign_name,impressions,clicks,spend,actions");
   url.searchParams.set("level", "campaign");
   url.searchParams.set("time_range", JSON.stringify({ since: range.start, until: range.end }));
@@ -126,11 +122,16 @@ async function syncMeta(input: ProviderRuntimeContext): Promise<ProviderSyncResu
 export const metaMarketingAdapter: IntegrationProviderAdapter = {
   integration: "meta_business",
   analyticsProvider: "meta_marketing",
-  configuration: config,
-  buildAuthorizationRequest(context) {
-    requireConfigured(config());
-    const url = new URL(`https://www.facebook.com/${process.env.META_GRAPH_API_VERSION!.trim()}/dialog/oauth`);
-    url.searchParams.set("client_id", process.env.META_APP_ID!.trim());
+  configuration() {
+    return resolveIntegrationApplicationConfiguration("meta_business");
+  },
+  testApplicationConfiguration() {
+    return testMetaApplicationConfiguration("meta_business");
+  },
+  async buildAuthorizationRequest(context) {
+    const credentials = await requireMetaApplicationCredentials("meta_business");
+    const url = new URL(`https://www.facebook.com/${metaGraphBase().split("/").at(-1)}/dialog/oauth`);
+    url.searchParams.set("client_id", credentials.appId);
     url.searchParams.set("redirect_uri", context.redirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", "ads_read,business_management");
@@ -138,14 +139,14 @@ export const metaMarketingAdapter: IntegrationProviderAdapter = {
     return { url: url.toString(), pkceVerifierRequired: false };
   },
   async exchangeAuthorizationCode(input): Promise<ProviderTokenSet> {
-    requireConfigured(config());
-    const tokenEndpoint = `${graphBase()}/oauth/access_token`;
+    const credentials = await requireMetaApplicationCredentials("meta_business");
+    const tokenEndpoint = `${metaGraphBase()}/oauth/access_token`;
     const short = await providerJson<MetaToken>(tokenEndpoint, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: formBody({
-        client_id: process.env.META_APP_ID!.trim(),
-        client_secret: process.env.META_APP_SECRET!.trim(),
+        client_id: credentials.appId,
+        client_secret: credentials.appSecret,
         redirect_uri: input.redirectUri,
         code: input.code,
       }),
@@ -156,15 +157,15 @@ export const metaMarketingAdapter: IntegrationProviderAdapter = {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: formBody({
         grant_type: "fb_exchange_token",
-        client_id: process.env.META_APP_ID!.trim(),
-        client_secret: process.env.META_APP_SECRET!.trim(),
+        client_id: credentials.appId,
+        client_secret: credentials.appSecret,
         fb_exchange_token: short.access_token,
       }),
     }, "meta_long_lived_token_exchange_failed");
     const accessToken = long.access_token ?? short.access_token;
     const grantedScopes = await grantedPermissions(accessToken);
     assertGrantedScopes(grantedScopes, ["ads_read", "business_management"], "meta_oauth_scope_missing");
-    const me = await providerJson<{ id?: string }>(`${graphBase()}/me?fields=id`, { headers: authHeaders(accessToken) }, "meta_subject_lookup_failed");
+    const me = await providerJson<{ id?: string }>(`${metaGraphBase()}/me?fields=id`, { headers: authHeaders(accessToken) }, "meta_subject_lookup_failed");
     return {
       strategy: { kind: "meta_user", refreshSupported: false }, accessToken, refreshToken: null,
       accessExpiresAt: isoAfterSeconds(long.expires_in ?? short.expires_in), refreshExpiresAt: null,
@@ -185,7 +186,7 @@ export const metaMarketingAdapter: IntegrationProviderAdapter = {
     try {
       this.validateAssetSelection(input.assets);
       const account = requireAsset(input.assets, "ad_account");
-      await providerJson(`${graphBase()}/act_${account.externalId}?fields=id,name,account_status`, { headers: authHeaders(input.accessToken) }, "meta_connection_test_failed");
+      await providerJson(`${metaGraphBase()}/act_${account.externalId}?fields=id,name,account_status`, { headers: authHeaders(input.accessToken) }, "meta_connection_test_failed");
       return { ok: true, checkedAt: new Date().toISOString(), message: "Meta Ad Account access verified.", requiresReauth: false, diagnosticCode: "integration_test_ok" };
     } catch (error) {
       const requiresReauth = Boolean(error && typeof error === "object" && "requiresReauth" in error && (error as { requiresReauth?: unknown }).requiresReauth);
