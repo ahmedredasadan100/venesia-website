@@ -1,11 +1,12 @@
 "use client";
 
 import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
-import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import FeedModuleFilterFields from "./FeedModuleFilterFields";
 import {
   MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeader,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
@@ -15,11 +16,11 @@ import {
   ModuleEditorTechnicalIdentity,
 } from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
+import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
 import type { FeedModuleConfig } from "../../../lib/feed-modules/types";
 import { TOPICS_FEED_TYPES } from "../../../lib/feed-modules/types";
 import type { TopicFilterOptions } from "../../../lib/feed-modules/load-topic-filter-options";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
-import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type FeedModuleEditClientProps = {
   block: {
@@ -61,7 +62,6 @@ export default function FeedModuleEditClient({
         backLabel="الرجوع لكل Feed Modules"
         status={block.status}
         saved={saved}
-        slotContext={getSlotCompatibilityLabel("feed")}
       />
 
       <form action={updateAction}>
@@ -75,17 +75,18 @@ export default function FeedModuleEditClient({
               id: "content",
               content: (
                 <ModuleEditorSection>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Widget Title</span>
+                  <ModuleEditorFieldGrid>
+                  <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
+                    <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.internalModuleName.labelAr}</span>
                     <input
                       name="widget_title"
                       defaultValue={config.presentation.title}
                       required
                       className={fieldClassName()}
                     />
-                  </label>
+                  </label></ModuleEditorField>
 
-                  <AdminFormListboxSelect
+                  <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
                     name="feed_type"
                     label="Feed Type"
                     defaultValue={block.feed_type}
@@ -93,12 +94,10 @@ export default function FeedModuleEditClient({
                       value: feedType,
                       label: FEED_TYPE_LABELS[feedType] ?? feedType,
                     }))}
-                  />
+                  /></ModuleEditorField>
 
-                  <FeedModuleFilterFields config={config} filterOptions={filterOptions} />
-
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Limit</span>
+                  <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
+                    <span className="text-xs font-semibold text-white/55">عدد النتائج</span>
                     <input
                       name="limit"
                       type="number"
@@ -106,7 +105,10 @@ export default function FeedModuleEditClient({
                       defaultValue={config.query.limit}
                       className={fieldClassName()}
                     />
-                  </label>
+                  </label></ModuleEditorField>
+                  </ModuleEditorFieldGrid>
+
+                  <FeedModuleFilterFields config={config} filterOptions={filterOptions} />
 
                   <AdminFormGrid columns={3}>
                     <AdminFormSwitch name="show_image" label="Show Image" value="true" defaultChecked={config.presentation.showImage} surface />
@@ -116,7 +118,7 @@ export default function FeedModuleEditClient({
 
                   <AdminFormGrid>
                     <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Eyebrow (Categories / Series)</span>
+                      <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr} (التصنيفات / السلاسل)</span>
                       <input name="eyebrow" defaultValue={config.presentation.eyebrow ?? ""} className={fieldClassName()} />
                     </label>
 
@@ -126,9 +128,6 @@ export default function FeedModuleEditClient({
                     </label>
                   </AdminFormGrid>
 
-                  <p className="text-xs leading-6 text-white/42">
-                    Empty Behavior: Hide — إذا لا توجد نتائج، لا يظهر الـ widget على الموقع.
-                  </p>
                 </ModuleEditorSection>
               ),
             },
@@ -136,7 +135,6 @@ export default function FeedModuleEditClient({
               id: "settings",
               content: (
                 <ModuleEditorSettingsComposition
-                  context={<ModuleDependencyHintsPanel moduleKind="feed" templateSlug={block.slug} />}
                   primary={
                   <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
@@ -156,9 +154,6 @@ export default function FeedModuleEditClient({
                   <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">حالة النشر</h2>
                     <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
-                    <p className="text-xs leading-6 text-white/42">
-                      Slot و Sort Order و Visibility تُدار من Pages Manager لكل صفحة على حدة.
-                    </p>
                   </ModuleEditorSection>
                   }
                 />

@@ -15,7 +15,6 @@ export type BlockEditorContextHeaderProps = {
   description?: string;
   status?: string;
   saved?: boolean;
-  slotContext?: string | null;
   actions?: ReactNode;
 };
 
@@ -26,7 +25,6 @@ export default function BlockEditorContextHeader({
   title,
   description,
   status,
-  slotContext,
   actions,
 }: BlockEditorContextHeaderProps) {
   const statusInfo = status ? statusMeta(status) : null;
@@ -34,19 +32,7 @@ export default function BlockEditorContextHeader({
     <AdminPageContextHeader
         eyebrow={eyebrow}
         title={title}
-        description={
-          description || slotContext ? (
-            <>
-              {description}
-              {slotContext ? (
-                <span className="mt-2 block text-xs text-white/40">
-                  الفتحة المفضلة:{" "}
-                  <span className="text-[#D8B87A]/85">{slotContext}</span>
-                </span>
-              ) : null}
-            </>
-          ) : undefined
-        }
+        description={description}
         breadcrumb={
           <Link
             href={backHref}

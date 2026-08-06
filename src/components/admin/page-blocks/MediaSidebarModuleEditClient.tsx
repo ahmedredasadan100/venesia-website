@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 
 import { AdminFormListboxSelect } from "../ui";
-import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import {
   MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeader,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
@@ -16,7 +17,6 @@ import {
 } from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import {
-  getMediaSidebarModuleSummary,
   MEDIA_SIDEBAR_WIDGET_LABELS,
 } from "../../../lib/media-sidebar-modules/admin-present";
 import {
@@ -25,7 +25,6 @@ import {
 } from "../../../lib/media-sidebar-modules/parse-config";
 import type { MediaSidebarWidgetKey } from "../../../lib/media-sidebar-modules/types";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
-import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type MediaSidebarModuleEditClientProps = {
   block: {
@@ -73,11 +72,6 @@ export default function MediaSidebarModuleEditClient({
   );
   const [limit, setLimit] = useState<number | "">(readInitialLimit(initialWidgetKey, initialConfig));
 
-  const summary = useMemo(
-    () => getMediaSidebarModuleSummary(widgetKey, block.description),
-    [widgetKey, block.description],
-  );
-
   const dataSourceOptions = useMemo(() => {
     if (widgetKey === "sections") {
       return [{ value: "navigation", label: "navigation / menu — قائمة التنقل" }];
@@ -105,7 +99,6 @@ export default function MediaSidebarModuleEditClient({
         backLabel="الرجوع لكل Media Sidebar Modules"
         status={block.status}
         saved={saved}
-        slotContext={getSlotCompatibilityLabel("media-sidebar")}
       />
 
       <form action={updateAction}>
@@ -119,32 +112,33 @@ export default function MediaSidebarModuleEditClient({
               id: "content",
               content: (
                 <ModuleEditorSection>
-                  <label className="block space-y-2">
+                  <ModuleEditorFieldGrid>
+                  <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
                     <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-                  </label>
+                  </label></ModuleEditorField>
 
-                  <AdminFormListboxSelect
+                  <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
                     name="widget_key"
                     label="نوع الـ widget"
                     value={widgetKey}
                     onChange={(value) => handleWidgetChange(readInitialWidgetKey(value))}
                     options={WIDGET_KEYS.map((key) => ({ value: key, label: MEDIA_SIDEBAR_WIDGET_LABELS[key] }))}
-                  />
+                  /></ModuleEditorField>
 
-                  <AdminFormListboxSelect
+                  <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
                     name="data_source"
                     label="مصدر البيانات"
                     value={dataSource}
                     onChange={(value) => setDataSource(value === "navigation" ? "navigation" : "topics")}
                     options={dataSourceOptions}
                     dir="ltr"
-                  />
+                  /></ModuleEditorField>
 
                   {widgetKey === "sections" ? (
-                    <p className="text-xs leading-6 text-white/42">Limit غير مطبق على widget أقسام المركز الإعلامي.</p>
+                    <ModuleEditorField nature="standard" span={4}><p className="rounded-xl border border-white/10 bg-black/16 px-4 py-3 text-xs leading-6 text-white/42">عدد العناصر غير مطبق على أقسام المركز الإعلامي.</p></ModuleEditorField>
                   ) : (
-                    <label className="block space-y-2">
+                    <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Limit</span>
                       <input
                         name="limit"
@@ -159,18 +153,9 @@ export default function MediaSidebarModuleEditClient({
                         className={fieldClassName()}
                         dir="ltr"
                       />
-                    </label>
+                    </label></ModuleEditorField>
                   )}
-
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">وصف قصير</span>
-                    <textarea
-                      readOnly
-                      value={summary}
-                      rows={3}
-                      className={fieldClassName("cursor-default resize-none text-white/72")}
-                    />
-                  </label>
+                  </ModuleEditorFieldGrid>
                 </ModuleEditorSection>
               ),
             },
@@ -178,7 +163,6 @@ export default function MediaSidebarModuleEditClient({
               id: "settings",
               content: (
                 <ModuleEditorSettingsComposition
-                  context={<ModuleDependencyHintsPanel moduleKind="media-sidebar" templateSlug={block.slug} />}
                   primary={
                   <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
@@ -193,9 +177,6 @@ export default function MediaSidebarModuleEditClient({
                   <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">حالة النشر</h2>
                     <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
-                    <p className="text-xs leading-6 text-white/42">
-                      Slot و Sort Order و Visibility تُدار من Pages Manager لكل صفحة على حدة.
-                    </p>
                   </ModuleEditorSection>
                   }
                 />

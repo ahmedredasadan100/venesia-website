@@ -6,6 +6,8 @@ import AdminImagePathListField from "../../../../../../components/admin/page-blo
 import {
   ModuleEditorHeader,
   ModuleEditorFeedback,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
@@ -80,33 +82,35 @@ export default function HeroEditClient({
     <div className="mx-auto max-w-5xl space-y-5">
       <ModuleEditorSection>
         <h2 className="text-base font-semibold text-white">بيانات الموديول</h2>
-        <AdminFormGrid className="max-w-[920px]">
-          <label className="space-y-2">
+        <ModuleEditorFieldGrid className="max-w-[920px]">
+          <ModuleEditorField nature="standard" span={4}><label className="space-y-2">
             <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
             <input name="name" defaultValue={hero.name} required className={fieldClassName("h-11")} />
-          </label>
-          <ModuleEditorTechnicalIdentity
+          </label></ModuleEditorField>
+          <ModuleEditorField nature="technical" span={4}><ModuleEditorTechnicalIdentity
             mode="read-only"
             value={hero.slug}
             inputClassName={fieldClassName("h-11 bg-white/[0.03]")}
-          />
-          <label className="space-y-2 md:col-span-2">
+          /></ModuleEditorField>
+          <ModuleEditorField nature="short-description" span={4}><label className="space-y-2">
             <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
             <input
               name="template_description"
               defaultValue={hero.description ?? ""}
               className={fieldClassName("h-11")}
             />
-          </label>
-        </AdminFormGrid>
+          </label></ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
       {!isHomeHero ? (
         <ModuleEditorSection>
           <h2 className="text-base font-semibold text-white">عناصر الهيرو</h2>
 
+          <ModuleEditorFieldGrid>
+          <ModuleEditorField nature="short-text" span={6}>
           <HeroTextFieldRow
-            label="العنوان التمهيدي"
+            label="النص التمهيدي"
             name="eyebrow"
             defaultValue={String(config.eyebrow ?? "")}
             boldName="eyebrow_bold"
@@ -116,6 +120,8 @@ export default function HeroEditClient({
             alignmentDefault={controls.eyebrowAlignment}
             showDefault={controls.showEyebrow}
           />
+          </ModuleEditorField>
+          <ModuleEditorField nature="short-text" span={6}>
           <HeroTextFieldRow
             label="العنوان الرئيسي"
             name="title"
@@ -127,6 +133,8 @@ export default function HeroEditClient({
             alignmentDefault={controls.titleAlignment}
             showDefault={controls.showTitle}
           />
+          </ModuleEditorField>
+          <ModuleEditorField nature="short-text" span={6}>
           <HeroTextFieldRow
             label="النص المميز"
             name="highlight"
@@ -139,6 +147,8 @@ export default function HeroEditClient({
             showDefault={controls.showHighlight}
             helperText="عنصر مستقل عن العنوان الفرعي، ويمكن عرضهما معًا."
           />
+          </ModuleEditorField>
+          <ModuleEditorField nature="short-text" span={6}>
           <HeroTextFieldRow
             label="العنوان الفرعي"
             name="subtitle"
@@ -150,8 +160,9 @@ export default function HeroEditClient({
             alignmentDefault={controls.subtitleAlignment}
             showDefault={controls.showSubtitle}
           />
+          </ModuleEditorField>
 
-          <div className="max-w-[920px] space-y-1.5">
+          <ModuleEditorField nature="long-content"><div className="max-w-[920px] space-y-1.5">
             <span className="block text-xs font-semibold text-white/55">الوصف</span>
             <input
               type="hidden"
@@ -172,8 +183,9 @@ export default function HeroEditClient({
               minHeight={160}
               placeholder="اكتب وصف الهيرو..."
             />
-          </div>
+          </div></ModuleEditorField>
 
+          <ModuleEditorField nature="short-text" span={8}>
           <HeroTextFieldRow
             label="مسار التنقل — عنوان الصفحة الحالي"
             name="breadcrumb_current_label"
@@ -187,7 +199,9 @@ export default function HeroEditClient({
             placeholder="مثال: من نحن"
             helperText="يستبدل آخر عنصر في مسار التنقل لهذا الهيرو فقط، دون تغيير عنوان الصفحة في النظام."
           />
+          </ModuleEditorField>
 
+          <ModuleEditorField nature="binary-state" span={4}>
           <HeroVisibilityAlignRow
             label="زر الإجراء"
             alignmentName="cta_alignment"
@@ -198,31 +212,29 @@ export default function HeroEditClient({
           >
             <p className="text-xs text-white/40">لا يظهر الزر علنًا إلا بعد تعبئة نص ورابط في تبويب الأزرار.</p>
           </HeroVisibilityAlignRow>
+          </ModuleEditorField>
+          </ModuleEditorFieldGrid>
         </ModuleEditorSection>
       ) : (
         <ModuleEditorSection>
-          <AdminNotice
-            variant="info"
-            message="هيرو الصفحة الرئيسية محمي بقواعده الخاصة. استخدم الحقول الأساسية أدناه دون عناصر التحكم الداخلية."
-          />
-          <AdminFormGrid className="max-w-[920px]">
-            <label className="space-y-2">
-              <span className="text-xs font-semibold text-white/55">العنوان التمهيدي</span>
+          <ModuleEditorFieldGrid className="max-w-[920px]">
+            <ModuleEditorField nature="short-text" span={3}><label className="space-y-2">
+              <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
               <input name="eyebrow" defaultValue={String(config.eyebrow ?? "")} className={fieldClassName("h-11")} />
-            </label>
-            <label className="space-y-2">
+            </label></ModuleEditorField>
+            <ModuleEditorField nature="short-text" span={4}><label className="space-y-2">
               <span className="text-xs font-semibold text-white/55">العنوان الرئيسي</span>
               <input name="title" defaultValue={String(config.title ?? "")} className={fieldClassName("h-11")} />
-            </label>
-            <label className="space-y-2">
+            </label></ModuleEditorField>
+            <ModuleEditorField nature="short-text" span={5}><label className="space-y-2">
               <span className="text-xs font-semibold text-white/55">النص المميز</span>
               <input name="highlight" defaultValue={String(config.highlight ?? "")} className={fieldClassName("h-11")} />
-            </label>
-            <label className="space-y-2">
+            </label></ModuleEditorField>
+            <ModuleEditorField nature="short-description" span={5}><label className="space-y-2">
               <span className="text-xs font-semibold text-white/55">العنوان الفرعي</span>
               <input name="subtitle" defaultValue={String(config.subtitle ?? "")} className={fieldClassName("h-11")} />
-            </label>
-            <label className="space-y-2 md:col-span-2">
+            </label></ModuleEditorField>
+            <ModuleEditorField nature="long-content"><label className="space-y-2">
               <span className="text-xs font-semibold text-white/55">الوصف</span>
               <textarea
                 name="description"
@@ -230,23 +242,18 @@ export default function HeroEditClient({
                 rows={4}
                 className={fieldClassName("resize-y leading-7")}
               />
-            </label>
-          </AdminFormGrid>
+            </label></ModuleEditorField>
+          </ModuleEditorFieldGrid>
         </ModuleEditorSection>
       )}
     </div>
   );
 
-  const orderTab = !isHomeHero ? (
+  const orderTab = (
     <div className="mx-auto max-w-5xl">
       <ModuleEditorSection>
         <HeroElementOrderEditor defaultOrder={controls.heroElementOrder} />
       </ModuleEditorSection>
-    </div>
-  ) : (
-    <div className="mx-auto max-w-5xl">
-      <AdminNotice variant="info" message="ترتيب العناصر متاح لهيرو الصفحات الداخلية فقط." />
-      <input type="hidden" name="hero_element_order" value={JSON.stringify(controls.heroElementOrder)} />
     </div>
   );
 

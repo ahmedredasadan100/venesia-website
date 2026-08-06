@@ -1,10 +1,11 @@
 "use client";
 
 import { AdminFormListboxSelect, AdminFormSwitch } from "../ui";
-import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import {
   MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeader,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
@@ -17,7 +18,6 @@ import BreadcrumbManualItemsField from "./editors/BreadcrumbManualItemsField";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { BreadcrumbBlockConfig } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
-import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type BreadcrumbModuleEditClientProps = {
   block: {
@@ -51,7 +51,6 @@ export default function BreadcrumbModuleEditClient({
         backLabel="الرجوع لكل موديولات Breadcrumb"
         status={block.status}
         saved={saved}
-        slotContext={getSlotCompatibilityLabel("breadcrumb")}
       />
 
       <form action={updateAction}>
@@ -66,26 +65,34 @@ export default function BreadcrumbModuleEditClient({
               id: "content",
               content: (
                 <ModuleEditorSection>
-                  <AdminFormListboxSelect
-                    name="source"
-                    label="مصدر المسار"
-                    defaultValue={config.source ?? "navigation"}
-                    options={[
-                      { value: "navigation", label: "من قائمة التنقل (تلقائي)" },
-                      { value: "manual", label: "يدوي" },
-                    ]}
-                  />
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">تسمية الصفحة الحالية (اختياري)</span>
-                    <input
-                      name="current_label_override"
-                      defaultValue={config.currentLabelOverride ?? ""}
-                      placeholder="يستبدل آخر عنصر في المسار"
-                      className={fieldClassName()}
-                    />
-                  </label>
+                  <ModuleEditorFieldGrid>
+                    <ModuleEditorField nature="standard" span={4}>
+                      <AdminFormListboxSelect
+                        name="source"
+                        label="مصدر المسار"
+                        defaultValue={config.source ?? "navigation"}
+                        options={[
+                          { value: "navigation", label: "من قائمة التنقل (تلقائي)" },
+                          { value: "manual", label: "يدوي" },
+                        ]}
+                      />
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-text" span={5}>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">تسمية الصفحة الحالية (اختياري)</span>
+                        <input
+                          name="current_label_override"
+                          defaultValue={config.currentLabelOverride ?? ""}
+                          placeholder="يستبدل آخر عنصر في المسار"
+                          className={fieldClassName()}
+                        />
+                      </label>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="binary-state" span={3}>
+                      <AdminFormSwitch name="show_home" label="إظهار الرئيسية" value="true" defaultChecked={config.showHome !== false} surface />
+                    </ModuleEditorField>
+                  </ModuleEditorFieldGrid>
                   <BreadcrumbManualItemsField items={config.manualItems ?? []} />
-                  <AdminFormSwitch name="show_home" label="إظهار الرئيسية" value="true" defaultChecked={config.showHome !== false} surface />
                 </ModuleEditorSection>
               ),
             },
@@ -93,19 +100,26 @@ export default function BreadcrumbModuleEditClient({
               id: "settings",
               content: (
                 <ModuleEditorSettingsComposition
-                  context={<ModuleDependencyHintsPanel moduleKind="breadcrumb" templateSlug={block.slug} />}
                   primary={
                   <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
-                      <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-                    </label>
-                    <ModuleEditorTechnicalIdentity mode="editable" value={block.slug} inputClassName={fieldClassName()} />
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
-                      <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
-                    </label>
+                    <ModuleEditorFieldGrid>
+                      <ModuleEditorField nature="standard" span={4}>
+                        <label className="block space-y-2">
+                          <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
+                          <input name="name" defaultValue={block.name} required className={fieldClassName()} />
+                        </label>
+                      </ModuleEditorField>
+                      <ModuleEditorField nature="technical" span={4}>
+                        <ModuleEditorTechnicalIdentity mode="editable" value={block.slug} inputClassName={fieldClassName()} />
+                      </ModuleEditorField>
+                      <ModuleEditorField nature="short-description" span={4}>
+                        <label className="block space-y-2">
+                          <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
+                          <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
+                        </label>
+                      </ModuleEditorField>
+                    </ModuleEditorFieldGrid>
                   </ModuleEditorSection>
                   }
 

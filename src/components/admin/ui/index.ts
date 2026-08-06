@@ -165,9 +165,11 @@ export {
   AdminFormActions,
   AdminFormError,
   AdminFormGrid,
+  AdminFormGridItem,
   useAdminFormRuntime,
   useAdminUnsavedChangesGuard,
 } from "./AdminFormRuntime";
+export type { AdminFormGridSpan } from "./AdminFormRuntime";
 export type {
   AdminFormRuntimeContextValue,
   AdminFormRuntimeProps,

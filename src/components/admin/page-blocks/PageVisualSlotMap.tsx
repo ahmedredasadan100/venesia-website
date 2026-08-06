@@ -10,6 +10,7 @@ import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-mo
 
 type PageVisualSlotMapProps = {
   assignments: PageBlockAssignmentRow[];
+  pageSlug: string;
 };
 
 function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
@@ -36,7 +37,7 @@ function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
   return groups;
 }
 
-export default function PageVisualSlotMap({ assignments }: PageVisualSlotMapProps) {
+export default function PageVisualSlotMap({ assignments, pageSlug }: PageVisualSlotMapProps) {
   const grouped = groupAssignmentsBySlot(assignments);
 
   return (
@@ -75,7 +76,7 @@ export default function PageVisualSlotMap({ assignments }: PageVisualSlotMapProp
                 <ul className="space-y-2">
                   {rows.map((row) => {
                     const visible = normalizeBoolean(row.is_visible, true);
-                    const compatibility = getSlotCompatibilityLabel(row.module_kind);
+                    const compatibility = getSlotCompatibilityLabel(row.module_kind, pageSlug);
 
                     return (
                       <li

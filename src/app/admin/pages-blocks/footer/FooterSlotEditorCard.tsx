@@ -88,7 +88,7 @@ export default function FooterSlotEditorCard({
 
       <div className="space-y-4">
         <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
-          <p className={adminFormHintClassName()}>معاينة رأس العمود (Eyebrow + Title)</p>
+          <p className={adminFormHintClassName()}>معاينة رأس العمود (النص التمهيدي + العنوان)</p>
           <FooterBlockHeader
             variant="admin"
             eyebrow={slot.heading}
@@ -104,7 +104,7 @@ export default function FooterSlotEditorCard({
         <div className={ADMIN_FORM.gridTwoCol}>
           <BlockTypeSelect value={slot.type} onChange={handleTypeChange} />
           <label className={adminFormLabelClassName()}>
-            <span>تسمية القسم (Eyebrow) — اختياري</span>
+            <span>النص التمهيدي — اختياري</span>
             <input
               value={slot.heading ?? ""}
               onChange={(event) => updateHeading(event.target.value)}

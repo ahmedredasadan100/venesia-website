@@ -63,7 +63,6 @@ export function listRegistrySlugsForSlot(slot: PageCompositionSlot) {
 export {
   getModuleEditorHeaderMetadata,
   getModuleEditorSectionMetadata,
-  getModuleDependencyHints,
   getModuleKindMetadata,
   getSlotCompatibilityLabel,
   getSlotModuleSlugMetadata,

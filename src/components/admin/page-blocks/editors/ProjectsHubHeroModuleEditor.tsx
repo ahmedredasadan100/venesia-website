@@ -1,6 +1,6 @@
 "use client";
 
-import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import { ModuleEditorField, ModuleEditorFieldGrid, ModuleEditorSection } from "../ModuleEditorPresentation";
 import { AdminFormListboxSelect } from "../../ui";
 
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
@@ -19,7 +19,8 @@ export default function ProjectsHubHeroModuleEditor({ config }: ProjectsHubHeroM
       <input type="hidden" name="config_schema" value="projects-hub-hero" />
 
       <ModuleEditorSection>
-        <AdminFormListboxSelect
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
           name="selection_mode"
           label="طريقة اختيار الشرائح"
           defaultValue={config.selectionMode}
@@ -28,9 +29,9 @@ export default function ProjectsHubHeroModuleEditor({ config }: ProjectsHubHeroM
             label: mode === "auto_residential_with_media" ? "تلقائي — سكني مع وسائط" : mode,
           }))}
           dir="ltr"
-        />
+        /></ModuleEditorField>
 
-        <label className="block space-y-2">
+        <ModuleEditorField nature="technical" span={3}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">التشغيل التلقائي (مللي ثانية)</span>
           <input
             name="autoplay_ms"
@@ -42,9 +43,9 @@ export default function ProjectsHubHeroModuleEditor({ config }: ProjectsHubHeroM
             dir="ltr"
             className={fieldClassName()}
           />
-        </label>
+        </label></ModuleEditorField>
 
-        <label className="block space-y-2">
+        <ModuleEditorField nature="short-description" span={5}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">نص الحالة الفارغة (اختياري)</span>
           <textarea
             name="empty_state"
@@ -53,7 +54,8 @@ export default function ProjectsHubHeroModuleEditor({ config }: ProjectsHubHeroM
             placeholder="اتركه فارغًا لعدم عرض رسالة"
             className={fieldClassName("resize-y leading-7")}
           />
-        </label>
+        </label></ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
     </div>
   );

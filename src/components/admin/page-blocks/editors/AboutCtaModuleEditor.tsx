@@ -1,6 +1,12 @@
 "use client";
 
-import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
+  ModuleEditorRepeaterCard,
+  ModuleEditorRepeaterGrid,
+  ModuleEditorSection,
+} from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
@@ -57,7 +63,7 @@ export default function AboutCtaModuleEditor({
 }: AboutCtaModuleEditorProps) {
   const isHomeContact = editorMode === "home-contact";
   const fieldLabels = {
-    eyebrow: "العنوان التمهيدي الصغير",
+    eyebrow: "النص التمهيدي",
     title: "العنوان",
     description: "الوصف",
     imageAlt: "وصف الصورة",
@@ -94,11 +100,12 @@ export default function AboutCtaModuleEditor({
 
   const textFields = showText ? (
       <ModuleEditorSection>
-      <label className="block space-y-2">
+      <ModuleEditorFieldGrid>
+      <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
         <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
         <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-      </label>
-      <label className="block space-y-2">
+      </label></ModuleEditorField>
+      <ModuleEditorField nature="short-text" span={4}><label className="block space-y-2">
         <span className="text-xs font-semibold text-white/55">{fieldLabels.title}</span>
         {isHomeContact ? (
           <textarea
@@ -111,16 +118,17 @@ export default function AboutCtaModuleEditor({
         ) : (
           <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
         )}
-      </label>
-      <label className="block space-y-2">
+      </label></ModuleEditorField>
+      <ModuleEditorField nature="short-description" span={5}><label className="block space-y-2">
         <span className="text-xs font-semibold text-white/55">{fieldLabels.description}</span>
         <textarea
           name="description"
           defaultValue={config.description ?? ""}
-          rows={4}
+          rows={2}
           className={fieldClassName("resize-y leading-7")}
         />
-      </label>
+      </label></ModuleEditorField>
+      </ModuleEditorFieldGrid>
       </ModuleEditorSection>
   ) : null;
 
@@ -153,27 +161,24 @@ export default function AboutCtaModuleEditor({
         name="image"
         label="صورة القسم"
         defaultValue={config.image ?? ""}
+        altName="image_alt"
+        defaultAlt={config.imageAlt ?? ""}
+        altLabel={fieldLabels.imageAlt}
         dimensionHint="content"
         browseFolder={isHomeContact ? "images/home" : "images/about"}
       />
-      <label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">{fieldLabels.imageAlt}</span>
-        <input name="image_alt" defaultValue={config.imageAlt ?? ""} className={fieldClassName()} />
-      </label>
       </ModuleEditorSection>
   ) : null;
 
   const contactsFields = showContacts ? (
       <ModuleEditorSection>
-      <p className="text-xs leading-6 text-white/45">
-        اترك الصف فارغًا لإخفائه. الرابط اختياري — إن وُجد يصبح النص قابلًا للنقر. استخدم الأسهم لتغيير ترتيب الظهور.
-      </p>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <ModuleEditorRepeaterGrid>
         {contactRows.map((row, index) => (
-          <div key={row.uid} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-[#D8B87A]/70">وسيلة {index + 1}</p>
-              <div className="flex items-center gap-1.5">
+          <ModuleEditorRepeaterCard
+            key={row.uid}
+            title={`وسيلة ${index + 1}`}
+            actions={(
+              <>
                 <button
                   type="button"
                   onClick={() => moveRow(index, -1)}
@@ -192,8 +197,9 @@ export default function AboutCtaModuleEditor({
                 >
                   ↓
                 </button>
-              </div>
-            </div>
+              </>
+            )}
+          >
 
             <label className="block space-y-2">
               <span className="text-xs font-semibold text-white/55">{fieldLabels.contactLabel}</span>
@@ -250,9 +256,9 @@ export default function AboutCtaModuleEditor({
                 defaultValue={row.linkDefault}
               />
             )}
-          </div>
+          </ModuleEditorRepeaterCard>
         ))}
-      </div>
+      </ModuleEditorRepeaterGrid>
       </ModuleEditorSection>
   ) : null;
 

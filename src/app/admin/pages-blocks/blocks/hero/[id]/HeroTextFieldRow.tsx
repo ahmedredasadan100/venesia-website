@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AdminFormSwitch } from "../../../../../../components/admin/ui";
 import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
 import type { HeroTextAlignment } from "../../../../../../lib/hero/hero-content-controls";
 
@@ -56,9 +57,7 @@ export default function HeroTextFieldRow({
   return (
     <div className="max-w-[920px] space-y-1.5">
       <span className="block text-xs font-semibold text-white/55">{label}</span>
-      {enableBold ? <input type="hidden" name={boldName} value={bold ? "true" : "false"} /> : null}
       <input type="hidden" name={alignmentName} value={alignment} />
-      <input type="hidden" name={showName} value={show ? "true" : "false"} />
 
       <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:gap-3">
         <input
@@ -74,16 +73,14 @@ export default function HeroTextFieldRow({
           aria-label={`تنسيق ${label}`}
         >
           {enableBold ? (
-            <button
-              type="button"
-              title="خط عريض"
-              aria-label="خط عريض"
-              aria-pressed={bold}
-              onClick={() => setBold((current) => !current)}
-              className={toolClass(bold)}
-            >
-              B
-            </button>
+            <AdminFormSwitch
+              name={boldName}
+              label="خط عريض"
+              value="true"
+              checked={bold}
+              onChange={(event) => setBold(event.target.checked)}
+              className="min-w-24"
+            />
           ) : null}
           {alignOptions.map((option) => {
             const active = option.value === alignment;
@@ -101,16 +98,15 @@ export default function HeroTextFieldRow({
               </button>
             );
           })}
-          <button
-            type="button"
-            title={show ? "إخفاء العنصر" : "إظهار العنصر"}
-            aria-label={show ? "إخفاء العنصر" : "إظهار العنصر"}
-            aria-pressed={show}
-            onClick={() => setShow((current) => !current)}
-            className={[toolClass(show), "w-auto min-w-10 px-2.5"].join(" ")}
-          >
-            {show ? "إخفاء" : "إظهار"}
-          </button>
+          <AdminFormSwitch
+            name={showName}
+            label={show ? "ظاهر" : "مخفي"}
+            value="true"
+            checked={show}
+            onChange={(event) => setShow(event.target.checked)}
+            surface
+            className="min-w-32"
+          />
         </div>
       </div>
 

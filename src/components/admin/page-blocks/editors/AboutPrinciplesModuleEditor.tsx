@@ -1,12 +1,18 @@
 "use client";
 
-import { ModuleEditorSection } from "../ModuleEditorPresentation";
+import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
+  ModuleEditorRepeaterCard,
+  ModuleEditorRepeaterGrid,
+  ModuleEditorSection,
+} from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminFormListboxSelect } from "../../ui";
+import { AdminFormListboxSelect, AdminFormSwitch } from "../../ui";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   ABOUT_PRINCIPLES_ICON_KEYS,
@@ -72,19 +78,15 @@ function PlainTextFormatControls({
   return (
     <div className="space-y-2">
       <span className="text-xs font-semibold text-white/55">{label}</span>
-      <input type="hidden" name={boldName} value={bold ? "true" : "false"} />
       <input type="hidden" name={alignmentName} value={alignment} />
       <div className="flex flex-wrap gap-2" role="toolbar" aria-label={label}>
-        <button
-          type="button"
-          title="عريض"
-          aria-label="عريض"
-          aria-pressed={bold}
-          onClick={() => setBold((current) => !current)}
-          className={toolClass(bold)}
-        >
-          عريض
-        </button>
+        <AdminFormSwitch
+          name={boldName}
+          label="خط عريض"
+          value="true"
+          checked={bold}
+          onChange={(event) => setBold(event.target.checked)}
+        />
         {alignOptions.map((option) => {
           const active = option.value === alignment;
           return (
@@ -156,24 +158,26 @@ export default function AboutPrinciplesModuleEditor({
 
       <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">{isHomeTrust ? "نصوص القسم" : "العنوان"}</h2>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان التمهيدي الصغير</span>
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
           <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-        </label>
+        </label></ModuleEditorField>
+        <ModuleEditorField nature="short-text" span={9}><label className="block space-y-2">
+          <span className="text-xs font-semibold text-white/55">العنوان الرئيسي</span>
+          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
+        </label></ModuleEditorField>
+        </ModuleEditorFieldGrid>
         {isHomeTrust ? (
           <PlainTextFormatControls
-            label="تنسيق العنوان التمهيدي"
+            label="تنسيق النص التمهيدي"
             boldName="eyebrow_bold"
             alignmentName="eyebrow_alignment"
             boldDefault={eyebrowBold}
             alignmentDefault={eyebrowAlignment}
-            helperText="يؤثر على العنوان التمهيدي الصغير فقط."
+            helperText="يؤثر على النص التمهيدي فقط."
           />
         ) : null}
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان الرئيسي</span>
-          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-        </label>
         {isHomeTrust ? (
           <PlainTextFormatControls
             label="تنسيق العنوان الرئيسي"
@@ -185,7 +189,7 @@ export default function AboutPrinciplesModuleEditor({
           />
         ) : null}
         {isHomeTrust ? (
-          <AdminRichTextEditor
+          <ModuleEditorFieldGrid><ModuleEditorField nature="long-content"><AdminRichTextEditor
             name="principles_intro"
             label="الفقرة التعريفية"
             defaultValue={config.description ?? ""}
@@ -193,7 +197,7 @@ export default function AboutPrinciplesModuleEditor({
             enableTextAlign
             minHeight={160}
             helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
-          />
+          /></ModuleEditorField></ModuleEditorFieldGrid>
         ) : null}
       </ModuleEditorSection>
 
@@ -214,15 +218,13 @@ export default function AboutPrinciplesModuleEditor({
           ) : null}
         </div>
 
-        <div className="space-y-4">
+        <ModuleEditorRepeaterGrid>
           {items.map((item, index) => (
-            <div key={index} className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-[#D8B87A]/70">
-                  {isHomeTrust ? `بطاقة ${index + 1}` : `عنصر ${index + 1}`}
-                </p>
-                {!isHomeTrust ? (
-                  <div className="flex flex-wrap gap-2">
+            <ModuleEditorRepeaterCard
+              key={index}
+              title={isHomeTrust ? `بطاقة ${index + 1}` : `عنصر ${index + 1}`}
+              actions={!isHomeTrust ? (
+                <>
                     <button
                       type="button"
                       onClick={() => moveItem(index, -1)}
@@ -247,9 +249,9 @@ export default function AboutPrinciplesModuleEditor({
                     >
                       حذف
                     </button>
-                  </div>
-                ) : null}
-              </div>
+                </>
+              ) : undefined}
+            >
 
               <input type="hidden" name={`principle_${index}_title`} value={item.title ?? ""} />
               <input type="hidden" name={`principle_${index}_description`} value={item.description ?? ""} />
@@ -287,31 +289,21 @@ export default function AboutPrinciplesModuleEditor({
                 />
               </label>
               {isHomeTrust ? (
-                <>
                   <AdminMediaImageField
                     name={`principle_${index}_image`}
                     label="صورة الكارت — اختياري"
                     defaultValue={item.image ?? ""}
+                    altName={`principle_${index}_image_alt`}
+                    defaultAlt={item.imageAlt ?? ""}
+                    altLabel="النص البديل للصورة — اختياري"
                     dimensionHint="content"
                     browseFolder="images/home"
                     onValueChange={(value) => updateItem(index, { image: value || undefined })}
                   />
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">
-                      النص البديل للصورة — اختياري
-                    </span>
-                    <input
-                      name={`principle_${index}_image_alt`}
-                      value={item.imageAlt ?? ""}
-                      onChange={(event) => updateItem(index, { imageAlt: event.target.value })}
-                      className={fieldClassName()}
-                    />
-                  </label>
-                </>
               ) : null}
-            </div>
+            </ModuleEditorRepeaterCard>
           ))}
-        </div>
+        </ModuleEditorRepeaterGrid>
       </ModuleEditorSection>
     </div>
   );

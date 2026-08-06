@@ -43,6 +43,7 @@ import {
 import type { AdminFormRuntimeHandle } from "../ui/AdminFormRuntime";
 import { PlusIcon } from "../AdminRowActions";
 import type { AdminFormAction } from "../../../lib/admin/form-runtime";
+import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
 import {
   adminCollectionSearchIncludes,
   applyAdminEntityUrlPatch,
@@ -577,7 +578,7 @@ export default function BlockModuleManagerClient({
               {moduleKey === "feed" ? (
                 <>
                   <label className={adminFormLabelClassName()}>
-                    Widget Title
+                    {MODULE_EDITOR_TERMINOLOGY.internalModuleName.labelAr}
                     <input
                       name="widget_title"
                       required

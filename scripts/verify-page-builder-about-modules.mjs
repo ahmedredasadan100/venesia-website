@@ -34,6 +34,7 @@ const section = read("src/components/modules/AboutIntroSingleImageModuleSection.
 const migration = read("sql/migrations/20250715120000_about_intro_single_image_module.sql");
 const registry = read("src/lib/page-blocks/module-edit-registry.ts");
 const slots = read("src/components/page-composition/slot-module-nodes.tsx");
+const presentationRegistry = read("src/lib/page-composition/module-registry-metadata.ts");
 
 assert(
   row.includes("duplicate: manageable") &&
@@ -55,10 +56,13 @@ assert(client.includes('isVisionGoals'), "Vision goals chrome flag missing");
 assert(
   client.includes("const usesAboutStructuredChrome =") &&
     client.includes("isAboutIntro || isAboutIntroSingleImage || isVisionGoals") &&
-    client.includes("usesUnifiedModuleChrome || usesProjectsHubHeader ? null"),
-  "Module hints must be gated for vision-goals / single-image",
+    !client.includes("ModuleDependencyHintsPanel"),
+  "legacy module hints must remain retired for structured editors",
 );
-assert(client.includes('title="الرؤية والأهداف"'), "Vision goals header title missing");
+assert(
+  presentationRegistry.includes('"vision-goals"') && presentationRegistry.includes('labelAr: "الرؤية والأهداف"'),
+  "Vision goals shared header metadata missing",
+);
 assert(editor.includes('name="image_position"'), "imagePosition field missing");
 assert(!editor.includes("image_secondary"), "Single-image editor must not expose secondary image");
 assert(section.includes('aspect-[16/12]'), "Public single-image frame aspect missing");

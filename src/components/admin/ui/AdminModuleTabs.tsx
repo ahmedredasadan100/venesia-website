@@ -22,6 +22,8 @@ export type AdminModuleTab = AdminModuleTabNavigationLabel & {
   /** Full descriptive heading rendered inside the active panel. */
   sectionHeading?: ReactNode;
   sectionDescription?: ReactNode;
+  /** Optional compact context rendered opposite the active section title. */
+  sectionSummary?: ReactNode;
   /** Semantic icon rendered by the shared owner. */
   icon?: AdminModuleTabIconName;
   indicator?: ReactNode;
@@ -302,7 +304,7 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
         >
           {tab.sectionHeading ? (
             <header
-              className="mb-5 flex min-h-[84px] min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5"
+              className="mb-5 flex min-h-[84px] min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5"
               data-admin-tab-section-heading={tab.id}
             >
               <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] shadow-[inset_0_0_14px_rgba(216,184,122,0.08)] sm:size-12 [&>svg]:size-5">
@@ -323,6 +325,14 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
                   </span>
                 ) : null}
               </span>
+              {tab.sectionSummary ? (
+                <div
+                  className="flex w-full min-w-0 flex-wrap items-center gap-2 border-t border-white/8 pt-3 sm:ms-auto sm:w-auto sm:max-w-[46%] sm:border-s sm:border-t-0 sm:ps-4 sm:pt-0"
+                  data-admin-tab-section-summary={tab.id}
+                >
+                  {tab.sectionSummary}
+                </div>
+              ) : null}
             </header>
           ) : null}
           {tab.id === activeId && activePanelContext ? (

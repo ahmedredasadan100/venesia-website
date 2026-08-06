@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeadingVisibilityRow,
   ModuleEditorSection,
 } from "../ModuleEditorPresentation";
@@ -150,15 +152,16 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
       <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">إعدادات عرض المشروعات المميزة</h2>
 
-        <AdminFormListboxSelect
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="standard" span={5}><AdminFormListboxSelect
           name="selection_mode"
           label="قاعدة الاختيار"
           defaultValue={config.selectionMode}
           options={FEATURED_SELECTION_MODE_OPTIONS}
           hint="الاختيار يعتمد على حقل featured في سجلات المشروعات — وليس اختياراً يدوياً من هذا المحرر."
-        />
+        /></ModuleEditorField>
 
-        <label className="block space-y-2">
+        <ModuleEditorField nature="technical" span={3}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">الحد الأقصى (اختياري)</span>
           <input
             name="limit"
@@ -170,9 +173,9 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
             dir="ltr"
             className={fieldClassName()}
           />
-        </label>
+        </label></ModuleEditorField>
 
-        <label className="block space-y-2">
+        <ModuleEditorField nature="technical" span={4}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">التشغيل التلقائي (مللي ثانية)</span>
           <input
             name="autoplay_ms"
@@ -184,13 +187,14 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
             dir="ltr"
             className={fieldClassName()}
           />
-        </label>
+        </label></ModuleEditorField>
 
-        <VisibilityToggle
+        <ModuleEditorField nature="binary-state" span={4}><VisibilityToggle
           name="show_slider_dots"
           label="إظهار مؤشرات السلايدر"
           defaultChecked={config.showSliderDots !== false}
-        />
+        /></ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
     </div>
   );

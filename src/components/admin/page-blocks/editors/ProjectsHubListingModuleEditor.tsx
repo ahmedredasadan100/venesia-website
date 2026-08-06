@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeadingVisibilityRow,
   ModuleEditorSection,
 } from "../ModuleEditorPresentation";
@@ -125,7 +127,8 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
       <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">إعدادات عرض القائمة</h2>
 
-        <label className="block space-y-2">
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="technical" span={4}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عدد المشروعات في الصفحة</span>
           <input
             name="page_size"
@@ -136,9 +139,9 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
             dir="ltr"
             className={fieldClassName()}
           />
-        </label>
+        </label></ModuleEditorField>
 
-        <AdminFormListboxSelect
+        <ModuleEditorField nature="standard" span={8}><AdminFormListboxSelect
           name="default_view"
           label="وضع العرض الافتراضي"
           defaultValue={config.defaultView}
@@ -146,7 +149,8 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
             value: mode,
             label: mode === "list" ? "قائمة" : "بطاقات",
           }))}
-        />
+        /></ModuleEditorField>
+        </ModuleEditorFieldGrid>
 
         <AdminFormGrid columns={3}>
           <VisibilityToggle

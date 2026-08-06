@@ -1,5 +1,6 @@
 import type { PageModuleKind } from "../page-blocks/types";
 import type { PageCompositionSlot } from "./slot-module-registry";
+import { getPreferredSlotsForModuleKind } from "./route-slot-policy.ts";
 
 export type ModuleEditorIconToken =
   | "content"
@@ -27,9 +28,6 @@ export type ModuleKindMetadata = {
   kind: PageModuleKind | string;
   labelAr: string;
   descriptionAr: string;
-  typicalSlots: PageCompositionSlot[];
-  dependencyHints: string[];
-  previewNoteAr: string;
   editorSections: ModuleEditorSections;
 };
 
@@ -37,8 +35,7 @@ export type SlotModuleSlugMetadata = {
   slug: string;
   labelAr: string;
   descriptionAr: string;
-  typicalSlot: PageCompositionSlot;
-  dependencyHints: string[];
+  preferredSlot: PageCompositionSlot;
   editorSections?: ModuleEditorSections;
 };
 
@@ -78,12 +75,6 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     kind: "hero",
     labelAr: "الهيرو",
     descriptionAr: "شريحة علوية سينمائية — صور، عنوان، وCTA رئيسي للصفحة.",
-    typicalSlots: ["hero"],
-    dependencyHints: [
-      "يفضّل وجود breadcrumb في نفس فتحة الهيرو للصفحات الداخلية.",
-      "صور الهيرو يجب أن تكون بجودة عالية وبنسبة 16:9.",
-    ],
-    previewNoteAr: "المعاينة العامة تعرض الهيرو المنشور فقط — لا توجد معاينة side-by-side بعد.",
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
@@ -126,10 +117,7 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
   breadcrumb: {
     kind: "breadcrumb",
     labelAr: "مسار التنقل",
-    descriptionAr: "Breadcrumb داخل فتحة الهيرو للصفحات الداخلية.",
-    typicalSlots: ["hero"],
-    dependencyHints: ["يُربط عادةً مع هيرو نشط على نفس الصفحة."],
-    previewNoteAr: "يظهر ضمن الهيرو على الموقع العام.",
+    descriptionAr: "مسار تنقل تلقائي أو يدوي للصفحات الداخلية.",
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
@@ -148,24 +136,12 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     kind: "content",
     labelAr: "محتوى",
     descriptionAr: "كتل محتوى نصية/بصرية متخصصة حسب slug الصفحة.",
-    typicalSlots: ["main", "bottom"],
-    dependencyHints: [
-      "يعمل أفضل بعد هيرو واضح يحدد سياق الصفحة.",
-      "تحقق من الصور والنصوص قبل النشر — التعديل يؤثر على كل الصفحات المرتبطة.",
-    ],
-    previewNoteAr: "لا توجد معاينة عامة للمسودة — راجع الصفحة المنشورة من الرابط العام.",
     editorSections: CONTENT_MODULE_SECTIONS,
   },
   cta: {
     kind: "cta",
     labelAr: "دعوة لإجراء",
     descriptionAr: "شريط CTA بعنوان ونص وزر وروابط.",
-    typicalSlots: ["main", "bottom"],
-    dependencyHints: [
-      "يحتاج عنوانًا واضحًا ونصًا مختصرًا ورابط إجراء صالحًا.",
-      "تجنّب تكرار نفس CTA في عدة فتحات على نفس الصفحة.",
-    ],
-    previewNoteAr: "المعاينة العامة متاحة فقط بعد النشر والربط الظاهر.",
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
@@ -181,9 +157,6 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     kind: "cards",
     labelAr: "بطاقات",
     descriptionAr: "شبكة بطاقات بعناوين وروابط وصور.",
-    typicalSlots: ["main", "sidebar", "bottom"],
-    dependencyHints: ["كل بطاقة تحتاج عنوانًا ووصفًا مختصرًا على الأقل."],
-    previewNoteAr: "لا توجد معاينة token — استخدم حالة النشر والظهور.",
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
@@ -202,12 +175,6 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     kind: "feed",
     labelAr: "خلاصة موضوعات",
     descriptionAr: "ودجت يجلب موضوعات أو تصنيفات منشورة من Supabase.",
-    typicalSlots: ["sidebar", "main"],
-    dependencyHints: [
-      "يعتمد على موضوعات منشورة — تحقق من وجود مقالات كافية.",
-      "مصمم غالبًا للشريط الجانبي في صفحات topics/media.",
-    ],
-    previewNoteAr: "يعرض بيانات حية من قاعدة البيانات عند النشر.",
     editorSections: {
       content: {
         navigationLabelAr: "إعدادات Feed",
@@ -223,12 +190,6 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     kind: "media-sidebar",
     labelAr: "شريط إعلامي جانبي",
     descriptionAr: "ودجات المركز الإعلامي في الشريط الجانبي.",
-    typicalSlots: ["sidebar"],
-    dependencyHints: [
-      "مخصص لصفحات المركز الإعلامي والمواضيع ذات الشريط الجانبي.",
-      "يعتمد على محتوى إعلامي منشور أو legacy حسب الإعداد.",
-    ],
-    previewNoteAr: "يُحمّل مع صفحات media-center/topics عند الربط.",
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
@@ -247,9 +208,6 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     kind: "media-hub",
     labelAr: "مركز إعلامي — Hub",
     descriptionAr: "أقسام المركز الإعلامي داخل الصفحة الرئيسية للمركز.",
-    typicalSlots: ["main"],
-    dependencyHints: ["يُستخدم في صفحة media-center — يعتمد على أقسام المحتوى الإعلامي."],
-    previewNoteAr: "لا يمر عبر composition الموحد بعد — راجع صفحة المركز الإعلامي.",
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
@@ -271,8 +229,7 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "home-story",
     labelAr: "قصة فينيسيا",
     descriptionAr: "سرد تمهيدي للصفحة الرئيسية.",
-    typicalSlot: "main",
-    dependencyHints: ["يفضّل أن يسبقه هيرو سينمائي قوي."],
+    preferredSlot: "main",
     editorSections: {
       text: {
         navigationLabelAr: "النص",
@@ -299,8 +256,7 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "home-trust",
     labelAr: "ثقة فينيسيا",
     descriptionAr: "شبكة مبادئ/ثقة للصفحة الرئيسية.",
-    typicalSlot: "main",
-    dependencyHints: ["يعمل بعد سكشن القصة أو الهيرو."],
+    preferredSlot: "main",
     editorSections: {
       pages: HOME_PAGES_SECTION,
     },
@@ -309,8 +265,7 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "home-projects",
     labelAr: "مشاريع الرئيسية",
     descriptionAr: "يعرض مشاريع homepage من جدول projects.",
-    typicalSlot: "main",
-    dependencyHints: ["يتطلب مشاريع منشورة مع show_on_homepage."],
+    preferredSlot: "main",
     editorSections: {
       pages: HOME_PAGES_SECTION,
     },
@@ -319,8 +274,7 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "home-contact",
     labelAr: "تواصل الرئيسية",
     descriptionAr: "CTA تواصل مع صورة ووسائل اتصال.",
-    typicalSlot: "main",
-    dependencyHints: ["يحتاج نص CTA وصورة وروابط تواصل صحيحة."],
+    preferredSlot: "main",
     editorSections: {
       text: {
         navigationLabelAr: "النص",
@@ -353,57 +307,49 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "projects-hub-hero",
     labelAr: "هيرو صفحة المشروعات",
     descriptionAr: "هيرو /projects — الشرائح من جدول projects.",
-    typicalSlot: "main",
-    dependencyHints: ["يتطلب مشروعات سكنية منشورة مع وسائط."],
+    preferredSlot: "main",
   },
   "projects-hub-featured": {
     slug: "projects-hub-featured",
     labelAr: "المشروعات المميزة",
     descriptionAr: "سكشن المشروعات المميزة على /projects.",
-    typicalSlot: "main",
-    dependencyHints: ["يتطلب مشروعات بمنشور وfeatured = true."],
+    preferredSlot: "main",
   },
   "projects-hub-listing": {
     slug: "projects-hub-listing",
     labelAr: "قائمة المشروعات",
     descriptionAr: "فهرس المشروعات مع الفلاتر على /projects.",
-    typicalSlot: "main",
-    dependencyHints: ["يعرض المشروعات المنشورة من جدول projects."],
+    preferredSlot: "main",
   },
   "projects-hub-map": {
     slug: "projects-hub-map",
     labelAr: "خريطة المشروعات",
     descriptionAr: "خريطة بيت الوطن وربط الدبابيس بكود المشروع.",
-    typicalSlot: "main",
-    dependencyHints: ["يطابق الدبابيس عبر code وmapArea."],
+    preferredSlot: "main",
   },
   "about-intro": {
     slug: "about-intro",
     labelAr: "من نحن — المقدمة",
     descriptionAr: "مقدمة بصرية لصفحة عن فينيسيا.",
-    typicalSlot: "main",
-    dependencyHints: ["صور رئيسية/ثانوية مع alt text."],
+    preferredSlot: "main",
   },
   "about-intro-single-image": {
     slug: "about-intro-single-image",
     labelAr: "من نحن — محتوى وصورة واحدة",
     descriptionAr: "محتوى من نحن بصورة واحدة وموضع يمين/يسار.",
-    typicalSlot: "main",
-    dependencyHints: ["صورة واحدة فقط — موضع سطح المكتب يمين أو شمال."],
+    preferredSlot: "main",
   },
   "vision-goals": {
     slug: "vision-goals",
     labelAr: "الرؤية والأهداف",
     descriptionAr: "نصوص وصورة قسم الرؤية والأهداف في صفحة من نحن.",
-    typicalSlot: "main",
-    dependencyHints: ["يحتاج نصوص رؤية وأهداف وصورة موصوفة بوضوح."],
+    preferredSlot: "main",
   },
   "about-cta": {
     slug: "about-cta",
     labelAr: "دعوة للتواصل",
     descriptionAr: "قسم دعوة للتواصل في صفحة من نحن مع صورة وزر ووسائل اتصال.",
-    typicalSlot: "main",
-    dependencyHints: ["يحتاج صورة ونص CTA وروابط تواصل صحيحة."],
+    preferredSlot: "main",
     editorSections: {
       text: {
         navigationLabelAr: "النص",
@@ -435,29 +381,25 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "about-principles",
     labelAr: "المبادئ",
     descriptionAr: "عناوين وبطاقات المبادئ في صفحة من نحن.",
-    typicalSlot: "main",
-    dependencyHints: ["كل مبدأ يحتاج عنوانًا ووصفًا واضحين."],
+    preferredSlot: "main",
   },
   "about-approach": {
     slug: "about-approach",
     labelAr: "منهج العمل",
     descriptionAr: "عنوان ومنهج العمل في صفحة من نحن.",
-    typicalSlot: "main",
-    dependencyHints: ["يحافظ العنوان على الفصل البصري المعتمد عند وجود جزأين."],
+    preferredSlot: "main",
   },
   "topics-intro": {
     slug: "topics-intro",
     labelAr: "مقدمة الموضوعات",
     descriptionAr: "تمهيد لصفحة topics.",
-    typicalSlot: "main",
-    dependencyHints: ["يُفضّل مع feed في sidebar."],
+    preferredSlot: "main",
   },
   "topics-insight-cta": {
     slug: "topics-insight-cta",
     labelAr: "CTA موضوعات",
     descriptionAr: "دعوة لإجراء في صفحة الموضوعات.",
-    typicalSlot: "sidebar",
-    dependencyHints: ["رابط إجراء واضح ونص هادئ."],
+    preferredSlot: "sidebar",
   },
 };
 
@@ -501,21 +443,9 @@ export function getModuleEditorSectionMetadata(
   return slugSection ?? getModuleKindMetadata(kind)?.editorSections[sectionId] ?? null;
 }
 
-export function getModuleDependencyHints(kind: string, slug?: string | null) {
-  const hints = new Set<string>();
-  const kindMeta = getModuleKindMetadata(kind);
-  kindMeta?.dependencyHints.forEach((hint) => hints.add(hint));
-
-  if (slug) {
-    getSlotModuleSlugMetadata(slug)?.dependencyHints.forEach((hint) => hints.add(hint));
-  }
-
-  return [...hints];
-}
-
-export function getSlotCompatibilityLabel(kind: string) {
-  const meta = getModuleKindMetadata(kind);
-  if (!meta?.typicalSlots.length) return null;
+export function getSlotCompatibilityLabel(kind: string, pageSlug?: string | null) {
+  const preferredSlots = getPreferredSlotsForModuleKind(kind, pageSlug);
+  if (!preferredSlots.length) return null;
   const labels: Record<PageCompositionSlot, string> = {
     hero: "الهيرو",
     main: "المحتوى الرئيسي",
@@ -523,5 +453,5 @@ export function getSlotCompatibilityLabel(kind: string) {
     bottom: "أسفل الصفحة",
     footer: "قبل الفوتر",
   };
-  return meta.typicalSlots.map((slot) => labels[slot]).join(" · ");
+  return preferredSlots.map((slot) => labels[slot]).join(" · ");
 }

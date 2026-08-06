@@ -1,13 +1,14 @@
 "use client";
 
 import {
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeadingVisibilityRow,
   ModuleEditorSection,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
-import AdminNotice from "../../AdminNotice";
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
@@ -105,20 +106,16 @@ function EyebrowFormatControls({
 
   return (
     <div className="space-y-2">
-      <span className="text-xs font-semibold text-white/55">تنسيق العنوان التمهيدي</span>
-      <input type="hidden" name="eyebrow_bold" value={bold ? "true" : "false"} />
+      <span className="text-xs font-semibold text-white/55">تنسيق النص التمهيدي</span>
       <input type="hidden" name="eyebrow_alignment" value={alignment} />
-      <div className="flex flex-wrap gap-2" role="toolbar" aria-label="تنسيق العنوان التمهيدي الصغير">
-        <button
-          type="button"
-          title="عريض"
-          aria-label="عريض"
-          aria-pressed={bold}
-          onClick={() => setBold((current) => !current)}
-          className={toolClass(bold)}
-        >
-          عريض
-        </button>
+      <div className="flex flex-wrap gap-2" role="toolbar" aria-label="تنسيق النص التمهيدي">
+        <AdminFormSwitch
+          name="eyebrow_bold"
+          label="خط عريض"
+          value="true"
+          checked={bold}
+          onChange={(event) => setBold(event.target.checked)}
+        />
         {alignOptions.map((option) => {
           const active = option.value === alignment;
           return (
@@ -137,7 +134,7 @@ function EyebrowFormatControls({
         })}
       </div>
       <p className="text-xs leading-6 text-white/45">
-        يؤثر على العنوان التمهيدي الصغير فقط — لا يغيّر العنوان الكبير ولا النص التمهيدي في العمود الآخر.
+        يؤثر على النص التمهيدي فقط — لا يغيّر العنوان الكبير ولا المحتوى التمهيدي في العمود الآخر.
       </p>
     </div>
   );
@@ -161,15 +158,10 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
 
   return (
     <div className="space-y-6">
-      <AdminNotice
-        variant="info"
-        title="بيانات الكروت"
-        message="الصور والأكواد والأوصاف وترتيب الظهور تُدار من لوحة المشاريع عبر «الظهور في الصفحة الرئيسية» و«ترتيب الصفحة الرئيسية» — وليس من هذا الموديول."
-      />
-
       <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">عرض المشاريع</h2>
-        <label className="block space-y-2">
+        <ModuleEditorFieldGrid>
+        <ModuleEditorField nature="technical" span={4}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عدد المشاريع المعروضة</span>
           <input
             name="projects_limit"
@@ -180,15 +172,16 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
             dir="ltr"
             className={fieldClassName()}
           />
-        </label>
+        </label></ModuleEditorField>
         <p className="text-xs leading-6 text-white/45">
           يُطبَّق على المشاريع حسب ترتيب الصفحة الرئيسية. اترك الحقل فارغًا لعرض كل المشاريع المؤهلة مع التقسيم الصفحي.
         </p>
-        <AlignmentChoice
+        <ModuleEditorField nature="standard" span={8}><AlignmentChoice
           name="card_cta_alignment"
           label="محاذاة زر الكارت"
           defaultValue={cardCtaAlignment}
-        />
+        /></ModuleEditorField>
+        </ModuleEditorFieldGrid>
         <p className="text-xs leading-6 text-white/45">
           موضع زر «استكشف المشروع» داخل كل كارت في الصفحة الرئيسية فقط — لا يؤثر على صفحة المشاريع أو المميز.
         </p>
@@ -202,11 +195,11 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
 
         <ModuleEditorHeadingVisibilityRow
           name="show_eyebrow"
-          label="إظهار العنوان التمهيدي الصغير"
+          label="إظهار النص التمهيدي"
           defaultChecked={config.showEyebrow !== false}
         >
           <label className="block min-w-0 space-y-2">
-            <span className="text-xs font-semibold text-white/55">العنوان التمهيدي الصغير</span>
+            <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
             <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
           </label>
         </ModuleEditorHeadingVisibilityRow>
@@ -228,7 +221,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
           <VisibilityToggle name="show_footer_cta" label="إظهار زر أسفل السكشن" defaultChecked={config.showFooterCta !== false} />
         </AdminFormGrid>
 
-        <AdminRichTextEditor
+        <ModuleEditorFieldGrid><ModuleEditorField nature="long-content"><AdminRichTextEditor
           name="intro"
           label="النص التمهيدي"
           defaultValue={config.intro ?? ""}
@@ -236,7 +229,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
           enableTextAlign
           minHeight={160}
           helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
-        />
+        /></ModuleEditorField></ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>

@@ -35,8 +35,8 @@ assert(
   "Vision goals must use unified module chrome via about structured chrome",
 );
 assert(
-  client.includes("usesUnifiedModuleChrome || usesProjectsHubHeader ? null"),
-  "Module hints must be gated for vision-goals",
+  !client.includes("ModuleDependencyHintsPanel"),
+  "legacy module hints must remain retired",
 );
 assert(
   client.includes("usesLockedInternalSlug") &&

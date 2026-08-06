@@ -37,8 +37,8 @@ assert(
   "Arabic about-intro header metadata missing from the shared registry",
 );
 assert(
-  client.includes("usesUnifiedModuleChrome || usesProjectsHubHeader ? null"),
-  "ModuleDependencyHintsPanel must not render for about-intro",
+  !client.includes("ModuleDependencyHintsPanel"),
+  "legacy ModuleDependencyHintsPanel must remain retired",
 );
 assert(presentation.includes("معرّف بنيوي للقراءة فقط"), "shared structural slug helper missing");
 assert(

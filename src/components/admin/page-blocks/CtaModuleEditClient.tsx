@@ -1,10 +1,11 @@
 "use client";
 
-import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../ui";
 import {
   MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeader,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
@@ -17,7 +18,7 @@ import { linkDefaultFromContainer } from "../../../lib/admin/links/link-defaults
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { CtaBlockConfig } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
-import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
+import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
 
 type CtaModuleEditClientProps = {
   block: {
@@ -50,7 +51,6 @@ export default function CtaModuleEditClient({
         backLabel="الرجوع لبلوكات CTA"
         status={block.status}
         saved={saved}
-        slotContext={getSlotCompatibilityLabel("cta")}
       />
 
       <form action={updateAction}>
@@ -66,27 +66,32 @@ export default function CtaModuleEditClient({
               id: "content",
               content: (
                 <ModuleEditorSection>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Eyebrow</span>
-                    <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">العنوان</span>
-                    <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Highlight</span>
-                    <input name="highlight" defaultValue={config.highlight ?? ""} className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">الوصف</span>
-                    <textarea
-                      name="description"
-                      defaultValue={config.description ?? ""}
-                      rows={4}
-                      className={fieldClassName("resize-y leading-7")}
-                    />
-                  </label>
+                  <ModuleEditorFieldGrid>
+                    <ModuleEditorField nature="short-text" span={3}>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
+                        <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+                      </label>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-text" span={4}>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">العنوان</span>
+                        <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
+                      </label>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-description" span={5}>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}</span>
+                        <textarea name="description" defaultValue={config.description ?? ""} rows={2} className={fieldClassName("resize-y leading-7")} />
+                      </label>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-text" span={4}>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">النص المميز</span>
+                        <input name="highlight" defaultValue={config.highlight ?? ""} className={fieldClassName()} />
+                      </label>
+                    </ModuleEditorField>
+                  </ModuleEditorFieldGrid>
                   <AdminFormGrid>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Primary CTA Label</span>
@@ -116,7 +121,6 @@ export default function CtaModuleEditClient({
               id: "meta",
               content: (
                 <ModuleEditorSettingsComposition
-                  context={<ModuleDependencyHintsPanel moduleKind="cta" templateSlug={block.slug} />}
                   primary={
                   <ModuleEditorSection className="max-w-xl">
                   <label className="block space-y-2">

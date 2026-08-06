@@ -1,10 +1,11 @@
 "use client";
 
 import { AdminFormListboxSelect } from "../ui";
-import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
 import {
   MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
   ModuleEditorHeader,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
@@ -17,7 +18,7 @@ import AdminCardsItemsField from "./editors/AdminCardsItemsField";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { CardsBlockConfig } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
-import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
+import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
 
 type CardsModuleEditClientProps = {
   block: {
@@ -50,7 +51,6 @@ export default function CardsModuleEditClient({
         backLabel="الرجوع لبلوكات الكروت"
         status={block.status}
         saved={saved}
-        slotContext={getSlotCompatibilityLabel("cards")}
       />
 
       <form action={updateAction}>
@@ -66,23 +66,31 @@ export default function CardsModuleEditClient({
               id: "content",
               content: (
                 <ModuleEditorSection>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Eyebrow</span>
-                    <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">عنوان القسم</span>
-                    <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">الوصف</span>
-                    <textarea
-                      name="description"
-                      defaultValue={config.description ?? ""}
-                      rows={3}
-                      className={fieldClassName("resize-y leading-7")}
-                    />
-                  </label>
+                  <ModuleEditorFieldGrid>
+                    <ModuleEditorField nature="short-text" span={3}>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
+                        <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+                      </label>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-text" span={4}>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}</span>
+                        <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
+                      </label>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-description" span={5}>
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}</span>
+                        <textarea
+                          name="description"
+                          defaultValue={config.description ?? ""}
+                          rows={2}
+                          className={fieldClassName("resize-y leading-7")}
+                        />
+                      </label>
+                    </ModuleEditorField>
+                  </ModuleEditorFieldGrid>
                   <AdminCardsItemsField items={config.items ?? []} minItems={1} showIcon showHref />
                 </ModuleEditorSection>
               ),
@@ -91,34 +99,34 @@ export default function CardsModuleEditClient({
               id: "meta",
               content: (
                 <ModuleEditorSettingsComposition
-                  context={<ModuleDependencyHintsPanel moduleKind="cards" templateSlug={block.slug} />}
                   primary={
-                  <ModuleEditorSection className="max-w-xl">
-                    <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">الاسم</span>
-                    <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-                  </label>
-                  <ModuleEditorTechnicalIdentity
-                    mode="editable"
-                    value={block.slug}
-                    inputClassName={fieldClassName()}
-                  />
-                  <AdminFormListboxSelect
-                    name="status"
-                    label="الحالة"
-                    defaultValue={block.status}
-                    options={MODULE_EDITOR_STATUS_OPTIONS}
-                  />
-                  <AdminFormListboxSelect
-                    name="columns"
-                    label="Columns"
-                    defaultValue={String(config.columns ?? 3)}
-                    options={[
-                      { value: "2", label: "2" },
-                      { value: "3", label: "3" },
-                      { value: "4", label: "4" },
-                    ]}
-                  />
+                  <ModuleEditorSection>
+                    <ModuleEditorFieldGrid>
+                      <ModuleEditorField nature="standard" span={4}>
+                        <label className="block space-y-2">
+                          <span className="text-xs font-semibold text-white/55">الاسم</span>
+                          <input name="name" defaultValue={block.name} required className={fieldClassName()} />
+                        </label>
+                      </ModuleEditorField>
+                      <ModuleEditorField nature="technical" span={4}>
+                        <ModuleEditorTechnicalIdentity mode="editable" value={block.slug} inputClassName={fieldClassName()} />
+                      </ModuleEditorField>
+                      <ModuleEditorField nature="standard" span={4}>
+                        <AdminFormListboxSelect name="status" label="الحالة" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
+                      </ModuleEditorField>
+                      <ModuleEditorField nature="standard" span={4}>
+                        <AdminFormListboxSelect
+                          name="columns"
+                          label="عدد الأعمدة"
+                          defaultValue={String(config.columns ?? 3)}
+                          options={[
+                            { value: "2", label: "2" },
+                            { value: "3", label: "3" },
+                            { value: "4", label: "4" },
+                          ]}
+                        />
+                      </ModuleEditorField>
+                    </ModuleEditorFieldGrid>
                   </ModuleEditorSection>
                   }
                 />

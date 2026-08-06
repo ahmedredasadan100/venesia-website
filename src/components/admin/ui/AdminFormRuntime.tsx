@@ -634,17 +634,48 @@ export function AdminFormGrid({
   className = "",
 }: {
   children: ReactNode;
-  columns?: 1 | 2 | 3;
+  columns?: 1 | 2 | 3 | 12;
   className?: string;
 }) {
   const columnsClassName =
     columns === 1
       ? "grid-cols-1"
+      : columns === 12
+        ? "grid-cols-1 xl:grid-cols-12"
       : columns === 3
         ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
         : "grid-cols-1 md:grid-cols-2";
   return (
     <div className={`grid gap-5 ${columnsClassName} ${className}`.trim()}>
+      {children}
+    </div>
+  );
+}
+
+export type AdminFormGridSpan = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12;
+
+const ADMIN_FORM_GRID_SPAN_CLASSES: Record<AdminFormGridSpan, string> = {
+  3: "xl:col-span-3",
+  4: "xl:col-span-4",
+  5: "xl:col-span-5",
+  6: "xl:col-span-6",
+  7: "xl:col-span-7",
+  8: "xl:col-span-8",
+  9: "xl:col-span-9",
+  12: "xl:col-span-12",
+};
+
+export function AdminFormGridItem({
+  children,
+  span = 12,
+  className = "",
+}: {
+  children: ReactNode;
+  span?: AdminFormGridSpan;
+  className?: string;
+}) {
+  return (
+    <div className={`${ADMIN_FORM_GRID_SPAN_CLASSES[span]} ${className}`.trim()}>
       {children}
     </div>
   );

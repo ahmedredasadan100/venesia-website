@@ -52,8 +52,21 @@ function buildCardsItems(formData: FormData): CardsBlockItem[] {
   return items;
 }
 
+function assertValidCardsItems(items: CardsBlockItem[]) {
+  if (!items.length) {
+    throw new Error("أضف بطاقة واحدة على الأقل بعنوان ووصف مختصر.");
+  }
+
+  items.forEach((item, index) => {
+    if (!item.title?.trim() || !item.body?.trim()) {
+      throw new Error(`البطاقة ${index + 1} تحتاج عنوانًا ووصفًا مختصرًا.`);
+    }
+  });
+}
+
 function buildCardsConfig(formData: FormData): CardsBlockConfig {
   const items = buildCardsItems(formData);
+  assertValidCardsItems(items);
 
   const columns = parseNumber(formData.get("columns"), 3);
   const normalizedColumns = columns === 2 || columns === 4 ? columns : 3;

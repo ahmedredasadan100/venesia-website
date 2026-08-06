@@ -564,7 +564,10 @@ check(
       "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
       "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-    ].every((path) => read(path).includes("AdminFormGrid")),
+    ].every((path) => {
+      const source = read(path);
+      return source.includes("AdminFormGrid") || source.includes("ModuleEditorFieldGrid");
+    }),
 );
 
 console.log(`Shared Specialized Editors Presentation verification passed (${passed} checks).`);
