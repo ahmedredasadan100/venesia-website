@@ -1,5 +1,15 @@
 "use client";
 
+import {
+  ModuleEditorHeadingVisibilityRow,
+  ModuleEditorSection,
+} from "../ModuleEditorPresentation";
+
+import {
+  AdminFormGrid,
+  AdminFormListboxSelect,
+  AdminFormSwitch,
+} from "../../ui";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   PROJECTS_HUB_FEATURED_SELECTION_MODES,
@@ -9,6 +19,11 @@ import {
 type ProjectsHubFeaturedModuleEditorProps = {
   config: ProjectsHubFeaturedModuleConfig;
 };
+
+const FEATURED_SELECTION_MODE_OPTIONS = PROJECTS_HUB_FEATURED_SELECTION_MODES.map((mode) => ({
+  value: mode,
+  label: mode === "featured_flag" ? "المشروعات ذات featured = true" : mode,
+}));
 
 function VisibilityToggle({
   name,
@@ -20,10 +35,42 @@ function VisibilityToggle({
   defaultChecked: boolean;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-      <span>{label}</span>
-      <input type="checkbox" name={name} value="true" defaultChecked={defaultChecked} />
-    </label>
+    <AdminFormSwitch
+      name={name}
+      label={label}
+      value="true"
+      defaultChecked={defaultChecked}
+      surface
+    />
+  );
+}
+
+function HeadingFieldRow({
+  name,
+  label,
+  value,
+  showName,
+  showLabel,
+  showDefault,
+}: {
+  name: string;
+  label: string;
+  value: string;
+  showName: string;
+  showLabel: string;
+  showDefault: boolean;
+}) {
+  return (
+    <ModuleEditorHeadingVisibilityRow
+      name={showName}
+      label={showLabel}
+      defaultChecked={showDefault}
+    >
+      <label className="block min-w-0 space-y-2">
+        <span className="text-xs font-semibold text-white/55">{label}</span>
+        <input name={name} defaultValue={value} className={fieldClassName("h-11 min-w-0")} />
+      </label>
+    </ModuleEditorHeadingVisibilityRow>
   );
 }
 
@@ -32,46 +79,36 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
     <div className="space-y-6">
       <input type="hidden" name="config_schema" value="projects-hub-featured" />
 
-      <p className="text-sm leading-7 text-white/55">
-        تحكّم في العناصر الظاهرة داخل قسم المشروعات المميزة. بيانات كل مشروع وحالة التمييز تُدار من قسم إدارة
-        المشروعات.
-      </p>
-
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">عنوان قسم المشروعات المميزة</h2>
         <p className="text-xs leading-6 text-white/45">يتحكّم في عنوان القسم فقط، وليس في بيانات المشروعات.</p>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <VisibilityToggle
-            name="show_title"
-            label="إظهار عنوان القسم"
-            defaultChecked={config.showTitle !== false}
-          />
-          <VisibilityToggle
-            name="show_subtitle"
-            label="إظهار العنوان الفرعي"
-            defaultChecked={config.showSubtitle !== false}
-          />
-        </div>
+        <HeadingFieldRow
+          name="title"
+          label="العنوان"
+          value={config.title}
+          showName="show_title"
+          showLabel="إظهار عنوان القسم"
+          showDefault={config.showTitle !== false}
+        />
 
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان</span>
-          <input name="title" defaultValue={config.title} className={fieldClassName()} />
-        </label>
+        <HeadingFieldRow
+          name="subtitle"
+          label="العنوان الفرعي"
+          value={config.subtitle}
+          showName="show_subtitle"
+          showLabel="إظهار العنوان الفرعي"
+          showDefault={config.showSubtitle !== false}
+        />
+      </ModuleEditorSection>
 
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان الفرعي</span>
-          <input name="subtitle" defaultValue={config.subtitle} className={fieldClassName()} />
-        </label>
-      </section>
-
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">البيانات الظاهرة داخل المشروع المميز</h2>
         <p className="text-xs leading-6 text-white/45">
           إظهار أو إخفاء الحقول المعروضة حالياً داخل البطاقة الرئيسية والبطاقات الجانبية. لا يغيّر قيم المشروع.
         </p>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <AdminFormGrid columns={3}>
           <VisibilityToggle
             name="show_project_image"
             label="إظهار صورة المشروع"
@@ -107,25 +144,19 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
             label="إظهار زر استكشف التفاصيل"
             defaultChecked={config.showExploreButton !== false}
           />
-        </div>
-      </section>
+        </AdminFormGrid>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">إعدادات عرض المشروعات المميزة</h2>
 
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">قاعدة الاختيار</span>
-          <select name="selection_mode" defaultValue={config.selectionMode} className={fieldClassName()} dir="ltr">
-            {PROJECTS_HUB_FEATURED_SELECTION_MODES.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode === "featured_flag" ? "المشروعات ذات featured = true" : mode}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="text-xs leading-6 text-white/45">
-          الاختيار يعتمد على حقل featured في سجلات المشروعات — وليس اختياراً يدوياً من هذا المحرر.
-        </p>
+        <AdminFormListboxSelect
+          name="selection_mode"
+          label="قاعدة الاختيار"
+          defaultValue={config.selectionMode}
+          options={FEATURED_SELECTION_MODE_OPTIONS}
+          hint="الاختيار يعتمد على حقل featured في سجلات المشروعات — وليس اختياراً يدوياً من هذا المحرر."
+        />
 
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">الحد الأقصى (اختياري)</span>
@@ -160,7 +191,7 @@ export default function ProjectsHubFeaturedModuleEditor({ config }: ProjectsHubF
           label="إظهار مؤشرات السلايدر"
           defaultChecked={config.showSliderDots !== false}
         />
-      </section>
+      </ModuleEditorSection>
     </div>
   );
 }

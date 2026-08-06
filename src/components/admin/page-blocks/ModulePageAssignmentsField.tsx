@@ -1,3 +1,5 @@
+import { AdminFormSection } from "../ui";
+
 type ModulePageOption = {
   id: number;
   title: string;
@@ -18,7 +20,7 @@ export default function ModulePageAssignmentsField({
   const assignedSet = new Set(assignedPageIds);
 
   return (
-    <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+    <AdminFormSection variant="module">
       <h2 className="text-lg font-semibold text-white">يظهر في الصفحات</h2>
       <p className="text-sm leading-7 text-white/45">{helperText}</p>
 
@@ -43,6 +45,6 @@ export default function ModulePageAssignmentsField({
 
         {!pages.length ? <p className="text-sm text-white/45">لا توجد صفحات منشورة في النظام.</p> : null}
       </div>
-    </section>
+    </AdminFormSection>
   );
 }

@@ -22,6 +22,7 @@ function assert(condition, message) {
 
 const registry = read("src/lib/page-blocks/module-edit-registry.ts");
 const client = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
+const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
 const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 
 const required = [
@@ -35,6 +36,10 @@ const required = [
   "home-contact",
   "home-trust",
   "home-projects",
+  "projects-hub-hero",
+  "projects-hub-featured",
+  "projects-hub-listing",
+  "projects-hub-map",
 ];
 
 for (const slug of required) {
@@ -50,8 +55,13 @@ assert(
 );
 assert(client.includes("usesLockedInternalSlug"), "UI locked slug flag missing");
 assert(
-  client.includes("المعرّف التقني للموديول — للقراءة فقط."),
-  "Read-only slug helper text missing",
+  client.includes("isStructuralContentTemplateSlug(block.slug, block.variant)"),
+  "UI must resolve technical identity locks from the shared registry",
+);
+assert(
+  client.includes("<ModuleEditorTechnicalIdentity") &&
+    presentation.includes("معرّف بنيوي للقراءة فقط"),
+  "Read-only slug presentation must stay in the shared Module Editor owner",
 );
 assert(
   actions.includes("isStructuralContentTemplateSlug(existing.slug, existing.variant)"),

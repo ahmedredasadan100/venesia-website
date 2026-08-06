@@ -164,6 +164,55 @@ function getCategoryLabel(category: PublicProject["category"]) {
   return category === "residential" ? "سكني" : "تجاري";
 }
 
+function FeaturedProjectEnglishName({
+  project,
+  className = "",
+}: {
+  project: PublicProject;
+  className?: string;
+}) {
+  return (
+    <span
+      title={project.englishName}
+      className={`block min-w-0 truncate font-en font-bold leading-tight text-[#D8B87A] ${className}`.trim()}
+    >
+      {project.englishName}
+    </span>
+  );
+}
+
+function FeaturedProjectMetaRow({
+  project,
+  showLocation,
+  showType,
+  className = "",
+}: {
+  project: PublicProject;
+  showLocation: boolean;
+  showType: boolean;
+  className?: string;
+}) {
+  if (!showLocation && !showType) return null;
+
+  return (
+    <div className={`flex min-w-0 flex-nowrap items-center gap-2 ${className}`.trim()}>
+      {showLocation ? (
+        <span
+          title={project.location.label}
+          className="min-w-0 truncate rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]"
+        >
+          {project.location.label}
+        </span>
+      ) : null}
+      {showType ? (
+        <span className="shrink-0 rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A]">
+          {getCategoryLabel(project.category)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function MainFeaturedCard({
   project,
   display,
@@ -213,22 +262,15 @@ function MainFeaturedCard({
 
         <div className="relative z-10 flex min-w-0 flex-col justify-center p-5 pt-4 sm:p-6 sm:pt-5 lg:pt-6">
           {display.showProjectCode ? (
-            <p className="hidden font-en text-2xl font-semibold leading-none text-[#D8B87A] lg:block lg:text-3xl">
-              {project.englishName}
-            </p>
+            <FeaturedProjectEnglishName project={project} className="hidden text-lg lg:block lg:text-xl" />
           ) : null}
 
-          {display.showProjectLocation ? (
-            <span className="mt-3 hidden w-fit rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111] lg:inline-flex">
-              {project.location.label}
-            </span>
-          ) : null}
-
-          {display.showProjectType ? (
-            <span className="mt-2 hidden w-fit rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-3 py-1 text-xs font-medium text-[#D8B87A] lg:inline-flex">
-              {getCategoryLabel(project.category)}
-            </span>
-          ) : null}
+          <FeaturedProjectMetaRow
+            project={project}
+            showLocation={display.showProjectLocation}
+            showType={display.showProjectType}
+            className="mt-3 hidden lg:flex"
+          />
 
           {display.showProjectDescription ? (
             <PlainTextContent
@@ -278,19 +320,21 @@ function SideFeaturedCard({
           <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/36 to-transparent" />
 
           {display.showProjectCode ? (
-            <p className="absolute bottom-4 right-4 font-en text-3xl font-semibold leading-none text-[#D8B87A]">
-              {project.englishName}
-            </p>
+            <FeaturedProjectEnglishName
+              project={project}
+              className="absolute inset-x-4 bottom-4 text-right text-lg sm:text-xl"
+            />
           ) : null}
         </div>
       ) : null}
 
       <div className="p-4 text-center">
-        {display.showProjectName ? (
-          <span className="inline-flex rounded-lg border border-[#D8B87A]/30 bg-[#D8B87A]/10 px-3 py-1.5 text-sm font-semibold text-[#D8B87A]">
-            {project.arabicName}
-          </span>
-        ) : null}
+        <FeaturedProjectMetaRow
+          project={project}
+          showLocation={display.showProjectLocation}
+          showType={display.showProjectType}
+          className="w-full justify-center"
+        />
 
         {display.showProjectDescription ? (
           <PlainTextContent

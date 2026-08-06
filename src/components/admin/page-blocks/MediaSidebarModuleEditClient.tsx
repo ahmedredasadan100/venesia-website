@@ -2,11 +2,18 @@
 
 import { useMemo, useState } from "react";
 
-import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader, { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
-import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
+import { AdminFormListboxSelect } from "../ui";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
-import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
+import {
+  MODULE_EDITOR_STATUS_OPTIONS,
+  ModuleEditorFeedback,
+  ModuleEditorHeader,
+  ModuleEditorPagesTab,
+  ModuleEditorSaveArea,
+  ModuleEditorSection,
+  ModuleEditorSettingsComposition,
+  ModuleEditorTabs,
+} from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import {
   getMediaSidebarModuleSummary,
@@ -66,7 +73,6 @@ export default function MediaSidebarModuleEditClient({
   );
   const [limit, setLimit] = useState<number | "">(readInitialLimit(initialWidgetKey, initialConfig));
 
-  const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
   const summary = useMemo(
     () => getMediaSidebarModuleSummary(widgetKey, block.description),
     [widgetKey, block.description],
@@ -92,12 +98,11 @@ export default function MediaSidebarModuleEditClient({
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <BlockEditorContextHeader
+      <ModuleEditorHeader
+        moduleKind="media-sidebar"
+        entityName={block.name}
         backHref="/admin/pages-blocks/blocks/media-sidebar"
         backLabel="الرجوع لكل Media Sidebar Modules"
-        eyebrow="MEDIA SIDEBAR MODULE"
-        title={block.name}
-        description="ودجت جانبي لصفحات المركز الإعلامي والموضوعات — يُفضّل في فتحة Sidebar."
         status={block.status}
         saved={saved}
         slotContext={getSlotCompatibilityLabel("media-sidebar")}
@@ -106,56 +111,35 @@ export default function MediaSidebarModuleEditClient({
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
 
-        <AdminModuleTabs
-          activePanelContext={<BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/media-sidebar" saved={saved} />}
+        <ModuleEditorTabs
+          moduleKind="media-sidebar"
+          activePanelContext={<ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/media-sidebar" saved={saved} />}
           tabs={[
             {
               id: "content",
-              navigationLabel: "المحتوى",
-              sectionHeading: "إعدادات الشريط الجانبي",
-              sectionDescription: "حدّد نوع الـwidget ومصدر البيانات وعدد العناصر المعروضة.",
-              icon: "media",
               content: (
-                <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <ModuleEditorSection>
                   <label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
                     <input name="name" defaultValue={block.name} required className={fieldClassName()} />
                   </label>
 
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">نوع الـ widget</span>
-                    <select
-                      name="widget_key"
-                      value={widgetKey}
-                      onChange={(event) => handleWidgetChange(readInitialWidgetKey(event.target.value))}
-                      className={fieldClassName()}
-                    >
-                      {WIDGET_KEYS.map((key) => (
-                        <option key={key} value={key}>
-                          {MEDIA_SIDEBAR_WIDGET_LABELS[key]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <AdminFormListboxSelect
+                    name="widget_key"
+                    label="نوع الـ widget"
+                    value={widgetKey}
+                    onChange={(value) => handleWidgetChange(readInitialWidgetKey(value))}
+                    options={WIDGET_KEYS.map((key) => ({ value: key, label: MEDIA_SIDEBAR_WIDGET_LABELS[key] }))}
+                  />
 
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">مصدر البيانات</span>
-                    <select
-                      name="data_source"
-                      value={dataSource}
-                      onChange={(event) =>
-                        setDataSource(event.target.value === "navigation" ? "navigation" : "topics")
-                      }
-                      className={fieldClassName()}
-                      dir="ltr"
-                    >
-                      {dataSourceOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <AdminFormListboxSelect
+                    name="data_source"
+                    label="مصدر البيانات"
+                    value={dataSource}
+                    onChange={(value) => setDataSource(value === "navigation" ? "navigation" : "topics")}
+                    options={dataSourceOptions}
+                    dir="ltr"
+                  />
 
                   {widgetKey === "sections" ? (
                     <p className="text-xs leading-6 text-white/42">Limit غير مطبق على widget أقسام المركز الإعلامي.</p>
@@ -187,73 +171,44 @@ export default function MediaSidebarModuleEditClient({
                       className={fieldClassName("cursor-default resize-none text-white/72")}
                     />
                   </label>
-                </section>
+                </ModuleEditorSection>
               ),
             },
             {
               id: "settings",
-              navigationLabel: "الإعدادات",
-              sectionHeading: "إعدادات الموديول",
-              sectionDescription: "أدر الوصف الداخلي وحالة نشر الموديول.",
-              icon: "settings",
               content: (
-                <div className="space-y-5">
-                  <ModuleDependencyHintsPanel moduleKind="media-sidebar" templateSlug={block.slug} />
-                  <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <ModuleEditorSettingsComposition
+                  context={<ModuleDependencyHintsPanel moduleKind="media-sidebar" templateSlug={block.slug} />}
+                  primary={
+                  <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
                       <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
                     </label>
-                  </section>
+                  </ModuleEditorSection>
+                  }
 
-                  <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                  secondary={
+                  <ModuleEditorSection>
                     <h2 className="text-lg font-semibold text-white">حالة النشر</h2>
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">حالة الموديول</span>
-                      <select name="status" defaultValue={block.status} className={fieldClassName()}>
-                        <option value="draft">مسودة</option>
-                        <option value="published">منشور</option>
-                        <option value="unpublished">مخفي</option>
-                        <option value="archived">أرشيف</option>
-                      </select>
-                    </label>
+                    <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
                     <p className="text-xs leading-6 text-white/42">
                       Slot و Sort Order و Visibility تُدار من Pages Manager لكل صفحة على حدة.
                     </p>
-                  </section>
-                  </div>
-                </div>
+                  </ModuleEditorSection>
+                  }
+                />
               ),
             },
             {
               id: "pages",
-              navigationLabel: "الصفحات",
-              sectionHeading: "الظهور في الصفحات",
-              sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
-              icon: "plans",
-              content: (
-                <div className="space-y-5">
-                  <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-                  <ModulePageAssignmentsField
-                    pages={assignmentContext.pages}
-                    assignedPageIds={assignedPageIds}
-                  />
-                </div>
-              ),
+              content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
             },
           ]}
         />
 
-        <div className="mt-6 flex justify-end">
-          <button
-            type="submit"
-            className="rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
-          >
-            حفظ الموديول
-          </button>
-        </div>
+        <ModuleEditorSaveArea />
       </form>
     </div>
   );

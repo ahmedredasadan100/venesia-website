@@ -158,6 +158,7 @@ export {
   AdminStickyFormBar,
   ADMIN_FORM_STACK_CLASS_NAME,
   ADMIN_FORM_SECTION_CLASSES,
+  ADMIN_FORM_MODULE_SECTION_CLASSES,
 } from "./AdminForm";
 export {
   default as AdminFormRuntime,

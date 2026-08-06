@@ -43,8 +43,38 @@ function loadTopLevelFunction(relPath, functionName, scriptKind) {
   return context.selectedFunction;
 }
 
+function loadTopLevelFunctionSource(relPath, functionName, scriptKind) {
+  const source = readFileSync(resolve(relPath), "utf8");
+  const sourceFile = ts.createSourceFile(
+    relPath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind,
+  );
+  const declaration = sourceFile.statements.find(
+    (statement) =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === functionName,
+  );
+  assert.ok(declaration, `${functionName} must remain a top-level function in ${relPath}`);
+
+  return ts.createPrinter().printNode(
+    ts.EmitHint.Unspecified,
+    declaration,
+    sourceFile,
+  );
+}
+
 const featuredSectionPath = "src/components/projects/ProjectsFeaturedSection.tsx";
 const featuredSectionSource = readFileSync(resolve(featuredSectionPath), "utf8");
+const featuredEditorSource = readFileSync(
+  resolve("src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx"),
+  "utf8",
+);
+const contentModuleEditorSource = readFileSync(
+  resolve("src/components/admin/page-blocks/ContentModuleEditClient.tsx"),
+  "utf8",
+);
 const projectsHubRendererSource = readFileSync(
   resolve("src/components/projects/ProjectsHubModulesRenderer.tsx"),
   "utf8",
@@ -58,6 +88,16 @@ const applyFeaturedLimit = loadTopLevelFunction(
   "src/lib/projects/map-projects-hub-module-props.ts",
   "applyFeaturedLimit",
   ts.ScriptKind.TS,
+);
+const mainFeaturedCardSource = loadTopLevelFunctionSource(
+  featuredSectionPath,
+  "MainFeaturedCard",
+  ts.ScriptKind.TSX,
+);
+const sideFeaturedCardSource = loadTopLevelFunctionSource(
+  featuredSectionPath,
+  "SideFeaturedCard",
+  ts.ScriptKind.TSX,
 );
 
 assert.ok(
@@ -73,6 +113,84 @@ assert.ok(
 assert.ok(
   featuredSectionSource.includes("<SideFeaturedCard key={project.id}"),
   "Side project identity must remain key={project.id}",
+);
+assert.equal(
+  (featuredSectionSource.match(/<FeaturedProjectEnglishName/g) ?? []).length,
+  2,
+  "Main and side cards must adopt one shared English-name presentation owner",
+);
+assert.equal(
+  (featuredSectionSource.match(/<FeaturedProjectMetaRow/g) ?? []).length,
+  2,
+  "Main and side cards must adopt one shared location/type row owner",
+);
+assert.match(
+  featuredSectionSource,
+  /block min-w-0 truncate font-en font-bold leading-tight/,
+  "English project names must remain one-line, bold, and ellipsized",
+);
+assert.match(
+  featuredSectionSource,
+  /flex min-w-0 flex-nowrap items-center gap-2/,
+  "Location and project type must remain on one responsive row",
+);
+assert.doesNotMatch(
+  sideFeaturedCardSource,
+  /project\.arabicName/,
+  "Side featured cards must not render the Arabic project name",
+);
+assert.match(
+  sideFeaturedCardSource,
+  /<FeaturedProjectMetaRow[\s\S]*?className="w-full justify-center"/,
+  "Side metadata must start without a deleted-name spacing gap",
+);
+assert.match(
+  sideFeaturedCardSource,
+  /<PlainTextContent[\s\S]*?className="mt-3 line-clamp-2/,
+  "Side descriptions must retain one balanced spacing step after metadata",
+);
+assert.ok(
+  sideFeaturedCardSource.indexOf("<FeaturedProjectEnglishName") <
+    sideFeaturedCardSource.indexOf("<FeaturedProjectMetaRow") &&
+    sideFeaturedCardSource.indexOf("<FeaturedProjectMetaRow") <
+      sideFeaturedCardSource.indexOf("<PlainTextContent"),
+  "Side card order must remain English name, metadata, then description",
+);
+assert.match(
+  mainFeaturedCardSource,
+  /<FeaturedProjectEnglishName[\s\S]*?<FeaturedProjectMetaRow[\s\S]*?<PlainTextContent/,
+  "Main featured card presentation must remain intact",
+);
+
+assert.doesNotMatch(
+  featuredEditorSource,
+  /تحكّم في العناصر الظاهرة داخل قسم المشروعات المميزة/,
+  "The featured editor must not repeat the unified Section Hero description",
+);
+assert.doesNotMatch(
+  featuredEditorSource,
+  /type=["']checkbox["']|<select\b/,
+  "The featured editor must not own raw checkbox or native select presentation",
+);
+assert.match(featuredEditorSource, /<AdminFormSwitch\b/, "Featured options must use the shared switch");
+assert.match(
+  featuredEditorSource,
+  /<AdminFormListboxSelect[\s\S]*?name="selection_mode"/,
+  "Featured selection mode must use the shared form listbox",
+);
+assert.match(
+  featuredEditorSource,
+  /<AdminFormGrid columns=\{3\}/,
+  "Featured card visibility options must use the shared three-column form grid",
+);
+assert.ok(
+  featuredEditorSource.indexOf('name="title"') < featuredEditorSource.indexOf('name="subtitle"'),
+  "Title with its visibility switch must precede subtitle with its visibility switch",
+);
+assert.match(
+  contentModuleEditorSource,
+  /<AdminFormListboxSelect[\s\S]*?name="status"/,
+  "Content module status must use the shared form listbox",
 );
 
 let evaluatedStates = 0;

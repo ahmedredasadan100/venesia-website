@@ -40,6 +40,9 @@ export const ADMIN_FORM_SECTION_CLASSES =
 const ADMIN_FORM_SECTION_COMPACT_CLASSES =
   `${ADMIN_FORM_SECTION_SURFACE_CLASSES} px-6 py-4`;
 
+export const ADMIN_FORM_MODULE_SECTION_CLASSES =
+  "space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5";
+
 type AdminFormSectionProps = {
   id?: string;
   children: ReactNode;
@@ -50,6 +53,7 @@ type AdminFormSectionProps = {
   actions?: ReactNode;
   compactHeader?: boolean;
   density?: "default" | "compact";
+  variant?: "default" | "module";
   className?: string;
 };
 
@@ -63,11 +67,14 @@ export function AdminFormSection({
   actions,
   compactHeader = false,
   density = "default",
+  variant = "default",
   className = "",
 }: AdminFormSectionProps) {
   const hasHeader = eyebrow || title || description || actions;
   const sectionClassName =
-    density === "compact"
+    variant === "module"
+      ? ADMIN_FORM_MODULE_SECTION_CLASSES
+      : density === "compact"
       ? ADMIN_FORM_SECTION_COMPACT_CLASSES
       : ADMIN_FORM_SECTION_CLASSES;
 

@@ -1,10 +1,12 @@
 "use client";
 
+import { ModuleEditorSection } from "../ModuleEditorPresentation";
+
 import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminLinkField } from "../../ui";
+import { AdminFormListboxSelect, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { AboutIntroBeatConfig, AboutIntroModuleConfig } from "../../../../lib/page-blocks/configs";
@@ -202,7 +204,7 @@ export default function AboutIntroModuleEditor({
       {isHomeStory && section === "all" ? <input type="hidden" name="include_story_cta" value="1" /> : null}
 
       {showText ? (
-        <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
           {section === "all" ? (
             <h2 className="text-sm font-semibold text-white">{isHomeStory ? "النص" : "محتوى الموديول"}</h2>
           ) : null}
@@ -232,11 +234,11 @@ export default function AboutIntroModuleEditor({
               helperText={fieldLabels.bodyHelper}
             />
           </div>
-        </section>
+      </ModuleEditorSection>
       ) : null}
 
       {showImages ? (
-        <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
           {section === "all" ? (
             <h2 className="text-sm font-semibold text-white">
               {isHomeStory ? "الصور (2 متداخلة)" : "الصور (3 كحد أقصى)"}
@@ -365,11 +367,11 @@ export default function AboutIntroModuleEditor({
               </div>
             </>
           )}
-        </section>
+      </ModuleEditorSection>
       ) : null}
 
       {showCta ? (
-        <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
           {section === "all" ? <h2 className="text-sm font-semibold text-white">زر CTA</h2> : null}
           <div className="space-y-4">
             <label className="block space-y-2">
@@ -384,28 +386,26 @@ export default function AboutIntroModuleEditor({
               defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
               showAnchor
             />
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">فتح الرابط</span>
-              <select
-                name="button_open_target"
-                defaultValue={config.button?.target === "_blank" ? "_blank" : "_self"}
-                className={fieldClassName()}
-              >
-                <option value="_self">نفس النافذة</option>
-                <option value="_blank">نافذة جديدة</option>
-              </select>
-            </label>
+            <AdminFormListboxSelect
+              name="button_open_target"
+              label="فتح الرابط"
+              defaultValue={config.button?.target === "_blank" ? "_blank" : "_self"}
+              options={[
+                { value: "_self", label: "نفس النافذة" },
+                { value: "_blank", label: "نافذة جديدة" },
+              ]}
+            />
             <HomeStoryButtonPresentationFields
               alignment={config.button?.alignment === "center" || config.button?.alignment === "left" ? config.button.alignment : "right"}
               icon={config.button?.icon === "arrow" ? "arrow" : "none"}
               iconPosition={config.button?.iconPosition === "left" ? "left" : "right"}
             />
           </div>
-        </section>
+      </ModuleEditorSection>
       ) : null}
 
       {showBeats ? (
-        <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
           <h2 className="text-sm font-semibold text-white">البطاقات (3 كحد أقصى)</h2>
           <div className="grid gap-4 lg:grid-cols-3">
             {beats.map((beat, index) => (
@@ -436,7 +436,7 @@ export default function AboutIntroModuleEditor({
               </div>
             ))}
           </div>
-        </section>
+      </ModuleEditorSection>
       ) : null}
     </div>
   );

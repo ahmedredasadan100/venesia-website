@@ -1,11 +1,18 @@
 "use client";
 
-import AdminModuleTabs from "../ui/AdminModuleTabs";
-import BlockEditorContextHeader, { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
-import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModuleDependencyHintsPanel from "./ModuleDependencyHintsPanel";
-import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
-import { AdminLinkField } from "../ui";
+import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../ui";
+import {
+  MODULE_EDITOR_STATUS_OPTIONS,
+  ModuleEditorFeedback,
+  ModuleEditorHeader,
+  ModuleEditorPagesTab,
+  ModuleEditorSaveArea,
+  ModuleEditorSection,
+  ModuleEditorSettingsComposition,
+  ModuleEditorTabs,
+  ModuleEditorTechnicalIdentity,
+} from "./ModuleEditorPresentation";
 import { linkDefaultFromContainer } from "../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { CtaBlockConfig } from "../../../lib/page-blocks/configs";
@@ -34,16 +41,13 @@ export default function CtaModuleEditClient({
   saved,
   updateAction,
 }: CtaModuleEditClientProps) {
-  const assignedPageIds = assignmentContext.assignments.map((row) => row.page_id);
-
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <BlockEditorContextHeader
+      <ModuleEditorHeader
+        moduleKind="cta"
+        entityName={block.name}
         backHref="/admin/pages-blocks/blocks/cta"
         backLabel="الرجوع لبلوكات CTA"
-        eyebrow="CTA MODULE"
-        title={block.name}
-        description="شريط دعوة لإجراء — يحتاج عنوانًا ونصًا وزرًا ورابطًا صالحًا."
         status={block.status}
         saved={saved}
         slotContext={getSlotCompatibilityLabel("cta")}
@@ -54,17 +58,14 @@ export default function CtaModuleEditClient({
         <input type="hidden" name="variant" value={block.variant ?? "band"} />
         <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
 
-        <AdminModuleTabs
-          activePanelContext={<BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/cta" saved={saved} />}
+        <ModuleEditorTabs
+          moduleKind="cta"
+          activePanelContext={<ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/cta" saved={saved} />}
           tabs={[
             {
               id: "content",
-              navigationLabel: "المحتوى",
-              sectionHeading: "محتوى الدعوة للإجراء",
-              sectionDescription: "أدر النصوص والأزرار والروابط الأساسية للموديول.",
-              icon: "content",
               content: (
-                <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <ModuleEditorSection>
                   <label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">Eyebrow</span>
                     <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
@@ -86,7 +87,7 @@ export default function CtaModuleEditClient({
                       className={fieldClassName("resize-y leading-7")}
                     />
                   </label>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <AdminFormGrid>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Primary CTA Label</span>
                       <input name="primary_cta_label" defaultValue={config.primaryCta?.label ?? ""} className={fieldClassName()} />
@@ -107,73 +108,55 @@ export default function CtaModuleEditClient({
                       defaultValue={linkDefaultFromContainer(config.secondaryCta as Record<string, unknown>)}
                       showAnchor
                     />
-                  </div>
-                </section>
+                  </AdminFormGrid>
+                </ModuleEditorSection>
               ),
             },
             {
               id: "meta",
-              navigationLabel: "الإعدادات",
-              sectionHeading: "إعدادات الموديول",
-              sectionDescription: "أدر الهوية الداخلية وحالة نشر الموديول.",
-              icon: "settings",
               content: (
-                <div className="space-y-5">
-                  <ModuleDependencyHintsPanel moduleKind="cta" templateSlug={block.slug} />
-                  <section className="max-w-xl space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+                <ModuleEditorSettingsComposition
+                  context={<ModuleDependencyHintsPanel moduleKind="cta" templateSlug={block.slug} />}
+                  primary={
+                  <ModuleEditorSection className="max-w-xl">
                   <label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">الاسم</span>
                     <input name="name" defaultValue={block.name} required className={fieldClassName()} />
                   </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Slug</span>
-                    <input name="slug" defaultValue={block.slug} required dir="ltr" className={fieldClassName()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">الحالة</span>
-                    <select name="status" defaultValue={block.status} className={fieldClassName()}>
-                      <option value="draft">مسودة</option>
-                      <option value="published">منشور</option>
-                      <option value="unpublished">مخفي</option>
-                      <option value="archived">أرشيف</option>
-                    </select>
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">Background Style</span>
-                    <select name="background_style" defaultValue={config.backgroundStyle ?? "dark"} className={fieldClassName()}>
-                      <option value="dark">Dark</option>
-                      <option value="gold">Gold</option>
-                      <option value="gradient">Gradient</option>
-                    </select>
-                  </label>
-                  </section>
-                </div>
+                  <ModuleEditorTechnicalIdentity
+                    mode="editable"
+                    value={block.slug}
+                    inputClassName={fieldClassName()}
+                  />
+                  <AdminFormListboxSelect
+                    name="status"
+                    label="الحالة"
+                    defaultValue={block.status}
+                    options={MODULE_EDITOR_STATUS_OPTIONS}
+                  />
+                  <AdminFormListboxSelect
+                    name="background_style"
+                    label="Background Style"
+                    defaultValue={config.backgroundStyle ?? "dark"}
+                    options={[
+                      { value: "dark", label: "Dark" },
+                      { value: "gold", label: "Gold" },
+                      { value: "gradient", label: "Gradient" },
+                    ]}
+                  />
+                  </ModuleEditorSection>
+                  }
+                />
               ),
             },
             {
               id: "pages",
-              navigationLabel: "الصفحات",
-              sectionHeading: "الظهور في الصفحات",
-              sectionDescription: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
-              icon: "plans",
-              content: (
-                <div className="space-y-5">
-                  <ModuleCrossPageUsageBanner moduleName={block.name} assignments={assignmentContext.assignments} />
-                  <ModulePageAssignmentsField
-                    pages={assignmentContext.pages}
-                    assignedPageIds={assignedPageIds}
-                  />
-                </div>
-              ),
+              content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
             },
           ]}
         />
 
-        <div className="mt-6 flex justify-end">
-          <button type="submit" className="rounded-2xl bg-[#D8B87A] px-6 py-3 text-sm font-bold text-[#06101C]">
-            حفظ الموديول
-          </button>
-        </div>
+        <ModuleEditorSaveArea />
       </form>
     </div>
   );

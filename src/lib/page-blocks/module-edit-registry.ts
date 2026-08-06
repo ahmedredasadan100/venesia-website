@@ -31,6 +31,10 @@ export const STRUCTURAL_CONTENT_TEMPLATE_SLUGS = [
   "home-contact",
   "home-trust",
   "home-projects",
+  "projects-hub-hero",
+  "projects-hub-featured",
+  "projects-hub-listing",
+  "projects-hub-map",
 ] as const;
 
 export function isStructuralContentTemplateSlug(slug: string | null | undefined, variant?: string | null) {

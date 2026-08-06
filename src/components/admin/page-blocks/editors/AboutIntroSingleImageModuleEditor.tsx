@@ -1,5 +1,7 @@
 "use client";
 
+import { ModuleEditorSection } from "../ModuleEditorPresentation";
+
 import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
@@ -32,7 +34,7 @@ export default function AboutIntroSingleImageModuleEditor({
       {/* config_schema is owned by ContentModuleEditClient — avoid duplicate FormData names */}
       <input type="hidden" name="image_position" value={imagePosition} />
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">محتوى الموديول</h2>
         <label className="block max-w-[920px] space-y-1.5">
           <span className="text-xs font-semibold text-white/55">العنوان التمهيدي</span>
@@ -58,9 +60,9 @@ export default function AboutIntroSingleImageModuleEditor({
             helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
           />
         </div>
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">الصورة</h2>
         <AdminMediaImageField
           name="image_main"
@@ -106,9 +108,9 @@ export default function AboutIntroSingleImageModuleEditor({
             على الموبايل تظهر الصورة دائمًا أعلى النص بغض النظر عن هذا الاختيار.
           </p>
         </div>
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">البطاقات (3 كحد أقصى)</h2>
         <div className="grid gap-4 lg:grid-cols-3">
           {beats.map((beat, index) => (
@@ -143,7 +145,7 @@ export default function AboutIntroSingleImageModuleEditor({
             </div>
           ))}
         </div>
-      </section>
+      </ModuleEditorSection>
     </div>
   );
 }

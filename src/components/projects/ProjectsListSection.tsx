@@ -51,6 +51,55 @@ function getCategoryLabel(category: PublicProject["category"]) {
   return PROJECT_CATEGORY_LABELS[category];
 }
 
+function ProjectListingEnglishName({ project }: { project: PublicProject }) {
+  return (
+    <span
+      title={project.englishName}
+      className="hidden min-w-0 truncate font-en text-lg font-bold leading-tight text-[#D8B87A] md:block md:text-xl"
+    >
+      {project.englishName}
+    </span>
+  );
+}
+
+function ListViewIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="size-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M8 6h13M8 12h13M8 18h13" />
+      <path d="M3 6h.01M3 12h.01M3 18h.01" strokeWidth="2.8" />
+    </svg>
+  );
+}
+
+function CardsViewIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="size-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
 export default function ProjectsListSection({
   projects,
   allProjects,
@@ -138,35 +187,41 @@ export default function ProjectsListSection({
             </div>
 
             {showViewToggle ? (
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
+              <div role="group" aria-label="طريقة عرض المشروعات" className="inline-flex w-fit gap-2">
                 <button
                   type="button"
+                  aria-label="عرض قائمة"
+                  title="عرض قائمة"
+                  aria-pressed={viewMode === "list"}
                   onClick={() => {
                     setCurrentPage(1);
                     setViewMode("list");
                   }}
-                  className={`rounded-lg border px-3 py-2 text-sm transition ${
+                  className={`inline-flex size-11 items-center justify-center rounded-xl border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070B] ${
                     viewMode === "list"
-                      ? "border-[#D8B87A]/35 text-[#D8B87A]"
+                      ? "border-[#D8B87A]/50 bg-[#D8B87A]/10 text-[#D8B87A]"
                       : "border-white/10 text-white/50 hover:border-[#D8B87A]/30 hover:text-[#D8B87A]"
                   }`}
                 >
-                  عرض قائمة
+                  <ListViewIcon />
                 </button>
 
                 <button
                   type="button"
+                  aria-label="عرض كروت"
+                  title="عرض كروت"
+                  aria-pressed={viewMode === "cards"}
                   onClick={() => {
                     setCurrentPage(1);
                     setViewMode("cards");
                   }}
-                  className={`rounded-lg border px-3 py-2 text-sm transition ${
+                  className={`inline-flex size-11 items-center justify-center rounded-xl border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070B] ${
                     viewMode === "cards"
-                      ? "border-[#D8B87A]/35 text-[#D8B87A]"
+                      ? "border-[#D8B87A]/50 bg-[#D8B87A]/10 text-[#D8B87A]"
                       : "border-white/10 text-white/50 hover:border-[#D8B87A]/30 hover:text-[#D8B87A]"
                   }`}
                 >
-                  عرض كروت
+                  <CardsViewIcon />
                 </button>
               </div>
             ) : null}
@@ -285,9 +340,7 @@ function ProjectRow({
         <div className="flex min-w-0 flex-col justify-between p-5 pt-4 sm:p-6 sm:pt-5 md:pt-6">
           <div className="min-w-0">
             {display.showProjectCode ? (
-              <p className="hidden font-en text-2xl font-semibold leading-none text-[#D8B87A] md:block md:text-3xl">
-                {project.englishName}
-              </p>
+              <ProjectListingEnglishName project={project} />
             ) : null}
 
             {display.showProjectLocation ? (
@@ -361,9 +414,7 @@ function ProjectCard({
 
       <div className="min-w-0 px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5 md:pt-4">
         {display.showProjectCode ? (
-          <p className="hidden font-en text-2xl font-semibold text-[#D8B87A] md:block md:text-3xl">
-            {project.englishName}
-          </p>
+          <ProjectListingEnglishName project={project} />
         ) : null}
 
         {display.showProjectLocation ? (

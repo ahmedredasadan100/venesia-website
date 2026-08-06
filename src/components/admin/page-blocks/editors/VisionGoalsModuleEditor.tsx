@@ -1,5 +1,7 @@
 "use client";
 
+import { ModuleEditorSection } from "../ModuleEditorPresentation";
+
 import AdminMediaImageField from "../../media/AdminMediaImageField";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { VisionGoalsItemConfig, VisionGoalsModuleConfig } from "../../../../lib/page-blocks/configs";
@@ -22,7 +24,7 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
     <div className="space-y-6">
       <input type="hidden" name="config_schema" value="vision-goals" />
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">النص</h2>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">Eyebrow</span>
@@ -41,9 +43,9 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
             className={fieldClassName("resize-y leading-7")}
           />
         </label>
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">الصورة</h2>
         <AdminMediaImageField
           name="image"
@@ -56,9 +58,9 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
           <span className="text-xs font-semibold text-white/55">Alt</span>
           <input name="image_alt" defaultValue={config.imageAlt ?? ""} className={fieldClassName()} />
         </label>
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">رؤيتنا</h2>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عنوان العمود</span>
@@ -88,9 +90,9 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
             </div>
           ))}
         </div>
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">أهدافنا</h2>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">عنوان العمود</span>
@@ -120,7 +122,7 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
             </div>
           ))}
         </div>
-      </section>
+      </ModuleEditorSection>
     </div>
   );
 }

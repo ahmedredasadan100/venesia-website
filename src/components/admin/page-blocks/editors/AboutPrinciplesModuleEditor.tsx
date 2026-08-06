@@ -1,9 +1,12 @@
 "use client";
 
+import { ModuleEditorSection } from "../ModuleEditorPresentation";
+
 import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
+import { AdminFormListboxSelect } from "../../ui";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   ABOUT_PRINCIPLES_ICON_KEYS,
@@ -151,7 +154,7 @@ export default function AboutPrinciplesModuleEditor({
       {isHomeTrust ? <input type="hidden" name="include_home_trust_intro" value="1" /> : null}
       <input type="hidden" name="principle_count" value={String(items.length)} />
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <h2 className="text-sm font-semibold text-white">{isHomeTrust ? "نصوص القسم" : "العنوان"}</h2>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">العنوان التمهيدي الصغير</span>
@@ -192,9 +195,9 @@ export default function AboutPrinciplesModuleEditor({
             helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
           />
         ) : null}
-      </section>
+      </ModuleEditorSection>
 
-      <section className="space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5">
+      <ModuleEditorSection>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-white">
             {isHomeTrust ? "بطاقات الثقة (4)" : "المبادئ (حتى 6)"}
@@ -248,26 +251,20 @@ export default function AboutPrinciplesModuleEditor({
                 ) : null}
               </div>
 
-              <input type="hidden" name={`principle_${index}_icon`} value={item.icon ?? "land"} />
               <input type="hidden" name={`principle_${index}_title`} value={item.title ?? ""} />
               <input type="hidden" name={`principle_${index}_description`} value={item.description ?? ""} />
 
               {!isHomeTrust ? (
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">الأيقونة</span>
-                  <select
+                <AdminFormListboxSelect
+                    name={`principle_${index}_icon`}
+                    label="الأيقونة"
                     value={item.icon ?? "land"}
-                    onChange={(event) => updateItem(index, { icon: event.target.value })}
-                    className={fieldClassName()}
-                  >
-                    {ABOUT_PRINCIPLES_ICON_KEYS.map((key) => (
-                      <option key={key} value={key}>
-                        {ICON_LABELS[key]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
+                    onChange={(value) => updateItem(index, { icon: value })}
+                    options={ABOUT_PRINCIPLES_ICON_KEYS.map((key) => ({ value: key, label: ICON_LABELS[key] }))}
+                />
+              ) : (
+                <input type="hidden" name={`principle_${index}_icon`} value={item.icon ?? "land"} />
+              )}
               <label className="block space-y-2">
                 <span className="text-xs font-semibold text-white/55">
                   {isHomeTrust ? "عنوان البطاقة" : "عنوان العنصر"}
@@ -315,7 +312,7 @@ export default function AboutPrinciplesModuleEditor({
             </div>
           ))}
         </div>
-      </section>
+      </ModuleEditorSection>
     </div>
   );
 }
