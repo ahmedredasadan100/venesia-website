@@ -1,6 +1,10 @@
 import type { AnalyticsProviderKey } from "../reports/analytics-contract";
+import type {
+  IntegrationAppConfigurationSource,
+  IntegrationAppConfigurationStatus,
+} from "./server-configuration-contract";
 
-export const INTEGRATIONS_CONTRACT_VERSION = "external-integrations-v1" as const;
+export const INTEGRATIONS_CONTRACT_VERSION = "external-integrations-v2" as const;
 export const INTEGRATIONS_MIGRATION_VERSION = "20260806010000" as const;
 
 export const INTEGRATION_KEYS = [
@@ -182,12 +186,6 @@ export const INTEGRATION_DEFINITIONS = [
   },
 ] as const satisfies readonly IntegrationDefinition[];
 
-export type ProviderConfigurationDiagnostic = {
-  configured: boolean;
-  missing: string[];
-  message: string;
-};
-
 export type PersistedIntegrationConnection = {
   id: string;
   integrationKey: LiveIntegrationKey;
@@ -223,6 +221,9 @@ export type IntegrationSnapshotItem = IntegrationDefinition & {
   availableAssets: IntegrationAsset[];
   selectedAssets: IntegrationAsset[];
   missingConfiguration: string[];
+  appConfigurationStatus: IntegrationAppConfigurationStatus | null;
+  appConfigurationSource: IntegrationAppConfigurationSource;
+  appConfigurationLastTestedAt: string | null;
 };
 
 export type IntegrationStatistics = {

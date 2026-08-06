@@ -10,14 +10,18 @@ import type {
 } from "../provider-adapter-contract";
 import { formBody, isoAfterSeconds, providerJson, selectedAsset } from "../provider-http";
 import {
+  requireApplicationConfigurationValue,
+  requireIntegrationApplicationConfiguration,
+  resolveGoogleAdsApiVersion,
+  resolveIntegrationApplicationConfiguration,
+} from "../server-configuration-resolver";
+import {
   assertGrantedScopes,
-  configuredEnvironment,
   dateRange,
   finiteNumber,
   metric,
   queryDays,
   requireAsset,
-  requireConfigured,
   splitScopes,
   uniqueAssets,
 } from "./shared";
@@ -25,8 +29,6 @@ import {
 const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
 const GOOGLE_REVOKE = "https://oauth2.googleapis.com/revoke";
-
-const GOOGLE_CONFIG = ["GOOGLE_INTEGRATIONS_CLIENT_ID", "GOOGLE_INTEGRATIONS_CLIENT_SECRET", "INTEGRATIONS_OAUTH_BASE_URL"] as const;
 
 type GoogleTokenResponse = {
   access_token?: string;
@@ -61,21 +63,37 @@ const GOOGLE_DEFINITIONS: Record<GoogleKind, {
   },
 };
 
-function googleHeaders(accessToken: string, ads = false, loginCustomerId?: string | null) {
+function googleHeaders(accessToken: string, loginCustomerId?: string | null) {
   return {
     authorization: `Bearer ${accessToken}`,
-    ...(ads ? { "developer-token": process.env.GOOGLE_ADS_DEVELOPER_TOKEN!.trim() } : {}),
     ...(loginCustomerId ? { "login-customer-id": loginCustomerId.replace(/\D/g, "") } : {}),
   };
 }
 
-async function exchangeGoogleCode(code: string, redirectUri: string, pkceVerifier: string | null) {
+async function googleAdsHeaders(accessToken: string, loginCustomerId?: string | null) {
+  const configuration = await requireIntegrationApplicationConfiguration("google_ads");
+  return {
+    ...googleHeaders(accessToken, loginCustomerId),
+    "developer-token": requireApplicationConfigurationValue(
+      configuration,
+      "google_ads_developer_token",
+    ),
+  };
+}
+
+async function exchangeGoogleCode(
+  integration: LiveIntegrationKey,
+  code: string,
+  redirectUri: string,
+  pkceVerifier: string | null,
+) {
+  const configuration = await requireIntegrationApplicationConfiguration(integration);
   return providerJson<GoogleTokenResponse>(GOOGLE_TOKEN, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: formBody({
-      client_id: process.env.GOOGLE_INTEGRATIONS_CLIENT_ID!.trim(),
-      client_secret: process.env.GOOGLE_INTEGRATIONS_CLIENT_SECRET!.trim(),
+      client_id: requireApplicationConfigurationValue(configuration, "google_client_id"),
+      client_secret: requireApplicationConfigurationValue(configuration, "google_client_secret"),
       code,
       grant_type: "authorization_code",
       redirect_uri: redirectUri,
@@ -99,12 +117,13 @@ function tokenSet(payload: GoogleTokenResponse, fallbackRefresh: string | null =
 
 async function refreshGoogle(input: ProviderRuntimeContext) {
   if (!input.refreshToken) throw new Error("google_oauth_refresh_token_missing");
+  const configuration = await requireIntegrationApplicationConfiguration(input.integration);
   const payload = await providerJson<GoogleTokenResponse>(GOOGLE_TOKEN, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: formBody({
-      client_id: process.env.GOOGLE_INTEGRATIONS_CLIENT_ID!.trim(),
-      client_secret: process.env.GOOGLE_INTEGRATIONS_CLIENT_SECRET!.trim(),
+      client_id: requireApplicationConfigurationValue(configuration, "google_client_id"),
+      client_secret: requireApplicationConfigurationValue(configuration, "google_client_secret"),
       refresh_token: input.refreshToken,
       grant_type: "refresh_token",
     }),
@@ -162,7 +181,7 @@ async function discoverSearchConsole(accessToken: string) {
 }
 
 function googleAdsVersion() {
-  return process.env.GOOGLE_ADS_API_VERSION?.trim() || "v25";
+  return resolveGoogleAdsApiVersion();
 }
 
 async function googleAdsSearch<T>(input: {
@@ -178,7 +197,7 @@ async function googleAdsSearch<T>(input: {
     const payload = await providerJson<{ results?: T[]; nextPageToken?: string }>(
       `https://googleads.googleapis.com/${googleAdsVersion()}/customers/${customerId}/googleAds:search`, {
       method: "POST",
-      headers: { ...googleHeaders(input.accessToken, true, input.loginCustomerId), "content-type": "application/json" },
+      headers: { ...await googleAdsHeaders(input.accessToken, input.loginCustomerId), "content-type": "application/json" },
       body: JSON.stringify({ query: input.query, pageSize: 10000, ...(pageToken ? { pageToken } : {}) }),
     }, "google_ads_query_failed");
     results.push(...(payload.results ?? []));
@@ -191,7 +210,7 @@ async function googleAdsSearch<T>(input: {
 async function discoverGoogleAds(accessToken: string) {
   const payload = await providerJson<{ resourceNames?: string[] }>(
     `https://googleads.googleapis.com/${googleAdsVersion()}/customers:listAccessibleCustomers`,
-    { headers: googleHeaders(accessToken, true) },
+    { headers: await googleAdsHeaders(accessToken) },
     "google_ads_asset_discovery_failed",
   );
   const assets: IntegrationAsset[] = [];
@@ -364,16 +383,53 @@ function createGoogleAdapter(kind: GoogleKind): IntegrationProviderAdapter {
   return {
     integration: definition.integration,
     analyticsProvider: definition.analyticsProvider,
-    configuration() {
-      return configuredEnvironment([
-        ...GOOGLE_CONFIG,
-        ...(kind === "ads" ? ["GOOGLE_ADS_DEVELOPER_TOKEN"] : []),
-      ]);
+    async configuration() {
+      return resolveIntegrationApplicationConfiguration(definition.integration);
     },
-    buildAuthorizationRequest(context) {
-      requireConfigured(this.configuration());
+    async testApplicationConfiguration() {
+      const configuration = await resolveIntegrationApplicationConfiguration(definition.integration, {
+        includeSecrets: true,
+        allowUntested: true,
+      });
+      if (configuration.missing.length) {
+        return {
+          status: "configuration_invalid",
+          safeErrorCode: "integration_app_configuration_incomplete",
+          message: "Required Google application fields are missing.",
+        };
+      }
+      const clientId = requireApplicationConfigurationValue(configuration, "google_client_id");
+      const clientSecret = requireApplicationConfigurationValue(configuration, "google_client_secret");
+      const developerToken = kind === "ads"
+        ? requireApplicationConfigurationValue(configuration, "google_ads_developer_token")
+        : null;
+      if (!/^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$/.test(clientId) || clientSecret.length < 8) {
+        return {
+          status: "configuration_invalid",
+          safeErrorCode: "google_app_credentials_format_invalid",
+          message: "Google OAuth credential format is invalid.",
+        };
+      }
+      if (developerToken && !/^[A-Za-z0-9]{22}$/.test(developerToken)) {
+        return {
+          status: "configuration_invalid",
+          safeErrorCode: "google_ads_developer_token_format_invalid",
+          message: "Google Ads Developer Token format is invalid.",
+        };
+      }
+      return {
+        status: "configuration_saved_waiting_for_authorization",
+        safeErrorCode: null,
+        message: "Google requires user authorization before an official credential test is possible.",
+      };
+    },
+    async buildAuthorizationRequest(context) {
+      const configuration = await requireIntegrationApplicationConfiguration(definition.integration);
       const url = new URL(GOOGLE_AUTH);
-      url.searchParams.set("client_id", process.env.GOOGLE_INTEGRATIONS_CLIENT_ID!.trim());
+      url.searchParams.set(
+        "client_id",
+        requireApplicationConfigurationValue(configuration, "google_client_id"),
+      );
       url.searchParams.set("redirect_uri", context.redirectUri);
       url.searchParams.set("response_type", "code");
       url.searchParams.set("access_type", "offline");
@@ -387,8 +443,12 @@ function createGoogleAdapter(kind: GoogleKind): IntegrationProviderAdapter {
       return { url: url.toString(), pkceVerifierRequired: true };
     },
     async exchangeAuthorizationCode(input) {
-      requireConfigured(this.configuration());
-      const tokens = tokenSet(await exchangeGoogleCode(input.code, input.redirectUri, input.pkceVerifier));
+      const tokens = tokenSet(await exchangeGoogleCode(
+        definition.integration,
+        input.code,
+        input.redirectUri,
+        input.pkceVerifier,
+      ));
       assertGrantedScopes(tokens.grantedScopes, definition.scopes, "google_oauth_scope_missing");
       return tokens;
     },

@@ -7,8 +7,11 @@ import type {
   IntegrationAsset,
   IntegrationCredentialStrategy,
   LiveIntegrationKey,
-  ProviderConfigurationDiagnostic,
 } from "./integrations-contract";
+import type {
+  IntegrationAppConfigurationDiagnostic,
+  IntegrationAppConfigurationTestResult,
+} from "./server-configuration-contract";
 
 export type ProviderAuthorizationContext = {
   redirectUri: string;
@@ -82,8 +85,9 @@ export type ProviderRevocationResult = {
 export interface IntegrationProviderAdapter {
   readonly integration: LiveIntegrationKey;
   readonly analyticsProvider: AnalyticsProviderKey | null;
-  configuration(): ProviderConfigurationDiagnostic;
-  buildAuthorizationRequest(context: ProviderAuthorizationContext): ProviderAuthorizationRequest;
+  configuration(): Promise<IntegrationAppConfigurationDiagnostic>;
+  testApplicationConfiguration(): Promise<IntegrationAppConfigurationTestResult>;
+  buildAuthorizationRequest(context: ProviderAuthorizationContext): Promise<ProviderAuthorizationRequest>;
   exchangeAuthorizationCode(input: {
     code: string;
     redirectUri: string;

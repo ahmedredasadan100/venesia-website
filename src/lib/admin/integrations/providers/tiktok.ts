@@ -4,18 +4,15 @@ import type { AnalyticsMetric } from "../../reports/analytics-contract";
 import { assertRequiredAssets, type IntegrationAsset } from "../integrations-contract";
 import type { IntegrationProviderAdapter, ProviderRuntimeContext, ProviderSyncResult, ProviderTokenSet } from "../provider-adapter-contract";
 import { providerJson } from "../provider-http";
-import { configuredEnvironment, dateRange, finiteNumber, metric, requireAsset, requireConfigured, splitScopes, uniqueAssets } from "./shared";
+import {
+  requireApplicationConfigurationValue,
+  requireIntegrationApplicationConfiguration,
+  resolveIntegrationApplicationConfiguration,
+} from "../server-configuration-resolver";
+import { dateRange, finiteNumber, metric, requireAsset, splitScopes, uniqueAssets } from "./shared";
 
 const TIKTOK_BASE = "https://business-api.tiktok.com/open_api/v1.3";
-
-function config() {
-  return configuredEnvironment([
-    "TIKTOK_BUSINESS_APP_ID",
-    "TIKTOK_BUSINESS_APP_SECRET",
-    "TIKTOK_BUSINESS_AUTHORIZATION_URL",
-    "INTEGRATIONS_OAUTH_BASE_URL",
-  ]);
-}
+const TIKTOK_AUTHORIZATION = "https://ads.tiktok.com/marketing_api/auth";
 
 function headers(accessToken: string) {
   return { "Access-Token": accessToken, "content-type": "application/json" };
@@ -192,20 +189,41 @@ async function syncTikTok(input: ProviderRuntimeContext): Promise<ProviderSyncRe
 export const tiktokAdsAdapter: IntegrationProviderAdapter = {
   integration: "tiktok_ads",
   analyticsProvider: "tiktok_ads",
-  configuration: config,
-  buildAuthorizationRequest(context) {
-    requireConfigured(config());
-    const url = new URL(process.env.TIKTOK_BUSINESS_AUTHORIZATION_URL!.trim());
+  configuration() {
+    return resolveIntegrationApplicationConfiguration("tiktok_ads");
+  },
+  async testApplicationConfiguration() {
+    const configuration = await resolveIntegrationApplicationConfiguration("tiktok_ads", {
+      includeSecrets: true,
+      allowUntested: true,
+    });
+    if (configuration.missing.length) {
+      return { status: "configuration_invalid", safeErrorCode: "integration_app_configuration_incomplete", message: "Required TikTok application fields are missing." };
+    }
+    const appId = requireApplicationConfigurationValue(configuration, "tiktok_app_id");
+    const appSecret = requireApplicationConfigurationValue(configuration, "tiktok_app_secret");
+    if (!/^[A-Za-z0-9_-]{4,128}$/.test(appId) || appSecret.length < 8) {
+      return { status: "configuration_invalid", safeErrorCode: "tiktok_app_credentials_format_invalid", message: "TikTok application credential format is invalid." };
+    }
+    return { status: "configuration_saved_waiting_for_authorization", safeErrorCode: null, message: "TikTok Marketing API requires an authorization code before it can verify the App ID and Secret." };
+  },
+  async buildAuthorizationRequest(context) {
+    const configuration = await requireIntegrationApplicationConfiguration("tiktok_ads");
+    const url = new URL(TIKTOK_AUTHORIZATION);
     url.searchParams.set("state", context.state);
-    if (!url.searchParams.has("app_id")) url.searchParams.set("app_id", process.env.TIKTOK_BUSINESS_APP_ID!.trim());
-    if (!url.searchParams.has("redirect_uri")) url.searchParams.set("redirect_uri", context.redirectUri);
+    url.searchParams.set("app_id", requireApplicationConfigurationValue(configuration, "tiktok_app_id"));
+    url.searchParams.set("redirect_uri", context.redirectUri);
     return { url: url.toString(), pkceVerifierRequired: false };
   },
   async exchangeAuthorizationCode(input): Promise<ProviderTokenSet> {
-    requireConfigured(config());
+    const configuration = await requireIntegrationApplicationConfiguration("tiktok_ads");
     const payload = await providerJson<{ code?: number; message?: string; data?: TikTokTokenData }>(`${TIKTOK_BASE}/oauth2/access_token/`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ app_id: process.env.TIKTOK_BUSINESS_APP_ID!.trim(), secret: process.env.TIKTOK_BUSINESS_APP_SECRET!.trim(), auth_code: input.code }),
+      body: JSON.stringify({
+        app_id: requireApplicationConfigurationValue(configuration, "tiktok_app_id"),
+        secret: requireApplicationConfigurationValue(configuration, "tiktok_app_secret"),
+        auth_code: input.code,
+      }),
     }, "tiktok_oauth_exchange_failed");
     const data = unwrap(payload, "tiktok_oauth_exchange_failed");
     if (!data.access_token) throw new Error("tiktok_access_token_missing");

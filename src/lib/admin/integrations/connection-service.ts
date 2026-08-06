@@ -23,7 +23,8 @@ import { getFreshRuntimeConnection, providerRuntimeContext, type IntegrationRunt
 import { assertRequiredAssets, getIntegrationDefinition, type LiveIntegrationKey } from "./integrations-contract";
 import { integrationProviderRegistry } from "./provider-registry";
 import { ProviderRequestError } from "./provider-http";
-import { callbackUri } from "./providers/shared";
+import { isIntegrationAppConfigurationAuthorizationReady } from "./server-configuration-contract";
+import { integrationCallbackUri } from "./server-configuration-resolver";
 import { runIntegrationSync } from "./sync-coordinator";
 
 function actor(user: AdminUserRecord) {
@@ -72,8 +73,8 @@ export async function beginIntegrationAuthorization(
   user: AdminUserRecord,
 ) {
   const adapter = integrationProviderRegistry.get(integration);
-  const configuration = adapter.configuration();
-  if (!configuration.configured) {
+  const configuration = await adapter.configuration();
+  if (!isIntegrationAppConfigurationAuthorizationReady(configuration)) {
     throw new Error(`integration_provider_not_configured:${configuration.missing.join(",")}`);
   }
   await pruneAuthorizationAttempts();
@@ -81,8 +82,8 @@ export async function beginIntegrationAuthorization(
   const nonce = randomBytes(32).toString("base64url");
   const state = `${attemptId}.${nonce}`;
   const verifier = randomBytes(48).toString("base64url");
-  const redirectUri = callbackUri(integration);
-  const request = adapter.buildAuthorizationRequest({
+  const redirectUri = await integrationCallbackUri(integration);
+  const request = await adapter.buildAuthorizationRequest({
     redirectUri,
     state,
     codeChallenge: pkceChallenge(verifier),
@@ -119,7 +120,7 @@ export async function completeIntegrationAuthorization(input: {
   try {
     const tokenSet = await adapter.exchangeAuthorizationCode({
       code: input.code,
-      redirectUri: callbackUri(input.routeIntegration),
+      redirectUri: await integrationCallbackUri(input.routeIntegration),
       pkceVerifier: attempt.pkceVerifier,
     });
     connectionId = await promoteAuthorization({

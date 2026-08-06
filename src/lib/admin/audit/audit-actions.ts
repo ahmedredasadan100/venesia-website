@@ -23,6 +23,12 @@ export const AUDIT_ACTIONS = {
   integrationSyncRequested: "integration.sync.requested",
   integrationDiagnosed: "integration.diagnosed",
   integrationDisconnected: "integration.disconnected",
+  integrationAppConfigurationCreated: "integration.app_configuration.created",
+  integrationAppConfigurationReplaced: "integration.app_configuration.replaced",
+  integrationAppConfigurationRemoved: "integration.app_configuration.removed",
+  integrationAppConfigurationTestPassed: "integration.app_configuration.test_passed",
+  integrationAppConfigurationTestFailed: "integration.app_configuration.test_failed",
+  integrationAppConfigurationReadinessChanged: "integration.app_configuration.readiness_changed",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -52,6 +58,12 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "integration.sync.requested": "طلب مزامنة تكامل خارجي",
   "integration.diagnosed": "تشخيص تكامل خارجي",
   "integration.disconnected": "فصل تكامل خارجي",
+  "integration.app_configuration.created": "إنشاء إعداد تطبيق مزوّد",
+  "integration.app_configuration.replaced": "استبدال إعداد تطبيق مزوّد",
+  "integration.app_configuration.removed": "إزالة إعداد تطبيق مزوّد",
+  "integration.app_configuration.test_passed": "نجاح اختبار إعداد تطبيق مزوّد",
+  "integration.app_configuration.test_failed": "فشل اختبار إعداد تطبيق مزوّد",
+  "integration.app_configuration.readiness_changed": "تغيّر جاهزية إعداد تطبيق مزوّد",
 };
 
 export const AUDIT_ACTION_OPTIONS = Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => ({

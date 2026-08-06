@@ -16,6 +16,10 @@ import {
   type IntegrationProviderAdapter,
 } from "../src/lib/admin/integrations/provider-adapter-contract.ts";
 import { assertGrantedScopes } from "../src/lib/admin/integrations/providers/shared.ts";
+import {
+  applicationConfigurationProviderForIntegration,
+  requiredApplicationConfigurationFields,
+} from "../src/lib/admin/integrations/server-configuration-contract.ts";
 import { ANALYTICS_PROVIDER_DEFINITIONS } from "../src/lib/admin/reports/analytics-contract.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -30,7 +34,7 @@ function walk(path: string): string[] {
   });
 }
 
-assert.equal(INTEGRATIONS_CONTRACT_VERSION, "external-integrations-v1");
+assert.equal(INTEGRATIONS_CONTRACT_VERSION, "external-integrations-v2");
 assert.equal(INTEGRATIONS_MIGRATION_VERSION, "20260806010000");
 assert.deepEqual(INTEGRATION_KEYS, [
   "google_analytics",
@@ -91,8 +95,24 @@ assert.throws(() => assertGrantedScopes(["read"], ["reporting"], "scope_missing"
 const adapter = (integration: (typeof LIVE_INTEGRATION_KEYS)[number]): IntegrationProviderAdapter => ({
   integration,
   analyticsProvider: null,
-  configuration: () => ({ configured: false, missing: ["TEST"], message: "not configured" }),
-  buildAuthorizationRequest: () => ({ url: "https://provider.invalid/authorize", pkceVerifierRequired: false }),
+  configuration: async () => ({
+    integration,
+    provider: applicationConfigurationProviderForIntegration(integration),
+    configured: false,
+    status: "needs_configuration",
+    source: "none",
+    missing: requiredApplicationConfigurationFields(integration).map((field) => field.key),
+    message: "not configured",
+    lastTestedAt: null,
+    safeErrorCode: null,
+    version: 0,
+  }),
+  testApplicationConfiguration: async () => ({
+    status: "configuration_invalid",
+    safeErrorCode: "not_configured",
+    message: "not configured",
+  }),
+  buildAuthorizationRequest: async () => ({ url: "https://provider.invalid/authorize", pkceVerifierRequired: false }),
   exchangeAuthorizationCode: async () => { throw new Error("not configured"); },
   refreshCredential: async () => null,
   discoverAssets: async () => [],
@@ -109,7 +129,8 @@ assert.throws(() => createIntegrationProviderRegistry([]).get("google_analytics"
 
 const foundationMigration = source("sql/migrations/20260805234500_external_integrations_capability.sql");
 const recoveryMigration = source("sql/migrations/20260806010000_external_integrations_asset_reselection_recovery.sql");
-const migration = `${foundationMigration}\n${recoveryMigration}`;
+const configurationMigration = source("sql/migrations/20260806140000_integrations_server_configuration_capability.sql");
+const migration = `${foundationMigration}\n${recoveryMigration}\n${configurationMigration}`;
 const credentialTable = foundationMigration.match(/create table(?:\s+if not exists)?\s+public\.integration_credentials[\s\S]*?;\s*create table/i)?.[0] ?? "";
 assert.ok(credentialTable, "the credential table definition must be inspected rather than skipped");
 for (const required of [
@@ -135,6 +156,8 @@ assert.match(migration, /run\.status = 'running' and run\.leased_until <= clock_
 assert.match(migration, /analytics_ingestion_connection_provider_mismatch/);
 assert.match(recoveryMigration, /status in \('pending_selection', 'testing', 'needs_attention'\)/i, "asset selection must recover from interrupted or failed tests");
 assert.match(recoveryMigration, /'migrationVersion', '20260806010000'/i, "health must prove the latest corrective migration");
+assert.match(configurationMigration, /'migrationVersion', '20260806010000'/i, "health must preserve the deployed Core Integrations migration contract");
+assert.match(configurationMigration, /'serverConfigurationMigrationVersion', '20260806140000'/i, "health must prove the Server Configuration migration independently");
 assert.match(migration, /enable row level security/gi);
 assert.match(migration, /grant execute[\s\S]*service_role/i);
 assert.doesNotMatch(credentialTable, /\baccess_token\b|\brefresh_token\b/i, "token plaintext must never be a table column");
@@ -190,6 +213,9 @@ assert.deepEqual(vercel.crons, [{ path: "/api/admin/integrations/sync", schedule
 for (const name of ["GOOGLE_INTEGRATIONS_CLIENT_ID", "META_APP_ID", "TIKTOK_BUSINESS_APP_ID", "SNAPCHAT_MARKETING_CLIENT_ID", "CRON_SECRET"]) {
   assert.match(envExample, new RegExp(`^${name}=`, "m"));
 }
+assert.match(envExample, /Legacy bootstrap only/);
+assert.doesNotMatch(envExample, /^INTEGRATIONS_OAUTH_BASE_URL=/m);
+assert.doesNotMatch(envExample, /^TIKTOK_BUSINESS_AUTHORIZATION_URL=/m);
 
 const providerHosts = /googleapis\.com|graph\.facebook\.com|business-api\.tiktok\.com|adsapi\.snapchat\.com|api\.snapchat\.com/i;
 const providerFiles = walk("src").filter((path) => /\.(?:ts|tsx)$/.test(path));

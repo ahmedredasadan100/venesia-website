@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { IntegrationAssetType, IntegrationConnectionStatus, IntegrationSnapshotItem } from "../../../lib/admin/integrations/integrations-contract";
+import { isIntegrationAppConfigurationAuthorizationReady } from "../../../lib/admin/integrations/server-configuration-contract";
 import { AdminConfirmDialog, AdminStatusPill } from "../ui";
 import IntegrationBrandIcon from "./IntegrationBrandIcon";
 
@@ -120,7 +121,11 @@ export default function IntegrationConnectionWizard({
 
   const selectedIds = Object.values(selection).filter((value): value is string => Boolean(value));
   const requiredReady = item.requiredAssetTypes.every((type) => Boolean(selection[type]));
-  const canAuthorize = item.liveConnectionSupported && item.missingConfiguration.length === 0;
+  const canAuthorize = item.liveConnectionSupported && item.appConfigurationStatus !== null &&
+    isIntegrationAppConfigurationAuthorizationReady({
+      status: item.appConfigurationStatus,
+      lastTestedAt: item.appConfigurationLastTestedAt,
+    });
   const showAssetSelection = groups.length > 0 && ["pending_selection", "testing", "needs_attention"].includes(item.status);
   const progressIndex = ["connected", "syncing"].includes(item.status)
     ? 3
@@ -170,11 +175,12 @@ export default function IntegrationConnectionWizard({
         {feedback ? <p role={feedback.tone === "error" ? "alert" : "status"} className={`mt-4 rounded-2xl border px-4 py-3 text-xs ${feedback.tone === "error" ? "border-rose-400/20 bg-rose-400/[.07] text-rose-100" : "border-emerald-400/20 bg-emerald-400/[.07] text-emerald-100"}`}>{feedback.message}</p> : null}
       </section>
 
-      {item.missingConfiguration.length ? (
+      {!canAuthorize && item.liveConnectionSupported ? (
         <section className="rounded-[24px] border border-amber-300/18 bg-amber-300/[.055] p-5">
-          <h2 className="text-sm font-semibold text-amber-100">Server configuration مطلوبة</h2>
-          <p className="mt-2 text-xs leading-6 text-amber-100/65">لا يمكن بدء OAuth قبل ضبط App Credentials التالية في بيئة السيرفر:</p>
-          <ul className="mt-3 space-y-2 font-en text-xs text-amber-100/80">{item.missingConfiguration.map((name) => <li key={name}>• {name}</li>)}</ul>
+          <h2 className="text-sm font-semibold text-amber-100">App Configuration غير جاهزة</h2>
+          <p className="mt-2 text-xs leading-6 text-amber-100/65">لا يمكن بدء OAuth قبل حفظ الإعداد داخل CMS Vault واجتياز الفحص الآمن. حالة المصدر: <span className="font-en">{item.appConfigurationSource}</span>.</p>
+          {item.missingConfiguration.length ? <ul className="mt-3 space-y-2 font-en text-xs text-amber-100/80">{item.missingConfiguration.map((name) => <li key={name}>• {name}</li>)}</ul> : null}
+          <Link href={`/admin/settings/integrations/server-configuration#${item.key === "whatsapp_business" ? "whatsapp" : item.key.startsWith("google_") ? "google" : item.key === "meta_business" ? "meta" : item.key === "tiktok_ads" ? "tiktok" : "snapchat"}`} className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-amber-200/22 px-4 text-xs font-semibold text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">فتح إعدادات الربط على السيرفر</Link>
         </section>
       ) : null}
 

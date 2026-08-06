@@ -124,6 +124,11 @@ export async function loadIntegrationPersistenceSnapshot() {
       vaultAvailable: health.vaultAvailable === true,
       migrationRegistered: health.migrationRegistered === true,
       migrationVersion: String(health.migrationVersion ?? ""),
+      serverConfigurationMigrationRegistered:
+        health.serverConfigurationMigrationRegistered === true,
+      serverConfigurationMigrationVersion: String(
+        health.serverConfigurationMigrationVersion ?? "",
+      ),
       valid: health.vaultAvailable === true &&
         health.migrationRegistered === true &&
         health.migrationVersion === INTEGRATIONS_MIGRATION_VERSION,
@@ -131,7 +136,7 @@ export async function loadIntegrationPersistenceSnapshot() {
   };
 }
 
-async function createVaultSecret(secret: string, name: string, description: string) {
+export async function createIntegrationVaultSecret(secret: string, name: string, description: string) {
   const { data, error } = await getSupabaseAdmin().rpc("create_integration_vault_secret", {
     p_secret: secret,
     p_name: name,
@@ -152,7 +157,7 @@ export async function readVaultSecret(secretId: string | null) {
   return data;
 }
 
-async function deleteVaultSecret(secretId: string | null) {
+export async function deleteIntegrationVaultSecret(secretId: string | null) {
   if (!secretId) return;
   await getSupabaseAdmin().rpc("delete_integration_vault_secret", { p_secret_id: secretId });
 }
@@ -167,7 +172,7 @@ export async function createAuthorizationAttempt(input: {
   expiresAt: string;
 }) {
   const verifierSecretId = input.pkceVerifier
-    ? await createVaultSecret(
+    ? await createIntegrationVaultSecret(
         input.pkceVerifier,
         `integration-oauth-pkce-${input.integration}-${Date.now()}`,
         "Short-lived OAuth PKCE verifier. Deleted after callback consumption.",
@@ -188,7 +193,7 @@ export async function createAuthorizationAttempt(input: {
     .select("id")
     .single();
   if (error || !data) {
-    await deleteVaultSecret(verifierSecretId);
+    await deleteIntegrationVaultSecret(verifierSecretId);
     throw new Error(error?.message ?? "integration_oauth_attempt_write_failed");
   }
   return String((data as JsonRecord).id);
@@ -208,7 +213,7 @@ export async function consumeAuthorizationAttempt(input: {
   const row = asRecord(data, "integration_oauth_attempt");
   const verifierSecretId = optionalText(row.pkceVerifierSecretId);
   const pkceVerifier = await readVaultSecret(verifierSecretId);
-  await deleteVaultSecret(verifierSecretId);
+  await deleteIntegrationVaultSecret(verifierSecretId);
   return {
     integration: String(row.integrationKey) as LiveIntegrationKey,
     environmentKey: String(row.environmentKey),
@@ -228,13 +233,13 @@ export async function promoteAuthorization(input: {
   actorAdminUserId: number;
   tokenSet: ProviderTokenSet;
 }) {
-  const accessSecretId = await createVaultSecret(
+  const accessSecretId = await createIntegrationVaultSecret(
     input.tokenSet.accessToken,
     `integration-access-${input.integration}-${Date.now()}`,
     "Provider access credential managed by External Integrations Capability.",
   );
   const refreshSecretId = input.tokenSet.refreshToken
-    ? await createVaultSecret(
+    ? await createIntegrationVaultSecret(
         input.tokenSet.refreshToken,
         `integration-refresh-${input.integration}-${Date.now()}`,
         "Provider refresh credential managed by External Integrations Capability.",
@@ -253,20 +258,20 @@ export async function promoteAuthorization(input: {
     p_refresh_expires_at: input.tokenSet.refreshExpiresAt,
   });
   if (error || typeof data !== "string") {
-    await Promise.all([deleteVaultSecret(accessSecretId), deleteVaultSecret(refreshSecretId)]);
+    await Promise.all([deleteIntegrationVaultSecret(accessSecretId), deleteIntegrationVaultSecret(refreshSecretId)]);
     throw new Error(error?.message ?? "integration_authorization_promotion_failed");
   }
   return data;
 }
 
 export async function rotateCredentials(connectionId: string, tokenSet: ProviderTokenSet) {
-  const accessSecretId = await createVaultSecret(
+  const accessSecretId = await createIntegrationVaultSecret(
     tokenSet.accessToken,
     `integration-access-rotation-${connectionId}-${Date.now()}`,
     "Rotated provider access credential.",
   );
   const refreshSecretId = tokenSet.refreshToken
-    ? await createVaultSecret(
+    ? await createIntegrationVaultSecret(
         tokenSet.refreshToken,
         `integration-refresh-rotation-${connectionId}-${Date.now()}`,
         "Rotated provider refresh credential.",
@@ -281,7 +286,7 @@ export async function rotateCredentials(connectionId: string, tokenSet: Provider
     p_refresh_expires_at: tokenSet.refreshExpiresAt,
   });
   if (error) {
-    await Promise.all([deleteVaultSecret(accessSecretId), deleteVaultSecret(refreshSecretId)]);
+    await Promise.all([deleteIntegrationVaultSecret(accessSecretId), deleteIntegrationVaultSecret(refreshSecretId)]);
     throw new Error(error.message);
   }
 }
