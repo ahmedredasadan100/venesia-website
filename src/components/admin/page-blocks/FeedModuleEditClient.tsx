@@ -137,7 +137,6 @@ export default function FeedModuleEditClient({
                 <ModuleEditorSettingsComposition
                   primary={
                   <ModuleEditorSection>
-                    <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">اسم الموديول (Admin)</span>
                       <input name="name" defaultValue={block.name} required className={fieldClassName()} />

@@ -36,13 +36,12 @@ export default function AboutIntroSingleImageModuleEditor({
   const mainAlt = config.images?.mainAlt ?? "";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="space-y-4">
       {/* config_schema is owned by ContentModuleEditClient — avoid duplicate FormData names */}
       <input type="hidden" name="image_position" value={imagePosition} />
 
       <ModuleEditorSection>
-        <h2 className="text-sm font-semibold text-white">محتوى الموديول</h2>
-        <ModuleEditorFieldGrid className="max-w-[920px]">
+        <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={3}><label className="block space-y-1.5">
           <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
           <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />

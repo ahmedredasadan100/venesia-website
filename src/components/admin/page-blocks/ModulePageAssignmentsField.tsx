@@ -9,21 +9,16 @@ type ModulePageOption = {
 type ModulePageAssignmentsFieldProps = {
   pages: ModulePageOption[];
   assignedPageIds: number[];
-  helperText?: string;
 };
 
 export default function ModulePageAssignmentsField({
   pages,
   assignedPageIds,
-  helperText = "اختر الصفحات التي تستخدم هذا الموديول. إزالة الربط هنا لا تحذف الموديول نفسه.",
 }: ModulePageAssignmentsFieldProps) {
   const assignedSet = new Set(assignedPageIds);
 
   return (
     <AdminFormSection variant="module">
-      <h2 className="text-lg font-semibold text-white">يظهر في الصفحات</h2>
-      <p className="text-sm leading-7 text-white/45">{helperText}</p>
-
       <div className="space-y-2">
         {pages.map((page) => (
           <label

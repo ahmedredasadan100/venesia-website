@@ -205,16 +205,13 @@ export default function AboutIntroModuleEditor({
   }
 
   return (
-    <div className={isHomeStory ? "space-y-6" : "mx-auto max-w-5xl space-y-4"}>
+    <div className={isHomeStory ? "space-y-6" : "space-y-4"}>
       {section === "all" ? <input type="hidden" name="config_schema" value="about-intro" /> : null}
       {isHomeStory && section === "all" ? <input type="hidden" name="include_story_cta" value="1" /> : null}
 
       {showText ? (
       <ModuleEditorSection>
-          {section === "all" ? (
-            <h2 className="text-sm font-semibold text-white">{isHomeStory ? "النص" : "محتوى الموديول"}</h2>
-          ) : null}
-          <ModuleEditorFieldGrid className="max-w-[920px]">
+          <ModuleEditorFieldGrid>
           <ModuleEditorField nature="short-text" span={3}><label className="block space-y-1.5">
             <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
             <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />

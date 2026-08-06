@@ -102,7 +102,6 @@ export default function BreadcrumbModuleEditClient({
                 <ModuleEditorSettingsComposition
                   primary={
                   <ModuleEditorSection>
-                    <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <ModuleEditorFieldGrid>
                       <ModuleEditorField nature="standard" span={4}>
                         <label className="block space-y-2">

@@ -17,8 +17,8 @@ export type ModuleEditorIconToken =
 
 export type ModuleEditorSectionMetadata = {
   navigationLabelAr: string;
-  sectionHeadingAr: string;
-  sectionDescriptionAr: string;
+  sectionHeadingAr: string | null;
+  sectionDescriptionAr: string | null;
   icon: ModuleEditorIconToken;
 };
 
@@ -49,7 +49,7 @@ const SETTINGS_SECTION: ModuleEditorSectionMetadata = {
 const PAGES_SECTION: ModuleEditorSectionMetadata = {
   navigationLabelAr: "الصفحات",
   sectionHeadingAr: "الظهور في الصفحات",
-  sectionDescriptionAr: "راجع مواضع استخدام الموديول وحدّد الصفحات المرتبطة به.",
+  sectionDescriptionAr: null,
   icon: "plans",
 };
 
@@ -61,8 +61,8 @@ const HOME_PAGES_SECTION: ModuleEditorSectionMetadata = {
 const CONTENT_MODULE_SECTIONS: ModuleEditorSections = {
   content: {
     navigationLabelAr: "المحتوى",
-    sectionHeadingAr: "محتوى الموديول",
-    sectionDescriptionAr: "أدر المحتوى والإعدادات المتخصصة لهذا الموديول.",
+    sectionHeadingAr: null,
+    sectionDescriptionAr: null,
     icon: "content",
   },
   meta: SETTINGS_SECTION,
@@ -412,7 +412,7 @@ export function getSlotModuleSlugMetadata(slug: string): SlotModuleSlugMetadata 
 }
 
 export type ResolvedModuleEditorHeaderMetadata = {
-  eyebrowAr: string;
+  eyebrowAr: string | null;
   titleAr: string;
   descriptionAr: string;
 };
@@ -428,7 +428,7 @@ export function getModuleEditorHeaderMetadata(
   if (!owner) return null;
 
   return {
-    eyebrowAr: kindMetadata?.labelAr ?? owner.labelAr,
+    eyebrowAr: null,
     titleAr: slugMetadata?.labelAr ?? entityName ?? owner.labelAr,
     descriptionAr: owner.descriptionAr,
   };

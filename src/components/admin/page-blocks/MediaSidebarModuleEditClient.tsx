@@ -165,7 +165,6 @@ export default function MediaSidebarModuleEditClient({
                 <ModuleEditorSettingsComposition
                   primary={
                   <ModuleEditorSection>
-                    <h2 className="text-lg font-semibold text-white">بيانات الموديول</h2>
                     <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
                       <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />

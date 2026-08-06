@@ -465,11 +465,16 @@ const missingMetadataCombinations = moduleEditorMetadataInventory.flatMap(
   ({ moduleKind, moduleSlug, tabIds }) =>
     tabIds.flatMap((tabId) => {
       const metadata = getModuleEditorSectionMetadata(moduleKind, tabId, moduleSlug);
+      const sectionChromeComplete = metadata?.sectionHeadingAr === null
+        ? metadata.sectionDescriptionAr === null
+        : Boolean(
+            metadata?.sectionHeadingAr.trim().length &&
+            (metadata.sectionDescriptionAr === null || metadata.sectionDescriptionAr.trim().length > 0),
+          );
       const complete =
         metadata !== null &&
         metadata.navigationLabelAr.trim().length > 0 &&
-        metadata.sectionHeadingAr.trim().length > 0 &&
-        metadata.sectionDescriptionAr.trim().length > 0 &&
+        sectionChromeComplete &&
         metadata.icon.trim().length > 0;
       return complete ? [] : [`${moduleKind}:${moduleSlug ?? "default"}:${tabId}`];
     }),

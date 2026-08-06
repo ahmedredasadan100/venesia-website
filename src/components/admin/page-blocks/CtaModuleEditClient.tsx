@@ -122,7 +122,7 @@ export default function CtaModuleEditClient({
               content: (
                 <ModuleEditorSettingsComposition
                   primary={
-                  <ModuleEditorSection className="max-w-xl">
+                  <ModuleEditorSection>
                   <label className="block space-y-2">
                     <span className="text-xs font-semibold text-white/55">الاسم</span>
                     <input name="name" defaultValue={block.name} required className={fieldClassName()} />

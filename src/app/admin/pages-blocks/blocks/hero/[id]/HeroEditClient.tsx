@@ -79,10 +79,9 @@ export default function HeroEditClient({
   const isHomeHero = hero.variant === "home-cinematic";
 
   const contentTab = (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="space-y-5">
       <ModuleEditorSection>
-        <h2 className="text-base font-semibold text-white">بيانات الموديول</h2>
-        <ModuleEditorFieldGrid className="max-w-[920px]">
+        <ModuleEditorFieldGrid>
           <ModuleEditorField nature="standard" span={4}><label className="space-y-2">
             <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
             <input name="name" defaultValue={hero.name} required className={fieldClassName("h-11")} />
@@ -162,7 +161,7 @@ export default function HeroEditClient({
           />
           </ModuleEditorField>
 
-          <ModuleEditorField nature="long-content"><div className="max-w-[920px] space-y-1.5">
+          <ModuleEditorField nature="long-content"><div className="space-y-1.5">
             <span className="block text-xs font-semibold text-white/55">الوصف</span>
             <input
               type="hidden"
@@ -217,7 +216,7 @@ export default function HeroEditClient({
         </ModuleEditorSection>
       ) : (
         <ModuleEditorSection>
-          <ModuleEditorFieldGrid className="max-w-[920px]">
+          <ModuleEditorFieldGrid>
             <ModuleEditorField nature="short-text" span={3}><label className="space-y-2">
               <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
               <input name="eyebrow" defaultValue={String(config.eyebrow ?? "")} className={fieldClassName("h-11")} />
@@ -250,7 +249,7 @@ export default function HeroEditClient({
   );
 
   const orderTab = (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <ModuleEditorSection>
         <HeroElementOrderEditor defaultOrder={controls.heroElementOrder} />
       </ModuleEditorSection>
@@ -303,7 +302,7 @@ export default function HeroEditClient({
             {
               id: "media-desktop",
               content: (
-                <div className="mx-auto max-w-5xl">
+                <div>
                   <ModuleEditorSection>
                     <AdminImagePathListField
                       name="images"
@@ -311,7 +310,7 @@ export default function HeroEditClient({
                       defaultValue={imagesText}
                       helperText="اختر أو ارفع الصور من المكتبة. استخدم الأسهم لترتيب الشرائح في العرض."
                     />
-                    <label className="block max-w-[920px] space-y-2">
+                    <label className="block space-y-2">
                       <span className="text-xs font-semibold text-white/55">Image Position Class</span>
                       <input
                         name="image_position_class"
@@ -327,7 +326,7 @@ export default function HeroEditClient({
             {
               id: "media-mobile",
               content: (
-                <div className="mx-auto max-w-5xl">
+                <div>
                   <ModuleEditorSection>
                     <AdminImagePathListField
                       name="mobile_images"
@@ -342,7 +341,7 @@ export default function HeroEditClient({
             {
               id: "buttons",
               content: (
-                <div className="mx-auto max-w-5xl">
+                <div>
                   <ModuleEditorSection>
                     {isHomeHero ? (
                       <AdminFormSwitch
@@ -361,7 +360,7 @@ export default function HeroEditClient({
                       </p>
                     )}
 
-                    <AdminFormGrid className="max-w-[920px]">
+                    <AdminFormGrid>
                       <label className="space-y-2">
                         <span className="text-xs font-semibold text-white/55">الزر الأساسي — النص</span>
                         <input
@@ -400,7 +399,7 @@ export default function HeroEditClient({
             {
               id: "display",
               content: (
-                <div className="mx-auto max-w-5xl">
+                <div>
                   <ModuleEditorPagesTab moduleName={hero.name} assignmentContext={assignmentContext}>
                     <ModuleEditorSection>
                     <AdminFormSwitch name="is_visible" label="إظهار الهيرو" defaultChecked={hero.is_visible} surface />

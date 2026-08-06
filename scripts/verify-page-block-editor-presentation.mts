@@ -18,6 +18,11 @@ const pagesClient = read("src/app/admin/pages-blocks/pages/[id]/PageBlocksClient
 const pagesHeader = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksHeader.tsx");
 const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
 const presentationContract = read("src/lib/page-blocks/module-editor-presentation-contract.ts");
+const blockEditorHeader = read("src/components/admin/page-blocks/BlockEditorContextHeader.tsx");
+const assignmentField = read("src/components/admin/page-blocks/ModulePageAssignmentsField.tsx");
+const crossPageUsageBanner = read("src/components/admin/page-blocks/ModuleCrossPageUsageBanner.tsx");
+const blockStatusOwner = read("src/lib/page-blocks/admin-utils.ts");
+const blockTypes = read("src/lib/page-blocks/types.ts");
 const mediaOwner = read("src/components/admin/media/AdminMediaImageField.tsx");
 const routeSlotPolicy = read("src/lib/page-composition/route-slot-policy.ts");
 const compatibilityPresentation = read("src/lib/page-composition/module-registry-metadata.ts");
@@ -28,6 +33,12 @@ const cardsActions = read("src/app/admin/pages-blocks/blocks/cards/actions.ts");
 const cardsRepeater = read("src/components/admin/page-blocks/editors/AdminCardsItemsField.tsx");
 const breadcrumbRepeater = read("src/components/admin/page-blocks/editors/BreadcrumbManualItemsField.tsx");
 const breadcrumbActions = read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts");
+const pageBlockPublicLoader = read("src/lib/page-blocks/load-page-blocks.ts");
+const feedPublicLoader = read("src/lib/feed-modules/load-feed-modules.ts");
+const mediaSidebarPublicLoader = read("src/lib/media-sidebar-modules/load-media-sidebar-modules.ts");
+const mediaHubPublicLoader = read("src/lib/media-hub-modules/load-media-hub-modules.ts");
+const mediaSidebarRenderer = read("src/components/media-center/MediaSidebar.tsx");
+const mediaHubRenderPlan = read("src/lib/media-hub-modules/build-media-hub-render-plan.ts");
 
 check(
   "Page Modules summary is owned by the shared Section Hero",
@@ -75,6 +86,33 @@ const fieldLayoutAdopters = [
 check(
   "all eligible field-layout editors adopt the shared presentation contract",
   fieldLayoutAdopters.every((path) => existsSync(resolve(ROOT, path)) && read(path).includes("ModuleEditorFieldGrid")),
+);
+
+const fieldLayoutSources = fieldLayoutAdopters.map(read).join("\n");
+check(
+  "Page Block editor sections use their full content width",
+  !fieldLayoutSources.includes("max-w-") &&
+    !presentation.includes("max-w-") &&
+    presentationContract.includes('"long-content": { defaultSpan: 12'),
+);
+
+check(
+  "shared metadata suppresses redundant editor chrome and generic section headings",
+  compatibilityPresentation.includes("eyebrowAr: null") &&
+    compatibilityPresentation.includes("sectionHeadingAr: null") &&
+    !compatibilityPresentation.includes('sectionHeadingAr: "محتوى الموديول"') &&
+    !fieldLayoutSources.includes(">بيانات الموديول</h2>") &&
+    !fieldLayoutSources.includes(">محتوى الموديول</h2>") &&
+    blockEditorHeader.includes("eyebrow?: ReactNode"),
+);
+
+check(
+  "assignment UI keeps only conditional multi-page guidance",
+  !assignmentField.includes("helperText") &&
+    !assignmentField.includes("اختر الصفحات التي تستخدم هذا الموديول") &&
+    !assignmentField.includes("يظهر في الصفحات") &&
+    /sectionHeadingAr:\s*"الظهور في الصفحات",\s*sectionDescriptionAr:\s*null/.test(compatibilityPresentation) &&
+    crossPageUsageBanner.includes("if (assignments.length <= 1) return null"),
 );
 
 const repeaterAdopters = [
@@ -128,6 +166,53 @@ check(
     !heroVisibility.includes("aria-pressed={show}") &&
     !heroText.includes("aria-pressed={show}") &&
     !binaryPresentationSources.includes("aria-pressed={bold}"),
+);
+
+const statusEditorAdopters = [
+  "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+  "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+  "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+  "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+  "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+  "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+  "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+];
+const statusEditorSources = statusEditorAdopters.map(read);
+const statusSchemaSources = [
+  "sql/migrations/20250618100000_page_blocks_phase1.sql",
+  "sql/migrations/20250618500000_breadcrumb_module.sql",
+  "sql/migrations/20250622000000_feed_modules_topics.sql",
+  "sql/migrations/20250625200000_media_sidebar_modules.sql",
+  "sql/migrations/20250625300000_media_hub_modules.sql",
+].map(read);
+const allowedStatusConstraint = "check (status in ('draft', 'published', 'unpublished', 'archived'))";
+
+check(
+  "persisted module lifecycle keeps the database four-state listbox contract",
+  blockStatusOwner.includes('BLOCK_STATUSES: PageBlockStatus[] = ["draft", "published", "unpublished", "archived"]') &&
+    blockTypes.includes('PageBlockStatus = "draft" | "published" | "unpublished" | "archived"') &&
+    statusSchemaSources.every((source) => source.includes(allowedStatusConstraint)) &&
+    ["draft", "published", "unpublished", "archived"].every((status) =>
+      presentation.includes(`{ value: "${status}"`),
+    ) &&
+    statusEditorSources.every((source) =>
+      source.includes('name="status"') && source.includes("MODULE_EDITOR_STATUS_OPTIONS"),
+    ) &&
+    statusEditorSources.every((source) => !/<AdminFormSwitch\b[^>]*\bname="status"/.test(source)),
+);
+
+check(
+  "public rendering requires both published template state and visible assignment state",
+  pageBlockPublicLoader.includes('return status === "published"') &&
+    pageBlockPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
+    feedPublicLoader.includes('return status === "published"') &&
+    feedPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
+    mediaSidebarPublicLoader.includes('template.status !== "published"') &&
+    mediaSidebarPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
+    mediaSidebarRenderer.includes(".filter((widget) => widget.isVisible)") &&
+    mediaHubPublicLoader.includes('template.status !== "published"') &&
+    mediaHubPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
+    mediaHubRenderPlan.includes(".filter((module) => module.isVisible)"),
 );
 
 const mediaAdopters = [

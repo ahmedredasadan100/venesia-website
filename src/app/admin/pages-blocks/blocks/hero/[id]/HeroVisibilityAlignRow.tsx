@@ -46,7 +46,7 @@ export default function HeroVisibilityAlignRow({
   ];
 
   return (
-    <div className="max-w-[920px] space-y-2">
+    <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-semibold text-white/55">{label}</span>
         <input type="hidden" name={alignmentName} value={alignment} />

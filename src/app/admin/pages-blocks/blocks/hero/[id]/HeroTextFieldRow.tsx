@@ -55,7 +55,7 @@ export default function HeroTextFieldRow({
   ];
 
   return (
-    <div className="max-w-[920px] space-y-1.5">
+    <div className="space-y-1.5">
       <span className="block text-xs font-semibold text-white/55">{label}</span>
       <input type="hidden" name={alignmentName} value={alignment} />
 
