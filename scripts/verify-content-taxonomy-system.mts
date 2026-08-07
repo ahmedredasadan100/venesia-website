@@ -280,6 +280,14 @@ check(
 );
 check(
   "series-parity",
+  "SeriesForm uses the shared grid owner for one responsive primary row",
+  seriesForm.includes("<AdminFormGrid columns={12}>") &&
+    seriesForm.includes("AdminFormGridItem") &&
+    seriesForm.indexOf("<AdminFormSwitch") <
+      seriesForm.indexOf("</AdminFormGrid>"),
+);
+check(
+  "series-parity",
   "series sort order is removed from the form UI only",
   !seriesForm.includes('name="sort_order"') &&
     createSeries.includes("sort_order: 0") &&
@@ -387,11 +395,12 @@ check(
 );
 check(
   "slug-policy",
-  "both forms render edit slugs read-only",
+  "category locks its edit slug while Series presents slug on create only",
   categoryForm.includes("readOnly") &&
-    seriesForm.includes("readOnly") &&
     categoryForm.includes('mode === "edit"') &&
-    seriesForm.includes('mode === "edit"'),
+    seriesForm.includes('mode === "edit"') &&
+    seriesForm.includes("{!isEdit ? (") &&
+    !seriesForm.includes("readOnly={isEdit}"),
 );
 const updateCategory = exportedFunctionSlice(
   taxonomyFormActions,

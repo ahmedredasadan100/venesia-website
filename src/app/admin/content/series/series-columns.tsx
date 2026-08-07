@@ -8,6 +8,7 @@ import {
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
 import {
+  ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
@@ -243,6 +244,7 @@ export function createSeriesColumns(
       sortKey: "name",
       minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
+      flexible: true,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -270,8 +272,8 @@ export function createSeriesColumns(
       hideable: true,
       sortable: true,
       sortKey: "status",
-      minWidth: 120,
-      width: 140,
+      minWidth: 104,
+      width: 104,
       renderCell: ({ row }) => {
         const status = statusMeta(row.status);
         return (
@@ -298,8 +300,8 @@ export function createSeriesColumns(
       hideable: true,
       sortable: true,
       sortKey: "topics_count",
-      minWidth: 120,
-      width: 120,
+      minWidth: 80,
+      width: 80,
       renderCell: ({ row }) => (
         <span className="font-en text-sm font-semibold tabular-nums text-white/72">
           {row.topics_count}
@@ -333,7 +335,7 @@ export function createSeriesColumns(
     {
       key: "sort_order",
       label: "الترتيب",
-      defaultVisible: true,
+      defaultVisible: false,
       hideable: true,
       sortable: true,
       sortKey: "sort_order",
@@ -348,14 +350,20 @@ export function createSeriesColumns(
     {
       key: "created_at",
       label: "تاريخ الإنشاء",
-      defaultVisible: false,
+      defaultVisible: true,
       hideable: true,
       sortable: true,
       sortKey: "created_at",
-      minWidth: 140,
-      width: 150,
-      renderCell: ({ row }) =>
-        singleLine(row.created_at ? formatAdminDateTime(row.created_at) : "—"),
+      minWidth: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
+      renderCell: ({ row }) => (
+        <span
+          dir="ltr"
+          className="block whitespace-nowrap font-en text-sm tabular-nums text-white/68"
+        >
+          {row.created_at ? formatAdminDateTime(row.created_at) : "—"}
+        </span>
+      ),
     },
     {
       key: "updated_at",
@@ -364,10 +372,16 @@ export function createSeriesColumns(
       hideable: true,
       sortable: true,
       sortKey: "updated_at",
-      minWidth: 140,
-      width: 150,
-      renderCell: ({ row }) =>
-        singleLine(row.updated_at ? formatAdminDateTime(row.updated_at) : "—"),
+      minWidth: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
+      renderCell: ({ row }) => (
+        <span
+          dir="ltr"
+          className="block whitespace-nowrap font-en text-sm tabular-nums text-white/68"
+        >
+          {row.updated_at ? formatAdminDateTime(row.updated_at) : "—"}
+        </span>
+      ),
     },
     {
       key: "actions",

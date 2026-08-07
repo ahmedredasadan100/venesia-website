@@ -6,7 +6,7 @@ export const SERIES_DEFAULT_COLUMN_KEYS = [
   "status",
   "category",
   "topics_count",
-  "sort_order",
+  "created_at",
   "actions",
 ] as const;
 
