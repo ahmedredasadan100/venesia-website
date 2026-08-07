@@ -171,6 +171,7 @@ export default function CategoriesListClient({
                   : "success" as const,
               isActive: actionResult.isActive,
               status: actionResult.status,
+              publishedAt: actionResult.publishedAt,
               updatedAt: actionResult.updatedAt,
             };
           },
@@ -191,6 +192,12 @@ export default function CategoriesListClient({
                         : isActive
                           ? "published"
                           : "unpublished",
+                    published_at:
+                      typeof mutationResult.publishedAt === "string"
+                        ? mutationResult.publishedAt
+                        : mutationResult.publishedAt === null
+                          ? null
+                          : row.published_at,
                     updated_at:
                       typeof mutationResult.updatedAt === "string"
                         ? mutationResult.updatedAt
@@ -211,6 +218,10 @@ export default function CategoriesListClient({
             typeof result.isActive === "boolean" ? result.isActive : nextActive,
           status:
             typeof result.status === "string" ? result.status : nextStatus,
+          publishedAt:
+            typeof result.publishedAt === "string" || result.publishedAt === null
+              ? result.publishedAt
+              : undefined,
           updatedAt:
             typeof result.updatedAt === "string" ? result.updatedAt : undefined,
         };

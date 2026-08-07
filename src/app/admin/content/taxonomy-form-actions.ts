@@ -229,8 +229,8 @@ export async function createCategoryForm(
         created_at: now,
         updated_at: now,
       })
-      .select("id")
-      .single<{ id: number }>();
+      .select("id, published_at")
+      .single<{ id: number; published_at: string | null }>();
     if (error) throw error;
 
     await recordCmsAdminAudit(
@@ -243,6 +243,7 @@ export async function createCategoryForm(
           slug: parsed.data.slug,
           parent_id: parsed.data.parent_id,
           color_token: colorToken,
+          published_at: data.published_at,
         },
       },
       actor,
@@ -280,9 +281,13 @@ export async function updateCategoryForm(
 
   const { data: current, error: currentError } = await getSupabaseAdmin()
     .from("topic_categories")
-    .select("id, slug")
+    .select("id, slug, status")
     .eq("id", id)
-    .maybeSingle<{ id: number; slug: string }>();
+    .maybeSingle<{
+      id: number;
+      slug: string;
+      status: string | null;
+    }>();
   if (currentError || !current) {
     return formFailure("التصنيف غير موجود أو تعذر تحميله.");
   }
@@ -313,10 +318,19 @@ export async function updateCategoryForm(
       colorToken,
       actorId: actor.id,
     });
+    const nextStatus = parsed.data.is_published
+      ? "published"
+      : "unpublished";
+    const auditVerb =
+      current.status !== "published" && nextStatus === "published"
+        ? "publish"
+        : current.status === "published" && nextStatus === "unpublished"
+          ? "unpublish"
+          : "update";
 
     await recordCmsAdminAudit(
       {
-        action: buildCmsAuditAction("topic_category", "update"),
+        action: buildCmsAuditAction("topic_category", auditVerb),
         entityType: "topic_category",
         entityId: id,
         entityLabel: parsed.data.name,
@@ -324,6 +338,8 @@ export async function updateCategoryForm(
           slug: current.slug,
           parent_id: parsed.data.parent_id,
           color_token: colorToken,
+          status: nextStatus,
+          published_at: mutation.category.published_at,
         },
       },
       actor,

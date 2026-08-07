@@ -113,6 +113,7 @@ function flattenValidTransferTargets(
 export type CategoryStatusMutationResult = AdminActionResult & {
   isActive?: boolean;
   status?: string;
+  publishedAt?: string | null;
   updatedAt?: string;
 };
 
@@ -145,11 +146,12 @@ export async function toggleCategoryStatusAjax(
     .from("topic_categories")
     .update({ is_active: isActive, status, updated_at: updatedAt })
     .eq("id", id)
-    .select("id, is_active, status, updated_at")
+    .select("id, is_active, status, published_at, updated_at")
     .maybeSingle<{
       id: number;
       is_active: boolean | null;
       status: string | null;
+      published_at: string | null;
       updated_at: string | null;
     }>();
   if (updateError || !updated || Boolean(updated.is_active) !== isActive) {
@@ -167,7 +169,10 @@ export async function toggleCategoryStatusAjax(
     ),
     entityType: "topic_category",
     entityId: id,
-    metadata: { is_active: isActive },
+    metadata: {
+      is_active: isActive,
+      published_at: updated.published_at,
+    },
   });
   await revalidateCategories();
   return {
@@ -180,6 +185,7 @@ export async function toggleCategoryStatusAjax(
     ),
     isActive,
     status: updated.status ?? status,
+    publishedAt: updated.published_at,
     updatedAt: updated.updated_at ?? updatedAt,
   };
 }

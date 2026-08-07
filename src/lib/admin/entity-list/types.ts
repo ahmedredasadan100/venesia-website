@@ -21,6 +21,8 @@ export type AdminEntityColumnDef<
   sortKey?: TSortKey;
   minWidth: number;
   width?: number;
+  /** Explicitly absorbs remaining table width. At most one visible column should opt in. */
+  flexible?: boolean;
   /** Logical alignment; defaults to start for the primary column and center otherwise. */
   align?: AdminEntityColumnAlignment;
   sticky?: AdminEntityColumnSticky;

@@ -620,7 +620,9 @@ check(
 );
 check(
   "fixed table tracks do not absorb remaining viewport width",
-  entityListTableSource.includes("const flexibleColumnKey = columns.find") &&
+  entityListTableSource.includes("const flexibleColumnKey =") &&
+    entityListTableSource.includes("columns.find((column) => column.flexible)?.key") &&
+    entityListTableSource.includes("!column.primary") &&
     entityListTableSource.includes("function getColumnBaseWidth") &&
     entityListTableSource.includes("const tableMinWidth =") &&
     entityListTableSource.includes('className="w-full table-fixed') &&

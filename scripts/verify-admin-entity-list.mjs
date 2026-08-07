@@ -105,6 +105,9 @@ const topicsClient = read("src/components/admin/content/TopicsListClient.tsx");
 const topicsPage = read("src/app/admin/content/topics/page.tsx");
 const categoriesPage = read("src/app/admin/content/categories/page.tsx");
 const categoriesListOwner = read("src/lib/admin/content/load-categories-list.ts");
+const categoriesListConfigModule = loadPureTypeScriptModule(
+  "src/lib/admin/content/categories-list-config.ts",
+);
 const categoriesClient = read("src/app/admin/content/categories/CategoriesListClient.tsx");
 const categoriesColumns = read("src/app/admin/content/categories/categories-columns.tsx");
 const categoriesActions = read("src/app/admin/content/categories/CategoryRowActions.tsx");
@@ -468,6 +471,7 @@ check(
     !categoriesColumns.includes('label: "العدد"') &&
     categoriesActions.includes("AdminDataGridRowActions") &&
     categoriesActions.includes("information:") &&
+    categoriesListOwner.includes("published_at") &&
     categoriesListOwner.includes("created_at") &&
     categoriesListOwner.includes("updated_at") &&
     read("src/lib/admin/content/categories-list-config.ts").includes(
@@ -476,6 +480,17 @@ check(
     read("src/app/admin/content/categories/actions.ts").includes(
       "saveCategoriesTablePreferences",
     ),
+);
+
+check(
+  "Categories default to identity, status, topics, first publish date, and actions while retaining optional hierarchy columns",
+  JSON.stringify(categoriesListConfigModule.CATEGORIES_DEFAULT_COLUMN_KEYS) ===
+    JSON.stringify(["name", "status", "count", "published_at", "actions"]) &&
+    categoriesListConfigModule.CATEGORIES_PREFERENCE_COLUMN_KEYS.includes("parent") &&
+    categoriesListConfigModule.CATEGORIES_PREFERENCE_COLUMN_KEYS.includes("sort_order") &&
+    categoriesColumns.includes('key: "published_at"') &&
+    categoriesColumns.includes("ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH") &&
+    categoriesColumns.includes("flexible: true"),
 );
 
 check(
@@ -553,10 +568,8 @@ check(
     appearsInOrder(categoriesListConfig, [
       '"name"',
       '"status"',
-      '"parent"',
       '"count"',
-      '"sort_order"',
-      '"created_at"',
+      '"published_at"',
       '"actions"',
     ]) &&
     appearsInOrder(seriesListConfig, [
