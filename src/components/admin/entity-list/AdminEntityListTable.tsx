@@ -94,12 +94,14 @@ export default function AdminEntityListTable<
 }: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>) {
   const selectionColumnWidth = 46;
   const showSelection = Boolean(selection);
-  const flexibleColumnKey = columns.find(
-    (column) =>
-      !column.primary &&
-      column.sticky !== "start" &&
-      column.sticky !== "end",
-  )?.key;
+  const flexibleColumnKey =
+    columns.find((column) => column.flexible)?.key ??
+    columns.find(
+      (column) =>
+        !column.primary &&
+        column.sticky !== "start" &&
+        column.sticky !== "end",
+    )?.key;
 
   function getColumnBaseWidth(
     column: AdminEntityColumnDef<TRow, TKey, TSortKey>,

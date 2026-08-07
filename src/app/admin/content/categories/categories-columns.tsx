@@ -12,6 +12,7 @@ import {
 import {
   ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
+  ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   getAdminDataGridHierarchyPrimaryColumnWidth,
 } from "../../../../components/admin/ui/AdminDataGrid";
@@ -29,6 +30,7 @@ export type CategoryColumnKey =
   | "id"
   | "parent"
   | "sort_order"
+  | "published_at"
   | "created_at"
   | "updated_at";
 
@@ -39,6 +41,7 @@ export type CategorySortKey =
   | "id"
   | "parent"
   | "sort_order"
+  | "published_at"
   | "created_at"
   | "updated_at";
 
@@ -134,6 +137,7 @@ export function createCategoryColumns(
       sortKey: "name",
       minWidth: primaryColumnWidth,
       width: primaryColumnWidth,
+      flexible: true,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => {
@@ -221,8 +225,8 @@ export function createCategoryColumns(
       hideable: true,
       sortable: true,
       sortKey: "count",
-      minWidth: 96,
-      width: 96,
+      minWidth: 80,
+      width: 80,
       renderCell: ({ row }) => (
         <span className="font-en tabular-nums text-sm font-semibold text-white/82">
           {row.totalCount}
@@ -258,9 +262,23 @@ export function createCategoryColumns(
       ),
     },
     {
+      key: "published_at",
+      label: "تاريخ النشر",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "published_at",
+      minWidth: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
+      renderCell: ({ row }) =>
+        singleLine(
+          row.published_at ? formatAdminDateTime(row.published_at) : "—",
+        ),
+    },
+    {
       key: "created_at",
       label: "تاريخ الإنشاء",
-      defaultVisible: true,
+      defaultVisible: false,
       hideable: true,
       sortable: true,
       sortKey: "created_at",

@@ -4,10 +4,8 @@ export const CATEGORIES_LIST_VIEW_KEY = "content-categories";
 export const CATEGORIES_DEFAULT_COLUMN_KEYS = [
   "name",
   "status",
-  "parent",
   "count",
-  "sort_order",
-  "created_at",
+  "published_at",
   "actions",
 ] as const;
 
@@ -17,6 +15,7 @@ export const CATEGORIES_PREFERENCE_COLUMN_KEYS = [
   "id",
   "parent",
   "sort_order",
+  "published_at",
   "created_at",
   "updated_at",
 ] as const;

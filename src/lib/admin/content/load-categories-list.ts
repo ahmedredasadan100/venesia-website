@@ -16,6 +16,7 @@ export const categoryListRowSchema = z.object({
   parent_name: z.string().nullable(),
   status: z.string().nullable(),
   color_token: z.string().nullable(),
+  published_at: z.string().nullable(),
   created_at: z.string().nullable(),
   updated_at: z.string().nullable(),
   ownCount: z.number().int().nonnegative(),
@@ -98,6 +99,7 @@ function flattenRows(
         : null,
       status: node.status,
       color_token: node.color_token,
+      published_at: node.published_at,
       created_at: node.created_at,
       updated_at: node.updated_at,
       ownCount: node.ownCount,
@@ -114,7 +116,7 @@ export async function loadCategoriesListData() {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
     .select(
-      "id, name, slug, description, sort_order, is_active, parent_id, status, color_token, created_at, updated_at, topics_count:topics(count)",
+      "id, name, slug, description, sort_order, is_active, parent_id, status, color_token, published_at, created_at, updated_at, topics_count:topics(count)",
     )
     .is("topics.deleted_at", null)
     .order("parent_id", { ascending: true, nullsFirst: true })

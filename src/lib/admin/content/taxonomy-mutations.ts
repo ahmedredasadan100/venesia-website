@@ -47,6 +47,7 @@ const categoryMutationRowSchema = z.strictObject({
   is_active: z.boolean().nullable(),
   status: z.string().nullable(),
   color_token: z.enum(ADMIN_TONE_TOKENS),
+  published_at: z.string().nullable(),
   updated_at: z.string().nullable(),
 });
 

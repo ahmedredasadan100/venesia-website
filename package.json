@@ -29,7 +29,7 @@
     "capture:admin-data-engine-baseline": "node scripts/capture-admin-data-engine-baseline.mjs",
     "verify:admin-data-engine-contracts": "node --experimental-strip-types scripts/verify-admin-data-engine-contracts.mts",
     "verify:admin-row-actions": "node --experimental-strip-types scripts/verify-admin-row-actions-capability.mts",
-    "verify:content-taxonomy": "node --experimental-strip-types scripts/verify-content-taxonomy-system.mts",
+    "verify:content-taxonomy": "node --experimental-strip-types scripts/verify-content-taxonomy-system.mts && node --experimental-strip-types scripts/verify-topic-category-first-publish.mts",
     "verify:admin-form-system": "node --experimental-strip-types scripts/verify-admin-form-system.mts",
     "verify:project-admin-data-entry": "node --experimental-strip-types scripts/verify-project-admin-data-entry.mts",
     "verify:project-publishing-capability": "node --experimental-strip-types scripts/verify-project-publishing-capability.mts",

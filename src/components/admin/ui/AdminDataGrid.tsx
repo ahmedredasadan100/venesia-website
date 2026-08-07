@@ -139,6 +139,9 @@ export const ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH =
   ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx * 2 +
   ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.borderSafetyPx;
 
+/** Canonical width for `DD MMM YYYY, hh:mm A` Admin timestamp columns. */
+export const ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH = 196;
+
 export const ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT = {
   textBudgetPx: 200,
   cellInlinePaddingPx: ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx,

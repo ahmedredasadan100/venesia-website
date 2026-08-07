@@ -92,6 +92,8 @@ const paths = {
     "sql/migrations/20260723040000_content_taxonomy_data_runtime.sql",
   deleteGuardMigration:
     "sql/migrations/20260807130000_taxonomy_delete_guard_truth_closure.sql",
+  firstPublishMigration:
+    "sql/migrations/20260807140000_topic_categories_first_publish_date.sql",
 } as const;
 
 for (const [key, path] of Object.entries(paths)) {
@@ -134,6 +136,7 @@ const instantMutation = read(paths.instantMutation);
 const instantMutationCache = read(paths.instantMutationCache);
 const migration = read(paths.migration);
 const deleteGuardMigration = read(paths.deleteGuardMigration);
+const firstPublishMigration = read(paths.firstPublishMigration);
 const createCategory = exportedFunctionSlice(
   taxonomyFormActions,
   "createCategoryForm",
@@ -141,6 +144,30 @@ const createCategory = exportedFunctionSlice(
 const createSeries = exportedFunctionSlice(
   taxonomyFormActions,
   "createSeriesForm",
+);
+
+check(
+  "category-first-publish",
+  "category publication is database-owned, immutable after first publish, and backfilled only in the migration",
+  firstPublishMigration.includes("add column if not exists published_at timestamp with time zone") &&
+    firstPublishMigration.includes("sync_topic_category_publication_compatibility") &&
+    firstPublishMigration.includes("old.published_at is not null") &&
+    firstPublishMigration.includes("new.published_at := old.published_at") &&
+    firstPublishMigration.includes("categories.created_at") &&
+    firstPublishMigration.includes("fallback is migration-only") &&
+    firstPublishMigration.includes("topic_categories_published_at_required_when_published"),
+);
+check(
+  "category-first-publish",
+  "category writers and the canonical read model adopt stored published_at without a presentation fallback",
+  taxonomyMutations.includes("published_at: z.string().nullable()") &&
+    taxonomyFormActions.includes('.select("id, published_at")') &&
+    taxonomyFormActions.includes("mutation.category.published_at") &&
+    categoryActions.includes('.select("id, is_active, status, published_at, updated_at")') &&
+    categoryClient.includes("publishedAt: actionResult.publishedAt") &&
+    categoryColumns.includes("formatAdminDateTime(row.published_at)") &&
+    !categoryColumns.includes("formatAdminDateTime(row.created_at ??") &&
+    firstPublishMigration.includes("filtered.published_at"),
 );
 
 // 1. Targeted shared Form Runtime contracts.
