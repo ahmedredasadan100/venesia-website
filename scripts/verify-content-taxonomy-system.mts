@@ -231,11 +231,20 @@ check(
 );
 check(
   "category-parity",
-  "CategoryForm uses the shared grid, switch, listbox, and actions",
-  categoryForm.includes("AdminFormGrid") &&
+  "CategoryForm uses the shared grid owner for one responsive primary row",
+  categoryForm.includes("<AdminFormGrid columns={12}>") &&
+    categoryForm.includes("AdminFormGridItem") &&
+    categoryForm.includes("<AdminFormGridItem span={isEdit ? 5 : 3}>") &&
+    categoryForm.includes("<AdminFormGridItem span={isEdit ? 4 : 3}>") &&
+    occurrenceCount(categoryForm, /<AdminFormGridItem span=\{3\}/g) === 2 &&
     categoryForm.includes("AdminFormSwitch") &&
     categoryForm.includes("AdminFormListboxSelect") &&
-    categoryForm.includes("AdminFormActions"),
+    categoryForm.includes("AdminFormActions") &&
+    categoryForm.indexOf('name="name"') < categoryForm.indexOf('name="parent_id"') &&
+    categoryForm.indexOf('name="parent_id"') < categoryForm.indexOf('sourceInputName="name"') &&
+    categoryForm.indexOf('sourceInputName="name"') < categoryForm.indexOf('name="is_published"') &&
+    categoryForm.indexOf("<AdminFormSwitch") <
+      categoryForm.indexOf("</AdminFormGrid>"),
 );
 check(
   "category-parity",
@@ -395,11 +404,12 @@ check(
 );
 check(
   "slug-policy",
-  "category locks its edit slug while Series presents slug on create only",
-  categoryForm.includes("readOnly") &&
+  "category and Series present their immutable slug on create only",
+  categoryForm.includes("{!isEdit ? (") &&
     categoryForm.includes('mode === "edit"') &&
     seriesForm.includes('mode === "edit"') &&
     seriesForm.includes("{!isEdit ? (") &&
+    !categoryForm.includes("readOnly={isEdit}") &&
     !seriesForm.includes("readOnly={isEdit}"),
 );
 const updateCategory = exportedFunctionSlice(
