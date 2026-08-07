@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatAdminListDate } from "../../../lib/content-dates";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 import { getContentTypeLabel } from "../../../lib/admin/content/content-types";
 import { getContentStatusMetadata } from "../../../lib/admin/content/content-status-metadata";
 import { adminContentTopicPath } from "../../../lib/admin/content-routes";
@@ -211,7 +211,7 @@ export function createUnifiedContentColumns(
       sortable: true,
       sortKey: "created_at",
       minWidth: 140,
-      renderCell: ({ row }) => singleLine(formatAdminListDate(row.created_at)),
+      renderCell: ({ row }) => singleLine(formatAdminDateTime(row.created_at)),
     },
     {
       key: "updated_at",
@@ -221,7 +221,7 @@ export function createUnifiedContentColumns(
       sortable: true,
       sortKey: "updated_at",
       minWidth: 140,
-      renderCell: ({ row }) => singleLine(formatAdminListDate(row.updated_at)),
+      renderCell: ({ row }) => singleLine(formatAdminDateTime(row.updated_at)),
     },
     {
       key: "created_by",
@@ -243,7 +243,7 @@ export function createUnifiedContentColumns(
       minWidth: 140,
       renderCell: ({ row }) =>
         singleLine(
-          row.published_at ? formatAdminListDate(row.published_at) : "لم يُنشر",
+          row.published_at ? formatAdminDateTime(row.published_at) : "لم يُنشر",
         ),
     },
     {

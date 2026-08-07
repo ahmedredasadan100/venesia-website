@@ -19,6 +19,7 @@ import {
   type AdminSelfAccountField,
   type AdminSelfAccountFieldErrors,
 } from "../../../../lib/admin/users/admin-users-validation";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 
 import {
   changeAdminPasswordAction,
@@ -34,21 +35,6 @@ type SecuritySettingsClientProps = {
 };
 
 const FEEDBACK_CHANNEL = "settings-security";
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return "—";
-  }
-}
 
 const fieldClassName =
   "w-full rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-white outline-none focus:border-[#D8B87A]/45";
@@ -398,7 +384,7 @@ export default function SecuritySettingsClient({
             <div className="grid max-w-xl gap-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4 text-sm text-white/62">
               <p>
                 <span className="text-white/45">آخر دخول: </span>
-                <span className="text-white/80">{formatDate(lastLoginAt)}</span>
+                <span className="text-white/80">{formatAdminDateTime(lastLoginAt)}</span>
               </p>
               <p className="leading-7 text-white/45">
                 عند تغيير كلمة المرور أو البريد أو إلغاء الجلسات، يتم إبطال الجلسات النشطة الأخرى حسب

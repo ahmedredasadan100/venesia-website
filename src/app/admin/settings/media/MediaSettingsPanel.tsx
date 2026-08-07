@@ -18,6 +18,7 @@ import {
 import { getMediaReadinessReasonLabel } from "../../../../lib/admin/media-catalog/readiness";
 import type { MediaSettings } from "../../../../lib/admin/media-catalog/settings";
 import type { MediaCatalogReadiness } from "../../../../lib/admin/media-catalog/types";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 import { updateMediaSettingsAction } from "./actions";
 import {
   MEDIA_SETTINGS_ACTION_INITIAL,
@@ -41,16 +42,6 @@ type ReconciliationResult = {
 
 const inputClass =
   "h-11 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none focus:border-[var(--admin-accent)]/45";
-
-function formatScanDate(value: string | null) {
-  if (!value) return "لم يكتمل فحص بعد";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "غير معروف";
-  return new Intl.DateTimeFormat("ar-EG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(parsed);
-}
 
 export default function MediaSettingsPanel({
   settings,
@@ -203,7 +194,9 @@ export default function MediaSettingsPanel({
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <dt className="text-xs text-white/40">آخر فحص مكتمل</dt>
             <dd className="mt-2 font-semibold text-white">
-              {formatScanDate(readiness.lastCompletedScanAt)}
+              {readiness.lastCompletedScanAt
+                ? formatAdminDateTime(readiness.lastCompletedScanAt)
+                : "لم يكتمل فحص بعد"}
             </dd>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">

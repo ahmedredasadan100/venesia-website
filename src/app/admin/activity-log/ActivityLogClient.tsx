@@ -31,6 +31,7 @@ import type {
 } from "../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
 import { ACTIVITY_LOG_DEFAULT_COLUMN_KEYS } from "../../../lib/admin/audit/activity-log-list-config";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 
 import { saveActivityLogColumnPreferences } from "./column-preferences";
 import type {
@@ -58,21 +59,6 @@ type ActivityLogColumnKey =
   | "entity"
   | "ip"
   | "details";
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return "—";
-  }
-}
 
 function formatMetadata(metadata: Record<string, unknown>) {
   if (!metadata || Object.keys(metadata).length === 0) return "—";
@@ -110,7 +96,7 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     sticky: "start",
     renderCell: ({ row }) => (
       <span className="block text-right text-sm text-white/60">
-        {formatDate(row.created_at)}
+        {formatAdminDateTime(row.created_at)}
       </span>
     ),
   },

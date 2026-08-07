@@ -13,6 +13,7 @@ import type {
   IntegrationAppConfigurationSurfaceSnapshot,
   IntegrationsServerConfigurationSnapshot,
 } from "../../../lib/admin/integrations/server-configuration-contract";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 import {
   AdminConfirmDialog,
   AdminPageContextHeader,
@@ -69,16 +70,6 @@ const SAFE_ERRORS: Record<string, string> = {
 function safeFeedbackMessage(code: string | undefined) {
   if (!code) return "تعذر إكمال الإجراء بأمان.";
   return SAFE_ERRORS[code] ?? "تعذر إكمال الإجراء. راجع Diagnostics دون كشف بيانات الاعتماد.";
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "لم يُفحص بعد";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "غير متاح";
-  return new Intl.DateTimeFormat("ar-EG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
 }
 
 function ShieldIcon() {
@@ -286,7 +277,7 @@ function SurfaceCard({
                 <p className="font-en text-xs font-semibold text-white/68">{validation.label}</p>
                 <AdminStatusPill tone={STATUS_TONES[validation.status]}>{STATUS_LABELS[validation.status]}</AdminStatusPill>
               </div>
-              <p className="mt-3 text-[10px] leading-5 text-white/36">آخر فحص: {formatDate(validation.lastTestedAt)}</p>
+              <p className="mt-3 text-[10px] leading-5 text-white/36">آخر فحص: {validation.lastTestedAt ? formatAdminDateTime(validation.lastTestedAt) : "لم يُفحص بعد"}</p>
               {validation.missing.length ? <p className="mt-2 font-en text-[10px] leading-5 text-amber-100/58">Missing: {validation.missing.join(", ")}</p> : null}
               {validation.safeErrorCode ? <p className="mt-2 font-en text-[10px] leading-5 text-rose-100/55">Diagnostic: {validation.safeErrorCode}</p> : null}
               {validation.configured ? (
@@ -318,7 +309,7 @@ function SurfaceCard({
               </button>
             ) : null}
           </div>
-          <p className="text-[10px] leading-5 text-white/30">Version {surface.version} · {surface.updatedAt ? `آخر تحديث ${formatDate(surface.updatedAt)}` : "لم يُحفظ داخل CMS بعد"}</p>
+          <p className="text-[10px] leading-5 text-white/30">Version {surface.version} · {surface.updatedAt ? `آخر تحديث ${formatAdminDateTime(surface.updatedAt)}` : "لم يُحفظ داخل CMS بعد"}</p>
           {ownerReady ? <p className="text-[10px] leading-5 text-emerald-100/55">الربط متاح فقط للاتصالات التي اجتازت فحص الإعداد الخاص بها.</p> : null}
         </aside>
       </div>

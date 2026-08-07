@@ -1,24 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 import { AdminFormError } from "../../ui/AdminFormRuntime";
 import AdminFormSwitch from "../../ui/AdminFormSwitch";
 import { AdminEntityReviewDecisionCard } from "../../review/AdminEntityReviewPanel";
 import TopicDateLabelField from "./article/TopicDateLabelField";
 import TopicFormSwitch from "./article/TopicFormSwitch";
-
-function formatPublishTime(value?: string | null) {
-  if (!value) return null;
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "Africa/Cairo",
-    }).format(new Date(value));
-  } catch {
-    return null;
-  }
-}
 
 export default function ContentPublishingOptions({
   status = "unpublished",
@@ -34,7 +22,7 @@ export default function ContentPublishingOptions({
   dateLabel?: string | null;
 }) {
   const [published, setPublished] = useState(status === "published");
-  const lastPublishTime = formatPublishTime(publishedAt);
+  const lastPublishTime = publishedAt ? formatAdminDateTime(publishedAt) : null;
 
   return (
     <>

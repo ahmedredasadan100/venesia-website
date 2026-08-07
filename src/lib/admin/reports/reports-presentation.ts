@@ -1,4 +1,5 @@
 import type { AnalyticsMetric } from "./analytics-contract";
+import { formatAdminDateTime } from "../../content-dates";
 import {
   getAdminReportDefinition,
   type AdminReportId,
@@ -209,7 +210,7 @@ function projectsPresentation(model: AdminReportsModel) {
       items: dashboard.recentProjects.map((project) => ({
         id: `project-${project.id}`,
         title: project.arabicName,
-        meta: `${project.code} · ${project.updatedAt}`,
+        meta: `${project.code} · ${formatAdminDateTime(project.updatedAt)}`,
         status: project.publicationStatus,
         href: `/admin/projects/${project.id}`,
       })),
@@ -495,14 +496,14 @@ function auditPresentation(model: AdminReportsModel) {
         title: "النشاط الحديث",
         description: "أحدث أحداث Audit من العينة الحالية.",
         filter: "recent",
-        items: audit.recentActivity.map((event) => ({ id: `audit-${event.id}`, title: event.action, meta: `${event.actor} · ${event.entityLabel ?? event.entityType ?? "system"} · ${event.createdAt}`, status: "recorded" })),
+        items: audit.recentActivity.map((event) => ({ id: `audit-${event.id}`, title: event.action, meta: `${event.actor} · ${event.entityLabel ?? event.entityType ?? "system"} · ${formatAdminDateTime(event.createdAt)}`, status: "recorded" })),
       },
       {
         id: "audit-publishing",
         title: "تاريخ النشر",
         description: "أحداث النشر وإلغاء النشر داخل العينة الحالية.",
         filter: "publishing",
-        items: audit.publishingHistory.map((event) => ({ id: `publish-${event.id}`, title: event.action, meta: `${event.actor} · ${event.entityLabel ?? event.entityType ?? "system"} · ${event.createdAt}`, status: "recorded" })),
+        items: audit.publishingHistory.map((event) => ({ id: `publish-${event.id}`, title: event.action, meta: `${event.actor} · ${event.entityLabel ?? event.entityType ?? "system"} · ${formatAdminDateTime(event.createdAt)}`, status: "recorded" })),
       },
     );
   }

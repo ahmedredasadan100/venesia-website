@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { IntegrationAssetType, IntegrationConnectionStatus, IntegrationSnapshotItem } from "../../../lib/admin/integrations/integrations-contract";
 import { isIntegrationAppConfigurationAuthorizationReady } from "../../../lib/admin/integrations/server-configuration-contract";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 import { AdminConfirmDialog, AdminStatusPill } from "../ui";
 import IntegrationBrandIcon from "./IntegrationBrandIcon";
 
@@ -166,8 +167,8 @@ export default function IntegrationConnectionWizard({
         </ol>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4"><p className="text-[10px] text-white/35">آخر مزامنة</p><p className="mt-2 font-en text-xs text-white/65">{item.lastSyncAt ?? "—"}</p></div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4"><p className="text-[10px] text-white/35">المزامنة التالية</p><p className="mt-2 font-en text-xs text-white/65">{item.nextSyncAt ?? "—"}</p></div>
+          <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4"><p className="text-[10px] text-white/35">آخر مزامنة</p><p className="mt-2 font-en text-xs text-white/65">{formatAdminDateTime(item.lastSyncAt)}</p></div>
+          <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4"><p className="text-[10px] text-white/35">المزامنة التالية</p><p className="mt-2 font-en text-xs text-white/65">{formatAdminDateTime(item.nextSyncAt)}</p></div>
           <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4"><p className="text-[10px] text-white/35">الأصول المحددة</p><p className="mt-2 font-en text-xs text-white/65">{item.selectedAssets.length}</p></div>
         </div>
 

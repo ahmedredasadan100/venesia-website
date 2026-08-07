@@ -170,6 +170,34 @@ function collectPages(directory, result = []) {
   return result;
 }
 
+function collectSourceFiles(directory, result = []) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) collectSourceFiles(path, result);
+    else if (/\.[cm]?[jt]sx?$/.test(entry.name)) result.push(path);
+  }
+  return result;
+}
+
+const adminPresentationSourceRoots = [
+  resolve(root, "src/app/admin"),
+  resolve(root, "src/components/admin"),
+  resolve(root, "src/lib/admin"),
+];
+const localDateTimePresentationDebt = adminPresentationSourceRoots
+  .flatMap((directory) => collectSourceFiles(directory))
+  .filter((sourceFile) =>
+    /Intl\.DateTimeFormat|\.toLocale(?:String|DateString|TimeString)\s*\(/.test(
+      readFileSync(sourceFile, "utf8"),
+    ),
+  )
+  .map((sourceFile) => relative(root, sourceFile).replaceAll("\\", "/"));
+check(
+  "Admin date and time presentation delegates to the Shared Date and Time owner",
+  localDateTimePresentationDebt.length === 0,
+  localDateTimePresentationDebt.join(", "),
+);
+
 const adminRoot = resolve(root, "src/app/admin");
 const inventory = collectPages(adminRoot).map((absolutePath) => {
   const path = relative(root, absolutePath).replaceAll("\\", "/");

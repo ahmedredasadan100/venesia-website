@@ -33,6 +33,7 @@ import type {
 } from "../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
 import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 import {
   ADMIN_USERS_LIST_PAGE_SIZES,
   adminUserEntityListRowSchema,
@@ -82,21 +83,6 @@ const STATUS_FILTER: AdminEntityFilterDef = {
     { value: "inactive", label: "موقوف" },
   ],
 };
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return "—";
-  }
-}
 
 function roleLabel(role: string) {
   return role === "admin" ? "مدير" : role;
@@ -171,7 +157,7 @@ function createAdminUserColumns(input: {
       width: 174,
       renderCell: ({ row }) => (
         <span className="block text-right text-sm text-white/55">
-          {formatDate(row.last_login_at)}
+          {formatAdminDateTime(row.last_login_at)}
         </span>
       ),
     },
@@ -181,7 +167,7 @@ function createAdminUserColumns(input: {
       width: 174,
       renderCell: ({ row }) => (
         <span className="block text-right text-sm text-white/55">
-          {formatDate(row.created_at)}
+          {formatAdminDateTime(row.created_at)}
         </span>
       ),
     },
@@ -218,7 +204,7 @@ function createAdminUserColumns(input: {
                   label: "الحالة",
                   value: row.is_active ? "نشط" : "موقوف",
                 },
-                { label: "آخر دخول", value: formatDate(row.last_login_at) },
+                { label: "آخر دخول", value: formatAdminDateTime(row.last_login_at) },
               ],
             },
             copyPublicLink: { access: "hidden" },

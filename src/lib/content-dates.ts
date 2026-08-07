@@ -61,34 +61,64 @@ export function resolveTopicPublishedAt(options: {
     : options.nowIso;
 }
 
-export function formatAdminListDate(value?: string | null) {
-  if (!value) return "غير محدد";
-
-  return new Intl.DateTimeFormat("ar-EG", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
 export const ADMIN_TIME_ZONE = "Africa/Cairo";
+export const ADMIN_DATE_TIME_PATTERN = "DD MMM YYYY, hh:mm A";
+export const ADMIN_DATE_ONLY_PATTERN = "DD MMM YYYY";
+
+const ADMIN_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: true,
+  timeZone: ADMIN_TIME_ZONE,
+});
+
+const ADMIN_DATE_ONLY_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function adminDateTimePart(
+  parts: Intl.DateTimeFormatPart[],
+  type: Intl.DateTimeFormatPartTypes,
+) {
+  return parts.find((part) => part.type === type)?.value ?? "";
+}
 
 export function formatAdminDateTime(value?: string | null) {
   if (!value) return "—";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatAdminDateOnly(value);
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
 
-  const day = new Intl.DateTimeFormat("ar-EG", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: ADMIN_TIME_ZONE,
-  }).format(date);
-  const time = new Intl.DateTimeFormat("ar-EG", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: ADMIN_TIME_ZONE,
-  }).format(date);
+  const parts = ADMIN_DATE_TIME_FORMATTER.formatToParts(date);
+  const day = adminDateTimePart(parts, "day");
+  const month = adminDateTimePart(parts, "month");
+  const year = adminDateTimePart(parts, "year");
+  const hour = adminDateTimePart(parts, "hour");
+  const minute = adminDateTimePart(parts, "minute");
+  const dayPeriod = adminDateTimePart(parts, "dayPeriod").toUpperCase();
 
-  return `${day} — ${time}`;
+  if (!day || !month || !year || !hour || !minute || !dayPeriod) return "—";
+
+  return `${day} ${month} ${year}, ${hour}:${minute} ${dayPeriod}`;
+}
+
+export function formatAdminDateOnly(value?: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "—";
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return "—";
+  }
+
+  return ADMIN_DATE_ONLY_FORMATTER.format(date);
 }

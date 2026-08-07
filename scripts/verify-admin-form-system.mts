@@ -49,7 +49,15 @@ const { resolvePublicContentPath } = await jiti.import<
 const { resolveAdminFormNavigationDecision } = await jiti.import<
   typeof import("../src/lib/admin/form-runtime.ts")
 >("../src/lib/admin/form-runtime.ts");
-const { parseFormPublishedDate, resolveTopicPublishedAt } = await jiti.import<
+const {
+  ADMIN_DATE_ONLY_PATTERN,
+  ADMIN_DATE_TIME_PATTERN,
+  ADMIN_TIME_ZONE,
+  formatAdminDateOnly,
+  formatAdminDateTime,
+  parseFormPublishedDate,
+  resolveTopicPublishedAt,
+} = await jiti.import<
   typeof import("../src/lib/content-dates.ts")
 >("../src/lib/content-dates.ts");
 
@@ -778,6 +786,17 @@ check(
 );
 const articleSaveHelpers = read(
   "src/app/admin/content/topics/article-actions/helpers.ts",
+);
+check(
+  "Shared Date and Time owner fixes Admin presentation without changing the stored instant",
+  ADMIN_DATE_TIME_PATTERN === "DD MMM YYYY, hh:mm A" &&
+    ADMIN_DATE_ONLY_PATTERN === "DD MMM YYYY" &&
+    ADMIN_TIME_ZONE === "Africa/Cairo" &&
+    formatAdminDateTime("2026-08-06T23:24:00.000Z") ===
+      "07 Aug 2026, 02:24 AM" &&
+    formatAdminDateTime("2026-08-07") === "07 Aug 2026" &&
+    formatAdminDateOnly("2026-08-07") === "07 Aug 2026" &&
+    formatAdminDateOnly("2026-02-30") === "—",
 );
 const publicationForm = new FormData();
 publicationForm.set("published_at", "2026-08-15");
