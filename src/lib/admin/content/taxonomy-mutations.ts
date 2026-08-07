@@ -34,6 +34,11 @@ const deleteTopicCategoryInputSchema = z.strictObject({
   actorId: positiveIdSchema,
 });
 
+const deleteTopicSeriesInputSchema = z.strictObject({
+  ids: z.array(positiveIdSchema).min(1),
+  actorId: positiveIdSchema,
+});
+
 const categoryMutationRowSchema = z.strictObject({
   id: positiveIdSchema,
   name: z.string(),
@@ -69,6 +74,21 @@ const deleteTopicCategoryResultSchema = z.strictObject({
   deleted_category_id: positiveIdSchema,
   transfer_to_id: positiveIdSchema.nullable(),
   topics_updated: z.coerce.number().int().nonnegative().finite(),
+  soft_deleted_topics_detached: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .finite(),
+});
+
+const deleteTopicSeriesResultSchema = z.strictObject({
+  deleted_series_ids: z.array(positiveIdSchema).min(1),
+  deleted_series_count: z.coerce.number().int().positive().finite(),
+  soft_deleted_topics_detached: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .finite(),
 });
 
 export type UpdateTopicCategoryAtomicInput = z.input<
@@ -80,6 +100,9 @@ export type UpdateTopicSeriesAtomicInput = z.input<
 export type DeleteTopicCategoryAtomicInput = z.input<
   typeof deleteTopicCategoryInputSchema
 >;
+export type DeleteTopicSeriesAtomicInput = z.input<
+  typeof deleteTopicSeriesInputSchema
+>;
 
 export type UpdateTopicCategoryAtomicResult = z.output<
   typeof updateTopicCategoryResultSchema
@@ -89,6 +112,9 @@ export type UpdateTopicSeriesAtomicResult = z.output<
 >;
 export type DeleteTopicCategoryAtomicResult = z.output<
   typeof deleteTopicCategoryResultSchema
+>;
+export type DeleteTopicSeriesAtomicResult = z.output<
+  typeof deleteTopicSeriesResultSchema
 >;
 
 type SupabaseRpcError = {
@@ -163,4 +189,20 @@ export async function deleteTopicCategoryAtomically(
   );
   if (error) throw new TaxonomyMutationDatabaseError(error);
   return deleteTopicCategoryResultSchema.parse(data);
+}
+
+export async function deleteTopicSeriesAtomically(
+  input: DeleteTopicSeriesAtomicInput,
+): Promise<DeleteTopicSeriesAtomicResult> {
+  const parsed = deleteTopicSeriesInputSchema.parse(input);
+  const ids = [...new Set(parsed.ids)];
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "admin_delete_topic_series",
+    {
+      p_series_ids: ids,
+      p_actor_id: parsed.actorId,
+    },
+  );
+  if (error) throw new TaxonomyMutationDatabaseError(error);
+  return deleteTopicSeriesResultSchema.parse(data);
 }

@@ -383,6 +383,8 @@ export async function deleteCategorySafelyAjax(id: number, transferToId?: number
     metadata: {
       transfer_to_id: mutation.transfer_to_id,
       topics_updated: mutation.topics_updated,
+      soft_deleted_topics_detached:
+        mutation.soft_deleted_topics_detached,
     },
   });
   await revalidateCategories();
