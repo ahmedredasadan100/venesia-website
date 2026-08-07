@@ -8,6 +8,10 @@ import {
   SERIES_LIST_VIEW_KEY,
   SERIES_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/series-list-config";
+import {
+  deleteTopicSeriesAtomically,
+  TaxonomyMutationDatabaseError,
+} from "../../../../lib/admin/content/taxonomy-mutations";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 
 import { revalidatePath } from "next/cache";
@@ -132,31 +136,46 @@ export async function duplicateSeriesAjax(id: number): Promise<SeriesTableResult
 }
 
 export async function deleteSeriesAjax(id: number): Promise<SeriesTableResult> {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   if (!validateId(String(id))) return failure("السلسلة غير صالحة.");
 
-  const { count, error: countError } = await getSupabaseAdmin()
-    .from("topics")
-    .select("id", { count: "exact", head: true })
-    .eq("series_id", id);
-
-  if (countError) return failure(countError.message);
-  if ((count ?? 0) > 0) return failure("لا يمكن حذف سلسلة مرتبطة بموضوعات. أخفها أو انقل الموضوعات أولًا.");
-
-  const { error } = await getSupabaseAdmin().from("topic_series").delete().eq("id", id);
-  if (error) return failure(error.message);
+  let mutation: Awaited<ReturnType<typeof deleteTopicSeriesAtomically>>;
+  try {
+    mutation = await deleteTopicSeriesAtomically({
+      ids: [id],
+      actorId: actor.id,
+    });
+  } catch (error) {
+    if (error instanceof TaxonomyMutationDatabaseError) {
+      if (error.message === "series still has active topics") {
+        return failure("لا يمكن حذف سلسلة مرتبطة بموضوعات نشطة. انقل الموضوعات أولًا.");
+      }
+      if (error.message === "one or more series were not found") {
+        return failure("السلسلة غير موجودة.");
+      }
+      return failure(error.message);
+    }
+    return failure("تعذر حذف السلسلة. تحقق من العلاقات الحالية وحاول مرة أخرى.");
+  }
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic_series", "delete"),
     entityType: "topic_series",
     entityId: id,
+    metadata: {
+      soft_deleted_topics_detached:
+        mutation.soft_deleted_topics_detached,
+    },
   });
-  return successWithAffectedIds("تم حذف السلسلة بنجاح.", [id]);
+  return successWithAffectedIds(
+    "تم حذف السلسلة بنجاح.",
+    mutation.deleted_series_ids,
+  );
 }
 
 export async function bulkSeriesActionAjax(action: string, ids: number[]): Promise<SeriesTableResult> {
-  await requireAdminSession();
-  const validIds = ids.filter((id) => validateId(String(id))).map(String);
+  const actor = await requireAdminSession();
+  const validIds = ids.filter((id) => validateId(String(id)));
   if (!validIds.length) return failure("حدد سلسلة واحدة على الأقل.");
 
   const now = new Date().toISOString();
@@ -166,42 +185,55 @@ export async function bulkSeriesActionAjax(action: string, ids: number[]): Promi
     const { error } = await getSupabaseAdmin()
       .from("topic_series")
       .update({ status, deleted_at: null, updated_at: now })
-      .in("id", validIds);
+      .in("id", validIds.map(String));
 
     if (error) return failure(error.message);
     await recordCmsAdminAudit({
       action: buildCmsAuditAction("topic_series", status === "published" ? "publish" : "unpublish"),
       entityType: "topic_series",
-      metadata: { bulk_action: action, ids: validIds.map(Number) },
+      metadata: { bulk_action: action, ids: validIds },
     });
     return successWithAffectedIds(
       status === "published"
         ? "تم إظهار السلاسل المحددة بنجاح."
         : "تم إخفاء السلاسل المحددة بنجاح.",
-      validIds.map(Number),
+      validIds,
     );
   }
 
   if (action === "delete") {
-    const { data: linked, error: linkedError } = await getSupabaseAdmin()
-      .from("topics")
-      .select("series_id")
-      .in("series_id", validIds);
-
-    if (linkedError) return failure(linkedError.message);
-    if ((linked ?? []).length > 0) return failure("لا يمكن حذف سلاسل مرتبطة بموضوعات. انقل الموضوعات أولًا.");
-
-    const { error } = await getSupabaseAdmin().from("topic_series").delete().in("id", validIds);
-    if (error) return failure(error.message);
+    let mutation: Awaited<ReturnType<typeof deleteTopicSeriesAtomically>>;
+    try {
+      mutation = await deleteTopicSeriesAtomically({
+        ids: validIds,
+        actorId: actor.id,
+      });
+    } catch (error) {
+      if (error instanceof TaxonomyMutationDatabaseError) {
+        if (error.message === "series still has active topics") {
+          return failure("لا يمكن حذف سلاسل مرتبطة بموضوعات نشطة. انقل الموضوعات أولًا.");
+        }
+        if (error.message === "one or more series were not found") {
+          return failure("سلسلة واحدة أو أكثر غير موجودة.");
+        }
+        return failure(error.message);
+      }
+      return failure("تعذر حذف السلاسل. تحقق من العلاقات الحالية وحاول مرة أخرى.");
+    }
 
     await recordCmsAdminAudit({
       action: buildCmsAuditAction("topic_series", "delete"),
       entityType: "topic_series",
-      metadata: { bulk_action: action, ids: validIds.map(Number) },
+      metadata: {
+        bulk_action: action,
+        ids: mutation.deleted_series_ids,
+        soft_deleted_topics_detached:
+          mutation.soft_deleted_topics_detached,
+      },
     });
     return successWithAffectedIds(
       "تم حذف السلاسل المحددة بنجاح.",
-      validIds.map(Number),
+      mutation.deleted_series_ids,
     );
   }
 

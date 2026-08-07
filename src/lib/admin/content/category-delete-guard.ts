@@ -13,11 +13,26 @@ export async function loadCategoryDeleteDependencies(
   categoryId: number,
 ): Promise<CategoryDeleteDependencies> {
   const supabase = getSupabaseAdmin();
-  const [topics, series, children] = await Promise.all([
+  const { data: category, error: categoryError } = await supabase
+    .from("topic_categories")
+    .select("slug")
+    .eq("id", categoryId)
+    .maybeSingle<{ slug: string }>();
+  if (categoryError) throw new Error(categoryError.message);
+  if (!category) throw new Error("category was not found");
+
+  const [topics, legacyTopics, series, children] = await Promise.all([
     supabase
       .from("topics")
       .select("id", { count: "exact", head: true })
-      .eq("category_id", categoryId),
+      .eq("category_id", categoryId)
+      .is("deleted_at", null),
+    supabase
+      .from("topics")
+      .select("id", { count: "exact", head: true })
+      .is("category_id", null)
+      .eq("category_slug", category.slug)
+      .is("deleted_at", null),
     supabase
       .from("topic_series")
       .select("id", { count: "exact", head: true })
@@ -28,11 +43,12 @@ export async function loadCategoryDeleteDependencies(
       .eq("parent_id", categoryId),
   ]);
 
-  const error = topics.error ?? series.error ?? children.error;
+  const error =
+    topics.error ?? legacyTopics.error ?? series.error ?? children.error;
   if (error) throw new Error(error.message);
 
   return {
-    topicCount: topics.count ?? 0,
+    topicCount: (topics.count ?? 0) + (legacyTopics.count ?? 0),
     seriesCount: series.count ?? 0,
     childrenCount: children.count ?? 0,
   };

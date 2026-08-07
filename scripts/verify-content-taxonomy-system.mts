@@ -79,7 +79,10 @@ const paths = {
     "src/lib/admin/interaction-system/adoption-manifest.ts",
   categoryAdapter:
     "src/lib/admin/content/entity-list-adapters/categories.ts",
+  categoryDeleteGuard:
+    "src/lib/admin/content/category-delete-guard.ts",
   seriesAdapter: "src/lib/admin/content/entity-list-adapters/series.ts",
+  seriesActions: "src/app/admin/content/series/actions.ts",
   taxonomyMutations: "src/lib/admin/content/taxonomy-mutations.ts",
   instantMutation:
     "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
@@ -87,6 +90,8 @@ const paths = {
     "src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts",
   migration:
     "sql/migrations/20260723040000_content_taxonomy_data_runtime.sql",
+  deleteGuardMigration:
+    "sql/migrations/20260807130000_taxonomy_delete_guard_truth_closure.sql",
 } as const;
 
 for (const [key, path] of Object.entries(paths)) {
@@ -121,11 +126,14 @@ const previewActions = read(paths.previewActions);
 const previewAdapters = read(paths.previewAdapters);
 const interactionManifest = read(paths.interactionManifest);
 const categoryAdapter = read(paths.categoryAdapter);
+const categoryDeleteGuard = read(paths.categoryDeleteGuard);
 const seriesAdapter = read(paths.seriesAdapter);
+const seriesActions = read(paths.seriesActions);
 const taxonomyMutations = read(paths.taxonomyMutations);
 const instantMutation = read(paths.instantMutation);
 const instantMutationCache = read(paths.instantMutationCache);
 const migration = read(paths.migration);
+const deleteGuardMigration = read(paths.deleteGuardMigration);
 const createCategory = exportedFunctionSlice(
   taxonomyFormActions,
   "createCategoryForm",
@@ -531,6 +539,62 @@ check(
   updateCategory.includes("updateTopicCategoryAtomically") &&
     updateSeries.includes("updateTopicSeriesAtomically") &&
     categoryActions.includes("deleteTopicCategoryAtomically"),
+);
+check(
+  "delete-guard-truth",
+  "Series single and bulk deletion delegate to the shared atomic Taxonomy owner",
+  exportedFunctionSlice(seriesActions, "deleteSeriesAjax").includes(
+    "deleteTopicSeriesAtomically",
+  ) &&
+    exportedFunctionSlice(seriesActions, "bulkSeriesActionAjax").includes(
+      "deleteTopicSeriesAtomically",
+    ) &&
+    taxonomyMutations.includes('"admin_delete_topic_series"'),
+);
+check(
+  "delete-guard-truth",
+  "Series delete paths do not read a list read model, cache, or duplicate direct relation guard",
+  !exportedFunctionSlice(seriesActions, "deleteSeriesAjax").includes(
+    '.from("topics")',
+  ) &&
+    !exportedFunctionSlice(seriesActions, "bulkSeriesActionAjax").includes(
+      '.from("topics")',
+    ) &&
+    !exportedFunctionSlice(seriesActions, "deleteSeriesAjax").includes(
+      '.from("topic_series").delete',
+    ) &&
+    !exportedFunctionSlice(seriesActions, "bulkSeriesActionAjax").includes(
+      '.from("topic_series").delete',
+    ) &&
+    !seriesActions.includes("admin_list_series") &&
+    !seriesActions.includes("unstable_cache"),
+);
+check(
+  "delete-guard-truth",
+  "atomic Series guard blocks active topics and detaches only soft-deleted tombstone references",
+  deleteGuardMigration.includes(
+    "function public.admin_delete_topic_series",
+  ) &&
+    deleteGuardMigration.includes("topics.deleted_at is null") &&
+    deleteGuardMigration.includes("series still has active topics") &&
+    deleteGuardMigration.includes("topics.deleted_at is not null") &&
+    deleteGuardMigration.includes("series_id = null") &&
+    deleteGuardMigration.includes("series_slug = null") &&
+    deleteGuardMigration.includes("topics_series_id_fkey"),
+);
+check(
+  "delete-guard-truth",
+  "Category preview and atomic mutation share active-topic semantics including legacy slug references",
+  occurrenceCount(categoryDeleteGuard, /\.is\("deleted_at", null\)/g) ===
+    2 &&
+    categoryDeleteGuard.includes('.is("category_id", null)') &&
+    categoryDeleteGuard.includes('.eq("category_slug", category.slug)') &&
+    deleteGuardMigration.includes(
+      "create or replace function public.admin_delete_topic_category",
+    ) &&
+    deleteGuardMigration.includes("v_active_topic_count") &&
+    deleteGuardMigration.includes("soft_deleted_topics_detached") &&
+    deleteGuardMigration.includes("topics_category_id_fkey"),
 );
 check(
   "mutation-rollback",
