@@ -114,6 +114,9 @@ const categoriesActions = read("src/app/admin/content/categories/CategoryRowActi
 const seriesClient = read("src/app/admin/content/series/SeriesTableClient.tsx");
 const seriesPage = read("src/app/admin/content/series/page.tsx");
 const seriesListOwner = read("src/lib/admin/content/load-series-list.ts");
+const seriesListConfigModule = loadPureTypeScriptModule(
+  "src/lib/admin/content/series-list-config.ts",
+);
 const seriesColumns = read("src/app/admin/content/series/series-columns.tsx");
 const unifiedContentColumns = read(
   "src/components/admin/content/unified-content-columns.tsx",
@@ -548,10 +551,23 @@ check(
 );
 
 check(
-  "Series columns default contract",
-  read("src/lib/admin/content/series-list-config.ts").includes(
-    "SERIES_DEFAULT_COLUMN_KEYS",
-  ) && seriesClient.includes("onPersistColumns"),
+  "Series defaults to identity, status, category, topics, creation date, and actions with intentional geometry",
+  JSON.stringify(seriesListConfigModule.SERIES_DEFAULT_COLUMN_KEYS) ===
+    JSON.stringify([
+      "name",
+      "status",
+      "category",
+      "topics_count",
+      "created_at",
+      "actions",
+    ]) &&
+    seriesListConfigModule.SERIES_PREFERENCE_COLUMN_KEYS.includes("sort_order") &&
+    seriesClient.includes("onPersistColumns") &&
+    seriesColumns.includes("flexible: true") &&
+    seriesColumns.includes("ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH") &&
+    seriesColumns.includes('dir="ltr"') &&
+    seriesColumns.includes('minWidth: 104') &&
+    seriesColumns.includes('minWidth: 80'),
 );
 
 check(
@@ -577,7 +593,7 @@ check(
       '"status"',
       '"category"',
       '"topics_count"',
-      '"sort_order"',
+      '"created_at"',
       '"actions"',
     ]) &&
     appearsInOrder(pagesListConfig, [
