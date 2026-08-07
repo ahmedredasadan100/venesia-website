@@ -15,7 +15,12 @@ type ContentBasicDataPanelProps = {
   contentType: ContentType;
   mode: "create" | "edit";
   categories: ContentEditorCategoryOption[];
-  series: Array<{ id: number; name: string; slug: string }>;
+  series: Array<{
+    id: number;
+    name: string;
+    slug: string;
+    category_id: number | null;
+  }>;
   contentEditor: ReactNode;
   displaySettings?: ReactNode;
   values?: {
@@ -109,6 +114,7 @@ export default function ContentBasicDataPanel({
               </label>
               <TopicSeriesFields
                 options={series}
+                defaultCategoryId={values?.categoryId}
                 defaultSeriesId={values?.seriesId}
                 defaultSeries={values?.series}
                 defaultSeriesSlug={values?.seriesSlug}

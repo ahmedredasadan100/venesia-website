@@ -38,6 +38,10 @@ import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import {
   type MediaReferenceSynchronizationResult,
 } from "../../../../lib/admin/media-catalog/synchronization";
+import {
+  isAdminContentSeriesInCategory,
+  TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE,
+} from "../../../../lib/admin/content/category-hierarchy";
 import { coordinateMediaReferenceEntityMutation } from "../../../../lib/admin/media-catalog/domain-write-coordination";
 import {
   getMediaReferenceWriteLeaseUserMessage,
@@ -91,6 +95,47 @@ function getPublishFailure(
 
 function invalidMutation(message = "تعذر تنفيذ العملية."): AdminActionResult {
   return adminActionFailure("تعذر تنفيذ العملية", message);
+}
+
+async function validateBulkCategoryMoveSeries(
+  topicIds: number[],
+  categoryId: number,
+) {
+  const { data: topics, error: topicsError } = await getSupabaseAdmin()
+    .from("topics")
+    .select("id,series_id")
+    .in("id", topicIds);
+  if (topicsError) throw topicsError;
+
+  const seriesIds = [
+    ...new Set(
+      (topics ?? [])
+        .map((topic) => Number(topic.series_id))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ];
+  if (!seriesIds.length) return null;
+
+  const { data: series, error: seriesError } = await getSupabaseAdmin()
+    .from("topic_series")
+    .select("id,category_id")
+    .in("id", seriesIds);
+  if (seriesError) throw seriesError;
+  const seriesById = new Map(
+    (series ?? []).map((item) => [Number(item.id), item]),
+  );
+  const conflict = (topics ?? []).find((topic) => {
+    if (!topic.series_id) return false;
+    const linkedSeries = seriesById.get(Number(topic.series_id));
+    return (
+      !linkedSeries ||
+      !isAdminContentSeriesInCategory(linkedSeries, categoryId)
+    );
+  });
+
+  return conflict
+    ? `${TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE} تعارض الموضوع رقم ${conflict.id}.`
+    : null;
 }
 
 function mediaAwareSuccess(
@@ -465,6 +510,19 @@ export async function bulkUpdateUnifiedContent(
       .eq("is_active", true)
       .maybeSingle<{ id: number; name: string; slug: string }>();
     if (!category) return invalidMutation("التصنيف المختار غير متاح.");
+    try {
+      const seriesCategoryError = await validateBulkCategoryMoveSeries(
+        ids,
+        category.id,
+      );
+      if (seriesCategoryError) return invalidMutation(seriesCategoryError);
+    } catch (error) {
+      return invalidMutation(
+        error instanceof Error
+          ? error.message
+          : "تعذر التحقق من توافق السلاسل مع التصنيف.",
+      );
+    }
     payload = {
       category_id: category.id,
       category: category.name,

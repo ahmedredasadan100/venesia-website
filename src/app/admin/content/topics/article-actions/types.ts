@@ -48,4 +48,5 @@ export type SeriesRow = {
   id: number;
   name: string;
   slug: string;
+  category_id: number | null;
 };

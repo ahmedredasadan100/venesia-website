@@ -34,6 +34,9 @@ import {
 import { revalidateUnifiedContentPaths } from "../editor-actions/revalidate";
 import type { TopicPayload } from "./helpers";
 import type { TopicStatus } from "./types";
+import {
+  getAdminContentSeriesCategoryError,
+} from "../../../../../lib/admin/content/category-hierarchy";
 
 type FieldErrors = Record<string, string[]>;
 
@@ -162,6 +165,15 @@ export async function saveArticleContentAdapter(
   if (payload.seriesId && !series) {
     return formFailure("السلسلة المختارة غير موجودة.", {
       series_id: ["اختر سلسلة متاحة أو اترك الحقل فارغًا."],
+    });
+  }
+  const seriesCategoryError = getAdminContentSeriesCategoryError(
+    series,
+    category.id,
+  );
+  if (seriesCategoryError) {
+    return formFailure(seriesCategoryError, {
+      series_id: [seriesCategoryError],
     });
   }
 

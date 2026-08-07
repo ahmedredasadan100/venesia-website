@@ -26,11 +26,33 @@ import {
 } from "../../../lib/admin/content/taxonomy-mutations";
 import { revalidateTopicsCache } from "../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
+import { TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE } from "../../../lib/admin/content/category-hierarchy";
 
 type DatabaseErrorLike = {
   code?: string;
   message?: string;
 };
+
+async function getSeriesCategoryChangeError(
+  seriesId: number,
+  currentCategoryId: number | null,
+  nextCategoryId: number,
+) {
+  if (currentCategoryId === nextCategoryId) return null;
+
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select("id,category_id")
+    .eq("series_id", seriesId);
+  if (error) throw error;
+
+  const conflict = (data ?? []).find(
+    (topic) => topic.category_id !== nextCategoryId,
+  );
+  return conflict
+    ? `${TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE} انقل أو أزل ارتباط الموضوع رقم ${conflict.id} أولًا.`
+    : null;
+}
 
 function buildFormFailure(
   mode: AdminFormMode,
@@ -484,6 +506,16 @@ export async function updateSeriesForm(
     );
     if (categoryError) {
       return formFailure(categoryError, { category_id: [categoryError] });
+    }
+    const seriesCategoryError = await getSeriesCategoryChangeError(
+      id,
+      current.category_id,
+      parsed.data.category_id,
+    );
+    if (seriesCategoryError) {
+      return formFailure(seriesCategoryError, {
+        category_id: [seriesCategoryError],
+      });
     }
     const status = parsed.data.is_published ? "published" : "unpublished";
     const mutation = await updateTopicSeriesAtomically({

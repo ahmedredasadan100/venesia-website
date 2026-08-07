@@ -39,7 +39,7 @@ export default async function NewUnifiedContentPage({
         .order("id", { ascending: true }),
       supabase
         .from("topic_series")
-        .select("id,name,slug,status,deleted_at")
+        .select("id,name,slug,status,deleted_at,category_id")
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true }),
     ]);
@@ -56,6 +56,7 @@ export default async function NewUnifiedContentPage({
     slug: string;
     status: string;
     deleted_at: string | null;
+    category_id: number | null;
   }>;
   const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
   const loadError = categoriesError?.message ?? seriesError?.message;

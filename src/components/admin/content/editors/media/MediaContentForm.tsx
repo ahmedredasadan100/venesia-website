@@ -71,6 +71,7 @@ type MediaContentFormProps = {
     slug: string;
     status: string;
     deleted_at: string | null;
+    category_id: number | null;
   }>;
   returnPath?: string;
   errorMessage?: string | null;
@@ -117,7 +118,12 @@ export default function MediaContentForm({
         (item.status === "published" && !item.deleted_at) ||
         item.id === values?.series_id,
     )
-    .map(({ id, name, slug }) => ({ id, name, slug }));
+    .map(({ id, name, slug, category_id }) => ({
+      id,
+      name,
+      slug,
+      category_id,
+    }));
   const publishInitial = mediaRowToPublishInput({
     title: values?.title,
     slug: values?.slug,

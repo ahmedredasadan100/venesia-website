@@ -31,7 +31,12 @@ export type ArticleEditorCategory = {
   sort_order: number | null;
   is_active: boolean | null;
 };
-export type ArticleEditorSeries = { id: number; name: string; slug: string };
+export type ArticleEditorSeries = {
+  id: number;
+  name: string;
+  slug: string;
+  category_id: number | null;
+};
 export type ArticleEditorTopic = {
   id: number;
   title: string | null;
