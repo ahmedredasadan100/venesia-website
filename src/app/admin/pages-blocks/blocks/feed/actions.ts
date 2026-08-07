@@ -94,7 +94,7 @@ function createFeedModuleSuccess(
       infrastructureWarning ??
       (mediaWarning
         ? "تم إنشاء الموديول، لكن مزامنة مراجع الوسائط تحتاج إلى مراجعة."
-        : "تم إنشاء الموديول كمسودة بنجاح."),
+        : "تم إنشاء الموديول كغير منشور بنجاح."),
     code: warning ? "created_with_warning" : "created",
     entityId: id,
     editHref: `/admin/pages-blocks/blocks/feed/${id}${mediaWarning ? "?notice=saved_with_media_sync_warning" : ""}`,
@@ -140,7 +140,7 @@ export async function createFeedModule(
       name,
       slug,
       description: cleanText(formData.get("description")) || null,
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
+      status: getStatus(cleanText(formData.get("status")) || "unpublished"),
       feed_type: readFeedType(formData.get("feed_type")),
       config: await sanitizeFeedModuleConfig(formData),
     };
@@ -199,7 +199,7 @@ export async function updateFeedModule(formData: FormData) {
     name,
     slug,
     description: cleanText(formData.get("description")) || null,
-    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
     feed_type: readFeedType(formData.get("feed_type")),
     config: await sanitizeFeedModuleConfig(formData),
     updated_at: new Date().toISOString(),
@@ -232,7 +232,7 @@ export async function updateFeedModule(formData: FormData) {
 export async function toggleFeedModuleStatus(formData: FormData) {
   await requireAdminSession();
   const id = parseNumber(formData.get("id"));
-  const nextStatus = getStatus(cleanText(formData.get("next_status")) || "draft");
+  const nextStatus = getStatus(cleanText(formData.get("next_status")) || "unpublished");
   if (!id) throw new Error("معرّف الموديول مفقود.");
 
   const { error } = await getSupabaseAdmin()
@@ -296,7 +296,7 @@ export async function duplicateFeedModule(formData: FormData) {
     name: `${source.name} - نسخة`,
     slug: `${source.slug}-copy-${Date.now()}`,
     description: source.description,
-    status: "draft",
+    status: "unpublished",
     feed_type: source.feed_type,
     config: source.config,
     sort_order: (source.sort_order ?? 0) + 1,
@@ -338,8 +338,8 @@ export async function bulkFeedModules(formData: FormData) {
 
   const now = new Date().toISOString();
 
-  if (action === "publish" || action === "hide" || action === "draft") {
-    const status = action === "publish" ? "published" : action === "hide" ? "unpublished" : "draft";
+  if (action === "publish" || action === "hide") {
+    const status = action === "publish" ? "published" : "unpublished";
     const { error } = await getSupabaseAdmin()
       .from("feed_module_templates")
       .update({ status, updated_at: now })

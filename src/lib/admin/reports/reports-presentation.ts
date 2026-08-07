@@ -116,7 +116,6 @@ function contentPresentation(model: AdminReportsModel) {
       metrics: [
         { id: "content-total", label: "إجمالي المحتوى", value: dashboard.kpis.topics.total, filter: "all" },
         { id: "content-published", label: "منشور", value: dashboard.kpis.topics.published, filter: "all" },
-        { id: "content-drafts", label: "مسودات", value: dashboard.kpis.topics.draft, filter: "draft", href: "/admin/content/topics?status=draft" },
         { id: "content-unpublished", label: "غير منشور", value: dashboard.kpis.topics.unpublished, filter: "all", href: "/admin/content/topics?status=unpublished" },
       ],
     });
@@ -129,7 +128,7 @@ function contentPresentation(model: AdminReportsModel) {
         id: `topic-${topic.id}`,
         title: topic.title,
         meta: `${topic.category} · ${topic.contentType}`,
-        status: topic.status ?? "draft",
+        status: topic.status ?? "unpublished",
         href: `/admin/content/topics/${topic.id}`,
       })),
     });
@@ -168,7 +167,7 @@ function contentPresentation(model: AdminReportsModel) {
         id: `review-${item.id}`,
         title: item.title || `محتوى #${item.id}`,
         meta: item.blockerIds.join(" · "),
-        status: item.status ?? "draft",
+        status: item.status ?? "unpublished",
         href: `/admin/content/topics/${item.id}`,
       })),
     });
@@ -199,7 +198,6 @@ function projectsPresentation(model: AdminReportsModel) {
       metrics: [
         { id: "projects-total", label: "إجمالي المشاريع", value: dashboard.kpis.projects.total, filter: "health" },
         { id: "projects-published", label: "منشورة", value: dashboard.kpis.projects.published, filter: "published" },
-        { id: "projects-drafts", label: "مسودات", value: dashboard.kpis.projects.draft, filter: "all" },
         { id: "projects-unpublished", label: "غير منشورة", value: dashboard.kpis.projects.unpublished, filter: "all" },
       ],
     });
@@ -238,7 +236,6 @@ function projectsPresentation(model: AdminReportsModel) {
         metrics: [
           { id: "updates-total", label: "إجمالي التحديثات", value: reports.projects.constructionUpdates.total, filter: "all" },
           { id: "updates-published", label: "منشورة", value: reports.projects.constructionUpdates.published, filter: "published" },
-          { id: "updates-draft", label: "مسودات", value: reports.projects.constructionUpdates.draft, filter: "all" },
           { id: "updates-unpublished", label: "غير منشورة", value: reports.projects.constructionUpdates.unpublished, filter: "all" },
         ],
       },
@@ -440,11 +437,9 @@ function publishingPresentation(model: AdminReportsModel) {
       metrics: [
         { id: "publishing-recent-topics", label: "محتوى نُشر خلال 30 يومًا", value: reports.publishing.recentPublishing.topics, filter: "recent" },
         { id: "publishing-recent-projects", label: "مشاريع نُشرت خلال 30 يومًا", value: reports.publishing.recentPublishing.projects, filter: "recent" },
-        { id: "publishing-pending-topics", label: "محتوى معلّق", value: reports.publishing.pendingPublishing.topics, filter: "pending" },
-        { id: "publishing-pending-projects", label: "مشاريع معلّقة", value: reports.publishing.pendingPublishing.projects, filter: "pending" },
-        { id: "publishing-drafts-topics", label: "مسودات محتوى", value: reports.publishing.drafts.topics, filter: "drafts", href: "/admin/content/topics?status=draft" },
-        { id: "publishing-drafts-projects", label: "مسودات مشاريع", value: reports.publishing.drafts.projects, filter: "drafts" },
-        { id: "publishing-drafts-pages", label: "مسودات صفحات", value: reports.publishing.drafts.pages, filter: "drafts", href: "/admin/pages-blocks/pages" },
+        { id: "publishing-unpublished-topics", label: "محتوى غير منشور", value: reports.publishing.unpublished.topics, filter: "unpublished", href: "/admin/content/topics?status=unpublished" },
+        { id: "publishing-unpublished-projects", label: "مشاريع غير منشورة", value: reports.publishing.unpublished.projects, filter: "unpublished" },
+        { id: "publishing-unpublished-pages", label: "صفحات غير منشورة", value: reports.publishing.unpublished.pages, filter: "unpublished", href: "/admin/pages-blocks/pages" },
       ],
     });
   }
@@ -472,7 +467,7 @@ function publishingPresentation(model: AdminReportsModel) {
     groups,
     records,
     actions: [
-      { id: "publishing-content", label: "مسودات المحتوى", description: "فتح قائمة المحتوى على حالة المسودة.", href: "/admin/content/topics?status=draft" },
+      { id: "publishing-content", label: "المحتوى غير المنشور", description: "فتح قائمة المحتوى على حالة غير المنشور.", href: "/admin/content/topics?status=unpublished" },
       { id: "publishing-pages", label: "إدارة الصفحات", description: "فتح مالك صفحات الموقع.", href: "/admin/pages-blocks/pages" },
     ],
   };

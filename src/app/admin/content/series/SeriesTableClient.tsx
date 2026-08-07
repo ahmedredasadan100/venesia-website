@@ -66,9 +66,7 @@ const STATUS_FILTER: AdminEntityFilterDef = {
   type: "status",
   options: [
     { value: "published", label: "منشور" },
-    { value: "unpublished", label: "مخفي" },
-    { value: "draft", label: "مسودة" },
-    { value: "archived", label: "مؤرشف" },
+    { value: "unpublished", label: "غير منشور" },
   ],
   className: "min-w-[150px]",
 };
@@ -76,7 +74,9 @@ const STATUS_FILTER: AdminEntityFilterDef = {
 type SeriesMetrics = {
   total: number;
   published: number;
+  unpublished: number;
   topics: number;
+  averageTopics: number;
   categoryOptions: AdminEntityFilterOption[];
   categoryDescendantIdsByValue: Record<string, number[]>;
 };
@@ -353,9 +353,11 @@ export default function SeriesTableClient({
       <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid
           items={[
-            { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true },
-            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true },
-            { label: "الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
+            { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true, onClick: controller.resetFilters, active: !controller.query.search && controller.query.filters.status === "all" && !controller.query.filters.categoryId },
+            { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
+            { label: "متوسط الموضوعات لكل سلسلة", value: controller.result.metrics?.averageTopics ?? 0, tone: "blue", compact: true },
+            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: controller.query.filters.status === "published" },
+            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: controller.query.filters.status === "unpublished" },
           ]}
         />
       </AdminEntityListPrimarySection>
@@ -395,9 +397,7 @@ export default function SeriesTableClient({
                     : "all";
               const status =
                 statusValue === "published" ||
-                statusValue === "unpublished" ||
-                statusValue === "draft" ||
-                statusValue === "archived"
+                statusValue === "unpublished"
                   ? statusValue
                   : "all";
               const categoryId = Number(categoryValue);

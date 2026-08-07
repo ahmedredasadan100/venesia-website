@@ -570,7 +570,6 @@ check(
     appearsInOrder(pagesListConfig, [
       'key: "page"',
       'key: "status"',
-      'key: "modules"',
       'key: "type"',
       'key: "actions"',
     ]) &&
@@ -605,9 +604,7 @@ check(
     seriesColumns.includes('label: "الرابط"') &&
     activityLogClient.includes('label: "عنوان IP"') &&
     pageBlockAdminUtils.includes("getContentStatusMetadata(status)") &&
-    pagesClient.includes(
-      'status === "hidden" ? "unpublished" : status',
-    ),
+    pagesClient.includes("getContentStatusMetadata(status)"),
 );
 
 check(

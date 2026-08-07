@@ -8,11 +8,11 @@ const { Client } = pg;
 const connectionString = process.env.SUPABASE_DB_URL;
 if (!connectionString) throw new Error("SUPABASE_DB_URL is required.");
 
-const migrationVersion = "20260805230000";
+const migrationVersion = "20260807120000";
 const canonicalizeMigrationSql = (source: string) =>
   source.replace(/^\uFEFF/u, "").replace(/\r\n?/g, "\n");
 const migrationSource = canonicalizeMigrationSql(readFileSync(
-  "sql/migrations/20260805230000_reports_analytics_capability_closure.sql",
+  "sql/migrations/20260807120000_system_publication_summary_cards_closure.sql",
   "utf8",
 ));
 const migrationHash = createHash("sha256").update(migrationSource).digest("hex");
@@ -32,7 +32,7 @@ try {
     [migrationVersion],
   )).rows;
   assert.equal(registry.length, 1, "Reports migration must be registered exactly once");
-  assert.equal(registry[0]?.name, "reports_analytics_capability_closure");
+  assert.equal(registry[0]?.name, "system_publication_summary_cards_closure");
   assert.equal(Number(registry[0]?.statement_count), 1);
   assert.equal(
     createHash("sha256")
@@ -76,9 +76,9 @@ try {
       (select count(*)::integer from public.topics where deleted_at is null and content_type='site_update') as construction_updates,
       (select count(*)::integer from public.media_assets where status <> 'deleted' and missing_object) as media_missing_objects,
       (select count(*)::integer from public.media_assets where status <> 'deleted' and media_kind='image' and nullif(btrim(default_alt_text),'') is null) as media_missing_alt,
-      (select count(*)::integer from public.topics where deleted_at is null and status='draft') as topic_drafts,
-      (select count(*)::integer from public.projects where publication_status='draft') as project_drafts,
-      (select count(*)::integer from public.pages where status='draft') as page_drafts
+      (select count(*)::integer from public.topics where deleted_at is null and status='unpublished') as topic_unpublished,
+      (select count(*)::integer from public.projects where publication_status='unpublished') as project_unpublished,
+      (select count(*)::integer from public.pages where status='unpublished') as page_unpublished
   `)).rows[0];
   assert.equal(model.content.missingSeo, independent.content_missing_seo);
   assert.equal(model.content.missingImages, independent.content_missing_images);
@@ -86,9 +86,9 @@ try {
   assert.equal(model.projects.constructionUpdates.total, independent.construction_updates);
   assert.equal(model.media.missingObjects, independent.media_missing_objects);
   assert.equal(model.media.missingAlt, independent.media_missing_alt);
-  assert.equal(model.publishing.drafts.topics, independent.topic_drafts);
-  assert.equal(model.publishing.drafts.projects, independent.project_drafts);
-  assert.equal(model.publishing.drafts.pages, independent.page_drafts);
+  assert.equal(model.publishing.unpublished.topics, independent.topic_unpublished);
+  assert.equal(model.publishing.unpublished.projects, independent.project_unpublished);
+  assert.equal(model.publishing.unpublished.pages, independent.page_unpublished);
 
   const requiredIndexes = [
     "topics_dashboard_updated_idx",

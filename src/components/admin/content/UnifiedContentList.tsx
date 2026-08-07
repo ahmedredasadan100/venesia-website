@@ -31,7 +31,6 @@ import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions
 const BULK_OPTIONS = [
   { value: "publish", label: "نشر" },
   { value: "unpublish", label: "إخفاء" },
-  { value: "archive", label: "أرشفة" },
   { value: "delete", label: "حذف آمن" },
   { value: "move_category", label: "نقل لتصنيف" },
   { value: "feature", label: "تعيين كمميز" },
@@ -110,7 +109,7 @@ export default function UnifiedContentList({
   const categoryOptions = useMemo(
     () =>
       toAdminCategoryFilterOptions(
-        categories.filter((category) => category.is_active !== false),
+        categories.filter((category) => category.status === "published"),
       ),
     [categories],
   );

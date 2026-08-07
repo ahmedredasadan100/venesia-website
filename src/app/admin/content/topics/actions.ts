@@ -281,7 +281,7 @@ export async function duplicateUnifiedContent(
     ...copyable,
     title: `${String(topic.title ?? "بدون عنوان")} - نسخة`,
     slug,
-    status: "draft",
+    status: "unpublished",
     published_at: null,
     published_by: null,
     views_count: 0,
@@ -332,7 +332,7 @@ export async function duplicateUnifiedContent(
   return mediaAwareSuccess(
     mediaSynchronization,
     "تم نسخ المحتوى",
-    "أُنشئت نسخة جديدة كمسودة.",
+    "أُنشئت نسخة جديدة كغير منشورة.",
     { code: "created", entityId: data.id },
   );
 }
@@ -349,7 +349,7 @@ export async function softDeleteUnifiedContent(
   const now = new Date().toISOString();
   const { error } = await getSupabaseAdmin()
     .from("topics")
-    .update({ status: "archived", deleted_at: now, updated_at: now, updated_by: actor.id })
+    .update({ status: "unpublished", deleted_at: now, updated_at: now, updated_by: actor.id })
     .eq("id", id);
   if (error) return invalidMutation(error.message);
 
@@ -452,10 +452,8 @@ export async function bulkUpdateUnifiedContent(
     );
   } else if (action === "unpublish") {
     payload = { status: "unpublished", updated_by: actor.id, updated_at: now };
-  } else if (action === "archive") {
-    payload = { status: "archived", updated_by: actor.id, updated_at: now };
   } else if (action === "delete") {
-    payload = { status: "archived", deleted_at: now, updated_by: actor.id, updated_at: now };
+    payload = { status: "unpublished", deleted_at: now, updated_by: actor.id, updated_at: now };
   } else if (action === "feature" || action === "unfeature") {
     payload = { is_featured: action === "feature", updated_by: actor.id, updated_at: now };
   } else if (action === "move_category") {

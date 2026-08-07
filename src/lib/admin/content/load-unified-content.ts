@@ -42,16 +42,17 @@ export type ContentSortValue = (typeof CONTENT_SORT_VALUES)[number];
 export const DEFAULT_CONTENT_LIST_SORT: ContentSortValue = "title_asc";
 
 const CONTENT_SORT_SET = new Set<string>(CONTENT_SORT_VALUES);
-const STATUS_VALUES = new Set(["published", "draft", "unpublished", "archived"]);
+const STATUS_VALUES = new Set(["published", "unpublished"]);
 const FEATURED_VALUES = new Set(["yes", "no"]);
 
 export type UnifiedContentFilters = {
   q: string;
   contentType: ContentType | "all";
   categoryId: number | null;
-  seriesId: number | null;
+  seriesId: number | "any" | null;
   status: string | "all";
   featured: "yes" | "no" | "all";
+  image: "without" | "all";
   sort: ContentSortValue;
   page: number;
   pageSize: number;
@@ -94,6 +95,7 @@ export type ContentListSearchParams = {
   series?: string;
   status?: string;
   featured?: string;
+  image?: string;
   sort?: string;
   page?: string;
   limit?: string;
@@ -130,12 +132,13 @@ export function normalizeUnifiedContentFilters(
     q: cleanContentTitleSearch(params?.q),
     contentType: isContentType(rawType) ? rawType : "all",
     categoryId: getOptionalId(params?.category),
-    seriesId: getOptionalId(params?.series),
+    seriesId: params?.series === "any" ? "any" : getOptionalId(params?.series),
     status: rawStatus && STATUS_VALUES.has(rawStatus) ? rawStatus : "all",
     featured:
       rawFeatured && FEATURED_VALUES.has(rawFeatured)
         ? (rawFeatured as "yes" | "no")
         : "all",
+    image: params?.image === "without" ? "without" : "all",
     sort:
       rawSort && CONTENT_SORT_SET.has(rawSort)
         ? (rawSort as ContentSortValue)
@@ -164,10 +167,12 @@ function applyFilters(query: any, filters: UnifiedContentFilters, categories: Ad
       getCategoryAndDescendantIds(categories, filters.categoryId),
     );
   }
-  if (filters.seriesId) next = next.eq("series_id", filters.seriesId);
+  if (filters.seriesId === "any") next = next.not("series_id", "is", null);
+  else if (filters.seriesId) next = next.eq("series_id", filters.seriesId);
   if (filters.status !== "all") next = next.eq("status", filters.status);
   if (filters.featured === "yes") next = next.eq("is_featured", true);
   if (filters.featured === "no") next = next.eq("is_featured", false);
+  if (filters.image === "without") next = next.or("image.is.null,image.eq.");
 
   return next;
 }
@@ -256,16 +261,18 @@ export async function loadUnifiedContentMetrics() {
   const [
     total,
     published,
-    draft,
     unpublished,
-    archived,
+    withoutImage,
+    withSeries,
+    featured,
     { data: seoRows, error: seoError },
   ] = await Promise.all([
     base(),
     base().eq("status", "published"),
-    base().eq("status", "draft"),
     base().eq("status", "unpublished"),
-    base().eq("status", "archived"),
+    base().or("image.is.null,image.eq."),
+    base().not("series_id", "is", null),
+    base().eq("is_featured", true),
     supabase
       .from("topics")
       .select(
@@ -301,16 +308,18 @@ export async function loadUnifiedContentMetrics() {
   return {
     total: total.count ?? 0,
     published: published.count ?? 0,
-    draft: draft.count ?? 0,
     unpublished: unpublished.count ?? 0,
-    archived: archived.count ?? 0,
+    withoutImage: withoutImage.count ?? 0,
+    withSeries: withSeries.count ?? 0,
+    featured: featured.count ?? 0,
     seoAverage,
     error:
       total.error?.message ??
       published.error?.message ??
-      draft.error?.message ??
       unpublished.error?.message ??
-      archived.error?.message ??
+      withoutImage.error?.message ??
+      withSeries.error?.message ??
+      featured.error?.message ??
       seoError?.message ??
       null,
   };

@@ -7,10 +7,8 @@ import { ADMIN_TONE_TOKENS } from "./admin-tone-palette";
 
 const positiveIdSchema = z.number().int().positive();
 const seriesStatusSchema = z.enum([
-  "draft",
   "published",
   "unpublished",
-  "archived",
 ]);
 
 const updateTopicCategoryInputSchema = z.strictObject({

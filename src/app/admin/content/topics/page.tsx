@@ -71,7 +71,7 @@ export default async function UnifiedContentTopicsPage({
   ] = await Promise.all([
     supabase
       .from("topic_categories")
-      .select("id,name,slug,parent_id,sort_order,is_active,color_token")
+      .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
     supabase

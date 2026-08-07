@@ -48,7 +48,7 @@ type HeroEditClientProps = {
     source_type: string;
     source_slug: string | null;
     limit_count: number | null;
-    is_visible: boolean;
+    status: "published" | "unpublished";
   };
   config: Record<string, unknown>;
   imagesText: string;
@@ -75,7 +75,7 @@ export default function HeroEditClient({
 }: HeroEditClientProps) {
   const primaryCtaLink = legacyHrefFromConfig(config, "primaryCtaLink", "primaryCtaHref");
   const secondaryCtaLink = legacyHrefFromConfig(config, "secondaryCtaLink", "secondaryCtaHref");
-  const statusInfo = statusMeta(hero.is_visible ? "published" : "unpublished");
+  const statusInfo = statusMeta(hero.status);
   const controls = resolveHeroContentControls(config);
   const isHomeHero = hero.variant === "home-cinematic";
 
@@ -403,7 +403,7 @@ export default function HeroEditClient({
                 <div>
                   <ModuleEditorPagesTab moduleName={hero.name} assignmentContext={assignmentContext}>
                     <ModuleEditorSection>
-                    <AdminFormSwitch name="is_visible" label="إظهار الهيرو" defaultChecked={hero.is_visible} surface />
+                    <AdminFormSwitch name="is_published" label="منشور" defaultChecked={hero.status === "published"} surface />
 
                     <AdminFormListboxSelect
                       name="variant"

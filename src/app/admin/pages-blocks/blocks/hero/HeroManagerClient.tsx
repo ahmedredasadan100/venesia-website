@@ -76,7 +76,7 @@ type HeroRow = {
   name: string;
   slug: string;
   description: string | null;
-  is_visible: boolean;
+  status: "published" | "unpublished";
   hero_assignments: HeroAssignment[];
 };
 
@@ -104,15 +104,15 @@ const sourceLabels: Record<string, string> = {
 const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
 const HERO_FILTERS: readonly AdminEntityFilterDef[] = [
   {
-    id: "hero-visibility",
-    paramKey: "visibility",
-    label: "الظهور",
+    id: "hero-status",
+    paramKey: "status",
+    label: "حالة النشر",
     type: "status",
     allValue: "all",
-    placeholder: "الظهور",
+    placeholder: "حالة النشر",
     options: [
-      { value: "visible", label: "ظاهر" },
-      { value: "hidden", label: "مخفي" },
+      { value: "published", label: "منشور" },
+      { value: "unpublished", label: "غير منشور" },
     ],
   },
 ];
@@ -171,7 +171,7 @@ export default function HeroManagerClient({
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const [isRefreshPending, startRefreshTransition] = useTransition();
   const search = searchParams.get("q") ?? "";
-  const visibility = searchParams.get("visibility") ?? "all";
+  const status = searchParams.get("status") ?? "all";
   const filteredHeroes = useMemo(
     () => heroes.filter((hero) => {
       if (
@@ -181,13 +181,13 @@ export default function HeroManagerClient({
           search,
         )
       ) return false;
-      return visibility === "all" || (hero.is_visible ? "visible" : "hidden") === visibility;
+      return status === "all" || hero.status === status;
     }),
-    [heroes, search, visibility],
+    [heroes, search, status],
   );
   const pagination = useAdminBoundedClientPagination({
     rows: filteredHeroes,
-    datasetKey: `${search}|${visibility}|${filteredHeroes.map((hero) => hero.id).sort().join("|")}`,
+    datasetKey: `${search}|${status}|${filteredHeroes.map((hero) => hero.id).sort().join("|")}`,
     defaultPageSize: PAGE_SIZE,
   });
   const paginatedHeroes = pagination.rows;
@@ -263,7 +263,6 @@ export default function HeroManagerClient({
         eyebrow="HERO MODULE"
         title="إدارة الهيرو"
         description="جدول موحّد لكل الهيروهات. كل Hero يدار كـ Module مستقل ويمكن ربطه بصفحة أو أكثر."
-        meta={`${heroes.length} هيرو إجمال`}
         actions={(
           <button
             type="button"
@@ -307,7 +306,7 @@ export default function HeroManagerClient({
           basePath="/admin/pages-blocks/blocks/hero"
           search={{ value: search, placeholder: "ابحث باسم الهيرو أو المعرّف الداخلي…", minLength: 1, pending: isBusy }}
           filters={HERO_FILTERS}
-          values={{ visibility }}
+          values={{ status }}
           columnsControl={
             <AdminColumnVisibilityMenu
               columns={columnConfig.columns}
@@ -358,7 +357,7 @@ export default function HeroManagerClient({
           }}
         />
 
-        <AdminDataGrid className="!rounded-t-none !border-t-0" summary={filteredHeroes.length ? `${filteredHeroes.length} هيرو إجمال` : undefined}>
+        <AdminDataGrid className="!rounded-t-none !border-t-0">
           <AdminDataGridHeader columns={gridColumns}>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
@@ -399,20 +398,20 @@ export default function HeroManagerClient({
                   title: `معلومات ${hero.name}`,
                   items: [
                     { label: "Slug", value: hero.slug },
-                    { label: "الحالة", value: hero.is_visible ? "ظاهر" : "مخفي" },
+                    { label: "الحالة", value: hero.status === "published" ? "منشور" : "غير منشور" },
                     { label: "الصفحات المربوطة", value: String(hero.hero_assignments.length) },
                   ],
                 },
                 copyPublicLink: hidden,
                 visibility: {
                   access: "allowed",
-                  isVisible: hero.is_visible,
+                  isVisible: hero.status === "published",
                   pending: rowPending,
                   onSelect: async () => {
                     await runMutation(
                       hero.id,
-                      () => toggleHeroTemplate(mutationFormData({ id: hero.id, next_visible: !hero.is_visible })),
-                      hero.is_visible ? "تم إخفاء الهيرو." : "تم إظهار الهيرو.",
+                      () => toggleHeroTemplate(mutationFormData({ id: hero.id, next_status: hero.status === "published" ? "unpublished" : "published" })),
+                      hero.status === "published" ? "أصبح الهيرو غير منشور." : "تم نشر الهيرو.",
                     );
                   },
                 },
@@ -477,7 +476,7 @@ export default function HeroManagerClient({
 
                 {visibleColumnSet.has("status") ? (
                   <AdminDataGridStatusCell>
-                    <AdminStatusPill tone={hero.is_visible ? "green" : "muted"}>{hero.is_visible ? "ظاهر" : "مخفي"}</AdminStatusPill>
+                    <AdminStatusPill tone={hero.status === "published" ? "green" : "gold"}>{hero.status === "published" ? "منشور" : "غير منشور"}</AdminStatusPill>
                   </AdminDataGridStatusCell>
                 ) : null}
 
@@ -567,8 +566,8 @@ export default function HeroManagerClient({
                 </select>
               </label>
               <label className={`${ADMIN_FORM.checkboxRow} md:col-span-2`}>
-                <span>نشط</span>
-                <input type="checkbox" name="is_visible" defaultChecked className="h-4 w-4 accent-[#D8B87A]" />
+                <span>منشور</span>
+                <input type="checkbox" name="is_published" className="h-4 w-4 accent-[#D8B87A]" />
               </label>
               <input type="hidden" name="style_preset" value="cinematic-gold" />
               <input type="hidden" name="limit_count" value="1" />

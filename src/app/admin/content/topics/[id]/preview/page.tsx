@@ -41,7 +41,7 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
         description="معاينة إدارية موحدة لا تسجل مشاهدة عامة ولا تغيّر حالة المحتوى."
         actions={
           <>
-            <AdminStatusBadge status={topic.status === "unpublished" ? "hidden" : topic.status || "draft"} />
+            <AdminStatusBadge status={topic.status === "published" ? "published" : "unpublished"} />
             <Link
               href={`/admin/content/topics/${topic.id}`}
               className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/65 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"

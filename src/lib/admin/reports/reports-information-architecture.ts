@@ -46,7 +46,7 @@ export const ADMIN_REPORT_DEFINITIONS = [
       { id: "missing_seo", label: "SEO ناقص", description: "المحتوى الذي يحتاج بيانات SEO." },
       { id: "missing_alt", label: "Alt ناقص", description: "الصور التي تحتاج نصًا بديلًا." },
       { id: "review_blocked", label: "محجوب بالمراجعة", description: "السجلات التي تمنعها قواعد النشر الحالية." },
-      { id: "draft", label: "المسودات", description: "المحتوى الموجود في حالة مسودة." },
+      { id: "unpublished", label: "غير المنشور", description: "المحتوى غير المنشور للعامة." },
     ],
   },
   {
@@ -127,8 +127,7 @@ export const ADMIN_REPORT_DEFINITIONS = [
     filters: [
       { id: "all", label: "الكل", description: "كل مؤشرات النشر المتاحة." },
       { id: "recent", label: "النشر الحديث", description: "ما نُشر خلال نافذة الثلاثين يومًا." },
-      { id: "pending", label: "معلّق", description: "الكيانات المعلقة قبل النشر." },
-      { id: "drafts", label: "المسودات", description: "المسودات عبر أنواع المحتوى الحالية." },
+      { id: "unpublished", label: "غير المنشور", description: "الكيانات غير المنشورة عبر أنواع المحتوى الحالية." },
       { id: "validation_blocks", label: "موانع التحقق", description: "قواعد المراجعة التي تمنع النشر." },
     ],
   },

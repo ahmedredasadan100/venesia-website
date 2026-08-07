@@ -29,7 +29,9 @@ const categoryMetricsSchema = z.strictObject({
   ),
   total: z.coerce.number().int().nonnegative().finite(),
   published: z.coerce.number().int().nonnegative().finite(),
+  unpublished: z.coerce.number().int().nonnegative().finite(),
   topics: z.coerce.number().int().nonnegative().finite(),
+  series: z.coerce.number().int().nonnegative().finite(),
 });
 
 type CategoryMetrics = z.output<typeof categoryMetricsSchema>;

@@ -45,8 +45,8 @@ function createPageFormSuccess(
     revision,
     title: warning ? "تم إنشاء الصفحة مع تنبيه" : "تم إنشاء الصفحة",
     message: warning
-      ? `تم إنشاء الصفحة كمسودة، لكن ${postCommitWarnings.join(" و")}. يمكنك متابعة تعديل الصفحة الآن.`
-      : "تم إنشاء الصفحة كمسودة بنجاح.",
+      ? `تم إنشاء الصفحة كغير منشورة، لكن ${postCommitWarnings.join(" و")}. يمكنك متابعة تعديل الصفحة الآن.`
+      : "تم إنشاء الصفحة كغير منشورة بنجاح.",
     code: warning ? "created_with_infrastructure_warning" : "created",
     entityId: id,
     editHref: `/admin/pages-blocks/pages/${id}`,
@@ -140,7 +140,7 @@ export async function createPage(
       slug: validated.slug,
       path: validated.path,
       page_type: "static",
-      status: "draft",
+      status: "unpublished",
     })
     .select("id")
     .single<{ id: number }>();
@@ -165,7 +165,7 @@ export async function createPage(
         title,
         slug: validated.slug,
         path: validated.path,
-        status: "draft",
+        status: "unpublished",
       },
     });
   } catch (error) {

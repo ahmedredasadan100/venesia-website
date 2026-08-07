@@ -43,7 +43,7 @@ export default function ArticleCreateEditor({
       <AdminPageContextHeader
         eyebrow="CREATE TOPIC"
         title="إضافة موضوع جديد"
-        description="أنشئ الموضوع كاملًا من البداية: المحتوى، السيو، الصورة، الأسئلة الشائعة، ثم احفظه كمسودة أو انشره بعد اكتمال الجاهزية."
+        description="أنشئ الموضوع كاملًا من البداية: المحتوى، السيو، الصورة، الأسئلة الشائعة، ثم احفظه كغير منشور أو انشره بعد اكتمال الجاهزية."
         actions={
           <>
             <AdminActionButton href="/admin/content/topics" variant="dark">عرض الموضوعات</AdminActionButton>
@@ -141,12 +141,12 @@ export default function ArticleCreateEditor({
                   }}
                   publishingOptions={
                     <ContentPublishingOptions
-                      status="draft"
+                      status="unpublished"
                       popular={false}
                       dateLabel={null}
                     />
                   }
-                  status="draft"
+                  status="unpublished"
                   contentTypeLabel="مقال"
                 />
               ),

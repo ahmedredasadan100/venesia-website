@@ -61,7 +61,7 @@ const STATUS_FILTER: AdminEntityFilterDef = {
   type: "status",
   options: [
     { value: "published", label: "منشور" },
-    { value: "hidden", label: "مخفي" },
+    { value: "unpublished", label: "غير منشور" },
   ],
   className: "min-w-[160px]",
 };
@@ -70,7 +70,9 @@ type CategoryMetrics = {
   parentOptions: Array<{ id: number; name: string; level: number }>;
   total: number;
   published: number;
+  unpublished: number;
   topics: number;
+  series: number;
 };
 
 export default function CategoriesListClient({
@@ -134,8 +136,8 @@ export default function CategoriesListClient({
 
   const toggleStatus = useCallback(
     async (category: CategoryListRow): Promise<CategoryStatusMutationResult> => {
-      const nextActive = !Boolean(category.is_active);
-      const nextStatus = nextActive ? "published" : "draft";
+      const nextActive = category.status !== "published";
+      const nextStatus = nextActive ? "published" : "unpublished";
       try {
         const result = await instant.mutateAsync({
           rowId: category.id,
@@ -188,7 +190,7 @@ export default function CategoriesListClient({
                         ? mutationResult.status
                         : isActive
                           ? "published"
-                          : "draft",
+                          : "unpublished",
                     updated_at:
                       typeof mutationResult.updatedAt === "string"
                         ? mutationResult.updatedAt
@@ -382,9 +384,11 @@ export default function CategoriesListClient({
       <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid
           items={[
-            { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true },
-            { label: "نشط", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true },
-            { label: "الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
+            { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true, onClick: controller.resetFilters, active: !controller.query.search && controller.query.filters.status === "all" },
+            { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
+            { label: "إجمالي السلاسل", value: controller.result.metrics?.series ?? 0, tone: "blue", compact: true },
+            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: controller.query.filters.status === "published" },
+            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: controller.query.filters.status === "unpublished" },
           ]}
         />
       </AdminEntityListPrimarySection>
@@ -418,7 +422,7 @@ export default function CategoriesListClient({
                   : controller.query.search;
               const status =
                 "status" in patch
-                  ? patch.status === "published" || patch.status === "hidden"
+                  ? patch.status === "published" || patch.status === "unpublished"
                     ? patch.status
                     : "all"
                   : controller.query.filters.status;

@@ -19,7 +19,7 @@ export type ProjectListType = (typeof projectTypeValues)[number];
 export type ProjectFilters = {
   projectType: ProjectListType;
   featured: "all" | "yes" | "no";
-  publicationStatus: "all" | "draft" | "published" | "unpublished";
+  publicationStatus: "all" | "published" | "unpublished";
 };
 
 export const PROJECTS_LIST_PAGE_SIZES = [10, 20, 30] as const;
@@ -32,7 +32,7 @@ export const projectsQueryContract: AdminEntityListQueryContract<
   filtersSchema: z.strictObject({
     projectType: z.enum(projectTypeValues),
     featured: z.enum(["all", "yes", "no"]),
-    publicationStatus: z.enum(["all", "draft", "published", "unpublished"]),
+    publicationStatus: z.enum(["all", "published", "unpublished"]),
   }),
   sortFields: projectSortFields,
   defaultSort: { field: "updated_at", direction: "desc" },
@@ -43,7 +43,7 @@ export const projectsQueryContract: AdminEntityListQueryContract<
   rawFilterSchemas: {
     type: z.enum(projectTypeValues),
     featured: z.enum(["yes", "no"]),
-    publication_status: z.enum(["draft", "published", "unpublished"]),
+    publication_status: z.enum(["published", "unpublished"]),
   },
   parseFilters(params) {
     return {
@@ -54,10 +54,9 @@ export const projectsQueryContract: AdminEntityListQueryContract<
           ? (params.get("featured") as "yes" | "no")
           : "all",
       publicationStatus:
-        params.get("publication_status") === "draft" ||
         params.get("publication_status") === "published" ||
         params.get("publication_status") === "unpublished"
-          ? (params.get("publication_status") as "draft" | "published" | "unpublished")
+          ? (params.get("publication_status") as "published" | "unpublished")
           : "all",
     };
   },

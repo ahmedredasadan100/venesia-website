@@ -63,7 +63,6 @@ export type AdminPageListRow = {
   path: string;
   page_type: string;
   status: string;
-  block_count: number;
 };
 
 const PAGE_DELETE_CONFIRM =
@@ -71,9 +70,7 @@ const PAGE_DELETE_CONFIRM =
 const MUTATION_PENDING_REASON = "انتظر انتهاء العملية الحالية ثم حاول مرة أخرى.";
 
 function statusMeta(status: string) {
-  return getContentStatusMetadata(
-    status === "hidden" ? "unpublished" : status,
-  );
+  return getContentStatusMetadata(status);
 }
 
 type PageRowActionHandlers = {
@@ -142,7 +139,6 @@ function PageRowActions({
           { label: "المسار", value: publicPath ?? "غير متاح" },
           { label: "النوع", value: formatPageTypeLabel(row.page_type) },
           { label: "الحالة", value: status.label },
-          { label: "عدد الموديولات", value: String(row.block_count) },
         ],
       },
       copyPublicLink: {
@@ -232,20 +228,6 @@ function createPageColumns(
       },
     },
     {
-      key: "modules",
-      label: "الموديولات",
-      defaultVisible: true,
-      hideable: true,
-      sortable: false,
-      minWidth: 112,
-      width: 112,
-      renderCell: ({ row }) => (
-        <span className="font-en text-sm tabular-nums text-white/60">
-          {row.block_count}
-        </span>
-      ),
-    },
-    {
       key: "type",
       label: "النوع",
       defaultVisible: true,
@@ -329,7 +311,7 @@ export default function PagesTableClient({
   }
 
   async function toggle(page: AdminPageListRow): Promise<AdminActionResult> {
-    const nextStatus = page.status === "published" ? "hidden" : "published";
+    const nextStatus = page.status === "published" ? "unpublished" : "published";
     try {
       const result = await instant.mutateAsync({
         rowId: page.id,

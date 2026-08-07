@@ -82,8 +82,9 @@ const publicationDecision = inspectReviewDecisionCard(
 );
 
 check(
-  "capability owns exactly draft, published, and unpublished",
-  capability.includes('"draft",\n  "published",\n  "unpublished"') &&
+  "capability owns exactly published and unpublished",
+  capability.includes('"published",\n  "unpublished"') &&
+    !capability.includes('"draft"') &&
     !capability.includes("archived"),
 );
 check(
@@ -120,10 +121,10 @@ check(
 );
 check(
   "form save passes trusted actor and prior state into the same aggregate RPC",
-  saveAction.includes('rpc(\n          "save_project_admin_entry"') &&
+    saveAction.includes('rpc(\n          "save_project_admin_entry"') &&
     saveAction.includes("publication_actor_id: actor.id") &&
     saveAction.includes("publication_previous_status") &&
-    saveAction.includes('mode === "create" && payload.project.publication_status === "unpublished"') &&
+    saveAction.includes("const requestedPublicationStatus = payload.project.publication_status") &&
     !saveAction.includes("save_project_publication"),
 );
 check(
@@ -134,8 +135,8 @@ check(
     publicationAction.includes("revalidateProjectPaths"),
 );
 check(
-  "duplicate proves draft, null publication metadata, and unfeatured result",
-  duplicateAction.includes('publication_status !== "draft"') &&
+  "duplicate proves unpublished, null publication metadata, and unfeatured result",
+  duplicateAction.includes('publication_status !== "unpublished"') &&
     duplicateAction.includes("published_at !== null") &&
     duplicateAction.includes("published_by !== null") &&
     duplicateAction.includes("publication.featured"),

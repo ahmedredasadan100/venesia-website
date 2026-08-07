@@ -39,7 +39,7 @@ export default function CreatePageModal() {
       <VenesiaModal
         open={open}
         title="إضافة صفحة جديدة"
-        description="سيتم إنشاء الصفحة كمسودة، ولن تظهر للعامة قبل النشر وتفعيل المسار العام."
+        description="سيتم إنشاء الصفحة كغير منشورة، ولن تظهر للعامة قبل النشر وتفعيل المسار العام."
         onClose={requestClose}
       >
         <AdminFormRuntime

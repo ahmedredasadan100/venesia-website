@@ -162,7 +162,6 @@ function read(form: HTMLFormElement, seed: ReviewState): ReviewState {
 
 function statusLabel(status: string) {
   if (status === "published") return "منشور";
-  if (status === "archived") return "مؤرشف";
   return "غير منشور";
 }
 
@@ -186,7 +185,7 @@ export default function ContentReviewPanel({
   formId,
   initial,
   publishingOptions,
-  status = "draft",
+  status = "unpublished",
   publishedAt,
   dateLabel,
   featured = false,
@@ -197,7 +196,7 @@ export default function ContentReviewPanel({
   const seed = useMemo<ReviewState>(
     () => ({
       ...initial,
-      status: status ?? "draft",
+      status: status ?? "unpublished",
       publishedAt: publishedAt?.slice(0, 10) ?? "",
       featured,
       popular,

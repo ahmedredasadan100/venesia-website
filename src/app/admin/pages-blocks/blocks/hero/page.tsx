@@ -12,7 +12,7 @@ type HeroRow = {
   name: string;
   slug: string;
   description: string | null;
-  is_visible: boolean;
+  status: "published" | "unpublished";
   hero_assignments: Array<{
     id: number;
     path: string | null;
@@ -25,7 +25,7 @@ export default async function HeroesManagerPage({ searchParams }: PageProps) {
   const [heroesResult, preference] = await Promise.all([
     getSupabaseAdmin()
       .from("hero_templates")
-      .select("id,name,slug,description,is_visible,hero_assignments(id,path,is_active)")
+      .select("id,name,slug,description,status,hero_assignments(id,path,is_active)")
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
     readAdminColumnPreferences(

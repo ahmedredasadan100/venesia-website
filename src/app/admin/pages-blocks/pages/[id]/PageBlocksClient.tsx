@@ -536,7 +536,6 @@ export default function PageBlocksClient({
 
                 <PageBlocksAssignmentsGrid
                   rows={paginatedRows}
-                  totalCount={pagination.totalCount}
                   previewHref={previewHref}
                   sort={table.sort}
                   onToggleSort={(key) => {
@@ -561,7 +560,7 @@ export default function PageBlocksClient({
                   basePath={`/admin/pages-blocks/pages/${page.id}`}
                   currentPage={pagination.page}
                   totalPages={pagination.totalPages}
-                  totalCount={pagination.totalCount}
+                  totalCount={filteredRows.length}
                   pageSize={String(pagination.pageSize)}
                   onPageChange={pagination.setPage}
                   onPageSizeChange={pagination.setPageSize}

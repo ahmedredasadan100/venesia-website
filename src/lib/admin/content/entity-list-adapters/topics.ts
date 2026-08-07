@@ -51,9 +51,10 @@ const topicRowSchema = z.object({
 const topicMetricsSchema = z.object({
   total: z.number().int().nonnegative(),
   published: z.number().int().nonnegative(),
-  draft: z.number().int().nonnegative(),
   unpublished: z.number().int().nonnegative(),
-  archived: z.number().int().nonnegative(),
+  withoutImage: z.number().int().nonnegative(),
+  withSeries: z.number().int().nonnegative(),
+  featured: z.number().int().nonnegative(),
   seoAverage: z.number().int().nonnegative(),
   error: z.string().nullable(),
 });
@@ -68,7 +69,7 @@ export async function loadTopicsEntityListResult(
   if (!categories) {
     const { data, error: categoriesError } = await getSupabaseAdmin()
       .from("topic_categories")
-      .select("id,name,slug,parent_id,sort_order,is_active,color_token")
+      .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true });
     if (categoriesError) throw new Error(categoriesError.message);
@@ -84,6 +85,7 @@ export async function loadTopicsEntityListResult(
         seriesId: query.filters.seriesId,
         status: query.filters.status,
         featured: query.filters.featured,
+        image: query.filters.image,
         sort: `${query.sort.field}_${query.sort.direction}`,
         page: query.page,
         pageSize: query.pageSize,

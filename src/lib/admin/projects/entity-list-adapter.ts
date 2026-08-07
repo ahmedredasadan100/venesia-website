@@ -34,7 +34,7 @@ const projectEntityListRowSchema = z.object({
   main_area_name: z.string(),
   sub_area_name: z.string(),
   featured: z.boolean(),
-  publication_status: z.enum(["draft", "published", "unpublished"]),
+  publication_status: z.enum(["published", "unpublished"]),
   published_at: z.string().nullable(),
   updated_at: z.string(),
 });

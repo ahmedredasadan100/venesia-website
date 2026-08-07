@@ -272,14 +272,14 @@ export default function MediaContentForm({
                 initial={publishInitial}
                 publishingOptions={
                   <ContentPublishingOptions
-                    status={values?.status ?? "draft"}
+                    status={values?.status ?? "unpublished"}
                     featured={Boolean(values?.is_featured)}
                     popular={Boolean(values?.is_popular)}
                     publishedAt={values?.published_at}
                     dateLabel={values?.date_label}
                   />
                 }
-                status={values?.status ?? "draft"}
+                status={values?.status ?? "unpublished"}
                 publishedAt={values?.published_at}
                 dateLabel={values?.date_label}
                 featured={Boolean(values?.is_featured)}

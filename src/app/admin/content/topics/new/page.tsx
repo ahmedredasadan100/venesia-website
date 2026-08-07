@@ -34,7 +34,7 @@ export default async function NewUnifiedContentPage({
     await Promise.all([
       supabase
         .from("topic_categories")
-        .select("id,name,slug,parent_id,sort_order,is_active,color_token")
+        .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
         .order("sort_order", { ascending: true })
         .order("id", { ascending: true }),
       supabase
@@ -46,7 +46,7 @@ export default async function NewUnifiedContentPage({
   const categories = flattenAdminCategoryTree(
     buildAdminCategoryTree(
       ((categoryRows ?? []) as AdminContentCategory[]).filter(
-        (category) => category.is_active !== false,
+        (category) => category.status === "published",
       ),
     ),
   );
@@ -63,7 +63,7 @@ export default async function NewUnifiedContentPage({
   if (contentType === "article") {
     return (
       <ArticleCreateEditor
-        categories={categories.filter((category) => category.is_active !== false)}
+        categories={categories.filter((category) => category.status === "published")}
         series={series.filter((item) => item.status === "published" && !item.deleted_at)}
         errorMessage={errorMessage ?? loadError}
       />

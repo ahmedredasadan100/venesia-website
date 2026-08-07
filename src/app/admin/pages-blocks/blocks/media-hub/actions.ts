@@ -36,7 +36,7 @@ export async function updateMediaHubModule(formData: FormData) {
   const nextRow = {
     name,
     description: cleanText(formData.get("description")) || null,
-    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
     section_key: sectionKey,
     config,
     updated_at: new Date().toISOString(),

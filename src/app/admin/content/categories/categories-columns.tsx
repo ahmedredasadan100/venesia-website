@@ -197,8 +197,8 @@ export function createCategoryColumns(
       minWidth: 104,
       width: 104,
       renderCell: ({ row }) => (
-        <AdminStatusPill tone={Boolean(row.is_active) ? "green" : "gold"}>
-          {Boolean(row.is_active) ? "منشور" : "مخفي"}
+        <AdminStatusPill tone={row.status === "published" ? "green" : "gold"}>
+          {row.status === "published" ? "منشور" : "غير منشور"}
         </AdminStatusPill>
       ),
     },

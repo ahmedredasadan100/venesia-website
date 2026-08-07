@@ -23,10 +23,7 @@ function formatDate(value?: string | null, includeTime = false) {
 }
 
 function statusLabel(status?: string | null) {
-  if (status === "published") return "منشور";
-  if (status === "unpublished") return "غير منشور";
-  if (status === "archived") return "أرشيف";
-  return "مسودة";
+  return status === "published" ? "منشور" : "غير منشور";
 }
 
 const SOURCE_STATUS_LABELS: Record<DashboardSourceStatus, string> = {
@@ -126,7 +123,7 @@ export default function AdminDashboardView({ model }: { model: AdminDashboardMod
         { label: "إجمالي المشاريع", value: truth.kpis.projects.total, tone: "green" },
         { label: "الصفحات", value: truth.kpis.pages.total, tone: "violet" },
         { label: "الميديا المدارة", value: truth.kpis.media.total, tone: "cyan" },
-        { label: "التصنيفات النشطة", value: truth.kpis.categories.active, tone: "amber" },
+        { label: "التصنيفات المنشورة", value: truth.kpis.categories.published, tone: "amber" },
       ]
     : [
         "إجمالي المحتوى النشط",
@@ -150,10 +147,9 @@ export default function AdminDashboardView({ model }: { model: AdminDashboardMod
   const distributions = truth
     ? [
         { label: "محتوى منشور", value: truth.kpis.topics.published, color: "bg-emerald-300" },
-        { label: "مسودات محتوى", value: truth.kpis.topics.draft, color: "bg-amber-300" },
         { label: "محتوى غير منشور", value: truth.kpis.topics.unpublished, color: "bg-violet-300" },
         { label: "مشاريع منشورة", value: truth.kpis.projects.published, color: "bg-cyan-300" },
-        { label: "مشاريع غير منشورة", value: truth.kpis.projects.nonPublished, color: "bg-blue-300" },
+        { label: "مشاريع غير منشورة", value: truth.kpis.projects.unpublished, color: "bg-blue-300" },
         { label: "صفحات منشورة", value: truth.kpis.pages.published, color: "bg-[#D8B87A]" },
       ]
     : [];
@@ -234,7 +230,7 @@ export default function AdminDashboardView({ model }: { model: AdminDashboardMod
                 ["محتوى بدون صورة", truth.contentHealth.topicsMissingImage],
                 ["محتوى بدون وصف SEO", truth.contentHealth.topicsMissingSeoDescription],
                 ["تصنيفات نشطة بدون صورة", truth.contentHealth.categoriesMissingImage],
-                ["مسودات أقدم من 30 يومًا", truth.contentHealth.staleDrafts],
+                ["غير منشور منذ أكثر من 30 يومًا", truth.contentHealth.staleUnpublished],
               ].map(([label, value]) => (
                 <div key={String(label)} className="flex items-center justify-between rounded-[18px] border border-white/10 bg-white/[0.028] px-4 py-3">
                   <span className="text-sm text-white/62">{label}</span>

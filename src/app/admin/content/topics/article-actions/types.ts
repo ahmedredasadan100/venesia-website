@@ -1,4 +1,4 @@
-export const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
+export const VALID_STATUSES = ["published", "unpublished"] as const;
 
 export type TopicStatus = (typeof VALID_STATUSES)[number];
 

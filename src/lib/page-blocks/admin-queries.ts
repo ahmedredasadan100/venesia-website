@@ -67,7 +67,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("hero_assignments")
-      .select("id,target_id,is_active,priority,updated_at,hero_templates(id,name,slug,variant,is_visible,sort_order)")
+      .select("id,target_id,is_active,priority,updated_at,hero_templates(id,name,slug,variant,status,sort_order)")
       .eq("target_type", "page")
       .eq("target_id", pageId),
     getSupabaseAdmin()
@@ -83,7 +83,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
     getSupabaseAdmin().from("cards_block_templates").select("id,name,slug,status").order("name"),
     getSupabaseAdmin().from("breadcrumb_block_templates").select("id,name,slug,status").order("name"),
     getSupabaseAdmin().from("feed_module_templates").select("id,name,slug,status").order("name"),
-    getSupabaseAdmin().from("hero_templates").select("id,name,slug,is_visible").order("name"),
+    getSupabaseAdmin().from("hero_templates").select("id,name,slug,status").order("name"),
     getSupabaseAdmin().from("media_sidebar_module_templates").select("id,name,slug,status").order("name"),
     getSupabaseAdmin().from("media_hub_module_templates").select("id,name,slug,status").order("name"),
   ]);
@@ -96,7 +96,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       name: string;
       slug: string;
       variant: string;
-      is_visible: boolean;
+      status: string;
       sort_order: number | null;
     } | null;
 
@@ -108,13 +108,13 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: template.id,
       slot: "hero",
       sort_order: Math.max(0, 1000 - Number(row.priority ?? 1000)),
-      is_visible: normalizeBoolean(row.is_active, true) && normalizeBoolean(template.is_visible, true),
+      is_visible: normalizeBoolean(row.is_active, true) && template.status === "published",
       updated_at: String(row.updated_at),
       module_kind: "hero",
       block_type: null,
       template_name: template.name,
       template_slug: template.slug,
-      template_status: template.is_visible ? "published" : "unpublished",
+      template_status: template.status,
       template_variant: template.variant ?? "internal-page",
       manages_assignment_on_page: true,
       assignment_note: "حذف الربط يزيل الهيرو من هذه الصفحة فقط — الموديول يبقى في Hero Manager.",
@@ -140,7 +140,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       block_type: "content",
       template_name: template?.name ?? "—",
       template_slug: template?.slug ?? "—",
-      template_status: template?.status ?? "draft",
+      template_status: template?.status ?? "unpublished",
       template_variant: template?.variant ?? "default",
       manages_assignment_on_page: true,
       assignment_note: null,
@@ -166,7 +166,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       block_type: "cta",
       template_name: template?.name ?? "—",
       template_slug: template?.slug ?? "—",
-      template_status: template?.status ?? "draft",
+      template_status: template?.status ?? "unpublished",
       template_variant: template?.variant ?? "band",
       manages_assignment_on_page: true,
       assignment_note: null,
@@ -192,7 +192,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       block_type: "cards",
       template_name: template?.name ?? "—",
       template_slug: template?.slug ?? "—",
-      template_status: template?.status ?? "draft",
+      template_status: template?.status ?? "unpublished",
       template_variant: template?.variant ?? "glass",
       manages_assignment_on_page: true,
       assignment_note: null,
@@ -218,7 +218,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       block_type: "breadcrumb",
       template_name: template?.name ?? "—",
       template_slug: template?.slug ?? "—",
-      template_status: template?.status ?? "draft",
+      template_status: template?.status ?? "unpublished",
       template_variant: template?.variant ?? "hero-inline",
       manages_assignment_on_page: true,
       assignment_note: null,
@@ -244,7 +244,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       block_type: "feed",
       template_name: template?.name ?? "—",
       template_slug: template?.slug ?? "—",
-      template_status: template?.status ?? "draft",
+      template_status: template?.status ?? "unpublished",
       template_variant: template?.feed_type ?? "latest",
       manages_assignment_on_page: true,
       assignment_note: null,
@@ -270,7 +270,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       block_type: null,
       template_name: template?.name ?? "—",
       template_slug: template?.slug ?? "—",
-      template_status: template?.status ?? "draft",
+      template_status: template?.status ?? "unpublished",
       template_variant: template?.widget_key ?? "sections",
       manages_assignment_on_page: true,
       assignment_note: "slot: sidebar — يتحكم في ظهور وترتيب لوحة الشريط الجانبي على الموقع.",
@@ -296,7 +296,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       block_type: null,
       template_name: template?.name ?? "—",
       template_slug: template?.slug ?? "—",
-      template_status: template?.status ?? "draft",
+      template_status: template?.status ?? "unpublished",
       template_variant: template?.section_key ?? "featured",
       manages_assignment_on_page: true,
       assignment_note: "slot: main — يتحكم في ظهور وترتيب سكشن Hub على /media-center.",
@@ -319,12 +319,12 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       cards: (cardsTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
       breadcrumb: (breadcrumbTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
       feed: (feedTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
-      hero: ((heroTemplates ?? []) as Array<{ id: number; name: string; slug: string; is_visible: boolean }>).map(
+      hero: ((heroTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>).map(
         (hero) => ({
           id: hero.id,
           name: hero.name,
           slug: hero.slug,
-          status: hero.is_visible ? "published" : "unpublished",
+          status: hero.status,
         }),
       ),
       mediaSidebar: (mediaSidebarTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,

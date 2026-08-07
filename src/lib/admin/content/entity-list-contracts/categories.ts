@@ -15,7 +15,7 @@ export const categorySortFields = [
 ] as const;
 export type CategorySortField = (typeof categorySortFields)[number];
 export type CategoryFilters = {
-  status: "all" | "published" | "hidden";
+  status: "all" | "published" | "unpublished";
 };
 
 export const categoriesQueryContract: AdminEntityListQueryContract<
@@ -24,7 +24,7 @@ export const categoriesQueryContract: AdminEntityListQueryContract<
 > = {
   mode: "server-page",
   filtersSchema: z.strictObject({
-    status: z.enum(["all", "published", "hidden"]),
+    status: z.enum(["all", "published", "unpublished"]),
   }),
   sortFields: categorySortFields,
   defaultSort: { field: "tree", direction: "asc" },
@@ -33,13 +33,13 @@ export const categoriesQueryContract: AdminEntityListQueryContract<
   maxPageSize: 50,
   searchMinLength: 0,
   rawFilterSchemas: {
-    status: z.enum(["all", "published", "hidden"]),
+    status: z.enum(["all", "published", "unpublished"]),
   },
   parseFilters(params) {
     const status = params.get("status");
     return {
       status:
-        status === "published" || status === "hidden" ? status : "all",
+        status === "published" || status === "unpublished" ? status : "all",
     };
   },
   writeFilters(filters, params) {

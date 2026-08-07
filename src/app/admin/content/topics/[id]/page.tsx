@@ -63,7 +63,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       .maybeSingle(),
     supabase
       .from("topic_categories")
-      .select("id,name,slug,parent_id,sort_order,is_active,color_token")
+      .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
     supabase
@@ -80,7 +80,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
   const selectableCategories = categories
     .filter(
       (category) =>
-        category.is_active !== false || category.id === topic.category_id,
+        category.status === "published" || category.id === topic.category_id,
     )
     .map((category) =>
       category.id === topic.category_id

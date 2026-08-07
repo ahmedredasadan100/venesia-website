@@ -27,6 +27,7 @@ export type UnifiedContentFilterState = {
   series: string;
   status: string;
   featured: string;
+  image: string;
 };
 
 const BASE_PATH = "/admin/content/topics";
@@ -60,7 +61,8 @@ export function useUnifiedContentToolbar({
     () =>
       series
         .filter((item) => item.status === "published" && !item.deleted_at)
-        .map((item) => ({ value: String(item.id), label: item.name })),
+        .map((item) => ({ value: String(item.id), label: item.name }))
+        .concat([{ value: "any", label: "مرتبط بأي سلسلة" }]),
     [series],
   );
   const filters = useMemo<AdminEntityFilterDef[]>(
@@ -102,10 +104,16 @@ export function useUnifiedContentToolbar({
         type: "status",
         options: [
           { value: "published", label: "منشور" },
-          { value: "draft", label: "مسودة" },
           { value: "unpublished", label: "غير منشور" },
-          { value: "archived", label: "أرشيف" },
         ],
+      },
+      {
+        id: "image",
+        paramKey: "image",
+        label: "الصورة",
+        placeholder: "الصورة",
+        type: "boolean",
+        options: [{ value: "without", label: "بدون صورة" }],
       },
       {
         id: "featured",
@@ -172,6 +180,7 @@ export function useUnifiedContentToolbar({
       series: values.series,
       status: values.status,
       featured: values.featured,
+      image: values.image,
     },
     clearableFilterKeys: [
       "content_type",
@@ -179,6 +188,7 @@ export function useUnifiedContentToolbar({
       "series",
       "status",
       "featured",
+      "image",
     ],
     onQueryPatch(patch, behavior = "push") {
       onNavigate(
@@ -196,6 +206,7 @@ export function useUnifiedContentToolbar({
             "status" in patch ? (patch.status ?? "all") : values.status,
           featured:
             "featured" in patch ? (patch.featured ?? "all") : values.featured,
+          image: "image" in patch ? (patch.image ?? "all") : values.image,
         },
         behavior,
       );

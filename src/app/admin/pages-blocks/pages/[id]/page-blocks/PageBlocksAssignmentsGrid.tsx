@@ -24,7 +24,6 @@ type SortKey = "module_kind" | "template_name" | "visibility";
 // 150px = secondary module-type column (no dedicated preset).
 type PageBlocksAssignmentsGridProps = {
   rows: PageBlockAssignmentRow[];
-  totalCount: number;
   previewHref: string | null;
   sort: { key: SortKey | null; direction: AdminTableSortDirection };
   onToggleSort: (key: SortKey) => void;
@@ -44,7 +43,6 @@ type PageBlocksAssignmentsGridProps = {
 
 export default function PageBlocksAssignmentsGrid({
   rows,
-  totalCount,
   previewHref,
   sort,
   onToggleSort,
@@ -80,7 +78,7 @@ export default function PageBlocksAssignmentsGrid({
   }
 
   return (
-    <AdminDataGrid className="!rounded-t-none !border-t-0" summary={`${totalCount} موديول`}>
+    <AdminDataGrid className="!rounded-t-none !border-t-0">
       <AdminDataGridHeader columns={gridColumns}>
         <AdminDataGridCheckboxCell>
           <AdminDataGridCheckbox

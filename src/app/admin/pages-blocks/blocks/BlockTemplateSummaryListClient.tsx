@@ -135,7 +135,6 @@ export default function BlockTemplateSummaryListClient({
         eyebrow="Admin Panel"
         title={title}
         description={description}
-        meta={`${rows.length} بلوك`}
       />
 
       <AdminFeedbackRegion
@@ -213,7 +212,7 @@ export default function BlockTemplateSummaryListClient({
         }}
       />
 
-      <AdminDataGrid className="!rounded-t-none !border-t-0" summary={filteredRows.length ? `${filteredRows.length} بلوك` : undefined}>
+      <AdminDataGrid className="!rounded-t-none !border-t-0">
         <AdminDataGridHeader columns={columns}>
           <AdminDataGridPrimaryCell>الاسم</AdminDataGridPrimaryCell>
           {visibleColumnSet.has("slug") ? (

@@ -221,7 +221,7 @@ export async function createCategoryForm(
         slug: parsed.data.slug,
         parent_id: parsed.data.parent_id,
         is_active: parsed.data.is_published,
-        status: parsed.data.is_published ? "published" : "draft",
+        status: parsed.data.is_published ? "published" : "unpublished",
         color_token: colorToken,
         sort_order: 0,
         show_in_menu: true,
@@ -469,11 +469,7 @@ export async function updateSeriesForm(
     if (categoryError) {
       return formFailure(categoryError, { category_id: [categoryError] });
     }
-    const status = parsed.data.is_published
-      ? "published"
-      : current.status === "archived" || current.status === "draft"
-        ? current.status
-        : "unpublished";
+    const status = parsed.data.is_published ? "published" : "unpublished";
     const mutation = await updateTopicSeriesAtomically({
       id,
       name: parsed.data.name,

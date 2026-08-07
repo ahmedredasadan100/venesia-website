@@ -1,5 +1,4 @@
 export const PROJECT_PUBLICATION_STATUSES = [
-  "draft",
   "published",
   "unpublished",
 ] as const;
@@ -7,17 +6,12 @@ export const PROJECT_PUBLICATION_STATUSES = [
 export type ProjectPublicationStatus =
   (typeof PROJECT_PUBLICATION_STATUSES)[number];
 
-export type ProjectPublicationTone = "blue" | "green" | "gold";
+export type ProjectPublicationTone = "green" | "gold";
 
 export const PROJECT_PUBLICATION_METADATA: Record<
   ProjectPublicationStatus,
   { label: string; tone: ProjectPublicationTone; publicLabel: string }
 > = {
-  draft: {
-    label: "مسودة",
-    tone: "blue",
-    publicLabel: "غير ظاهر للعامة",
-  },
   published: {
     label: "منشور",
     tone: "green",
@@ -88,11 +82,10 @@ export function isProjectPubliclyVisible(
 }
 
 export function resolveProjectPublicationStatusForVisibility(
-  currentStatus: ProjectPublicationStatus,
+  _currentStatus: ProjectPublicationStatus,
   visible: boolean,
 ): ProjectPublicationStatus {
-  if (visible) return "published";
-  return currentStatus === "draft" ? "draft" : "unpublished";
+  return visible ? "published" : "unpublished";
 }
 
 export function resolveProjectPublicationAuditOperation(input: {

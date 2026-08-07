@@ -104,6 +104,7 @@ function toFilters(state: {
   series: string;
   status: string;
   featured: string;
+  image: string;
 }): TopicFilters {
   return {
     contentType:
@@ -116,18 +117,17 @@ function toFilters(state: {
         ? state.contentType
         : "all",
     categoryId: positiveId(state.category),
-    seriesId: positiveId(state.series),
+    seriesId: state.series === "any" ? "any" : positiveId(state.series),
     status:
       state.status === "published" ||
-      state.status === "draft" ||
-      state.status === "unpublished" ||
-      state.status === "archived"
+      state.status === "unpublished"
         ? state.status
         : "all",
     featured:
       state.featured === "yes" || state.featured === "no"
         ? state.featured
         : "all",
+    image: state.image === "without" ? "without" : "all",
   };
 }
 
@@ -405,6 +405,9 @@ export default function TopicsListClient({
     if (controller.query.filters.featured !== "all") {
       params.set("featured", controller.query.filters.featured);
     }
+    if (controller.query.filters.image !== "all") {
+      params.set("image", controller.query.filters.image);
+    }
     if (sort !== "title_asc") params.set("sort", sort);
     if (controller.query.page > 1) {
       params.set("page", String(controller.query.page));
@@ -429,6 +432,7 @@ export default function TopicsListClient({
         : "all",
       status: controller.query.filters.status,
       featured: controller.query.filters.featured,
+      image: controller.query.filters.image,
     },
     categories,
     series,
@@ -448,11 +452,12 @@ export default function TopicsListClient({
       <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid
           items={[
-            { label: "إجمالي الموضوعات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", compact: true },
-            { label: "منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", compact: true },
-            { label: "مسودات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.draft ?? 0), tone: "amber", compact: true },
-            { label: "غير منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", compact: true },
-            { label: "أرشيف", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.archived ?? 0), tone: "cyan", compact: true },
+            { label: "إجمالي الموضوعات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", compact: true, onClick: controller.resetFilters, active: !controller.query.search && controller.query.filters.contentType === "all" && !controller.query.filters.categoryId && !controller.query.filters.seriesId && controller.query.filters.status === "all" && controller.query.filters.featured === "all" && controller.query.filters.image === "all" },
+            { label: "منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: controller.query.filters.status === "published" },
+            { label: "غير منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: controller.query.filters.status === "unpublished" },
+            { label: "بدون صورة", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.withoutImage ?? 0), tone: "amber", compact: true, onClick: () => controller.setFilter("image", "without"), active: controller.query.filters.image === "without" },
+            { label: "مرتبطة بسلسلة", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.withSeries ?? 0), tone: "cyan", compact: true, onClick: () => controller.setFilter("seriesId", "any"), active: controller.query.filters.seriesId === "any" },
+            { label: "مميزة", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.featured ?? 0), tone: "gold", compact: true, onClick: () => controller.setFilter("featured", "yes"), active: controller.query.filters.featured === "yes" },
             { label: "متوسط SEO", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.seoAverage ?? 0), suffix: controller.result.metrics?.error ? undefined : "/100", tone: "blue", compact: true },
           ]}
         />

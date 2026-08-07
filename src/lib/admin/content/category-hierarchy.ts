@@ -7,6 +7,7 @@ export type AdminContentCategory = {
   parent_id: number | null;
   sort_order: number | null;
   is_active: boolean | null;
+  status?: string | null;
   color_token?: string | null;
 };
 
@@ -90,7 +91,7 @@ export function getCategoryAndDescendantIds(
 
 export function getSelectableAdminCategories(categories: AdminContentCategory[]) {
   return flattenAdminCategoryTree(buildAdminCategoryTree(categories)).filter(
-    (category) => category.is_active !== false,
+    (category) => category.status === "published",
   );
 }
 

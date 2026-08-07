@@ -105,7 +105,7 @@ export async function duplicateProjectAjax(id: number) {
     .select("publication_status,published_at,published_by,featured")
     .eq("id", duplicated.project_id)
     .maybeSingle<{
-      publication_status: "draft" | "published" | "unpublished";
+      publication_status: "published" | "unpublished";
       published_at: string | null;
       published_by: number | null;
       featured: boolean;
@@ -113,7 +113,7 @@ export async function duplicateProjectAjax(id: number) {
   if (
     publicationError ||
     !publication ||
-    publication.publication_status !== "draft" ||
+    publication.publication_status !== "unpublished" ||
     publication.published_at !== null ||
     publication.published_by !== null ||
     publication.featured !== false
@@ -122,7 +122,7 @@ export async function duplicateProjectAjax(id: number) {
       ok: false as const,
       code: "project_duplicate_publication_result_invalid",
       message:
-        "أُنشئت النسخة دون إثبات عقد المسودة النهائي. حدّث القائمة قبل أي إجراء آخر.",
+        "أُنشئت النسخة دون إثبات عقد غير المنشور النهائي. حدّث القائمة قبل أي إجراء آخر.",
     };
   }
   const mediaSynchronization = await synchronizeDuplicatedProjectMedia(

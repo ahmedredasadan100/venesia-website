@@ -16,7 +16,7 @@ export async function togglePageStatus(pageId: number): Promise<PageMutationResu
     .from("pages").select("status").eq("id", pageId).maybeSingle<{ status: string }>();
   if (loadError || !page) return { ok: false, code: "page_not_found", message: loadError?.message ?? "الصفحة غير موجودة." };
 
-  const nextStatus = page.status === "published" ? "hidden" : "published";
+  const nextStatus = page.status === "published" ? "unpublished" : "published";
   const { error } = await getSupabaseAdmin().from("pages")
     .update({ status: nextStatus, updated_at: new Date().toISOString() }).eq("id", pageId);
   if (error) return { ok: false, code: "status_update_failed", message: error.message };
@@ -26,5 +26,5 @@ export async function togglePageStatus(pageId: number): Promise<PageMutationResu
     entityType: "page", entityId: pageId, metadata: { status: nextStatus },
   });
   await revalidatePageBlocksPath(pageId);
-  return { ok: true, status: nextStatus, message: nextStatus === "published" ? "تم نشر الصفحة." : "تم إخفاء الصفحة." };
+  return { ok: true, status: nextStatus, message: nextStatus === "published" ? "تم نشر الصفحة." : "أصبحت الصفحة غير منشورة." };
 }

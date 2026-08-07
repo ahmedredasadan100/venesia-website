@@ -110,7 +110,7 @@ export default function CategoryForm({
               <AdminFormSwitch
                 name="is_published"
                 label="منشور"
-                defaultChecked={category?.is_active ?? true}
+                defaultChecked={category?.status === "published"}
                 disabled={pending}
                 surface
               />

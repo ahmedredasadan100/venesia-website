@@ -75,7 +75,6 @@ const PROJECT_FILTERS: readonly AdminEntityFilterDef[] = [
     placeholder: "حالة النشر",
     type: "status",
     options: [
-      { value: "draft", label: "مسودة" },
       { value: "published", label: "منشور" },
       { value: "unpublished", label: "غير منشور" },
     ],
@@ -267,11 +266,7 @@ export default function ProjectsTableClient({
       item: ProjectGridRow,
       visible: boolean,
     ): Promise<AdminActionResult> => {
-      const nextStatus = visible
-        ? "published"
-        : item.publication_status === "draft"
-          ? "draft"
-          : "unpublished";
+      const nextStatus = visible ? "published" : "unpublished";
       try {
         const result = await instant.mutateAsync({
           rowId: item.id,
@@ -286,7 +281,6 @@ export default function ProjectsTableClient({
           reconcileSuccess: (confirmed, tools) => {
             const authoritativeStatus = confirmed.publication_status;
             if (
-              authoritativeStatus !== "draft" &&
               authoritativeStatus !== "published" &&
               authoritativeStatus !== "unpublished"
             ) return;
@@ -313,7 +307,6 @@ export default function ProjectsTableClient({
           },
         });
         const authoritativeStatus =
-          result.publication_status === "draft" ||
           result.publication_status === "published" ||
           result.publication_status === "unpublished"
             ? result.publication_status
@@ -454,8 +447,7 @@ export default function ProjectsTableClient({
                   : controller.query.filters.featured;
               const publicationStatus =
                 "publication_status" in patch
-                  ? patch.publication_status === "draft" ||
-                    patch.publication_status === "published" ||
+                  ? patch.publication_status === "published" ||
                     patch.publication_status === "unpublished"
                     ? patch.publication_status
                     : "all"

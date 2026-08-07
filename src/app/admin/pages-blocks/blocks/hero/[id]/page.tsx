@@ -72,7 +72,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
         source_type: hero.source_type,
         source_slug: hero.source_slug,
         limit_count: hero.limit_count,
-        is_visible: hero.is_visible,
+        status: hero.status,
       }}
       config={config}
       imagesText={imagesToTextarea(config)}

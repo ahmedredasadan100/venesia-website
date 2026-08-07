@@ -8,6 +8,9 @@ export type AdminMetricCardProps = {
   align?: "center" | "start";
   compact?: boolean;
   className?: string;
+  onClick?: () => void;
+  active?: boolean;
+  ariaLabel?: string;
 };
 
 const TONE_STYLES: Record<
@@ -65,16 +68,31 @@ export default function AdminMetricCard({
   align = "center",
   compact = false,
   className = "",
+  onClick,
+  active = false,
+  ariaLabel,
 }: AdminMetricCardProps) {
   const styles = TONE_STYLES[tone];
   const alignClasses = align === "center" ? "items-center text-center" : "items-start text-right";
   const sizeClasses = compact ? "min-h-[84px] gap-1.5 px-4 py-3" : "min-h-[96px] gap-2 p-4";
   const valueSizeClass = compact ? "text-2xl" : "text-3xl";
 
+  const Component = onClick ? "button" : "div";
+
   return (
-    <div
+    <Component
+      {...(onClick
+        ? {
+            type: "button" as const,
+            onClick,
+            "aria-pressed": active,
+            "aria-label": ariaLabel ?? label,
+          }
+        : {})}
       className={[
         "group relative isolate flex flex-col justify-center overflow-hidden rounded-[26px] border border-white/10 bg-[#080B10]/70 shadow-[0_20px_70px_rgba(0,0,0,0.20),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl transition-all duration-300 ease-out hover:-translate-y-1",
+        onClick ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]" : "",
+        active ? "border-[#D8B87A]/45 ring-1 ring-[#D8B87A]/20" : "",
         sizeClasses,
         alignClasses,
         styles.hoverBorder,
@@ -89,11 +107,11 @@ export default function AdminMetricCard({
         style={{ background: `radial-gradient(circle at 85% 12%, ${styles.accent}, transparent 42%)` }}
         aria-hidden="true"
       />
-      <p className={`font-en ${valueSizeClass} font-semibold leading-none ${styles.valueClass}`}>
+      <p className={`font-en ${valueSizeClass} font-bold leading-none ${styles.valueClass}`}>
         {value}
         {suffix}
       </p>
-      <p className="text-sm font-semibold leading-snug text-white/62">{label}</p>
-    </div>
+      <p className="text-sm font-bold leading-snug text-white/62">{label}</p>
+    </Component>
   );
 }

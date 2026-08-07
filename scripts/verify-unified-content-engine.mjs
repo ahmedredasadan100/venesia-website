@@ -135,8 +135,6 @@ const contentStatuses = loadPureTypeScriptModule(
 const expectedStatusMetadata = {
   published: { label: "منشور", tone: "green" },
   unpublished: { label: "غير منشور", tone: "gold" },
-  draft: { label: "مسودة", tone: "blue" },
-  archived: { label: "مؤرشف", tone: "muted" },
 };
 for (const [status, expected] of Object.entries(expectedStatusMetadata)) {
   check(
@@ -146,9 +144,9 @@ for (const [status, expected] of Object.entries(expectedStatusMetadata)) {
   );
 }
 check(
-  "Unknown content statuses must fail safely to draft metadata",
+  "Unknown content statuses must fail safely to unpublished metadata",
   JSON.stringify(contentStatuses.getContentStatusMetadata("unknown")) ===
-    JSON.stringify(expectedStatusMetadata.draft),
+    JSON.stringify(expectedStatusMetadata.unpublished),
 );
 
 const actionFeedback = loadPureTypeScriptModule(
@@ -561,12 +559,11 @@ check(
   containsAll(actions, [
     'action === "publish"',
     'action === "unpublish"',
-    'action === "archive"',
     'action === "delete"',
     'action === "move_category"',
     'action === "feature"',
     'action === "unfeature"',
-  ]),
+  ]) && !actions.includes('action === "archive"'),
 );
 
 const oldAdminRoutePattern = /\/admin\/(?:topics|content\/articles|content\/media|media-center)(?:[/?#"'`]|\b)/;

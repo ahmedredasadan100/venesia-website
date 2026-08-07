@@ -185,7 +185,7 @@ try {
       resolveTopicPublishedAt({
         formPublishedDate: submittedPublicationDate,
         currentPublishedAt: null,
-        status: "draft",
+        status: "unpublished",
         nowIso: "2026-08-15T08:00:00.000Z",
       }) === null,
   );
