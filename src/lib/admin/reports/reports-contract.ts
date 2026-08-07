@@ -9,7 +9,7 @@ import type {
 import type { AnalyticsSnapshot } from "./analytics-contract";
 
 export const REPORTS_CONTRACT_VERSION = "admin-reports-truth-v1" as const;
-export const REPORTS_MIGRATION_VERSION = "20260805230000" as const;
+export const REPORTS_MIGRATION_VERSION = "20260807120000" as const;
 
 export type ReportsState = "ready" | "partial" | "unavailable";
 export type ReportsSourceStatus = "ready" | "warning" | "unavailable";
@@ -44,7 +44,6 @@ export type ReportsReadModel = {
       source: "topics.content_type=site_update";
       total: number;
       published: number;
-      draft: number;
       unpublished: number;
     };
   };
@@ -62,8 +61,7 @@ export type ReportsReadModel = {
   };
   publishing: {
     recentPublishing: { windowDays: 30; topics: number; projects: number };
-    pendingPublishing: { topics: number; projects: number };
-    drafts: { topics: number; projects: number; pages: number };
+    unpublished: { topics: number; projects: number; pages: number };
   };
   sourcesOfTruth: string[];
   databaseDiagnostics: {
@@ -149,8 +147,7 @@ export function parseReportsReadModel(value: unknown): ReportsReadModel {
   const storage = record(media.storage, "media.storage");
   const publishing = record(root.publishing, "publishing");
   const recentPublishing = record(publishing.recentPublishing, "publishing.recentPublishing");
-  const pendingPublishing = countGroup(publishing.pendingPublishing, "publishing.pendingPublishing", ["topics", "projects"]);
-  const drafts = countGroup(publishing.drafts, "publishing.drafts", ["topics", "projects", "pages"]);
+  const unpublished = countGroup(publishing.unpublished, "publishing.unpublished", ["topics", "projects", "pages"]);
   const diagnostics = record(root.databaseDiagnostics, "databaseDiagnostics");
   if (diagnostics.migrationVersion !== REPORTS_MIGRATION_VERSION) {
     throw new Error("Reports migration provenance does not match the contract");
@@ -186,7 +183,6 @@ export function parseReportsReadModel(value: unknown): ReportsReadModel {
         source: "topics.content_type=site_update",
         total: count(construction.total, "projects.constructionUpdates.total"),
         published: count(construction.published, "projects.constructionUpdates.published"),
-        draft: count(construction.draft, "projects.constructionUpdates.draft"),
         unpublished: count(construction.unpublished, "projects.constructionUpdates.unpublished"),
       },
     },
@@ -211,8 +207,7 @@ export function parseReportsReadModel(value: unknown): ReportsReadModel {
         topics: count(recentPublishing.topics, "publishing.recentPublishing.topics"),
         projects: count(recentPublishing.projects, "publishing.recentPublishing.projects"),
       },
-      pendingPublishing: pendingPublishing as ReportsReadModel["publishing"]["pendingPublishing"],
-      drafts: drafts as ReportsReadModel["publishing"]["drafts"],
+      unpublished: unpublished as ReportsReadModel["publishing"]["unpublished"],
     },
     sourcesOfTruth: rows(root.sourcesOfTruth, "sourcesOfTruth")
       .map((item, index) => text(item, `sourcesOfTruth.${index}`)),

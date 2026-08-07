@@ -8,6 +8,9 @@ export type AdminMetricCardsGridItem = {
   align?: "center" | "start";
   compact?: boolean;
   className?: string;
+  onClick?: () => void;
+  active?: boolean;
+  ariaLabel?: string;
 };
 
 export type AdminMetricCardsGridProps = {
@@ -15,7 +18,7 @@ export type AdminMetricCardsGridProps = {
   className?: string;
 };
 
-const GRID_CLASSES = "grid gap-4 md:grid-cols-6";
+const GRID_CLASSES = "grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]";
 
 export default function AdminMetricCardsGrid({ items, className = "" }: AdminMetricCardsGridProps) {
   return (

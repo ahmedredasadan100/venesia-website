@@ -12,12 +12,11 @@ const statusMap: Record<
   }
 > = {
   published: { label: "منشور", tone: "green" },
+  unpublished: { label: "غير منشور", tone: "muted" },
   active: { label: "ظاهر", tone: "green" },
   visible: { label: "ظاهر", tone: "green" },
-  draft: { label: "مسودة", tone: "gold" },
   hidden: { label: "مخفي", tone: "muted" },
   inactive: { label: "مخفي", tone: "muted" },
-  archived: { label: "مؤرشف", tone: "red" },
 };
 
 /**
@@ -27,7 +26,7 @@ const statusMap: Record<
  * pages working while forcing the same pill sizing, radius and tones.
  */
 export default function AdminStatusBadge({ status }: AdminStatusBadgeProps) {
-  const normalizedStatus = status || "draft";
+  const normalizedStatus = status || "unpublished";
   const config = statusMap[normalizedStatus] ?? {
     label: normalizedStatus,
     tone: "muted" as const,

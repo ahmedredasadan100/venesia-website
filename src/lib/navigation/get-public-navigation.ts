@@ -61,9 +61,9 @@ export const getPublicNavigationItemsByMenuId = cache(async function getPublicNa
     async () => {
       const { data: menu, error: menuError } = await getSupabaseAdmin()
         .from("menus")
-        .select("id, is_active")
+        .select("id, status")
         .eq("id", menuId)
-        .eq("is_active", true)
+        .eq("status", "published")
         .maybeSingle();
 
       if (menuError) {

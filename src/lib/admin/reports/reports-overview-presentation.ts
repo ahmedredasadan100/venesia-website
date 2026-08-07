@@ -76,7 +76,7 @@ export function buildAdminReportsOverview(
   const kpis: ReportsOverviewCard[] = dashboard
     ? [
         { id: "overview-content", label: "إجمالي المحتوى", value: dashboard.kpis.topics.total, description: `${dashboard.kpis.topics.published} منشور`, href: buildAdminReportHref("content"), tone: "gold" },
-        { id: "overview-published", label: "المحتوى المنشور", value: dashboard.kpis.topics.published, description: `${dashboard.kpis.topics.nonPublished} غير منشور`, href: buildAdminReportHref("publishing", { filter: "recent" }), tone: "green" },
+        { id: "overview-published", label: "المحتوى المنشور", value: dashboard.kpis.topics.published, description: `${dashboard.kpis.topics.unpublished} غير منشور`, href: buildAdminReportHref("publishing", { filter: "recent" }), tone: "green" },
         { id: "overview-projects", label: "المشاريع", value: dashboard.kpis.projects.total, description: `${dashboard.kpis.projects.published} منشور`, href: buildAdminReportHref("projects", { filter: "health" }), tone: "blue" },
         { id: "overview-media", label: "الميديا المُدارة", value: dashboard.kpis.media.total, description: `${dashboard.kpis.media.issues} مشكلة`, href: buildAdminReportHref("media"), tone: "cyan" },
       ]
@@ -165,7 +165,7 @@ export function buildAdminReportsOverview(
   const content = (dashboard?.recentTopics ?? []).slice(0, 5).map((topic) => ({
     id: `overview-topic-${topic.id}`,
     title: topic.title,
-    meta: `${topic.category} · ${topic.status ?? "draft"}`,
+    meta: `${topic.category} · ${topic.status ?? "unpublished"}`,
     href: `${buildAdminReportHref("content")}#recent-content`,
   }));
   const activity = (audit?.recentActivity ?? []).slice(0, 5).map((event) => ({

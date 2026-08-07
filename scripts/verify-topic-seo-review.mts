@@ -162,7 +162,7 @@ const overrideWrite = buildTopicWritePayload(
   overridePayload,
   { id: 1, name: "QA category", slug: "qa-category" },
   null,
-  "draft",
+  "unpublished",
   "2026-07-22T12:00:00.000Z",
   null,
 );
@@ -182,7 +182,7 @@ const rawSeoWrite = buildTopicWritePayload(
   rawSeoPayload,
   { id: 1, name: "QA category", slug: "qa-category" },
   null,
-  "draft",
+  "unpublished",
   "2026-07-24T12:00:00.000Z",
   null,
 );

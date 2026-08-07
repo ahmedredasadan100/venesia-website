@@ -22,7 +22,9 @@ import { getSupabaseAdmin } from "../../../supabase-admin";
 const seriesMetricsSchema = z.strictObject({
   total: z.coerce.number().int().nonnegative().finite(),
   published: z.coerce.number().int().nonnegative().finite(),
+  unpublished: z.coerce.number().int().nonnegative().finite(),
   topics: z.coerce.number().int().nonnegative().finite(),
+  averageTopics: z.coerce.number().nonnegative().finite(),
   categoryOptions: z.array(
     z.strictObject({
       value: z.string(),

@@ -21,7 +21,7 @@ function formatPublishTime(value?: string | null) {
 }
 
 export default function ContentPublishingOptions({
-  status = "draft",
+  status = "unpublished",
   featured = false,
   popular = false,
   publishedAt,
@@ -34,11 +34,6 @@ export default function ContentPublishingOptions({
   dateLabel?: string | null;
 }) {
   const [published, setPublished] = useState(status === "published");
-  const unpublishedStatus = status === "archived"
-    ? "archived"
-    : status === "draft"
-      ? "draft"
-      : "unpublished";
   const lastPublishTime = formatPublishTime(publishedAt);
 
   return (
@@ -51,7 +46,7 @@ export default function ContentPublishingOptions({
         <input
           type="hidden"
           name="status"
-          value={published ? "published" : unpublishedStatus}
+          value={published ? "published" : "unpublished"}
           data-content-publishing-options
         />
         <AdminFormSwitch
@@ -76,7 +71,7 @@ export default function ContentPublishingOptions({
           {lastPublishTime ? `آخر نشر · ${lastPublishTime}` : "لم يُنشر بعد"}
         </p>
         <p id="content-publication-hint" className="mt-1 text-[10px] leading-5 text-white/32">
-          الأرشفة عملية مستقلة من إجراءات قائمة المحتوى.
+          غير المنشور لا يظهر للعامة ويمكن تحريره في أي وقت.
         </p>
         <AdminFormError name="status" />
       </AdminEntityReviewDecisionCard>

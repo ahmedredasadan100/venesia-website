@@ -26,7 +26,7 @@ type HeroTemplateRecord = {
   source_id: number | null;
   source_slug: string | null;
   limit_count: number;
-  is_visible: boolean;
+  status: "published" | "unpublished";
   sort_order: number;
   config: Record<string, unknown> | null;
 };
@@ -49,7 +49,7 @@ function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): 
     source_id: template.source_id,
     source_slug: template.source_slug,
     limit_count: template.limit_count,
-    is_visible: template.is_visible,
+    is_visible: template.status === "published",
     sort_order: template.sort_order,
     config: template.config,
     page,
@@ -70,7 +70,7 @@ async function templateToHeroSectionResolved(template: HeroTemplateRecord, page:
 async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRecord | null> {
   const supabaseAdmin = getSupabaseAdmin();
   const baseSelect =
-    "hero_templates(id,name,slug,variant,style_preset,source_type,source_id,source_slug,limit_count,is_visible,sort_order,config)";
+    "hero_templates(id,name,slug,variant,style_preset,source_type,source_id,source_slug,limit_count,status,sort_order,config)";
 
   const byId = await supabaseAdmin
     .from("hero_assignments")
@@ -86,7 +86,7 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
     logError("getAssignedHeroTemplate by id failed", byId.error, { pageId: page.id });
   } else if (byId.data?.hero_templates) {
     const template = byId.data.hero_templates as unknown as HeroTemplateRecord;
-    return template.is_visible ? template : null;
+    return template.status === "published" ? template : null;
   }
 
   const byPath = await supabaseAdmin
@@ -103,7 +103,7 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
     logError("getAssignedHeroTemplate by path failed", byPath.error, { path: page.path });
   } else if (byPath.data?.hero_templates) {
     const template = byPath.data.hero_templates as unknown as HeroTemplateRecord;
-    return template.is_visible ? template : null;
+    return template.status === "published" ? template : null;
   }
 
   return null;

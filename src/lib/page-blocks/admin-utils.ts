@@ -1,7 +1,7 @@
 import type { PageBlockStatus, PageBlockType } from "./types";
 import { getContentStatusMetadata } from "../admin/content/content-status-metadata";
 
-export const BLOCK_STATUSES: PageBlockStatus[] = ["draft", "published", "unpublished"];
+export const BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"];
 
 export function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -48,7 +48,7 @@ export function normalizeBoolean(value: unknown, fallback = false) {
 }
 
 export function getStatus(value: string): PageBlockStatus {
-  return BLOCK_STATUSES.includes(value as PageBlockStatus) ? (value as PageBlockStatus) : "draft";
+  return BLOCK_STATUSES.includes(value as PageBlockStatus) ? (value as PageBlockStatus) : "unpublished";
 }
 
 export function statusMeta(status?: string | null) {

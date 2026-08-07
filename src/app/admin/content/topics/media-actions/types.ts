@@ -1,6 +1,6 @@
 import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 
-export const VALID_STATUSES = ["draft", "published", "unpublished", "archived"] as const;
+export const VALID_STATUSES = ["published", "unpublished"] as const;
 
 export type MediaStatus = (typeof VALID_STATUSES)[number];
 

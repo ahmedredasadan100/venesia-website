@@ -195,10 +195,7 @@ export async function saveProjectEntry(
       previousSlug = current.slug;
     }
 
-    const requestedPublicationStatus =
-      mode === "create" && payload.project.publication_status === "unpublished"
-        ? "draft"
-        : payload.project.publication_status;
+    const requestedPublicationStatus = payload.project.publication_status;
     const trustedPayload = {
       ...payload,
       project: {
@@ -308,7 +305,7 @@ export async function saveProjectEntry(
             : nextPublicationStatus === "unpublished"
               ? "تم حفظ المشروع وإخفاؤه"
               : mode === "create"
-                ? "تم إنشاء المشروع كمسودة"
+                ? "تم إنشاء المشروع كغير منشور"
                 : "تم حفظ المشروع",
       message: reconciliationWarning
         ? "حُفظ المشروع وكل عناصره، لكن تعذرت إعادة قراءة عقد التعديل بأمان. سيُعاد تحميل المحرر قبل السماح بحفظ آخر."
@@ -318,7 +315,7 @@ export async function saveProjectEntry(
             ? "حُفظ Project Aggregate وأصبح المشروع ظاهرًا للعامة."
             : nextPublicationStatus === "unpublished"
               ? "حُفظ المشروع وأُخفي عن العرض العام مع الاحتفاظ بتاريخ أول نشر."
-              : "حُفظ أصل المشروع وكل العناصر التابعة كمسودة ضمن عملية ذرية واحدة.",
+              : "حُفظ أصل المشروع وكل العناصر التابعة كغير منشورة ضمن عملية ذرية واحدة.",
       code: reconciliationWarning
         ? "saved_requires_reconciliation_reload"
         : mediaWarning

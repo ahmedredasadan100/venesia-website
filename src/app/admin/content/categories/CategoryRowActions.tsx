@@ -49,7 +49,7 @@ export default function CategoryRowActions({
 }: CategoryRowActionsProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement | null>(null);
-  const isActive = Boolean(category.is_active);
+  const isActive = category.status === "published";
   const previewCapability = buildAdminCategoryCollectionPreviewCapability({
     id: category.id,
     slug: category.slug,

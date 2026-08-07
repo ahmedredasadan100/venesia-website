@@ -1,8 +1,4 @@
-export type ContentPublicationStatus =
-  | "archived"
-  | "draft"
-  | "published"
-  | "unpublished";
+export type ContentPublicationStatus = "published" | "unpublished";
 
 export type ContentVisibilityActionIntent =
   | "hide"
@@ -21,17 +17,13 @@ export function getContentPublicVisibilityState(input: {
   status?: string | null;
   deletedAt?: string | null;
 }): ContentPublicVisibilityState {
-  if (input.deletedAt || input.status === "archived") {
+  if (input.deletedAt) {
     return {
       isPubliclyVisible: false,
       actionIntent: "restore_required",
       nextStatus: null,
-      tooltip: input.deletedAt
-        ? "المحتوى محذوف حذفًا آمنًا — يجب استعادته قبل النشر"
-        : "المحتوى مؤرشف — يجب استعادته قبل النشر",
-      ariaLabel: input.deletedAt
-        ? "المحتوى غير ظاهر للعامة لأنه محذوف حذفًا آمنًا"
-        : "المحتوى غير ظاهر للعامة لأنه مؤرشف",
+      tooltip: "المحتوى محذوف حذفًا آمنًا — يجب استعادته قبل النشر",
+      ariaLabel: "المحتوى غير ظاهر للعامة لأنه محذوف حذفًا آمنًا",
     };
   }
 
@@ -49,14 +41,8 @@ export function getContentPublicVisibilityState(input: {
     isPubliclyVisible: false,
     actionIntent: "publish",
     nextStatus: "published",
-    tooltip:
-      input.status === "draft"
-        ? "المحتوى مسودة — اضغط لمحاولة النشر"
-        : "المحتوى غير ظاهر للعامة — اضغط لإعادة النشر",
-    ariaLabel:
-      input.status === "draft"
-        ? "المحتوى غير ظاهر للعامة لأنه مسودة. محاولة النشر"
-        : "المحتوى غير ظاهر للعامة. إعادة نشر المحتوى",
+    tooltip: "المحتوى غير منشور — اضغط للنشر",
+    ariaLabel: "المحتوى غير منشور. نشر المحتوى",
   };
 }
 

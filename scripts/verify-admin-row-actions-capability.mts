@@ -1199,8 +1199,8 @@ check(
     ?.queryMode === "bounded-client" &&
     pageAssignmentsSource.includes("useAdminBoundedClientPagination") &&
     pageAssignmentsSource.includes("pagination.resetPage()") &&
-    pageAssignmentsGridSource.includes("summary={`${totalCount}") &&
-    pageAssignmentsSource.includes("totalCount={pagination.totalCount}") &&
+    !pageAssignmentsGridSource.includes("summary={`${totalCount}") &&
+    pageAssignmentsSource.includes("totalCount={filteredRows.length}") &&
     !pageAssignmentsSource.includes("const [currentPage") &&
     !pageAssignmentsSource.includes("Math.ceil(table.rows.length") &&
     !pageAssignmentsSource.includes("table.rows.slice(") &&

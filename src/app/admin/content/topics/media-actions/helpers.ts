@@ -103,7 +103,7 @@ export function validateSlug(slug: string) {
   return validateSlugFormat(slug);
 }
 
-export function getNormalizedStatus(value: string, fallback: MediaStatus = "draft"): MediaStatus {
+export function getNormalizedStatus(value: string, fallback: MediaStatus = "unpublished"): MediaStatus {
   return VALID_STATUSES.includes(value as MediaStatus) ? (value as MediaStatus) : fallback;
 }
 
@@ -139,7 +139,7 @@ export function getPayload(formData: FormData) {
     categoryId: getString(formData, "category_id"),
     contentType: getString(formData, "content_type"),
     seriesId: getString(formData, "series_id"),
-    status: getNormalizedStatus(getString(formData, "status"), "draft"),
+    status: getNormalizedStatus(getString(formData, "status"), "unpublished"),
     isFeatured: getBoolean(formData, "is_featured"),
     isPopular: getBoolean(formData, "is_popular"),
     publishedAt: parseFormPublishedDate(formData),

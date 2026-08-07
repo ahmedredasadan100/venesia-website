@@ -8,11 +8,11 @@ const { Client } = pg;
 const connectionString = process.env.SUPABASE_DB_URL;
 if (!connectionString) throw new Error("SUPABASE_DB_URL is required.");
 
-const migrationVersion = "20260805210000";
+const migrationVersion = "20260807120000";
 const canonicalizeMigrationSql = (source: string) =>
   source.replace(/^\uFEFF/u, "").replace(/\r\n?/g, "\n");
 const migrationSource = canonicalizeMigrationSql(readFileSync(
-  "sql/migrations/20260805210000_dashboard_truth_closure.sql",
+  "sql/migrations/20260807120000_system_publication_summary_cards_closure.sql",
   "utf8",
 ));
 const migrationHash = createHash("sha256").update(migrationSource).digest("hex");
@@ -32,7 +32,7 @@ try {
     [migrationVersion],
   )).rows;
   assert.equal(registry.length, 1, "Dashboard migration must be registered exactly once");
-  assert.equal(registry[0]?.name, "dashboard_truth_closure");
+  assert.equal(registry[0]?.name, "system_publication_summary_cards_closure");
   assert.equal(Number(registry[0]?.statement_count), 1);
   assert.equal(
     createHash("sha256")
@@ -72,7 +72,7 @@ try {
       (select count(*)::integer from public.projects) as projects_total,
       (select count(*)::integer from public.projects where publication_status='published') as projects_published,
       (select count(*)::integer from public.pages) as pages_total,
-      (select count(*)::integer from public.topic_categories where is_active is distinct from false) as categories_active,
+      (select count(*)::integer from public.topic_categories where status='published') as categories_published,
       (select count(*)::integer from public.media_assets where status <> 'deleted') as media_total
   `)).rows[0];
   assert.equal(model.kpis.topics.total, independent.topics_total);
@@ -80,7 +80,7 @@ try {
   assert.equal(model.kpis.projects.total, independent.projects_total);
   assert.equal(model.kpis.projects.published, independent.projects_published);
   assert.equal(model.kpis.pages.total, independent.pages_total);
-  assert.equal(model.kpis.categories.active, independent.categories_active);
+  assert.equal(model.kpis.categories.published, independent.categories_published);
   assert.equal(model.kpis.media.total, independent.media_total);
 
   const requiredIndexes = [

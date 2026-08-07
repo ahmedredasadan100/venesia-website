@@ -384,7 +384,7 @@ export function createEmptyProjectEntry(
       robots_follow: null,
       og_image: "",
       og_image_alt: "",
-      publication_status: "draft",
+      publication_status: "unpublished",
       published_at: null,
       published_by: null,
       featured: false,
@@ -580,7 +580,7 @@ export function projectEntryPayloadFromFormData(
   const publicationStatus = (readLastString(
     formData,
     "publication_status",
-  ) || "draft") as ProjectPublicationStatus;
+  ) || "unpublished") as ProjectPublicationStatus;
   const seo = readEntitySeoFormData(formData);
 
   return {

@@ -22,6 +22,7 @@ export type CategoryFormRecord = {
   slug: string;
   parent_id: number | null;
   is_active: boolean | null;
+  status: string | null;
   color_token: string | null;
 };
 
@@ -36,7 +37,7 @@ export type SeriesFormRecord = {
 async function loadCategoryRows() {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
-    .select("id, name, slug, parent_id, sort_order, is_active, color_token")
+    .select("id, name, slug, parent_id, sort_order, is_active, status, color_token")
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 
@@ -65,7 +66,7 @@ export async function loadSeriesCategoryFormOptions(currentCategoryId?: number |
   const rows = await loadCategoryRows();
   return toOptions(
     rows.filter(
-      (row) => row.is_active !== false || row.id === currentCategoryId,
+      (row) => row.status === "published" || row.id === currentCategoryId,
     ),
   );
 }
@@ -73,7 +74,7 @@ export async function loadSeriesCategoryFormOptions(currentCategoryId?: number |
 export async function loadCategoryFormRecord(id: number) {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
-    .select("id, name, slug, parent_id, is_active, color_token")
+    .select("id, name, slug, parent_id, is_active, status, color_token")
     .eq("id", id)
     .maybeSingle<CategoryFormRecord>();
 

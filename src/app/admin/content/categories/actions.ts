@@ -127,9 +127,9 @@ export async function toggleCategoryStatusAjax(
   const supabase = getSupabaseAdmin();
   const { data: current, error: readError } = await supabase
     .from("topic_categories")
-    .select("id, is_active")
+    .select("id, status")
     .eq("id", id)
-    .maybeSingle<{ id: number; is_active: boolean | null }>();
+    .maybeSingle<{ id: number; status: string | null }>();
   if (readError || !current) {
     return adminActionFailure(
       "تعذر تنفيذ العملية",
@@ -138,8 +138,8 @@ export async function toggleCategoryStatusAjax(
     );
   }
 
-  const isActive = !Boolean(current.is_active);
-  const status = isActive ? "published" : "draft";
+  const isActive = current.status !== "published";
+  const status = isActive ? "published" : "unpublished";
   const updatedAt = new Date().toISOString();
   const { data: updated, error: updateError } = await supabase
     .from("topic_categories")
@@ -236,7 +236,7 @@ export async function duplicateCategoryAjax(
       is_active: false,
       parent_id: current.parent_id,
       color_token: current.color_token || getDeterministicAdminTone(nextSlug),
-      status: "draft",
+      status: "unpublished",
       show_in_menu: true,
       is_featured: false,
       created_at: now,

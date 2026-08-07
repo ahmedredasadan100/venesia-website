@@ -14,7 +14,7 @@ import { revalidatePath } from "next/cache";
 import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
-type SeriesStatus = "draft" | "published" | "unpublished" | "archived";
+type SeriesStatus = "published" | "unpublished";
 
 function validateId(id: string) {
   return /^\d+$/.test(id);
@@ -109,7 +109,7 @@ export async function duplicateSeriesAjax(id: number): Promise<SeriesTableResult
     .insert({
       name: `${data.name} - نسخة`,
       slug,
-      status: "draft",
+      status: "unpublished",
       sort_order: data.sort_order ?? 0,
       category_id: data.category_id,
       deleted_at: null,

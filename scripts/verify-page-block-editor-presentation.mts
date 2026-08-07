@@ -39,7 +39,7 @@ const mediaSidebarPublicLoader = read("src/lib/media-sidebar-modules/load-media-
 const mediaHubPublicLoader = read("src/lib/media-hub-modules/load-media-hub-modules.ts");
 const mediaSidebarRenderer = read("src/components/media-center/MediaSidebar.tsx");
 const mediaHubRenderPlan = read("src/lib/media-hub-modules/build-media-hub-render-plan.ts");
-const lifecycleMigration = read("sql/migrations/20260807090000_page_block_module_lifecycle_contract.sql");
+const publicationClosureMigration = read("sql/migrations/20260807120000_system_publication_summary_cards_closure.sql");
 
 check(
   "Page Modules summary is owned by the shared Section Hero",
@@ -190,20 +190,21 @@ const lifecycleTables = [
   "media_sidebar_module_templates",
   "media_hub_module_templates",
 ] as const;
-const allowedStatusConstraint = "check (status in ('draft', 'published', 'unpublished'))";
+const allowedStatusConstraint = "check (status in ('published', 'unpublished'))";
 
 check(
-  "persisted module lifecycle keeps the proven three-state database and listbox contract",
-  blockStatusOwner.includes('BLOCK_STATUSES: PageBlockStatus[] = ["draft", "published", "unpublished"]') &&
-    blockTypes.includes('PageBlockStatus = "draft" | "published" | "unpublished"') &&
+  "persisted module lifecycle is binary across database and editor contracts",
+  blockStatusOwner.includes('BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"]') &&
+    blockTypes.includes('PageBlockStatus = "published" | "unpublished"') &&
     lifecycleTables.every((table) =>
-      lifecycleMigration.includes(`update public.${table} set status = 'unpublished' where status = 'archived'`) &&
-      lifecycleMigration.includes(`constraint ${table}_status_check`) &&
-      lifecycleMigration.includes(allowedStatusConstraint),
+      publicationClosureMigration.includes(`update public.${table} set status = 'unpublished' where status is distinct from 'published'`) &&
+      publicationClosureMigration.includes(`constraint ${table}_status_check`) &&
+      publicationClosureMigration.includes(allowedStatusConstraint),
     ) &&
-    ["draft", "published", "unpublished"].every((status) =>
+    ["published", "unpublished"].every((status) =>
       presentation.includes(`{ value: "${status}"`),
     ) &&
+    !presentation.includes('{ value: "draft"') &&
     !presentation.includes('{ value: "archived"') &&
     statusEditorSources.every((source) =>
       source.includes('name="status"') && source.includes("MODULE_EDITOR_STATUS_OPTIONS"),

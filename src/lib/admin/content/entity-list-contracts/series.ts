@@ -15,7 +15,7 @@ export const seriesSortFields = [
 ] as const;
 export type SeriesSortField = (typeof seriesSortFields)[number];
 export type SeriesFilters = {
-  status: "all" | "published" | "unpublished" | "draft" | "archived";
+  status: "all" | "published" | "unpublished";
   categoryId: number | null;
 };
 
@@ -25,7 +25,7 @@ export const seriesQueryContract: AdminEntityListQueryContract<
 > = {
   mode: "server-page",
   filtersSchema: z.strictObject({
-    status: z.enum(["all", "published", "unpublished", "draft", "archived"]),
+    status: z.enum(["all", "published", "unpublished"]),
     categoryId: z.number().int().positive().nullable(),
   }),
   sortFields: seriesSortFields,
@@ -35,7 +35,7 @@ export const seriesQueryContract: AdminEntityListQueryContract<
   maxPageSize: 50,
   searchMinLength: 0,
   rawFilterSchemas: {
-    status: z.enum(["all", "published", "unpublished", "draft", "archived"]),
+    status: z.enum(["all", "published", "unpublished"]),
     category: z.string().regex(/^[1-9]\d{0,8}$/),
   },
   parseFilters(params) {
@@ -44,7 +44,7 @@ export const seriesQueryContract: AdminEntityListQueryContract<
     return {
       status:
         status &&
-        ["published", "unpublished", "draft", "archived"].includes(status)
+        ["published", "unpublished"].includes(status)
           ? status
           : "all",
       categoryId:

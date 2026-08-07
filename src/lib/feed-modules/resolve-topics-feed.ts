@@ -74,8 +74,8 @@ async function resolveLatestOrPopular(
 async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePayload> {
   const { data: categories, error: categoriesError } = await getSupabaseAdmin()
     .from("topic_categories")
-    .select("id, name, slug, is_active, topics_count:topics(count)")
-    .eq("is_active", true)
+    .select("id, name, slug, status, topics_count:topics(count)")
+    .eq("status", "published")
     // Soft-deleted topics must never count toward a public category.
     .is("topics.deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -158,7 +158,7 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
       .from("topic_categories")
       .select("id")
       .eq("slug", config.query.categorySlug)
-      .eq("is_active", true)
+      .eq("status", "published")
       .maybeSingle();
 
     if (categoryError) {

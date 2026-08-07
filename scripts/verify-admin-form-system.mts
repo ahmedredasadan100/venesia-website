@@ -812,7 +812,7 @@ check(
     resolveTopicPublishedAt({
       formPublishedDate: submittedPublicationDate,
       currentPublishedAt: null,
-      status: "draft",
+      status: "unpublished",
       nowIso: "2026-08-15T08:00:00.000Z",
     }) === null,
 );
@@ -858,10 +858,10 @@ check(
       'capability.publicationStatus === "published"',
     ),
 );
-const draftPreviewActions = resolveAdminEntityPreviewActions({
+const unpublishedPreviewActions = resolveAdminEntityPreviewActions({
   entityType: "topic",
   entityId: 42,
-  publicationStatus: "draft",
+  publicationStatus: "unpublished",
   routes: {
     internalPreview: "/admin/content/topics/42/preview",
     publicView: "/topics/reference-topic",
@@ -915,9 +915,9 @@ check(
 );
 check(
   "shared Preview/Public resolver behavior owns publication visibility and disabled state",
-  draftPreviewActions.length === 1 &&
-    draftPreviewActions[0]?.kind === "internal-preview" &&
-    draftPreviewActions[0]?.disabled === false &&
+  unpublishedPreviewActions.length === 1 &&
+    unpublishedPreviewActions[0]?.kind === "internal-preview" &&
+    unpublishedPreviewActions[0]?.disabled === false &&
     publishedPreviewActions.length === 2 &&
     publishedPreviewActions[0]?.kind === "internal-preview" &&
     publishedPreviewActions[0]?.disabled === true &&

@@ -68,9 +68,7 @@ function SeriesIcon() {
 
 function statusMeta(status?: string | null) {
   if (status === "published") return { label: "منشور", tone: "green" as const };
-  if (status === "unpublished") return { label: "مخفي", tone: "gold" as const };
-  if (status === "archived") return { label: "أرشيف", tone: "muted" as const };
-  return { label: "مسودة", tone: "muted" as const };
+  return { label: "غير منشور", tone: "gold" as const };
 }
 
 function singleLine(value: string) {

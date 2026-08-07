@@ -34,9 +34,8 @@ import {
 } from "../../../lib/page-blocks/module-editor-presentation-contract";
 
 export const MODULE_EDITOR_STATUS_OPTIONS = [
-  { value: "draft", label: "مسودة" },
   { value: "published", label: "منشور" },
-  { value: "unpublished", label: "مخفي" },
+  { value: "unpublished", label: "غير منشور" },
 ] as const;
 
 type ModuleEditorMetadataScope = {

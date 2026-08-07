@@ -81,14 +81,11 @@ function successMessage(mode: AdminFormMode, status: TopicStatus) {
   if (mode === "create") {
     return status === "published"
       ? "تم إنشاء الموضوع ونشره بنجاح."
-      : "تم إنشاء الموضوع كمسودة بنجاح.";
+      : "تم إنشاء الموضوع كغير منشور بنجاح.";
   }
   if (status === "published") return "تم حفظ الموضوع ونشره بنجاح.";
   if (status === "unpublished") {
     return "تم حفظ الموضوع وإخفاؤه مع الاحتفاظ بتاريخ أول نشر.";
-  }
-  if (status === "archived") {
-    return "تم حفظ بيانات الموضوع دون تغيير حالة الأرشفة.";
   }
   return "تم حفظ تعديلات الموضوع بنجاح.";
 }
@@ -131,8 +128,8 @@ export async function saveArticleContentAdapter(
 
   const payload = getPayload(formData);
   const nextStatus = getNormalizedStatus(
-    String(formData.get("status") ?? "draft"),
-    "draft",
+    String(formData.get("status") ?? "unpublished"),
+    "unpublished",
   );
 
   const baseErrors = validateTopicFields(payload, false);
@@ -222,7 +219,7 @@ export async function saveArticleContentAdapter(
 
   const now = new Date().toISOString();
   const currentStatus = currentTopic
-    ? getNormalizedStatus(String(currentTopic.status ?? "draft"), "draft")
+    ? getNormalizedStatus(String(currentTopic.status ?? "unpublished"), "unpublished")
     : null;
   const writePayload = buildTopicWritePayload(
     payload,

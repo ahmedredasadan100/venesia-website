@@ -50,7 +50,6 @@ function rawReadModel() {
         source: "topics.content_type=site_update",
         total: 0,
         published: 0,
-        draft: 0,
         unpublished: 0,
       },
     },
@@ -68,8 +67,7 @@ function rawReadModel() {
     },
     publishing: {
       recentPublishing: { windowDays: 30, topics: 0, projects: 0 },
-      pendingPublishing: { topics: 0, projects: 0 },
-      drafts: { topics: 0, projects: 0, pages: 0 },
+      unpublished: { topics: 0, projects: 0, pages: 0 },
     },
     sourcesOfTruth: ["public.admin_reports_truth_v1()"],
     databaseDiagnostics: {
@@ -217,7 +215,7 @@ function validContentAssessment(id: number): ContentReviewAssessment {
   return {
     id,
     title: `Valid content ${id}`,
-    status: "draft",
+    status: "unpublished",
     contentType: "article",
     blockerIds: [],
   };

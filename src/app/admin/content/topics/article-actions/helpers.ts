@@ -133,7 +133,7 @@ function getFaq(formData: FormData) {
     .filter((item) => item.question || item.answer);
 }
 
-export function getNormalizedStatus(value: string, fallback: TopicStatus = "draft") {
+export function getNormalizedStatus(value: string, fallback: TopicStatus = "unpublished") {
   return VALID_STATUSES.includes(value as TopicStatus) ? (value as TopicStatus) : fallback;
 }
 

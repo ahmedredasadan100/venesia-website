@@ -37,7 +37,7 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
       supabase
         .from("topic_categories")
         .select("id,name,slug")
-        .eq("is_active", true)
+        .eq("status", "published")
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true }),
       supabase

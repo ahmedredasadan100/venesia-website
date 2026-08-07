@@ -45,7 +45,7 @@ export function formatArabicContentDate(value?: string | null) {
 export function resolveTopicPublishedAt(options: {
   formPublishedDate: string | null;
   currentPublishedAt: string | null;
-  status: "draft" | "published" | "unpublished" | "archived";
+  status: "published" | "unpublished";
   nowIso: string;
 }) {
   if (options.currentPublishedAt) {

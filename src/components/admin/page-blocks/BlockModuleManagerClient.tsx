@@ -251,7 +251,6 @@ export default function BlockModuleManagerClient({
         eyebrow="Admin Panel"
         title={moduleTitle}
         description={moduleDescription}
-        meta={`${rows.length} بلوك`}
         actions={(
           <button
             type="button"
@@ -322,7 +321,6 @@ export default function BlockModuleManagerClient({
             options={[
               { value: "publish", label: "نشر" },
               { value: "hide", label: "إخفاء" },
-              { value: "draft", label: "مسودة" },
               { value: "delete", label: "حذف" },
             ]}
             onClearSelection={selection.clearSelection}
@@ -356,7 +354,7 @@ export default function BlockModuleManagerClient({
         }}
       />
 
-      <AdminDataGrid className="!rounded-t-none !border-t-0" summary={filteredRows.length ? `${filteredRows.length} بلوك` : undefined}>
+      <AdminDataGrid className="!rounded-t-none !border-t-0">
         <AdminDataGridHeader columns={gridColumns}>
           <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
@@ -519,7 +517,7 @@ export default function BlockModuleManagerClient({
       <VenesiaModal
         open={showCreateModal}
         title="إضافة بلوك جديد"
-        description="أنشئ القالب ثم عدّل المحتوى واربطه بالصفحات. البلوكات الجديدة تُنشأ كمسودة."
+        description="أنشئ القالب ثم عدّل المحتوى واربطه بالصفحات. البلوكات الجديدة تُنشأ كغير منشورة."
         size="md"
         onClose={requestCreateClose}
       >
@@ -608,7 +606,7 @@ export default function BlockModuleManagerClient({
                   </label>
                 </>
               ) : null}
-              <input type="hidden" name="status" value="draft" />
+              <input type="hidden" name="status" value="unpublished" />
               <input type="hidden" name="style_preset" value="premium-dark" />
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
                 <AdminModalCancelButton onClick={requestClose} disabled={pending}>

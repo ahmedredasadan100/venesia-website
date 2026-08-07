@@ -93,7 +93,7 @@ function createBreadcrumbBlockSuccess(
       infrastructureWarning ??
       (mediaWarning
         ? "تم إنشاء البلوك، لكن مزامنة مراجع الوسائط تحتاج إلى مراجعة."
-        : "تم إنشاء البلوك كمسودة بنجاح."),
+        : "تم إنشاء البلوك كغير منشور بنجاح."),
     code: warning ? "created_with_warning" : "created",
     entityId: id,
     editHref: `/admin/pages-blocks/blocks/breadcrumb/${id}${mediaWarning ? "?notice=saved_with_media_sync_warning" : ""}`,
@@ -125,7 +125,7 @@ export async function createBreadcrumbBlock(
       description: cleanText(formData.get("description")) || null,
       variant: cleanText(formData.get("variant")) || "hero-inline",
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "draft"),
+      status: getStatus(cleanText(formData.get("status")) || "unpublished"),
       config: buildBreadcrumbConfig(formData),
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
@@ -185,7 +185,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
     description: cleanText(formData.get("description")) || null,
     variant: cleanText(formData.get("variant")) || "hero-inline",
     style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
     config: buildBreadcrumbConfig(formData),
     updated_at: new Date().toISOString(),
   };
@@ -217,7 +217,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
 export async function toggleBreadcrumbBlockStatus(formData: FormData) {
   await requireAdminSession();
   const id = parseNumber(formData.get("id"));
-  const nextStatus = getStatus(cleanText(formData.get("next_status")) || "draft");
+  const nextStatus = getStatus(cleanText(formData.get("next_status")) || "unpublished");
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
   const { error } = await getSupabaseAdmin()
@@ -283,7 +283,7 @@ export async function duplicateBreadcrumbBlock(formData: FormData) {
     description: source.description,
     variant: source.variant,
     style_preset: source.style_preset,
-    status: "draft",
+    status: "unpublished",
     config: source.config,
     sort_order: (source.sort_order ?? 0) + 1,
   };
@@ -324,8 +324,8 @@ export async function bulkBreadcrumbBlocks(formData: FormData) {
 
   const now = new Date().toISOString();
 
-  if (action === "publish" || action === "hide" || action === "draft") {
-    const status = action === "publish" ? "published" : action === "hide" ? "unpublished" : "draft";
+  if (action === "publish" || action === "hide") {
+    const status = action === "publish" ? "published" : "unpublished";
     const { error } = await getSupabaseAdmin()
       .from("breadcrumb_block_templates")
       .update({ status, updated_at: now })

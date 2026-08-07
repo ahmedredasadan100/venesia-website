@@ -10,7 +10,7 @@ export type PageBlockType = (typeof PAGE_BLOCK_TYPES)[number];
 export const PAGE_MODULE_KINDS = ["hero", ...PAGE_BLOCK_TYPES, "media-sidebar", "media-hub"] as const;
 export type PageModuleKind = (typeof PAGE_MODULE_KINDS)[number];
 
-export type PageBlockStatus = "draft" | "published" | "unpublished";
+export type PageBlockStatus = "published" | "unpublished";
 
 export type PageBlockTemplateBase = {
   id: number;

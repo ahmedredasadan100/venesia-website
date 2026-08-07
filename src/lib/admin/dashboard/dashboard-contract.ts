@@ -1,5 +1,5 @@
 export const DASHBOARD_CONTRACT_VERSION = "dashboard-truth-v1" as const;
-export const DASHBOARD_MIGRATION_VERSION = "20260805210000" as const;
+export const DASHBOARD_MIGRATION_VERSION = "20260807120000" as const;
 
 export type DashboardState = "ready" | "partial" | "unavailable";
 export type DashboardSourceStatus = "ready" | "warning" | "unavailable";
@@ -22,28 +22,23 @@ export type DashboardReadModel = {
     topics: {
       total: number;
       published: number;
-      nonPublished: number;
-      draft: number;
       unpublished: number;
-      archived: number;
       featured: number;
     };
-    categories: { total: number; active: number; inactive: number };
+    categories: { total: number; published: number; unpublished: number };
     projects: {
       total: number;
       published: number;
-      nonPublished: number;
-      draft: number;
       unpublished: number;
     };
-    pages: { total: number; published: number; nonPublished: number };
+    pages: { total: number; published: number; unpublished: number };
     media: { total: number; active: number; issues: number };
   };
   contentHealth: {
     topicsMissingImage: number;
     topicsMissingSeoDescription: number;
     categoriesMissingImage: number;
-    staleDrafts: number;
+    staleUnpublished: number;
   };
   recentTopics: Array<{
     id: number;
@@ -186,28 +181,23 @@ export function parseDashboardReadModel(value: unknown): DashboardReadModel {
       topics: {
         total: count(topics.total, "kpis.topics.total"),
         published: count(topics.published, "kpis.topics.published"),
-        nonPublished: count(topics.non_published, "kpis.topics.non_published"),
-        draft: count(topics.draft, "kpis.topics.draft"),
         unpublished: count(topics.unpublished, "kpis.topics.unpublished"),
-        archived: count(topics.archived, "kpis.topics.archived"),
         featured: count(topics.featured, "kpis.topics.featured"),
       },
       categories: {
         total: count(categories.total, "kpis.categories.total"),
-        active: count(categories.active, "kpis.categories.active"),
-        inactive: count(categories.inactive, "kpis.categories.inactive"),
+        published: count(categories.published, "kpis.categories.published"),
+        unpublished: count(categories.unpublished, "kpis.categories.unpublished"),
       },
       projects: {
         total: count(projects.total, "kpis.projects.total"),
         published: count(projects.published, "kpis.projects.published"),
-        nonPublished: count(projects.non_published, "kpis.projects.non_published"),
-        draft: count(projects.draft, "kpis.projects.draft"),
         unpublished: count(projects.unpublished, "kpis.projects.unpublished"),
       },
       pages: {
         total: count(pages.total, "kpis.pages.total"),
         published: count(pages.published, "kpis.pages.published"),
-        nonPublished: count(pages.non_published, "kpis.pages.non_published"),
+        unpublished: count(pages.unpublished, "kpis.pages.unpublished"),
       },
       media: {
         total: count(media.total, "kpis.media.total"),
@@ -225,7 +215,7 @@ export function parseDashboardReadModel(value: unknown): DashboardReadModel {
         health.categoriesMissingImage,
         "contentHealth.categoriesMissingImage",
       ),
-      staleDrafts: count(health.staleDrafts, "contentHealth.staleDrafts"),
+      staleUnpublished: count(health.staleUnpublished, "contentHealth.staleUnpublished"),
     },
     recentTopics: rows(root.recentTopics, "recentTopics").map((row, index) => {
       const item = record(row, `recentTopics.${index}`);

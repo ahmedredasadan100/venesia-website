@@ -2,7 +2,6 @@ export const PAGES_LIST_VIEW_KEY = "pages";
 
 export type PageColumnKey =
   | "page"
-  | "modules"
   | "type"
   | "status"
   | "actions";
@@ -24,12 +23,6 @@ export const PAGES_LIST_COLUMNS = [
   {
     key: "status",
     label: "الحالة",
-    defaultVisible: true,
-    hideable: true,
-  },
-  {
-    key: "modules",
-    label: "الموديولات",
     defaultVisible: true,
     hideable: true,
   },

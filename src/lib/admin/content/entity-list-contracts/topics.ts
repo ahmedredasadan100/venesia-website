@@ -19,9 +19,10 @@ export type TopicSortField = (typeof topicSortFields)[number];
 export type TopicFilters = {
   contentType: ContentType | "all";
   categoryId: number | null;
-  seriesId: number | null;
-  status: "all" | "published" | "draft" | "unpublished" | "archived";
+  seriesId: number | "any" | null;
+  status: "all" | "published" | "unpublished";
   featured: "all" | "yes" | "no";
+  image: "all" | "without";
 };
 
 function positiveId(value: string | null) {
@@ -45,9 +46,10 @@ export const topicsQueryContract: AdminEntityListQueryContract<
       "gallery",
     ]),
     categoryId: z.number().int().positive().nullable(),
-    seriesId: z.number().int().positive().nullable(),
-    status: z.enum(["all", "published", "draft", "unpublished", "archived"]),
+    seriesId: z.union([z.number().int().positive(), z.literal("any")]).nullable(),
+    status: z.enum(["all", "published", "unpublished"]),
     featured: z.enum(["all", "yes", "no"]),
+    image: z.enum(["all", "without"]),
   }),
   sortFields: topicSortFields,
   defaultSort: { field: "title", direction: "asc" },
@@ -66,14 +68,17 @@ export const topicsQueryContract: AdminEntityListQueryContract<
       "gallery",
     ]),
     category: z.string().regex(/^[1-9]\d{0,8}$/),
-    series: z.string().regex(/^[1-9]\d{0,8}$/),
-    status: z.enum(["all", "published", "draft", "unpublished", "archived"]),
+    series: z.union([z.string().regex(/^[1-9]\d{0,8}$/), z.literal("any")]),
+    status: z.enum(["all", "published", "unpublished"]),
     featured: z.enum(["all", "yes", "no"]),
+    image: z.enum(["all", "without"]),
   },
   parseFilters(params) {
     const contentType = params.get("content_type");
     const status = params.get("status");
     const featured = params.get("featured");
+    const series = params.get("series");
+    const image = params.get("image");
     return {
       contentType:
         contentType &&
@@ -83,18 +88,19 @@ export const topicsQueryContract: AdminEntityListQueryContract<
           ? contentType
           : "all",
       categoryId: positiveId(params.get("category")),
-      seriesId: positiveId(params.get("series")),
+      seriesId: series === "any" ? "any" : positiveId(series),
       status:
         status &&
-        ["published", "draft", "unpublished", "archived"].includes(status)
+        ["published", "unpublished"].includes(status)
           ? status
           : "all",
       featured:
         featured === "yes" || featured === "no" ? featured : "all",
+      image: image === "without" ? "without" : "all",
     };
   },
   writeFilters(filters, params) {
-    ["content_type", "category", "series", "status", "featured"].forEach((key) =>
+    ["content_type", "category", "series", "status", "featured", "image"].forEach((key) =>
       params.delete(key),
     );
     if (filters.contentType !== "all") {
@@ -104,5 +110,6 @@ export const topicsQueryContract: AdminEntityListQueryContract<
     if (filters.seriesId) params.set("series", String(filters.seriesId));
     if (filters.status !== "all") params.set("status", filters.status);
     if (filters.featured !== "all") params.set("featured", filters.featured);
+    if (filters.image !== "all") params.set("image", filters.image);
   },
 };

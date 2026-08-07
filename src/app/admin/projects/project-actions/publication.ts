@@ -27,7 +27,7 @@ const resultSchema = z.object({
   project_id: z.coerce.number().int().positive(),
   project_type: z.enum(["residential", "commercial"]),
   project_slug: z.string().min(1),
-  publication_status: z.enum(["draft", "published", "unpublished"]),
+  publication_status: z.enum(["published", "unpublished"]),
   published_at: z.string().nullable(),
   published_by: z.coerce.number().int().positive().nullable(),
   featured: z.boolean(),
@@ -189,9 +189,7 @@ export async function setProjectPublicationAjax(
     message:
       result.publication_status === "published"
         ? "أصبح المشروع ظاهرًا في قنوات المشاريع العامة."
-        : previousStatus === "draft"
-          ? "ظل المشروع مسودة وغير ظاهر للعامة."
-          : "أُخفي المشروع مع الاحتفاظ بتاريخ أول نشر.",
+        : "أصبح المشروع غير منشور مع الاحتفاظ بتاريخ أول نشر.",
     projectId: result.project_id,
     ...result,
   };

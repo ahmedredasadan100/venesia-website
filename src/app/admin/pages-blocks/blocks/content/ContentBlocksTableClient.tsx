@@ -271,7 +271,6 @@ export default function ContentBlocksTableClient({
         eyebrow="Admin Panel"
         title="إدارة بلوكات المحتوى"
         description="قوالب المحتوى النصي القابلة لإعادة الاستخدام. اربطها بالصفحات من Pages Manager."
-        meta={`${rows.length} بلوك`}
         actions={(
           <button
             type="button"
@@ -341,7 +340,6 @@ export default function ContentBlocksTableClient({
               options={[
                 { value: "publish", label: "نشر" },
                 { value: "hide", label: "إخفاء" },
-                { value: "draft", label: "مسودة" },
                 { value: "delete", label: "حذف" },
               ]}
               onClearSelection={selection.clearSelection}
@@ -383,7 +381,7 @@ export default function ContentBlocksTableClient({
           }}
         />
 
-        <AdminDataGrid className="!rounded-t-none !border-t-0" summary={`${filteredRows.length} بلوك`}>
+        <AdminDataGrid className="!rounded-t-none !border-t-0">
           <AdminDataGridHeader columns={columns}>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
@@ -567,7 +565,7 @@ export default function ContentBlocksTableClient({
       <VenesiaModal
         open={showCreateModal}
         title="إضافة بلوك جديد"
-        description="أنشئ القالب ثم عدّل المحتوى واربطه بالصفحات. البلوكات الجديدة تُنشأ كمسودة."
+        description="أنشئ القالب ثم عدّل المحتوى واربطه بالصفحات. البلوكات الجديدة تُنشأ كغير منشورة."
         size="md"
         onClose={requestCreateClose}
       >
@@ -621,7 +619,7 @@ export default function ContentBlocksTableClient({
                   ))}
                 </select>
               </label>
-              <input type="hidden" name="status" value="draft" />
+              <input type="hidden" name="status" value="unpublished" />
               <input type="hidden" name="style_preset" value="premium-dark" />
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
                 <AdminModalCancelButton onClick={requestClose} disabled={pending}>

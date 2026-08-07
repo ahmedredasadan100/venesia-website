@@ -306,7 +306,7 @@ export async function loadProjectEntry(
         root.publication_status === "published" ||
         root.publication_status === "unpublished"
           ? root.publication_status
-          : "draft",
+          : "unpublished",
       published_at: stringValue(root.published_at) || null,
       published_by: numberOrNull(root.published_by),
       featured: root.featured === true,

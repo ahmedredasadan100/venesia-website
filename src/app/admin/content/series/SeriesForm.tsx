@@ -107,7 +107,7 @@ export default function SeriesForm({
                 name="is_published"
                 label="منشور"
                 defaultChecked={
-                  isEdit ? series?.status === "published" : true
+                  isEdit ? series?.status === "published" : false
                 }
                 disabled={pending}
                 surface

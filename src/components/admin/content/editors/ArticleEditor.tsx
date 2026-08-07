@@ -101,7 +101,7 @@ export default function ArticleEditor({
   const safeSeries = series;
   const faq = getFaq(topic.faq);
   const seoKeywords = getSeoKeywords(topic.seo_keywords);
-  const status = topic.status || "draft";
+  const status = topic.status || "unpublished";
   const previewCapability = buildAdminContentPreviewCapability({
     entityType: "topic",
     id: topic.id,

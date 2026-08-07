@@ -299,7 +299,6 @@ export const loadProjectForAdminPreviewResult = cache(
     const project = data as unknown as PublicProjectRootRow;
     const publicationStatus = project.publication_status;
     if (
-      publicationStatus !== "draft" &&
       publicationStatus !== "published" &&
       publicationStatus !== "unpublished"
     ) {

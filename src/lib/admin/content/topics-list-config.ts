@@ -23,7 +23,7 @@ export const TOPICS_NOTICE_CODE_MAP = {
     message: "تم إخفاء المحتوى مع الحفاظ على بيانات النشر.",
   },
   saved: { message: "تم حفظ التغيير بنجاح." },
-  created: { message: "تم إنشاء نسخة مسودة بنجاح." },
+  created: { message: "تم إنشاء نسخة غير منشورة بنجاح." },
   deleted: { message: "تم حذف المحتوى حذفًا آمنًا." },
   error: {
     message: "تعذر تنفيذ العملية.",

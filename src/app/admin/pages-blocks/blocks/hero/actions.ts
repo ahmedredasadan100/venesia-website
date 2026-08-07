@@ -231,7 +231,7 @@ export async function createHeroTemplate(
       style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
       source_type: cleanText(formData.get("source_type")) || "manual",
       limit_count: parseNumber(formData.get("limit_count"), 1),
-      is_visible: formData.get("is_visible") === "on",
+      status: formData.get("is_published") === "on" ? "published" : "unpublished",
       config: buildHeroConfig(formData),
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
@@ -281,13 +281,13 @@ export async function createHeroTemplate(
 export async function toggleHeroTemplate(formData: FormData) {
   await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
-  const nextVisible = formData.get("next_visible") === "true";
+  const nextStatus = formData.get("next_status") === "published" ? "published" : "unpublished";
 
   if (!id) throw new Error("Hero id is missing.");
 
   const { error } = await getSupabaseAdmin()
     .from("hero_templates")
-    .update({ is_visible: nextVisible, updated_at: new Date().toISOString() })
+    .update({ status: nextStatus, updated_at: new Date().toISOString() })
     .eq("id", id);
 
   if (error) throw new Error(error.message);
@@ -355,7 +355,7 @@ export async function duplicateHeroTemplate(formData: FormData) {
     source_id: hero.source_id,
     source_slug: hero.source_slug,
     limit_count: hero.limit_count,
-    is_visible: false,
+    status: "unpublished",
     sort_order: hero.sort_order + 1,
     config: hero.config,
   };
@@ -396,7 +396,7 @@ export async function bulkHeroTemplates(formData: FormData) {
   if (action === "show" || action === "hide") {
     const { error } = await getSupabaseAdmin()
       .from("hero_templates")
-      .update({ is_visible: action === "show", updated_at: new Date().toISOString() })
+      .update({ status: action === "show" ? "published" : "unpublished", updated_at: new Date().toISOString() })
       .in("id", ids);
 
     if (error) throw new Error(error.message);
@@ -469,7 +469,7 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     source_type: cleanText(formData.get("source_type")) || "manual",
     source_slug: cleanText(formData.get("source_slug")) || null,
     limit_count: parseNumber(formData.get("limit_count"), 1),
-    is_visible: formData.get("is_visible") === "on",
+    status: formData.get("is_published") === "on" ? "published" : "unpublished",
     config: buildHeroConfig(formData),
     updated_at: new Date().toISOString(),
   };

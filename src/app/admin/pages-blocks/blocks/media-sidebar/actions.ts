@@ -33,7 +33,7 @@ export async function updateMediaSidebarModule(formData: FormData) {
   const nextRow = {
     name,
     description: cleanText(formData.get("description")) || null,
-    status: getStatus(cleanText(formData.get("status")) || "draft"),
+    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
     widget_key: widgetKey,
     config,
     updated_at: new Date().toISOString(),
