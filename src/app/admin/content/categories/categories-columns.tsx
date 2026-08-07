@@ -209,7 +209,7 @@ export function createCategoryColumns(
     {
       key: "parent",
       label: "التصنيف الأب",
-      defaultVisible: true,
+      defaultVisible: false,
       hideable: true,
       sortable: true,
       sortKey: "parent",
@@ -249,7 +249,7 @@ export function createCategoryColumns(
     {
       key: "sort_order",
       label: "الترتيب",
-      defaultVisible: true,
+      defaultVisible: false,
       hideable: true,
       sortable: true,
       sortKey: "sort_order",
@@ -264,7 +264,7 @@ export function createCategoryColumns(
     {
       key: "published_at",
       label: "تاريخ النشر",
-      defaultVisible: true,
+      defaultVisible: false,
       hideable: true,
       sortable: true,
       sortKey: "published_at",
@@ -278,16 +278,20 @@ export function createCategoryColumns(
     {
       key: "created_at",
       label: "تاريخ الإنشاء",
-      defaultVisible: false,
+      defaultVisible: true,
       hideable: true,
       sortable: true,
       sortKey: "created_at",
-      minWidth: 140,
-      width: 150,
-      renderCell: ({ row }) =>
-        singleLine(
-          row.created_at ? formatAdminDateTime(row.created_at) : "—",
-        ),
+      minWidth: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
+      renderCell: ({ row }) => (
+        <span
+          dir="ltr"
+          className="block whitespace-nowrap font-en text-sm tabular-nums text-white/68"
+        >
+          {row.created_at ? formatAdminDateTime(row.created_at) : "—"}
+        </span>
+      ),
     },
     {
       key: "updated_at",

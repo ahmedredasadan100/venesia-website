@@ -181,7 +181,7 @@ try {
 
   assert.match(
     categoriesConfig,
-    /CATEGORIES_DEFAULT_COLUMN_KEYS\s*=\s*\[[\s\S]*?"name",\s*"status",\s*"count",\s*"published_at",\s*"actions",/,
+    /CATEGORIES_DEFAULT_COLUMN_KEYS\s*=\s*\[[\s\S]*?"name",\s*"status",\s*"count",\s*"created_at",\s*"actions",/,
     "the default Categories table contains only the agreed visible columns",
   );
   assert.match(
