@@ -486,14 +486,20 @@ check(
 );
 
 check(
-  "Categories default to identity, status, topics, first publish date, and actions while retaining optional hierarchy columns",
+  "Categories default to identity, status, topics, creation date, and actions while retaining optional hierarchy and publication columns",
   JSON.stringify(categoriesListConfigModule.CATEGORIES_DEFAULT_COLUMN_KEYS) ===
-    JSON.stringify(["name", "status", "count", "published_at", "actions"]) &&
+    JSON.stringify(["name", "status", "count", "created_at", "actions"]) &&
     categoriesListConfigModule.CATEGORIES_PREFERENCE_COLUMN_KEYS.includes("parent") &&
     categoriesListConfigModule.CATEGORIES_PREFERENCE_COLUMN_KEYS.includes("sort_order") &&
-    categoriesColumns.includes('key: "published_at"') &&
-    categoriesColumns.includes("ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH") &&
-    categoriesColumns.includes("flexible: true"),
+    categoriesListConfigModule.CATEGORIES_PREFERENCE_COLUMN_KEYS.includes("published_at") &&
+    /key:\s*"parent"[\s\S]*?defaultVisible:\s*false/.test(categoriesColumns) &&
+    /key:\s*"sort_order"[\s\S]*?defaultVisible:\s*false/.test(categoriesColumns) &&
+    /key:\s*"published_at"[\s\S]*?defaultVisible:\s*false/.test(categoriesColumns) &&
+    /key:\s*"status"[\s\S]*?minWidth:\s*104[\s\S]*?width:\s*104/.test(categoriesColumns) &&
+    /key:\s*"count"[\s\S]*?minWidth:\s*80[\s\S]*?width:\s*80/.test(categoriesColumns) &&
+    /key:\s*"created_at"[\s\S]*?defaultVisible:\s*true[\s\S]*?minWidth:\s*ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH[\s\S]*?width:\s*ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH[\s\S]*?dir="ltr"[\s\S]*?whitespace-nowrap/.test(categoriesColumns) &&
+    /key:\s*"actions"[\s\S]*?width:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*?sticky:\s*"end"/.test(categoriesColumns) &&
+    /key:\s*"name"[\s\S]*?flexible:\s*true/.test(categoriesColumns),
 );
 
 check(
@@ -585,7 +591,7 @@ check(
       '"name"',
       '"status"',
       '"count"',
-      '"published_at"',
+      '"created_at"',
       '"actions"',
     ]) &&
     appearsInOrder(seriesListConfig, [

@@ -5,7 +5,7 @@ export const CATEGORIES_DEFAULT_COLUMN_KEYS = [
   "name",
   "status",
   "count",
-  "published_at",
+  "created_at",
   "actions",
 ] as const;
 
