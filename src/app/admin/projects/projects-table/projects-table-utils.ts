@@ -54,16 +54,3 @@ export function isProjectColumnVisible(
 ) {
   return visibleColumns.includes(key);
 }
-
-export function formatDate(value?: string | null) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(value));
-  } catch {
-    return "—";
-  }
-}

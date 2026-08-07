@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { buildAdminReportsOverview } from "../../../lib/admin/reports/reports-overview-presentation";
 import type { AdminReportsModel, ReportsState } from "../../../lib/admin/reports/reports-contract";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 import {
   AdminPageContextHeader,
   AdminPageExperience,
@@ -29,18 +30,6 @@ const TONE_CLASSES = {
   cyan: "border-cyan-400/16 from-cyan-400/10 text-cyan-200",
   red: "border-rose-400/16 from-rose-400/10 text-rose-200",
 } as const;
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? "غير متاح"
-    : new Intl.DateTimeFormat("ar-EG", {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(date);
-}
 
 function SectionHeading({ title, description }: { title: string; description: string }) {
   return (
@@ -136,7 +125,7 @@ function OverviewState({ model }: { model: AdminReportsModel }) {
       </span>
       <span className="flex shrink-0 items-center gap-3">
         <AdminStatusPill tone={STATE_TONES[model.state]}>{STATE_LABELS[model.state]}</AdminStatusPill>
-        <span className="font-en text-[11px] text-white/34">{formatDate(model.checkedAt)}</span>
+        <span className="font-en text-[11px] text-white/34">{formatAdminDateTime(model.checkedAt)}</span>
       </span>
     </Link>
   );

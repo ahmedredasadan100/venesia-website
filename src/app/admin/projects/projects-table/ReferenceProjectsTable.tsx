@@ -22,7 +22,7 @@ import {
   isProjectPubliclyVisible,
 } from "../../../../lib/admin/projects/project-publishing-capability";
 import { resolveAdminEntityPreviewActions } from "../../../../lib/admin/interaction-system/entity-preview-capability";
-import { formatDate } from "./projects-table-utils";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { ProjectGridRow } from "./projects-table-types";
 
 export {
@@ -131,10 +131,10 @@ function ProjectRowActions({
           },
           { label: "الموقع", value: row.location_label || "—" },
           { label: "حالة النشر", value: publication.label },
-          { label: "تاريخ أول نشر", value: formatDate(row.published_at) },
+          { label: "تاريخ أول نشر", value: formatAdminDateTime(row.published_at) },
           { label: "الظهور العام", value: publication.publicLabel },
           { label: "التمييز", value: row.featured ? "مميز" : "عادي" },
-          { label: "آخر تحديث", value: formatDate(row.updated_at) },
+          { label: "آخر تحديث", value: formatAdminDateTime(row.updated_at) },
         ],
       },
       copyPublicLink: {
@@ -356,7 +356,7 @@ export function createProjectColumns(
       align: "center",
       minWidth: 145,
       width: 150,
-      renderCell: ({ row }) => singleLine(formatDate(row.published_at), "font-en text-center tabular-nums"),
+      renderCell: ({ row }) => singleLine(formatAdminDateTime(row.published_at), "font-en text-center tabular-nums"),
     },
     {
       key: "updated_at",
@@ -368,7 +368,7 @@ export function createProjectColumns(
       align: "center",
       minWidth: 140,
       width: 150,
-      renderCell: ({ row }) => singleLine(formatDate(row.updated_at), "font-en text-center tabular-nums"),
+      renderCell: ({ row }) => singleLine(formatAdminDateTime(row.updated_at), "font-en text-center tabular-nums"),
     },
     {
       key: "actions",

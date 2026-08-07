@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import AdminCategoryBadge from "../../../../components/admin/content/AdminCategoryBadge";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
-import { formatAdminListDate } from "../../../../lib/content-dates";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 import {
   AdminStatusPill,
@@ -268,7 +268,7 @@ export function createCategoryColumns(
       width: 150,
       renderCell: ({ row }) =>
         singleLine(
-          row.created_at ? formatAdminListDate(row.created_at) : "—",
+          row.created_at ? formatAdminDateTime(row.created_at) : "—",
         ),
     },
     {
@@ -282,7 +282,7 @@ export function createCategoryColumns(
       width: 150,
       renderCell: ({ row }) =>
         singleLine(
-          row.updated_at ? formatAdminListDate(row.updated_at) : "—",
+          row.updated_at ? formatAdminDateTime(row.updated_at) : "—",
         ),
     },
     {

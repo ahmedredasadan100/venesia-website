@@ -13,10 +13,7 @@ import {
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
-import {
-  formatAdminDateTime,
-  formatAdminListDate,
-} from "../../../../lib/content-dates";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { SeriesListRow } from "../../../../lib/admin/content/load-series-list";
 import { buildAdminSeriesCollectionPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
 import { resolveAdminEntityPreviewActions } from "../../../../lib/admin/interaction-system/entity-preview-capability";
@@ -358,7 +355,7 @@ export function createSeriesColumns(
       minWidth: 140,
       width: 150,
       renderCell: ({ row }) =>
-        singleLine(row.created_at ? formatAdminListDate(row.created_at) : "—"),
+        singleLine(row.created_at ? formatAdminDateTime(row.created_at) : "—"),
     },
     {
       key: "updated_at",
@@ -370,7 +367,7 @@ export function createSeriesColumns(
       minWidth: 140,
       width: 150,
       renderCell: ({ row }) =>
-        singleLine(row.updated_at ? formatAdminListDate(row.updated_at) : "—"),
+        singleLine(row.updated_at ? formatAdminDateTime(row.updated_at) : "—"),
     },
     {
       key: "actions",

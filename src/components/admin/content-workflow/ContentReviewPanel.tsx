@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  formatAdminDateOnly,
+  formatAdminDateTime,
+} from "../../../lib/content-dates";
 
 import {
   buildContentReviewChecks,
@@ -165,22 +169,6 @@ function statusLabel(status: string) {
   return "غير منشور";
 }
 
-function formatAuditTimestamp(value?: string | null) {
-  if (!value) return "لم يُحفظ بعد";
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "Africa/Cairo",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
-
 export default function ContentReviewPanel({
   formId,
   initial,
@@ -222,7 +210,13 @@ export default function ContentReviewPanel({
   }, [formId, seed]);
 
   const checks = useMemo(() => buildContentReviewChecks(input), [input]);
-  const visibleDate = dateLabel || input.publishedAt || "سيُحدد عند أول نشر";
+  const visibleDate = publishedAt
+    ? formatAdminDateTime(publishedAt)
+    : input.publishedAt
+      ? formatAdminDateOnly(input.publishedAt)
+      : dateLabel && /^\d{4}-\d{2}-\d{2}$/.test(dateLabel)
+        ? formatAdminDateOnly(dateLabel)
+        : "سيُحدد عند أول نشر";
 
   return (
     <div
@@ -263,7 +257,7 @@ export default function ContentReviewPanel({
           </>
         }
         summaryEntries={[
-          { id: "last-save", title: "آخر حفظ", value: formatAuditTimestamp(updatedAt) },
+          { id: "last-save", title: "آخر حفظ", value: updatedAt ? formatAdminDateTime(updatedAt) : "لم يُحفظ بعد" },
           { id: "status", title: "حالة النشر الحالية", value: statusLabel(input.status) },
           { id: "publish-date", title: "تاريخ النشر", value: visibleDate },
         ]}

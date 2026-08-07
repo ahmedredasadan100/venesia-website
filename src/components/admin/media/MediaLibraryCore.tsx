@@ -27,6 +27,7 @@ import {
   CMS_PDF_ACCEPT,
   validateCmsUploadFile,
 } from "../../../lib/admin/media-intelligence/cms-upload-policy";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 import {
   AdminFeedbackChannelViewport,
   useAdminFeedback,
@@ -89,11 +90,6 @@ function formatBytes(value: number | null) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatDate(value: string) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "غير معروف" : parsed.toLocaleDateString("ar-EG");
 }
 
 function isManaged(asset: MediaCatalogAsset) {
@@ -861,7 +857,7 @@ export default function MediaLibraryCore({
                 <div className={focusedAsset.kind === "document" ? "h-72" : "relative h-48"}>{focusedAsset.kind === "document" ? <PdfDocumentPreview asset={focusedAsset} /> : <AssetPreview asset={focusedAsset} />}</div>
                 <div className="space-y-3 p-5">
                   <div><h2 className="break-words font-semibold text-white">{focusedAsset.displayName}</h2><p className="mt-1 break-all font-mono text-[10px] text-white/35" dir="ltr">{focusedAsset.objectKey}</p><p className="mt-2 text-[10px] text-[#D8B87A]/70">{assetManagementStatus(focusedAsset)}</p></div>
-                  <dl className="grid grid-cols-2 gap-2 text-xs text-white/45"><div><dt>الحجم</dt><dd className="text-white/70">{formatBytes(focusedAsset.sizeBytes)}</dd></div><div><dt>تاريخ الإضافة</dt><dd className="text-white/70">{formatDate(focusedAsset.createdAt)}</dd></div><div><dt>النوع</dt><dd className="break-all text-white/70">{focusedAsset.extension} / {focusedAsset.mimeType ?? "غير معروف"}</dd></div><div><dt>الأبعاد</dt><dd className="text-white/70">{focusedAsset.kind === "document" ? "مستند PDF" : focusedAsset.width && focusedAsset.height ? `${focusedAsset.width} × ${focusedAsset.height}` : "غير معروفة"}</dd></div><div><dt>أضيف بواسطة</dt><dd className="text-white/70">{focusedAsset.uploadedBy ?? "غير معروف"}</dd></div><div><dt>حالة الملف</dt><dd className="text-white/70">{assetManagementStatus(focusedAsset)}</dd></div><div><dt>الاستخدام</dt><dd className="text-white/70">{focusedAsset.referenceCount === null ? "يعرض الفحص المباشر أدناه" : `${focusedAsset.referenceCount} ارتباط مسجل`}</dd></div><div><dt>المجلد</dt><dd className="break-all text-white/70">{focusedAsset.folderPath}</dd></div></dl>
+                  <dl className="grid grid-cols-2 gap-2 text-xs text-white/45"><div><dt>الحجم</dt><dd className="text-white/70">{formatBytes(focusedAsset.sizeBytes)}</dd></div><div><dt>تاريخ الإضافة</dt><dd className="text-white/70">{formatAdminDateTime(focusedAsset.createdAt)}</dd></div><div><dt>النوع</dt><dd className="break-all text-white/70">{focusedAsset.extension} / {focusedAsset.mimeType ?? "غير معروف"}</dd></div><div><dt>الأبعاد</dt><dd className="text-white/70">{focusedAsset.kind === "document" ? "مستند PDF" : focusedAsset.width && focusedAsset.height ? `${focusedAsset.width} × ${focusedAsset.height}` : "غير معروفة"}</dd></div><div><dt>أضيف بواسطة</dt><dd className="text-white/70">{focusedAsset.uploadedBy ?? "غير معروف"}</dd></div><div><dt>حالة الملف</dt><dd className="text-white/70">{assetManagementStatus(focusedAsset)}</dd></div><div><dt>الاستخدام</dt><dd className="text-white/70">{focusedAsset.referenceCount === null ? "يعرض الفحص المباشر أدناه" : `${focusedAsset.referenceCount} ارتباط مسجل`}</dd></div><div><dt>المجلد</dt><dd className="break-all text-white/70">{focusedAsset.folderPath}</dd></div></dl>
                   <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void copyPublicUrl(focusedAsset)} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/65">نسخ الرابط</button><a href={focusedAsset.publicUrl} download target="_blank" rel="noreferrer" className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/65">تنزيل</a></div>
                 </div>
               </section>

@@ -14,6 +14,7 @@ import type {
   GlobalSeoHealthSnapshot,
 } from "../../../../lib/seo/global-seo-health-types";
 import { getSitemapSourceLabel } from "../../../../lib/seo/sitemap-monitor-types";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 
 import { runSitemapCheckAction } from "./actions";
 
@@ -34,20 +35,6 @@ const SOURCE_LABELS = {
   environment: "Environment",
   code_fallback: "Code fallback",
 } as const;
-
-function formatDate(value: string) {
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
 
 function healthTone(status: GlobalSeoHealthSnapshot["status"] | GlobalSeoHealthCheck["status"]) {
   if (status === "healthy" || status === "pass") return "green" as const;
@@ -110,7 +97,7 @@ export default function SitemapMonitorClient({ initialSnapshot }: SitemapMonitor
         </div>
         <div className="rounded-[18px] border border-white/10 bg-[#080B10]/78 p-5">
           <p className="text-xs text-white/45">آخر فحص</p>
-          <p className="mt-3 text-sm text-white/82">{formatDate(snapshot.checkedAt)}</p>
+          <p className="mt-3 text-sm text-white/82">{formatAdminDateTime(snapshot.checkedAt)}</p>
         </div>
       </section>
 

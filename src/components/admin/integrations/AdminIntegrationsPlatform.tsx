@@ -11,6 +11,7 @@ import type {
   IntegrationsSnapshot,
 } from "../../../lib/admin/integrations/integrations-contract";
 import { isIntegrationAppConfigurationAuthorizationReady } from "../../../lib/admin/integrations/server-configuration-contract";
+import { formatAdminDateTime } from "../../../lib/content-dates";
 import {
   AdminPageContextHeader,
   AdminPageExperience,
@@ -75,19 +76,6 @@ const STATUS_DOTS: Record<IntegrationConnectionStatus, string> = {
 
 type CategoryFilter = "all" | IntegrationCategory;
 type StatusFilter = "all" | IntegrationConnectionStatus;
-
-function formatDate(value: string | null) {
-  if (!value) return "لا توجد مزامنة";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "غير متاح";
-  return new Intl.DateTimeFormat("ar-EG", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
 
 function SearchIcon() {
   return (
@@ -221,7 +209,7 @@ function IntegrationCard({ item }: { item: IntegrationSnapshotItem }) {
       <div className="mt-3 border-t border-white/7 pt-3">
         <div className="flex items-center justify-between gap-3 text-[10px]">
           <span className="font-semibold text-white/32">آخر مزامنة</span>
-          <span className="font-en text-white/50">{formatDate(item.lastSyncAt)}</span>
+          <span className="font-en text-white/50">{item.lastSyncAt ? formatAdminDateTime(item.lastSyncAt) : "لا توجد مزامنة"}</span>
         </div>
         <p className="mt-2 line-clamp-2 text-[10px] leading-5 text-white/32">{item.message}</p>
       </div>
@@ -300,7 +288,7 @@ export default function AdminIntegrationsPlatform({ snapshot }: { snapshot: Inte
             <MetricCard label="يحتاج انتباه" value={snapshot.statistics.needsAttention} helper="تعذر الفحص أو مصدر جزئي" tone={snapshot.statistics.needsAttention ? "red" : "default"} />
             <MetricCard label="غير المتصل" value={snapshot.statistics.disconnected} helper="لا يوجد Adapter مفعّل" />
             <MetricCard label="حالة الأمان" value={securityReady ? "محمي" : "مراجعة"} helper="الأسرار لا تنتقل إلى العميل" tone={securityReady ? "green" : "red"} />
-            <MetricCard label="آخر مزامنة" value={snapshot.lastSyncAt ? "متاحة" : "لا توجد"} helper={formatDate(snapshot.lastSyncAt)} />
+            <MetricCard label="آخر مزامنة" value={snapshot.lastSyncAt ? "متاحة" : "لا توجد"} helper={snapshot.lastSyncAt ? formatAdminDateTime(snapshot.lastSyncAt) : "لا توجد مزامنة"} />
           </div>
         </div>
       </section>

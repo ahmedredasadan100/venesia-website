@@ -9,18 +9,7 @@ import type {
 import AdminMetricCard, {
   type AdminMetricCardTone,
 } from "../ui/AdminMetricCard";
-
-function formatDate(value?: string | null, includeTime = false) {
-  if (!value) return "غير متاح";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "غير متاح";
-  return new Intl.DateTimeFormat("ar-EG", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    ...(includeTime ? { hour: "2-digit", minute: "2-digit" } : {}),
-  }).format(date);
-}
+import { formatAdminDateTime } from "../../../lib/content-dates";
 
 function statusLabel(status?: string | null) {
   return status === "published" ? "منشور" : "غير منشور";
@@ -104,7 +93,7 @@ function DashboardStateBanner({ model }: { model: AdminDashboardModel }) {
         <p className="mt-1 text-xs leading-6 opacity-75">{content.body}</p>
       </div>
       <p className="shrink-0 font-en text-xs opacity-65">
-        آخر فحص: {formatDate(model.checkedAt, true)}
+        آخر فحص: {formatAdminDateTime(model.checkedAt)}
       </p>
     </section>
   );
@@ -199,7 +188,7 @@ export default function AdminDashboardView({ model }: { model: AdminDashboardMod
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-sm font-semibold leading-6 text-white/78">{event.action}</p>
                       <time className="shrink-0 font-en text-[11px] text-white/38" dateTime={event.timestamp}>
-                        {formatDate(event.timestamp, true)}
+                        {formatAdminDateTime(event.timestamp)}
                       </time>
                     </div>
                     <p className="mt-1 text-xs leading-6 text-white/48">
@@ -267,7 +256,7 @@ export default function AdminDashboardView({ model }: { model: AdminDashboardMod
                         <td className="px-4 py-4 text-white/48">{getContentTypeLabel(topic.contentType)}</td>
                         <td className="px-4 py-4 text-white/48">{topic.category}</td>
                         <td className="px-4 py-4 text-white/62">{statusLabel(topic.status)}</td>
-                        <td className="px-4 py-4 text-white/48">{formatDate(topic.updatedAt)}</td>
+                        <td className="px-4 py-4 text-white/48">{formatAdminDateTime(topic.updatedAt)}</td>
                         <td className="px-4 py-4">
                           <Link className="text-[#D8B87A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]" href={`/admin/content/topics/${topic.id}`}>
                             تعديل
@@ -301,7 +290,7 @@ export default function AdminDashboardView({ model }: { model: AdminDashboardMod
                       <span className="text-xs text-white/42">{statusLabel(project.publicationStatus)}</span>
                     </div>
                     <p className="mt-2 line-clamp-1 text-sm text-white/72">{project.arabicName}</p>
-                    <p className="mt-1 font-en text-[11px] text-white/35">{formatDate(project.updatedAt)}</p>
+                    <p className="mt-1 font-en text-[11px] text-white/35">{formatAdminDateTime(project.updatedAt)}</p>
                   </Link>
                 ))}
               </div>
@@ -326,7 +315,7 @@ export default function AdminDashboardView({ model }: { model: AdminDashboardMod
                 <p className="mt-2 text-xs leading-6 text-white/48">{source.message}</p>
                 <p className="mt-2 break-all font-en text-[10px] leading-5 text-white/30">{source.source}</p>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/35">
-                  <span>{formatDate(source.checkedAt, true)}</span>
+                  <span>{formatAdminDateTime(source.checkedAt)}</span>
                   {source.href ? <Link href={source.href} className="text-[#D8B87A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">التشخيص</Link> : null}
                 </div>
               </div>

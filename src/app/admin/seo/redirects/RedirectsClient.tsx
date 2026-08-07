@@ -42,6 +42,7 @@ import {
   REDIRECTS_LIST_COLUMN_META,
   type RedirectColumnKey,
 } from "../../../../lib/admin/redirects/list-config";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 
 import RedirectFormModal from "./RedirectFormModal";
 import { createRedirectsCollectionToolbar } from "./RedirectsListFilters";
@@ -62,21 +63,6 @@ type RedirectsClientProps = {
 };
 
 const PAGE_SIZE_OPTIONS = REDIRECTS_LIST_PAGE_SIZES.map(String);
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return "—";
-  }
-}
 
 function createRedirectColumns(input: {
   rowPendingAction: (id: number) => string | null;
@@ -146,7 +132,7 @@ function createRedirectColumns(input: {
       width: 164,
       renderCell: ({ row }) => (
         <span className="block text-right text-sm text-white/62">
-          {formatDate(row.created_at)}
+          {formatAdminDateTime(row.created_at)}
         </span>
       ),
     },
@@ -156,7 +142,7 @@ function createRedirectColumns(input: {
       width: 164,
       renderCell: ({ row }) => (
         <span className="block text-right text-sm text-white/62">
-          {formatDate(row.updated_at)}
+          {formatAdminDateTime(row.updated_at)}
         </span>
       ),
     },

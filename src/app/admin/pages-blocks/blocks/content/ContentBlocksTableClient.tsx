@@ -56,6 +56,7 @@ import {
   normalizePageCompositionVisibleColumnKeys,
 } from "../../../../../lib/page-blocks/admin-collection-columns";
 import { statusMeta } from "../../../../../lib/page-blocks/admin-utils";
+import { formatAdminDateTime } from "../../../../../lib/content-dates";
 import {
   restorePageCompositionColumnPreferences,
   savePageCompositionColumnPreferences,
@@ -95,12 +96,6 @@ type ContentBlocksTableClientProps = {
 
 function variantLabel(variant: string) {
   return VARIANT_OPTIONS.find(([value]) => value === variant)?.[1] ?? variant;
-}
-
-function formatUpdatedAt(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("ar-EG", { year: "numeric", month: "short", day: "numeric" });
 }
 
 export default function ContentBlocksTableClient({
@@ -450,7 +445,7 @@ export default function ContentBlocksTableClient({
                       { label: "Slug", value: row.slug },
                       { label: "Variant", value: variantLabel(row.variant) },
                       { label: "الحالة", value: status.label },
-                      { label: "آخر تحديث", value: formatUpdatedAt(row.updated_at) },
+                      { label: "آخر تحديث", value: formatAdminDateTime(row.updated_at) },
                     ],
                   },
                   copyPublicLink: hidden,
@@ -537,7 +532,7 @@ export default function ContentBlocksTableClient({
 
                   {visibleColumnSet.has("updatedAt") ? (
                     <AdminDataGridCenterCell className="font-en text-xs tabular-nums text-white/55">
-                      {formatUpdatedAt(row.updated_at)}
+                      {formatAdminDateTime(row.updated_at)}
                     </AdminDataGridCenterCell>
                   ) : null}
 

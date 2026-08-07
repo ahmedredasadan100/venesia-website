@@ -12,6 +12,7 @@ import type {
   MediaRecoveryItem,
   MediaRecoveryQueue,
 } from "../../../../lib/admin/media-catalog/recovery-contract";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 
 const ACTION_LABELS: Record<MediaRecoveryAction, string> = {
   retry_verification: "التحقق من هذا الملف",
@@ -27,16 +28,6 @@ const CONFIRM_ACTIONS = new Set<MediaRecoveryAction>([
   "confirm_missing",
   "resolve_write_lease",
 ]);
-
-function formatDate(value: string | null) {
-  if (!value) return "غير متاح";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "غير معروف";
-  return new Intl.DateTimeFormat("ar-EG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(parsed);
-}
 
 const STATE_LABELS: Record<string, string> = {
   reserved: "الحذف متوقف قبل الإنهاء",
@@ -325,10 +316,10 @@ export default function MediaRecoveryCenter() {
                       {item.publicValue ?? "غير متاح"}
                     </dd>
                   </div>
-                  <div><dt>بدأت</dt><dd className="mt-1 text-white/65">{formatDate(item.startedAt)}</dd></div>
-                  <div><dt>آخر تحديث للحالة</dt><dd className="mt-1 text-white/65">{formatDate(item.updatedAt)}</dd></div>
+                  <div><dt>بدأت</dt><dd className="mt-1 text-white/65">{formatAdminDateTime(item.startedAt)}</dd></div>
+                  <div><dt>آخر تحديث للحالة</dt><dd className="mt-1 text-white/65">{formatAdminDateTime(item.updatedAt)}</dd></div>
                   {item.expiresAt ? (
-                    <div><dt>انتهاء مهلة الحفظ</dt><dd className="mt-1 text-white/65">{formatDate(item.expiresAt)}</dd></div>
+                    <div><dt>انتهاء مهلة الحفظ</dt><dd className="mt-1 text-white/65">{formatAdminDateTime(item.expiresAt)}</dd></div>
                   ) : null}
                   <div className="min-w-0">
                     <dt>رمز التعثر</dt>
@@ -336,8 +327,8 @@ export default function MediaRecoveryCenter() {
                       {item.failureCode ?? "غير متاح"}
                     </dd>
                   </div>
-                  <div><dt>آخر تحقق تخزين</dt><dd className="mt-1 text-white/65">{formatDate(item.lastStorageVerification)}</dd></div>
-                  <div><dt>آخر فحص شامل لكل المصادر</dt><dd className="mt-1 text-white/65">{formatDate(item.lastProviderScan)}</dd></div>
+                  <div><dt>آخر تحقق تخزين</dt><dd className="mt-1 text-white/65">{formatAdminDateTime(item.lastStorageVerification)}</dd></div>
+                  <div><dt>آخر فحص شامل لكل المصادر</dt><dd className="mt-1 text-white/65">{formatAdminDateTime(item.lastProviderScan)}</dd></div>
                 </dl>
                 {item.blockedReasons.length ? (
                   <ul className="mt-3 space-y-1 text-xs leading-6 text-amber-100/65">
