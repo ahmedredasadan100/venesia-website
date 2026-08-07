@@ -88,7 +88,7 @@ export async function getSeries(seriesId: number | null, currentSeriesId?: numbe
 
   let query = getSupabaseAdmin()
     .from("topic_series")
-    .select("id, name, slug")
+    .select("id, name, slug, category_id")
     .eq("id", seriesId)
     .is("deleted_at", null);
   if (seriesId !== currentSeriesId) query = query.eq("status", "published");

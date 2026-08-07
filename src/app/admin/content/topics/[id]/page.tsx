@@ -68,7 +68,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       .order("id", { ascending: true }),
     supabase
       .from("topic_series")
-      .select("id,name,slug,status,deleted_at")
+      .select("id,name,slug,status,deleted_at,category_id")
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true }),
   ]);
@@ -93,6 +93,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
     slug: string;
     status: string;
     deleted_at: string | null;
+    category_id: number | null;
   }>;
   const selectableSeries = allSeries.filter(
     (item) =>

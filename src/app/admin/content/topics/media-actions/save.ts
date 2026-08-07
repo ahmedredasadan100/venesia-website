@@ -33,6 +33,9 @@ import {
   resolveMediaSection,
 } from "./validation";
 import { revalidateUnifiedContentPaths } from "../editor-actions/revalidate";
+import {
+  getAdminContentSeriesCategoryError,
+} from "../../../../../lib/admin/content/category-hierarchy";
 
 type FieldErrors = Record<string, string[]>;
 
@@ -171,7 +174,7 @@ export async function saveMediaContentAdapter(
   const seriesQuery = payload.seriesId
     ? getSupabaseAdmin()
         .from("topic_series")
-        .select("id,name,slug")
+        .select("id,name,slug,category_id")
         .eq("id", Number(payload.seriesId))
         .is("deleted_at", null)
     : null;
@@ -179,11 +182,25 @@ export async function saveMediaContentAdapter(
     ? await (Number(payload.seriesId) === currentTopic?.series_id
         ? seriesQuery
         : seriesQuery.eq("status", "published")
-      ).maybeSingle<{ id: number; name: string; slug: string }>()
+      ).maybeSingle<{
+        id: number;
+        name: string;
+        slug: string;
+        category_id: number | null;
+      }>()
     : { data: null };
   if (payload.seriesId && !series) {
     return failure("السلسلة المختارة غير موجودة أو غير مفعلة.", {
       series_id: ["اختر سلسلة متاحة أو اترك الحقل فارغًا."],
+    });
+  }
+  const seriesCategoryError = getAdminContentSeriesCategoryError(
+    series,
+    section.category.id,
+  );
+  if (seriesCategoryError) {
+    return failure(seriesCategoryError, {
+      series_id: [seriesCategoryError],
     });
   }
 

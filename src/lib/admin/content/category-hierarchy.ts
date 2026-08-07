@@ -16,6 +16,45 @@ export type AdminContentCategoryNode = AdminContentCategory & {
   children: AdminContentCategoryNode[];
 };
 
+export type AdminContentSeriesCategory = {
+  category_id: number | null;
+};
+
+export const TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE =
+  "اختر سلسلة تابعة للتصنيف المحدد أو اترك الحقل فارغًا.";
+
+export function isAdminContentSeriesInCategory(
+  series: AdminContentSeriesCategory,
+  categoryId: number | null,
+) {
+  return categoryId !== null && series.category_id === categoryId;
+}
+
+export function isAdminContentSeriesSelectionValid(
+  series: AdminContentSeriesCategory | null,
+  categoryId: number | null,
+) {
+  return series === null || isAdminContentSeriesInCategory(series, categoryId);
+}
+
+export function getAdminContentSeriesCategoryError(
+  series: AdminContentSeriesCategory | null,
+  categoryId: number | null,
+) {
+  return isAdminContentSeriesSelectionValid(series, categoryId)
+    ? null
+    : TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE;
+}
+
+export function filterAdminContentSeriesByCategory<
+  TSeries extends AdminContentSeriesCategory,
+>(series: readonly TSeries[], categoryId: number | null) {
+  if (categoryId === null) return [];
+  return series.filter((item) =>
+    isAdminContentSeriesInCategory(item, categoryId),
+  );
+}
+
 function compareCategories(a: AdminContentCategory, b: AdminContentCategory) {
   return (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id - b.id;
 }
