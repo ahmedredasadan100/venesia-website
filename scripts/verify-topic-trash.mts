@@ -51,6 +51,9 @@ const sharedRowActions = read(
   "src/components/admin/ui/AdminDataGridRowActions.tsx",
 );
 const auditActions = read("src/lib/admin/audit/cms-audit-actions.ts");
+const bulkLabels = read(
+  "src/lib/admin/entity-list/bulk-action-labels.ts",
+);
 
 const softDelete = functionSection(
   actions,
@@ -204,8 +207,12 @@ check(
 );
 check(
   "Trash bulk selection exposes the formal restore and permanent-delete labels",
-  list.includes('label: "استعادة المحدد"') &&
-    list.includes('label: "حذف نهائي للمحدد"') &&
+  bulkLabels.includes('restoreSelected: "استعادة المحدد"') &&
+    bulkLabels.includes(
+      'permanentlyDeleteSelected: "حذف نهائي للمحدد"',
+    ) &&
+    list.includes("ADMIN_BULK_ACTION_LABELS.restoreSelected") &&
+    list.includes("ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected") &&
     list.includes("enableSelection") &&
     list.includes("getBulkConfirmation"),
 );
@@ -214,12 +221,13 @@ check(
   list.includes('action === "permanent_delete"') &&
     list.includes("ids.length") &&
     list.includes("لا يمكن التراجع عن هذا الإجراء") &&
-    list.includes('confirmLabel: "حذف نهائي للمحدد"'),
+    list.includes("ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected"),
 );
 check(
   "Empty Trash uses shared confirmation with a server-verified count",
   listClient.includes("floating.openConfirmation") &&
-    listClient.includes('confirmLabel: "إفراغ المحذوفات"') &&
+    bulkLabels.includes('emptyTrash: "إفراغ المحذوفات"') &&
+    listClient.includes("ADMIN_BULK_ACTION_LABELS.emptyTrash") &&
     listClient.includes('formData.set("expected_count", String(confirmedCount))') &&
     emptyTrashAction.includes('getString(formData, "confirm_permanent") !== "true"'),
 );

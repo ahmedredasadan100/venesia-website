@@ -52,6 +52,7 @@ import UnifiedContentList, {
 } from "./UnifiedContentList";
 import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions";
 import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../lib/admin/entity-list/bulk-action-labels";
 
 type SeriesOption = {
   id: number;
@@ -185,7 +186,7 @@ function TopicEmptyTrashAction({
     floating.openConfirmation({
       title: `إفراغ المحذوفات (${confirmedCount})؟`,
       description: `سيتم حذف ${confirmedCount} من الموضوعات الموجودة في المحذوفات نهائيًا وتحرير الـSlugs الخاصة بها. لا يمكن التراجع عن هذا الإجراء.`,
-      confirmLabel: "إفراغ المحذوفات",
+      confirmLabel: ADMIN_BULK_ACTION_LABELS.emptyTrash,
       returnFocusRef: triggerRef,
       onConfirm: async () => {
         const formData = new FormData();
@@ -215,7 +216,7 @@ function TopicEmptyTrashAction({
       onClick={requestEmptyTrash}
       className="border-red-300/20 text-red-100/85 hover:border-red-300/35 hover:bg-red-400/8"
     >
-      إفراغ المحذوفات
+      {ADMIN_BULK_ACTION_LABELS.emptyTrash}
     </AdminActionButton>
   );
 }

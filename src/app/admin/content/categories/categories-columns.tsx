@@ -10,6 +10,7 @@ import {
   AdminStatusPill,
 } from "../../../../components/admin/ui";
 import {
+  ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
   ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
@@ -225,8 +226,8 @@ export function createCategoryColumns(
       hideable: true,
       sortable: true,
       sortKey: "count",
-      minWidth: 80,
-      width: 80,
+      minWidth: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
       renderCell: ({ row }) => (
         <span className="font-en tabular-nums text-sm font-semibold text-white/82">
           {row.totalCount}

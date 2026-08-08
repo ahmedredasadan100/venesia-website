@@ -28,19 +28,23 @@ import {
   type UnifiedContentSortKey,
 } from "./unified-content-columns";
 import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../lib/admin/entity-list/bulk-action-labels";
 
 const BULK_OPTIONS = [
-  { value: "publish", label: "نشر" },
-  { value: "unpublish", label: "إخفاء" },
-  { value: "move_to_trash", label: "نقل إلى المحذوفات" },
+  { value: "publish", label: ADMIN_BULK_ACTION_LABELS.showSelected },
+  { value: "unpublish", label: ADMIN_BULK_ACTION_LABELS.hideSelected },
+  { value: "move_to_trash", label: ADMIN_BULK_ACTION_LABELS.deleteSelected },
   { value: "move_category", label: "نقل لتصنيف" },
   { value: "feature", label: "تعيين كمميز" },
   { value: "unfeature", label: "إلغاء التمييز" },
 ] as const;
 
 const TRASH_BULK_OPTIONS = [
-  { value: "restore", label: "استعادة المحدد" },
-  { value: "permanent_delete", label: "حذف نهائي للمحدد" },
+  { value: "restore", label: ADMIN_BULK_ACTION_LABELS.restoreSelected },
+  {
+    value: "permanent_delete",
+    label: ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected,
+  },
 ] as const;
 
 export const UNIFIED_CONTENT_LIST_ID = "content-topics-table";
@@ -206,7 +210,8 @@ export default function UnifiedContentList({
           ? {
               title: `حذف نهائي لـ ${ids.length} موضوع؟`,
               description: `سيتم حذف ${ids.length} من الموضوعات المحددة نهائيًا وتحرير الـSlugs الخاصة بها. لا يمكن التراجع عن هذا الإجراء.`,
-              confirmLabel: "حذف نهائي للمحدد",
+              confirmLabel:
+                ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected,
             }
           : action === "move_to_trash"
             ? {

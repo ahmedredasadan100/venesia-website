@@ -36,6 +36,7 @@ import {
   useAdminBoundedClientPagination,
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -294,9 +295,18 @@ export default function MenusTableClient({
               entityLabel="قائمة"
               action={bulkMenuAction}
               options={[
-                { value: "show", label: "إظهار" },
-                { value: "hide", label: "إخفاء" },
-                { value: "delete", label: "حذف" },
+                {
+                  value: "show",
+                  label: ADMIN_BULK_ACTION_LABELS.showSelected,
+                },
+                {
+                  value: "hide",
+                  label: ADMIN_BULK_ACTION_LABELS.hideSelected,
+                },
+                {
+                  value: "delete",
+                  label: ADMIN_BULK_ACTION_LABELS.deleteSelected,
+                },
               ]}
               idsFieldName="menu_ids"
               onClearSelection={selection.clearSelection}

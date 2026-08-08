@@ -49,6 +49,7 @@ import {
   applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
 } from "../../../lib/admin/entity-list";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../lib/admin/entity-list/bulk-action-labels";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -319,9 +320,18 @@ export default function BlockModuleManagerClient({
             selectedIds={selection.selectedIds}
             entityLabel="بلوك"
             options={[
-              { value: "publish", label: "نشر" },
-              { value: "hide", label: "إخفاء" },
-              { value: "delete", label: "حذف" },
+              {
+                value: "publish",
+                label: ADMIN_BULK_ACTION_LABELS.showSelected,
+              },
+              {
+                value: "hide",
+                label: ADMIN_BULK_ACTION_LABELS.hideSelected,
+              },
+              {
+                value: "delete",
+                label: ADMIN_BULK_ACTION_LABELS.deleteSelected,
+              },
             ]}
             onClearSelection={selection.clearSelection}
             isBusy={isBusy}

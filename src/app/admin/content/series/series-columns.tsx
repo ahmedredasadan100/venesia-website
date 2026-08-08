@@ -8,9 +8,11 @@ import {
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
 import {
+  ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
   ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
+  ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
@@ -288,8 +290,8 @@ export function createSeriesColumns(
       hideable: true,
       sortable: true,
       sortKey: "category",
-      minWidth: 160,
-      width: 180,
+      minWidth: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
       renderCell: ({ row }) =>
         singleLine(row.category_name?.trim() ? row.category_name : "—"),
     },
@@ -300,8 +302,8 @@ export function createSeriesColumns(
       hideable: true,
       sortable: true,
       sortKey: "topics_count",
-      minWidth: 80,
-      width: 80,
+      minWidth: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
       renderCell: ({ row }) => (
         <span className="font-en text-sm font-semibold tabular-nums text-white/72">
           {row.topics_count}

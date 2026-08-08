@@ -34,6 +34,7 @@ import type {
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
 import {
   bulkSeriesActionAjax,
   deleteSeriesAjax,
@@ -53,9 +54,9 @@ import {
 const BASE_PATH = "/admin/content/series";
 
 const BULK_OPTIONS = [
-  { value: "publish", label: "إظهار المحدد" },
-  { value: "hide", label: "إخفاء المحدد" },
-  { value: "delete", label: "حذف المحدد" },
+  { value: "publish", label: ADMIN_BULK_ACTION_LABELS.showSelected },
+  { value: "hide", label: ADMIN_BULK_ACTION_LABELS.hideSelected },
+  { value: "delete", label: ADMIN_BULK_ACTION_LABELS.deleteSelected },
 ] as const;
 
 const STATUS_FILTER: AdminEntityFilterDef = {

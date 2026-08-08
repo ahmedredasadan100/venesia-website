@@ -30,6 +30,7 @@ import type {
   AdminEntityListQuery,
   AdminEntityListResult,
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list/feedback-codes";
 import {
@@ -507,7 +508,12 @@ export default function PagesTableClient({
             enableColumnManagement
             enableSelection
             selectionLabel="تحديد كل الصفحات في الصفحة الحالية"
-            bulkOptions={[{ value: "delete", label: "حذف المحدد" }]}
+            bulkOptions={[
+              {
+                value: "delete",
+                label: ADMIN_BULK_ACTION_LABELS.deleteSelected,
+              },
+            ]}
             bulkEntityLabel="صفحة"
             onBulkExecute={(action, ids) =>
               action === "delete"

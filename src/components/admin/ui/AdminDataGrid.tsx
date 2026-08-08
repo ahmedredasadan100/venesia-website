@@ -142,6 +142,12 @@ export const ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH =
 /** Canonical width for `DD MMM YYYY, hh:mm A` Admin timestamp columns. */
 export const ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH = 196;
 
+/** Sort-safe width for compact numeric count columns. */
+export const ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH = 112;
+
+/** Balanced width for short secondary entity references. */
+export const ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH = 160;
+
 export const ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT = {
   textBudgetPx: 200,
   cellInlinePaddingPx: ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx,
