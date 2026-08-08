@@ -170,6 +170,20 @@ function getNumericObjectLiteral(path, variableName) {
   return {};
 }
 
+function getNumericConst(path, variableName) {
+  const sourceFile = parseTypeScriptSource(path);
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    const declaration = statement.declarationList.declarations.find(
+      (item) => ts.isIdentifier(item.name) && item.name.text === variableName,
+    );
+    if (declaration?.initializer && ts.isNumericLiteral(declaration.initializer)) {
+      return Number(declaration.initializer.text);
+    }
+  }
+  return null;
+}
+
 function findIfElseBranches(source, path, expectedCondition) {
   const sourceFile = ts.createSourceFile(
     path,
@@ -415,6 +429,10 @@ const compactColumnWidths = getNumericObjectLiteral(
   columnsPath,
   "TOPICS_COMPACT_COLUMN_WIDTHS",
 );
+const topicsTitleMinWidth = getNumericConst(
+  columnsPath,
+  "TOPICS_TITLE_MIN_WIDTH",
+);
 const topicsAdapter = read(
   "src/lib/admin/content/entity-list-adapters/topics.ts",
 );
@@ -465,11 +483,12 @@ check(
     JSON.stringify(compactColumnWidths) ===
       JSON.stringify({
         status: 88,
-        contentType: 104,
-        category: 120,
-        featured: 52,
+        contentType: 52,
+        category: 88,
+        featured: 44,
         seo: 76,
-      }),
+      }) &&
+    topicsTitleMinWidth === 170,
 );
 check(
   "Featured must use the shared icon and SEO must follow it",
@@ -578,6 +597,21 @@ check(
 check(
   "Table overflow must remain inside its shared container",
   entityListTable.includes("<AdminDataGrid") && dataGrid.includes("overflow-x-auto"),
+);
+check(
+  "Flexible Topics geometry must fit the authenticated 1280px admin shell without sticky-column overlap",
+  entityListTable.includes("column.flexible") &&
+    entityListTable.includes("? column.minWidth") &&
+    46 +
+      topicsTitleMinWidth +
+      compactColumnWidths.status +
+      compactColumnWidths.contentType +
+      compactColumnWidths.category +
+      170 +
+      compactColumnWidths.featured +
+      compactColumnWidths.seo +
+      144 <=
+      878,
 );
 check(
   "Bulk actions must use the shared Admin listbox select",

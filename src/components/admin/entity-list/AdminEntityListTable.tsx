@@ -106,8 +106,15 @@ export default function AdminEntityListTable<
   function getColumnBaseWidth(
     column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
   ) {
-    return column.sticky === "end"
-      ? actionsColumnWidth
+    if (column.sticky === "end") {
+      return actionsColumnWidth;
+    }
+
+    // A flexible track may prefer a wider desktop width, but that preference
+    // must not become the table's hard minimum. Otherwise the shared sticky
+    // actions track can cover the final data columns inside narrower shells.
+    return column.flexible
+      ? column.minWidth
       : Math.max(column.minWidth, column.width ?? column.minWidth);
   }
 
