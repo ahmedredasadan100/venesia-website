@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import AdminPageHeader from "../../../../../../components/admin/AdminPageHeader";
 import AdminStatusBadge from "../../../../../../components/admin/AdminStatusBadge";
 import AdminCategoryBadge from "../../../../../../components/admin/content/AdminCategoryBadge";
+import RichTextContent from "../../../../../../components/content/RichTextContent";
 import {
   resolveYouTubeEmbedUrl,
   type MediaTopicPayload,
@@ -93,24 +94,16 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
               ))}
             </div>
           ) : (
-            <div className="space-y-4">{renderMarkdown(topic.content || "")}</div>
+            <RichTextContent
+              value={topic.content}
+              mode="markdown"
+              className="article-rich-text article-rich-text--admin-preview"
+            />
           )}
         </div>
       </article>
     </main>
   );
-}
-
-function renderMarkdown(content: string) {
-  return content.split("\n").map((line, index) => {
-    const key = `${index}-${line.slice(0, 20)}`;
-    if (!line.trim()) return <div key={key} className="h-3" />;
-    if (line.startsWith("# ")) return <h1 key={key} className="text-4xl font-semibold text-white">{line.slice(2)}</h1>;
-    if (line.startsWith("## ")) return <h2 key={key} className="mt-8 text-2xl font-semibold text-[#D8B87A]">{line.slice(3)}</h2>;
-    if (line.startsWith("### ")) return <h3 key={key} className="mt-6 text-xl font-semibold text-white">{line.slice(4)}</h3>;
-    if (line.startsWith("- ")) return <li key={key} className="mr-6 list-disc leading-8 text-white/68">{line.slice(2)}</li>;
-    return <p key={key} className="leading-9 text-white/68">{line}</p>;
-  });
 }
 
 function VideoPreview({ url }: { url: string }) {

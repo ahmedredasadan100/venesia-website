@@ -16,6 +16,20 @@ export function revalidateUnifiedContentPaths(options: {
   oldSlug?: string | null;
   newSlug?: string | null;
 }) {
+  revalidateUnifiedContentBatchPaths({
+    contentType: options.contentType,
+    entries: [options],
+  });
+}
+
+export function revalidateUnifiedContentBatchPaths(options: {
+  contentType: ContentType;
+  entries: readonly {
+    id?: string | number;
+    oldSlug?: string | null;
+    newSlug?: string | null;
+  }[];
+}) {
   revalidateTopicsCache();
   if (options.contentType !== "article") revalidateMediaCenterCache();
 
@@ -23,18 +37,20 @@ export function revalidateUnifiedContentPaths(options: {
   revalidatePath("/admin/content/topics/new");
   revalidatePath(resolvePublicContentBasePath(options.contentType));
 
-  if (options.id) {
-    revalidatePath(`/admin/content/topics/${options.id}`);
-    revalidatePath(`/admin/content/topics/${options.id}/preview`);
-  }
-  if (options.oldSlug) {
-    revalidatePath(
-      resolvePublicContentPath(options.contentType, options.oldSlug),
-    );
-  }
-  if (options.newSlug) {
-    revalidatePath(
-      resolvePublicContentPath(options.contentType, options.newSlug),
-    );
+  for (const entry of options.entries) {
+    if (entry.id) {
+      revalidatePath(`/admin/content/topics/${entry.id}`);
+      revalidatePath(`/admin/content/topics/${entry.id}/preview`);
+    }
+    if (entry.oldSlug) {
+      revalidatePath(
+        resolvePublicContentPath(options.contentType, entry.oldSlug),
+      );
+    }
+    if (entry.newSlug) {
+      revalidatePath(
+        resolvePublicContentPath(options.contentType, entry.newSlug),
+      );
+    }
   }
 }

@@ -1068,11 +1068,16 @@ check(
 const unifiedActionPath =
   "src/app/admin/content/topics/article-actions/save.ts";
 const unifiedAction = read(unifiedActionPath);
+const articleCreateDomain = read(
+  "src/app/admin/content/topics/article-actions/create-domain.ts",
+);
 const preflightIndex = unifiedAction.indexOf(
   "const publishErrors = validateTopicFields(",
 );
 const uploadIndex = unifiedAction.indexOf("await uploadTopicImage(");
-const insertIndex = unifiedAction.indexOf(".insert({");
+const createDelegateIndex = unifiedAction.indexOf(
+  "await createArticleDomainRecord({",
+);
 const updateIndex = unifiedAction.indexOf(".update({");
 check(
   "Topic Article has one unified create/edit action owner",
@@ -1095,7 +1100,8 @@ check(
   "publish preflight runs before Storage and database writes",
   preflightIndex >= 0 &&
     uploadIndex > preflightIndex &&
-    insertIndex > uploadIndex &&
+    createDelegateIndex > uploadIndex &&
+    articleCreateDomain.includes(".insert({") &&
     updateIndex > uploadIndex,
 );
 check(

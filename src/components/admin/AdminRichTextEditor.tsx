@@ -8,7 +8,12 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { normalizeRichTextContent } from "../../lib/rich-text/html-utils";
+import {
+  markdownToRichTextHtml,
+  normalizeArticleMarkdown,
+  normalizeRichTextContent,
+  richTextHtmlToMarkdown,
+} from "../../lib/rich-text/html-utils";
 import {
   AdminFormError,
   useOptionalAdminFormRuntime,
@@ -39,6 +44,11 @@ type AdminRichTextEditorProps = {
   visibilityDefault?: boolean;
   helperText?: string;
   appearance?: "dark" | "light";
+  /** Keep HTML as the default contract; Article consumers opt into their existing Markdown contract. */
+  storageFormat?: "html" | "markdown";
+  /** Enables the Article block structure while retaining the same TipTap editor engine. */
+  enableArticleStructure?: boolean;
+  onValueChange?: (value: string) => void;
 };
 
 type TextAlignValue = "right" | "center" | "left" | "justify";
@@ -92,33 +102,44 @@ export default function AdminRichTextEditor({
   visibilityDefault = true,
   helperText,
   appearance = "dark",
+  storageFormat = "html",
+  enableArticleStructure = false,
+  onValueChange,
 }: AdminRichTextEditorProps) {
   const runtime = useOptionalAdminFormRuntime();
   const pending = runtime?.pending ?? false;
   const hasError = Boolean(runtime?.fieldErrors[name]?.length);
   const styleScope = `rich-text-${useId().replace(/:/g, "")}`;
-  const initialContent = useMemo(() => normalizeRichTextContent(defaultValue), [defaultValue]);
-  const [html, setHtml] = useState(initialContent);
-  const [syncedContent, setSyncedContent] = useState(initialContent);
+  const initialValue = useMemo(
+    () => storageFormat === "markdown"
+      ? defaultValue
+      : normalizeRichTextContent(defaultValue),
+    [defaultValue, storageFormat],
+  );
+  const initialContent = useMemo(
+    () => storageFormat === "markdown"
+      ? markdownToRichTextHtml(normalizeArticleMarkdown(initialValue))
+      : initialValue,
+    [initialValue, storageFormat],
+  );
   const [contentVisible, setContentVisible] = useState(visibilityDefault);
+  const [linkEditorOpen, setLinkEditorOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
   const valueInputRef = useRef<HTMLInputElement>(null);
+  const currentValueRef = useRef(initialValue);
+  const hasUserInteractedRef = useRef(false);
   const isMinimal = toolbarMode === "minimal";
   const withTextAlign = enableTextAlign;
   const sideToolbar = toolbarPlacement === "side";
   const withVisibility = Boolean(visibilityName);
 
-  if (initialContent !== syncedContent) {
-    setSyncedContent(initialContent);
-    setHtml(initialContent);
-  }
-
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
-        heading: false,
+        heading: enableArticleStructure ? { levels: [1, 2, 3] } : false,
         codeBlock: false,
-        blockquote: false,
+        blockquote: enableArticleStructure ? {} : false,
         horizontalRule: false,
         link: false,
         underline: false,
@@ -164,38 +185,66 @@ export default function AdminRichTextEditor({
       },
     },
     onUpdate: ({ editor: currentEditor }) => {
+      if (!hasUserInteractedRef.current) return;
       const nextHtml = currentEditor.isEmpty ? "" : currentEditor.getHTML();
-      if (nextHtml === valueInputRef.current?.value) return;
-      setHtml(nextHtml);
+      const nextValue = storageFormat === "markdown"
+        ? richTextHtmlToMarkdown(nextHtml)
+        : nextHtml;
+      if (nextValue === currentValueRef.current) return;
+      currentValueRef.current = nextValue;
       if (valueInputRef.current) {
-        valueInputRef.current.value = nextHtml;
+        valueInputRef.current.value = nextValue;
         valueInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
       }
+      onValueChange?.(nextValue);
     },
-  }, [hasError, initialContent, isMinimal, label, name, withTextAlign]);
+    onFocus: () => {
+      hasUserInteractedRef.current = true;
+    },
+  }, [enableArticleStructure, hasError, isMinimal, label, name, onValueChange, storageFormat, withTextAlign]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const currentHtml = editor.isEmpty ? "" : editor.getHTML();
+    if (currentHtml !== initialContent) {
+      editor.commands.setContent(initialContent, { emitUpdate: false });
+    }
+    currentValueRef.current = initialValue;
+    hasUserInteractedRef.current = false;
+    if (valueInputRef.current) valueInputRef.current.value = initialValue;
+  }, [editor, initialContent, initialValue]);
 
   useEffect(() => {
     editor?.setEditable(!pending);
   }, [editor, pending]);
 
-  function toggleLink() {
+  function openLinkEditor() {
     if (!editor) return;
 
     const previousUrl = editor.getAttributes("link").href as string | undefined;
-    const url = window.prompt("أدخل الرابط", previousUrl ?? "https://");
+    setLinkUrl(previousUrl ?? "https://");
+    setLinkEditorOpen(true);
+  }
 
-    if (url === null) return;
-
-    if (!url.trim()) {
+  function applyLink() {
+    if (!editor) return;
+    if (!linkUrl.trim()) {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      setLinkEditorOpen(false);
       return;
     }
 
-    const normalized = /^https?:\/\//i.test(url.trim()) || url.startsWith("/") || url.startsWith("mailto:")
-      ? url.trim()
-      : `https://${url.trim()}`;
+    const normalized = /^(https?:\/\/|mailto:|tel:|\/|#)/i.test(linkUrl.trim())
+      ? linkUrl.trim()
+      : `https://${linkUrl.trim()}`;
 
     editor.chain().focus().extendMarkRange("link").setLink({ href: normalized }).run();
+    setLinkEditorOpen(false);
+  }
+
+  function removeLink() {
+    editor?.chain().focus().extendMarkRange("link").unsetLink().run();
+    setLinkEditorOpen(false);
   }
 
   function setAlign(alignment: TextAlignValue) {
@@ -221,6 +270,31 @@ export default function AdminRichTextEditor({
         onClick={() => editor?.chain().focus().toggleBold().run()}
         appearance={appearance}
       />
+      {enableArticleStructure ? (
+        <>
+          <ToolButton
+            label="فقرة"
+            title="فقرة"
+            active={editor?.isActive("paragraph")}
+            onClick={() => editor?.chain().focus().setParagraph().run()}
+            appearance={appearance}
+          />
+          <ToolButton
+            label="H2"
+            title="عنوان رئيسي داخل المقال"
+            active={editor?.isActive("heading", { level: 2 })}
+            onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+            appearance={appearance}
+          />
+          <ToolButton
+            label="H3"
+            title="عنوان فرعي داخل المقال"
+            active={editor?.isActive("heading", { level: 3 })}
+            onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+            appearance={appearance}
+          />
+        </>
+      ) : null}
       {withTextAlign ? (
         <>
           <ToolButton
@@ -299,10 +373,68 @@ export default function AdminRichTextEditor({
             label="🔗"
             title="رابط"
             active={editor?.isActive("link")}
-            onClick={toggleLink}
+            onClick={openLinkEditor}
             appearance={appearance}
           />
         </>
+      ) : null}
+      {linkEditorOpen ? (
+        <div
+          className={`flex basis-full flex-wrap items-end gap-2 rounded-xl border p-2 ${appearance === "light" ? "border-slate-200 bg-white" : "border-white/10 bg-black/30"}`}
+          data-admin-rich-text-link-editor=""
+        >
+          <label className="min-w-52 flex-1 space-y-1 text-right">
+            <span className={`block text-[11px] font-semibold ${appearance === "light" ? "text-slate-600" : "text-white/55"}`}>
+              عنوان الرابط
+            </span>
+            <input
+              type="text"
+              value={linkUrl}
+              autoFocus
+              dir="ltr"
+              aria-label="عنوان الرابط"
+              onChange={(event) => setLinkUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  applyLink();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setLinkEditorOpen(false);
+                  editor?.chain().focus().run();
+                }
+              }}
+              className={`h-9 w-full rounded-lg border px-3 text-xs outline-none ${appearance === "light" ? "border-slate-200 bg-white text-slate-800 focus:border-[#b98724]/50" : "border-white/10 bg-[#05070B] text-white focus:border-[#D8B87A]/40"}`}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={applyLink}
+            className="h-9 rounded-lg bg-[#D8B87A] px-3 text-xs font-semibold text-[#080B10]"
+          >
+            تطبيق الرابط
+          </button>
+          {editor?.isActive("link") ? (
+            <button
+              type="button"
+              onClick={removeLink}
+              className={`h-9 rounded-lg border px-3 text-xs font-semibold ${appearance === "light" ? "border-slate-200 text-slate-600" : "border-white/10 text-white/65"}`}
+            >
+              إزالة الرابط
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setLinkEditorOpen(false);
+              editor?.chain().focus().run();
+            }}
+            className={`h-9 rounded-lg border px-3 text-xs font-semibold ${appearance === "light" ? "border-slate-200 text-slate-600" : "border-white/10 text-white/65"}`}
+          >
+            إلغاء
+          </button>
+        </div>
       ) : null}
     </div>
   );
@@ -312,7 +444,7 @@ export default function AdminRichTextEditor({
       {withVisibility && visibilityName ? (
         <input type="hidden" name={visibilityName} value={contentVisible ? "true" : "false"} />
       ) : null}
-      <input ref={valueInputRef} type="hidden" name={name} value={html} readOnly />
+      <input ref={valueInputRef} type="hidden" name={name} defaultValue={initialValue} />
 
       {label ? (
         <span className={`text-sm font-medium ${appearance === "light" ? "text-slate-700" : "text-white/70"}`}>
@@ -364,6 +496,27 @@ export default function AdminRichTextEditor({
         }
         [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content p:last-child {
           margin-bottom: 0;
+        }
+        [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content h1,
+        [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content h2,
+        [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content h3 {
+          color: ${appearance === "light" ? "#1e293b" : "#f8fafc"};
+          font-weight: 750;
+        }
+        [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content h1 {
+          margin: 0 0 18px;
+          font-size: 1.75rem;
+          line-height: 1.55;
+        }
+        [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content h2 {
+          margin: 30px 0 12px;
+          font-size: 1.4rem;
+          line-height: 1.65;
+        }
+        [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content h3 {
+          margin: 24px 0 10px;
+          font-size: 1.15rem;
+          line-height: 1.7;
         }
         [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content ul,
         [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content ol {

@@ -36,6 +36,7 @@
       "structuredWarning": true,
       "sourceFiles": [
         "src/app/admin/content/topics/actions.ts",
+        "src/app/admin/content/topics/article-actions/create-domain.ts",
         "src/app/admin/content/topics/article-actions/save.ts",
         "src/app/admin/content/topics/media-actions/save.ts"
       ],

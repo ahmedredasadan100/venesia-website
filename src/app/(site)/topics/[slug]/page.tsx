@@ -9,6 +9,7 @@ import TopicsSidebarSearchPanel from "../../../../components/topics/TopicsSideba
 import TopicCard from "../../../../components/topics/TopicCard";
 import TopicViewTracker from "../../../../components/content/TopicViewTracker";
 import JsonLd from "../../../../components/seo/JsonLd";
+import RichTextContent from "../../../../components/content/RichTextContent";
 
 import { loadFeedModulesForPageSlug } from "../../../../lib/feed-modules/load-feed-modules";
 import {
@@ -65,68 +66,6 @@ export async function generateMetadata({
     publishedTime: topic.publishedAt,
     modifiedTime: topic.publishedAt,
     includePageSeo: false,
-  });
-}
-
-function renderContent(content?: string) {
-  if (!content) return null;
-
-  return content.split("\n").map((line, index) => {
-    const trimmed = line.trim();
-
-    if (!trimmed) return <div key={index} className="h-5" />;
-
-    if (trimmed.startsWith("# ")) {
-      return (
-        <h1 key={index} className="mt-10 text-4xl font-semibold leading-[1.4] text-white">
-          {trimmed.replace("# ", "")}
-        </h1>
-      );
-    }
-
-    if (trimmed.startsWith("## ")) {
-      return (
-        <h2 key={index} className="mt-10 text-2xl font-semibold leading-[1.5] text-[#D8B87A]">
-          {trimmed.replace("## ", "")}
-        </h2>
-      );
-    }
-
-    if (trimmed.startsWith("### ")) {
-      return (
-        <h3 key={index} className="mt-8 text-xl font-semibold leading-[1.5] text-white">
-          {trimmed.replace("### ", "")}
-        </h3>
-      );
-    }
-
-    const aligned = /^::(right|center|left|justify)::\s*(.+)$/.exec(trimmed);
-    if (aligned) {
-      const alignmentClass = aligned[1] === "center" ? "text-center" : aligned[1] === "left" ? "text-left" : aligned[1] === "justify" ? "text-justify" : "text-right";
-      return <p key={index} className={`${alignmentClass} leading-9 text-white/68`}>{aligned[2]}</p>;
-    }
-
-    if (/^\d+\.\s+/.test(trimmed)) {
-      return <li key={index} className="mr-6 list-decimal leading-8 text-white/68">{trimmed.replace(/^\d+\.\s+/, "")}</li>;
-    }
-
-    if (trimmed.startsWith("> ")) {
-      return <blockquote key={index} className="my-5 border-r-4 border-[#D8B87A] bg-[#D8B87A]/8 px-5 py-3 leading-8 text-white/72">{trimmed.slice(2)}</blockquote>;
-    }
-
-    if (trimmed.startsWith("- ")) {
-      return (
-        <li key={index} className="mr-6 list-disc leading-8 text-white/68">
-          {trimmed.replace("- ", "")}
-        </li>
-      );
-    }
-
-    return (
-      <p key={index} className="leading-9 text-white/68">
-        {trimmed}
-      </p>
-    );
   });
 }
 
@@ -207,9 +146,11 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
           </div>
 
           <article className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-6 md:p-8">
-            <div className="prose prose-invert max-w-none">
-              {renderContent(topic.content)}
-            </div>
+            <RichTextContent
+              value={topic.content}
+              mode="markdown"
+              className="article-rich-text"
+            />
           </article>
 
           {topic.showFaqOnPage && topic.faq.length > 0 && (

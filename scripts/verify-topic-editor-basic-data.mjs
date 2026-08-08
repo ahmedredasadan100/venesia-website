@@ -92,7 +92,7 @@ check("inactive current category remains selectable only for its record", catego
 check("series retains a single series_id input owner and stable target", seriesFields.match(/<input\b[^>]*name="series_id"/g)?.length === 1 && seriesFields.includes('triggerId="content-series-listbox"'));
 check("slug keeps automatic and manual modes", slugInput.includes("setIsManual(false)") && slugInput.includes("setIsManual(true)") && slugInput.includes("slugify(titleInput?.value"));
 check("image owner preserves one image and alt submission contract", imageField.match(/<AdminMediaImageField/g)?.length === 1 && imageField.match(/<textarea\b[^>]*name="image_alt"/g)?.length === 1);
-check("Markdown is the sole article content field owner", markdownEditor.match(/type="hidden" name="content"/g)?.length === 1 && !/<textarea[^>]*name="content"/.test(markdownEditor));
+check("Markdown adapter is the sole article content field owner", markdownEditor.match(/<AdminRichTextEditor\b/g)?.length === 1 && markdownEditor.includes('name="content"') && markdownEditor.includes('storageFormat="markdown"') && !/<textarea[^>]*name="content"/.test(markdownEditor));
 check("FAQ retains one owner for each visibility setting", faqEditor.match(/name="show_faq_on_page"/g)?.length === 1 && faqEditor.match(/name="show_faq_title_on_page"/g)?.length === 1);
 check("shared display controls stay injectable at the shared basic boundary", basicPanel.includes("displaySettings?: ReactNode") && basicPanel.includes("{displaySettings ? (") && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.match(new RegExp(`name="${name}"`, "g"))?.length === 1));
 

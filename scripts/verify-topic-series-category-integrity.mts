@@ -10,7 +10,8 @@ import {
 } from "../src/lib/admin/content/category-hierarchy.ts";
 
 const root = resolve(import.meta.dirname, "..");
-const read = (path: string) => readFile(resolve(root, path), "utf8");
+const read = async (path: string) =>
+  (await readFile(resolve(root, path), "utf8")).replace(/\r\n/g, "\n");
 
 let passed = 0;
 function check(label: string, condition: unknown) {

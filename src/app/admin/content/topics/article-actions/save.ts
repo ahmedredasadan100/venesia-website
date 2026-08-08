@@ -37,6 +37,10 @@ import type { TopicStatus } from "./types";
 import {
   getAdminContentSeriesCategoryError,
 } from "../../../../../lib/admin/content/category-hierarchy";
+import {
+  ArticleSlugConflictError,
+  createArticleDomainRecord,
+} from "./create-domain";
 
 type FieldErrors = Record<string, string[]>;
 
@@ -233,47 +237,43 @@ export async function saveArticleContentAdapter(
   const currentStatus = currentTopic
     ? getNormalizedStatus(String(currentTopic.status ?? "unpublished"), "unpublished")
     : null;
-  const writePayload = buildTopicWritePayload(
-    payload,
-    category,
-    series,
-    nextStatus,
-    now,
-    currentTopic,
-  );
+  const writePayload = currentTopic
+    ? buildTopicWritePayload(
+        payload,
+        category,
+        series,
+        nextStatus,
+        now,
+        currentTopic,
+      )
+    : null;
 
-  const leaseEntityIdentity = mode === "edit"
-    ? id
-    : `create:${crypto.randomUUID()}`;
   let coordinated;
   try {
-    coordinated = await coordinateMediaReferenceEntityMutation({
-      domainKey: "topics",
-      leaseEntityIdentity,
-      intendedRow: {
-        ...(currentTopic ?? {}),
-        ...writePayload,
-      },
-      actorId: actor.id,
-      requestIdentity: `topic-article:${mode}:${leaseEntityIdentity}`,
-      mutate: async () => {
-        if (mode === "create") {
-          const { data, error } = await getSupabaseAdmin()
-            .from("topics")
-            .insert({
-              ...writePayload,
-              created_at: now,
-              created_by: actor.id,
-              updated_by: actor.id,
-              published_by: nextStatus === "published" ? actor.id : null,
-            })
-            .select("id, slug")
-            .single<{ id: number; slug: string }>();
-          if (error || !data) {
-            throw new Error(error?.message ?? "تعذر إنشاء الموضوع. راجع قاعدة البيانات.");
-          }
-          return data;
-        } else {
+    if (mode === "create") {
+      coordinated = await createArticleDomainRecord({
+        payload,
+        category,
+        series,
+        status: nextStatus,
+        actorId: actor.id,
+        now,
+        requestIdentity: `topic-article:create:${crypto.randomUUID()}`,
+      });
+    } else {
+      if (!writePayload) {
+        return formFailure("تعذر تحضير بيانات الموضوع للتحديث.");
+      }
+      coordinated = await coordinateMediaReferenceEntityMutation({
+        domainKey: "topics",
+        leaseEntityIdentity: id,
+        intendedRow: {
+          ...(currentTopic ?? {}),
+          ...writePayload,
+        },
+        actorId: actor.id,
+        requestIdentity: `topic-article:edit:${id}`,
+        mutate: async () => {
           const { data, error } = await getSupabaseAdmin()
             .from("topics")
             .update({
@@ -288,11 +288,16 @@ export async function saveArticleContentAdapter(
             .maybeSingle<{ id: number; slug: string }>();
           if (error || !data) throw new Error(error?.message ?? "تعذر تحديث الموضوع.");
           return data;
-        }
-      },
-      resolveEntityIdentity: (value) => String(value.id),
-    });
+        },
+        resolveEntityIdentity: (value) => String(value.id),
+      });
+    }
   } catch (error) {
+    if (error instanceof ArticleSlugConflictError) {
+      return formFailure("هذا الـ Slug مستخدم بالفعل في موضوع آخر.", {
+        slug: ["اختر Slug مختلفًا."],
+      });
+    }
     if (error instanceof MediaReferenceWriteLeaseError) {
       return formFailure(getMediaReferenceWriteLeaseUserMessage(error.code), {
         image: [getMediaReferenceWriteLeaseUserMessage(error.code)],

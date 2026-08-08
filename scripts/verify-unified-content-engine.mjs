@@ -713,6 +713,7 @@ check(
 );
 
 const articleSave = read("src/app/admin/content/topics/article-actions/save.ts");
+const articleCreate = read("src/app/admin/content/topics/article-actions/create-domain.ts");
 const mediaSave = read("src/app/admin/content/topics/media-actions/save.ts");
 const articleModeBranches = findIfElseBranches(
   articleSave,
@@ -726,12 +727,15 @@ const mediaModeBranches = findIfElseBranches(
 );
 check(
   "Article create branch must insert both stable creator and updater actor IDs",
-  containsAll(articleModeBranches.then, [
+  articleModeBranches.then.includes("createArticleDomainRecord({") &&
+  containsAll(articleCreate, [
     '.from("topics")',
     ".insert({",
-    "created_by: actor.id",
-    "updated_by: actor.id",
-  ]) && !articleModeBranches.then.includes(".update({"),
+    "created_by: input.actorId",
+    "updated_by: input.actorId",
+  ]) &&
+    !articleModeBranches.then.includes(".update({") &&
+    !articleCreate.includes(".update({"),
 );
 check(
   "Article update branch must update only the stable updater actor ID",
@@ -764,7 +768,7 @@ check(
 );
 check(
   "Draft saves must not assign a publisher",
-  articleSave.includes('nextStatus === "published" ? actor.id : null') &&
+  articleCreate.includes('input.status === "published" ? input.actorId : null') &&
     mediaSave.includes('payload.status === "published" ? actor.id : null'),
 );
 

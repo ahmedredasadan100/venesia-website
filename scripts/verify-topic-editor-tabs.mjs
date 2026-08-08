@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const editor = read("src/components/admin/content/editors/article/TopicMarkdownEditor.tsx");
+const sharedRichTextEditor = read("src/components/admin/AdminRichTextEditor.tsx");
 const faq = read("src/components/admin/content/editors/article/FaqEditor.tsx");
 const seo = read("src/components/admin/SeoPanel.tsx");
 const sharedSeo = read("src/components/admin/seo/AdminEntitySeoPanel.tsx");
@@ -32,12 +33,11 @@ function check(label, condition) {
   console.log(`PASS ${label}`);
 }
 
-for (const label of ["فقرة", "H1", "H2", "H3", "Bold", "Italic", "قائمة نقطية", "قائمة رقمية", "رابط", "تراجع", "إعادة"]) {
-  check(`content toolbar retains ${label}`, editor.includes(label));
-}
-check("numbered list continues on Enter", editor.includes("Number(ordered[1]) + 1"));
-check("content toolbar has no retired duplicate add action", !editor.includes("إضافة محتوى") && !editor.includes('<ToolButton label="Quote"') && !editor.includes("addMenuOpen"));
-check("content statistics retain heading and internal-link analysis", ["H1", "H2", "H3", "روابط داخلية"].every((label) => editor.includes(`label="${label}"`)) && editor.includes("markdownInternalLinks + htmlInternalLinks"));
+check("Article content adopts the shared visual editor once", editor.match(/<AdminRichTextEditor\b/g)?.length === 1 && editor.includes('storageFormat="markdown"') && editor.includes("enableArticleStructure"));
+check("shared visual toolbar owns paragraph, H2, H3, bold, lists and links", ["setParagraph()", "toggleHeading({ level: 2 })", "toggleHeading({ level: 3 })", "toggleBold()", "toggleBulletList()", "toggleOrderedList()", "setLink"].every((token) => sharedRichTextEditor.includes(token)));
+check("shared editor keeps native TipTap keyboard and RTL semantics", sharedRichTextEditor.includes("<EditorContent editor={editor}") && sharedRichTextEditor.includes('dir: "rtl"') && sharedRichTextEditor.includes("StarterKit.configure"));
+check("content toolbar has no retired Markdown textarea engine", !editor.includes("<textarea") && !editor.includes("replaceSelection") && !editor.includes("prefixSelection"));
+check("content statistics retain heading and internal-link analysis", ["H2", "H3", "روابط داخلية"].every((label) => editor.includes(`label="${label}"`)) && editor.includes("markdownInternalLinks + htmlInternalLinks"));
 check("keyword density remains in SEO rather than the body owner", !editor.includes("keywordDensity") && seo.includes("topicAnalysis.keywordDensity") && sharedSeo.includes("data-admin-entity-seo-metric={metric.id}"));
 
 check("FAQ uses shared confirmation and drag reorder", faq.includes("AdminConfirmDialog") && !faq.includes("window.confirm") && faq.includes("draggable") && faq.includes("onDrop"));

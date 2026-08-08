@@ -1,10 +1,15 @@
-import { isHtmlContent, renderRichTextHtml, stripHtml } from "../../lib/rich-text/html-utils";
+import {
+  isHtmlContent,
+  renderArticleMarkdownHtml,
+  renderRichTextHtml,
+  stripHtml,
+} from "../../lib/rich-text/html-utils";
 
 export type RichTextContentProps = {
   value?: string | null;
   className?: string;
-  /** rich = always HTML; plain = always strip tags; auto = detect stored HTML */
-  mode?: "rich" | "plain" | "auto";
+  /** rich = stored HTML; markdown = Article Markdown; plain = strip tags; auto = detect HTML */
+  mode?: "rich" | "markdown" | "plain" | "auto";
 };
 
 /**
@@ -17,6 +22,16 @@ export default function RichTextContent({
 }: RichTextContentProps) {
   const raw = value?.trim() ?? "";
   if (!raw) return null;
+
+  if (mode === "markdown") {
+    return (
+      <div
+        className={`rich-text-content ${className}`.trim()}
+        dir="rtl"
+        dangerouslySetInnerHTML={{ __html: renderArticleMarkdownHtml(raw) }}
+      />
+    );
+  }
 
   const useRichHtml = mode === "rich" || (mode === "auto" && isHtmlContent(raw));
 

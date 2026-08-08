@@ -43,6 +43,31 @@ export async function ensureUniqueSlug(slug: string, id?: string) {
   return !data;
 }
 
+export async function getConflictingTopicSlugs(slugs: readonly string[]) {
+  const candidates = [...new Set(slugs.map((slug) => slug.trim()).filter(Boolean))];
+  if (!candidates.length) return new Set<string>();
+
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select("slug")
+    .in("slug", candidates);
+
+  if (error) {
+    logError("getConflictingTopicSlugs failed", error, {
+      candidateCount: candidates.length,
+    });
+    throw new Error("Could not verify Article slug uniqueness.", {
+      cause: error,
+    });
+  }
+
+  return new Set(
+    (data ?? [])
+      .map((row) => String(row.slug ?? "").trim())
+      .filter(Boolean),
+  );
+}
+
 async function loadTopicCategoriesForValidation() {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
