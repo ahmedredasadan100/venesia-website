@@ -218,6 +218,7 @@ export default function AdminEntityListTable<
                   <AdminDataGridStickyActionsHeaderCell
                     key={column.key}
                     width={actionsColumnWidth}
+                    columnKey={column.key}
                   >
                     {content}
                   </AdminDataGridStickyActionsHeaderCell>
@@ -242,6 +243,7 @@ export default function AdminEntityListTable<
               return (
                 <th
                   key={column.key}
+                  data-admin-column-key={column.key}
                   style={getColumnTrackStyle(column)}
                   className={`whitespace-nowrap ${alignmentClass} ${stickyPrimary}`}
                 >
@@ -286,6 +288,7 @@ export default function AdminEntityListTable<
                       <AdminDataGridStickyActionsCell
                         key={column.key}
                         width={actionsColumnWidth}
+                        columnKey={column.key}
                         className="border-b border-white/8 group-last:border-b-0"
                       >
                         {content}
@@ -311,6 +314,7 @@ export default function AdminEntityListTable<
                   return (
                     <td
                       key={column.key}
+                      data-admin-column-key={column.key}
                       style={{
                         ...(getColumnTrackStyle(column) ?? {}),
                         ...(column.primary && depth > 0
