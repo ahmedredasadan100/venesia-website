@@ -25,6 +25,14 @@ function exportedFunction(source: string, name: string, nextName?: string) {
   return source.slice(start, end);
 }
 
+function functionSection(source: string, startMarker: string, endMarker: string) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `Missing ${startMarker}`);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `Missing boundary ${endMarker}`);
+  return source.slice(start, end);
+}
+
 const contract = read(
   "src/lib/admin/content/entity-list-contracts/topics.ts",
 );
@@ -34,25 +42,55 @@ const rowActions = read(
   "src/components/admin/content/UnifiedContentRowActions.tsx",
 );
 const listClient = read("src/components/admin/content/TopicsListClient.tsx");
+const list = read("src/components/admin/content/UnifiedContentList.tsx");
+const columns = read(
+  "src/components/admin/content/unified-content-columns.tsx",
+);
+const topicsPage = read("src/app/admin/content/topics/page.tsx");
 const sharedRowActions = read(
   "src/components/admin/ui/AdminDataGridRowActions.tsx",
 );
 const auditActions = read("src/lib/admin/audit/cms-audit-actions.ts");
 
-const softDelete = exportedFunction(
+const softDelete = functionSection(
   actions,
-  "softDeleteUnifiedContent",
-  "restoreUnifiedContent",
+  "export async function softDeleteUnifiedContent",
+  "async function restoreTopicsWithCanonicalOwner",
 );
-const restore = exportedFunction(
+const restoreAction = exportedFunction(
   actions,
   "restoreUnifiedContent",
   "permanentlyDeleteUnifiedContent",
 );
-const purge = exportedFunction(
+const purgeAction = exportedFunction(
   actions,
   "permanentlyDeleteUnifiedContent",
+  "emptyUnifiedContentTrash",
+);
+const emptyTrashAction = exportedFunction(
+  actions,
+  "emptyUnifiedContentTrash",
   "bulkUpdateUnifiedContent",
+);
+const bulkAction = exportedFunction(
+  actions,
+  "bulkUpdateUnifiedContent",
+  "saveContentTablePreferences",
+);
+const restoreOwner = functionSection(
+  actions,
+  "async function restoreTopicsWithCanonicalOwner",
+  "async function permanentlyDeleteTopicsWithCanonicalOwner",
+);
+const purgeOwner = functionSection(
+  actions,
+  "async function permanentlyDeleteTopicsWithCanonicalOwner",
+  "export async function restoreUnifiedContent",
+);
+const metricItems = functionSection(
+  listClient,
+  "const metricItems:",
+  "const trashCount",
 );
 
 check(
@@ -81,29 +119,53 @@ check(
 );
 check(
   "Restore only targets deleted Topics and restores them unpublished",
-  restore.includes('.not("deleted_at", "is", null)') &&
-    restore.includes('status: "unpublished"') &&
-    restore.includes("deleted_at: null"),
+  restoreOwner.includes("loadDeletedTopics(input.ids)") &&
+    restoreOwner.includes('.not("deleted_at", "is", null)') &&
+    restoreOwner.includes('status: "unpublished"') &&
+    restoreOwner.includes("deleted_at: null"),
 );
 check(
   "Restore blocks a conflicting active slug with a clear domain result",
-  restore.includes('.eq("slug", slug)') &&
-    restore.includes('.is("deleted_at", null)') &&
-    restore.includes("topicRestoreSlugConflict(slug, id)"),
+  actions.includes("findActiveTopicSlugConflict(topics)") &&
+    actions.includes('.is("deleted_at", null)') &&
+    restoreOwner.includes("topicRestoreSlugConflict(topic.slug, topic.id)"),
 );
 check(
   "Permanent delete requires explicit confirmation and only targets Trash",
-  purge.includes('getString(formData, "confirm_permanent") !== "true"') &&
-    purge.includes("loadDeletedTopic(id)") &&
-    purge.includes(".delete()") &&
-    purge.includes('.not("deleted_at", "is", null)'),
+  purgeAction.includes('getString(formData, "confirm_permanent") !== "true"') &&
+    purgeAction.includes("permanentlyDeleteTopicsWithCanonicalOwner") &&
+    purgeOwner.includes("loadDeletedTopics(input.ids)") &&
+    purgeOwner.includes(".delete()") &&
+    purgeOwner.includes('.not("deleted_at", "is", null)'),
 );
 check(
   "Permanent delete releases the slug and delegates media cleanup",
-  purge.includes("slug_released: true") &&
-    purge.includes(
+  purgeOwner.includes("slug_released: true") &&
+    purgeOwner.includes(
       "synchronizeMediaReferenceWriteScopesAfterDomainMutation",
     ),
+);
+check(
+  "Single and bulk mutations delegate to the same restore and purge owners",
+  restoreAction.includes("restoreTopicsWithCanonicalOwner") &&
+    purgeAction.includes("permanentlyDeleteTopicsWithCanonicalOwner") &&
+    bulkAction.includes("restoreTopicsWithCanonicalOwner") &&
+    bulkAction.includes("permanentlyDeleteTopicsWithCanonicalOwner"),
+);
+check(
+  "Bulk Trash mutations reject active or missing Topics before writing",
+  restoreOwner.includes("topics.length !== input.ids.length") &&
+    restoreOwner.includes("لم تتم استعادة أي Topic نشط") &&
+    purgeOwner.includes("topics.length !== input.ids.length") &&
+    purgeOwner.includes("لم يتم حذف أي Topic نشط"),
+);
+check(
+  "Empty Trash counts and reloads deleted Topics before canonical purge",
+  emptyTrashAction.includes("loadAllDeletedTopics()") &&
+    emptyTrashAction.includes("topics.length !== expectedCount") &&
+    emptyTrashAction.includes('scope: "empty_trash"') &&
+    purgeOwner.includes("expectedTotalDeletedCount") &&
+    purgeOwner.includes('.not("deleted_at", "is", null)'),
 );
 check(
   "Restore and permanent delete use the existing Topic audit owner",
@@ -119,6 +181,53 @@ check(
     rowActions.includes('title: "استعادة الموضوع؟"') &&
     rowActions.includes('title: "حذف الموضوع نهائيًا؟"') &&
     sharedRowActions.includes("AdminConfirmDialog"),
+);
+check(
+  "The Topics header owns the explicit Trash entry instead of a metric card",
+  topicsPage.includes('href={`${ADMIN_CONTENT_ROUTES.topics}?view=trash`}') &&
+    topicsPage.includes("key={query.filters.view}") &&
+    topicsPage.includes("المحذوفات") &&
+    !metricItems.includes("المحذوفات"),
+);
+check(
+  "The core seven Topic metrics stay in one non-wrapping row",
+  [
+    "إجمالي الموضوعات",
+    "منشور",
+    "غير منشور",
+    "بدون صورة",
+    "مرتبطة بسلسلة",
+    "مميزة",
+    "متوسط SEO",
+  ].every((label) => metricItems.includes(label)) &&
+    listClient.includes('className="min-w-[1146px]"'),
+);
+check(
+  "Trash bulk selection exposes the formal restore and permanent-delete labels",
+  list.includes('label: "استعادة المحدد"') &&
+    list.includes('label: "حذف نهائي للمحدد"') &&
+    list.includes("enableSelection") &&
+    list.includes("getBulkConfirmation"),
+);
+check(
+  "Permanent selected deletion confirms count and irreversibility",
+  list.includes('action === "permanent_delete"') &&
+    list.includes("ids.length") &&
+    list.includes("لا يمكن التراجع عن هذا الإجراء") &&
+    list.includes('confirmLabel: "حذف نهائي للمحدد"'),
+);
+check(
+  "Empty Trash uses shared confirmation with a server-verified count",
+  listClient.includes("floating.openConfirmation") &&
+    listClient.includes('confirmLabel: "إفراغ المحذوفات"') &&
+    listClient.includes('formData.set("expected_count", String(confirmedCount))') &&
+    emptyTrashAction.includes('getString(formData, "confirm_permanent") !== "true"'),
+);
+check(
+  "Featured state is read-only in Trash",
+  columns.includes('rowActionHandlers?.view === "trash"') &&
+    columns.includes('role="img"') &&
+    columns.includes("عرض فقط"),
 );
 check(
   "The Topics client adopts restore and purge through the instant mutation owner",

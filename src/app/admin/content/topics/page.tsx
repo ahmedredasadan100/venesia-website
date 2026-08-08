@@ -136,6 +136,12 @@ export default async function UnifiedContentTopicsPage({
             <AdminActionButton href={ADMIN_CONTENT_ROUTES.series} variant="dark">
               سلاسل المحتوى
             </AdminActionButton>
+            <AdminActionButton
+              href={`${ADMIN_CONTENT_ROUTES.topics}?view=trash`}
+              variant="dark"
+            >
+              المحذوفات
+            </AdminActionButton>
           </>
         }
       />
@@ -150,6 +156,7 @@ export default async function UnifiedContentTopicsPage({
 
       {!listLoadError && initialResult ? (
         <TopicsListClient
+          key={query.filters.view}
           categories={flattenedCategories}
           series={series}
           initialQuery={query}

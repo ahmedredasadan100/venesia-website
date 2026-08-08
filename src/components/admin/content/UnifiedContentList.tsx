@@ -32,11 +32,18 @@ import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions
 const BULK_OPTIONS = [
   { value: "publish", label: "نشر" },
   { value: "unpublish", label: "إخفاء" },
-  { value: "delete", label: "نقل إلى المحذوفات" },
+  { value: "move_to_trash", label: "نقل إلى المحذوفات" },
   { value: "move_category", label: "نقل لتصنيف" },
   { value: "feature", label: "تعيين كمميز" },
   { value: "unfeature", label: "إلغاء التمييز" },
 ] as const;
+
+const TRASH_BULK_OPTIONS = [
+  { value: "restore", label: "استعادة المحدد" },
+  { value: "permanent_delete", label: "حذف نهائي للمحدد" },
+] as const;
+
+export const UNIFIED_CONTENT_LIST_ID = "content-topics-table";
 
 function parseSort(sort: ContentSortValue) {
   const direction = sort.endsWith("_asc")
@@ -124,7 +131,7 @@ export default function UnifiedContentList({
       UnifiedContentSortKey,
       number
     >
-      listId="content-topics-table"
+      listId={UNIFIED_CONTENT_LIST_ID}
       rows={rows}
       columns={columns}
       getRowId={(row) => row.id}
@@ -133,9 +140,9 @@ export default function UnifiedContentList({
       defaultVisibleColumns={DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS}
       onPersistColumns={saveContentTablePreferences}
       enableColumnManagement
-      enableSelection={!trashView}
+      enableSelection
       selectionLabel="تحديد كل الموضوعات في الصفحة"
-      bulkOptions={trashView ? [] : BULK_OPTIONS}
+      bulkOptions={trashView ? TRASH_BULK_OPTIONS : BULK_OPTIONS}
       bulkEntityLabel="موضوع"
       mapResultToFeedback={(result) =>
         mapTopicsActionResultToFeedback(result, { currentListPath })
@@ -185,12 +192,30 @@ export default function UnifiedContentList({
       onBulkExecute={async (action, ids) => {
         const formData = new FormData();
         formData.set("bulk_action", action);
+        if (action === "permanent_delete") {
+          formData.set("confirm_permanent", "true");
+        }
         if (action === "move_category" && bulkCategoryId) {
           formData.set("category_id", bulkCategoryId);
         }
         ids.forEach((id) => formData.append("topic_ids", String(id)));
         return bulkUpdateUnifiedContent(formData);
       }}
+      getBulkConfirmation={(action, ids) =>
+        action === "permanent_delete"
+          ? {
+              title: `حذف نهائي لـ ${ids.length} موضوع؟`,
+              description: `سيتم حذف ${ids.length} من الموضوعات المحددة نهائيًا وتحرير الـSlugs الخاصة بها. لا يمكن التراجع عن هذا الإجراء.`,
+              confirmLabel: "حذف نهائي للمحدد",
+            }
+          : action === "move_to_trash"
+            ? {
+                title: `نقل ${ids.length} موضوع إلى المحذوفات؟`,
+                description: `سيتم نقل ${ids.length} من الموضوعات المحددة إلى المحذوفات مع إبقاء الـSlugs محجوزة، ويمكن استعادتها لاحقًا.`,
+                confirmLabel: "نقل إلى المحذوفات",
+              }
+            : null
+      }
       initialFeedback={initialFeedback}
       toolbar={toolbar}
       bulkAdditionalControls={({

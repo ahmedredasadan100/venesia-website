@@ -231,6 +231,22 @@ export function createUnifiedContentColumns(
       width: TOPICS_COMPACT_COLUMN_WIDTHS.featured,
       renderCell: ({ row, onMutationResult }) => {
         const active = Boolean(row.is_featured);
+        if (rowActionHandlers?.view === "trash") {
+          return (
+            <span
+              role="img"
+              aria-label={active ? "موضوع مميز — عرض فقط" : "موضوع غير مميز — عرض فقط"}
+              title={active ? "مميز — عرض فقط" : "غير مميز — عرض فقط"}
+              className={`inline-flex size-7 items-center justify-center rounded-full border ${
+                active
+                  ? "border-[#D8B87A]/30 bg-[#D8B87A]/10 text-[#E7B94F]/75"
+                  : "border-white/8 bg-white/[0.025] text-white/22"
+              }`}
+            >
+              <AdminDataGridActionIcon action="feature" active={active} />
+            </span>
+          );
+        }
         const pending = rowActionHandlers?.rowPendingAction(row.id) === "featured";
         const disabled = !rowActionHandlers || rowActionHandlers.mutationBusy;
         const label = active
