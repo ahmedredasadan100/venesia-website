@@ -5,10 +5,9 @@ import { getContentStatusMetadata } from "../../../lib/admin/content/content-sta
 import { adminContentTopicPath } from "../../../lib/admin/content-routes";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
 import type { AdminEntityColumnDef } from "../../../lib/admin/entity-list";
+import { AdminStatusPill } from "../ui";
 import {
-  AdminStatusPill,
-} from "../ui";
-import {
+  AdminDataGridActionIcon,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
@@ -30,6 +29,7 @@ export type UnifiedContentColumnKey =
   | "series"
   | "status"
   | "featured"
+  | "seo"
   | "published_at"
   | "actions";
 
@@ -67,6 +67,21 @@ function singleLine(value?: string | null, fallback = "—") {
   );
 }
 
+const TOPICS_COMPACT_COLUMN_WIDTHS = {
+  status: 96,
+  contentType: 120,
+  category: 144,
+  featured: 64,
+  seo: 76,
+} as const;
+
+function getSeoScoreTone(score: number) {
+  if (score >= 80) return "green" as const;
+  if (score >= 60) return "gold" as const;
+  if (score >= 40) return "blue" as const;
+  return "red" as const;
+}
+
 export function createUnifiedContentColumns(
   currentListPath: string,
   rowActionHandlers?: UnifiedContentRowActionHandlers,
@@ -81,6 +96,7 @@ export function createUnifiedContentColumns(
       sortKey: "title",
       minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.compactIcon,
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.compactIcon,
+      flexible: true,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -125,7 +141,8 @@ export function createUnifiedContentColumns(
       hideable: true,
       sortable: true,
       sortKey: "status",
-      minWidth: 104,
+      minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.status,
+      width: TOPICS_COMPACT_COLUMN_WIDTHS.status,
       renderCell: ({ row }) => {
         const status = getContentStatusMetadata(row.status);
         return (
@@ -139,7 +156,8 @@ export function createUnifiedContentColumns(
       defaultVisible: true,
       hideable: true,
       sortable: false,
-      minWidth: 130,
+      minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.contentType,
+      width: TOPICS_COMPACT_COLUMN_WIDTHS.contentType,
       renderCell: ({ row }) =>
         singleLine(getContentTypeLabel(row.content_type)),
     },
@@ -150,7 +168,8 @@ export function createUnifiedContentColumns(
       hideable: true,
       sortable: true,
       sortKey: "category",
-      minWidth: 170,
+      minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.category,
+      width: TOPICS_COMPACT_COLUMN_WIDTHS.category,
       renderCell: ({ row }) => (
         <AdminCategoryBadge
           name={row.category_name}
@@ -173,9 +192,47 @@ export function createUnifiedContentColumns(
       defaultVisible: true,
       hideable: true,
       sortable: false,
-      minWidth: 100,
-      renderCell: ({ row }) =>
-        singleLine(row.is_featured ? "مميز" : "غير مميز"),
+      minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.featured,
+      width: TOPICS_COMPACT_COLUMN_WIDTHS.featured,
+      renderCell: ({ row }) => {
+        const label = row.is_featured ? "مميز" : "غير مميز";
+        return (
+          <span
+            role="img"
+            aria-label={label}
+            title={label}
+            className={`inline-flex size-7 items-center justify-center rounded-full border ${
+              row.is_featured
+                ? "border-[#D8B87A]/35 bg-[#D8B87A]/12 text-[#E7B94F]"
+                : "border-white/10 bg-white/[0.035] text-white/28"
+            }`}
+          >
+            <AdminDataGridActionIcon
+              action="feature"
+              active={Boolean(row.is_featured)}
+            />
+          </span>
+        );
+      },
+    },
+    {
+      key: "seo",
+      label: "SEO",
+      defaultVisible: true,
+      hideable: true,
+      sortable: false,
+      minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.seo,
+      width: TOPICS_COMPACT_COLUMN_WIDTHS.seo,
+      renderCell: ({ row }) => (
+        <AdminStatusPill tone={getSeoScoreTone(row.seo_score)}>
+          <span
+            className="font-en tabular-nums"
+            title={`SEO: ${row.seo_score} من 100`}
+          >
+            {row.seo_score}%
+          </span>
+        </AdminStatusPill>
+      ),
     },
     {
       key: "id",

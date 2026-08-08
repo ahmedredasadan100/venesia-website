@@ -14,6 +14,7 @@ export const TOPICS_PREFERENCE_COLUMN_KEYS = [
   "series",
   "status",
   "featured",
+  "seo",
   "published_at",
 ] as const;
 
