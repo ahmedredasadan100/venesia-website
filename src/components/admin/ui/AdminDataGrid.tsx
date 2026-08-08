@@ -679,6 +679,7 @@ export function AdminDataGridActionsHeaderCell({ children, className = "", stick
 
 type StickyActionsTableCellProps = BaseProps & {
   width: number | string;
+  columnKey?: string;
 };
 
 export const getAdminDataGridFixedColumnStyle = (width: number | string) => ({
@@ -691,12 +692,14 @@ export const getAdminDataGridFixedColumnStyle = (width: number | string) => ({
 export function AdminDataGridStickyActionsHeaderCell({
   children,
   width,
+  columnKey,
   className = "",
 }: StickyActionsTableCellProps) {
   return (
     <th
       scope="col"
       data-admin-grid-sticky="inline-end"
+      data-admin-column-key={columnKey}
       style={getAdminDataGridFixedColumnStyle(width)}
       className={`sticky end-0 z-40 whitespace-nowrap border-s border-[#D8B87A]/18 bg-[#10151C] ${ADMIN_DATA_GRID_RULES.actionCellInlinePadding} py-4 text-center ${className}`}
     >
@@ -709,11 +712,13 @@ export function AdminDataGridStickyActionsHeaderCell({
 export function AdminDataGridStickyActionsCell({
   children,
   width,
+  columnKey,
   className = "",
 }: StickyActionsTableCellProps) {
   return (
     <td
       data-admin-grid-sticky="inline-end"
+      data-admin-column-key={columnKey}
       style={getAdminDataGridFixedColumnStyle(width)}
       className={`sticky end-0 z-30 whitespace-nowrap border-s border-white/8 bg-[#080B10] ${ADMIN_DATA_GRID_RULES.cellInlinePadding} ${ADMIN_DATA_GRID_RULES.cellBlockPadding} transition group-hover:bg-[#0D1117] ${className}`}
     >

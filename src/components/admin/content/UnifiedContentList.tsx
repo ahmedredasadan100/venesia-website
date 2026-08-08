@@ -22,6 +22,7 @@ import type { AdminEntityListFiltersProps } from "../entity-list/AdminEntityList
 import AdminListboxSelect from "../ui/AdminListboxSelect";
 import {
   createUnifiedContentColumns,
+  DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS,
   UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH,
   type UnifiedContentColumnKey,
   type UnifiedContentSortKey,
@@ -127,6 +128,7 @@ export default function UnifiedContentList({
       getRowId={(row) => row.id}
       getRowLabel={(row) => row.title || `الموضوع ${row.id}`}
       initialVisibleColumns={initialVisibleColumns}
+      defaultVisibleColumns={DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS}
       onPersistColumns={saveContentTablePreferences}
       enableColumnManagement
       enableSelection

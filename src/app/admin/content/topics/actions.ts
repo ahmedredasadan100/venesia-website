@@ -30,6 +30,7 @@ import {
 } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { revalidateMediaCenterPublicPaths } from "../../../../lib/media-center/revalidate-public-paths";
 import {
+  TOPICS_COLUMN_CONTRACT_VERSION,
   TOPICS_LIST_VIEW_KEY,
   TOPICS_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/topics-list-config";
@@ -555,5 +556,6 @@ export async function saveContentTablePreferences(visibleColumns: string[]) {
     viewKey: TOPICS_LIST_VIEW_KEY,
     visibleColumns,
     allowedColumns: TOPICS_PREFERENCE_COLUMN_KEYS,
+    contractVersion: TOPICS_COLUMN_CONTRACT_VERSION,
   });
 }

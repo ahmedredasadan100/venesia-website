@@ -15,12 +15,14 @@ import {
   CONTENT_LIST_VIEW_KEY,
   type ContentListSearchParams,
 } from "../../../../lib/admin/content/load-unified-content";
+import { TOPICS_COLUMN_CONTRACT_VERSION } from "../../../../lib/admin/content/topics-list-config";
 import { loadTopicsEntityListResult } from "../../../../lib/admin/content/entity-list-adapters/topics";
 import { topicsQueryContract } from "../../../../lib/admin/content/entity-list-contracts/topics";
 import { TOPICS_NOTICE_CODE_MAP } from "../../../../lib/admin/content/topics-list-config";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { ADMIN_CONTENT_ROUTES } from "../../../../lib/admin/content-routes";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
@@ -43,7 +45,7 @@ export default async function UnifiedContentTopicsPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const actor = await requireAdminSession();
+  await requireAdminSession();
   const params = await searchParams;
   const query = normalizeAdminEntityListQuery(
     topicsQueryContract,
@@ -67,7 +69,7 @@ export default async function UnifiedContentTopicsPage({
   const [
     { data: categoryRows, error: categoriesError },
     { data: seriesRows, error: seriesError },
-    { data: preference, error: preferenceError },
+    preference,
   ] = await Promise.all([
     supabase
       .from("topic_categories")
@@ -79,12 +81,9 @@ export default async function UnifiedContentTopicsPage({
       .select("id,name,status,deleted_at")
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true }),
-    supabase
-      .from("admin_user_preferences")
-      .select("preferences")
-      .eq("admin_user_id", actor.id)
-      .eq("view_key", CONTENT_LIST_VIEW_KEY)
-      .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
+    readAdminColumnPreferences(CONTENT_LIST_VIEW_KEY, {
+      contractVersion: TOPICS_COLUMN_CONTRACT_VERSION,
+    }),
   ]);
 
   const categories = (categoryRows ?? []) as AdminContentCategory[];
@@ -104,19 +103,19 @@ export default async function UnifiedContentTopicsPage({
     params?.notice,
     params?.message,
   );
-  const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
-    ? preference.preferences.visibleColumns
+  const visibleColumns = Array.isArray(preference.visibleColumns)
+    ? preference.visibleColumns
     : [...DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS];
   const loadError =
     categoriesError?.message ??
     seriesError?.message ??
-    preferenceError?.message ??
+    preference.error ??
     initialResult?.metrics?.error ??
     listError;
   const listLoadError =
     categoriesError?.message ??
     seriesError?.message ??
-    preferenceError?.message ??
+    preference.error ??
     listError;
 
   return (

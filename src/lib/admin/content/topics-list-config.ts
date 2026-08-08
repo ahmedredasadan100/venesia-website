@@ -1,5 +1,10 @@
 /** Topics list config — safe for server actions (no React). */
 export const TOPICS_LIST_VIEW_KEY = "content-topics";
+/**
+ * Bump when the Topics default column contract changes. Persisted selections
+ * from an older contract must not silently override a newly required default.
+ */
+export const TOPICS_COLUMN_CONTRACT_VERSION = 2;
 export const TOPICS_LIST_PAGE_SIZES = [10, 20, 30, 50] as const;
 export const TOPICS_LIST_DEFAULT_PAGE_SIZE = 10;
 

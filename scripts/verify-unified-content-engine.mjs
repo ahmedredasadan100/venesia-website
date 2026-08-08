@@ -44,6 +44,132 @@ function loadPureTypeScriptModule(path) {
   return commonJsModule.exports;
 }
 
+function parseTypeScriptSource(path) {
+  return ts.createSourceFile(
+    path,
+    read(path),
+    ts.ScriptTarget.Latest,
+    true,
+    path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+}
+
+function getImportSource(path, localName) {
+  const sourceFile = parseTypeScriptSource(path);
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !statement.importClause) continue;
+    const clause = statement.importClause;
+    if (clause.name?.text === localName) {
+      return statement.moduleSpecifier.text;
+    }
+    if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+      const match = clause.namedBindings.elements.find(
+        (element) => element.name.text === localName,
+      );
+      if (match) return statement.moduleSpecifier.text;
+    }
+  }
+  return null;
+}
+
+function getJsxAttributeValue(path, componentName, attributeName) {
+  const sourceFile = parseTypeScriptSource(path);
+  let value = null;
+  function visit(node) {
+    if (
+      value === null &&
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      node.tagName.getText(sourceFile) === componentName
+    ) {
+      const attribute = node.attributes.properties.find(
+        (property) =>
+          ts.isJsxAttribute(property) &&
+          property.name.getText(sourceFile) === attributeName,
+      );
+      if (attribute && ts.isJsxAttribute(attribute)) {
+        value = attribute.initializer?.getText(sourceFile) ?? "present";
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return value;
+}
+
+function getColumnFactoryContract(path, functionName) {
+  const sourceFile = parseTypeScriptSource(path);
+  const declaration = sourceFile.statements.find(
+    (statement) =>
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === functionName,
+  );
+  if (!declaration || !ts.isFunctionDeclaration(declaration) || !declaration.body) {
+    return { keys: [], defaultKeys: [] };
+  }
+  const returnStatement = declaration.body.statements.find(ts.isReturnStatement);
+  const array = returnStatement?.expression;
+  if (!array || !ts.isArrayLiteralExpression(array)) {
+    return { keys: [], defaultKeys: [] };
+  }
+  const rows = array.elements
+    .filter(ts.isObjectLiteralExpression)
+    .map((object) => {
+      const keyProperty = object.properties.find(
+        (property) =>
+          ts.isPropertyAssignment(property) &&
+          property.name.getText(sourceFile) === "key",
+      );
+      const defaultProperty = object.properties.find(
+        (property) =>
+          ts.isPropertyAssignment(property) &&
+          property.name.getText(sourceFile) === "defaultVisible",
+      );
+      const key =
+        keyProperty &&
+        ts.isPropertyAssignment(keyProperty) &&
+        ts.isStringLiteral(keyProperty.initializer)
+          ? keyProperty.initializer.text
+          : null;
+      const defaultVisible =
+        defaultProperty &&
+        ts.isPropertyAssignment(defaultProperty) &&
+        defaultProperty.initializer.kind === ts.SyntaxKind.TrueKeyword;
+      return { key, defaultVisible };
+    })
+    .filter((row) => row.key !== null);
+  return {
+    keys: rows.map((row) => row.key),
+    defaultKeys: rows.filter((row) => row.defaultVisible).map((row) => row.key),
+  };
+}
+
+function getNumericObjectLiteral(path, variableName) {
+  const sourceFile = parseTypeScriptSource(path);
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    const declaration = statement.declarationList.declarations.find(
+      (item) => ts.isIdentifier(item.name) && item.name.text === variableName,
+    );
+    if (!declaration?.initializer || !ts.isAsExpression(declaration.initializer)) {
+      continue;
+    }
+    const object = declaration.initializer.expression;
+    if (!ts.isObjectLiteralExpression(object)) continue;
+    return Object.fromEntries(
+      object.properties
+        .filter(ts.isPropertyAssignment)
+        .map((property) => [
+          property.name.getText(sourceFile),
+          ts.isNumericLiteral(property.initializer)
+            ? Number(property.initializer.text)
+            : null,
+        ]),
+    );
+  }
+  return {};
+}
+
 function findIfElseBranches(source, path, expectedCondition) {
   const sourceFile = ts.createSourceFile(
     path,
@@ -280,6 +406,15 @@ check(
 );
 
 const columns = read("src/components/admin/content/unified-content-columns.tsx");
+const columnsPath = "src/components/admin/content/unified-content-columns.tsx";
+const columnFactoryContract = getColumnFactoryContract(
+  columnsPath,
+  "createUnifiedContentColumns",
+);
+const compactColumnWidths = getNumericObjectLiteral(
+  columnsPath,
+  "TOPICS_COMPACT_COLUMN_WIDTHS",
+);
 const topicsAdapter = read(
   "src/lib/admin/content/entity-list-adapters/topics.ts",
 );
@@ -305,11 +440,18 @@ check(
 );
 check("The list must not render topic slugs", !columns.includes("row.slug"));
 check(
-  "Default columns must be title, category, status, and actions",
-  /key: "title"[\s\S]*?defaultVisible: true/.test(columns) &&
-    /key: "category"[\s\S]*?defaultVisible: true/.test(columns) &&
-    /key: "status"[\s\S]*?defaultVisible: true/.test(columns) &&
-    /key: "actions"[\s\S]*?defaultVisible: true/.test(columns),
+  "Topics default columns must use the actual requested render order",
+  JSON.stringify(columnFactoryContract.defaultKeys) ===
+    JSON.stringify([
+      "title",
+      "status",
+      "content_type",
+      "category",
+      "series",
+      "featured",
+      "seo",
+      "actions",
+    ]),
 );
 check(
   "Topics compact columns must stay fixed while the title absorbs remaining width",
@@ -319,7 +461,15 @@ check(
       "TOPICS_COMPACT_COLUMN_WIDTHS.contentType",
       "TOPICS_COMPACT_COLUMN_WIDTHS.category",
       "TOPICS_COMPACT_COLUMN_WIDTHS.featured",
-    ]),
+    ]) &&
+    JSON.stringify(compactColumnWidths) ===
+      JSON.stringify({
+        status: 88,
+        contentType: 104,
+        category: 120,
+        featured: 52,
+        seo: 76,
+      }),
 );
 check(
   "Featured must use the shared icon and SEO must follow it",
@@ -341,6 +491,11 @@ check(
 );
 
 const list = read("src/components/admin/content/UnifiedContentList.tsx");
+const topicsPagePath = "src/app/admin/content/topics/page.tsx";
+const topicsClientPath = "src/components/admin/content/TopicsListClient.tsx";
+const unifiedListPath = "src/components/admin/content/UnifiedContentList.tsx";
+const entityListPath = "src/components/admin/entity-list/AdminEntityList.tsx";
+const topicsPage = read(topicsPagePath);
 const preferences = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx");
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const rowActions = read("src/components/admin/content/UnifiedContentRowActions.tsx");
@@ -361,6 +516,8 @@ const floatingMenuStyle = read(
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
 const entityListTable = read("src/components/admin/entity-list/AdminEntityListTable.tsx");
+const prefsAdapter = read("src/lib/admin/preferences/admin-column-preferences.ts");
+const columnPrefs = read("src/lib/admin/entity-list/column-preferences.ts");
 const feedbackProvider = read("src/components/admin/AdminFeedbackProvider.tsx");
 check(
   "Topics list must consume the shared Admin Entity List System",
@@ -368,6 +525,55 @@ check(
     entityList.includes("AdminEntityListTable") &&
     entityListTable.includes("<table") &&
     entityListTable.includes("AdminDataGridStickyActionsCell"),
+);
+check(
+  "Topics production route must reach the rendered column factory through the real consumer chain",
+  getImportSource(topicsPagePath, "TopicsListClient") ===
+    "../../../../components/admin/content/TopicsListClient" &&
+    getJsxAttributeValue(
+      topicsPagePath,
+      "TopicsListClient",
+      "initialVisibleColumns",
+    ) === "{visibleColumns}" &&
+    getImportSource(topicsClientPath, "UnifiedContentList") ===
+      "./UnifiedContentList" &&
+    getJsxAttributeValue(
+      topicsClientPath,
+      "UnifiedContentList",
+      "initialVisibleColumns",
+    ) === "{initialVisibleColumns}" &&
+    getImportSource(unifiedListPath, "createUnifiedContentColumns") ===
+      "./unified-content-columns" &&
+    getJsxAttributeValue(unifiedListPath, "AdminEntityList", "columns") ===
+      "{columns}" &&
+    getJsxAttributeValue(
+      unifiedListPath,
+      "AdminEntityList",
+      "defaultVisibleColumns",
+    ) === "{DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS}" &&
+    getImportSource(entityListPath, "AdminEntityListTable") ===
+      "./AdminEntityListTable" &&
+    getJsxAttributeValue(
+      entityListPath,
+      "AdminEntityListTable",
+      "columns",
+    ) === "{visibleColumnDefs}",
+);
+check(
+  "Topics preference reads and writes must honor the current column contract version",
+  topicsPage.includes("readAdminColumnPreferences") &&
+    topicsPage.includes("contractVersion: TOPICS_COLUMN_CONTRACT_VERSION") &&
+    !topicsPage.includes('.from("admin_user_preferences")') &&
+    actions.includes("contractVersion: TOPICS_COLUMN_CONTRACT_VERSION") &&
+    topicsListConfig.includes("TOPICS_COLUMN_CONTRACT_VERSION = 2") &&
+    prefsAdapter.includes("columnContractVersion") &&
+    prefsAdapter.includes("contractMatches"),
+);
+check(
+  "Rendered entity columns must expose stable runtime keys for Production UI verification",
+  entityListTable.includes("data-admin-column-key={column.key}") &&
+    dataGrid.includes("data-admin-column-key={columnKey}") &&
+    entityListTable.includes("columnKey={column.key}"),
 );
 check(
   "Table overflow must remain inside its shared container",
@@ -444,8 +650,6 @@ check(
     confirmDialog.includes('event.key === "Escape"') &&
     confirmDialog.includes("returnFocusRef"),
 );
-const prefsAdapter = read("src/lib/admin/preferences/admin-column-preferences.ts");
-const columnPrefs = read("src/lib/admin/entity-list/column-preferences.ts");
 check(
   "Preferences must use the generic adapter with Topics view key config",
   actions.includes("saveAdminColumnPreferences") &&

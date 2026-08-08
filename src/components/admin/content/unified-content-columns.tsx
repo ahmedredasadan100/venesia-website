@@ -68,12 +68,24 @@ function singleLine(value?: string | null, fallback = "—") {
 }
 
 const TOPICS_COMPACT_COLUMN_WIDTHS = {
-  status: 96,
-  contentType: 120,
-  category: 144,
-  featured: 64,
+  status: 88,
+  contentType: 104,
+  category: 120,
+  featured: 52,
   seo: 76,
 } as const;
+
+function compactSingleLine(value?: string | null, fallback = "—") {
+  const text = value?.trim() || fallback;
+  return (
+    <span
+      className="inline-block max-w-full truncate whitespace-nowrap"
+      title={text}
+    >
+      {text}
+    </span>
+  );
+}
 
 function getSeoScoreTone(score: number) {
   if (score >= 80) return "green" as const;
@@ -159,7 +171,7 @@ export function createUnifiedContentColumns(
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.contentType,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.contentType,
       renderCell: ({ row }) =>
-        singleLine(getContentTypeLabel(row.content_type)),
+        compactSingleLine(getContentTypeLabel(row.content_type)),
     },
     {
       key: "category",
