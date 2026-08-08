@@ -28,13 +28,7 @@ const updateTopicSeriesInputSchema = z.strictObject({
   actorId: positiveIdSchema,
 });
 
-const deleteTopicCategoryInputSchema = z.strictObject({
-  id: positiveIdSchema,
-  transferToId: positiveIdSchema.nullable(),
-  actorId: positiveIdSchema,
-});
-
-const deleteTopicSeriesInputSchema = z.strictObject({
+const taxonomyLifecycleInputSchema = z.strictObject({
   ids: z.array(positiveIdSchema).min(1),
   actorId: positiveIdSchema,
 });
@@ -71,25 +65,9 @@ const updateTopicSeriesResultSchema = z.strictObject({
   topics_updated: z.coerce.number().int().nonnegative().finite(),
 });
 
-const deleteTopicCategoryResultSchema = z.strictObject({
-  deleted_category_id: positiveIdSchema,
-  transfer_to_id: positiveIdSchema.nullable(),
-  topics_updated: z.coerce.number().int().nonnegative().finite(),
-  soft_deleted_topics_detached: z.coerce
-    .number()
-    .int()
-    .nonnegative()
-    .finite(),
-});
-
-const deleteTopicSeriesResultSchema = z.strictObject({
-  deleted_series_ids: z.array(positiveIdSchema).min(1),
-  deleted_series_count: z.coerce.number().int().positive().finite(),
-  soft_deleted_topics_detached: z.coerce
-    .number()
-    .int()
-    .nonnegative()
-    .finite(),
+const taxonomyLifecycleResultSchema = z.strictObject({
+  affected_ids: z.array(positiveIdSchema).min(1),
+  affected_count: z.coerce.number().int().positive().finite(),
 });
 
 export type UpdateTopicCategoryAtomicInput = z.input<
@@ -98,11 +76,8 @@ export type UpdateTopicCategoryAtomicInput = z.input<
 export type UpdateTopicSeriesAtomicInput = z.input<
   typeof updateTopicSeriesInputSchema
 >;
-export type DeleteTopicCategoryAtomicInput = z.input<
-  typeof deleteTopicCategoryInputSchema
->;
-export type DeleteTopicSeriesAtomicInput = z.input<
-  typeof deleteTopicSeriesInputSchema
+export type TaxonomyLifecycleAtomicInput = z.input<
+  typeof taxonomyLifecycleInputSchema
 >;
 
 export type UpdateTopicCategoryAtomicResult = z.output<
@@ -111,11 +86,8 @@ export type UpdateTopicCategoryAtomicResult = z.output<
 export type UpdateTopicSeriesAtomicResult = z.output<
   typeof updateTopicSeriesResultSchema
 >;
-export type DeleteTopicCategoryAtomicResult = z.output<
-  typeof deleteTopicCategoryResultSchema
->;
-export type DeleteTopicSeriesAtomicResult = z.output<
-  typeof deleteTopicSeriesResultSchema
+export type TaxonomyLifecycleAtomicResult = z.output<
+  typeof taxonomyLifecycleResultSchema
 >;
 
 type SupabaseRpcError = {
@@ -176,34 +148,90 @@ export async function updateTopicSeriesAtomically(
   return updateTopicSeriesResultSchema.parse(data);
 }
 
-export async function deleteTopicCategoryAtomically(
-  input: DeleteTopicCategoryAtomicInput,
-): Promise<DeleteTopicCategoryAtomicResult> {
-  const parsed = deleteTopicCategoryInputSchema.parse(input);
-  const { data, error } = await getSupabaseAdmin().rpc(
-    "admin_delete_topic_category",
-    {
-      p_category_id: parsed.id,
-      p_transfer_to_id: parsed.transferToId,
-      p_actor_id: parsed.actorId,
-    },
-  );
+async function runTaxonomyLifecycleMutation(
+  rpcName:
+    | "admin_move_topic_categories_to_trash"
+    | "admin_restore_topic_categories"
+    | "admin_permanently_delete_topic_categories"
+    | "admin_move_topic_series_to_trash"
+    | "admin_restore_topic_series"
+    | "admin_permanently_delete_topic_series",
+  idParameter: "p_category_ids" | "p_series_ids",
+  input: TaxonomyLifecycleAtomicInput,
+): Promise<TaxonomyLifecycleAtomicResult> {
+  const parsed = taxonomyLifecycleInputSchema.parse(input);
+  const ids = [...new Set(parsed.ids)];
+  const { data, error } = await getSupabaseAdmin().rpc(rpcName, {
+    [idParameter]: ids,
+    p_actor_id: parsed.actorId,
+  });
   if (error) throw new TaxonomyMutationDatabaseError(error);
-  return deleteTopicCategoryResultSchema.parse(data);
+  const result = taxonomyLifecycleResultSchema.parse(data);
+  if (
+    result.affected_count !== ids.length ||
+    result.affected_ids.length !== ids.length
+  ) {
+    throw new Error("taxonomy lifecycle mutation returned a partial result");
+  }
+  return result;
 }
 
-export async function deleteTopicSeriesAtomically(
-  input: DeleteTopicSeriesAtomicInput,
-): Promise<DeleteTopicSeriesAtomicResult> {
-  const parsed = deleteTopicSeriesInputSchema.parse(input);
-  const ids = [...new Set(parsed.ids)];
-  const { data, error } = await getSupabaseAdmin().rpc(
-    "admin_delete_topic_series",
-    {
-      p_series_ids: ids,
-      p_actor_id: parsed.actorId,
-    },
+export function moveTopicCategoriesToTrashAtomically(
+  input: TaxonomyLifecycleAtomicInput,
+) {
+  return runTaxonomyLifecycleMutation(
+    "admin_move_topic_categories_to_trash",
+    "p_category_ids",
+    input,
   );
-  if (error) throw new TaxonomyMutationDatabaseError(error);
-  return deleteTopicSeriesResultSchema.parse(data);
+}
+
+export function restoreTopicCategoriesAtomically(
+  input: TaxonomyLifecycleAtomicInput,
+) {
+  return runTaxonomyLifecycleMutation(
+    "admin_restore_topic_categories",
+    "p_category_ids",
+    input,
+  );
+}
+
+export function permanentlyDeleteTopicCategoriesAtomically(
+  input: TaxonomyLifecycleAtomicInput,
+) {
+  return runTaxonomyLifecycleMutation(
+    "admin_permanently_delete_topic_categories",
+    "p_category_ids",
+    input,
+  );
+}
+
+export function moveTopicSeriesToTrashAtomically(
+  input: TaxonomyLifecycleAtomicInput,
+) {
+  return runTaxonomyLifecycleMutation(
+    "admin_move_topic_series_to_trash",
+    "p_series_ids",
+    input,
+  );
+}
+
+export function restoreTopicSeriesAtomically(
+  input: TaxonomyLifecycleAtomicInput,
+) {
+  return runTaxonomyLifecycleMutation(
+    "admin_restore_topic_series",
+    "p_series_ids",
+    input,
+  );
+}
+
+export function permanentlyDeleteTopicSeriesAtomically(
+  input: TaxonomyLifecycleAtomicInput,
+) {
+  return runTaxonomyLifecycleMutation(
+    "admin_permanently_delete_topic_series",
+    "p_series_ids",
+    input,
+  );
 }

@@ -71,7 +71,8 @@ export async function getConflictingTopicSlugs(slugs: readonly string[]) {
 async function loadTopicCategoriesForValidation() {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
-    .select("id, name, slug, parent_id, is_active");
+    .select("id, name, slug, parent_id, is_active")
+    .is("deleted_at", null);
 
   if (error) {
     logError("loadActiveTopicCategoriesForValidation failed", error);

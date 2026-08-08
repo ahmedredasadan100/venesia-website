@@ -197,6 +197,7 @@ async function validateBulkCategoryMoveSeries(
   const { data: series, error: seriesError } = await getSupabaseAdmin()
     .from("topic_series")
     .select("id,category_id")
+    .is("deleted_at", null)
     .in("id", seriesIds);
   if (seriesError) throw seriesError;
   const seriesById = new Map(
@@ -913,6 +914,7 @@ export async function bulkUpdateUnifiedContent(
       .from("topic_categories")
       .select("id,name,slug")
       .eq("id", categoryId)
+      .is("deleted_at", null)
       .eq("is_active", true)
       .maybeSingle<{ id: number; name: string; slug: string }>();
     if (!category) return invalidMutation("التصنيف المختار غير متاح.");

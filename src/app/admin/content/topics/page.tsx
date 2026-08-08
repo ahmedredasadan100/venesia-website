@@ -75,11 +75,13 @@ export default async function UnifiedContentTopicsPage({
     supabase
       .from("topic_categories")
       .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
     supabase
       .from("topic_series")
       .select("id,name,status,deleted_at")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true }),
     readAdminColumnPreferences(CONTENT_LIST_VIEW_KEY, {

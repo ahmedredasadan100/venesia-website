@@ -16,6 +16,7 @@ export const categorySortFields = [
 ] as const;
 export type CategorySortField = (typeof categorySortFields)[number];
 export type CategoryFilters = {
+  view: "active" | "trash";
   status: "all" | "published" | "unpublished";
 };
 
@@ -25,6 +26,7 @@ export const categoriesQueryContract: AdminEntityListQueryContract<
 > = {
   mode: "server-page",
   filtersSchema: z.strictObject({
+    view: z.enum(["active", "trash"]),
     status: z.enum(["all", "published", "unpublished"]),
   }),
   sortFields: categorySortFields,
@@ -34,17 +36,22 @@ export const categoriesQueryContract: AdminEntityListQueryContract<
   maxPageSize: 50,
   searchMinLength: 0,
   rawFilterSchemas: {
+    view: z.enum(["active", "trash"]),
     status: z.enum(["all", "published", "unpublished"]),
   },
   parseFilters(params) {
+    const view = params.get("view");
     const status = params.get("status");
     return {
+      view: view === "trash" ? "trash" : "active",
       status:
         status === "published" || status === "unpublished" ? status : "all",
     };
   },
   writeFilters(filters, params) {
+    params.delete("view");
     params.delete("status");
+    if (filters.view === "trash") params.set("view", "trash");
     if (filters.status !== "all") params.set("status", filters.status);
   },
 };

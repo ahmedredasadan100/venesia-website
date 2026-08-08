@@ -118,7 +118,7 @@ check(
     topics.includes('controller.setFilter("image", "without")') &&
     topics.includes('controller.setFilter("seriesId", "any")') &&
     topics.includes('controller.setFilter("featured", "yes")') &&
-    topics.includes("controller.resetFilters") &&
+    topics.includes('resetToView("active")') &&
     !/label: "متوسط SEO"[^\n]+onClick/.test(topics) &&
     topicContract.includes('image: "all" | "without"') &&
     topicContract.includes('seriesId: number | "any" | null'),

@@ -76,6 +76,7 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
     .from("topic_categories")
     .select("id, name, slug, status, topics_count:topics(count)")
     .eq("status", "published")
+    .is("deleted_at", null)
     // Soft-deleted topics must never count toward a public category.
     .is("topics.deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -98,6 +99,7 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
       .from("topic_series")
       .select("category_id")
       .eq("slug", config.query.seriesSlug)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (seriesError) {
@@ -150,6 +152,7 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
     .from("topic_series")
     .select("id, name, slug, status, sort_order, category_id")
     .eq("status", "published")
+    .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
 
@@ -158,6 +161,7 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
       .from("topic_categories")
       .select("id")
       .eq("slug", config.query.categorySlug)
+      .is("deleted_at", null)
       .eq("status", "published")
       .maybeSingle();
 

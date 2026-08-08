@@ -1588,12 +1588,12 @@ check(
 );
 
 check(
-  "Category delete is the only declared specialized Row Actions adapter",
+  "No Row Actions consumer declares a specialized parallel adapter",
   manifestEntries.flatMap((entry) =>
     Object.entries(entry.actions)
-      .filter(([, state]) => state === "specialized_adapter")
+      .filter(([, state]) => String(state) === "specialized_adapter")
       .map(([action]) => `${entry.entity}:${action}`),
-  ).join(",") === "categories:delete",
+  ).length === 0,
 );
 
 console.log(`Admin Row Actions capability verification passed (${passed} checks).`);

@@ -42,6 +42,9 @@ const rowActions = read(
   "src/components/admin/content/UnifiedContentRowActions.tsx",
 );
 const listClient = read("src/components/admin/content/TopicsListClient.tsx");
+const trashHeader = read(
+  "src/components/admin/entity-list/AdminEntityTrashHeader.tsx",
+);
 const list = read("src/components/admin/content/UnifiedContentList.tsx");
 const columns = read(
   "src/components/admin/content/unified-content-columns.tsx",
@@ -225,10 +228,11 @@ check(
 );
 check(
   "Empty Trash uses shared confirmation with a server-verified count",
-  listClient.includes("floating.openConfirmation") &&
+  listClient.includes("AdminEntityTrashHeader") &&
+    trashHeader.includes("floating.openConfirmation") &&
     bulkLabels.includes('emptyTrash: "إفراغ المحذوفات"') &&
-    listClient.includes("ADMIN_BULK_ACTION_LABELS.emptyTrash") &&
-    listClient.includes('formData.set("expected_count", String(confirmedCount))') &&
+    trashHeader.includes("ADMIN_BULK_ACTION_LABELS.emptyTrash") &&
+    listClient.includes('formData.set("expected_count", String(expectedCount))') &&
     emptyTrashAction.includes('getString(formData, "confirm_permanent") !== "true"'),
 );
 check(

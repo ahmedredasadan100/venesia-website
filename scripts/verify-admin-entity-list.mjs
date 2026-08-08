@@ -109,6 +109,9 @@ const categoriesListConfigModule = loadPureTypeScriptModule(
   "src/lib/admin/content/categories-list-config.ts",
 );
 const categoriesClient = read("src/app/admin/content/categories/CategoriesListClient.tsx");
+const entityTrashHeader = read(
+  "src/components/admin/entity-list/AdminEntityTrashHeader.tsx",
+);
 const categoriesColumns = read("src/app/admin/content/categories/categories-columns.tsx");
 const categoriesActions = read("src/app/admin/content/categories/CategoryRowActions.tsx");
 const seriesClient = read("src/app/admin/content/series/SeriesTableClient.tsx");
@@ -608,8 +611,9 @@ check(
   ].every((label) => bulkActionLabels.includes(label)) &&
     [
       topicsList,
-      topicsClient,
+      categoriesClient,
       seriesClient,
+      entityTrashHeader,
       pagesClient,
       menusClient,
       blockModuleManager,

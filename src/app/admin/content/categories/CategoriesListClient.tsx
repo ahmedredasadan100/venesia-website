@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   AdminEntityList,
   AdminEntityListSurface,
+  AdminEntityTrashHeader,
 } from "../../../../components/admin/entity-list";
 import {
   AdminEntityListPrimarySection,
@@ -15,6 +16,7 @@ import {
 } from "../../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
+import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import {
   CATEGORIES_DEFAULT_COLUMN_KEYS,
 } from "../../../../lib/admin/content/categories-list-config";
@@ -34,10 +36,15 @@ import type {
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
 import {
+  bulkCategoriesLifecycleAjax,
   deleteCategorySafelyAjax,
   duplicateCategoryAjax,
+  emptyCategoriesTrashAjax,
+  permanentlyDeleteCategoryAjax,
   restoreCategoriesTablePreferences,
+  restoreCategoryAjax,
   saveCategoriesTablePreferences,
   toggleCategoryStatusAjax,
   type CategoryDuplicateMutationResult,
@@ -51,7 +58,16 @@ import {
 } from "./categories-columns";
 
 const BASE_PATH = "/admin/content/categories";
+const LIST_ID = "content-categories-table";
 const EMPTY_COLLAPSED_CATEGORY_IDS = new Set<number>();
+
+const TRASH_BULK_OPTIONS = [
+  { value: "restore", label: ADMIN_BULK_ACTION_LABELS.restoreSelected },
+  {
+    value: "permanent_delete",
+    label: ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected,
+  },
+] as const;
 
 const STATUS_FILTER: AdminEntityFilterDef = {
   id: "categories-status-filter",
@@ -73,6 +89,7 @@ type CategoryMetrics = {
   unpublished: number;
   topics: number;
   series: number;
+  trashed: number;
 };
 
 export default function CategoriesListClient({
@@ -97,8 +114,9 @@ export default function CategoriesListClient({
     "categories",
     controller.query,
   );
+  const isTrashView = controller.query.filters.view === "trash";
   const rows = controller.result.rows;
-  const filterSignature = `${controller.query.search}\u0000${controller.query.filters.status}`;
+  const filterSignature = `${controller.query.filters.view}\u0000${controller.query.search}\u0000${controller.query.filters.status}`;
   const [treeState, setTreeState] = useState<{
     filterSignature: string;
     collapsedCategoryIds: Set<number>;
@@ -132,7 +150,10 @@ export default function CategoriesListClient({
   );
 
   // Stable identity so shared filter nodes don't remount on every render.
-  const filters = useMemo(() => [STATUS_FILTER], []);
+  const filters = useMemo(
+    () => (isTrashView ? [] : [STATUS_FILTER]),
+    [isTrashView],
+  );
 
   const toggleStatus = useCallback(
     async (category: CategoryListRow): Promise<CategoryStatusMutationResult> => {
@@ -291,53 +312,84 @@ export default function CategoriesListClient({
     [instant],
   );
 
-  const removeCategory = useCallback(
-    async (categoryId: number, transferToId: number | null) => {
+  const runLifecycleMutation = useCallback(
+    async (
+      category: CategoryListRow,
+      action: "delete" | "restore" | "permanent_delete",
+      execute: () => Promise<AdminActionResult>,
+    ): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
       try {
-        const result = await instant.mutateAsync({
-          rowId: categoryId,
-          action: "delete",
-          optimistic: (cache) => cache.removeRows(new Set([categoryId])),
+        await instant.mutateAsync({
+          rowId: category.id,
+          action,
+          optimistic: (cache) => cache.removeRows(new Set([category.id])),
           execute: async () => {
-            const actionResult = await deleteCategorySafelyAjax(
-              categoryId,
-              transferToId,
-            );
+            actionResult = await execute();
             return actionResult.ok
               ? {
                   ok: true as const,
-                  message:
-                    actionResult.message ?? "تم حذف التصنيف بنجاح.",
+                  message: actionResult.message,
                   feedbackStatus:
-                    "feedbackStatus" in actionResult &&
                     actionResult.feedbackStatus === "warning"
                       ? "warning" as const
                       : "success" as const,
                 }
               : {
                   ok: false as const,
-                  code: "category_delete_failed",
-                  message: actionResult.message ?? "تعذر حذف التصنيف.",
+                  code: `category_${action}_failed`,
+                  message: actionResult.message,
                 };
           },
         });
-        return {
-          ok: true,
-          message: result.message,
-          feedbackStatus: result.feedbackStatus,
-        };
+        await controller.invalidate();
+        if (actionResult) return actionResult;
       } catch (error) {
+        if (actionResult) return actionResult;
         return {
           ok: false,
+          title: "تعذر تنفيذ العملية",
           message:
-            error instanceof Error ? error.message : "تعذر حذف التصنيف.",
+            error instanceof Error ? error.message : "تعذر تحديث التصنيف.",
+          entityId: category.id,
         };
       }
+
+      return {
+        ok: false,
+        title: "تعذر تنفيذ العملية",
+        message: "تعذر إثبات نتيجة تحديث التصنيف.",
+        entityId: category.id,
+      };
     },
-    [instant],
+    [controller, instant],
   );
 
-  const pageRows = rows.filter((row) => {
+  const removeCategory = useCallback(
+    (category: CategoryListRow) =>
+      runLifecycleMutation(category, "delete", () =>
+        deleteCategorySafelyAjax(category.id),
+      ),
+    [runLifecycleMutation],
+  );
+
+  const restoreCategory = useCallback(
+    (category: CategoryListRow) =>
+      runLifecycleMutation(category, "restore", () =>
+        restoreCategoryAjax(category.id),
+      ),
+    [runLifecycleMutation],
+  );
+
+  const permanentlyDeleteCategory = useCallback(
+    (category: CategoryListRow) =>
+      runLifecycleMutation(category, "permanent_delete", () =>
+        permanentlyDeleteCategoryAjax(category.id, true),
+      ),
+    [runLifecycleMutation],
+  );
+
+  const pageRows = isTrashView ? rows : rows.filter((row) => {
     let parentId = row.parent_id;
     const visited = new Set<number>();
     while (parentId && !visited.has(parentId)) {
@@ -356,6 +408,7 @@ export default function CategoriesListClient({
     () =>
       createCategoryColumns(
         {
+          view: controller.query.filters.view,
           isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
           onToggle: toggleCategory,
           rowPendingAction: (categoryId) =>
@@ -367,6 +420,8 @@ export default function CategoriesListClient({
           onToggleStatus: toggleStatus,
           onDuplicate: duplicate,
           onDelete: removeCategory,
+          onRestore: restoreCategory,
+          onPermanentDelete: permanentlyDeleteCategory,
         },
         { maxVisibleDepth },
       ),
@@ -375,8 +430,11 @@ export default function CategoriesListClient({
       duplicate,
       instant.rowPending,
       instant.bulkPending,
+      controller.query.filters.view,
       maxVisibleDepth,
       removeCategory,
+      restoreCategory,
+      permanentlyDeleteCategory,
       toggleCategory,
       toggleStatus,
     ],
@@ -392,14 +450,29 @@ export default function CategoriesListClient({
 
   return (
     <AdminEntityListSurface consumer="categories">
+      {isTrashView ? (
+        <AdminEntityTrashHeader
+          count={controller.result.metrics?.trashed ?? 0}
+          description="تظهر هنا التصنيفات المحذوفة فقط. الاستعادة تعيد التصنيف كغير منشور، والحذف النهائي يحرر الـSlug بعد إثبات عدم وجود علاقات."
+          confirmationTitle={(count) => `إفراغ محذوفات التصنيفات (${count})؟`}
+          confirmationDescription={(count) =>
+            `سيتم حذف ${count} من التصنيفات نهائيًا وتحرير الـSlugs الخاصة بها. ستمنع العلاقات القائمة العملية، ولا يمكن التراجع عنها.`
+          }
+          feedbackChannel={`entity-list:${LIST_ID}`}
+          onEmptyTrash={(expectedCount) =>
+            emptyCategoriesTrashAjax(expectedCount, true)
+          }
+          onSuccess={controller.invalidate}
+        />
+      ) : null}
       <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid
           items={[
-            { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true, onClick: controller.resetFilters, active: !controller.query.search && controller.query.filters.status === "all" },
+            { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true, onClick: controller.resetFilters, active: !isTrashView && !controller.query.search && controller.query.filters.status === "all" },
             { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
             { label: "إجمالي السلاسل", value: controller.result.metrics?.series ?? 0, tone: "blue", compact: true },
-            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: controller.query.filters.status === "published" },
-            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: controller.query.filters.status === "unpublished" },
+            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
+            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
           ]}
         />
       </AdminEntityListPrimarySection>
@@ -415,7 +488,7 @@ export default function CategoriesListClient({
           CategorySortKey,
           number
         >
-          listId="content-categories-table"
+          listId={LIST_ID}
           toolbar={{
             basePath: BASE_PATH,
             search: {
@@ -437,7 +510,11 @@ export default function CategoriesListClient({
                     ? patch.status
                     : "all"
                   : controller.query.filters.status;
-              controller.setSearchAndFilters(search, { status }, behavior);
+              controller.setSearchAndFilters(
+                search,
+                { view: controller.query.filters.view, status },
+                behavior,
+              );
             },
           }}
           rows={pageRows}
@@ -455,10 +532,37 @@ export default function CategoriesListClient({
           }
           onRestoreColumns={restoreCategoriesTablePreferences}
           enableColumnManagement
-          enableSelection={false}
+          enableSelection={isTrashView}
+          selectionLabel="تحديد كل التصنيفات في الصفحة"
+          bulkOptions={isTrashView ? TRASH_BULK_OPTIONS : []}
+          bulkEntityLabel="تصنيف"
+          onBulkExecute={(action, ids) =>
+            bulkCategoriesLifecycleAjax(
+              action,
+              ids,
+              action === "permanent_delete",
+            )
+          }
+          getBulkConfirmation={(action, ids) =>
+            action === "permanent_delete"
+              ? {
+                  title: `حذف نهائي لـ ${ids.length} تصنيف؟`,
+                  description: `سيتم حذف ${ids.length} من التصنيفات المحددة نهائيًا وتحرير الـSlugs الخاصة بها. ستمنع العلاقات القائمة العملية، ولا يمكن التراجع عنها.`,
+                  confirmLabel:
+                    ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected,
+                }
+              : action === "restore"
+                ? {
+                    title: `استعادة ${ids.length} تصنيف؟`,
+                    description:
+                      "ستعود التصنيفات المحددة إلى القائمة النشطة كغير منشورة بعد التحقق من العلاقات والـSlugs.",
+                    confirmLabel: ADMIN_BULK_ACTION_LABELS.restoreSelected,
+                  }
+                : null
+          }
           mapResultToFeedback={(result) => mapAdminActionResultToFeedback(result)}
           onSuccessfulMutation={(result) => {
-            if (!result) return controller.invalidate();
+            if (!result || result.entityId == null) return controller.invalidate();
           }}
           sort={sort}
           sortMode={{
@@ -484,8 +588,12 @@ export default function CategoriesListClient({
               controller.query.filters.status === "all"
                 ? "system"
                 : "filtered",
-            systemEmpty: "لا توجد تصنيفات بعد.",
-            filteredEmpty: "لا توجد نتائج مطابقة للبحث أو الفلتر.",
+            systemEmpty: isTrashView
+              ? "لا توجد تصنيفات محذوفة."
+              : "لا توجد تصنيفات بعد.",
+            filteredEmpty: isTrashView
+              ? "لا توجد تصنيفات محذوفة مطابقة للبحث."
+              : "لا توجد نتائج مطابقة للبحث أو الفلتر.",
           }}
           getRowDepth={(row) => row.depth}
           rowClassName={(row) => (row.depth === 0 ? "bg-white/[0.015]" : "")}

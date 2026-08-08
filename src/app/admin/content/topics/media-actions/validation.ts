@@ -27,7 +27,8 @@ export async function resolveMediaSection(
   let query = getSupabaseAdmin()
     .from("topic_categories")
     .select("id, name, slug, parent_id, is_active")
-    .eq("id", normalizedId);
+    .eq("id", normalizedId)
+    .is("deleted_at", null);
   if (normalizedId !== currentCategoryId) query = query.eq("is_active", true);
   const { data, error } = await query.maybeSingle<CategoryRow>();
 

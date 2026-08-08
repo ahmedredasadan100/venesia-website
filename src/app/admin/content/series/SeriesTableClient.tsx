@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import {
   AdminEntityList,
   AdminEntityListSurface,
+  AdminEntityTrashHeader,
 } from "../../../../components/admin/entity-list";
 import {
   AdminEntityListPrimarySection,
@@ -39,6 +40,9 @@ import {
   bulkSeriesActionAjax,
   deleteSeriesAjax,
   duplicateSeriesAjax,
+  emptySeriesTrashAjax,
+  permanentlyDeleteSeriesAjax,
+  restoreSeriesAjax,
   restoreSeriesTablePreferences,
   saveSeriesTablePreferences,
   toggleSeriesStatusAjax,
@@ -57,6 +61,14 @@ const BULK_OPTIONS = [
   { value: "publish", label: ADMIN_BULK_ACTION_LABELS.showSelected },
   { value: "hide", label: ADMIN_BULK_ACTION_LABELS.hideSelected },
   { value: "delete", label: ADMIN_BULK_ACTION_LABELS.deleteSelected },
+] as const;
+
+const TRASH_BULK_OPTIONS = [
+  { value: "restore", label: ADMIN_BULK_ACTION_LABELS.restoreSelected },
+  {
+    value: "permanent_delete",
+    label: ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected,
+  },
 ] as const;
 
 const STATUS_FILTER: AdminEntityFilterDef = {
@@ -78,6 +90,7 @@ type SeriesMetrics = {
   unpublished: number;
   topics: number;
   averageTopics: number;
+  trashed: number;
   categoryOptions: AdminEntityFilterOption[];
   categoryDescendantIdsByValue: Record<string, number[]>;
 };
@@ -106,6 +119,7 @@ export default function SeriesTableClient({
     "series",
     controller.query,
   );
+  const isTrashView = controller.query.filters.view === "trash";
 
   const toggleSeries = useCallback(
     async (row: SeriesListRow): Promise<AdminActionResult> => {
@@ -175,7 +189,10 @@ export default function SeriesTableClient({
               ? {
                   ok: true as const,
                   message: actionResult.message ?? "تم نسخ السلسلة بنجاح.",
-                  affectedIds: actionResult.affectedIds,
+                  affectedIds:
+                    actionResult.entityId == null
+                      ? undefined
+                      : [actionResult.entityId],
                 }
               : {
                   ok: false as const,
@@ -207,49 +224,83 @@ export default function SeriesTableClient({
     [instant],
   );
 
-  const deleteSeries = useCallback(
-    async (row: SeriesListRow): Promise<AdminActionResult> => {
+  const runLifecycleMutation = useCallback(
+    async (
+      row: SeriesListRow,
+      action: "delete" | "restore" | "permanent_delete",
+      execute: () => Promise<AdminActionResult>,
+    ): Promise<AdminActionResult> => {
+      const resultHolder: { current?: AdminActionResult } = {};
       try {
-        const result = await instant.mutateAsync({
+        await instant.mutateAsync({
           rowId: row.id,
-          action: "delete",
+          action,
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
           execute: async () => {
-            const actionResult = await deleteSeriesAjax(row.id);
+            const actionResult = await execute();
+            resultHolder.current = actionResult;
             return actionResult.ok
               ? {
                   ok: true as const,
-                  message: actionResult.message ?? "تم حذف السلسلة بنجاح.",
+                  message: actionResult.message,
+                  feedbackStatus:
+                    actionResult.feedbackStatus === "warning"
+                      ? ("warning" as const)
+                      : ("success" as const),
                 }
               : {
                   ok: false as const,
-                  code: "series_delete_failed",
-                  message: actionResult.message ?? "تعذر حذف السلسلة.",
+                  code: `series_${action}_failed`,
+                  message: actionResult.message,
                 };
           },
         });
-        return {
-          ok: true,
-          title: "تم بنجاح",
-          message: result.message,
-          code: "deleted",
-          entityId: row.id,
-        };
+        await controller.invalidate();
+        if (resultHolder.current) return resultHolder.current;
       } catch (error) {
+        if (resultHolder.current) return resultHolder.current;
         return {
           ok: false,
-          title: "تعذر حذف السلسلة",
+          title: "تعذر تنفيذ العملية",
           message:
-            error instanceof Error ? error.message : "تعذر حذف السلسلة.",
+            error instanceof Error ? error.message : "تعذر تحديث السلسلة.",
           entityId: row.id,
         };
       }
+
+      return {
+        ok: false,
+        title: "تعذر تنفيذ العملية",
+        message: "تعذر إثبات نتيجة تحديث السلسلة.",
+        entityId: row.id,
+      };
     },
-    [instant],
+    [controller, instant],
+  );
+
+  const deleteSeries = useCallback(
+    (row: SeriesListRow) =>
+      runLifecycleMutation(row, "delete", () => deleteSeriesAjax(row.id)),
+    [runLifecycleMutation],
+  );
+
+  const restoreSeries = useCallback(
+    (row: SeriesListRow) =>
+      runLifecycleMutation(row, "restore", () => restoreSeriesAjax(row.id)),
+    [runLifecycleMutation],
+  );
+
+  const permanentlyDeleteSeries = useCallback(
+    (row: SeriesListRow) =>
+      runLifecycleMutation(row, "permanent_delete", () =>
+        permanentlyDeleteSeriesAjax(row.id, true),
+      ),
+    [runLifecycleMutation],
   );
 
   const rowHandlers = useMemo<SeriesRowActionHandlers>(
     () => ({
+      view: controller.query.filters.view,
       rowPendingAction: (seriesId) =>
         instant.rowPending?.rowId === seriesId
           ? instant.rowPending.action
@@ -259,13 +310,18 @@ export default function SeriesTableClient({
       onToggle: toggleSeries,
       onDuplicate: duplicateSeries,
       onDelete: deleteSeries,
+      onRestore: restoreSeries,
+      onPermanentDelete: permanentlyDeleteSeries,
     }),
     [
       deleteSeries,
       duplicateSeries,
       instant.bulkPending,
       instant.rowPending,
+      permanentlyDeleteSeries,
+      restoreSeries,
       toggleSeries,
+      controller.query.filters.view,
     ],
   );
   const columns = useMemo(
@@ -274,7 +330,7 @@ export default function SeriesTableClient({
   );
 
   const filters = useMemo<AdminEntityFilterDef[]>(
-    () => [
+    () => isTrashView ? [] : [
       STATUS_FILTER,
       {
         id: "series-category-filter",
@@ -287,7 +343,7 @@ export default function SeriesTableClient({
         className: "min-w-[160px]",
       },
     ],
-    [controller.result.metrics?.categoryOptions],
+    [controller.result.metrics?.categoryOptions, isTrashView],
   );
 
   const executeBulkMutation = useCallback(
@@ -299,7 +355,11 @@ export default function SeriesTableClient({
           action: `bulk-${action}`,
           bulk: true,
           optimistic: (cache) => {
-            if (action === "delete") {
+            if (
+              action === "delete" ||
+              action === "restore" ||
+              action === "permanent_delete"
+            ) {
               cache.removeRows(idSet);
               return;
             }
@@ -313,7 +373,11 @@ export default function SeriesTableClient({
             );
           },
           execute: async () => {
-            const actionResult = await bulkSeriesActionAjax(action, ids);
+            const actionResult = await bulkSeriesActionAjax(
+              action,
+              ids,
+              action === "permanent_delete",
+            );
             return actionResult.ok
               ? {
                   ok: true as const,
@@ -333,6 +397,10 @@ export default function SeriesTableClient({
           code:
             action === "delete"
               ? "deleted"
+              : action === "restore"
+                ? "restored"
+                : action === "permanent_delete"
+                  ? "permanently_deleted"
               : nextStatus === "published"
                 ? "published"
                 : "unpublished",
@@ -351,14 +419,29 @@ export default function SeriesTableClient({
 
   return (
     <AdminEntityListSurface consumer="series">
+      {isTrashView ? (
+        <AdminEntityTrashHeader
+          count={controller.result.metrics?.trashed ?? 0}
+          description="تظهر هنا السلاسل المحذوفة فقط. الاستعادة تعيد السلسلة كغير منشورة، والحذف النهائي يحرر الـSlug بعد إثبات عدم وجود علاقات."
+          confirmationTitle={(count) => `إفراغ محذوفات السلاسل (${count})؟`}
+          confirmationDescription={(count) =>
+            `سيتم حذف ${count} من السلاسل نهائيًا وتحرير الـSlugs الخاصة بها. ستمنع العلاقات القائمة العملية، ولا يمكن التراجع عنها.`
+          }
+          feedbackChannel="entity-list:content-series-table"
+          onEmptyTrash={(expectedCount) =>
+            emptySeriesTrashAjax(expectedCount, true)
+          }
+          onSuccess={controller.invalidate}
+        />
+      ) : null}
       <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid
           items={[
-            { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true, onClick: controller.resetFilters, active: !controller.query.search && controller.query.filters.status === "all" && !controller.query.filters.categoryId },
+            { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true, onClick: controller.resetFilters, active: !isTrashView && !controller.query.search && controller.query.filters.status === "all" && !controller.query.filters.categoryId },
             { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
             { label: "متوسط الموضوعات لكل سلسلة", value: controller.result.metrics?.averageTopics ?? 0, tone: "blue", compact: true },
-            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: controller.query.filters.status === "published" },
-            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: controller.query.filters.status === "unpublished" },
+            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
+            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
           ]}
         />
       </AdminEntityListPrimarySection>
@@ -405,6 +488,7 @@ export default function SeriesTableClient({
               controller.setSearchAndFilters(
                 search,
                 {
+                  view: controller.query.filters.view,
                   status,
                   categoryId:
                     Number.isInteger(categoryId) && categoryId > 0
@@ -432,11 +516,35 @@ export default function SeriesTableClient({
           enableColumnManagement
           enableSelection
           selectionLabel="تحديد كل السلاسل"
-          bulkOptions={BULK_OPTIONS}
+          bulkOptions={isTrashView ? TRASH_BULK_OPTIONS : BULK_OPTIONS}
           bulkEntityLabel="سلسلة"
+          getBulkConfirmation={(action, ids) =>
+            action === "permanent_delete"
+              ? {
+                  title: `حذف نهائي لـ ${ids.length} سلسلة؟`,
+                  description: `سيتم حذف ${ids.length} من السلاسل المحددة نهائيًا وتحرير الـSlugs الخاصة بها. ستمنع العلاقات القائمة العملية، ولا يمكن التراجع عنها.`,
+                  confirmLabel:
+                    ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected,
+                }
+              : action === "restore"
+                ? {
+                    title: `استعادة ${ids.length} سلسلة؟`,
+                    description:
+                      "ستعود السلاسل المحددة إلى القائمة النشطة كغير منشورة بعد التحقق من العلاقات والـSlugs.",
+                    confirmLabel: ADMIN_BULK_ACTION_LABELS.restoreSelected,
+                  }
+                : action === "delete"
+                  ? {
+                      title: `نقل ${ids.length} سلسلة إلى المحذوفات؟`,
+                      description:
+                        "ستُنقل السلاسل المحددة إلى المحذوفات مع الاحتفاظ بالـSlugs. ستمنع العلاقات القائمة العملية.",
+                      confirmLabel: ADMIN_BULK_ACTION_LABELS.deleteSelected,
+                    }
+                  : null
+          }
           mapResultToFeedback={(result) => mapAdminActionResultToFeedback(result)}
           onSuccessfulMutation={(result) => {
-            if (!result) return controller.invalidate();
+            if (!result || result.entityId == null) return controller.invalidate();
           }}
           sort={{
             key: controller.query.sort.field as SeriesSortKey,
@@ -469,16 +577,22 @@ export default function SeriesTableClient({
             systemEmpty: (
               <>
                 <p className="text-base font-semibold text-white">
-                  لا توجد سلاسل حتى الآن
+                  {isTrashView
+                    ? "لا توجد سلاسل في المحذوفات"
+                    : "لا توجد سلاسل حتى الآن"}
                 </p>
                 <p className="mt-2 text-sm text-white/45">
-                  ابدأ بإضافة أول سلسلة من زر إضافة سلسلة.
+                  {isTrashView
+                    ? "تظهر هنا السلاسل بعد نقلها إلى المحذوفات."
+                    : "ابدأ بإضافة أول سلسلة من زر إضافة سلسلة."}
                 </p>
               </>
             ),
             filteredEmpty: (
               <p className="text-base font-semibold text-white">
-                لا توجد سلاسل مطابقة للبحث أو الفلاتر المحددة
+                {isTrashView
+                  ? "لا توجد سلاسل محذوفة مطابقة للبحث."
+                  : "لا توجد سلاسل مطابقة للبحث أو الفلاتر المحددة"}
               </p>
             ),
           }}

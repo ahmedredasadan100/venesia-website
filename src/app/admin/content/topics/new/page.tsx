@@ -35,11 +35,13 @@ export default async function NewUnifiedContentPage({
       supabase
         .from("topic_categories")
         .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
+        .is("deleted_at", null)
         .order("sort_order", { ascending: true })
         .order("id", { ascending: true }),
       supabase
         .from("topic_series")
         .select("id,name,slug,status,deleted_at,category_id")
+        .is("deleted_at", null)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true }),
     ]);

@@ -79,8 +79,6 @@ const paths = {
     "src/lib/admin/interaction-system/adoption-manifest.ts",
   categoryAdapter:
     "src/lib/admin/content/entity-list-adapters/categories.ts",
-  categoryDeleteGuard:
-    "src/lib/admin/content/category-delete-guard.ts",
   seriesAdapter: "src/lib/admin/content/entity-list-adapters/series.ts",
   seriesActions: "src/app/admin/content/series/actions.ts",
   taxonomyMutations: "src/lib/admin/content/taxonomy-mutations.ts",
@@ -90,8 +88,8 @@ const paths = {
     "src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts",
   migration:
     "sql/migrations/20260723040000_content_taxonomy_data_runtime.sql",
-  deleteGuardMigration:
-    "sql/migrations/20260807130000_taxonomy_delete_guard_truth_closure.sql",
+  lifecycleMigration:
+    "sql/migrations/20260808120000_taxonomy_lifecycle_contract.sql",
   firstPublishMigration:
     "sql/migrations/20260807140000_topic_categories_first_publish_date.sql",
 } as const;
@@ -128,14 +126,13 @@ const previewActions = read(paths.previewActions);
 const previewAdapters = read(paths.previewAdapters);
 const interactionManifest = read(paths.interactionManifest);
 const categoryAdapter = read(paths.categoryAdapter);
-const categoryDeleteGuard = read(paths.categoryDeleteGuard);
 const seriesAdapter = read(paths.seriesAdapter);
 const seriesActions = read(paths.seriesActions);
 const taxonomyMutations = read(paths.taxonomyMutations);
 const instantMutation = read(paths.instantMutation);
 const instantMutationCache = read(paths.instantMutationCache);
 const migration = read(paths.migration);
-const deleteGuardMigration = read(paths.deleteGuardMigration);
+const lifecycleMigration = read(paths.lifecycleMigration);
 const firstPublishMigration = read(paths.firstPublishMigration);
 const createCategory = exportedFunctionSlice(
   taxonomyFormActions,
@@ -558,7 +555,6 @@ check(
 // 9. Mutation rollback / atomicity contracts.
 for (const rpc of [
   "admin_update_topic_category",
-  "admin_delete_topic_category",
   "admin_update_topic_series",
 ]) {
   check(
@@ -572,6 +568,26 @@ for (const rpc of [
     new RegExp(`\\.rpc\\(\\s*["']${rpc}["']`).test(taxonomyMutations),
   );
 }
+for (const rpc of [
+  "admin_move_topic_categories_to_trash",
+  "admin_restore_topic_categories",
+  "admin_permanently_delete_topic_categories",
+  "admin_move_topic_series_to_trash",
+  "admin_restore_topic_series",
+  "admin_permanently_delete_topic_series",
+]) {
+  check(
+    "mutation-atomicity",
+    `${rpc} is defined by the lifecycle migration`,
+    lifecycleMigration.includes(`function public.${rpc}`),
+  );
+  check(
+    "mutation-atomicity",
+    `${rpc} is called by the taxonomy mutation DAL`,
+    taxonomyMutations.includes(`"${rpc}"`) &&
+      taxonomyMutations.includes(".rpc(rpcName"),
+  );
+}
 check(
   "mutation-atomicity",
   "atomic DAL contains no split client-side topics write",
@@ -583,23 +599,21 @@ check(
   "mutation-atomicity",
   "category and series update actions delegate to atomic helpers",
   updateCategory.includes("updateTopicCategoryAtomically") &&
-    updateSeries.includes("updateTopicSeriesAtomically") &&
-    categoryActions.includes("deleteTopicCategoryAtomically"),
+    updateSeries.includes("updateTopicSeriesAtomically"),
 );
 check(
-  "delete-guard-truth",
-  "Series single and bulk deletion delegate to the shared atomic Taxonomy owner",
-  exportedFunctionSlice(seriesActions, "deleteSeriesAjax").includes(
-    "deleteTopicSeriesAtomically",
-  ) &&
-    exportedFunctionSlice(seriesActions, "bulkSeriesActionAjax").includes(
-      "deleteTopicSeriesAtomically",
-    ) &&
-    taxonomyMutations.includes('"admin_delete_topic_series"'),
+  "lifecycle-owner",
+  "Category and Series lifecycle actions delegate to the shared atomic Taxonomy owner",
+  categoryActions.includes("moveTopicCategoriesToTrashAtomically") &&
+    categoryActions.includes("restoreTopicCategoriesAtomically") &&
+    categoryActions.includes("permanentlyDeleteTopicCategoriesAtomically") &&
+    seriesActions.includes("moveTopicSeriesToTrashAtomically") &&
+    seriesActions.includes("permanentlyDeleteTopicSeriesAtomically") &&
+    seriesActions.includes("restoreTopicSeriesAtomically"),
 );
 check(
-  "delete-guard-truth",
-  "Series delete paths do not read a list read model, cache, or duplicate direct relation guard",
+  "lifecycle-owner",
+  "Lifecycle paths do not write taxonomy or Topic relationships directly",
   !exportedFunctionSlice(seriesActions, "deleteSeriesAjax").includes(
     '.from("topics")',
   ) &&
@@ -613,34 +627,33 @@ check(
       '.from("topic_series").delete',
     ) &&
     !seriesActions.includes("admin_list_series") &&
-    !seriesActions.includes("unstable_cache"),
+    !seriesActions.includes("unstable_cache") &&
+    !categoryActions.includes('.from("topics").update') &&
+    !taxonomyMutations.includes('"admin_delete_topic_category"') &&
+    !taxonomyMutations.includes('"admin_delete_topic_series"'),
 );
 check(
-  "delete-guard-truth",
-  "atomic Series guard blocks active topics and detaches only soft-deleted tombstone references",
-  deleteGuardMigration.includes(
-    "function public.admin_delete_topic_series",
+  "lifecycle-relationships",
+  "Lifecycle migration retires hard-delete RPCs and never transfers, detaches, or cascades Topic relationships",
+  lifecycleMigration.includes(
+    "drop function if exists public.admin_delete_topic_category",
   ) &&
-    deleteGuardMigration.includes("topics.deleted_at is null") &&
-    deleteGuardMigration.includes("series still has active topics") &&
-    deleteGuardMigration.includes("topics.deleted_at is not null") &&
-    deleteGuardMigration.includes("series_id = null") &&
-    deleteGuardMigration.includes("series_slug = null") &&
-    deleteGuardMigration.includes("topics_series_id_fkey"),
+    lifecycleMigration.includes(
+      "drop function if exists public.admin_delete_topic_series",
+    ) &&
+    lifecycleMigration.includes("categories still have linked topics") &&
+    lifecycleMigration.includes("series still have linked topics") &&
+    !lifecycleMigration.includes("update public.topics") &&
+    !lifecycleMigration.includes("delete from public.topics"),
 );
 check(
-  "delete-guard-truth",
-  "Category preview and atomic mutation share active-topic semantics including legacy slug references",
-  occurrenceCount(categoryDeleteGuard, /\.is\("deleted_at", null\)/g) ===
-    2 &&
-    categoryDeleteGuard.includes('.is("category_id", null)') &&
-    categoryDeleteGuard.includes('.eq("category_slug", category.slug)') &&
-    deleteGuardMigration.includes(
-      "create or replace function public.admin_delete_topic_category",
-    ) &&
-    deleteGuardMigration.includes("v_active_topic_count") &&
-    deleteGuardMigration.includes("soft_deleted_topics_detached") &&
-    deleteGuardMigration.includes("topics_category_id_fkey"),
+  "lifecycle-slugs",
+  "Trash keeps unique slugs reserved and permanent deletion is the only row delete",
+  lifecycleMigration.includes("taxonomy lifecycle requires topic_categories_slug_key") &&
+    lifecycleMigration.includes("taxonomy lifecycle requires topic_series_slug_key") &&
+    lifecycleMigration.includes("deleted_at = statement_timestamp()") &&
+    occurrenceCount(lifecycleMigration, /delete from public\.topic_categories/g) === 1 &&
+    occurrenceCount(lifecycleMigration, /delete from public\.topic_series/g) === 1,
 );
 check(
   "mutation-rollback",
@@ -674,7 +687,9 @@ check(
       (source) =>
         source.includes('pendingAction === "visibility"') &&
         source.includes('pendingAction === "duplicate"') &&
-        source.includes('pendingAction === "delete"') &&
+        source.includes(
+          'pendingAction === (isTrashView ? "permanent_delete" : "delete")',
+        ) &&
         source.includes("mutationBusy") &&
         !source.includes("localPending"),
     ),

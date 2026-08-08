@@ -38,12 +38,14 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
         .from("topic_categories")
         .select("id,name,slug")
         .eq("status", "published")
+        .is("deleted_at", null)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true }),
       supabase
         .from("topic_series")
         .select("id,name,slug,category_id")
         .eq("status", "published")
+        .is("deleted_at", null)
         .not("category_id", "is", null)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true }),

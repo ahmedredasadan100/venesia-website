@@ -8,6 +8,7 @@ export type {
 } from "./AdminEntityListTable";
 export { default as AdminEntityListFilters } from "./AdminEntityListFilters";
 export type { AdminEntityListFiltersProps } from "./AdminEntityListFilters";
+export { default as AdminEntityTrashHeader } from "./AdminEntityTrashHeader";
 export {
   default as AdminEntityListSurface,
   AdminEntityListPageLayout,

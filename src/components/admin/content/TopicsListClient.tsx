@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 
 import {
   duplicateUnifiedContent,
@@ -12,18 +12,19 @@ import {
   toggleUnifiedContentFeatured,
 } from "../../../app/admin/content/topics/actions";
 
-import { AdminEntityListSurface } from "../entity-list";
+import {
+  AdminEntityListSurface,
+  AdminEntityTrashHeader,
+} from "../entity-list";
 import {
   AdminEntityListPrimarySection,
   AdminEntityListTableRegion,
 } from "../entity-list/AdminEntityListSurface";
 import {
-  AdminActionButton,
   AdminMetricCardsGrid,
   AdminTablePagination,
   type AdminMetricCardsGridItem,
 } from "../ui";
-import { useAdminFeedback } from "../AdminFeedbackProvider";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
@@ -51,8 +52,6 @@ import UnifiedContentList, {
   UNIFIED_CONTENT_LIST_ID,
 } from "./UnifiedContentList";
 import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions";
-import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
-import { ADMIN_BULK_ACTION_LABELS } from "../../../lib/admin/entity-list/bulk-action-labels";
 
 type SeriesOption = {
   id: number;
@@ -145,80 +144,6 @@ function toFilters(state: {
         : "all",
     image: state.image === "without" ? "without" : "all",
   };
-}
-
-function TopicEmptyTrashAction({
-  count,
-  currentListPath,
-  onSuccess,
-}: {
-  count: number;
-  currentListPath: string;
-  onSuccess: () => void | Promise<void>;
-}) {
-  const floating = useAdminFloatingLayer();
-  const { publishFeedback } = useAdminFeedback();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  function requestEmptyTrash() {
-    if (count <= 0) return;
-    if (!floating) {
-      publishFeedback(
-        mapTopicsActionResultToFeedback(
-          {
-            ok: false,
-            title: "تعذر فتح التأكيد",
-            message: "لم يبدأ الإجراء لأن طبقة التأكيد المشتركة غير متاحة.",
-          },
-          { currentListPath },
-        ),
-        {
-          channel: `entity-list:${UNIFIED_CONTENT_LIST_ID}`,
-          placement: "inline",
-          critical: true,
-          reveal: true,
-        },
-      );
-      return;
-    }
-
-    const confirmedCount = count;
-    floating.openConfirmation({
-      title: `إفراغ المحذوفات (${confirmedCount})؟`,
-      description: `سيتم حذف ${confirmedCount} من الموضوعات الموجودة في المحذوفات نهائيًا وتحرير الـSlugs الخاصة بها. لا يمكن التراجع عن هذا الإجراء.`,
-      confirmLabel: ADMIN_BULK_ACTION_LABELS.emptyTrash,
-      returnFocusRef: triggerRef,
-      onConfirm: async () => {
-        const formData = new FormData();
-        formData.set("confirm_permanent", "true");
-        formData.set("expected_count", String(confirmedCount));
-        const result = await emptyUnifiedContentTrash(formData);
-        const feedback = mapTopicsActionResultToFeedback(result, {
-          currentListPath,
-        });
-        publishFeedback(feedback, {
-          channel: `entity-list:${UNIFIED_CONTENT_LIST_ID}`,
-          placement: "inline",
-          critical: !result.ok,
-          reveal: true,
-        });
-        if (!result.ok) throw new Error(result.message);
-        await onSuccess();
-      },
-    });
-  }
-
-  return (
-    <AdminActionButton
-      type="button"
-      variant="dark"
-      disabled={count <= 0}
-      onClick={requestEmptyTrash}
-      className="border-red-300/20 text-red-100/85 hover:border-red-300/35 hover:bg-red-400/8"
-    >
-      {ADMIN_BULK_ACTION_LABELS.emptyTrash}
-    </AdminActionButton>
-  );
 }
 
 export default function TopicsListClient({
@@ -657,19 +582,25 @@ export default function TopicsListClient({
   return (
     <AdminEntityListSurface consumer="topics">
       {isTrashView ? (
-        <section className="flex flex-wrap items-center justify-between gap-4 rounded-[18px] border border-amber-300/18 bg-amber-400/[0.055] px-5 py-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold text-amber-100">المحذوفات</h2>
-            <p className="mt-1 text-sm leading-6 text-white/55">
-              تظهر هنا الموضوعات المحذوفة فقط. الاستعادة تعيد الموضوع كغير منشور، والحذف النهائي يحرر الـSlug ولا يمكن التراجع عنه.
-            </p>
-          </div>
-          <TopicEmptyTrashAction
-            count={trashCount}
-            currentListPath={currentListPath}
-            onSuccess={controller.invalidate}
-          />
-        </section>
+        <AdminEntityTrashHeader
+          count={trashCount}
+          description="تظهر هنا الموضوعات المحذوفة فقط. الاستعادة تعيد الموضوع كغير منشور، والحذف النهائي يحرر الـSlug ولا يمكن التراجع عنه."
+          confirmationTitle={(count) => `إفراغ المحذوفات (${count})؟`}
+          confirmationDescription={(count) =>
+            `سيتم حذف ${count} من الموضوعات الموجودة في المحذوفات نهائيًا وتحرير الـSlugs الخاصة بها. لا يمكن التراجع عن هذا الإجراء.`
+          }
+          feedbackChannel={`entity-list:${UNIFIED_CONTENT_LIST_ID}`}
+          mapResultToFeedback={(result) =>
+            mapTopicsActionResultToFeedback(result, { currentListPath })
+          }
+          onEmptyTrash={(expectedCount) => {
+            const formData = new FormData();
+            formData.set("confirm_permanent", "true");
+            formData.set("expected_count", String(expectedCount));
+            return emptyUnifiedContentTrash(formData);
+          }}
+          onSuccess={controller.invalidate}
+        />
       ) : null}
       <AdminEntityListPrimarySection className="overflow-x-auto pb-1">
         <AdminMetricCardsGrid items={metricItems} className="min-w-[1146px]" />
