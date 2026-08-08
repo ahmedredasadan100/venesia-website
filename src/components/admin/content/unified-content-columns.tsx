@@ -69,11 +69,13 @@ function singleLine(value?: string | null, fallback = "—") {
 
 const TOPICS_COMPACT_COLUMN_WIDTHS = {
   status: 88,
-  contentType: 104,
-  category: 120,
-  featured: 52,
+  contentType: 52,
+  category: 88,
+  featured: 44,
   seo: 76,
 } as const;
+
+const TOPICS_TITLE_MIN_WIDTH = 170;
 
 function compactSingleLine(value?: string | null, fallback = "—") {
   const text = value?.trim() || fallback;
@@ -106,7 +108,7 @@ export function createUnifiedContentColumns(
       hideable: false,
       sortable: true,
       sortKey: "title",
-      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.compactIcon,
+      minWidth: TOPICS_TITLE_MIN_WIDTH,
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.compactIcon,
       flexible: true,
       sticky: "start",
