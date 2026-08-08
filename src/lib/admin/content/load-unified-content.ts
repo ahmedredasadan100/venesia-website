@@ -1,6 +1,10 @@
 import "server-only";
 
-import { analyzeTopicSeo } from "../seo-score";
+import {
+  analyzeEntitySeo,
+  analyzeTopicSeo,
+  type FaqItem,
+} from "../seo-score";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   getCategoryAndDescendantIds,
@@ -69,6 +73,7 @@ export type UnifiedContentRow = {
   series_name: string | null;
   status: string | null;
   is_featured: boolean | null;
+  seo_score: number;
   views_count: number | null;
   created_at: string | null;
   updated_at: string | null;
@@ -87,6 +92,94 @@ export type UnifiedContentListResult = {
   totalPages: number;
   error: string | null;
 };
+
+type UnifiedContentSeoSourceRow = Omit<UnifiedContentRow, "seo_score"> & {
+  slug: string | null;
+  excerpt: string | null;
+  content: string | null;
+  image: string | null;
+  image_alt: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_keywords: unknown;
+  focus_keyword: string | null;
+  og_image: string | null;
+  og_image_alt: string | null;
+  faq: unknown;
+};
+
+function normalizeSeoKeywords(value: unknown) {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function normalizeFaq(value: unknown): FaqItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const question = "question" in item ? String(item.question ?? "") : "";
+    const answer = "answer" in item ? String(item.answer ?? "") : "";
+    return [{ question, answer }];
+  });
+}
+
+function getUnifiedContentSeoScore(row: UnifiedContentSeoSourceRow) {
+  const hasOgImage = Boolean(row.og_image?.trim());
+  const image = hasOgImage ? row.og_image ?? "" : row.image ?? "";
+  const imageAlt = hasOgImage
+    ? row.og_image_alt ?? ""
+    : row.image_alt ?? "";
+  const commonInput = {
+    title: row.title ?? "",
+    content: row.content ?? "",
+    slug: row.slug ?? "",
+    image,
+    imageAlt,
+    seoTitle: row.seo_title ?? "",
+    seoDescription: row.seo_description ?? "",
+    seoKeywords: normalizeSeoKeywords(row.seo_keywords),
+    focusKeyword: row.focus_keyword ?? "",
+  };
+
+  if (row.content_type === "article") {
+    return analyzeTopicSeo({
+      ...commonInput,
+      excerpt: row.excerpt ?? "",
+      faq: normalizeFaq(row.faq),
+    }).seoScore;
+  }
+
+  return analyzeEntitySeo({
+    ...commonInput,
+    description: row.excerpt ?? "",
+  }).overallScore;
+}
+
+function toUnifiedContentRow(
+  source: UnifiedContentSeoSourceRow,
+): UnifiedContentRow {
+  return {
+    id: source.id,
+    title: source.title,
+    content_type: source.content_type,
+    category_id: source.category_id,
+    category_name: source.category_name,
+    category_color_token: source.category_color_token,
+    series_id: source.series_id,
+    series_name: source.series_name,
+    status: source.status,
+    is_featured: source.is_featured,
+    seo_score: getUnifiedContentSeoScore(source),
+    views_count: source.views_count,
+    created_at: source.created_at,
+    updated_at: source.updated_at,
+    published_at: source.published_at,
+    created_by_display: source.created_by_display,
+    updated_by_display: source.updated_by_display,
+    published_by_display: source.published_by_display,
+    deleted_at: source.deleted_at,
+  };
+}
 
 export type ContentListSearchParams = {
   q?: string;
@@ -205,7 +298,7 @@ function applySort(query: any, sort: ContentSortValue) {
 }
 
 const CONTENT_LIST_SELECT =
-  "id,title,content_type,category_id,category_name,category_color_token,series_id,series_name,status,is_featured,views_count,created_at,updated_at,published_at,created_by_display,updated_by_display,published_by_display,deleted_at";
+  "id,title,slug,excerpt,content,image,image_alt,content_type,category_id,category_name,category_color_token,series_id,series_name,status,is_featured,views_count,created_at,updated_at,published_at,created_by_display,updated_by_display,published_by_display,deleted_at,seo_title,seo_description,seo_keywords,focus_keyword,og_image,og_image_alt,faq";
 
 export async function loadUnifiedContentList(
   filters: UnifiedContentFilters,
@@ -244,7 +337,11 @@ export async function loadUnifiedContentList(
   ).range(from, to);
 
   return {
-    rows: error ? [] : ((data ?? []) as UnifiedContentRow[]),
+    rows: error
+      ? []
+      : ((data ?? []) as UnifiedContentSeoSourceRow[]).map(
+          toUnifiedContentRow,
+        ),
     totalCount,
     page,
     pageSize: filters.pageSize,

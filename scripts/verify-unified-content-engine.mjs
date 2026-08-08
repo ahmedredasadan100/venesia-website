@@ -280,6 +280,10 @@ check(
 );
 
 const columns = read("src/components/admin/content/unified-content-columns.tsx");
+const topicsAdapter = read(
+  "src/lib/admin/content/entity-list-adapters/topics.ts",
+);
+const topicsListConfig = read("src/lib/admin/content/topics-list-config.ts");
 check(
   "Required optional columns must be available",
   containsAll(columns, ['key: "id"', 'key: "views"', 'key: "created_at"', 'key: "updated_at"', 'key: "created_by"']),
@@ -306,6 +310,34 @@ check(
     /key: "category"[\s\S]*?defaultVisible: true/.test(columns) &&
     /key: "status"[\s\S]*?defaultVisible: true/.test(columns) &&
     /key: "actions"[\s\S]*?defaultVisible: true/.test(columns),
+);
+check(
+  "Topics compact columns must stay fixed while the title absorbs remaining width",
+  /key: "title"[\s\S]*?flexible: true/.test(columns) &&
+    containsAll(columns, [
+      "TOPICS_COMPACT_COLUMN_WIDTHS.status",
+      "TOPICS_COMPACT_COLUMN_WIDTHS.contentType",
+      "TOPICS_COMPACT_COLUMN_WIDTHS.category",
+      "TOPICS_COMPACT_COLUMN_WIDTHS.featured",
+    ]),
+);
+check(
+  "Featured must use the shared icon and SEO must follow it",
+  /key: "featured"[\s\S]*?AdminDataGridActionIcon[\s\S]*?key: "seo"/.test(
+    columns,
+  ),
+);
+check(
+  "Topics rows must expose the existing SEO truth through the current adapter",
+  containsAll(loader, [
+    "analyzeTopicSeo",
+    ").seoScore",
+    "analyzeEntitySeo",
+    ").overallScore",
+    "seo_score: getUnifiedContentSeoScore(source)",
+  ]) &&
+    topicsAdapter.includes("seo_score: z.number().int().min(0).max(100)") &&
+    topicsListConfig.includes('"seo"'),
 );
 
 const list = read("src/components/admin/content/UnifiedContentList.tsx");

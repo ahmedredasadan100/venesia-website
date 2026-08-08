@@ -38,6 +38,7 @@ const topicRowSchema = z.object({
   series_name: z.string().nullable(),
   status: z.string().nullable(),
   is_featured: z.boolean().nullable(),
+  seo_score: z.number().int().min(0).max(100),
   views_count: z.number().nullable(),
   created_at: z.string().nullable(),
   updated_at: z.string().nullable(),
