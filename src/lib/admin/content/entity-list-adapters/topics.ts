@@ -51,6 +51,7 @@ const topicRowSchema = z.object({
 
 const topicMetricsSchema = z.object({
   total: z.number().int().nonnegative(),
+  trashed: z.number().int().nonnegative(),
   published: z.number().int().nonnegative(),
   unpublished: z.number().int().nonnegative(),
   withoutImage: z.number().int().nonnegative(),
@@ -81,6 +82,7 @@ export async function loadTopicsEntityListResult(
     loadUnifiedContentList(
       {
         q: query.search,
+        view: query.filters.view,
         contentType: query.filters.contentType,
         categoryId: query.filters.categoryId,
         seriesId: query.filters.seriesId,

@@ -67,6 +67,7 @@ const FEATURED_VALUES = new Set(["yes", "no"]);
 
 export type UnifiedContentFilters = {
   q: string;
+  view: "active" | "trash";
   contentType: ContentType | "all";
   categoryId: number | null;
   seriesId: number | "any" | null;
@@ -210,6 +211,7 @@ export function sortUnifiedContentRowsBySeo(
 
 export type ContentListSearchParams = {
   q?: string;
+  view?: string;
   content_type?: string;
   category?: string;
   series?: string;
@@ -250,6 +252,7 @@ export function normalizeUnifiedContentFilters(
 
   return {
     q: cleanContentTitleSearch(params?.q),
+    view: params?.view === "trash" ? "trash" : "active",
     contentType: isContentType(rawType) ? rawType : "all",
     categoryId: getOptionalId(params?.category),
     seriesId: params?.series === "any" ? "any" : getOptionalId(params?.series),
@@ -274,7 +277,9 @@ export function normalizeUnifiedContentFilters(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyFilters(query: any, filters: UnifiedContentFilters, categories: AdminContentCategory[]) {
-  let next = query.is("deleted_at", null);
+  let next = filters.view === "trash"
+    ? query.not("deleted_at", "is", null)
+    : query.is("deleted_at", null);
 
   for (const word of filters.q.split(" ").filter(Boolean)) {
     next = next.ilike("title", `%${word}%`);
@@ -428,6 +433,7 @@ export async function loadUnifiedContentMetrics() {
 
   const [
     total,
+    trashed,
     published,
     unpublished,
     withoutImage,
@@ -436,6 +442,7 @@ export async function loadUnifiedContentMetrics() {
     { data: seoRows, error: seoError },
   ] = await Promise.all([
     base(),
+    supabase.from("topics").select("id", { count: "exact", head: true }).not("deleted_at", "is", null),
     base().eq("status", "published"),
     base().eq("status", "unpublished"),
     base().or("image.is.null,image.eq."),
@@ -475,6 +482,7 @@ export async function loadUnifiedContentMetrics() {
 
   return {
     total: total.count ?? 0,
+    trashed: trashed.count ?? 0,
     published: published.count ?? 0,
     unpublished: unpublished.count ?? 0,
     withoutImage: withoutImage.count ?? 0,
@@ -483,6 +491,7 @@ export async function loadUnifiedContentMetrics() {
     seoAverage,
     error:
       total.error?.message ??
+      trashed.error?.message ??
       published.error?.message ??
       unpublished.error?.message ??
       withoutImage.error?.message ??

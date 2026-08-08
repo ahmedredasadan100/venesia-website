@@ -21,6 +21,7 @@ export const topicSortFields = [
 export type TopicSortField = (typeof topicSortFields)[number];
 
 export type TopicFilters = {
+  view: "active" | "trash";
   contentType: ContentType | "all";
   categoryId: number | null;
   seriesId: number | "any" | null;
@@ -40,6 +41,7 @@ export const topicsQueryContract: AdminEntityListQueryContract<
 > = {
   mode: "server-page",
   filtersSchema: z.strictObject({
+    view: z.enum(["active", "trash"]),
     contentType: z.enum([
       "all",
       "article",
@@ -62,6 +64,7 @@ export const topicsQueryContract: AdminEntityListQueryContract<
   maxPageSize: 50,
   searchMinLength: 2,
   rawFilterSchemas: {
+    view: z.enum(["active", "trash"]),
     content_type: z.enum([
       "all",
       "article",
@@ -78,12 +81,14 @@ export const topicsQueryContract: AdminEntityListQueryContract<
     image: z.enum(["all", "without"]),
   },
   parseFilters(params) {
+    const view = params.get("view");
     const contentType = params.get("content_type");
     const status = params.get("status");
     const featured = params.get("featured");
     const series = params.get("series");
     const image = params.get("image");
     return {
+      view: view === "trash" ? "trash" : "active",
       contentType:
         contentType &&
         ["article", "news", "press", "site_update", "video", "gallery"].includes(
@@ -104,9 +109,10 @@ export const topicsQueryContract: AdminEntityListQueryContract<
     };
   },
   writeFilters(filters, params) {
-    ["content_type", "category", "series", "status", "featured", "image"].forEach((key) =>
+    ["view", "content_type", "category", "series", "status", "featured", "image"].forEach((key) =>
       params.delete(key),
     );
+    if (filters.view === "trash") params.set("view", "trash");
     if (filters.contentType !== "all") {
       params.set("content_type", filters.contentType);
     }

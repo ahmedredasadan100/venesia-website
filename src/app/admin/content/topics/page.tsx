@@ -52,6 +52,7 @@ export default async function UnifiedContentTopicsPage({
     new URLSearchParams(
       Object.entries({
         q: params?.q,
+        view: params?.view,
         content_type: params?.content_type,
         category: params?.category,
         series: params?.series,

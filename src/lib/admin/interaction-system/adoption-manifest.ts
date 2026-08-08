@@ -299,19 +299,20 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         visibility: "adopted",
         featured: "adopted",
         duplicate: "adopted",
-        archive: "hidden",
+        archive: "adopted",
         delete: "adopted",
       },
       owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
-      confirmationActions: ["delete"],
+      confirmationActions: ["archive", "delete"],
       auditedActions: [
         "visibility",
         "featured",
         "duplicate",
+        "archive",
         "delete",
       ],
       rationale:
-        "Topic row presentation is shared while instant mutations, feedback, confirmation, and audit remain with their existing owners.",
+        "Topic active and Trash row presentation is shared while instant mutations, feedback, confirmation, and audit remain with their existing owners.",
     },
     {
       entity: "categories",

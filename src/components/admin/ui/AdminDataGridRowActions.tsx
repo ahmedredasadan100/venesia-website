@@ -192,14 +192,14 @@ function resolveMenuItems(
       kind: "archive",
       target: actions.archive,
       dataGridAction: isArchived ? "restore" : "archive",
-      label: isArchived ? "استعادة" : "أرشفة",
+      label: actions.archive.label ?? (isArchived ? "استعادة" : "أرشفة"),
       tone: "neutral",
     },
     delete: {
       kind: "delete",
       target: actions.delete,
       dataGridAction: "delete",
-      label: "حذف",
+      label: actions.delete.label ?? "حذف",
       tone: "red",
     },
   };

@@ -4,6 +4,8 @@ import { useCallback, useMemo } from "react";
 
 import {
   duplicateUnifiedContent,
+  permanentlyDeleteUnifiedContent,
+  restoreUnifiedContent,
   setUnifiedContentStatus,
   softDeleteUnifiedContent,
   toggleUnifiedContentFeatured,
@@ -14,7 +16,11 @@ import {
   AdminEntityListPrimarySection,
   AdminEntityListTableRegion,
 } from "../entity-list/AdminEntityListSurface";
-import { AdminMetricCardsGrid, AdminTablePagination } from "../ui";
+import {
+  AdminMetricCardsGrid,
+  AdminTablePagination,
+  type AdminMetricCardsGridItem,
+} from "../ui";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
@@ -99,6 +105,7 @@ function positiveId(value: string) {
 
 function toFilters(state: {
   q: string;
+  view: "active" | "trash";
   contentType: string;
   category: string;
   series: string;
@@ -107,6 +114,7 @@ function toFilters(state: {
   image: string;
 }): TopicFilters {
   return {
+    view: state.view,
     contentType:
       state.contentType === "article" ||
       state.contentType === "news" ||
@@ -157,6 +165,7 @@ export default function TopicsListClient({
     "topics",
     controller.query,
   );
+  const isTrashView = controller.query.filters.view === "trash";
 
   const toggleVisibility = useCallback(
     async (
@@ -362,6 +371,82 @@ export default function TopicsListClient({
     [instant],
   );
 
+  const restoreTopic = useCallback(
+    async (row: UnifiedContentRow): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
+
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "restore",
+          optimistic: (cache) => cache.removeRows(new Set([row.id])),
+          execute: async () => {
+            actionResult = await restoreUnifiedContent(
+              topicActionFormData(row.id),
+            );
+            return toInstantMutationResult(
+              actionResult,
+              "topic_restore_failed",
+            );
+          },
+        });
+        if (actionResult) return actionResult;
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return unexpectedMutationFailure(error, {
+          title: "تعذر استعادة الموضوع",
+          fallbackMessage: "تعذر استعادة الموضوع من المحذوفات.",
+          entityId: row.id,
+        });
+      }
+
+      return unexpectedMutationFailure(null, {
+        title: "تعذر استعادة الموضوع",
+        fallbackMessage: "تعذر إثبات نتيجة استعادة الموضوع.",
+        entityId: row.id,
+      });
+    },
+    [instant],
+  );
+
+  const permanentlyDeleteTopic = useCallback(
+    async (row: UnifiedContentRow): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
+
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "permanent_delete",
+          optimistic: (cache) => cache.removeRows(new Set([row.id])),
+          execute: async () => {
+            actionResult = await permanentlyDeleteUnifiedContent(
+              topicActionFormData(row.id, { confirm_permanent: "true" }),
+            );
+            return toInstantMutationResult(
+              actionResult,
+              "topic_permanent_delete_failed",
+            );
+          },
+        });
+        if (actionResult) return actionResult;
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return unexpectedMutationFailure(error, {
+          title: "تعذر الحذف النهائي",
+          fallbackMessage: "تعذر حذف الموضوع نهائيًا.",
+          entityId: row.id,
+        });
+      }
+
+      return unexpectedMutationFailure(null, {
+        title: "تعذر الحذف النهائي",
+        fallbackMessage: "تعذر إثبات نتيجة الحذف النهائي.",
+        entityId: row.id,
+      });
+    },
+    [instant],
+  );
+
   const rowActionHandlers = useMemo<UnifiedContentRowActionHandlers>(
     () => ({
       rowPendingAction: (rowId) =>
@@ -374,12 +459,18 @@ export default function TopicsListClient({
       onFeatured: toggleFeatured,
       onDuplicate: duplicateTopic,
       onDelete: deleteTopic,
+      onRestore: restoreTopic,
+      onPermanentDelete: permanentlyDeleteTopic,
+      view: controller.query.filters.view,
     }),
     [
+      controller.query.filters.view,
       deleteTopic,
       duplicateTopic,
       instant.bulkPending,
       instant.rowPending,
+      permanentlyDeleteTopic,
+      restoreTopic,
       toggleFeatured,
       toggleVisibility,
     ],
@@ -389,6 +480,9 @@ export default function TopicsListClient({
     `${controller.query.sort.field}_${controller.query.sort.direction}` as ContentSortValue;
   const currentListPath = useMemo(() => {
     const params = new URLSearchParams();
+    if (controller.query.filters.view === "trash") {
+      params.set("view", "trash");
+    }
     if (controller.query.search) params.set("q", controller.query.search);
     if (controller.query.filters.contentType !== "all") {
       params.set("content_type", controller.query.filters.contentType);
@@ -423,6 +517,7 @@ export default function TopicsListClient({
   const toolbar = useUnifiedContentToolbar({
     values: {
       q: controller.query.search,
+      view: controller.query.filters.view,
       contentType: controller.query.filters.contentType,
       category: controller.query.filters.categoryId
         ? String(controller.query.filters.categoryId)
@@ -446,21 +541,65 @@ export default function TopicsListClient({
       );
     },
   });
+  const resetToView = useCallback(
+    (view: "active" | "trash") =>
+      controller.setSearchAndFilters(
+        "",
+        {
+          view,
+          contentType: "all",
+          categoryId: null,
+          seriesId: null,
+          status: "all",
+          featured: "all",
+          image: "all",
+        },
+        "push",
+      ),
+    [controller],
+  );
+  const metricsError = Boolean(controller.result.metrics?.error);
+  const metricItems: AdminMetricCardsGridItem[] = isTrashView
+    ? [
+        {
+          label: "الموضوعات النشطة",
+          value: metricsError ? "—" : (controller.result.metrics?.total ?? 0),
+          tone: "green",
+          compact: true,
+          onClick: () => resetToView("active"),
+        },
+        {
+          label: "المحذوفات",
+          value: metricsError ? "—" : (controller.result.metrics?.trashed ?? 0),
+          tone: "amber",
+          compact: true,
+          onClick: () => resetToView("trash"),
+          active: true,
+        },
+      ]
+    : [
+        { label: "إجمالي الموضوعات", value: metricsError ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", compact: true, onClick: () => resetToView("active"), active: !controller.query.search && controller.query.filters.contentType === "all" && !controller.query.filters.categoryId && !controller.query.filters.seriesId && controller.query.filters.status === "all" && controller.query.filters.featured === "all" && controller.query.filters.image === "all" },
+        { label: "منشور", value: metricsError ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: controller.query.filters.status === "published" },
+        { label: "غير منشور", value: metricsError ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: controller.query.filters.status === "unpublished" },
+        { label: "بدون صورة", value: metricsError ? "—" : (controller.result.metrics?.withoutImage ?? 0), tone: "amber", compact: true, onClick: () => controller.setFilter("image", "without"), active: controller.query.filters.image === "without" },
+        { label: "مرتبطة بسلسلة", value: metricsError ? "—" : (controller.result.metrics?.withSeries ?? 0), tone: "cyan", compact: true, onClick: () => controller.setFilter("seriesId", "any"), active: controller.query.filters.seriesId === "any" },
+        { label: "مميزة", value: metricsError ? "—" : (controller.result.metrics?.featured ?? 0), tone: "gold", compact: true, onClick: () => controller.setFilter("featured", "yes"), active: controller.query.filters.featured === "yes" },
+        { label: "متوسط SEO", value: metricsError ? "—" : (controller.result.metrics?.seoAverage ?? 0), suffix: metricsError ? undefined : "/100", tone: "blue", compact: true },
+        { label: "المحذوفات", value: metricsError ? "—" : (controller.result.metrics?.trashed ?? 0), tone: "amber", compact: true, onClick: () => resetToView("trash") },
+      ];
 
   return (
     <AdminEntityListSurface consumer="topics">
+      {isTrashView ? (
+        <section className="rounded-[18px] border border-amber-300/18 bg-amber-400/[0.055] px-5 py-4">
+          <h2 className="text-lg font-bold text-amber-100">المحذوفات</h2>
+          <p className="mt-1 text-sm leading-6 text-white/55">
+            تظهر هنا الموضوعات المحذوفة فقط. الاستعادة تعيد الموضوع كغير منشور، والحذف النهائي يحرر الـSlug ولا يمكن التراجع عنه.
+          </p>
+        </section>
+      ) : null}
       <AdminEntityListPrimarySection>
-        <AdminMetricCardsGrid
-          items={[
-            { label: "إجمالي الموضوعات", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", compact: true, onClick: controller.resetFilters, active: !controller.query.search && controller.query.filters.contentType === "all" && !controller.query.filters.categoryId && !controller.query.filters.seriesId && controller.query.filters.status === "all" && controller.query.filters.featured === "all" && controller.query.filters.image === "all" },
-            { label: "منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: controller.query.filters.status === "published" },
-            { label: "غير منشور", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: controller.query.filters.status === "unpublished" },
-            { label: "بدون صورة", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.withoutImage ?? 0), tone: "amber", compact: true, onClick: () => controller.setFilter("image", "without"), active: controller.query.filters.image === "without" },
-            { label: "مرتبطة بسلسلة", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.withSeries ?? 0), tone: "cyan", compact: true, onClick: () => controller.setFilter("seriesId", "any"), active: controller.query.filters.seriesId === "any" },
-            { label: "مميزة", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.featured ?? 0), tone: "gold", compact: true, onClick: () => controller.setFilter("featured", "yes"), active: controller.query.filters.featured === "yes" },
-            { label: "متوسط SEO", value: controller.result.metrics?.error ? "—" : (controller.result.metrics?.seoAverage ?? 0), suffix: controller.result.metrics?.error ? undefined : "/100", tone: "blue", compact: true },
-          ]}
-        />
+        <AdminMetricCardsGrid items={metricItems} />
       </AdminEntityListPrimarySection>
 
       {controller.error ? (
@@ -488,6 +627,7 @@ export default function TopicsListClient({
           initialVisibleColumns={initialVisibleColumns}
           initialFeedback={initialFeedback}
           toolbar={toolbar}
+          trashView={isTrashView}
           rowActionHandlers={rowActionHandlers}
           onSortChange={(next, options) =>
             controller.setSort(
@@ -513,7 +653,11 @@ export default function TopicsListClient({
           pageSizeOptions={TOPICS_LIST_PAGE_SIZES.map(String)}
           currentPage={controller.result.pagination.page}
           totalPages={controller.result.pagination.totalPages}
-          emptySummaryText="لا توجد موضوعات مطابقة"
+          emptySummaryText={
+            isTrashView
+              ? "لا توجد موضوعات محذوفة مطابقة"
+              : "لا توجد موضوعات مطابقة"
+          }
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
           pending={controller.isFetching}

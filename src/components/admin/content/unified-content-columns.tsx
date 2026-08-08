@@ -139,16 +139,26 @@ export function createUnifiedContentColumns(
               strokeLinecap="round"
             />
           </svg>
-          <Link
-            href={adminContentTopicPath(row.id, { returnTo: currentListPath })}
-            className="block min-w-0 flex-1 cursor-pointer truncate whitespace-nowrap text-right text-sm font-bold text-white transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
-            style={{
-              maxWidth: TOPICS_TITLE_TEXT_BUDGET,
-            }}
-            title={row.title || "بدون عنوان"}
-          >
-            {row.title || "بدون عنوان"}
-          </Link>
+          {rowActionHandlers?.view === "trash" ? (
+            <span
+              className="block min-w-0 flex-1 truncate whitespace-nowrap text-right text-sm font-bold text-white/82"
+              style={{ maxWidth: TOPICS_TITLE_TEXT_BUDGET }}
+              title={row.title || "بدون عنوان"}
+            >
+              {row.title || "بدون عنوان"}
+            </span>
+          ) : (
+            <Link
+              href={adminContentTopicPath(row.id, { returnTo: currentListPath })}
+              className="block min-w-0 flex-1 cursor-pointer truncate whitespace-nowrap text-right text-sm font-bold text-white transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+              style={{
+                maxWidth: TOPICS_TITLE_TEXT_BUDGET,
+              }}
+              title={row.title || "بدون عنوان"}
+            >
+              {row.title || "بدون عنوان"}
+            </Link>
+          )}
         </div>
       ),
     },
@@ -162,6 +172,9 @@ export function createUnifiedContentColumns(
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.status,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.status,
       renderCell: ({ row }) => {
+        if (row.deleted_at) {
+          return <AdminStatusPill tone="red">في المحذوفات</AdminStatusPill>;
+        }
         const status = getContentStatusMetadata(row.status);
         return (
           <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>

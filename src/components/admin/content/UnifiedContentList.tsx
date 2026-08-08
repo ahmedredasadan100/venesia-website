@@ -32,7 +32,7 @@ import type { UnifiedContentRowActionHandlers } from "./UnifiedContentRowActions
 const BULK_OPTIONS = [
   { value: "publish", label: "نشر" },
   { value: "unpublish", label: "إخفاء" },
-  { value: "delete", label: "حذف آمن" },
+  { value: "delete", label: "نقل إلى المحذوفات" },
   { value: "move_category", label: "نقل لتصنيف" },
   { value: "feature", label: "تعيين كمميز" },
   { value: "unfeature", label: "إلغاء التمييز" },
@@ -80,6 +80,7 @@ export default function UnifiedContentList({
   onSortChange,
   onSuccessfulMutation,
   toolbar,
+  trashView,
 }: {
   rows: UnifiedContentRow[];
   categories: AdminContentCategoryNode[];
@@ -99,6 +100,7 @@ export default function UnifiedContentList({
     result?: AdminActionResult,
   ) => void | Promise<void>;
   toolbar: AdminEntityListFiltersProps;
+  trashView: boolean;
 }) {
   const router = useRouter();
   const [bulkCategoryId, setBulkCategoryId] = useState("");
@@ -131,9 +133,9 @@ export default function UnifiedContentList({
       defaultVisibleColumns={DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS}
       onPersistColumns={saveContentTablePreferences}
       enableColumnManagement
-      enableSelection
+      enableSelection={!trashView}
       selectionLabel="تحديد كل الموضوعات في الصفحة"
-      bulkOptions={BULK_OPTIONS}
+      bulkOptions={trashView ? [] : BULK_OPTIONS}
       bulkEntityLabel="موضوع"
       mapResultToFeedback={(result) =>
         mapTopicsActionResultToFeedback(result, { currentListPath })
@@ -173,8 +175,12 @@ export default function UnifiedContentList({
       actionsColumnWidth={UNIFIED_CONTENT_ACTIONS_COLUMN_WIDTH}
       emptyState={{
         mode: "filtered",
-        systemEmpty: "لا توجد موضوعات حتى الآن.",
-        filteredEmpty: "لا توجد موضوعات مطابقة للفلاتر الحالية.",
+        systemEmpty: trashView
+          ? "لا توجد موضوعات في المحذوفات."
+          : "لا توجد موضوعات حتى الآن.",
+        filteredEmpty: trashView
+          ? "لا توجد موضوعات محذوفة مطابقة للفلاتر الحالية."
+          : "لا توجد موضوعات مطابقة للفلاتر الحالية.",
       }}
       onBulkExecute={async (action, ids) => {
         const formData = new FormData();

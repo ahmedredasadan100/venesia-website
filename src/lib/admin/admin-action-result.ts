@@ -4,10 +4,13 @@ export type AdminActionResultCode =
   | "featured"
   | "publish_validation"
   | "published"
+  | "permanently_deleted"
+  | "restored"
   | "saved"
   | "saved_with_media_sync_warning"
   | "unfeatured"
-  | "unpublished";
+  | "unpublished"
+  | "slug_conflict";
 
 export type AdminActionResult = {
   ok: boolean;

@@ -14,6 +14,7 @@ import { formatAdminDateTime } from "../../../lib/content-dates";
 import { getContentPublicVisibilityState } from "../../../lib/content-public-visibility";
 
 export type UnifiedContentRowActionHandlers = {
+  view: "active" | "trash";
   rowPendingAction: (rowId: number) => string | null;
   mutationBusy: boolean;
   onVisibility: (
@@ -23,6 +24,8 @@ export type UnifiedContentRowActionHandlers = {
   onFeatured: (row: UnifiedContentRow) => Promise<AdminActionResult>;
   onDuplicate: (row: UnifiedContentRow) => Promise<AdminActionResult>;
   onDelete: (row: UnifiedContentRow) => Promise<AdminActionResult>;
+  onRestore: (row: UnifiedContentRow) => Promise<AdminActionResult>;
+  onPermanentDelete: (row: UnifiedContentRow) => Promise<AdminActionResult>;
 };
 
 export default function UnifiedContentRowActions({
@@ -42,6 +45,7 @@ export default function UnifiedContentRowActions({
   });
   const nextStatus = visibility.nextStatus;
   const pendingAction = handlers.rowPendingAction(row.id);
+  const isTrashView = handlers.view === "trash";
 
   async function publishResult(result: Promise<AdminActionResult>) {
     const resolved = await result;
@@ -57,14 +61,24 @@ export default function UnifiedContentRowActions({
     entityLabel: row.title || `الموضوع ${row.id}`,
     actions: {
       edit: {
-        access: "allowed",
-        href: adminContentTopicPath(row.id, { returnTo: currentListPath }),
+        ...(isTrashView
+          ? { access: "hidden" as const }
+          : {
+              access: "allowed" as const,
+              href: adminContentTopicPath(row.id, {
+                returnTo: currentListPath,
+              }),
+            }),
       },
       preview: {
-        access: "allowed",
-        href: adminContentTopicPreviewPath(row.id),
-        target: "_blank",
-        rel: "noopener noreferrer",
+        ...(isTrashView
+          ? { access: "hidden" as const }
+          : {
+              access: "allowed" as const,
+              href: adminContentTopicPreviewPath(row.id),
+              target: "_blank",
+              rel: "noopener noreferrer",
+            }),
       },
       information: {
         access: "allowed",
@@ -92,10 +106,20 @@ export default function UnifiedContentRowActions({
             label: "عدد المشاهدات:",
             value: `${new Intl.NumberFormat("ar-EG").format(row.views_count ?? 0)} مشاهدة`,
           },
+          ...(isTrashView
+            ? [
+                {
+                  label: "نُقل إلى المحذوفات:",
+                  value: formatAdminDateTime(row.deleted_at),
+                },
+              ]
+            : []),
         ],
       },
       copyPublicLink: { access: "hidden" },
-      visibility: nextStatus
+      visibility: isTrashView
+        ? { access: "hidden" }
+        : nextStatus
         ? pendingAction === "visibility"
           ? {
               access: "disabled",
@@ -121,7 +145,9 @@ export default function UnifiedContentRowActions({
             isVisible: visibility.isPubliclyVisible,
             disabledReason: visibility.tooltip,
           },
-      featured:
+      featured: isTrashView
+        ? { access: "hidden" }
+        :
         pendingAction === "featured"
           ? {
               access: "disabled",
@@ -142,7 +168,9 @@ export default function UnifiedContentRowActions({
                   await publishResult(handlers.onFeatured(row));
                 },
               },
-      duplicate:
+      duplicate: isTrashView
+        ? { access: "hidden" }
+        :
         pendingAction === "duplicate"
           ? {
               access: "disabled",
@@ -157,29 +185,79 @@ export default function UnifiedContentRowActions({
                   await publishResult(handlers.onDuplicate(row));
                 },
               },
-      archive: { access: "hidden" },
-      delete:
-        pendingAction === "delete"
+      archive: !isTrashView
+        ? { access: "hidden" }
+        : pendingAction === "restore"
           ? {
               access: "disabled",
               disabledReason: pendingReason,
               pending: true,
+              isArchived: true,
+              label: "استعادة",
             }
           : handlers.mutationBusy
-            ? { access: "disabled", disabledReason: pendingReason }
+            ? {
+                access: "disabled",
+                disabledReason: pendingReason,
+                isArchived: true,
+                label: "استعادة",
+              }
             : {
                 access: "allowed",
-                // AdminDataGridRowActions delegates this declaration to
-                // AdminConfirmDialog, the existing Confirmation Runtime owner.
+                isArchived: true,
+                label: "استعادة",
                 confirmation: {
                   mode: "shared",
-                  title: "هل أنت متأكد من حذف المحتوى؟",
+                  title: "استعادة الموضوع؟",
                   description:
-                    "سيتم حذف المحتوى حذفًا آمنًا وإزالته من القائمة.",
-                  confirmLabel: "تأكيد الحذف",
+                    "سيعود الموضوع إلى القائمة النشطة كغير منشور مع الاحتفاظ بالـSlug الحالي.",
+                  confirmLabel: "استعادة",
                 },
                 onSelect: async () => {
-                  const result = await publishResult(handlers.onDelete(row));
+                  const result = await publishResult(handlers.onRestore(row));
+                  if (!result.ok) throw new Error(result.message);
+                },
+              },
+      delete:
+        pendingAction === (isTrashView ? "permanent_delete" : "delete")
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+              label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+            }
+          : handlers.mutationBusy
+            ? {
+                access: "disabled",
+                disabledReason: pendingReason,
+                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+              }
+            : {
+                access: "allowed",
+                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+                // AdminDataGridRowActions delegates this declaration to
+                // AdminConfirmDialog, the existing Confirmation Runtime owner.
+                confirmation: isTrashView
+                  ? {
+                      mode: "shared",
+                      title: "حذف الموضوع نهائيًا؟",
+                      description:
+                        "سيُحذف السجل نهائيًا ويصبح الـSlug متاحًا للاستخدام. لا يمكن التراجع عن هذا الإجراء.",
+                      confirmLabel: "حذف نهائي",
+                    }
+                  : {
+                      mode: "shared",
+                      title: "نقل الموضوع إلى المحذوفات؟",
+                      description:
+                        "سيختفي الموضوع من القائمة النشطة ويمكن استعادته لاحقًا. سيبقى الـSlug محجوزًا.",
+                      confirmLabel: "نقل إلى المحذوفات",
+                    },
+                onSelect: async () => {
+                  const result = await publishResult(
+                    isTrashView
+                      ? handlers.onPermanentDelete(row)
+                      : handlers.onDelete(row),
+                  );
                   if (!result.ok) throw new Error(result.message);
                 },
               },
