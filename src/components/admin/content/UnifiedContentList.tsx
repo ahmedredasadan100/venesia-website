@@ -145,11 +145,10 @@ export default function UnifiedContentList({
           ? {
               mode: "callback",
               onToggle: (sortKey) => {
-                const key = sortKey as UnifiedContentSortKey;
                 onSortChange({
-                  key,
+                  key: sortKey,
                   direction:
-                    parsedSort.key === key && parsedSort.direction === "asc"
+                    parsedSort.key === sortKey && parsedSort.direction === "asc"
                       ? "desc"
                       : "asc",
                 });

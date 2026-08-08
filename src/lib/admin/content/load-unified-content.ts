@@ -27,8 +27,16 @@ export const CONTENT_SORT_VALUES = [
   "id_desc",
   "title_asc",
   "title_desc",
+  "content_type_asc",
+  "content_type_desc",
   "category_asc",
   "category_desc",
+  "series_asc",
+  "series_desc",
+  "featured_asc",
+  "featured_desc",
+  "seo_asc",
+  "seo_desc",
   "views_asc",
   "views_desc",
   "created_at_asc",
@@ -46,6 +54,14 @@ export type ContentSortValue = (typeof CONTENT_SORT_VALUES)[number];
 export const DEFAULT_CONTENT_LIST_SORT: ContentSortValue = "title_asc";
 
 const CONTENT_SORT_SET = new Set<string>(CONTENT_SORT_VALUES);
+type SeoContentSortValue = "seo_asc" | "seo_desc";
+const SEO_SORT_VALUES = new Set<ContentSortValue>(["seo_asc", "seo_desc"]);
+
+function isSeoContentSortValue(
+  value: ContentSortValue,
+): value is SeoContentSortValue {
+  return SEO_SORT_VALUES.has(value);
+}
 const STATUS_VALUES = new Set(["published", "unpublished"]);
 const FEATURED_VALUES = new Set(["yes", "no"]);
 
@@ -181,6 +197,17 @@ function toUnifiedContentRow(
   };
 }
 
+export function sortUnifiedContentRowsBySeo(
+  rows: readonly UnifiedContentRow[],
+  direction: "asc" | "desc",
+) {
+  const multiplier = direction === "asc" ? 1 : -1;
+  return [...rows].sort(
+    (left, right) =>
+      (left.seo_score - right.seo_score) * multiplier || left.id - right.id,
+  );
+}
+
 export type ContentListSearchParams = {
   q?: string;
   content_type?: string;
@@ -271,14 +298,20 @@ function applyFilters(query: any, filters: UnifiedContentFilters, categories: Ad
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applySort(query: any, sort: ContentSortValue) {
-  const sortMap: Record<ContentSortValue, { column: string; ascending: boolean }> = {
+function applySort(query: any, sort: Exclude<ContentSortValue, SeoContentSortValue>) {
+  const sortMap: Record<Exclude<ContentSortValue, SeoContentSortValue>, { column: string; ascending: boolean }> = {
     id_asc: { column: "id", ascending: true },
     id_desc: { column: "id", ascending: false },
     title_asc: { column: "title", ascending: true },
     title_desc: { column: "title", ascending: false },
+    content_type_asc: { column: "content_type", ascending: true },
+    content_type_desc: { column: "content_type", ascending: false },
     category_asc: { column: "category_name", ascending: true },
     category_desc: { column: "category_name", ascending: false },
+    series_asc: { column: "series_name", ascending: true },
+    series_desc: { column: "series_name", ascending: false },
+    featured_asc: { column: "is_featured", ascending: true },
+    featured_desc: { column: "is_featured", ascending: false },
     views_asc: { column: "views_count", ascending: true },
     views_desc: { column: "views_count", ascending: false },
     created_at_asc: { column: "created_at", ascending: true },
@@ -291,10 +324,13 @@ function applySort(query: any, sort: ContentSortValue) {
     status_desc: { column: "status", ascending: false },
   };
   const selected = sortMap[sort];
-  return query.order(selected.column, {
+  const sorted = query.order(selected.column, {
     ascending: selected.ascending,
     nullsFirst: false,
   });
+  return selected.column === "id"
+    ? sorted
+    : sorted.order("id", { ascending: true });
 }
 
 const CONTENT_LIST_SELECT =
@@ -327,26 +363,61 @@ export async function loadUnifiedContentList(
   const page = Math.min(filters.page, totalPages);
   const from = (page - 1) * filters.pageSize;
   const to = from + filters.pageSize - 1;
-  const { data, error } = await applySort(
-    applyFilters(
-      supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
-      filters,
-      categories,
-    ),
-    filters.sort,
-  ).range(from, to);
+  let rows: UnifiedContentRow[] = [];
+  let dataError: string | null = null;
 
-  return {
-    rows: error
+  if (isSeoContentSortValue(filters.sort)) {
+    // SEO is derived by the existing shared score owner, not persisted as a
+    // second source of truth. Read the full filtered dataset in bounded server
+    // chunks, score it once, then paginate the sorted rows.
+    const sourceRows: UnifiedContentSeoSourceRow[] = [];
+    const batchSize = 500;
+    for (let offset = 0; offset < totalCount; offset += batchSize) {
+      const { data, error } = await applyFilters(
+        supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
+        filters,
+        categories,
+      )
+        .order("id", { ascending: true })
+        .range(offset, Math.min(offset + batchSize - 1, totalCount - 1));
+      if (error) {
+        dataError = error.message;
+        break;
+      }
+      sourceRows.push(...((data ?? []) as UnifiedContentSeoSourceRow[]));
+    }
+
+    if (!dataError) {
+      const direction = filters.sort === "seo_asc" ? "asc" : "desc";
+      rows = sortUnifiedContentRowsBySeo(
+        sourceRows.map(toUnifiedContentRow),
+        direction,
+      ).slice(from, to + 1);
+    }
+  } else {
+    const { data, error } = await applySort(
+      applyFilters(
+        supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
+        filters,
+        categories,
+      ),
+      filters.sort,
+    ).range(from, to);
+    dataError = error?.message ?? null;
+    rows = error
       ? []
       : ((data ?? []) as UnifiedContentSeoSourceRow[]).map(
           toUnifiedContentRow,
-        ),
+        );
+  }
+
+  return {
+    rows,
     totalCount,
     page,
     pageSize: filters.pageSize,
     totalPages,
-    error: error?.message ?? null,
+    error: dataError,
   };
 }
 

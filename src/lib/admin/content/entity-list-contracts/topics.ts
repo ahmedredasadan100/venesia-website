@@ -7,7 +7,11 @@ import type { AdminEntityListQueryContract } from "../../entity-list/data-engine
 export const topicSortFields = [
   "id",
   "title",
+  "content_type",
   "category",
+  "series",
+  "featured",
+  "seo",
   "views",
   "created_at",
   "updated_at",

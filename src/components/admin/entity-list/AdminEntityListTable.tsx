@@ -30,14 +30,14 @@ export type AdminEntityListSelectionApi<TId extends AdminGridId = AdminGridId> =
   toggleOne: (id: TId, checked: boolean) => void;
 };
 
-type SortMode =
+type SortMode<TSortKey extends string> =
   | {
       mode: "href";
-      hrefFor: (columnKey: string, sortKey: string) => string;
+      hrefFor: (columnKey: string, sortKey: TSortKey) => string;
     }
   | {
       mode: "callback";
-      onToggle: (sortKey: string) => void;
+      onToggle: (sortKey: TSortKey) => void;
     };
 
 export type AdminEntityListTableProps<
@@ -51,7 +51,7 @@ export type AdminEntityListTableProps<
   getRowId: (row: TRow) => TId;
   getRowLabel: (row: TRow) => string;
   sort?: AdminEntitySortState<TSortKey> | null;
-  sortMode?: SortMode;
+  sortMode?: SortMode<TSortKey>;
   selection?: AdminEntityListSelectionApi<TId> | null;
   selectionLabel?: string;
   scrollLabel?: string;
@@ -138,11 +138,12 @@ export default function AdminEntityListTable<
   }
 
   function renderHeaderLabel(column: AdminEntityColumnDef<TRow, TKey, TSortKey>) {
-    if (!column.sortable || !column.sortKey || !sortMode) {
+    const sortKey = column.sortKey;
+    if (!column.sortable || !sortKey || !sortMode) {
       return column.label;
     }
 
-    const active = sort?.key === column.sortKey;
+    const active = sort?.key === sortKey;
     const direction = sort?.direction ?? "asc";
     const alignment = column.align ?? (column.primary ? "start" : "center");
     const justifyClass =
@@ -155,7 +156,7 @@ export default function AdminEntityListTable<
     if (sortMode.mode === "href") {
       return (
         <AdminDataGridSortLink
-          href={sortMode.hrefFor(column.key, column.sortKey)}
+          href={sortMode.hrefFor(column.key, sortKey)}
           active={active}
           direction={direction}
           className={justifyClass}
@@ -169,7 +170,7 @@ export default function AdminEntityListTable<
       <AdminDataGridSortLabel
         active={active}
         direction={direction}
-        onClick={() => sortMode.onToggle(column.sortKey!)}
+        onClick={() => sortMode.onToggle(sortKey)}
         className={justifyClass}
       >
         {column.label}
