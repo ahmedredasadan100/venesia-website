@@ -92,7 +92,13 @@ export default function MediaCenterHubPress({
                 ▣
               </div>
 
-              <p className="text-xs text-white/35">{item.date}</p>
+              {item.showDateOnPage || item.showCategoryOnPage || item.showSeriesOnPage ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-white/35">
+                  {item.showCategoryOnPage && item.category ? <span>{item.category}</span> : null}
+                  {item.showSeriesOnPage && item.series ? <span>{item.series}</span> : null}
+                  {item.showDateOnPage && item.date ? <span>{item.date}</span> : null}
+                </div>
+              ) : null}
 
               <h3 className="mt-3 min-h-[56px] line-clamp-2 text-base font-semibold leading-7 text-white transition group-hover:text-[#D8B87A]">
                 {item.title}

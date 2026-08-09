@@ -41,6 +41,10 @@ type DbTopic = {
   show_title_on_page?: boolean | null;
   show_image_on_page?: boolean | null;
   show_excerpt_on_page?: boolean | null;
+  show_date_on_page?: boolean | null;
+  show_category_on_page?: boolean | null;
+  show_series_on_page?: boolean | null;
+  show_intro_card_on_page?: boolean | null;
   show_faq_on_page?: boolean | null;
   show_faq_title_on_page?: boolean | null;
 };
@@ -75,6 +79,10 @@ export type PublicTopicDetail = {
   showTitleOnPage: boolean;
   showImageOnPage: boolean;
   showExcerptOnPage: boolean;
+  showDateOnPage: boolean;
+  showCategoryOnPage: boolean;
+  showSeriesOnPage: boolean;
+  showIntroCardOnPage: boolean;
   showFaqOnPage: boolean;
   showFaqTitleOnPage: boolean;
 };
@@ -96,6 +104,10 @@ function mapDbTopicToListingTopic(topic: DbTopic): Topic {
     content: topic.content ?? undefined,
     series: topic.series ?? undefined,
     seriesSlug: topic.series_slug ?? undefined,
+    showDateOnPage: topic.show_date_on_page !== false,
+    showCategoryOnPage: topic.show_category_on_page !== false,
+    showSeriesOnPage: topic.show_series_on_page !== false,
+    showIntroCardOnPage: topic.show_intro_card_on_page !== false,
     seoTitle: topic.seo_title ?? undefined,
     seoDescription: topic.seo_description ?? undefined,
     seoKeywords: topic.seo_keywords ?? undefined,
@@ -134,13 +146,17 @@ function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
     showTitleOnPage: topic.show_title_on_page !== false,
     showImageOnPage: topic.show_image_on_page !== false,
     showExcerptOnPage: topic.show_excerpt_on_page !== false,
+    showDateOnPage: topic.show_date_on_page !== false,
+    showCategoryOnPage: topic.show_category_on_page !== false,
+    showSeriesOnPage: topic.show_series_on_page !== false,
+    showIntroCardOnPage: topic.show_intro_card_on_page !== false,
     showFaqOnPage: topic.show_faq_on_page !== false,
     showFaqTitleOnPage: topic.show_faq_title_on_page !== false,
   };
 }
 
 const LISTING_SELECT =
-  "id, slug, title, excerpt, image, category, category_slug, series, series_slug, date_label, published_at, is_featured, is_popular";
+  "id, slug, title, excerpt, image, category, category_slug, series, series_slug, date_label, published_at, is_featured, is_popular, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
 
 /** Public /topics routes only expose article topics; media lives under /media-center. */
 const PUBLIC_TOPIC_CONTENT_TYPE = "article";
@@ -148,7 +164,7 @@ const PUBLIC_TOPIC_CONTENT_TYPE = "article";
 function applyPublicTopicFilters(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
-  categorySlug?: string,
+  filters: { categorySlug?: string; seriesSlug?: string } = {},
 ) {
   let next = query
     .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
@@ -156,19 +172,25 @@ function applyPublicTopicFilters(
     .is("deleted_at", null)
     .not("slug", "like", "e2e-test%");
 
-  if (categorySlug) {
-    next = next.eq("category_slug", categorySlug);
+  if (filters.categorySlug) {
+    next = next.eq("category_slug", filters.categorySlug);
+  }
+
+  if (filters.seriesSlug) {
+    next = next.eq("series_slug", filters.seriesSlug);
   }
 
   return next;
 }
 
-async function queryFeaturedPublicTopic(categorySlug?: string): Promise<Topic | undefined> {
+async function queryFeaturedPublicTopic(
+  filters: { categorySlug?: string; seriesSlug?: string },
+): Promise<Topic | undefined> {
   const supabase = getSupabaseAdmin();
 
   const { data: featuredRow, error: featuredError } = await applyPublicTopicFilters(
     supabase.from("topics").select(LISTING_SELECT),
-    categorySlug,
+    filters,
   )
     .eq("is_featured", true)
     .limit(1)
@@ -185,7 +207,7 @@ async function queryFeaturedPublicTopic(categorySlug?: string): Promise<Topic | 
 
   const { data: fallbackRow, error: fallbackError } = await applyPublicTopicFilters(
     supabase.from("topics").select(LISTING_SELECT),
-    categorySlug,
+    filters,
   )
     .limit(1)
     .maybeSingle();
@@ -201,6 +223,7 @@ async function queryFeaturedPublicTopic(categorySlug?: string): Promise<Topic | 
 export type PublicTopicsListingParams = {
   sort: "latest" | "oldest";
   categorySlug?: string;
+  seriesSlug?: string;
   page: number;
   itemsPerPage: number;
 };
@@ -219,14 +242,19 @@ async function queryPublicTopicsListing(
   params: PublicTopicsListingParams,
 ): Promise<PublicTopicsListingResult> {
   const categorySlug = params.categorySlug?.trim() ?? "";
-  const featuredTopic = await queryFeaturedPublicTopic(categorySlug || undefined);
+  const seriesSlug = params.seriesSlug?.trim() ?? "";
+  const taxonomyFilters = {
+    categorySlug: categorySlug || undefined,
+    seriesSlug: seriesSlug || undefined,
+  };
+  const featuredTopic = await queryFeaturedPublicTopic(taxonomyFilters);
   const featuredId = featuredTopic?.id;
 
   const supabase = getSupabaseAdmin();
 
   let countQuery = applyPublicTopicFilters(
     supabase.from("topics").select("id", { count: "exact", head: true }),
-    categorySlug || undefined,
+    taxonomyFilters,
   );
 
   if (featuredId) {
@@ -247,7 +275,7 @@ async function queryPublicTopicsListing(
 
   let listQuery = applyPublicTopicFilters(
     supabase.from("topics").select(LISTING_SELECT),
-    categorySlug || undefined,
+    taxonomyFilters,
   );
 
   if (featuredId) {
@@ -294,10 +322,12 @@ export async function loadPublicTopicsListing(
   params: PublicTopicsListingParams,
 ): Promise<PublicTopicsListingResult> {
   const categorySlug = params.categorySlug?.trim() ?? "";
+  const seriesSlug = params.seriesSlug?.trim() ?? "";
   const cacheKey = [
     "public-topics-listing",
     params.sort,
     categorySlug,
+    seriesSlug,
     String(params.page),
     String(params.itemsPerPage),
   ];

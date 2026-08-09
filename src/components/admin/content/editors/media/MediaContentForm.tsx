@@ -41,6 +41,10 @@ export type MediaContentFormValues = {
   show_title_on_page?: boolean | null;
   show_image_on_page?: boolean | null;
   show_excerpt_on_page?: boolean | null;
+  show_date_on_page?: boolean | null;
+  show_category_on_page?: boolean | null;
+  show_series_on_page?: boolean | null;
+  show_intro_card_on_page?: boolean | null;
   media_payload?: MediaTopicPayload | null;
   media_project?: string | null;
   seo_title?: string | null;
@@ -238,6 +242,10 @@ export default function MediaContentForm({
                     showTitle={values?.show_title_on_page}
                     showImage={values?.show_image_on_page}
                     showExcerpt={values?.show_excerpt_on_page}
+                    showDate={values?.show_date_on_page}
+                    showCategory={values?.show_category_on_page}
+                    showSeries={values?.show_series_on_page}
+                    showIntroCard={values?.show_intro_card_on_page}
                   />
                 }
                 values={{
@@ -298,6 +306,10 @@ export default function MediaContentForm({
                   title: values?.show_title_on_page,
                   image: values?.show_image_on_page,
                   excerpt: values?.show_excerpt_on_page,
+                  date: values?.show_date_on_page,
+                  category: values?.show_category_on_page,
+                  series: values?.show_series_on_page,
+                  introCard: values?.show_intro_card_on_page,
                 }}
               />
             ),

@@ -79,6 +79,16 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
   const sidebarFeeds = await loadFeedModulesForPageSlug("topics");
   const globalSeo = await loadResolvedGlobalSeo();
   const pagePath = `/topics/${topic.slug}`;
+  const showCategoryMetadata =
+    topic.showCategoryOnPage && Boolean(topic.category && topic.categorySlug);
+  const showSeriesMetadata =
+    topic.showSeriesOnPage && Boolean(topic.series && topic.seriesSlug);
+  const showDateMetadata = topic.showDateOnPage && Boolean(topic.date);
+  const headerEyebrow = showSeriesMetadata
+    ? topic.series
+    : showCategoryMetadata
+      ? topic.category
+      : undefined;
 
   const pageJsonLd = buildPageJsonLd(
     {
@@ -97,7 +107,7 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
   return (
     <InternalPageLayout
       title={topic.title}
-      eyebrow={topic.series || topic.category}
+      eyebrow={headerEyebrow}
       subtitle={topic.excerpt}
       heroImage={topic.image}
       showTitle={topic.showTitleOnPage}
@@ -109,41 +119,61 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:[direction:ltr]">
         <main dir="rtl" className="space-y-10 text-right">
-          <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.025]">
-            {topic.showImageOnPage ? (
-              <div className="relative h-[340px] w-full">
-                <Image
-                  src={topic.image}
-                  alt={topic.imageAlt}
-                  fill
-                  sizes="(max-width: 768px) 100vw, 900px"
-                  className="object-cover"
-                  priority
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent" />
-              </div>
-            ) : null}
-
-            <div className="space-y-5 p-6 md:p-8">
-              <div className="flex flex-wrap gap-3 text-xs text-white/45">
-                <span className="rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-4 py-2 text-[#D8B87A]">
-                  {topic.category}
-                </span>
-                <span>{topic.date}</span>
-                {topic.readingTime ? <span>{topic.readingTime}</span> : null}
-              </div>
-
-              {topic.showTitleOnPage ? (
-                <h1 className="text-3xl font-semibold leading-[1.4] text-white md:text-2xl">
-                  {topic.title}
-                </h1>
+          {topic.showIntroCardOnPage ? (
+            <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.025]">
+              {topic.showImageOnPage ? (
+                <div className="relative h-[340px] w-full">
+                  <Image
+                    src={topic.image}
+                    alt={topic.imageAlt}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 900px"
+                    className="object-cover"
+                    priority
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/25 to-transparent" />
+                </div>
               ) : null}
 
-              {topic.showExcerptOnPage ? (
-                <p className="max-w-3xl leading-8 text-white/60">{topic.excerpt}</p>
-              ) : null}
+              <div className="space-y-5 p-6 md:p-8">
+                {showCategoryMetadata || showSeriesMetadata || showDateMetadata || topic.readingTime ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/45">
+                    <div className="flex flex-wrap items-center gap-3">
+                      {showCategoryMetadata ? (
+                        <Link
+                          href={`/topics?category=${encodeURIComponent(topic.categorySlug)}`}
+                          className="rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-4 py-2 text-[#D8B87A] transition hover:border-[#D8B87A]/50"
+                        >
+                          {topic.category}
+                        </Link>
+                      ) : null}
+                      {showDateMetadata ? <span>{topic.date}</span> : null}
+                      {topic.readingTime ? <span>{topic.readingTime}</span> : null}
+                    </div>
+
+                    {showSeriesMetadata ? (
+                      <Link
+                        href={`/topics?series=${encodeURIComponent(topic.seriesSlug)}`}
+                        className="rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-4 py-2 text-[#D8B87A] transition hover:border-[#D8B87A]/50"
+                      >
+                        {topic.series}
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {topic.showTitleOnPage ? (
+                  <h1 className="text-3xl font-semibold leading-[1.4] text-white md:text-2xl">
+                    {topic.title}
+                  </h1>
+                ) : null}
+
+                {topic.showExcerptOnPage ? (
+                  <p className="max-w-3xl leading-8 text-white/60">{topic.excerpt}</p>
+                ) : null}
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <article className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-6 md:p-8">
             <RichTextContent

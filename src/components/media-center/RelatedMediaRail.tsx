@@ -47,13 +47,23 @@ export default function RelatedMediaRail({
 
               <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/70 to-transparent" />
 
-              <span className="absolute right-3 top-3 rounded-full border border-[#D8B87A]/30 bg-[#05070B]/70 px-3 py-1 text-[10px] text-[#D8B87A] backdrop-blur">
-                {item.category}
-              </span>
+              {item.showCategoryOnPage && item.category ? (
+                <span className="absolute right-3 top-3 rounded-full border border-[#D8B87A]/30 bg-[#05070B]/70 px-3 py-1 text-[10px] text-[#D8B87A] backdrop-blur">
+                  {item.category}
+                </span>
+              ) : null}
+
+              {item.showSeriesOnPage && item.series ? (
+                <span className="absolute left-3 top-3 rounded-full border border-[#D8B87A]/30 bg-[#05070B]/70 px-3 py-1 text-[10px] text-[#D8B87A] backdrop-blur">
+                  {item.series}
+                </span>
+              ) : null}
             </div>
 
             <div className="p-4">
-              <p className="text-xs text-white/38">{item.date}</p>
+              {item.showDateOnPage && item.date ? (
+                <p className="text-xs text-white/38">{item.date}</p>
+              ) : null}
 
               <h3 className="mt-2 line-clamp-2 text-base font-semibold leading-7 text-white transition group-hover:text-[#D8B87A]">
                 {item.title}

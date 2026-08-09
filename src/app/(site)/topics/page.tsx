@@ -30,14 +30,16 @@ type TopicsPageProps = {
     sort?: string;
     page?: string;
     category?: string;
+    series?: string;
   }>;
 };
 
 const ITEMS_PER_PAGE = 6;
 
-function buildTopicsQuery(sort: string, categorySlug: string) {
+function buildTopicsQuery(sort: string, categorySlug: string, seriesSlug: string) {
   const query: Record<string, string> = { sort };
   if (categorySlug) query.category = categorySlug;
+  if (seriesSlug) query.series = seriesSlug;
   return query;
 }
 
@@ -57,6 +59,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
 
   const sort = params?.sort === "oldest" ? "oldest" : "latest";
   const categorySlug = params?.category?.trim() ?? "";
+  const seriesSlug = params?.series?.trim() ?? "";
   const requestedPage = Number(params?.page ?? 1);
 
   const {
@@ -70,11 +73,12 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   } = await loadPublicTopicsListing({
     sort,
     categorySlug: categorySlug || undefined,
+    seriesSlug: seriesSlug || undefined,
     page: Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1,
     itemsPerPage: ITEMS_PER_PAGE,
   });
 
-  const pageQuery = buildTopicsQuery(sort, categorySlug);
+  const pageQuery = buildTopicsQuery(sort, categorySlug, seriesSlug);
 
   return (
     <InternalPageLayout
@@ -114,7 +118,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
 
                     <div className="flex items-center gap-3">
                       <Link
-                        href={`/topics?${new URLSearchParams(buildTopicsQuery("latest", categorySlug)).toString()}`}
+                        href={`/topics?${new URLSearchParams(buildTopicsQuery("latest", categorySlug, seriesSlug)).toString()}`}
                         scroll={false}
                         className={`rounded-full border px-5 py-2.5 text-sm transition-all duration-300 ${
                           sort === "latest"
@@ -126,7 +130,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                       </Link>
 
                       <Link
-                        href={`/topics?${new URLSearchParams(buildTopicsQuery("oldest", categorySlug)).toString()}`}
+                        href={`/topics?${new URLSearchParams(buildTopicsQuery("oldest", categorySlug, seriesSlug)).toString()}`}
                         scroll={false}
                         className={`rounded-full border px-5 py-2.5 text-sm transition-all duration-300 ${
                           sort === "oldest"
@@ -174,7 +178,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
 
                   <div className="flex items-center gap-3">
                     <Link
-                      href={`/topics?${new URLSearchParams(buildTopicsQuery("latest", categorySlug)).toString()}`}
+                      href={`/topics?${new URLSearchParams(buildTopicsQuery("latest", categorySlug, seriesSlug)).toString()}`}
                       scroll={false}
                       className={`rounded-full border px-5 py-2.5 text-sm transition-all duration-300 ${
                         sort === "latest"
@@ -186,7 +190,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                     </Link>
 
                     <Link
-                      href={`/topics?${new URLSearchParams(buildTopicsQuery("oldest", categorySlug)).toString()}`}
+                      href={`/topics?${new URLSearchParams(buildTopicsQuery("oldest", categorySlug, seriesSlug)).toString()}`}
                       scroll={false}
                       className={`rounded-full border px-5 py-2.5 text-sm transition-all duration-300 ${
                         sort === "oldest"

@@ -7,11 +7,11 @@ import type { MediaContentItem, MediaContentType } from "./types";
 
 /** Card / list / sidebar / hub fields — excludes body content and SEO blobs. */
 export const UNIFIED_LISTING_SELECT =
-  "id, slug, title, excerpt, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, canonical_url, robots_index, robots_follow";
+  "id, slug, title, excerpt, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, canonical_url, robots_index, robots_follow, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
 
 /** Detail page fields — includes full content + SEO. */
 export const UNIFIED_DETAIL_SELECT =
-  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, show_title_on_page, show_image_on_page, show_excerpt_on_page";
+  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
 
 const UNIFIED_MEDIA_CONTENT_TYPES = ["news", "press", "site_update", "video", "gallery"] as const satisfies readonly MediaContentType[];
 

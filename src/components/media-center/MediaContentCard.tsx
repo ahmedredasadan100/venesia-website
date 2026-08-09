@@ -32,19 +32,31 @@ export default function MediaContentCard({
             className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/35 to-transparent"
           />
 
-          <div className="absolute right-4 top-4 rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
-            {item.category}
-          </div>
-
-          {item.duration ? (
-            <div className="absolute left-4 top-4 rounded-full border border-white/15 bg-[#05070B]/70 px-3 py-1 text-[11px] text-white/75 backdrop-blur">
-              {item.duration}
+          {item.showCategoryOnPage && item.category ? (
+            <div className="absolute right-4 top-4 rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
+              {item.category}
             </div>
           ) : null}
+
+          <div className="absolute left-4 top-4 flex flex-col items-start gap-2">
+            {item.showSeriesOnPage && item.series ? (
+              <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
+                {item.series}
+              </span>
+            ) : null}
+
+            {item.duration ? (
+              <span className="rounded-full border border-white/15 bg-[#05070B]/70 px-3 py-1 text-[11px] text-white/75 backdrop-blur">
+                {item.duration}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex min-h-[245px] flex-col p-6">
-          <p className="text-xs text-white/42">{item.date}</p>
+          {item.showDateOnPage && item.date ? (
+            <p className="text-xs text-white/42">{item.date}</p>
+          ) : null}
 
           <h3 className="mt-3 text-xl font-semibold leading-8 text-white transition duration-300 group-hover:text-[#D8B87A]">
             {item.title}

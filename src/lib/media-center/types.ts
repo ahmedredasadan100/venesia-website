@@ -10,6 +10,7 @@ export type MediaContentItem = {
   title: string;
   excerpt: string;
   category: string;
+  series?: string;
   date: string;
   publishedAt: string;
   image: string;
@@ -22,6 +23,7 @@ export type MediaContentItem = {
   content?: string[];
   /** Used by hero media_category filter — not rendered in public media UI. */
   categorySlug?: string;
+  seriesSlug?: string;
   seoTitle?: string;
   seoDescription?: string;
   focusKeyword?: string;
@@ -32,19 +34,24 @@ export type MediaContentItem = {
   imageAlt?: string;
   ogImage?: string;
   ogImageAlt?: string;
-  showTitleOnPage?: boolean;
-  showImageOnPage?: boolean;
-  showExcerptOnPage?: boolean;
+  showTitleOnPage: boolean;
+  showImageOnPage: boolean;
+  showExcerptOnPage: boolean;
+  showDateOnPage: boolean;
+  showCategoryOnPage: boolean;
+  showSeriesOnPage: boolean;
+  showIntroCardOnPage: boolean;
 };
 
 export type MediaNewsItem = MediaContentItem;
 
 export type MediaSidebarItem = {
   title: string;
-  date: string;
+  date?: string;
   image: string;
   href: string;
   label?: string;
+  seriesLabel?: string;
 };
 
 export const MEDIA_TYPE_PATHS: Record<MediaContentType, string> = {

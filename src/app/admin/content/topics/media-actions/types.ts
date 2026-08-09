@@ -33,6 +33,10 @@ export type MediaTopicRow = {
   show_title_on_page: boolean | null;
   show_image_on_page: boolean | null;
   show_excerpt_on_page: boolean | null;
+  show_date_on_page: boolean | null;
+  show_category_on_page: boolean | null;
+  show_series_on_page: boolean | null;
+  show_intro_card_on_page: boolean | null;
   deleted_at?: string | null;
   media_payload: MediaTopicPayload | null;
   media_project?: string | null;

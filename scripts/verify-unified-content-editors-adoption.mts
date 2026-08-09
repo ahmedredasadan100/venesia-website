@@ -40,11 +40,15 @@ const publishing = read("src/components/admin/content/editors/ContentPublishingO
 const articleCreate = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
 const articleEdit = read("src/components/admin/content/editors/ArticleEditor.tsx");
 const mediaEditor = read("src/components/admin/content/editors/media/MediaContentForm.tsx");
+const displaySettings = read("src/components/admin/content/editors/ContentDisplaySettings.tsx");
+const contentReview = read("src/components/admin/content-workflow/ContentReviewPanel.tsx");
 const mediaSave = read("src/app/admin/content/topics/media-actions/save.ts");
 const articleSave = read("src/app/admin/content/topics/article-actions/save.ts");
 const sharedSave = read("src/app/admin/content/topics/editor-actions/save.ts");
 const articleHelpers = read("src/app/admin/content/topics/article-actions/helpers.ts");
 const mediaHelpers = read("src/app/admin/content/topics/media-actions/helpers.ts");
+const mediaTypes = read("src/app/admin/content/topics/media-actions/types.ts");
+const mediaValidation = read("src/app/admin/content/topics/media-actions/validation.ts");
 const routeCreate = read("src/app/admin/content/topics/new/page.tsx");
 const routeEdit = read("src/app/admin/content/topics/[id]/page.tsx");
 const listActions = read("src/app/admin/content/topics/actions.ts");
@@ -52,6 +56,8 @@ const publicPaths = read("src/lib/content/public-content-path.ts");
 const mediaContract = read("src/lib/media-center/types.ts");
 const topicLoader = read("src/lib/topics/load-public-topics.ts");
 const mediaLoader = read("src/lib/media-center/unified-provider.ts");
+const mediaAdapter = read("src/lib/media-center/adapt-topic-row.ts");
+const mediaDetail = read("src/components/media-center/MediaDetailArticle.tsx");
 const entitySeo = read("src/components/admin/seo/AdminEntitySeoPanel.tsx");
 const topicSeo = read("src/components/admin/SeoPanel.tsx");
 const mediaSeo = read("src/components/admin/content/editors/media/MediaEntitySeoPanel.tsx");
@@ -173,6 +179,34 @@ check(
     [articleCreate, articleEdit, mediaEditor].every((source) =>
       source.includes("<ContentDisplaySettings") && source.includes("dateLabel="),
     ),
+);
+const displayMetadataFields = [
+  "show_date_on_page",
+  "show_category_on_page",
+  "show_series_on_page",
+  "show_intro_card_on_page",
+] as const;
+check(
+  "all six content types adopt one seven-field display contract without a typed exception",
+  displayMetadataFields.every((field) =>
+    displaySettings.includes(`name="${field}"`) &&
+    mediaHelpers.includes(`getBoolean(formData, "${field}")`) &&
+    mediaHelpers.includes(`${field}: payload.`) &&
+    mediaTypes.includes(`${field}: boolean | null`) &&
+    mediaValidation.includes(field) &&
+    mediaLoader.split(field).length - 1 === 2 &&
+    mediaAdapter.includes(`row.${field} !== false`)
+  ) &&
+    !displaySettings.includes("topicMetadata") &&
+    !contentReview.includes("hasTopicMetadataDisplay") &&
+    contentReview.includes("7 خيارات") &&
+    !CONTENT_EDITOR_ADOPTION_MANIFEST.some((entry) =>
+      (entry.typedDifferences as readonly string[]).includes("topic_display_controls"),
+    ) &&
+    mediaDetail.includes("item.showIntroCardOnPage") &&
+    mediaDetail.includes("item.showDateOnPage") &&
+    mediaDetail.includes("item.showCategoryOnPage") &&
+    mediaDetail.includes("item.showSeriesOnPage"),
 );
 check(
   "video and gallery fields stay outside the shared core",
