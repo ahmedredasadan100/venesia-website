@@ -26,6 +26,10 @@ const physicalMoveRuntime = read("src/lib/admin/media-catalog/physical-move.ts")
 const providerRuntime = read("src/lib/admin/media-catalog/reference-providers.ts");
 const packageJson = JSON.parse(read("package.json"));
 const qualityWorkflow = read(".github/workflows/quality-gate.yml");
+const qualityJob = qualityWorkflow.slice(
+  qualityWorkflow.indexOf("  quality-gate:"),
+  qualityWorkflow.indexOf("  media-coordination-postgres:"),
+);
 const postgresJob = qualityWorkflow.slice(
   qualityWorkflow.indexOf("  media-coordination-postgres:"),
 );
@@ -113,7 +117,7 @@ check("runner proves physical move versus stale safe-delete ordering in both dir
 check("package exposes static ACL, SQL, and PostgreSQL coordination commands", packageJson.scripts?.["verify:media-coordination-rpc-acl"] === "node scripts/verify-media-coordination-rpc-acl.mjs" && packageJson.scripts?.["verify:media-coordination-sql"] === "node scripts/verify-media-coordination-sql.mjs" && packageJson.scripts?.["verify:media-coordination-postgres"] === "node --experimental-strip-types scripts/verify-media-coordination-postgres.mts");
 check("final local gate invokes coordination ACL and database proof safely", packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-rpc-acl") && packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-sql") && packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-postgres"));
 check("quality workflow has an independent PostgreSQL 15 job", postgresJob.startsWith("  media-coordination-postgres:") && postgresJob.includes("image: postgres:15-alpine") && postgresJob.includes("MEDIA_COORDINATION_DATABASE_REQUIRED: \"1\"") && postgresJob.includes("MEDIA_COORDINATION_DATABASE_DISPOSABLE: \"1\""));
-check("quality workflow guards Media coordination RPC ACLs in both jobs", qualityWorkflow.match(/npm run verify:media-coordination-rpc-acl/g)?.length === 2);
+check("quality workflow guards Media coordination RPC ACLs through the canonical gate and isolated job", qualityJob.includes("npm run ci:check") && packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-rpc-acl") && postgresJob.match(/npm run verify:media-coordination-rpc-acl/g)?.length === 1);
 check("isolated PostgreSQL job does not consume Supabase secrets", !postgresJob.includes("SUPABASE_") && postgresJob.includes("127.0.0.1:5432/venesia_media_coordination_ci"));
 check("fixture enforces PostgreSQL 15", fixture.includes("server_major <> 15"));
 check("fixture resets only the isolated coordination proof schemas before reruns", fixture.includes("drop schema if exists media_coordination_acl_test cascade") && fixture.includes("drop schema if exists media_coordination_test cascade"));

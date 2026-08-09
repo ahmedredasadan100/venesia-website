@@ -4,6 +4,7 @@ import {
   resolveArticleTopicCategory,
   type ArticleTopicCategoryRecord,
 } from "../../../../../lib/admin/article-topic-categories";
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { logError } from "../../../../../lib/logging";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type {
@@ -12,6 +13,8 @@ import type {
 } from "./types";
 
 export async function getTopicById(id: string) {
+  await requireAdminSession();
+
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
@@ -32,6 +35,8 @@ export async function getTopicById(id: string) {
 }
 
 export async function ensureUniqueSlug(slug: string, id?: string) {
+  await requireAdminSession();
+
   let query = getSupabaseAdmin().from("topics").select("id").eq("slug", slug).limit(1);
 
   if (id) {
@@ -44,6 +49,8 @@ export async function ensureUniqueSlug(slug: string, id?: string) {
 }
 
 export async function getConflictingTopicSlugs(slugs: readonly string[]) {
+  await requireAdminSession();
+
   const candidates = [...new Set(slugs.map((slug) => slug.trim()).filter(Boolean))];
   if (!candidates.length) return new Set<string>();
 
@@ -83,6 +90,8 @@ async function loadTopicCategoriesForValidation() {
 }
 
 export async function getCategory(categoryId: number | null, currentCategoryId?: number | null) {
+  await requireAdminSession();
+
   const categories = await loadTopicCategoriesForValidation();
   if (categoryId === currentCategoryId) {
     const current = categories.find((category) => category.id === categoryId);
@@ -100,6 +109,8 @@ export async function getCategory(categoryId: number | null, currentCategoryId?:
 }
 
 export async function getCategoryValidationError(categoryId: number | null, currentCategoryId?: number | null) {
+  await requireAdminSession();
+
   const categories = await loadTopicCategoriesForValidation();
   if (categoryId === currentCategoryId && categories.some((category) => category.id === categoryId)) {
     return null;
@@ -110,6 +121,8 @@ export async function getCategoryValidationError(categoryId: number | null, curr
 }
 
 export async function getSeries(seriesId: number | null, currentSeriesId?: number | null) {
+  await requireAdminSession();
+
   if (!seriesId) return null;
 
   let query = getSupabaseAdmin()
@@ -130,6 +143,8 @@ export async function getSeries(seriesId: number | null, currentSeriesId?: numbe
 }
 
 export async function getTopicForDuplicate(id: string) {
+  await requireAdminSession();
+
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
