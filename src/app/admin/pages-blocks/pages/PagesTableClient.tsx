@@ -18,6 +18,10 @@ import {
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
+import {
+  ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
+  ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
+} from "../../../../components/admin/ui/AdminDataGrid";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import {
   adminActionFailure,
@@ -203,7 +207,6 @@ function createPageColumns(
       sortable: true,
       sortKey: "title",
       minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly + 60,
-      flexible: true,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -222,8 +225,8 @@ function createPageColumns(
       defaultVisible: true,
       hideable: true,
       sortable: false,
-      minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.slug, 10),
-      width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.slug, 10),
+      minWidth: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
+      flexible: true,
       align: "center",
       renderCell: ({ row }) => (
         <span className="block truncate font-mono text-xs text-white/55" dir="ltr">
@@ -237,8 +240,8 @@ function createPageColumns(
       defaultVisible: true,
       hideable: true,
       sortable: false,
-      minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.count, 10),
-      width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.count, 10),
+      minWidth: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
       align: "center",
       renderCell: ({ row }) => (
         <span className="tabular-nums text-sm font-semibold text-white/70">

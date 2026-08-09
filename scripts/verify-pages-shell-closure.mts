@@ -20,6 +20,16 @@ const preferenceAction = read(
 const compositionClient = read(
   "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
 );
+const assignmentGrid = read(
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx",
+);
+const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const dataEngineContracts = read(
+  "src/lib/admin/entity-list/data-engine/contracts.ts",
+);
+const dataEngineController = read(
+  "src/lib/admin/entity-list/data-engine/client-controller.ts",
+);
 const assignmentRow = read(
   "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
 );
@@ -70,8 +80,71 @@ assert.match(page, /contractVersion:\s*PAGES_LIST_COLUMN_CONTRACT_VERSION/u);
 assert.match(preferenceAction, /contractVersion:\s*PAGES_LIST_COLUMN_CONTRACT_VERSION/u);
 assert.match(client, /type PageEntityListRow/u);
 assert.match(client, /export type AdminPageListRow = PageEntityListRow/u);
-assert.match(client, /flexible:\s*true/u);
 assert.match(client, /row\.moduleCount/u);
+
+const pageColumn = client.slice(
+  client.indexOf('key: "page"'),
+  client.indexOf('key: "slug"'),
+);
+const slugColumn = client.slice(
+  client.indexOf('key: "slug"'),
+  client.indexOf('key: "moduleCount"'),
+);
+const moduleCountColumn = client.slice(
+  client.indexOf('key: "moduleCount"'),
+  client.indexOf('key: "status"'),
+);
+const statusColumn = client.slice(
+  client.indexOf('key: "status"'),
+  client.indexOf('key: "actions"'),
+);
+const actionsColumnStart = client.indexOf('key: "actions"');
+const actionsColumn = client.slice(
+  actionsColumnStart,
+  client.indexOf("  ];", actionsColumnStart),
+);
+const orderedColumnOffsets = [
+  client.indexOf('key: "page"'),
+  client.indexOf('key: "slug"'),
+  client.indexOf('key: "moduleCount"'),
+  client.indexOf('key: "status"'),
+  client.indexOf('key: "actions"'),
+];
+
+assert.deepEqual(orderedColumnOffsets, [...orderedColumnOffsets].sort((left, right) => left - right));
+assert.match(pageColumn, /sortable:\s*true[\s\S]*sortKey:\s*"title"/u);
+assert.doesNotMatch(pageColumn, /flexible:\s*true/u);
+assert.match(slugColumn, /minWidth:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH/u);
+assert.match(slugColumn, /flexible:\s*true/u);
+assert.doesNotMatch(slugColumn, /sortable:\s*true/u);
+assert.match(
+  moduleCountColumn,
+  /minWidth:\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH/u,
+);
+assert.doesNotMatch(moduleCountColumn, /sortable:\s*true/u);
+assert.match(statusColumn, /sortable:\s*true[\s\S]*sortKey:\s*"status"/u);
+assert.match(
+  actionsColumn,
+  /sortable:\s*false[\s\S]*minWidth:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH/u,
+);
+assert.match(contract, /pageSortFields\s*=\s*\["id",\s*"title",\s*"status"\]/u);
+assert.match(
+  client,
+  /sortMode=\{\{[\s\S]*mode:\s*"callback"[\s\S]*controller\.setSort\([\s\S]*current\.field === field && current\.direction === "asc"[\s\S]*\? "desc"[\s\S]*: "asc"/u,
+);
+assert.match(
+  dataGrid,
+  /const indicator = active \? \(direction === "asc" \? "↑" : "↓"\) : "↕";/u,
+);
+assert.match(
+  dataEngineContracts,
+  /params\.set\("sort", `\$\{query\.sort\.field\}_\$\{query\.sort\.direction\}`\)/u,
+);
+assert.match(
+  dataEngineController,
+  /const setSort = useCallback\([\s\S]*commitQuery\([\s\S]*sort,[\s\S]*page:[\s\S]*"push"/u,
+);
+assert.match(dataEngineController, /window\.history\[[\s\S]*pushState/u);
 
 for (const retiredPath of [
   "src/lib/admin/pages/load-pages-table-rows.ts",
@@ -85,6 +158,15 @@ assert.match(assignmentRow, /AdminDataGridRowActions[\s\S]*display="visibility"/
 assert.equal((assignmentRow.match(/const capability: AdminRowActionsCapability/gu) ?? []).length, 1);
 assert.match(compositionClient, /if \(table\.sort\.key !== null\) return false;/u);
 assert.match(compositionClient, /if \(table\.sort\.key !== null\) return;/u);
+assert.match(
+  compositionClient,
+  /<section className="space-y-4" dir="rtl">[\s\S]*className="flex flex-col gap-0"[\s\S]*data-page-composition-table-shell=""/u,
+);
+assert.doesNotMatch(
+  compositionClient,
+  /space-y-4 rounded-\[28px\] border border-white\/10 bg-\[#080B10\]\/92 p-6/u,
+);
+assert.match(assignmentGrid, /<AdminDataGrid className="!rounded-t-none !border-t-0">/u);
 assert.match(uiRules, /عند تفعيل فرز عرض مختلف، يُعطّل reorder/u);
 assert.match(assignmentReorder, /mutatePageComposition\([\s\S]*"reorder"/u);
 
