@@ -1,7 +1,5 @@
 import "server-only";
 
-import type { MetadataRoute } from "next";
-
 import { SEO_ROUTES } from "../../config/seo/seo-routes";
 import { getMediaHref, getMediaItems } from "../media-center";
 import { logError } from "../logging";
@@ -231,15 +229,6 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
     sourceErrors,
     duplicateUrls,
   };
-}
-
-export function toMetadataSitemap(entries: SitemapEntry[]): MetadataRoute.Sitemap {
-  return entries.map((entry) => ({
-    url: entry.url,
-    lastModified: entry.lastModified,
-    changeFrequency: entry.changeFrequency ?? "monthly",
-    priority: entry.priority ?? 0.7,
-  }));
 }
 
 export function countEntriesBySource(entries: SitemapEntry[]) {

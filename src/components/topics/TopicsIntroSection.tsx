@@ -19,7 +19,7 @@ export default function TopicsIntroSection({ cmsContent }: TopicsIntroSectionPro
         <p className="text-xs uppercase tracking-[0.3em] text-[#D8B87A]/70">{intro.eyebrow}</p>
       ) : null}
 
-      <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">{intro.title}</h1>
+      <h2 className="mt-3 text-3xl font-semibold text-white md:text-4xl">{intro.title}</h2>
 
       {intro.description ? (
         <p className="mt-4 max-w-3xl leading-8 text-white/60">{intro.description}</p>

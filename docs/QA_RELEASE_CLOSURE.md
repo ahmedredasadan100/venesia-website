@@ -103,6 +103,8 @@ npm run typecheck
 npm run build
 npm run verify
 npm run ci:check
+npm run test:e2e:public
+npm run test:e2e:authenticated
 ```
 
 ### Architecture and Admin runtime
@@ -154,6 +156,8 @@ npm run verify:projects-hub-readiness
 ```
 
 The package manifest is the authority for the exact current command set.
+
+The repository has one Playwright configuration and one reusable Browser test directory. The public/unauthenticated suite is CI-safe and starts the built application unless `E2E_BASE_URL` is supplied. Authenticated state is an external input through `E2E_ADMIN_STORAGE_STATE`; it is never committed. The authenticated suite is read-only unless an explicitly isolated, disposable fixture environment is established. Missing authenticated state or fixture authority is reported as `Skipped`/QA gap, never as passing mutable coverage.
 
 For the Media Catalog foundation, a green static suite does not prove remote readiness. Report migration application, reconciliation, Admin authentication, Browser QA, and destructive-operation evidence independently. If no trusted Admin session exists, Browser QA is `Skipped`, not `Passed`.
 

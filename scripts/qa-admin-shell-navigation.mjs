@@ -1,10 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { chromium } from "playwright";
 import { fileURLToPath } from "node:url";
+import { loadEnvFile, requireEnv } from "./lib/env.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = resolve(root, ".tmp-qa/admin-shell");
@@ -18,30 +19,13 @@ let adminId = null;
 
 mkdirSync(out, { recursive: true });
 
-function loadEnv(path) {
-  if (!existsSync(path)) return;
-  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
-    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
-    if (!match || process.env[match[1]]) continue;
-    let value = match[2].trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
-    process.env[match[1]] = value;
-  }
-}
-
-function required(name) {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing ${name}`);
-  return value;
-}
-
 function check(name, condition, detail = "") {
   checks.push({ name, ok: Boolean(condition), detail });
   console.log(`${condition ? "PASS" : "FAIL"} ${name}${detail ? `: ${detail}` : ""}`);
 }
 
-loadEnv(resolve(root, ".env.local"));
-const supabase = createClient(required("NEXT_PUBLIC_SUPABASE_URL"), required("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false, autoRefreshToken: false } });
+loadEnvFile(resolve(root, ".env.local"));
+const supabase = createClient(requireEnv("NEXT_PUBLIC_SUPABASE_URL"), requireEnv("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false, autoRefreshToken: false } });
 
 async function setup() {
   const { data, error } = await supabase.from("admin_users").insert({

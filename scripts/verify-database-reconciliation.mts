@@ -11,8 +11,10 @@ import ts from "typescript";
 const { Client } = pg;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = join(ROOT, "sql", "migrations");
+const CURRENT_PROJECT_STATE_PATH = join(ROOT, "docs", "CURRENT_PROJECT_STATE.md");
 const MIGRATION_FILE = /^(\d{14})_([a-z0-9_]+)\.sql$/u;
 const PLATFORM_OWNED_FUNCTIONS = new Set(["rls_auto_enable"]);
+const FRAMEWORK_ENTRYPOINTS = new Set(["instrumentation.ts"]);
 const GOVERNANCE_MANIFEST_ENTRYPOINTS = new Set([
   "lib/admin/content/content-editor-adoption-manifest.ts",
   "lib/admin/form-system/adoption-manifest.ts",
@@ -91,6 +93,17 @@ function loadMigrations(): Migration[] {
     });
 }
 
+function loadDocumentedStateMetric(label: string) {
+  const source = readFileSync(CURRENT_PROJECT_STATE_PATH, "utf8");
+  const row = source
+    .split(/\r?\n/u)
+    .find((line) => line.startsWith(`| ${label} |`));
+  assert.ok(row, `CURRENT_PROJECT_STATE is missing the metric: ${label}`);
+  const value = row.split("|")[2]?.trim();
+  assert.match(value ?? "", /^\d+$/u, `CURRENT_PROJECT_STATE metric is not numeric: ${label}`);
+  return Number(value);
+}
+
 function verifyRuntimeReachability() {
   const sourceRoot = join(ROOT, "src");
   const extensions = [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"];
@@ -153,15 +166,24 @@ function verifyRuntimeReachability() {
     .filter((file) => !file.startsWith("app/") && file !== "proxy.ts" && !file.endsWith(".d.ts"));
   assert.deepEqual(
     zeroInbound.sort(),
-    [...GOVERNANCE_MANIFEST_ENTRYPOINTS].sort(),
-    `Unowned zero-inbound Runtime source remains: ${zeroInbound.filter((file) => !GOVERNANCE_MANIFEST_ENTRYPOINTS.has(file)).join(", ")}`,
+    [...FRAMEWORK_ENTRYPOINTS, ...GOVERNANCE_MANIFEST_ENTRYPOINTS].sort(),
+    `Unowned zero-inbound Runtime source remains: ${zeroInbound.filter((file) => !FRAMEWORK_ENTRYPOINTS.has(file) && !GOVERNANCE_MANIFEST_ENTRYPOINTS.has(file)).join(", ")}`,
   );
-  return { sourceFiles: files.length, governanceManifestEntrypoints: zeroInbound.length };
+  return {
+    sourceFiles: files.length,
+    frameworkEntrypoints: zeroInbound.filter((file) => FRAMEWORK_ENTRYPOINTS.has(file)).length,
+    governanceManifestEntrypoints: zeroInbound.filter((file) => GOVERNANCE_MANIFEST_ENTRYPOINTS.has(file)).length,
+  };
 }
 
 function verifyStructuralContract(migrations: Migration[]) {
   const runtimeReachability = verifyRuntimeReachability();
   assert.ok(migrations.length > 0, "The canonical migration corpus is empty.");
+  assert.equal(
+    loadDocumentedStateMetric("Repository migration files"),
+    migrations.length,
+    "CURRENT_PROJECT_STATE migration count drifted from the canonical migration corpus.",
+  );
   assert.equal(
     new Set(migrations.map((migration) => migration.version)).size,
     migrations.length,
@@ -319,6 +341,26 @@ async function verifyLiveContract(migrations: Migration[]) {
       reconciliation_audit_count: number;
     }[] };
     const state = integrity.rows[0];
+    assert.equal(
+      loadDocumentedStateMetric("Production registry versions"),
+      registry.rows.length,
+      "CURRENT_PROJECT_STATE registry count drifted from the live registry.",
+    );
+    assert.equal(
+      loadDocumentedStateMetric("Public catalog objects with repository provenance"),
+      catalog.rows.length,
+      "CURRENT_PROJECT_STATE provenance-object count drifted from the live catalog.",
+    );
+    assert.equal(
+      loadDocumentedStateMetric("Public tables"),
+      state.public_tables,
+      "CURRENT_PROJECT_STATE public-table count drifted from the live catalog.",
+    );
+    assert.equal(
+      loadDocumentedStateMetric("Public tables with RLS enabled"),
+      state.rls_enabled_tables,
+      "CURRENT_PROJECT_STATE RLS-table count drifted from the live catalog.",
+    );
     assert.equal(state.rls_enabled_tables, state.public_tables, "One or more public tables do not have RLS enabled.");
     assert.equal(state.invalid_indexes, 0, "Invalid, unready, or non-live public indexes remain.");
     assert.equal(state.unvalidated_constraints, 0, "Unvalidated public constraints remain.");

@@ -24,16 +24,9 @@ Names only — values belong in `.env.local` / hosting secrets:
 ```bash
 npm run lint
 npm run typecheck
-npm run verify:migrations
-npm run verify:legacy-media-admin
-npm run verify:media-library-system
-npm run verify:media-delete-saga
-npm run verify:media-write-adoption
-npm run verify:media-coordination-sql
-npm run verify:media-coordination-postgres
-npm run verify:media-live-qa-guards
-npm run verify:audit-coverage
+npm run verify
 npm run build
+npm run test:e2e:public
 ```
 
 Optional combined checks:
@@ -47,21 +40,16 @@ npm run ci:check
 
 GitHub Actions workflow: `.github/workflows/quality-gate.yml`
 
-Runs on pull requests and pushes to `main`:
+Runs on pull requests and pushes to `main`. The canonical application job runs `npm run ci:check`: lint, typecheck, architecture/contract verifiers, Production build, and the public/unauthenticated Playwright suite. Separate PostgreSQL 15 jobs prove Media coordination, Dashboard Truth, and Reports Analytics database behavior in disposable databases.
 
-- `npm run lint`
-- `npm run typecheck`
-- `npm run verify:migrations`
-- `npm run verify:legacy-media-admin`
-- `npm run verify:media-library-system`
-- `npm run verify:media-delete-saga`
-- `npm run verify:media-write-adoption`
-- `npm run verify:media-coordination-sql`
-- `npm run verify:media-coordination-postgres` (isolated PostgreSQL 15 job)
-- `npm run verify:media-live-qa-guards`
-- `npm run verify:unified-content`
-- `npm run verify:audit-coverage`
-- `npm run build`
+Playwright uses one repository configuration:
+
+```bash
+npm run test:e2e:public
+npm run test:e2e:authenticated
+```
+
+The authenticated suite is read-only and requires an external `E2E_ADMIN_STORAGE_STATE` file plus `E2E_BASE_URL`. It skips truthfully when no trusted state is supplied. Mutable save/pending/rollback coverage requires an isolated disposable Admin environment and must never target Production content.
 
 Required GitHub repository secrets (names only):
 
@@ -69,7 +57,7 @@ Required GitHub repository secrets (names only):
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-CI does **not** run production SQL migrations.
+CI does **not** run Production SQL migrations or mutate Production content.
 
 ## Admin audit logging
 

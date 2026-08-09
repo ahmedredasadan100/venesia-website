@@ -163,9 +163,9 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
                 ) : null}
 
                 {topic.showTitleOnPage ? (
-                  <h1 className="text-3xl font-semibold leading-[1.4] text-white md:text-2xl">
+                  <h2 className="text-3xl font-semibold leading-[1.4] text-white md:text-2xl">
                     {topic.title}
-                  </h1>
+                  </h2>
                 ) : null}
 
                 {topic.showExcerptOnPage ? (
@@ -180,6 +180,7 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
               value={topic.content}
               mode="markdown"
               className="article-rich-text"
+              demoteHeadings
             />
           </article>
 

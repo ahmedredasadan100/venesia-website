@@ -1,9 +1,8 @@
 # ADR: Media Catalog and Reference Safety
 
 **Decision status:** Accepted
-**Implementation status:** In progress on `codex/media-library-system`; no implementation or foundation closure is accepted
+**Implementation status:** Implemented and guarded; live destructive readiness remains environment-specific and must be reconciled independently
 **Date:** 2026-07-25
-**Baseline:** `47b662d0761adeae15ada412652fc8c92f5e3d53`
 
 ## Context
 
@@ -25,9 +24,9 @@ Runtime uploads already have one durable provider boundary, but a storage listin
 ## Consequences
 
 - Repository migration presence does not prove that a remote environment has applied the schema, grants, RLS, functions, or seed state.
-- Before the first authoritative reconciliation, destructive catalog operations remain blocked.
+- Before authoritative reconciliation in a target environment, destructive catalog operations remain blocked.
 - A canceled replacement leaves the newly uploaded asset unused by design.
-- Project child media is reference-discovered but remains non-rebindable until project aggregate atomicity is addressed; global Media Capability closure is therefore false.
+- Project aggregate writes and Media reference synchronization remain under their current guarded owners; environment-specific destructive readiness must not be inferred from repository closure.
 - Single managed-asset physical rename/move is coordinated through Storage move, catalog identity update, provider rebind, and compensation. Physical folder rename/move and multi-asset move are not claimed by this foundation.
 
 ## Required proof
