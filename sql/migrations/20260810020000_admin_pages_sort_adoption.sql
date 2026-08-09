@@ -101,7 +101,8 @@ as $$
       ) page_slice
     ), '[]'::jsonb),
     'total_count', (select total_count from normalized_state),
-    'page', (select page from normalized_state)
+    'page', (select page from normalized_state),
+    'contract_version', 2
   );
 $$;
 

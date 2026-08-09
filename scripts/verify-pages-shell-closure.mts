@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { adaptPagesReadModel } from "../src/lib/admin/pages/entity-list-read-model-boundary.ts";
+import type { SeoScoreInput } from "../src/lib/admin/seo-score.ts";
+
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) =>
   readFileSync(resolve(root, path), "utf8").replace(/\r\n?/gu, "\n");
@@ -14,6 +17,9 @@ const sortMigrationPath =
 const sortMigration = read(sortMigrationPath);
 const contract = read("src/lib/admin/pages/entity-list-contract.ts");
 const adapter = read("src/lib/admin/pages/entity-list-adapter.ts");
+const readModelBoundary = read(
+  "src/lib/admin/pages/entity-list-read-model-boundary.ts",
+);
 const config = read("src/lib/admin/pages/pages-list-config.ts");
 const page = read("src/app/admin/pages-blocks/pages/page.tsx");
 const client = read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx");
@@ -79,6 +85,9 @@ const foundationalSchema = read(
 const sharedEntitySeoMigration = read(
   "sql/migrations/20260803153000_shared_entity_seo_capability.sql",
 );
+const legacyPagesReadModelMigration = read(
+  "sql/migrations/20260805120000_admin_pages_search_read_model.sql",
+);
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const uiRules = read("src/components/admin/ui/ADMIN_UI_RULES.md");
 
@@ -123,6 +132,7 @@ assert.match(
   /p_sort_field = 'updatedAt' and p_sort_direction = 'asc' then updated_at end asc,[\s\S]*p_sort_field = 'updatedAt' and p_sort_direction = 'desc' then updated_at end desc/iu,
 );
 assert.match(sortMigration, /case when p_sort_field = 'status'[\s\S]*id asc/iu);
+assert.match(sortMigration, /'contract_version',\s*2/iu);
 for (const sourceField of [
   "p.updated_at",
   "p.seo_title",
@@ -146,28 +156,204 @@ assert.doesNotMatch(
   sortMigration.replace(/^\s*--.*$/gmu, ""),
   /\b(?:insert\s+into|update|delete\s+from|truncate)\s+public\./iu,
 );
+assert.match(
+  legacyPagesReadModelMigration,
+  /p_sort_field = 'title'[\s\S]*p_sort_field = 'status'[\s\S]*id asc/iu,
+);
+assert.doesNotMatch(
+  legacyPagesReadModelMigration,
+  /p_sort_field = '(?:path|slug|moduleCount|updatedAt)'/iu,
+);
 
 assert.match(contract, /moduleCount:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)/u);
-assert.match(contract, /updatedAt:\s*z\.string\(\)/u);
-assert.match(contract, /seoScore:\s*z\.number\(\)\.int\(\)\.min\(0\)\.max\(100\)/u);
-assert.match(contract, /seoLabel:\s*z\.string\(\)/u);
-assert.match(contract, /seoBlockingErrors:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)/u);
-assert.match(contract, /createAdminEntityListResultSchema\(pageEntityListRowSchema\)/u);
-assert.match(adapter, /block_count:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)/u);
-assert.match(adapter, /moduleCount:\s*block_count/u);
-assert.match(adapter, /updatedAt:\s*updated_at/u);
-assert.match(adapter, /analyzeEntitySeo\(\{/u);
+assert.match(contract, /updatedAt:\s*z\.string\(\)\.nullable\(\)/u);
+assert.match(contract, /seoScore:\s*z\.number\(\)\.int\(\)\.min\(0\)\.max\(100\)\.nullable\(\)/u);
+assert.match(contract, /seoLabel:\s*z\.string\(\)\.nullable\(\)/u);
+assert.match(contract, /seoBlockingErrors:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\)/u);
 assert.match(
-  adapter,
-  /profile:\s*"entity"[\s\S]*title:\s*source\.title[\s\S]*description:\s*""[\s\S]*content:\s*""[\s\S]*slug:\s*[\s\S]*source\.path === "\/" \? "" : source\.path\.replace\(\/\^\\\/\+\/, ""\)[\s\S]*image:\s*""[\s\S]*imageAlt:\s*""[\s\S]*ogImage:\s*og_image \?\? ""[\s\S]*ogImageAlt:\s*og_image_alt[\s\S]*seoTitle:\s*seo_title[\s\S]*seoDescription:\s*seo_description[\s\S]*seoKeywords:\s*seo_keywords[\s\S]*focusKeyword:\s*focus_keyword[\s\S]*faq:\s*\[\]/u,
+  contract,
+  /legacyPageSortFields\s*=\s*\[\s*"id",\s*"title",\s*"status",?\s*\]/u,
 );
-assert.match(adapter, /seoScore:\s*seo\.score/u);
-assert.match(adapter, /seoLabel:\s*seo\.label/u);
-assert.match(adapter, /seoBlockingErrors:\s*seo\.blockingErrors/u);
+assert.match(contract, /readModelContractVersion:\s*z\.number\(\)\.int\(\)\.positive\(\)/u);
+assert.match(contract, /supportedSortFields:\s*z\.array\(z\.enum\(pageSortFields\)\)/u);
+assert.match(
+  contract,
+  /createAdminEntityListResultSchema\([\s\S]*pageEntityListRowSchema,[\s\S]*pageEntityListMetricsSchema/u,
+);
+
+assert.match(readModelBoundary, /const transitionalString = z\.string\(\)\.nullable\(\)\.optional\(\)/u);
+assert.match(readModelBoundary, /seo_keywords:\s*z\.array\(z\.string\(\)\)\.nullable\(\)\.optional\(\)/u);
+assert.match(readModelBoundary, /contract_version:\s*z\.number\(\)\.int\(\)\.positive\(\)\.optional\(\)/u);
+assert.match(readModelBoundary, /const seoSource = completePageSeoSourceSchema\.safeParse\(source\)/u);
+assert.match(readModelBoundary, /const seo = seoSource\.success[\s\S]*\? options\.analyzeSeo\(\{/u);
+assert.match(
+  readModelBoundary,
+  /profile:\s*"entity"[\s\S]*title:\s*source\.title[\s\S]*description:\s*""[\s\S]*content:\s*""[\s\S]*slug:[\s\S]*source\.path === "\/"[\s\S]*source\.path\.replace\(\/\^\\\/\+\/, ""\)[\s\S]*image:\s*""[\s\S]*imageAlt:\s*""[\s\S]*ogImage:\s*seoSource\.data\.og_image \?\? ""[\s\S]*ogImageAlt:\s*seoSource\.data\.og_image_alt[\s\S]*seoTitle:\s*seoSource\.data\.seo_title[\s\S]*seoDescription:\s*seoSource\.data\.seo_description[\s\S]*seoKeywords:\s*seoSource\.data\.seo_keywords[\s\S]*focusKeyword:\s*seoSource\.data\.focus_keyword[\s\S]*faq:\s*\[\]/u,
+);
+assert.match(readModelBoundary, /updatedAt:\s*source\.updated_at \?\? null/u);
+assert.match(readModelBoundary, /seoScore:\s*seo\?\.score \?\? null/u);
+assert.match(readModelBoundary, /seoLabel:\s*seo\?\.label \?\? null/u);
+assert.match(readModelBoundary, /seoBlockingErrors:\s*seo\?\.blockingErrors \?\? null/u);
+assert.match(readModelBoundary, /readModelContractVersion = readModel\.contract_version \?\? 1/u);
+assert.match(
+  readModelBoundary,
+  /extendedContractAvailable[\s\S]*\? options\.extendedSortFields[\s\S]*: options\.legacySortFields/u,
+);
+assert.match(adapter, /adaptPagesReadModel\(data, \{/u);
+assert.match(adapter, /analyzeSeo:\s*analyzeEntitySeo/u);
+assert.match(adapter, /legacySortFields:\s*legacyPageSortFields/u);
+assert.match(adapter, /extendedSortFields:\s*pageSortFields/u);
+assert.match(adapter, /metrics:\s*readModel\.metrics/u);
 assert.equal((adapter.match(/\.rpc\(/gu) ?? []).length, 1);
-assert.equal((adapter.match(/analyzeEntitySeo\(/gu) ?? []).length, 1);
 assert.match(officialSeoOwner, /export function analyzeEntitySeo/u);
-assert.doesNotMatch(adapter, /function\s+(?:calculate|get)Seo|score\s*[+*/-]=/iu);
+assert.doesNotMatch(
+  `${adapter}\n${readModelBoundary}`,
+  /function\s+(?:calculate|get)Seo|score\s*[+*/-]=/iu,
+);
+
+let transitionSeoCalls = 0;
+const transitionSeoInputs: SeoScoreInput[] = [];
+const transitionOptions = {
+  analyzeSeo: (input: SeoScoreInput) => {
+    transitionSeoCalls += 1;
+    transitionSeoInputs.push(input);
+    return { score: 84, label: "ready", blockingErrors: 0 };
+  },
+  legacySortFields: ["id", "title", "status"] as const,
+  extendedSortFields: [
+    "id",
+    "title",
+    "path",
+    "slug",
+    "moduleCount",
+    "updatedAt",
+    "status",
+  ] as const,
+};
+const legacyReadModel = adaptPagesReadModel(
+  {
+    rows: [
+      {
+        id: 1,
+        title: "Home",
+        slug: "home",
+        path: "/",
+        page_type: "home",
+        status: "published",
+        block_count: 4,
+      },
+    ],
+    total_count: 1,
+    page: 1,
+  },
+  transitionOptions,
+);
+assert.equal(transitionSeoCalls, 0, "Legacy RPC rows must not create fake SEO inputs.");
+assert.deepEqual(legacyReadModel.rows[0], {
+  id: 1,
+  title: "Home",
+  slug: "home",
+  path: "/",
+  page_type: "home",
+  status: "published",
+  moduleCount: 4,
+  updatedAt: null,
+  seoScore: null,
+  seoLabel: null,
+  seoBlockingErrors: null,
+});
+assert.deepEqual(legacyReadModel.metrics, {
+  readModelContractVersion: 1,
+  supportedSortFields: ["id", "title", "status"],
+});
+
+const extendedReadModel = adaptPagesReadModel(
+  {
+    rows: [
+      {
+        id: 2,
+        title: "About",
+        slug: "about",
+        path: "/about",
+        page_type: "static",
+        status: "published",
+        block_count: 3,
+        updated_at: "2026-08-10T00:00:00.000Z",
+        seo_title: "About Venesia",
+        seo_description: "About page",
+        seo_keywords: ["venesia"],
+        focus_keyword: "venesia",
+        og_image: null,
+        og_image_alt: "Venesia",
+      },
+    ],
+    total_count: 1,
+    page: 1,
+    contract_version: 2,
+  },
+  transitionOptions,
+);
+assert.equal(transitionSeoCalls, 1);
+assert.equal(extendedReadModel.rows[0]?.seoScore, 84);
+assert.equal(
+  extendedReadModel.rows[0]?.updatedAt,
+  "2026-08-10T00:00:00.000Z",
+);
+assert.deepEqual(extendedReadModel.metrics.supportedSortFields, [
+  "id",
+  "title",
+  "path",
+  "slug",
+  "moduleCount",
+  "updatedAt",
+  "status",
+]);
+assert.deepEqual(transitionSeoInputs[0], {
+  profile: "entity",
+  title: "About",
+  description: "",
+  content: "",
+  slug: "about",
+  image: "",
+  imageAlt: "",
+  ogImage: "",
+  ogImageAlt: "Venesia",
+  seoTitle: "About Venesia",
+  seoDescription: "About page",
+  seoKeywords: ["venesia"],
+  focusKeyword: "venesia",
+  faq: [],
+});
+
+const partialExtendedReadModel = adaptPagesReadModel(
+  {
+    rows: [
+      {
+        id: 3,
+        title: "Contact",
+        slug: "contact",
+        path: "/contact",
+        page_type: "contact",
+        status: "published",
+        block_count: 1,
+        updated_at: "2026-08-10T00:00:00.000Z",
+        seo_title: "Contact",
+      },
+    ],
+    total_count: 1,
+    page: 1,
+    contract_version: 2,
+  },
+  transitionOptions,
+);
+assert.equal(
+  transitionSeoCalls,
+  1,
+  "Partial SEO sources must not invoke the official analyzer with empty fallbacks.",
+);
+assert.equal(partialExtendedReadModel.rows[0]?.seoScore, null);
+assert.equal(partialExtendedReadModel.rows[0]?.seoLabel, null);
+assert.equal(partialExtendedReadModel.rows[0]?.seoBlockingErrors, null);
 
 assert.match(
   foundationalSchema,
@@ -278,32 +464,32 @@ const orderedColumnOffsets = [
 ];
 
 assert.deepEqual(orderedColumnOffsets, [...orderedColumnOffsets].sort((left, right) => left - right));
-assert.match(pageColumn, /sortable:\s*true[\s\S]*sortKey:\s*"title"/u);
+assert.match(pageColumn, /sortable:\s*supportedSortFields\.has\("title"\)[\s\S]*sortKey:\s*"title"/u);
 assert.doesNotMatch(pageColumn, /flexible:\s*true/u);
 assert.match(pageColumn, /minWidth:\s*ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS\.textOnly \+ 40/u);
 assert.match(
   pathColumn,
-  /defaultVisible:\s*true[\s\S]*sortable:\s*true[\s\S]*sortKey:\s*"path"[\s\S]*minWidth:\s*PAGE_PATH_COLUMN_WIDTH[\s\S]*width:\s*PAGE_PATH_COLUMN_WIDTH/u,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("path"\)[\s\S]*sortKey:\s*"path"[\s\S]*minWidth:\s*PAGE_PATH_COLUMN_WIDTH[\s\S]*width:\s*PAGE_PATH_COLUMN_WIDTH/u,
 );
 assert.match(
   slugColumn,
-  /defaultVisible:\s*false[\s\S]*sortable:\s*true[\s\S]*sortKey:\s*"slug"[\s\S]*minWidth:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH/u,
+  /defaultVisible:\s*false[\s\S]*sortable:\s*supportedSortFields\.has\("slug"\)[\s\S]*sortKey:\s*"slug"[\s\S]*minWidth:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH/u,
 );
 assert.doesNotMatch(slugColumn, /flexible:\s*true/u);
 assert.match(
   moduleCountColumn,
-  /sortable:\s*true[\s\S]*sortKey:\s*"moduleCount"[\s\S]*minWidth:\s*PAGE_MODULE_COUNT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_MODULE_COUNT_COLUMN_WIDTH/u,
+  /sortable:\s*supportedSortFields\.has\("moduleCount"\)[\s\S]*sortKey:\s*"moduleCount"[\s\S]*minWidth:\s*PAGE_MODULE_COUNT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_MODULE_COUNT_COLUMN_WIDTH/u,
 );
 assert.match(
   seoColumn,
-  /defaultVisible:\s*true[\s\S]*sortable:\s*false[\s\S]*minWidth:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*width:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*<AdminSeoScorePill[\s\S]*score=\{row\.seoScore\}[\s\S]*label=\{row\.seoLabel\}[\s\S]*blockingErrors=\{row\.seoBlockingErrors\}/u,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*false[\s\S]*minWidth:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*width:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*<AdminSeoScorePill[\s\S]*score=\{row\.seoScore\}[\s\S]*label=\{row\.seoLabel\}[\s\S]*blockingErrors=\{row\.seoBlockingErrors\}[\s\S]*unavailableReason=\{PAGES_READ_MODEL_TRANSITION_MESSAGE\}/u,
 );
 assert.doesNotMatch(seoColumn, /sortKey:/u);
 assert.match(
   updatedAtColumn,
-  /defaultVisible:\s*true[\s\S]*sortable:\s*true[\s\S]*sortKey:\s*"updatedAt"[\s\S]*minWidth:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*formatAdminDateTime\(row\.updatedAt\)/u,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("updatedAt"\)[\s\S]*sortKey:\s*"updatedAt"[\s\S]*minWidth:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*row\.updatedAt \? formatAdminDateTime\(row\.updatedAt\) : "غير متاح"/u,
 );
-assert.match(statusColumn, /sortable:\s*true[\s\S]*sortKey:\s*"status"/u);
+assert.match(statusColumn, /sortable:\s*supportedSortFields\.has\("status"\)[\s\S]*sortKey:\s*"status"/u);
 assert.match(
   actionsColumn,
   /sortable:\s*false[\s\S]*minWidth:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH/u,
@@ -351,10 +537,20 @@ assert.doesNotMatch(config, /fillSpacer|fill-spacer/u);
 assert.doesNotMatch(contract, /fillSpacer|fill-spacer/u);
 
 assert.match(sharedSeoPill, /Shared presentation for the official analyzeEntitySeo score output/u);
+assert.match(sharedSeoPill, /score:\s*number \| null/u);
+assert.match(sharedSeoPill, /if \(score === null\)[\s\S]*tone="muted"[\s\S]*غير متاح/u);
 assert.match(sharedSeoPill, /<AdminStatusPill tone=\{getSeoScoreTone\(score\)\}>/u);
 assert.doesNotMatch(sharedSeoPill, /analyzeEntitySeo\(|seoKeywords|focusKeyword/u);
 assert.match(unifiedContentColumns, /<AdminSeoScorePill score=\{row\.seo_score\} \/>/u);
 assert.doesNotMatch(unifiedContentColumns, /function getSeoScoreTone/u);
+assert.match(
+  client,
+  /initialResult\.metrics\?\.supportedSortFields \?\? legacyPageSortFields[\s\S]*constrainQueryToReadModel[\s\S]*supportedSortFields\.has\(candidate\.sort\.field\)[\s\S]*sort:\s*\{ field: "id" as const, direction: "asc" as const \}[\s\S]*constrainQuery:\s*constrainQueryToReadModel/u,
+);
+assert.match(
+  client,
+  /readModelContractVersion \?\? 1\) >= 2[\s\S]*title:\s*"بيانات Pages جزئية مؤقتًا"[\s\S]*message:\s*PAGES_READ_MODEL_TRANSITION_MESSAGE[\s\S]*kind:\s*"critical_system"/u,
+);
 assert.match(
   client,
   /sortMode=\{\{[\s\S]*mode:\s*"callback"[\s\S]*controller\.setSort\([\s\S]*current\.field === field && current\.direction === "asc"[\s\S]*\? "desc"[\s\S]*: "asc"/u,

@@ -1,9 +1,10 @@
 import { AdminStatusPill } from "../ui";
 
 type AdminSeoScorePillProps = {
-  score: number;
-  label?: string;
-  blockingErrors?: number;
+  score: number | null;
+  label?: string | null;
+  blockingErrors?: number | null;
+  unavailableReason?: string;
 };
 
 function getSeoScoreTone(score: number) {
@@ -18,11 +19,20 @@ export default function AdminSeoScorePill({
   score,
   label,
   blockingErrors,
+  unavailableReason = "درجة SEO غير متاحة من مصدر البيانات الحالي.",
 }: AdminSeoScorePillProps) {
+  if (score === null) {
+    return (
+      <AdminStatusPill tone="muted">
+        <span title={unavailableReason}>غير متاح</span>
+      </AdminStatusPill>
+    );
+  }
+
   const details = [
     `SEO: ${score} من 100`,
     label,
-    blockingErrors === undefined ? null : `أخطاء مانعة: ${blockingErrors}`,
+    blockingErrors == null ? null : `أخطاء مانعة: ${blockingErrors}`,
   ].filter(Boolean);
 
   return (

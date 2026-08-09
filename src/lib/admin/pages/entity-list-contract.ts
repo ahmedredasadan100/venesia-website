@@ -15,6 +15,11 @@ export const pageSortFields = [
   "status",
 ] as const;
 export type PageSortField = (typeof pageSortFields)[number];
+export const legacyPageSortFields = [
+  "id",
+  "title",
+  "status",
+] as const satisfies readonly PageSortField[];
 export type PageFilters = Record<string, never>;
 
 export const pageEntityListRowSchema = z.object({
@@ -25,15 +30,26 @@ export const pageEntityListRowSchema = z.object({
   page_type: z.string(),
   status: z.string(),
   moduleCount: z.number().int().nonnegative(),
-  updatedAt: z.string(),
-  seoScore: z.number().int().min(0).max(100),
-  seoLabel: z.string(),
-  seoBlockingErrors: z.number().int().nonnegative(),
+  updatedAt: z.string().nullable(),
+  seoScore: z.number().int().min(0).max(100).nullable(),
+  seoLabel: z.string().nullable(),
+  seoBlockingErrors: z.number().int().nonnegative().nullable(),
 });
 export type PageEntityListRow = z.infer<typeof pageEntityListRowSchema>;
 
+export const pageEntityListMetricsSchema = z.object({
+  readModelContractVersion: z.number().int().positive(),
+  supportedSortFields: z.array(z.enum(pageSortFields)),
+});
+export type PageEntityListMetrics = z.infer<
+  typeof pageEntityListMetricsSchema
+>;
+
 export const pagesEntityListResultSchema =
-  createAdminEntityListResultSchema(pageEntityListRowSchema);
+  createAdminEntityListResultSchema(
+    pageEntityListRowSchema,
+    pageEntityListMetricsSchema,
+  );
 
 export const pagesQueryContract: AdminEntityListQueryContract<PageFilters, PageSortField> = {
   mode: "server-page",
