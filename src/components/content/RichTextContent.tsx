@@ -10,6 +10,8 @@ export type RichTextContentProps = {
   className?: string;
   /** rich = stored HTML; markdown = Article Markdown; plain = strip tags; auto = detect HTML */
   mode?: "rich" | "markdown" | "plain" | "auto";
+  /** Keep stored Article heading levels below the page's semantic H1. */
+  demoteHeadings?: boolean;
 };
 
 /**
@@ -19,6 +21,7 @@ export default function RichTextContent({
   value,
   className = "",
   mode = "auto",
+  demoteHeadings = false,
 }: RichTextContentProps) {
   const raw = value?.trim() ?? "";
   if (!raw) return null;
@@ -28,7 +31,9 @@ export default function RichTextContent({
       <div
         className={`rich-text-content ${className}`.trim()}
         dir="rtl"
-        dangerouslySetInnerHTML={{ __html: renderArticleMarkdownHtml(raw) }}
+        dangerouslySetInnerHTML={{
+          __html: renderArticleMarkdownHtml(raw, { demoteHeadings }),
+        }}
       />
     );
   }

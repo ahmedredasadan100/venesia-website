@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { Topic } from "../../lib/topics/types";
+import TopicImage from "./TopicImage";
 
 type FeaturedTopicProps = {
   topic?: Topic;
@@ -36,10 +37,13 @@ export default function FeaturedTopic({ topic }: FeaturedTopicProps) {
   return (
     <article className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-[0_25px_90px_rgba(0,0,0,0.32)]">
       <div className="relative h-[390px] overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-cover bg-center transition duration-1000 group-hover:scale-105"
-          style={{ backgroundImage: `url(${topic.image})` }}
+        <TopicImage
+          src={topic.image}
+          alt=""
+          fill
+          priority
+          sizes="(max-width: 768px) 100vw, 900px"
+          className="object-cover object-center transition duration-1000 group-hover:scale-105"
         />
 
         <div

@@ -751,7 +751,8 @@ select.admin-select option {
 
 .rich-text-content.article-rich-text h1,
 .rich-text-content.article-rich-text h2,
-.rich-text-content.article-rich-text h3 {
+.rich-text-content.article-rich-text h3,
+.rich-text-content.article-rich-text h4 {
   color: #ffffff;
   font-weight: 750;
   text-wrap: balance;
@@ -772,6 +773,27 @@ select.admin-select option {
 }
 
 .rich-text-content.article-rich-text h3 {
+  margin: 1.9rem 0 0.65rem;
+  font-size: clamp(1.18rem, 1.08rem + 0.35vw, 1.45rem);
+  line-height: 1.6;
+}
+
+/* Semantic demotion preserves the approved Article Rich Text typography. */
+.rich-text-content.article-rich-text h2[data-article-heading-level="1"] {
+  margin: 0 0 1.2rem;
+  color: #ffffff;
+  font-size: clamp(1.4rem, 1.3rem + 0.4vw, 1.75rem);
+  line-height: 1.45;
+}
+
+.rich-text-content.article-rich-text h3[data-article-heading-level="2"] {
+  margin: 2.65rem 0 0.8rem;
+  color: #d8b87a;
+  font-size: clamp(1.45rem, 1.28rem + 0.55vw, 1.9rem);
+  line-height: 1.55;
+}
+
+.rich-text-content.article-rich-text h4[data-article-heading-level="3"] {
   margin: 1.9rem 0 0.65rem;
   font-size: clamp(1.18rem, 1.08rem + 0.35vw, 1.45rem);
   line-height: 1.6;
@@ -811,6 +833,18 @@ select.admin-select option {
   }
 
   .rich-text-content.article-rich-text h3 {
+    margin-top: 1.6rem;
+  }
+
+  .rich-text-content.article-rich-text h2[data-article-heading-level="1"] {
+    margin-top: 0;
+  }
+
+  .rich-text-content.article-rich-text h3[data-article-heading-level="2"] {
+    margin-top: 2.1rem;
+  }
+
+  .rich-text-content.article-rich-text h4[data-article-heading-level="3"] {
     margin-top: 1.6rem;
   }
 

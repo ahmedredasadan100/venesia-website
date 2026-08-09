@@ -1,4 +1,5 @@
 import { classifyPublicDataError, isAbortOrTimeoutError } from "../supabase/classify-error";
+import { sanitizeLogContext } from "./sanitize-context";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -35,7 +36,7 @@ function writeLog(level: LogLevel, message: string, context?: LogContext) {
     level,
     message,
     timestamp: new Date().toISOString(),
-    ...context,
+    ...sanitizeLogContext(context),
   };
 
   if (level === "error") {

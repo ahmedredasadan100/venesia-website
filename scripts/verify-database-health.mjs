@@ -9,9 +9,9 @@
  * Does not print secrets, tokens, or connection strings.
  */
 
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { loadEnvFile } from "./lib/env.mjs";
 
 const TIMEOUT_MS = Number.parseInt(process.env.SUPABASE_FETCH_TIMEOUT_MS ?? "8000", 10) || 8000;
 
@@ -22,30 +22,6 @@ const CORE_CHECKS = [
   { name: "projects", select: "id", limit: 1 },
   { name: "topics", select: "id", limit: 1 },
 ];
-
-function loadEnvLocal() {
-  const envPath = resolve(process.cwd(), ".env.local");
-  if (!existsSync(envPath)) return;
-
-  const text = readFileSync(envPath, "utf8");
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq < 1) continue;
-    const key = line.slice(0, eq).trim();
-    let value = line.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (!process.env[key]) {
-      process.env[key] = value;
-    }
-  }
-}
 
 function createTimedFetch(timeoutMs) {
   return async (input, init) => {
@@ -77,7 +53,7 @@ function printResult(label, ok, detail = "") {
 }
 
 async function main() {
-  loadEnvLocal();
+  loadEnvFile(resolve(process.cwd(), ".env.local"));
 
   let failed = false;
 

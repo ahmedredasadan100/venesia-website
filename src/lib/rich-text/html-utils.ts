@@ -1,3 +1,5 @@
+import { demoteArticleHeadingHierarchy } from "./article-heading-semantics";
+
 const ALLOWED_TAGS = new Set([
   "p",
   "br",
@@ -340,6 +342,10 @@ export function renderRichTextHtml(value: string) {
 }
 
 /** Returns sanitized Article Markdown as HTML for Admin Preview and public presentation. */
-export function renderArticleMarkdownHtml(value: string) {
-  return sanitizeRichTextHtml(markdownToRichTextHtml(normalizeArticleMarkdown(value)));
+export function renderArticleMarkdownHtml(
+  value: string,
+  options: { demoteHeadings?: boolean } = {},
+) {
+  const html = sanitizeRichTextHtml(markdownToRichTextHtml(normalizeArticleMarkdown(value)));
+  return options.demoteHeadings ? demoteArticleHeadingHierarchy(html) : html;
 }

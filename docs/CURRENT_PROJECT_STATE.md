@@ -1,16 +1,16 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-05
+**Updated:** 2026-08-09
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
 This file records the minimum current facts needed to begin work safely. Architecture authority remains `../AI_ARCHITECTURE_PRINCIPLES.md`; executable manifests and guards remain the authority for adopter details.
 
-## Official baseline entering final reconciliation
+## Official baseline entering Medium Hardening
 
 ```text
-62fe0a56c2c61e0660fc2b7c480c49472c1d6080
+20a4be7242014aba0c264eb27c1e0f851d40c777
 ```
 
 The final release commit and automatic Production deployment are recorded by GitHub and Vercel release evidence rather than hard-coded before the expected-head merge exists.
@@ -24,6 +24,10 @@ The final release commit and automatic Production deployment are recorded by Git
 - Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
 - Existing `/images/**` and `/files/**` values are an explicit read-compatibility boundary for live content, not a write owner and not permission for filesystem uploads in Production.
+- The existing Sitemap capability preserves valid entries when one source fails, reports the source failure through the current logging owner, and exposes one route output contract.
+- Public Topic pages have one page-level `h1`; Article Markdown headings are rendered under that page heading without changing stored Markdown or approved visual typography.
+- Browser verification uses the existing Playwright dependency through one formal configuration. Public and unauthenticated checks run in CI; authenticated state is supplied externally and mutable Admin proof requires an isolated disposable environment.
+- Operational failures use the existing structured logger with context redaction, the Next.js server `onRequestError` hook, and public/Admin error boundaries. Vercel remains the current server-log sink; no external monitoring vendor has been selected.
 
 ## Production database reconciliation
 
@@ -31,16 +35,18 @@ The Final Legacy Cleanup reconciliation established the following live facts aga
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 64 |
-| Production registry versions | 64 |
+| Repository migration files | 73 |
+| Production registry versions | 73 |
 | Registry SQL provenance | Exact repository SQL for every version |
-| Public tables | 42 |
-| Public tables with RLS enabled | 42 |
-| Public catalog objects with repository provenance | 215 |
+| Public tables | 51 |
+| Public tables with RLS enabled | 51 |
+| Public catalog objects with repository provenance | 265 |
 | Invalid, unready, or non-live indexes | 0 |
 | Unvalidated public constraints | 0 |
 | Parallel public function overload names | 0 |
-| Registry reconciliation audit records | At least 1 |
+| Public RLS policies | 3 |
+| Anonymous-callable application data functions | 0 |
+| Registry reconciliation audit records | At least 6 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
@@ -70,6 +76,8 @@ Operational recovery, authentication, and focused current QA tools remain becaus
 - No direct Production filesystem upload owner exists; static bundled assets and live legacy read values are not runtime writers.
 - A provider reported as unavailable must remain unavailable/partial; no report may synthesize zeroes, mock analytics, or fake success.
 - A green structural build alone does not prove live database state, authenticated Browser behavior, GitHub checks, Vercel deployment, or Production smoke. Those are separate release proofs.
+- No isolated authenticated mutation fixture environment is currently established for reusable save, pending, or optimistic-rollback Browser tests; Production content is never a substitute.
+- External alerting, retention, and monitoring-vendor selection remain a Product/Platform decision. Console visibility and platform telemetry do not claim paging or incident-management closure.
 
 ## Update protocol
 
