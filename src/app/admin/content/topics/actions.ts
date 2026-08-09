@@ -44,10 +44,12 @@ import {
   TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE,
 } from "../../../../lib/admin/content/category-hierarchy";
 import { coordinateMediaReferenceEntityMutation } from "../../../../lib/admin/media-catalog/domain-write-coordination";
+import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import {
   getMediaReferenceWriteLeaseUserMessage,
   MediaReferenceWriteLeaseError,
 } from "../../../../lib/admin/media-catalog/write-lease";
+import { getResourceLinkUsageCount } from "../../../../lib/admin/links/usage";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -66,6 +68,81 @@ async function loadTopic(id: number) {
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle<Record<string, unknown>>();
+  return data;
+}
+
+type DeletedTopicMutationRow = {
+  id: number;
+  title: string | null;
+  slug: string;
+  content_type: string;
+  deleted_at: string;
+};
+
+type TopicMutationActor = Awaited<ReturnType<typeof requireAdminSession>>;
+
+async function loadDeletedTopics(ids: number[]) {
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select("id,title,slug,content_type,deleted_at")
+    .in("id", ids)
+    .not("deleted_at", "is", null)
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as DeletedTopicMutationRow[];
+}
+
+async function loadAllDeletedTopics() {
+  const pageSize = 500;
+  const rows: DeletedTopicMutationRow[] = [];
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await getSupabaseAdmin()
+      .from("topics")
+      .select("id,title,slug,content_type,deleted_at")
+      .not("deleted_at", "is", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as DeletedTopicMutationRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
+}
+
+function isTopicSlugConflictError(error: { code?: string; message?: string }) {
+  return (
+    error.code === "23505" ||
+    /topics_slug_key|slug/i.test(error.message ?? "")
+  );
+}
+
+function topicRestoreSlugConflict(slug: string, entityId: number) {
+  return adminActionFailure(
+    "تعذر استعادة الموضوع",
+    `لا يمكن استعادة الموضوع لأن الـSlug \"${slug}\" مستخدم في موضوع نشط آخر. غيّر Slug الموضوع النشط أولًا ثم أعد المحاولة.`,
+    { code: "slug_conflict", entityId },
+  );
+}
+
+async function findActiveTopicSlugConflict(
+  topics: DeletedTopicMutationRow[],
+) {
+  const slugs = [...new Set(topics.map((topic) => topic.slug.trim()))].filter(
+    Boolean,
+  );
+  if (!slugs.length) return null;
+  const { data, error } = await getSupabaseAdmin()
+    .from("topics")
+    .select("id,slug")
+    .in("slug", slugs)
+    .is("deleted_at", null)
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle<{ id: number; slug: string }>();
+  if (error) throw error;
   return data;
 }
 
@@ -120,6 +197,7 @@ async function validateBulkCategoryMoveSeries(
   const { data: series, error: seriesError } = await getSupabaseAdmin()
     .from("topic_series")
     .select("id,category_id")
+    .is("deleted_at", null)
     .in("id", seriesIds);
   if (seriesError) throw seriesError;
   const seriesById = new Map(
@@ -157,7 +235,14 @@ function mediaAwareSuccess(
 
 async function finishMutation(input: {
   actor: Awaited<ReturnType<typeof requireAdminSession>>;
-  action: "publish" | "unpublish" | "update" | "delete" | "duplicate";
+  action:
+    | "publish"
+    | "unpublish"
+    | "update"
+    | "delete"
+    | "permanent_delete"
+    | "restore"
+    | "duplicate";
   entityId?: number;
   entityLabel?: string | null;
   metadata?: Record<string, unknown>;
@@ -404,12 +489,311 @@ export async function softDeleteUnifiedContent(
     action: "delete",
     entityId: id,
     entityLabel: String(topic.title ?? ""),
+    metadata: {
+      permanent: false,
+      slug: topic.slug,
+      slug_retained: true,
+    },
   });
   return adminActionSuccess(
-    "تم حذف المحتوى",
-    "تم الحذف الآمن وإزالة المحتوى من القائمة.",
+    "تم نقل الموضوع إلى المحذوفات",
+    "اختفى الموضوع من القائمة النشطة، وبقي الـSlug محجوزًا حتى الحذف النهائي.",
     { code: "deleted", entityId: id },
   );
+}
+
+async function restoreTopicsWithCanonicalOwner(input: {
+  actor: TopicMutationActor;
+  ids: number[];
+  scope: "single" | "selected";
+}): Promise<AdminActionResult> {
+  let topics: DeletedTopicMutationRow[];
+  try {
+    topics = await loadDeletedTopics(input.ids);
+  } catch (error) {
+    return invalidMutation(error instanceof Error ? error.message : undefined);
+  }
+  if (topics.length !== input.ids.length) {
+    return adminActionFailure(
+      "تعذر الاستعادة",
+      "بعض الموضوعات المحددة ليست داخل المحذوفات. لم تتم استعادة أي Topic نشط.",
+    );
+  }
+
+  let slugConflict: { id: number; slug: string } | null;
+  try {
+    slugConflict = await findActiveTopicSlugConflict(topics);
+  } catch (error) {
+    return invalidMutation(error instanceof Error ? error.message : undefined);
+  }
+  if (slugConflict) {
+    const topic =
+      topics.find((item) => item.slug === slugConflict.slug) ?? topics[0];
+    return topicRestoreSlugConflict(topic.slug, topic.id);
+  }
+
+  const now = new Date().toISOString();
+  const { data: restored, error } = await getSupabaseAdmin()
+    .from("topics")
+    .update({
+      status: "unpublished",
+      deleted_at: null,
+      updated_at: now,
+      updated_by: input.actor.id,
+    })
+    .in("id", input.ids)
+    .not("deleted_at", "is", null)
+    .select("id");
+  if (error) {
+    if (isTopicSlugConflictError(error)) {
+      let conflictAfterWrite: { id: number; slug: string } | null = null;
+      try {
+        conflictAfterWrite = await findActiveTopicSlugConflict(topics);
+      } catch {}
+      const topic = conflictAfterWrite
+        ? topics.find((item) => item.slug === conflictAfterWrite.slug) ?? topics[0]
+        : topics[0];
+      return topicRestoreSlugConflict(topic.slug, topic.id);
+    }
+    return invalidMutation(error.message);
+  }
+  if ((restored ?? []).length !== topics.length) {
+    return invalidMutation(
+      "تغيرت حالة بعض الموضوعات أثناء الاستعادة. حدّث الصفحة وحاول مرة أخرى.",
+    );
+  }
+
+  const singleTopic = input.scope === "single" ? topics[0] : null;
+  await finishMutation({
+    actor: input.actor,
+    action: "restore",
+    entityId: singleTopic?.id,
+    entityLabel: singleTopic?.title ?? undefined,
+    metadata: {
+      bulk: input.scope === "selected",
+      bulk_action: input.scope === "selected" ? "restore" : undefined,
+      topic_ids: topics.map((topic) => topic.id),
+      count: topics.length,
+      restored_status: "unpublished",
+      ...(singleTopic
+        ? {
+            slug: singleTopic.slug,
+            previous_deleted_at: singleTopic.deleted_at,
+          }
+        : { slugs: topics.map((topic) => topic.slug) }),
+    },
+  });
+
+  return adminActionSuccess(
+    input.scope === "single" ? "تمت استعادة الموضوع" : "تمت استعادة المحدد",
+    input.scope === "single"
+      ? "عاد الموضوع إلى القائمة النشطة كغير منشور."
+      : `تمت استعادة ${topics.length} من الموضوعات المحددة كغير منشورة.`,
+    {
+      code: "restored",
+      entityId: singleTopic?.id,
+    },
+  );
+}
+
+async function permanentlyDeleteTopicsWithCanonicalOwner(input: {
+  actor: TopicMutationActor;
+  ids: number[];
+  scope: "single" | "selected" | "empty_trash";
+  expectedTotalDeletedCount?: number;
+}): Promise<AdminActionResult> {
+  let topics: DeletedTopicMutationRow[];
+  try {
+    topics = await loadDeletedTopics(input.ids);
+  } catch (error) {
+    return invalidMutation(error instanceof Error ? error.message : undefined);
+  }
+  if (topics.length !== input.ids.length) {
+    return adminActionFailure(
+      "تعذر الحذف النهائي",
+      "بعض الموضوعات المحددة ليست داخل المحذوفات. لم يتم حذف أي Topic نشط.",
+    );
+  }
+
+  for (const topic of topics) {
+    let linkUsageCount: number;
+    try {
+      linkUsageCount = await getResourceLinkUsageCount({
+        linkedType: "topics",
+        linkedId: topic.id,
+      });
+    } catch (error) {
+      return invalidMutation(
+        error instanceof Error
+          ? error.message
+          : "تعذر فحص روابط الموضوع قبل الحذف النهائي.",
+      );
+    }
+    if (linkUsageCount > 0) {
+      return adminActionFailure(
+        "تعذر الحذف النهائي",
+        `الموضوع «${topic.title || topic.id}» مستخدم في ${linkUsageCount} من الروابط الداخلية. لم يتم حذف أي موضوع.`,
+        { entityId: input.scope === "single" ? topic.id : undefined },
+      );
+    }
+  }
+
+  if (input.scope === "empty_trash") {
+    const { count, error: countError } = await getSupabaseAdmin()
+      .from("topics")
+      .select("id", { count: "exact", head: true })
+      .not("deleted_at", "is", null);
+    if (countError) return invalidMutation(countError.message);
+    if (count !== input.expectedTotalDeletedCount) {
+      return adminActionFailure(
+        "تغير عدد المحذوفات",
+        "تغير عدد الموضوعات المحذوفة بعد فتح التأكيد. حدّث الصفحة وراجع العدد قبل المحاولة مرة أخرى.",
+      );
+    }
+  }
+
+  const { data: deleted, error } = await getSupabaseAdmin()
+    .from("topics")
+    .delete()
+    .in("id", input.ids)
+    .not("deleted_at", "is", null)
+    .select("id");
+  if (error) return invalidMutation(error.message);
+  if ((deleted ?? []).length !== topics.length) {
+    return invalidMutation(
+      "تغيرت حالة بعض الموضوعات أثناء الحذف النهائي. حدّث الصفحة وراجع المحذوفات.",
+    );
+  }
+
+  const deletedIds = (deleted ?? []).map((row) => Number(row.id));
+  const mediaSynchronization =
+    await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+      [],
+      null,
+      deletedIds.map((id) => ({ domainKey: "topics", entityIdentity: id })),
+    );
+  const singleTopic = input.scope === "single" ? topics[0] : null;
+  await finishMutation({
+    actor: input.actor,
+    action: "permanent_delete",
+    entityId: singleTopic?.id,
+    entityLabel: singleTopic?.title ?? undefined,
+    metadata: {
+      bulk: input.scope !== "single",
+      bulk_action:
+        input.scope === "selected"
+          ? "permanent_delete"
+          : input.scope === "empty_trash"
+            ? "empty_trash"
+            : undefined,
+      empty_trash: input.scope === "empty_trash",
+      topic_ids: deletedIds,
+      count: deletedIds.length,
+      permanent: true,
+      slug_released: true,
+      ...(singleTopic
+        ? {
+            slug: singleTopic.slug,
+            content_type: singleTopic.content_type,
+          }
+        : {
+            slugs: topics.map((topic) => topic.slug),
+            content_types: topics.map((topic) => topic.content_type),
+          }),
+      media_synchronization_status: mediaSynchronization.status,
+    },
+  });
+
+  const title =
+    input.scope === "single"
+      ? "تم حذف الموضوع نهائيًا"
+      : input.scope === "selected"
+        ? "تم الحذف النهائي للمحدد"
+        : "تم إفراغ المحذوفات";
+  const message =
+    input.scope === "single"
+      ? `حُذف السجل نهائيًا وأصبح الـSlug \"${topics[0].slug}\" متاحًا للاستخدام.`
+      : `تم حذف ${topics.length} من الموضوعات نهائيًا وتحرير الـSlugs الخاصة بها.`;
+
+  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
+    return adminActionWarning(
+      `${title} مع تنبيه للميديا`,
+      `${message} تعذر إثبات تنظيف بعض مراجع الميديا بالكامل ويلزم فحصها.`,
+      {
+        code: "saved_with_media_sync_warning",
+        entityId: singleTopic?.id,
+      },
+    );
+  }
+  return adminActionSuccess(title, message, {
+    code: "permanently_deleted",
+    entityId: singleTopic?.id,
+  });
+}
+
+export async function restoreUnifiedContent(
+  formData: FormData,
+): Promise<AdminActionResult> {
+  const actor = await requireAdminSession();
+  const id = Number(getString(formData, "id"));
+  if (!Number.isInteger(id) || id <= 0) return invalidMutation();
+  return restoreTopicsWithCanonicalOwner({ actor, ids: [id], scope: "single" });
+}
+
+export async function permanentlyDeleteUnifiedContent(
+  formData: FormData,
+): Promise<AdminActionResult> {
+  const actor = await requireAdminSession();
+  const id = Number(getString(formData, "id"));
+  if (!Number.isInteger(id) || id <= 0) return invalidMutation();
+  if (getString(formData, "confirm_permanent") !== "true") {
+    return adminActionFailure(
+      "يلزم تأكيد الحذف النهائي",
+      "أكّد الحذف النهائي صراحةً قبل إزالة الموضوع وتحرير الـSlug.",
+      { entityId: id },
+    );
+  }
+  return permanentlyDeleteTopicsWithCanonicalOwner({
+    actor,
+    ids: [id],
+    scope: "single",
+  });
+}
+
+export async function emptyUnifiedContentTrash(
+  formData: FormData,
+): Promise<AdminActionResult> {
+  const actor = await requireAdminSession();
+  if (getString(formData, "confirm_permanent") !== "true") {
+    return adminActionFailure(
+      "يلزم تأكيد إفراغ المحذوفات",
+      "أكّد الحذف النهائي لكل الموضوعات الموجودة في المحذوفات.",
+    );
+  }
+  const expectedCount = Number(getString(formData, "expected_count"));
+  if (!Number.isInteger(expectedCount) || expectedCount <= 0) {
+    return invalidMutation("عدد الموضوعات المطلوب حذفها غير صالح.");
+  }
+
+  let topics: DeletedTopicMutationRow[];
+  try {
+    topics = await loadAllDeletedTopics();
+  } catch (error) {
+    return invalidMutation(error instanceof Error ? error.message : undefined);
+  }
+  if (topics.length !== expectedCount) {
+    return adminActionFailure(
+      "تغير عدد المحذوفات",
+      `العدد الحالي هو ${topics.length} وليس ${expectedCount}. حدّث الصفحة وراجع العدد قبل المحاولة مرة أخرى.`,
+    );
+  }
+
+  return permanentlyDeleteTopicsWithCanonicalOwner({
+    actor,
+    ids: topics.map((topic) => topic.id),
+    scope: "empty_trash",
+    expectedTotalDeletedCount: expectedCount,
+  });
 }
 
 export async function bulkUpdateUnifiedContent(
@@ -420,8 +804,30 @@ export async function bulkUpdateUnifiedContent(
   const action = getString(formData, "bulk_action");
   if (!ids.length) return invalidMutation("حدد محتوى واحدًا على الأقل.");
 
+  if (action === "restore") {
+    return restoreTopicsWithCanonicalOwner({
+      actor,
+      ids,
+      scope: "selected",
+    });
+  }
+  if (action === "permanent_delete") {
+    if (getString(formData, "confirm_permanent") !== "true") {
+      return adminActionFailure(
+        "يلزم تأكيد الحذف النهائي للمحدد",
+        "أكّد الحذف النهائي للموضوعات المحددة قبل تحرير الـSlugs.",
+      );
+    }
+    return permanentlyDeleteTopicsWithCanonicalOwner({
+      actor,
+      ids,
+      scope: "selected",
+    });
+  }
+
   const now = new Date().toISOString();
   let payload: Record<string, unknown> | null = null;
+  const moveToTrash = action === "delete" || action === "move_to_trash";
 
   if (action === "publish") {
     const { data, error: readError } = await getSupabaseAdmin()
@@ -498,7 +904,7 @@ export async function bulkUpdateUnifiedContent(
     );
   } else if (action === "unpublish") {
     payload = { status: "unpublished", updated_by: actor.id, updated_at: now };
-  } else if (action === "delete") {
+  } else if (moveToTrash) {
     payload = { status: "unpublished", deleted_at: now, updated_by: actor.id, updated_at: now };
   } else if (action === "feature" || action === "unfeature") {
     payload = { is_featured: action === "feature", updated_by: actor.id, updated_at: now };
@@ -508,6 +914,7 @@ export async function bulkUpdateUnifiedContent(
       .from("topic_categories")
       .select("id,name,slug")
       .eq("id", categoryId)
+      .is("deleted_at", null)
       .eq("is_active", true)
       .maybeSingle<{ id: number; name: string; slug: string }>();
     if (!category) return invalidMutation("التصنيف المختار غير متاح.");
@@ -534,20 +941,50 @@ export async function bulkUpdateUnifiedContent(
   }
 
   if (!payload) return invalidMutation("الإجراء الجماعي غير صالح.");
-  const { error } = await getSupabaseAdmin().from("topics").update(payload).in("id", ids);
+  const { data: activeTopics, error: activeTopicsError } =
+    await getSupabaseAdmin()
+      .from("topics")
+      .select("id")
+      .in("id", ids)
+      .is("deleted_at", null);
+  if (activeTopicsError) return invalidMutation(activeTopicsError.message);
+  if ((activeTopics ?? []).length !== ids.length) {
+    return adminActionFailure(
+      "تعذر تنفيذ الإجراء الجماعي",
+      "بعض السجلات غير موجودة أو داخل المحذوفات. لم يتم تعديل أي Topic محذوف.",
+    );
+  }
+  const { data: updated, error } = await getSupabaseAdmin()
+    .from("topics")
+    .update(payload)
+    .in("id", ids)
+    .is("deleted_at", null)
+    .select("id");
   if (error) return invalidMutation(error.message);
+  if ((updated ?? []).length !== ids.length) {
+    return invalidMutation(
+      "تغيرت حالة بعض الموضوعات أثناء التنفيذ. حدّث الصفحة وحاول مرة أخرى.",
+    );
+  }
 
   await finishMutation({
     actor,
-    action: action === "publish" ? "publish" : action === "unpublish" ? "unpublish" : action === "delete" ? "delete" : "update",
-    metadata: { bulk_action: action, topic_ids: ids, count: ids.length },
+    action: action === "publish" ? "publish" : action === "unpublish" ? "unpublish" : moveToTrash ? "delete" : "update",
+    metadata: {
+      bulk_action: action,
+      topic_ids: ids,
+      count: ids.length,
+      ...(moveToTrash
+        ? { permanent: false, slug_retained: true }
+        : {}),
+    },
   });
   return adminActionSuccess(
-    action === "delete" ? "تم حذف المحتوى" : "تم تحديث المحتوى",
-    action === "delete"
-      ? `تم الحذف الآمن لـ ${ids.length} من عناصر المحتوى.`
+    moveToTrash ? "تم نقل المحتوى إلى المحذوفات" : "تم تحديث المحتوى",
+    moveToTrash
+      ? `تم نقل ${ids.length} من عناصر المحتوى إلى المحذوفات مع إبقاء الـSlug محجوزًا.`
       : `تم تحديث ${ids.length} من عناصر المحتوى بنجاح.`,
-    { code: action === "delete" ? "deleted" : "saved" },
+    { code: moveToTrash ? "deleted" : "saved" },
   );
 }
 

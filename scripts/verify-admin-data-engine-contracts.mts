@@ -32,7 +32,15 @@ import {
 } from "../src/lib/admin/admin-list-search.ts";
 
 type Filters = { status: "all" | "published"; category: number | null };
-type SortField = "title" | "created_at";
+type SortField =
+  | "title"
+  | "status"
+  | "content_type"
+  | "category"
+  | "series"
+  | "featured"
+  | "seo"
+  | "created_at";
 
 const contract: AdminEntityListQueryContract<Filters, SortField> = {
   mode: "server-page",
@@ -40,7 +48,16 @@ const contract: AdminEntityListQueryContract<Filters, SortField> = {
     status: z.enum(["all", "published"]),
     category: z.number().int().positive().nullable(),
   }),
-  sortFields: ["title", "created_at"],
+  sortFields: [
+    "title",
+    "status",
+    "content_type",
+    "category",
+    "series",
+    "featured",
+    "seo",
+    "created_at",
+  ],
   defaultSort: { field: "title", direction: "asc" },
   defaultPageSize: 10,
   pageSizeOptions: [10, 20, 50],
@@ -144,6 +161,30 @@ assert.deepEqual(
 );
 // Canonical defaults do not pollute the URL.
 assert.equal(writeAdminEntityListQuery(contract, normalized).toString(), "");
+
+for (const field of [
+  "title",
+  "status",
+  "content_type",
+  "category",
+  "series",
+  "featured",
+  "seo",
+] as const) {
+  for (const direction of ["asc", "desc"] as const) {
+    const parsed = parseAdminEntityListRequestQuery(
+      contract,
+      `sort=${field}_${direction}`,
+    );
+    assert.deepEqual(parsed.sort, { field, direction });
+    assert.equal(
+      writeAdminEntityListQuery(contract, parsed).get("sort"),
+      field === "title" && direction === "asc"
+        ? null
+        : `${field}_${direction}`,
+    );
+  }
+}
 
 // Phase 1 adopters use the same strict boundary and canonical URL writer.
 const redirectQuery = parseAdminEntityListRequestQuery(
@@ -492,6 +533,48 @@ assert.equal(readScoped(unrelatedSearchQuery)?.totalRows, 1);
 assert.equal(readScoped(unrelatedFilterQuery)?.totalRows, 2);
 scopeClient.clear();
 
+type FeaturedRow = { id: number; is_featured: boolean };
+const featuredClient = new QueryClient({
+  defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+});
+const featuredQuery = pageOneQuery;
+featuredClient.setQueryData(
+  adminEntityListQueryKeys.query("topics", featuredQuery),
+  {
+    rows: [{ id: 1, is_featured: false }],
+    pagination: { page: 1, pageSize: 3, totalRows: 1, totalPages: 1 },
+    meta: scopeMeta,
+  } satisfies AdminEntityListResult<FeaturedRow>,
+);
+const featuredSnapshot = featuredClient.getQueriesData<
+  AdminEntityListResult<FeaturedRow>
+>({ queryKey: adminEntityListQueryKeys.queries("topics") });
+setAdminEntityListCachesInScope<FeaturedRow, unknown>(
+  featuredClient,
+  "topics",
+  featuredQuery,
+  (data) => ({
+    ...data,
+    rows: data.rows.map((row) => ({ ...row, is_featured: true })),
+  }),
+);
+assert.equal(
+  featuredClient.getQueryData<AdminEntityListResult<FeaturedRow>>(
+    adminEntityListQueryKeys.query("topics", featuredQuery),
+  )?.rows[0]?.is_featured,
+  true,
+  "featured success keeps the optimistic toggle",
+);
+featuredSnapshot.forEach(([key, value]) => featuredClient.setQueryData(key, value));
+assert.equal(
+  featuredClient.getQueryData<AdminEntityListResult<FeaturedRow>>(
+    adminEntityListQueryKeys.query("topics", featuredQuery),
+  )?.rows[0]?.is_featured,
+  false,
+  "featured failure restores the exact cache snapshot",
+);
+featuredClient.clear();
+
 const controllerQueryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
 });
@@ -532,5 +615,5 @@ assert.equal(clientEndpointRequests, 1);
 assert.deepEqual(normalizedCacheResult, normalizedResult);
 controllerQueryClient.clear();
 
-console.log("verify-admin-data-engine-contracts passed (76 assertions).");
+console.log("verify-admin-data-engine-contracts passed (shared query/sort and instant rollback contracts).");
 console.log(`out-of-range client endpoint request count: ${clientEndpointRequests}`);

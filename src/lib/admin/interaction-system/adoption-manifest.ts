@@ -233,6 +233,14 @@ export type AdminRowActionsAdoptionEntry = {
   rationale: string;
 };
 
+export type AdminStatusIconAdoptionEntry = {
+  entity: string;
+  consumerSourceFile: string;
+  dataMode: "server-page" | "bounded-client";
+  publicationField: "status" | "publication_status";
+  featuredField?: "is_featured" | "featured";
+};
+
 export const ADMIN_ROW_ACTIONS_EXISTING_OWNERS = {
   presentation: "shared_capabilities",
   data: "data_runtime",
@@ -263,6 +271,96 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       "duplicate",
       "archive",
       "delete",
+    ],
+  },
+  inlineStatusExtension: {
+    scope: "all_binary_publication_collections",
+    owner: "shared_capabilities",
+    runtime: "data_runtime",
+    capability: "shared_admin_row_actions",
+    adapter: "existing_domain_action_callbacks",
+    inputContract: "AdminRowActionsCapability",
+    outputContract: "inline_visibility_and_featured_action_state",
+    sourceOfTruth: "domain_publication_and_featured_fields",
+    icons: {
+      published: "eye",
+      unpublished: "eye_off",
+      featured: "star_filled",
+      notFeatured: "star_outline",
+    },
+    consumers: [
+      {
+        entity: "topics",
+        consumerSourceFile:
+          "src/components/admin/content/unified-content-columns.tsx",
+        dataMode: "server-page",
+        publicationField: "status",
+        featuredField: "is_featured",
+      },
+      {
+        entity: "topic_categories",
+        consumerSourceFile:
+          "src/app/admin/content/categories/categories-columns.tsx",
+        dataMode: "server-page",
+        publicationField: "status",
+      },
+      {
+        entity: "topic_series",
+        consumerSourceFile:
+          "src/app/admin/content/series/series-columns.tsx",
+        dataMode: "server-page",
+        publicationField: "status",
+      },
+      {
+        entity: "pages",
+        consumerSourceFile:
+          "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
+        dataMode: "server-page",
+        publicationField: "status",
+      },
+      {
+        entity: "projects",
+        consumerSourceFile:
+          "src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx",
+        dataMode: "server-page",
+        publicationField: "publication_status",
+        featuredField: "featured",
+      },
+      ...[
+        "breadcrumb_block_templates",
+        "cards_block_templates",
+        "cta_block_templates",
+        "feed_module_templates",
+      ].map((entity) => ({
+        entity,
+        consumerSourceFile:
+          "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+        dataMode: "bounded-client" as const,
+        publicationField: "status" as const,
+      })),
+      {
+        entity: "content_block_templates",
+        consumerSourceFile:
+          "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+        dataMode: "bounded-client",
+        publicationField: "status",
+      },
+      {
+        entity: "hero_templates",
+        consumerSourceFile:
+          "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+        dataMode: "bounded-client",
+        publicationField: "status",
+      },
+      ...["media_hub_module_templates", "media_sidebar_module_templates"].map(
+        (entity) => ({
+          entity,
+          consumerSourceFile:
+            "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+          dataMode: "bounded-client" as const,
+          publicationField: "status" as const,
+        }),
+      ),
     ],
   },
   ownerSourceFiles: {
@@ -299,19 +397,20 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         visibility: "adopted",
         featured: "adopted",
         duplicate: "adopted",
-        archive: "hidden",
+        archive: "adopted",
         delete: "adopted",
       },
       owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
-      confirmationActions: ["delete"],
+      confirmationActions: ["archive", "delete"],
       auditedActions: [
         "visibility",
         "featured",
         "duplicate",
+        "archive",
         "delete",
       ],
       rationale:
-        "Topic row presentation is shared while instant mutations, feedback, confirmation, and audit remain with their existing owners.",
+        "Topic active and Trash row presentation is shared while instant mutations, feedback, confirmation, and audit remain with their existing owners.",
     },
     {
       entity: "categories",
@@ -320,7 +419,6 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         "src/app/admin/content/categories/CategoryRowActions.tsx",
       sourceFiles: [
         "src/app/admin/content/categories/CategoryRowActions.tsx",
-        "src/app/admin/content/categories/CategoryDeleteButton.tsx",
         "src/app/admin/content/categories/CategoriesListClient.tsx",
         "src/app/admin/content/categories/actions.ts",
       ],
@@ -333,14 +431,14 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         visibility: "adopted",
         featured: "hidden",
         duplicate: "adopted",
-        archive: "hidden",
-        delete: "specialized_adapter",
+        archive: "adopted",
+        delete: "adopted",
       },
       owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
-      confirmationActions: ["delete"],
-      auditedActions: ["visibility", "duplicate", "delete"],
+      confirmationActions: ["archive", "delete"],
+      auditedActions: ["visibility", "duplicate", "archive", "delete"],
       rationale:
-        "Category delete keeps its transfer and relation-preflight adapter while delegating its dangerous confirmation surface to the existing Confirmation Runtime.",
+        "Category active and Trash row presentation uses the shared capability while atomic lifecycle RPCs remain in the existing Content Taxonomy mutation owner.",
     },
     {
       entity: "series",
@@ -360,14 +458,14 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         visibility: "adopted",
         featured: "hidden",
         duplicate: "adopted",
-        archive: "hidden",
+        archive: "adopted",
         delete: "adopted",
       },
       owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
-      confirmationActions: ["delete"],
-      auditedActions: ["visibility", "duplicate", "delete"],
+      confirmationActions: ["archive", "delete"],
+      auditedActions: ["visibility", "duplicate", "archive", "delete"],
       rationale:
-        "Series delegates row rendering to the shared capability and keeps its established Data, Feedback, Confirmation, and Audit owners.",
+        "Series active and Trash row presentation uses the shared capability while atomic lifecycle RPCs remain in the existing Content Taxonomy mutation owner.",
     },
     {
       entity: "pages",
@@ -523,6 +621,23 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
   canonicalOrders: {
     primary: readonly AdminRowActionPrimaryKind[];
     more: readonly AdminRowActionMoreKind[];
+  };
+  inlineStatusExtension: {
+    scope: "all_binary_publication_collections";
+    owner: "shared_capabilities";
+    runtime: "data_runtime";
+    capability: "shared_admin_row_actions";
+    adapter: "existing_domain_action_callbacks";
+    inputContract: "AdminRowActionsCapability";
+    outputContract: "inline_visibility_and_featured_action_state";
+    sourceOfTruth: "domain_publication_and_featured_fields";
+    icons: {
+      published: "eye";
+      unpublished: "eye_off";
+      featured: "star_filled";
+      notFeatured: "star_outline";
+    };
+    consumers: readonly AdminStatusIconAdoptionEntry[];
   };
   ownerSourceFiles: Readonly<
     Record<keyof AdminRowActionsExistingOwners, readonly string[]>

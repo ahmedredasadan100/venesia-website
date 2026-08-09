@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
 import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
@@ -34,7 +34,6 @@ import {
   AdminModalPrimaryButton,
   AdminPageExperience,
   AdminPageHeader,
-  AdminStatusPill,
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
@@ -50,6 +49,8 @@ import {
   useAdminBoundedClientPagination,
   type AdminEntityFilterDef,
 } from "../../../../../lib/admin/entity-list";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../../../lib/admin/entity-list/bulk-action-labels";
+import { useAdminBoundedClientInstantMutation } from "../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -149,12 +150,20 @@ export default function ContentBlocksTableClient({
     [],
   );
 
-  const table = useAdminTable<ContentBlockRow, ContentSortKey>({
+  const instant = useAdminBoundedClientInstantMutation<ContentBlockRow>({
+    entity: "content-block-templates",
     initialRows: rows,
+  });
+  const table = useAdminTable<ContentBlockRow, ContentSortKey>({
+    initialRows: instant.rows,
     getRowId: (item) => item.id,
     sortAccessors,
     refresh: getContentBlockRows,
   });
+  const setTableRows = table.setRows;
+  useEffect(() => {
+    setTableRows(instant.rows);
+  }, [instant.rows, setTableRows]);
   const search = searchParams.get("q") ?? "";
   const status = searchParams.get("status") ?? "all";
   const variant = searchParams.get("variant") ?? "all";
@@ -229,7 +238,9 @@ export default function ContentBlocksTableClient({
     clearFeedback(feedbackChannel);
     const result = await table.runAction(async () => {
       await action();
-      return { ok: true, message: successMessage };
+      const nextRows = await getContentBlockRows();
+      instant.hydrateRows(nextRows);
+      return { ok: true, message: successMessage, rows: nextRows };
     });
     publishFeedback(
       {
@@ -246,6 +257,60 @@ export default function ContentBlocksTableClient({
         reveal: !result.ok,
       },
     );
+  }
+
+  async function runVisibilityMutation(
+    row: ContentBlockRow,
+    nextStatus: "published" | "unpublished",
+  ) {
+    const successMessage =
+      nextStatus === "published" ? "تم نشر البلوك." : "تم إخفاء البلوك.";
+    clearFeedback(feedbackChannel);
+    try {
+      await instant.mutateAsync({
+        rowId: row.id,
+        action: "visibility",
+        optimistic: (cache) =>
+          cache.patchRows((candidate) =>
+            candidate.id === row.id
+              ? { ...candidate, status: nextStatus }
+              : candidate,
+          ),
+        execute: async () => {
+          const formData = new FormData();
+          formData.set("id", String(row.id));
+          formData.set("next_status", nextStatus);
+          await toggleContentBlockStatus(formData);
+          return { ok: true, message: successMessage };
+        },
+      });
+      publishFeedback(
+        {
+          variant: "success",
+          title: "تم تنفيذ الإجراء",
+          message: successMessage,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline" },
+      );
+    } catch (error) {
+      publishFeedback(
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline", reveal: true },
+      );
+    }
   }
 
   function sortProps(key: ContentSortKey) {
@@ -333,12 +398,25 @@ export default function ContentBlocksTableClient({
               selectedIds={selection.selectedIds}
               entityLabel="بلوك"
               options={[
-                { value: "publish", label: "نشر" },
-                { value: "hide", label: "إخفاء" },
-                { value: "delete", label: "حذف" },
+                {
+                  value: "publish",
+                  label: ADMIN_BULK_ACTION_LABELS.showSelected,
+                },
+                {
+                  value: "hide",
+                  label: ADMIN_BULK_ACTION_LABELS.hideSelected,
+                },
+                {
+                  value: "delete",
+                  label: ADMIN_BULK_ACTION_LABELS.deleteSelected,
+                },
               ]}
               onClearSelection={selection.clearSelection}
-              isBusy={table.isPending}
+              isBusy={
+                table.isPending ||
+                instant.rowPending !== null ||
+                instant.bulkPending !== null
+              }
               onExecute={async (action, ids) => {
                 clearFeedback(feedbackChannel);
                 const result = await table.runAction(async () => {
@@ -347,6 +425,7 @@ export default function ContentBlocksTableClient({
                   ids.forEach((id) => formData.append("ids", String(id)));
                   await bulkContentBlocks(formData);
                   const nextRows = await getContentBlockRows();
+                  instant.hydrateRows(nextRows);
                   return { ok: true, message: "تم تنفيذ العملية الجماعية بنجاح.", rows: nextRows };
                 });
                 publishFeedback(
@@ -428,6 +507,13 @@ export default function ContentBlocksTableClient({
               const nextStatus = row.status === "published" ? "unpublished" : "published";
               const isPublished = row.status === "published";
               const hidden = { access: "hidden" as const };
+              const visibilityPending =
+                instant.rowPending?.rowId === row.id &&
+                instant.rowPending.action === "visibility";
+              const mutationBusy =
+                table.isPending ||
+                instant.rowPending !== null ||
+                instant.bulkPending !== null;
               const capability: AdminRowActionsCapability = {
                 entityType: "content_block_template",
                 entityId: row.id,
@@ -449,46 +535,65 @@ export default function ContentBlocksTableClient({
                     ],
                   },
                   copyPublicLink: hidden,
-                  visibility: {
-                    access: "allowed",
-                    isVisible: isPublished,
-                    pending: table.isPending,
-                    onSelect: () =>
-                      runRowMutation(async () => {
-                        const formData = new FormData();
-                        formData.set("id", String(row.id));
-                        formData.set("next_status", nextStatus);
-                        await toggleContentBlockStatus(formData);
-                      }, isPublished ? "تم إخفاء البلوك." : "تم نشر البلوك."),
-                  },
+                  visibility: visibilityPending
+                    ? {
+                        access: "disabled",
+                        disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                        pending: true,
+                        isVisible: isPublished,
+                      }
+                    : mutationBusy
+                      ? {
+                          access: "disabled",
+                          disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                          isVisible: isPublished,
+                        }
+                      : {
+                          access: "allowed",
+                          isVisible: isPublished,
+                          onSelect: () =>
+                            runVisibilityMutation(row, nextStatus),
+                        },
                   featured: hidden,
-                  duplicate: {
-                    access: "allowed",
-                    pending: table.isPending,
-                    onSelect: () =>
-                      runRowMutation(async () => {
-                        const formData = new FormData();
-                        formData.set("id", String(row.id));
-                        await duplicateContentBlock(formData);
-                      }, "تم إنشاء نسخة من البلوك."),
-                  },
+                  duplicate:
+                    mutationBusy && !table.isPending
+                      ? {
+                          access: "disabled",
+                          disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                        }
+                      : {
+                          access: "allowed",
+                          pending: table.isPending,
+                          onSelect: () =>
+                            runRowMutation(async () => {
+                              const formData = new FormData();
+                              formData.set("id", String(row.id));
+                              await duplicateContentBlock(formData);
+                            }, "تم إنشاء نسخة من البلوك."),
+                        },
                   archive: hidden,
-                  delete: {
-                    access: "allowed",
-                    pending: table.isPending,
-                    onSelect: () =>
-                      runRowMutation(async () => {
-                        const formData = new FormData();
-                        formData.set("id", String(row.id));
-                        await deleteContentBlock(formData);
-                      }, "تم حذف البلوك."),
-                    confirmation: {
-                      mode: "shared",
-                      title: "تأكيد حذف البلوك",
-                      description: `حذف البلوك «${row.name}» نهائيًا؟`,
-                      confirmLabel: "حذف البلوك",
-                    },
-                  },
+                  delete:
+                    mutationBusy && !table.isPending
+                      ? {
+                          access: "disabled",
+                          disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                        }
+                      : {
+                          access: "allowed",
+                          pending: table.isPending,
+                          onSelect: () =>
+                            runRowMutation(async () => {
+                              const formData = new FormData();
+                              formData.set("id", String(row.id));
+                              await deleteContentBlock(formData);
+                            }, "تم حذف البلوك."),
+                          confirmation: {
+                            mode: "shared",
+                            title: "تأكيد حذف البلوك",
+                            description: `حذف البلوك «${row.name}» نهائيًا؟`,
+                            confirmLabel: "حذف البلوك",
+                          },
+                        },
                 },
               };
 
@@ -526,7 +631,11 @@ export default function ContentBlocksTableClient({
 
                   {visibleColumnSet.has("status") ? (
                     <AdminDataGridStatusCell>
-                      <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+                      <AdminDataGridRowActions
+                        capability={capability}
+                        display="visibility"
+                        size="compact"
+                      />
                     </AdminDataGridStatusCell>
                   ) : null}
 

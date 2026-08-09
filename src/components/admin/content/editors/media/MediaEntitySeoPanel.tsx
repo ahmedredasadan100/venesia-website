@@ -82,6 +82,7 @@ export default function MediaEntitySeoPanel({
         },
       }}
       initial={{
+        profile: "entity",
         title: values?.title ?? "",
         description: values?.excerpt ?? "",
         content: values?.content ?? "",
@@ -97,6 +98,7 @@ export default function MediaEntitySeoPanel({
         robotsFollow: values?.robots_follow ?? null,
         ogImage: values?.og_image ?? "",
         ogImageAlt: values?.og_image_alt ?? "",
+        faq: [],
       }}
       correctionTargets={{
         "seo-title-length": { tabId: "seo", targetId: MEDIA_SEO_FIELD_IDS.seoTitle },

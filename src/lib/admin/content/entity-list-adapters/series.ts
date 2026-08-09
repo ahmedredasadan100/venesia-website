@@ -25,6 +25,7 @@ const seriesMetricsSchema = z.strictObject({
   unpublished: z.coerce.number().int().nonnegative().finite(),
   topics: z.coerce.number().int().nonnegative().finite(),
   averageTopics: z.coerce.number().nonnegative().finite(),
+  trashed: z.coerce.number().int().nonnegative().finite(),
   categoryOptions: z.array(
     z.strictObject({
       value: z.string(),
@@ -75,6 +76,7 @@ export async function loadSeriesEntityListResult(
     p_search: query.search,
     p_status: query.filters.status,
     p_category_id: query.filters.categoryId,
+    p_view: query.filters.view,
   });
   if (error) throw new SeriesEntityListDatabaseError(error);
 

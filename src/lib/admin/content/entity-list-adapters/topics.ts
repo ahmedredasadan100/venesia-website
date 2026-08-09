@@ -51,6 +51,7 @@ const topicRowSchema = z.object({
 
 const topicMetricsSchema = z.object({
   total: z.number().int().nonnegative(),
+  trashed: z.number().int().nonnegative(),
   published: z.number().int().nonnegative(),
   unpublished: z.number().int().nonnegative(),
   withoutImage: z.number().int().nonnegative(),
@@ -71,6 +72,7 @@ export async function loadTopicsEntityListResult(
     const { data, error: categoriesError } = await getSupabaseAdmin()
       .from("topic_categories")
       .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true });
     if (categoriesError) throw new Error(categoriesError.message);
@@ -81,6 +83,7 @@ export async function loadTopicsEntityListResult(
     loadUnifiedContentList(
       {
         q: query.search,
+        view: query.filters.view,
         contentType: query.filters.contentType,
         categoryId: query.filters.categoryId,
         seriesId: query.filters.seriesId,

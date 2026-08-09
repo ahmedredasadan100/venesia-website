@@ -38,6 +38,7 @@ async function loadCategoryRows() {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
     .select("id, name, slug, parent_id, sort_order, is_active, status, color_token")
+    .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 
@@ -76,6 +77,7 @@ export async function loadCategoryFormRecord(id: number) {
     .from("topic_categories")
     .select("id, name, slug, parent_id, is_active, status, color_token")
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle<CategoryFormRecord>();
 
   if (error || !data) notFound();
@@ -87,6 +89,7 @@ export async function loadSeriesFormRecord(id: number) {
     .from("topic_series")
     .select("id, name, slug, status, category_id")
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle<SeriesFormRecord>();
 
   if (error || !data) notFound();

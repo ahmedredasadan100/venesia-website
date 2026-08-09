@@ -109,6 +109,9 @@ const categoriesListConfigModule = loadPureTypeScriptModule(
   "src/lib/admin/content/categories-list-config.ts",
 );
 const categoriesClient = read("src/app/admin/content/categories/CategoriesListClient.tsx");
+const entityTrashHeader = read(
+  "src/components/admin/entity-list/AdminEntityTrashHeader.tsx",
+);
 const categoriesColumns = read("src/app/admin/content/categories/categories-columns.tsx");
 const categoriesActions = read("src/app/admin/content/categories/CategoryRowActions.tsx");
 const seriesClient = read("src/app/admin/content/series/SeriesTableClient.tsx");
@@ -161,6 +164,21 @@ const pageCompositionColumnActions = read(
 const pageBlockAdminUtils = read("src/lib/page-blocks/admin-utils.ts");
 const pagesClient = read(
   "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
+);
+const bulkActionLabels = read(
+  "src/lib/admin/entity-list/bulk-action-labels.ts",
+);
+const menusClient = read(
+  "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+);
+const blockModuleManager = read(
+  "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+);
+const heroManager = read(
+  "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+);
+const contentBlocksClient = read(
+  "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
 );
 
 check(
@@ -496,7 +514,7 @@ check(
     /key:\s*"sort_order"[\s\S]*?defaultVisible:\s*false/.test(categoriesColumns) &&
     /key:\s*"published_at"[\s\S]*?defaultVisible:\s*false/.test(categoriesColumns) &&
     /key:\s*"status"[\s\S]*?minWidth:\s*104[\s\S]*?width:\s*104/.test(categoriesColumns) &&
-    /key:\s*"count"[\s\S]*?minWidth:\s*80[\s\S]*?width:\s*80/.test(categoriesColumns) &&
+    /key:\s*"count"[\s\S]*?minWidth:\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH[\s\S]*?width:\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH/.test(categoriesColumns) &&
     /key:\s*"created_at"[\s\S]*?defaultVisible:\s*true[\s\S]*?minWidth:\s*ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH[\s\S]*?width:\s*ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH[\s\S]*?dir="ltr"[\s\S]*?whitespace-nowrap/.test(categoriesColumns) &&
     /key:\s*"actions"[\s\S]*?width:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*?sticky:\s*"end"/.test(categoriesColumns) &&
     /key:\s*"name"[\s\S]*?flexible:\s*true/.test(categoriesColumns),
@@ -571,9 +589,37 @@ check(
     seriesClient.includes("onPersistColumns") &&
     seriesColumns.includes("flexible: true") &&
     seriesColumns.includes("ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH") &&
+    seriesColumns.includes("ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH") &&
+    seriesColumns.includes("ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH") &&
     seriesColumns.includes('dir="ltr"') &&
     seriesColumns.includes('minWidth: 104') &&
-    seriesColumns.includes('minWidth: 80'),
+    dataGrid.includes(
+      "ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH = 112",
+    ) &&
+    dataGrid.includes("ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH = 160"),
+);
+
+check(
+  "Admin content bulk actions adopt the shared formal Arabic labels",
+  [
+    'hideSelected: "إخفاء المحدد"',
+    'showSelected: "إظهار المحدد"',
+    'deleteSelected: "حذف المحدد"',
+    'restoreSelected: "استعادة المحدد"',
+    'permanentlyDeleteSelected: "حذف نهائي للمحدد"',
+    'emptyTrash: "إفراغ المحذوفات"',
+  ].every((label) => bulkActionLabels.includes(label)) &&
+    [
+      topicsList,
+      categoriesClient,
+      seriesClient,
+      entityTrashHeader,
+      pagesClient,
+      menusClient,
+      blockModuleManager,
+      heroManager,
+      contentBlocksClient,
+    ].every((source) => source.includes("ADMIN_BULK_ACTION_LABELS")),
 );
 
 check(

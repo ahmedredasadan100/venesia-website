@@ -28,6 +28,7 @@ export type AdminRowActionMoreKind =
  */
 export type AdminRowActionHidden = {
   access: Extract<AdminEntityCapabilityAccess, "hidden">;
+  label?: string;
   disabledReason?: never;
   pending?: never;
   href?: never;
@@ -38,6 +39,7 @@ export type AdminRowActionHidden = {
 
 export type AdminRowActionDisabled = {
   access: Extract<AdminEntityCapabilityAccess, "disabled">;
+  label?: string;
   disabledReason?: string;
   pending?: boolean;
   href?: never;
@@ -48,6 +50,7 @@ export type AdminRowActionDisabled = {
 
 export type AdminRowActionAllowedState = {
   access: Extract<AdminEntityCapabilityAccess, "allowed">;
+  label?: string;
   disabledReason?: never;
   pending?: boolean;
 };

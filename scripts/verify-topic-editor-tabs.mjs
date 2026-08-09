@@ -38,7 +38,7 @@ check("shared visual toolbar owns paragraph, H2, H3, bold, lists and links", ["s
 check("shared editor keeps native TipTap keyboard and RTL semantics", sharedRichTextEditor.includes("<EditorContent editor={editor}") && sharedRichTextEditor.includes('dir: "rtl"') && sharedRichTextEditor.includes("StarterKit.configure"));
 check("content toolbar has no retired Markdown textarea engine", !editor.includes("<textarea") && !editor.includes("replaceSelection") && !editor.includes("prefixSelection"));
 check("content statistics retain heading and internal-link analysis", ["H2", "H3", "روابط داخلية"].every((label) => editor.includes(`label="${label}"`)) && editor.includes("markdownInternalLinks + htmlInternalLinks"));
-check("keyword density remains in SEO rather than the body owner", !editor.includes("keywordDensity") && seo.includes("topicAnalysis.keywordDensity") && sharedSeo.includes("data-admin-entity-seo-metric={metric.id}"));
+check("keyword density remains in SEO rather than the body owner", !editor.includes("keywordDensity") && seo.includes('"keyword-density"') && sharedSeo.includes("analysis.metrics.map") && sharedSeo.includes("data-admin-entity-seo-metric={metric.id}"));
 
 check("FAQ uses shared confirmation and drag reorder", faq.includes("AdminConfirmDialog") && !faq.includes("window.confirm") && faq.includes("draggable") && faq.includes("onDrop"));
 check("FAQ owns its visibility fields once", faq.match(/name="show_faq_on_page"/g)?.length === 1 && faq.match(/name="show_faq_title_on_page"/g)?.length === 1 && !displaySettings.includes('name="show_faq_on_page"'));
@@ -51,7 +51,7 @@ for (const field of ["seoTitle", "seoDescription", "focusKeyword", "seoKeywords"
 }
 check("SEO avoids duplicate slug and image-alt owners", !seo.includes('name="slug"') && !seo.includes('name="image_alt"'));
 check("SEO adapter keeps the public article path", seo.includes('publicPathPrefix="/topics"'));
-check("SEO adapter adds typed topic analysis to the shared panel", seo.includes("topicAnalysis.issues.seo.filter") && sharedSeo.includes("analysis.issues.map"));
+check("SEO adapter adds typed topic analysis to the shared panel", seo.includes('profile: "article"') && seo.includes("resolveFaq: (state) => state.faq") && seo.includes("analysisExtension={createTopicAnalysisExtension") && sharedSeo.includes("analyzeEntitySeo(analysisInput)") && sharedSeo.includes("analysis.issues.map"));
 
 check("publishing owns status, featured, popular and date without a save engine", publishing.includes('name="status"') && publishing.includes('name="is_featured"') && publishing.includes('name="is_popular"') && publishing.includes("TopicDateLabelField") && !publishing.includes("SaveBar"));
 check("publishing and display switches delegate to the shared switch DOM", topicSwitch.match(/<AdminFormSwitch\b/g)?.length === 1 && !topicSwitch.includes("<input") && sharedSwitch.match(/type="checkbox"/g)?.length === 1 && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.includes(`name="${name}"`)));

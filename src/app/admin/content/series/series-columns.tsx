@@ -4,13 +4,14 @@ import Link from "next/link";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import {
   AdminDataGridRowActions,
-  AdminStatusPill,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
 import {
+  ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
   ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
+  ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
@@ -64,11 +65,6 @@ function SeriesIcon() {
   );
 }
 
-function statusMeta(status?: string | null) {
-  if (status === "published") return { label: "منشور", tone: "green" as const };
-  return { label: "غير منشور", tone: "gold" as const };
-}
-
 function singleLine(value: string) {
   return (
     <span className="block truncate text-sm text-white/68" title={value}>
@@ -81,12 +77,15 @@ function SeriesRowActions({
   row,
   onMutationResult,
   handlers,
+  display = "menu",
 }: {
   row: SeriesListRow;
   onMutationResult?: (result: AdminActionResult) => void;
   handlers: SeriesRowActionHandlers;
+  display?: "menu" | "visibility";
 }) {
   const pendingAction = handlers.rowPendingAction(row.id);
+  const isTrashView = handlers.view === "trash";
   const isHidden = row.status !== "published";
   const previewCapability = buildAdminSeriesCollectionPreviewCapability({
     id: row.id,
@@ -116,11 +115,15 @@ function SeriesRowActions({
     entityId: row.id,
     entityLabel: row.name,
     actions: {
-      edit: {
-        access: "allowed",
-        href: `/admin/content/series/${row.id}`,
-      },
-      preview: preview
+      edit: isTrashView
+        ? { access: "hidden" }
+        : {
+            access: "allowed",
+            href: `/admin/content/series/${row.id}`,
+          },
+      preview: isTrashView
+        ? { access: "hidden" }
+        : preview
         ? preview.disabled
           ? {
               access: "disabled",
@@ -149,6 +152,16 @@ function SeriesRowActions({
               ? formatAdminDateTime(row.updated_at)
               : "—",
           },
+          ...(isTrashView
+            ? [
+                {
+                  label: "تاريخ الحذف",
+                  value: row.deleted_at
+                    ? formatAdminDateTime(row.deleted_at)
+                    : "—",
+                },
+              ]
+            : []),
           {
             label: "التصنيف",
             value: row.category_name?.trim() || "—",
@@ -157,8 +170,15 @@ function SeriesRowActions({
         ],
       },
       copyPublicLink: { access: "hidden" },
-      visibility:
-        pendingAction === "visibility"
+      visibility: isTrashView
+        ? display === "visibility"
+          ? {
+              access: "disabled",
+              disabledReason: "عرض فقط داخل المحذوفات.",
+              isVisible: !isHidden,
+            }
+          : { access: "hidden" }
+        : pendingAction === "visibility"
           ? {
               access: "disabled",
               disabledReason: pendingReason,
@@ -179,8 +199,9 @@ function SeriesRowActions({
                 },
               },
       featured: { access: "hidden" },
-      duplicate:
-        pendingAction === "duplicate"
+      duplicate: isTrashView
+        ? { access: "hidden" }
+        : pendingAction === "duplicate"
           ? {
               access: "disabled",
               disabledReason: pendingReason,
@@ -194,41 +215,101 @@ function SeriesRowActions({
                   await run(() => handlers.onDuplicate(row));
                 },
               },
-      archive: { access: "hidden" },
-      delete:
-        pendingAction === "delete"
+      archive: !isTrashView
+        ? { access: "hidden" }
+        : pendingAction === "restore"
           ? {
               access: "disabled",
               disabledReason: pendingReason,
               pending: true,
+              isArchived: true,
+              label: "استعادة",
             }
           : handlers.mutationBusy
-            ? { access: "disabled", disabledReason: pendingReason }
+            ? {
+                access: "disabled",
+                disabledReason: pendingReason,
+                isArchived: true,
+                label: "استعادة",
+              }
             : {
                 access: "allowed",
+                isArchived: true,
+                label: "استعادة",
                 confirmation: {
                   mode: "shared",
-                  title: "حذف السلسلة",
-                  description: `هل تريد حذف سلسلة «${row.name}»؟ لا يمكن التراجع عن هذا الإجراء.`,
-                  confirmLabel: "حذف",
+                  title: "استعادة السلسلة؟",
+                  description:
+                    "ستعود السلسلة إلى القائمة النشطة كغير منشورة بعد التحقق من الـSlug والتصنيف المرتبط.",
+                  confirmLabel: "استعادة",
                 },
                 onSelect: async () => {
-                  const result = await run(() => handlers.onDelete(row));
+                  const result = await run(() => handlers.onRestore(row));
+                  if (!result.ok) throw new Error(result.message);
+                },
+              },
+      delete:
+        pendingAction === (isTrashView ? "permanent_delete" : "delete")
+          ? {
+              access: "disabled",
+              disabledReason: pendingReason,
+              pending: true,
+              label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+            }
+          : handlers.mutationBusy
+            ? {
+                access: "disabled",
+                disabledReason: pendingReason,
+                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+              }
+            : {
+                access: "allowed",
+                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+                confirmation: isTrashView
+                  ? {
+                      mode: "shared",
+                      title: "حذف السلسلة نهائيًا؟",
+                      description:
+                        "ستُحذف السلسلة نهائيًا ويصبح الـSlug متاحًا. أي Topic مرتبط سيمنع العملية، ولا يمكن التراجع عنها.",
+                      confirmLabel: "حذف نهائي",
+                    }
+                  : {
+                      mode: "shared",
+                      title: "نقل السلسلة إلى المحذوفات؟",
+                      description:
+                        "ستختفي السلسلة من القوائم والاختيارات النشطة ويمكن استعادتها لاحقًا. أي Topic مرتبط سيمنع العملية وسيبقى الـSlug محجوزًا.",
+                      confirmLabel: "نقل إلى المحذوفات",
+                    },
+                onSelect: async () => {
+                  const result = await run(() =>
+                    isTrashView
+                      ? handlers.onPermanentDelete(row)
+                      : handlers.onDelete(row),
+                  );
                   if (!result.ok) throw new Error(result.message);
                 },
               },
     },
   };
 
-  return <AdminDataGridRowActions capability={capability} size="compact" />;
+  return (
+    <AdminDataGridRowActions
+      capability={capability}
+      display={display}
+      size="compact"
+    />
+  );
 }
 
 export type SeriesRowActionHandlers = {
+  view: "active" | "trash";
   rowPendingAction: (id: number) => string | null;
   mutationBusy: boolean;
   onToggle: (row: SeriesListRow) => Promise<AdminActionResult>;
   onDuplicate: (row: SeriesListRow) => Promise<AdminActionResult>;
   onDelete: (row: SeriesListRow) => Promise<AdminActionResult>;
+  onRestore: (row: SeriesListRow) => Promise<AdminActionResult>;
+  onPermanentDelete: (row: SeriesListRow) => Promise<AdminActionResult>;
 };
 
 export function createSeriesColumns(
@@ -247,11 +328,9 @@ export function createSeriesColumns(
       flexible: true,
       sticky: "start",
       primary: true,
-      renderCell: ({ row }) => (
-        <Link
-          href={`/admin/content/series/${row.id}`}
-          className="flex min-w-0 cursor-pointer items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
-        >
+      renderCell: ({ row }) => {
+        const content = (
+          <>
           <SeriesIcon />
           <span
             className="min-w-0 truncate text-sm font-bold text-white"
@@ -262,8 +341,21 @@ export function createSeriesColumns(
           >
             {row.name}
           </span>
-        </Link>
-      ),
+          </>
+        );
+        return handlers.view === "trash" ? (
+          <span className="flex min-w-0 items-center justify-start gap-3 text-right">
+            {content}
+          </span>
+        ) : (
+          <Link
+            href={`/admin/content/series/${row.id}`}
+            className="flex min-w-0 cursor-pointer items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+          >
+            {content}
+          </Link>
+        );
+      },
     },
     {
       key: "status",
@@ -274,12 +366,14 @@ export function createSeriesColumns(
       sortKey: "status",
       minWidth: 104,
       width: 104,
-      renderCell: ({ row }) => {
-        const status = statusMeta(row.status);
-        return (
-          <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-        );
-      },
+      renderCell: ({ row, onMutationResult }) => (
+        <SeriesRowActions
+          row={row}
+          onMutationResult={onMutationResult}
+          handlers={handlers}
+          display="visibility"
+        />
+      ),
     },
     {
       key: "category",
@@ -288,8 +382,8 @@ export function createSeriesColumns(
       hideable: true,
       sortable: true,
       sortKey: "category",
-      minWidth: 160,
-      width: 180,
+      minWidth: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
       renderCell: ({ row }) =>
         singleLine(row.category_name?.trim() ? row.category_name : "—"),
     },
@@ -300,8 +394,8 @@ export function createSeriesColumns(
       hideable: true,
       sortable: true,
       sortKey: "topics_count",
-      minWidth: 80,
-      width: 80,
+      minWidth: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
       renderCell: ({ row }) => (
         <span className="font-en text-sm font-semibold tabular-nums text-white/72">
           {row.topics_count}

@@ -153,6 +153,7 @@ export async function browseTopicCategoriesPickerAjax(options?: { query?: string
     const { data, error } = await getSupabaseAdmin()
       .from("topic_categories")
       .select("id,name,slug,parent_id,sort_order")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true });
 
     if (error) throw new Error(error.message);

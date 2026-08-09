@@ -22,6 +22,7 @@ export const dynamic = "force-dynamic";
 
 type CategoriesSearchParams = {
   q?: string;
+  view?: string;
   status?: string;
   sort?: string;
   page?: string;
@@ -47,6 +48,7 @@ export default async function TopicCategoriesPage({
     new URLSearchParams(
       Object.entries({
         q: queryParams?.q,
+        view: queryParams?.view,
         status: queryParams?.status,
         sort: queryParams?.sort,
         page: queryParams?.page,
@@ -116,6 +118,12 @@ export default async function TopicCategoriesPage({
             <AdminActionButton href="/admin/content/series" variant="dark">
               عرض السلاسل
             </AdminActionButton>
+            <AdminActionButton
+              href="/admin/content/categories?view=trash"
+              variant="dark"
+            >
+              المحذوفات
+            </AdminActionButton>
           </>
         }
       />
@@ -130,6 +138,7 @@ export default async function TopicCategoriesPage({
 
       {listResult.data ? (
         <CategoriesListClient
+          key={query.filters.view}
           initialQuery={query}
           initialResult={listResult.data}
           initialVisibleColumns={visibleColumns}

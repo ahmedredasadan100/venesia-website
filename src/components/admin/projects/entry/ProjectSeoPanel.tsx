@@ -51,6 +51,7 @@ export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot
         },
       }}
       initial={{
+        profile: "entity",
         title: project.arabic_name,
         description: project.general_description,
         content: project.overview_body,
@@ -66,6 +67,7 @@ export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot
         robotsFollow: project.robots_follow,
         ogImage: project.og_image,
         ogImageAlt: project.og_image_alt,
+        faq: [],
       }}
       correctionTargets={{
         "seo-title-length": { tabId: "seo", targetId: PROJECT_SEO_FIELD_IDS.seoTitle },

@@ -4,24 +4,34 @@ import {
   describeSeoLength,
   type SeoLengthAssessment,
 } from "./seo-length-standards";
+import {
+  markdownToRichTextHtml,
+  normalizeArticleMarkdown,
+  stripHtml,
+} from "../rich-text/html-utils";
 
 export type FaqItem = {
   question?: string;
   answer?: string;
 };
 
+export type SeoScoreProfile = "article" | "entity";
+
 export type SeoScoreInput = {
+  profile: SeoScoreProfile;
   title: string;
-  excerpt: string;
+  description: string;
   slug: string;
   content: string;
   image: string;
   imageAlt: string;
+  ogImage: string;
+  ogImageAlt: string;
   seoTitle: string;
   seoDescription: string;
   seoKeywords: string[];
   focusKeyword: string;
-  faq?: FaqItem[];
+  faq: FaqItem[];
 };
 
 export type SeoIssue = {
@@ -32,58 +42,81 @@ export type SeoIssue = {
   hint: string;
 };
 
-export type EntitySeoScoreInput = {
-  title: string;
-  description: string;
-  content: string;
-  slug: string;
-  image: string;
-  imageAlt: string;
-  seoTitle: string;
-  seoDescription: string;
-  seoKeywords: string[];
-  focusKeyword: string;
-  canonicalUrl?: string;
+export type SeoScoreMetric = {
+  id: string;
+  label: string;
+  value: string;
+};
+
+export type SeoScoreOutput = {
+  score: number;
+  label: string;
+  blockingErrors: number;
+  issues: SeoIssue[];
+  metrics: SeoScoreMetric[];
 };
 
 function hasValue(value?: string | null) {
   return Boolean(value && value.trim().length > 0);
 }
 
-export function countWords(text: string) {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
-
 function normalizeText(text: string) {
   return text
+    .normalize("NFKC")
     .toLowerCase()
-    .replace(/[\u064B-\u065F\u0670]/g, "")
-    .replace(/[أإآ]/g, "ا")
+    .replace(/[\u0640\u064B-\u065F\u0670]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
     .replace(/ة/g, "ه")
     .replace(/ى/g, "ي");
 }
 
-function countMatches(text: string, keyword: string) {
-  const cleanKeyword = normalizeText(keyword.trim());
-  if (!cleanKeyword) return 0;
-
-  const cleanText = normalizeText(text);
-  const escapedKeyword = cleanKeyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return cleanText.match(new RegExp(escapedKeyword, "g"))?.length ?? 0;
+function renderMarkdown(text: string) {
+  return markdownToRichTextHtml(normalizeArticleMarkdown(text));
 }
 
-function countHeadings(content: string, level: 1 | 2 | 3) {
-  const pattern = level === 1 ? /^#\s+/gm : level === 2 ? /^##\s+/gm : /^###\s+/gm;
-  return content.match(pattern)?.length ?? 0;
+function getVisibleText(rendered: string) {
+  return stripHtml(
+    rendered.replace(/<\/(?:h[1-3]|blockquote|ul|ol)>/gi, "$& "),
+  );
 }
 
-function getFirstWords(content: string, limit = 150) {
-  return content.trim().split(/\s+/).slice(0, limit).join(" ");
+function toVisibleText(text: string) {
+  return getVisibleText(renderMarkdown(text));
 }
 
-function includesText(source: string, target: string) {
-  if (!source || !target) return false;
-  return normalizeText(source).includes(normalizeText(target));
+function tokenizeVisibleText(text: string) {
+  return normalizeText(text).match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function getWordTokens(text: string) {
+  return tokenizeVisibleText(toVisibleText(text));
+}
+
+export function countWords(text: string) {
+  return getWordTokens(text).length;
+}
+
+function countTokenMatches(
+  textTokens: readonly string[],
+  keywordTokens: readonly string[],
+) {
+  if (!keywordTokens.length) return 0;
+
+  let matches = 0;
+  for (let index = 0; index <= textTokens.length - keywordTokens.length; index += 1) {
+    if (keywordTokens.every((token, offset) => textTokens[index + offset] === token)) {
+      matches += 1;
+    }
+  }
+  return matches;
+}
+
+function countHeadings(rendered: string, level: 1 | 2 | 3) {
+  return rendered.match(new RegExp(`<h${level}>`, "g"))?.length ?? 0;
+}
+
+function includesTokens(source: string, keywordTokens: readonly string[]) {
+  return countTokenMatches(getWordTokens(source), keywordTokens) > 0;
 }
 
 function addScore(
@@ -127,39 +160,48 @@ function addLengthScore(
   return successful ? points : 0;
 }
 
-function clampScore(score: number) {
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
 function assignIssueIds(issues: SeoIssue[], ids: readonly string[]) {
   issues.forEach((issue, index) => {
     issue.id = ids[index] ?? `issue-${index + 1}`;
   });
 }
 
-export function analyzeTopicSeo(input: SeoScoreInput) {
-  const faq = input.faq ?? [];
+function analyzeArticleSeo(input: SeoScoreInput) {
+  const faq = input.faq;
   const filledFaqCount = faq.filter((item) => item.question?.trim() && item.answer?.trim()).length;
 
-  const wordCount = countWords(input.content);
-  const charCount = input.content.length;
-  const h1Count = countHeadings(input.content, 1);
-  const h2Count = countHeadings(input.content, 2);
-  const h3Count = countHeadings(input.content, 3);
-  const keywordMatches = countMatches(input.content, input.focusKeyword);
-  const keywordDensity =
+  const renderedContent = renderMarkdown(input.content);
+  const visibleContent = getVisibleText(renderedContent);
+  const visibleContentTokens = getWordTokens(visibleContent);
+  const firstContentTokens = tokenizeVisibleText(visibleContent).slice(0, 150);
+  const keywordTokens = getWordTokens(input.focusKeyword);
+  const wordCount = visibleContentTokens.length;
+  const charCount = visibleContent.length;
+  const h1Count = countHeadings(renderedContent, 1);
+  const h2Count = countHeadings(renderedContent, 2);
+  const h3Count = countHeadings(renderedContent, 3);
+  const keywordMatches = countTokenMatches(
+    visibleContentTokens,
+    keywordTokens,
+  );
+  const keywordWordCount = keywordTokens.length;
+  const rawKeywordDensity =
     wordCount > 0 && keywordMatches > 0
-      ? Number(((keywordMatches / wordCount) * 100).toFixed(1))
+      ? (keywordMatches * keywordWordCount * 100) / wordCount
       : 0;
+  const keywordDensity = Number(rawKeywordDensity.toFixed(2));
 
-  const keywordInTitle =
-    includesText(input.title, input.focusKeyword) || includesText(input.seoTitle, input.focusKeyword);
-  const keywordInDescription =
-    includesText(input.excerpt, input.focusKeyword) ||
-    includesText(input.seoDescription, input.focusKeyword);
-  const keywordInFirstWords = includesText(getFirstWords(input.content), input.focusKeyword);
-  const keywordInAlt = includesText(input.imageAlt, input.focusKeyword);
-  const keywordInSlug = includesText(input.slug.replace(/-/g, " "), input.focusKeyword);
+  const effectiveTitle = input.seoTitle.trim() || input.title.trim();
+  const effectiveDescription =
+    input.seoDescription.trim() || input.description.trim();
+  const keywordInTitle = includesTokens(effectiveTitle, keywordTokens);
+  const keywordInDescription = includesTokens(
+    effectiveDescription,
+    keywordTokens,
+  );
+  const keywordInFirstWords =
+    countTokenMatches(firstContentTokens, keywordTokens) > 0;
+  const keywordInAlt = includesTokens(input.imageAlt, keywordTokens);
   const seoTitleLength = assessSeoLength(
     input.seoTitle,
     SEO_LENGTH_STANDARDS.title,
@@ -185,7 +227,7 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
     seoTitleLength,
     "SEO Title مضبوط",
     "SEO Title محتاج ضبط",
-    14,
+    12,
   );
 
   seoScore += addLengthScore(
@@ -193,7 +235,7 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
     seoDescriptionLength,
     "Meta Description مضبوط",
     "Meta Description محتاج ضبط",
-    14,
+    12,
   );
 
   seoScore += addScore(
@@ -201,7 +243,7 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
     hasValue(input.focusKeyword),
     "Focus Keyword موجود",
     "Focus Keyword غير موجود",
-    10,
+    8,
     "حدد كلمة أو عبارة بحثية رئيسية واحدة تقود المقال.",
     "error"
   );
@@ -245,7 +287,7 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
 
   seoScore += addScore(
     seoIssues,
-    input.imageAlt.length >= 35 && input.imageAlt.length <= 140,
+    hasValue(input.image) && input.imageAlt.length >= 35 && input.imageAlt.length <= 140,
     "Alt Text مناسب",
     "Alt Text محتاج تحسين",
     8,
@@ -273,20 +315,20 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
 
   seoScore += addScore(
     seoIssues,
-    (keywordInSlug && input.slug.length <= 80) || (input.slug.length >= 8 && input.slug.length <= 80),
-    "Slug واضح ومناسب",
-    "Slug يحتاج تحسين",
-    5,
-    "الرابط الأفضل قصير، واضح، ولا يتجاوز 80 حرفًا."
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) && input.slug.length <= 80,
+    "Slug صالح ومقروء",
+    "Slug غير صالح أو طويل",
+    6,
+    "استخدم حروفًا إنجليزية صغيرة وأرقامًا وشرطات، وبحد أقصى 80 حرفًا."
   );
 
   seoScore += addScore(
     seoIssues,
-    keywordMatches >= 2 && keywordDensity <= 2.5,
+    rawKeywordDensity >= 0.5 && rawKeywordDensity <= 2.5,
     "تكرار الكلمة طبيعي",
-    keywordDensity > 2.5 ? "تكرار الكلمة زائد" : "الكلمة قليلة داخل المقال",
+    rawKeywordDensity > 2.5 ? "تكرار الكلمة زائد" : "الكلمة قليلة داخل المقال",
     12,
-    "استهدف كثافة طبيعية تقريبية بين 0.5% و2% بدون حشو."
+    `الكثافة الحالية ${keywordDensity}%. النطاق الإرشادي من 0.5% إلى 2.5%، ويُحسب بعدد كلمات العبارة داخل النص المرئي.`
   );
 
   contentScore += addScore(
@@ -300,12 +342,11 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
 
   contentScore += addScore(
     contentIssues,
-    h1Count === 1,
-    "يوجد H1 واحد واضح",
-    h1Count === 0 ? "لا يوجد H1" : "يوجد أكثر من H1",
+    h1Count <= 1,
+    h1Count === 0 ? "لا يوجد H1 مكرر داخل Markdown" : "يوجد H1 واحد كحد أقصى داخل Markdown",
+    "يوجد أكثر من H1 داخل Markdown",
     14,
-    "ابدأ المقال بعنوان رئيسي واحد فقط بصيغة # عنوان المقال.",
-    "error"
+    "عنوان الصفحة العام قد يملك H1؛ لذلك يتحقق المحلل فقط من عدم تكرار أكثر من H1 داخل محتوى Markdown نفسه."
   );
 
   contentScore += addScore(
@@ -337,11 +378,11 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
 
   contentScore += addScore(
     contentIssues,
-    h3Count >= 1,
-    "يوجد تقسيم H3",
-    "لا يوجد H3",
+    wordCount < 1200 || h3Count >= 1,
+    wordCount < 1200 ? "المحتوى لا يحتاج تقسيم H3 إضافيًا" : "يوجد تقسيم H3 للمحتوى الطويل",
+    "المحتوى الطويل يحتاج تقسيم H3",
     6,
-    "مفيد في المقالات الطويلة لتقسيم التفاصيل."
+    "يصبح H3 إرشادًا مفيدًا فقط عندما يتجاوز المحتوى المرئي 1200 كلمة."
   );
 
   contentScore += addScore(
@@ -355,7 +396,7 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
 
   contentScore += addScore(
     contentIssues,
-    input.excerpt.length >= 80 && input.excerpt.length <= 220,
+    input.description.length >= 80 && input.description.length <= 220,
     "الوصف المختصر مناسب للكروت",
     "الوصف المختصر يحتاج ضبط",
     6,
@@ -384,7 +425,7 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
 
   readinessScore += addScore(
     readinessIssues,
-    hasValue(input.excerpt) && input.excerpt.length >= 20,
+    hasValue(input.description) && input.description.length >= 20,
     "الوصف المختصر موجود",
     "الوصف المختصر ناقص",
     10,
@@ -394,7 +435,7 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
 
   readinessScore += addScore(
     readinessIssues,
-    input.content.length >= 300,
+    charCount >= 300,
     "المحتوى الأساسي موجود",
     "المحتوى قصير جدًا",
     15,
@@ -498,11 +539,9 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
     "faq",
   ]);
 
-  seoScore = clampScore(seoScore);
-  contentScore = clampScore(contentScore);
-  readinessScore = clampScore(readinessScore);
-
-  const overallScore = clampScore(seoScore * 0.45 + contentScore * 0.3 + readinessScore * 0.25);
+  const overallScore = Math.round(
+    seoScore * 0.45 + contentScore * 0.3 + readinessScore * 0.25,
+  );
 
   const label =
     overallScore >= 90
@@ -541,25 +580,25 @@ export function analyzeTopicSeo(input: SeoScoreInput) {
   };
 }
 
-/**
- * Entity-neutral subset of the accepted SEO Capability. Topic-specific FAQ,
- * heading and publishing signals intentionally stay in analyzeTopicSeo.
- */
-export function analyzeEntitySeo(input: EntitySeoScoreInput) {
+function analyzeEntityProfile(input: SeoScoreInput) {
   const issues: SeoIssue[] = [];
   const effectiveTitle = input.seoTitle.trim() || input.title.trim();
   const effectiveDescription =
     input.seoDescription.trim() || input.description.trim();
   const keyword = input.focusKeyword.trim();
-  const combinedContent = `${input.title} ${input.description} ${input.content}`
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&(?:nbsp|amp|quot|lt|gt);/gi, " ");
-  const wordCount = countWords(combinedContent);
-  const keywordMatches = countMatches(combinedContent, keyword);
-  const keywordDensity =
+  const combinedContent = toVisibleText(
+    `${input.title} ${input.description} ${input.content}`,
+  );
+  const combinedTokens = getWordTokens(combinedContent);
+  const keywordTokens = getWordTokens(keyword);
+  const wordCount = combinedTokens.length;
+  const keywordMatches = countTokenMatches(combinedTokens, keywordTokens);
+  const keywordWordCount = keywordTokens.length;
+  const rawKeywordDensity =
     wordCount > 0 && keywordMatches > 0
-      ? Number(((keywordMatches / wordCount) * 100).toFixed(1))
+      ? (keywordMatches * keywordWordCount * 100) / wordCount
       : 0;
+  const keywordDensity = Number(rawKeywordDensity.toFixed(2));
   let score = 0;
 
   score += addLengthScore(
@@ -587,7 +626,7 @@ export function analyzeEntitySeo(input: EntitySeoScoreInput) {
   );
   score += addScore(
     issues,
-    includesText(effectiveTitle, keyword),
+    includesTokens(effectiveTitle, keywordTokens),
     "الكلمة المفتاحية مستخدمة في العنوان",
     "استخدم الكلمة المفتاحية في العنوان",
     10,
@@ -595,7 +634,7 @@ export function analyzeEntitySeo(input: EntitySeoScoreInput) {
   );
   score += addScore(
     issues,
-    includesText(effectiveDescription, keyword),
+    includesTokens(effectiveDescription, keywordTokens),
     "الكلمة المفتاحية مستخدمة في الوصف",
     "استخدم الكلمة المفتاحية في وصف Meta",
     10,
@@ -603,7 +642,7 @@ export function analyzeEntitySeo(input: EntitySeoScoreInput) {
   );
   score += addScore(
     issues,
-    includesText(input.content, keyword),
+    includesTokens(input.content, keywordTokens),
     "الكلمة المفتاحية موجودة في المحتوى",
     "استخدم الكلمة المفتاحية في المحتوى",
     10,
@@ -619,19 +658,19 @@ export function analyzeEntitySeo(input: EntitySeoScoreInput) {
   );
   score += addScore(
     issues,
-    !input.image.trim() || Boolean(input.imageAlt.trim()),
+    Boolean(input.image.trim()) && Boolean(input.imageAlt.trim()),
     "النص البديل للصورة متاح",
-    "أضف النص البديل للصورة",
+    input.image.trim() ? "أضف النص البديل للصورة" : "أضف صورة المشاركة أولًا",
     8,
     "صف صورة المشاركة نصيًا.",
   );
   score += addScore(
     issues,
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) && input.slug.length <= 80,
-    "الرابط يدعم الكلمة المفتاحية",
-    "حسّن الرابط قبل الحفظ الأول",
+    "Slug صالح ومقروء",
+    "Slug غير صالح أو طويل",
     8,
-    "حافظ على Slug قصير ومقروء.",
+    "استخدم حروفًا إنجليزية صغيرة وأرقامًا وشرطات، وبحد أقصى 80 حرفًا.",
   );
   score += addScore(
     issues,
@@ -663,7 +702,7 @@ export function analyzeEntitySeo(input: EntitySeoScoreInput) {
       }
     }
   }
-  const overallScore = clampScore(score);
+  const overallScore = Math.round(score);
 
   return {
     overallScore,
@@ -680,5 +719,118 @@ export function analyzeEntitySeo(input: EntitySeoScoreInput) {
     keywordDensity,
     blockingErrors: issues.filter((issue) => issue.type === "error").length,
     issues,
+  };
+}
+
+function normalizeSeoScoreInput(input: SeoScoreInput): SeoScoreInput {
+  const keywordKeys = new Set<string>();
+  const seoKeywords = input.seoKeywords.flatMap((keyword) => {
+    const trimmed = keyword.trim();
+    if (!trimmed) return [];
+    const key = normalizeText(trimmed);
+    if (keywordKeys.has(key)) return [];
+    keywordKeys.add(key);
+    return [trimmed];
+  });
+  const faq = input.faq.flatMap((item) => {
+    const question = item.question?.trim() ?? "";
+    const answer = item.answer?.trim() ?? "";
+    return question || answer ? [{ question, answer }] : [];
+  });
+  const hasOgImage = Boolean(input.ogImage.trim());
+
+  return {
+    ...input,
+    image: hasOgImage ? input.ogImage : input.image,
+    imageAlt: hasOgImage ? input.ogImageAlt : input.imageAlt,
+    seoKeywords,
+    faq,
+  };
+}
+
+function buildSeoScoreMetrics(input: SeoScoreInput, analysis: {
+  keywordDensity: number;
+  faqCount?: number;
+}): SeoScoreMetric[] {
+  return [
+    {
+      id: "keyword-density",
+      label: "كثافة الكلمة المفتاحية",
+      value: input.focusKeyword.trim()
+        ? `${analysis.keywordDensity}%`
+        : "غير متاح",
+    },
+    ...(input.profile === "article"
+      ? [{
+          id: "faq-count",
+          label: "أسئلة FAQ المكتملة",
+          value: String(analysis.faqCount ?? 0),
+        }]
+      : []),
+  ];
+}
+
+/**
+ * The single public SEO Score owner. Every consumer submits the same input
+ * contract and receives the same official `score` output. The profile is an
+ * entity declaration; consumers never select a calculator or score variant.
+ * Canonical overrides and robots directives stay outside the score: the
+ * current metadata/persistence owners already validate and resolve them, and
+ * an explicit noindex/nofollow can be a correct product decision rather than
+ * a quality defect.
+ */
+export function analyzeEntitySeo(input: SeoScoreInput): SeoScoreOutput {
+  const normalizedInput = normalizeSeoScoreInput(input);
+
+  if (normalizedInput.profile === "article") {
+    const articleAnalysis = analyzeArticleSeo(normalizedInput);
+    const severity = { success: 0, muted: 1, warning: 2, error: 3 } as const;
+    const mergedIssues = new Map<string, SeoIssue>();
+    const weightedSections = [
+      [articleAnalysis.issues.seo, 0.45],
+      [articleAnalysis.issues.content, 0.3],
+      [articleAnalysis.issues.readiness, 0.25],
+    ] as const;
+
+    for (const [sectionIssues, sectionWeight] of weightedSections) {
+      for (const issue of sectionIssues) {
+        const id = issue.id ?? `issue-${mergedIssues.size + 1}`;
+        const weightedPoints = Number((issue.points * sectionWeight).toFixed(2));
+        const existing = mergedIssues.get(id);
+        if (!existing) {
+          mergedIssues.set(id, { ...issue, id, points: weightedPoints });
+          continue;
+        }
+
+        existing.points = Number((existing.points + weightedPoints).toFixed(2));
+        if (severity[issue.type] > severity[existing.type]) {
+          existing.type = issue.type;
+          existing.label = issue.label;
+          existing.hint = issue.hint;
+        }
+      }
+    }
+
+    const issues = [...mergedIssues.values()];
+    const score = Math.round(
+      issues.reduce((total, issue) => total + issue.points, 0),
+    );
+
+    return {
+      score,
+      label: articleAnalysis.label,
+      blockingErrors: issues.filter((issue) => issue.type === "error").length,
+      issues,
+      metrics: buildSeoScoreMetrics(normalizedInput, articleAnalysis),
+    };
+  }
+
+  const entityAnalysis = analyzeEntityProfile(normalizedInput);
+  return {
+    score: entityAnalysis.overallScore,
+    label: entityAnalysis.label,
+    blockingErrors: entityAnalysis.blockingErrors,
+    issues: entityAnalysis.issues,
+    metrics: buildSeoScoreMetrics(normalizedInput, entityAnalysis),
   };
 }

@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { formatAdminDateTime } from "../../../lib/content-dates";
 import { getContentTypeLabel } from "../../../lib/admin/content/content-types";
-import { getContentStatusMetadata } from "../../../lib/admin/content/content-status-metadata";
 import { adminContentTopicPath } from "../../../lib/admin/content-routes";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
 import type { AdminEntityColumnDef } from "../../../lib/admin/entity-list";
 import { AdminStatusPill } from "../ui";
 import {
-  AdminDataGridActionIcon,
-  ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
 } from "../ui/AdminDataGrid";
@@ -36,7 +33,11 @@ export type UnifiedContentColumnKey =
 export type UnifiedContentSortKey =
   | "id"
   | "title"
+  | "content_type"
   | "category"
+  | "series"
+  | "featured"
+  | "seo"
   | "views"
   | "created_at"
   | "updated_at"
@@ -68,14 +69,16 @@ function singleLine(value?: string | null, fallback = "—") {
 }
 
 const TOPICS_COMPACT_COLUMN_WIDTHS = {
-  status: 88,
-  contentType: 52,
-  category: 88,
-  featured: 44,
-  seo: 76,
+  status: 100,
+  contentType: 88,
+  category: 112,
+  series: 180,
+  featured: 72,
+  seo: 84,
 } as const;
 
-const TOPICS_TITLE_MIN_WIDTH = 170;
+const TOPICS_TITLE_MIN_WIDTH = 152;
+const TOPICS_TITLE_TEXT_BUDGET = 184;
 
 function compactSingleLine(value?: string | null, fallback = "—") {
   const text = value?.trim() || fallback;
@@ -134,17 +137,26 @@ export function createUnifiedContentColumns(
               strokeLinecap="round"
             />
           </svg>
-          <Link
-            href={adminContentTopicPath(row.id, { returnTo: currentListPath })}
-            className="block min-w-0 flex-1 cursor-pointer truncate whitespace-nowrap text-right text-sm font-bold text-white transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
-            style={{
-              maxWidth:
-                ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx,
-            }}
-            title={row.title || "بدون عنوان"}
-          >
-            {row.title || "بدون عنوان"}
-          </Link>
+          {rowActionHandlers?.view === "trash" ? (
+            <span
+              className="block min-w-0 flex-1 truncate whitespace-nowrap text-right text-sm font-bold text-white/82"
+              style={{ maxWidth: TOPICS_TITLE_TEXT_BUDGET }}
+              title={row.title || "بدون عنوان"}
+            >
+              {row.title || "بدون عنوان"}
+            </span>
+          ) : (
+            <Link
+              href={adminContentTopicPath(row.id, { returnTo: currentListPath })}
+              className="block min-w-0 flex-1 cursor-pointer truncate whitespace-nowrap text-right text-sm font-bold text-white transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+              style={{
+                maxWidth: TOPICS_TITLE_TEXT_BUDGET,
+              }}
+              title={row.title || "بدون عنوان"}
+            >
+              {row.title || "بدون عنوان"}
+            </Link>
+          )}
         </div>
       ),
     },
@@ -157,11 +169,19 @@ export function createUnifiedContentColumns(
       sortKey: "status",
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.status,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.status,
-      renderCell: ({ row }) => {
-        const status = getContentStatusMetadata(row.status);
-        return (
-          <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-        );
+      renderCell: ({ row, onMutationResult }) => {
+        if (row.deleted_at) {
+          return <AdminStatusPill tone="red">في المحذوفات</AdminStatusPill>;
+        }
+        return rowActionHandlers ? (
+          <UnifiedContentRowActions
+            row={row}
+            currentListPath={currentListPath}
+            onMutationResult={onMutationResult}
+            handlers={rowActionHandlers}
+            display="visibility"
+          />
+        ) : null;
       },
     },
     {
@@ -169,7 +189,8 @@ export function createUnifiedContentColumns(
       label: "المحتوى",
       defaultVisible: true,
       hideable: true,
-      sortable: false,
+      sortable: true,
+      sortKey: "content_type",
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.contentType,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.contentType,
       renderCell: ({ row }) =>
@@ -196,8 +217,10 @@ export function createUnifiedContentColumns(
       label: "السلسلة",
       defaultVisible: true,
       hideable: true,
-      sortable: false,
-      minWidth: 170,
+      sortable: true,
+      sortKey: "series",
+      minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.series,
+      width: TOPICS_COMPACT_COLUMN_WIDTHS.series,
       renderCell: ({ row }) => singleLine(row.series_name),
     },
     {
@@ -205,36 +228,28 @@ export function createUnifiedContentColumns(
       label: "مميز",
       defaultVisible: true,
       hideable: true,
-      sortable: false,
+      sortable: true,
+      sortKey: "featured",
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.featured,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.featured,
-      renderCell: ({ row }) => {
-        const label = row.is_featured ? "مميز" : "غير مميز";
-        return (
-          <span
-            role="img"
-            aria-label={label}
-            title={label}
-            className={`inline-flex size-7 items-center justify-center rounded-full border ${
-              row.is_featured
-                ? "border-[#D8B87A]/35 bg-[#D8B87A]/12 text-[#E7B94F]"
-                : "border-white/10 bg-white/[0.035] text-white/28"
-            }`}
-          >
-            <AdminDataGridActionIcon
-              action="feature"
-              active={Boolean(row.is_featured)}
-            />
-          </span>
-        );
-      },
+      renderCell: ({ row, onMutationResult }) =>
+        rowActionHandlers ? (
+          <UnifiedContentRowActions
+            row={row}
+            currentListPath={currentListPath}
+            onMutationResult={onMutationResult}
+            handlers={rowActionHandlers}
+            display="featured"
+          />
+        ) : null,
     },
     {
       key: "seo",
       label: "SEO",
       defaultVisible: true,
       hideable: true,
-      sortable: false,
+      sortable: true,
+      sortKey: "seo",
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.seo,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.seo,
       renderCell: ({ row }) => (

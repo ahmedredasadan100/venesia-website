@@ -157,7 +157,8 @@ async function validateCategoryParent(parentId: number | null, currentId?: numbe
 
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
-    .select("id, parent_id");
+    .select("id, parent_id")
+    .is("deleted_at", null);
   if (error) throw error;
 
   const rows = (data ?? []) as Array<{ id: number; parent_id: number | null }>;
@@ -192,6 +193,7 @@ async function validateSeriesCategory(
     .from("topic_categories")
     .select("id, is_active")
     .eq("id", categoryId)
+    .is("deleted_at", null)
     .maybeSingle<{ id: number; is_active: boolean | null }>();
   if (error) throw error;
   if (!data) return "التصنيف المحدد غير موجود.";
@@ -305,6 +307,7 @@ export async function updateCategoryForm(
     .from("topic_categories")
     .select("id, slug, status")
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle<{
       id: number;
       slug: string;
@@ -476,6 +479,7 @@ export async function updateSeriesForm(
     .from("topic_series")
     .select("id, slug, status, category_id")
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle<{
       id: number;
       slug: string;

@@ -32,7 +32,6 @@ import {
   AdminModalPrimaryButton,
   AdminPageExperience,
   AdminPageHeader,
-  AdminStatusPill,
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
@@ -48,6 +47,8 @@ import {
   useAdminBoundedClientPagination,
   type AdminEntityFilterDef,
 } from "../../../../../lib/admin/entity-list";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../../../lib/admin/entity-list/bulk-action-labels";
+import { useAdminBoundedClientInstantMutation } from "../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -170,10 +171,14 @@ export default function HeroManagerClient({
   );
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const [isRefreshPending, startRefreshTransition] = useTransition();
+  const instant = useAdminBoundedClientInstantMutation<HeroRow>({
+    entity: "hero-templates",
+    initialRows: heroes,
+  });
   const search = searchParams.get("q") ?? "";
   const status = searchParams.get("status") ?? "all";
   const filteredHeroes = useMemo(
-    () => heroes.filter((hero) => {
+    () => instant.rows.filter((hero) => {
       if (
         search &&
         !adminCollectionSearchIncludes(
@@ -183,7 +188,7 @@ export default function HeroManagerClient({
       ) return false;
       return status === "all" || hero.status === status;
     }),
-    [heroes, search, status],
+    [instant.rows, search, status],
   );
   const pagination = useAdminBoundedClientPagination({
     rows: filteredHeroes,
@@ -193,7 +198,11 @@ export default function HeroManagerClient({
   const paginatedHeroes = pagination.rows;
   const visibleIds = useMemo(() => paginatedHeroes.map((hero) => hero.id), [paginatedHeroes]);
   const selection = useAdminGridSelection<number>(visibleIds);
-  const isBusy = pendingRowId !== null || isRefreshPending;
+  const isBusy =
+    pendingRowId !== null ||
+    isRefreshPending ||
+    instant.rowPending !== null ||
+    instant.bulkPending !== null;
   const loadFeedback = useMemo(
     () =>
       loadError
@@ -250,6 +259,59 @@ export default function HeroManagerClient({
       return false;
     } finally {
       setPendingRowId(null);
+    }
+  }
+
+  async function runVisibilityMutation(
+    hero: HeroRow,
+    nextStatus: "published" | "unpublished",
+  ) {
+    const successMessage =
+      nextStatus === "published" ? "تم نشر الهيرو." : "أصبح الهيرو غير منشور.";
+    clearFeedback(feedbackChannel);
+    try {
+      await instant.mutateAsync({
+        rowId: hero.id,
+        action: "visibility",
+        optimistic: (cache) =>
+          cache.patchRows((candidate) =>
+            candidate.id === hero.id
+              ? { ...candidate, status: nextStatus }
+              : candidate,
+          ),
+        execute: async () => {
+          await toggleHeroTemplate(
+            mutationFormData({ id: hero.id, next_status: nextStatus }),
+          );
+          return { ok: true, message: successMessage };
+        },
+      });
+      publishFeedback(
+        {
+          variant: "success",
+          title: "تم تنفيذ الإجراء",
+          message: successMessage,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline" },
+      );
+    } catch (error) {
+      publishFeedback(
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline", reveal: true },
+      );
     }
   }
 
@@ -327,9 +389,18 @@ export default function HeroManagerClient({
               selectedIds={selection.selectedIds}
               entityLabel="هيرو"
               options={[
-                { value: "show", label: "إظهار" },
-                { value: "hide", label: "إخفاء" },
-                { value: "delete", label: "حذف" },
+                {
+                  value: "show",
+                  label: ADMIN_BULK_ACTION_LABELS.showSelected,
+                },
+                {
+                  value: "hide",
+                  label: ADMIN_BULK_ACTION_LABELS.hideSelected,
+                },
+                {
+                  value: "delete",
+                  label: ADMIN_BULK_ACTION_LABELS.deleteSelected,
+                },
               ]}
               onClearSelection={selection.clearSelection}
               isBusy={isBusy}
@@ -381,6 +452,9 @@ export default function HeroManagerClient({
             const previewPath = resolveHeroPreviewPath(hero);
             const hidden = { access: "hidden" as const };
             const rowPending = pendingRowId === hero.id;
+            const visibilityPending =
+              instant.rowPending?.rowId === hero.id &&
+              instant.rowPending.action === "visibility";
             const capability: AdminRowActionsCapability = {
               entityType: "hero_template",
               entityId: hero.id,
@@ -403,49 +477,79 @@ export default function HeroManagerClient({
                   ],
                 },
                 copyPublicLink: hidden,
-                visibility: {
-                  access: "allowed",
-                  isVisible: hero.status === "published",
-                  pending: rowPending,
-                  onSelect: async () => {
-                    await runMutation(
-                      hero.id,
-                      () => toggleHeroTemplate(mutationFormData({ id: hero.id, next_status: hero.status === "published" ? "unpublished" : "published" })),
-                      hero.status === "published" ? "أصبح الهيرو غير منشور." : "تم نشر الهيرو.",
-                    );
-                  },
-                },
+                visibility: visibilityPending
+                  ? {
+                      access: "disabled",
+                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                      pending: true,
+                      isVisible: hero.status === "published",
+                    }
+                  : isBusy
+                    ? {
+                        access: "disabled",
+                        disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                        isVisible: hero.status === "published",
+                      }
+                    : {
+                        access: "allowed",
+                        isVisible: hero.status === "published",
+                        onSelect: () =>
+                          runVisibilityMutation(
+                            hero,
+                            hero.status === "published"
+                              ? "unpublished"
+                              : "published",
+                          ),
+                      },
                 featured: hidden,
-                duplicate: {
-                  access: "allowed",
-                  pending: rowPending,
-                  onSelect: async () => {
-                    await runMutation(
-                      hero.id,
-                      () => duplicateHeroTemplate(mutationFormData({ id: hero.id })),
-                      "تم إنشاء نسخة من الهيرو.",
-                    );
-                  },
-                },
+                duplicate:
+                  isBusy && !rowPending
+                    ? {
+                        access: "disabled",
+                        disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                      }
+                    : {
+                        access: "allowed",
+                        pending: rowPending,
+                        onSelect: async () => {
+                          await runMutation(
+                            hero.id,
+                            () =>
+                              duplicateHeroTemplate(
+                                mutationFormData({ id: hero.id }),
+                              ),
+                            "تم إنشاء نسخة من الهيرو.",
+                          );
+                        },
+                      },
                 archive: hidden,
-                delete: {
-                  access: "allowed",
-                  pending: rowPending,
-                  onSelect: async () => {
-                    const succeeded = await runMutation(
-                      hero.id,
-                      () => deleteHeroTemplate(mutationFormData({ id: hero.id })),
-                      "تم حذف الهيرو.",
-                    );
-                    if (!succeeded) throw new Error("hero delete failed");
-                  },
-                  confirmation: {
-                    mode: "shared",
-                    title: "تأكيد حذف الهيرو",
-                    description: `حذف الهيرو «${hero.name}» نهائيًا؟`,
-                    confirmLabel: "حذف الهيرو",
-                  },
-                },
+                delete:
+                  isBusy && !rowPending
+                    ? {
+                        access: "disabled",
+                        disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                      }
+                    : {
+                        access: "allowed",
+                        pending: rowPending,
+                        onSelect: async () => {
+                          const succeeded = await runMutation(
+                            hero.id,
+                            () =>
+                              deleteHeroTemplate(
+                                mutationFormData({ id: hero.id }),
+                              ),
+                            "تم حذف الهيرو.",
+                          );
+                          if (!succeeded) throw new Error("hero delete failed");
+                        },
+                        confirmation: {
+                          mode: "shared",
+                          title: "تأكيد حذف الهيرو",
+                          description: `حذف الهيرو «${hero.name}» نهائيًا؟`,
+                          confirmLabel: "حذف الهيرو",
+                        },
+                      },
               },
             };
 
@@ -476,7 +580,11 @@ export default function HeroManagerClient({
 
                 {visibleColumnSet.has("status") ? (
                   <AdminDataGridStatusCell>
-                    <AdminStatusPill tone={hero.status === "published" ? "green" : "gold"}>{hero.status === "published" ? "منشور" : "غير منشور"}</AdminStatusPill>
+                    <AdminDataGridRowActions
+                      capability={capability}
+                      display="visibility"
+                      size="compact"
+                    />
                   </AdminDataGridStatusCell>
                 ) : null}
 

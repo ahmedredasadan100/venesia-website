@@ -62,6 +62,7 @@ export type {
 export type AdminDataGridRowActionsProps = {
   capability: AdminRowActionsCapability;
   size?: "default" | "compact";
+  display?: "menu" | "visibility" | "featured";
   sticky?: boolean;
   moreButtonRef?: RefObject<HTMLButtonElement | null>;
 };
@@ -192,14 +193,14 @@ function resolveMenuItems(
       kind: "archive",
       target: actions.archive,
       dataGridAction: isArchived ? "restore" : "archive",
-      label: isArchived ? "استعادة" : "أرشفة",
+      label: actions.archive.label ?? (isArchived ? "استعادة" : "أرشفة"),
       tone: "neutral",
     },
     delete: {
       kind: "delete",
       target: actions.delete,
       dataGridAction: "delete",
-      label: "حذف",
+      label: actions.delete.label ?? "حذف",
       tone: "red",
     },
   };
@@ -405,6 +406,7 @@ function restoreResolvedFocus(
 export default function AdminDataGridRowActions({
   capability,
   size = "default",
+  display = "menu",
   sticky = false,
   moreButtonRef,
 }: AdminDataGridRowActionsProps) {
@@ -790,6 +792,77 @@ export default function AdminDataGridRowActions({
     );
   }
 
+  function runInlineAction(target: AdminRowActionTarget) {
+    if (!isAllowedCommand(target) || target.pending) return;
+    if (target.confirmation?.mode === "shared") {
+      const snapshot: AdminEntityListConfirmationSnapshot = {
+        ...target.confirmation,
+        onConfirm: target.onSelect,
+        returnFocusRef: triggerRef,
+        resolveReturnFocus: createReturnFocusResolver(),
+      };
+      if (floating) floating.openConfirmation(snapshot);
+      else setLocalConfirmation(snapshot);
+      return;
+    }
+    void target.onSelect();
+  }
+
+  function renderInlineStatusAction() {
+    const isVisibility = display === "visibility";
+    const resolved = isVisibility
+      ? (() => {
+          const target = capability.actions.visibility;
+          return target.access === "hidden"
+            ? null
+            : { target, active: target.isVisible };
+        })()
+      : (() => {
+          const target = capability.actions.featured;
+          return target.access === "hidden"
+            ? null
+            : { target, active: target.isFeatured };
+        })();
+    if (!resolved) return null;
+
+    const { target, active } = resolved;
+    const enabled = target.access === "allowed" && !target.pending;
+    const actionLabel = isVisibility
+      ? active
+        ? `إخفاء ${capability.entityLabel}`
+        : `إظهار ${capability.entityLabel}`
+      : active
+        ? `إلغاء تمييز ${capability.entityLabel}`
+        : `تمييز ${capability.entityLabel}`;
+    const reason = target.disabledReason;
+
+    return (
+      <span
+        className="inline-flex items-center justify-center"
+        data-admin-row-action={display}
+        data-admin-entity-type={capability.entityType}
+        data-admin-entity-id={String(capability.entityId)}
+        data-admin-row-action-state={actionState(target)}
+      >
+        <AdminDataGridActionButton
+          action={isVisibility ? "visibility" : "feature"}
+          buttonRef={setTriggerNode}
+          size="inline"
+          tone={isVisibility ? undefined : active ? "gold" : "dark"}
+          isCurrentlyHidden={isVisibility ? !active : false}
+          visibilityEntityLabel={capability.entityLabel}
+          active={!isVisibility && active}
+          title={reason ?? actionLabel}
+          ariaLabel={reason ? `${actionLabel}: ${reason}` : actionLabel}
+          ariaPressed={active}
+          disabled={!enabled}
+          pending={target.pending}
+          onClick={enabled ? () => runInlineAction(target) : undefined}
+        />
+      </span>
+    );
+  }
+
   const menu =
     isMounted && isOpen && position
       ? createPortal(
@@ -891,6 +964,36 @@ export default function AdminDataGridRowActions({
         )
       : null;
 
+  const confirmationDialog = (
+    <AdminConfirmDialog
+      open={Boolean(localConfirmation)}
+      title={localConfirmation?.title ?? "تأكيد الإجراء"}
+      description={localConfirmation?.description ?? ""}
+      confirmLabel={localConfirmation?.confirmLabel ?? "تأكيد"}
+      cancelLabel={localConfirmation?.cancelLabel}
+      returnFocusRef={localConfirmation?.returnFocusRef}
+      resolveReturnFocus={localConfirmation?.resolveReturnFocus}
+      onCancel={() => setLocalConfirmation(null)}
+      onConfirm={async () => {
+        const activeConfirmation = localConfirmation;
+        if (!activeConfirmation) return;
+        await activeConfirmation.onConfirm();
+        setLocalConfirmation((current) =>
+          current === activeConfirmation ? null : current,
+        );
+      }}
+    />
+  );
+
+  if (display !== "menu") {
+    return (
+      <>
+        {renderInlineStatusAction()}
+        {confirmationDialog}
+      </>
+    );
+  }
+
   return (
     <>
       <AdminDataGridActionsCell
@@ -937,24 +1040,7 @@ export default function AdminDataGridRowActions({
         </span>
         {menu}
       </AdminDataGridActionsCell>
-      <AdminConfirmDialog
-        open={Boolean(localConfirmation)}
-        title={localConfirmation?.title ?? "تأكيد الإجراء"}
-        description={localConfirmation?.description ?? ""}
-        confirmLabel={localConfirmation?.confirmLabel ?? "تأكيد"}
-        cancelLabel={localConfirmation?.cancelLabel}
-        returnFocusRef={localConfirmation?.returnFocusRef}
-        resolveReturnFocus={localConfirmation?.resolveReturnFocus}
-        onCancel={() => setLocalConfirmation(null)}
-        onConfirm={async () => {
-          const activeConfirmation = localConfirmation;
-          if (!activeConfirmation) return;
-          await activeConfirmation.onConfirm();
-          setLocalConfirmation((current) =>
-            current === activeConfirmation ? null : current,
-          );
-        }}
-      />
+      {confirmationDialog}
     </>
   );
 }

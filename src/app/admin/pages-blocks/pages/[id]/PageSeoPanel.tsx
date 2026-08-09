@@ -113,6 +113,7 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
             },
           }}
           initial={{
+            profile: "entity",
             title: props.pageTitle,
             description: "",
             content: "",
@@ -128,6 +129,7 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
             robotsFollow: props.robotsFollow,
             ogImage: props.ogImage,
             ogImageAlt: props.ogImageAlt,
+            faq: [],
           }}
           correctionTargets={{
             "seo-title-length": { tabId: "seo", targetId: PAGE_SEO_FIELD_IDS.seoTitle },

@@ -381,8 +381,16 @@ check(
     '"id_desc"',
     '"title_asc"',
     '"title_desc"',
+    '"content_type_asc"',
+    '"content_type_desc"',
     '"category_asc"',
     '"category_desc"',
+    '"series_asc"',
+    '"series_desc"',
+    '"featured_asc"',
+    '"featured_desc"',
+    '"seo_asc"',
+    '"seo_desc"',
     '"views_asc"',
     '"views_desc"',
     '"created_at_asc"',
@@ -391,13 +399,30 @@ check(
     '"updated_at_desc"',
     '"created_by_asc"',
     '"created_by_desc"',
+    '"status_asc"',
+    '"status_desc"',
   ]),
 );
 check(
-  "Metrics must query the complete non-deleted topics dataset",
+  "Derived SEO sorting must reuse the existing score owner over the complete filtered server dataset before pagination",
+  loader.includes("isSeoContentSortValue(filters.sort)") &&
+    loader.includes("(seoSourceRows ?? []).map(toUnifiedContentRow)") &&
+    loader.includes("sortUnifiedContentRowsBySeo(") &&
+    loader.includes('.select(CONTENT_LIST_SELECT, { count: "exact" })') &&
+    loader.includes("while (seoSourceRows.length < totalCount)") &&
+    !loader.includes("const batchSize = 500") &&
+    loader.includes(".slice(from, to + 1)") &&
+    loader.includes("seo_score: getUnifiedContentSeoScore(source)"),
+);
+check(
+  "Metrics must derive active summaries and SEO average from one complete Topics scan",
   loader.includes('supabase.from("topics")') &&
+    loader.includes('.select(CONTENT_METRICS_SELECT, { count: "exact" })') &&
     loader.includes('.is("deleted_at", null)') &&
-    !/loadUnifiedContentMetrics[\s\S]*?\.range\(/.test(loader),
+    loader.includes("while (!activeError && activeRows.length < activeCount)") &&
+    loader.includes('row.status === "published"') &&
+    loader.includes('row.status === "unpublished"') &&
+    !loader.includes("const base = () =>"),
 );
 
 const filters = read("src/components/admin/content/UnifiedContentFilters.tsx");
@@ -420,6 +445,11 @@ check(
 );
 
 const columns = read("src/components/admin/content/unified-content-columns.tsx");
+const unifiedRowActions = read(
+  "src/components/admin/content/UnifiedContentRowActions.tsx",
+);
+const featuredColumnSource =
+  columns.match(/key: "featured"[\s\S]*?key: "seo"/)?.[0] ?? "";
 const columnsPath = "src/components/admin/content/unified-content-columns.tsx";
 const columnFactoryContract = getColumnFactoryContract(
   columnsPath,
@@ -436,6 +466,9 @@ const topicsTitleMinWidth = getNumericConst(
 const topicsAdapter = read(
   "src/lib/admin/content/entity-list-adapters/topics.ts",
 );
+const topicsSortContract = read(
+  "src/lib/admin/content/entity-list-contracts/topics.ts",
+);
 const topicsListConfig = read("src/lib/admin/content/topics-list-config.ts");
 check(
   "Required optional columns must be available",
@@ -444,7 +477,9 @@ check(
 check(
   "Title and actions columns must be fixed",
   /key: "title"[\s\S]*?hideable: false/.test(columns) &&
-    /key: "actions"[\s\S]*?hideable: false/.test(columns),
+    /key: "actions"[\s\S]*?hideable: false[\s\S]*?sortable: false[\s\S]*?minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*?width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*?sticky: "end"/.test(
+      columns,
+    ),
 );
 check(
   "The title must stay a single-line ellipsis link",
@@ -482,29 +517,58 @@ check(
     ]) &&
     JSON.stringify(compactColumnWidths) ===
       JSON.stringify({
-        status: 88,
-        contentType: 52,
-        category: 88,
-        featured: 44,
-        seo: 76,
+        status: 100,
+        contentType: 88,
+        category: 112,
+        series: 180,
+        featured: 72,
+        seo: 84,
       }) &&
-    topicsTitleMinWidth === 170,
+    topicsTitleMinWidth === 152,
 );
 check(
-  "Featured must use the shared icon and SEO must follow it",
-  /key: "featured"[\s\S]*?AdminDataGridActionIcon[\s\S]*?key: "seo"/.test(
-    columns,
-  ),
+  "Logical Topics columns must declare shared Asc/Desc sort keys while Actions remains non-sortable",
+  [
+    ["title", "title"],
+    ["status", "status"],
+    ["content_type", "content_type"],
+    ["category", "category"],
+    ["series", "series"],
+    ["featured", "featured"],
+    ["seo", "seo"],
+  ].every(([key, sortKey]) =>
+    new RegExp(`key: "${key}"[\\s\\S]*?sortable: true[\\s\\S]*?sortKey: "${sortKey}"`).test(columns),
+  ) &&
+    ["title", "status", "content_type", "category", "series", "featured", "seo"].every((field) =>
+      topicsSortContract.includes(`"${field}"`),
+    ) &&
+    /key: "actions"[\s\S]*?sortable: false/.test(columns),
 );
 check(
-  "Topics rows must expose the existing SEO truth through the current adapter",
+  "Featured delegates the shared inline Star contract, pending state, mutation, and feedback to existing owners",
+  featuredColumnSource.includes("<UnifiedContentRowActions") &&
+    featuredColumnSource.includes('display="featured"') &&
+    !featuredColumnSource.includes("<button") &&
+    !featuredColumnSource.includes("AdminDataGridActionIcon") &&
+    unifiedRowActions.includes('display?: "menu" | "visibility" | "featured"') &&
+    unifiedRowActions.includes('pendingAction === "featured"') &&
+    unifiedRowActions.includes("handlers.onFeatured(row)") &&
+    unifiedRowActions.includes("onMutationResult?.(resolved)"),
+);
+check(
+  "Topics rows and metrics must expose one official SEO score through the current owner contract",
   containsAll(loader, [
-    "analyzeTopicSeo",
-    ").seoScore",
     "analyzeEntitySeo",
-    ").overallScore",
+    'profile: row.content_type === "article" ? "article" : "entity"',
+    "}).score",
     "seo_score: getUnifiedContentSeoScore(source)",
+    "getUnifiedContentSeoScore(row)",
+    '.from("admin_content_topics")',
+    ".select(CONTENT_LIST_SELECT)",
   ]) &&
+    !loader.includes("analyzeTopicSeo") &&
+    !loader.includes(".seoScore") &&
+    !loader.includes(".overallScore") &&
     topicsAdapter.includes("seo_score: z.number().int().min(0).max(100)") &&
     topicsListConfig.includes('"seo"'),
 );
@@ -512,8 +576,12 @@ check(
 const list = read("src/components/admin/content/UnifiedContentList.tsx");
 const topicsPagePath = "src/app/admin/content/topics/page.tsx";
 const topicsClientPath = "src/components/admin/content/TopicsListClient.tsx";
+const topicsClient = read(topicsClientPath);
 const unifiedListPath = "src/components/admin/content/UnifiedContentList.tsx";
 const entityListPath = "src/components/admin/entity-list/AdminEntityList.tsx";
+const dataEngineClient = read(
+  "src/lib/admin/entity-list/data-engine/client-controller.ts",
+);
 const topicsPage = read(topicsPagePath);
 const preferences = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx");
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
@@ -599,7 +667,7 @@ check(
   entityListTable.includes("<AdminDataGrid") && dataGrid.includes("overflow-x-auto"),
 );
 check(
-  "Flexible Topics geometry must fit the authenticated 1280px admin shell without sticky-column overlap",
+  "Comfortable Topics geometry must preserve the shared horizontal-scroll and sticky-actions boundary",
   entityListTable.includes("column.flexible") &&
     entityListTable.includes("? column.minWidth") &&
     46 +
@@ -607,11 +675,27 @@ check(
       compactColumnWidths.status +
       compactColumnWidths.contentType +
       compactColumnWidths.category +
-      170 +
+      compactColumnWidths.series +
       compactColumnWidths.featured +
       compactColumnWidths.seo +
       144 <=
-      878,
+      980 &&
+    entityListTable.includes("AdminDataGridStickyActionsCell"),
+);
+check(
+  "Shared Entity List sorting must remain declarative and sort-key typed for every adopter",
+  entityListTable.includes("type SortMode<TSortKey extends string>") &&
+    entityListTable.includes("onToggle: (sortKey: TSortKey) => void") &&
+    entityListTable.includes("sortMode?: SortMode<TSortKey>") &&
+    entityListTable.includes("column.sortable") &&
+    entityListTable.includes("column.sortKey"),
+);
+check(
+  "Topics sorting must use the current instant query owner without a full reload",
+  topicsClient.includes("controller.setSort(") &&
+    dataEngineClient.includes('behavior === "replace" ? "replaceState" : "pushState"') &&
+    !dataEngineClient.includes("location.reload(") &&
+    !dataEngineClient.includes("router.refresh("),
 );
 check(
   "Bulk actions must use the shared Admin listbox select",

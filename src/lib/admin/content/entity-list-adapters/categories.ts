@@ -32,6 +32,7 @@ const categoryMetricsSchema = z.strictObject({
   unpublished: z.coerce.number().int().nonnegative().finite(),
   topics: z.coerce.number().int().nonnegative().finite(),
   series: z.coerce.number().int().nonnegative().finite(),
+  trashed: z.coerce.number().int().nonnegative().finite(),
 });
 
 type CategoryMetrics = z.output<typeof categoryMetricsSchema>;
@@ -74,6 +75,7 @@ export async function loadCategoriesEntityListResult(
       p_sort_direction: query.sort.direction,
       p_search: query.search,
       p_status: query.filters.status,
+      p_view: query.filters.view,
     },
   );
   if (error) throw new CategoriesEntityListDatabaseError(error);

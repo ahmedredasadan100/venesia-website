@@ -52,6 +52,7 @@ export default async function UnifiedContentTopicsPage({
     new URLSearchParams(
       Object.entries({
         q: params?.q,
+        view: params?.view,
         content_type: params?.content_type,
         category: params?.category,
         series: params?.series,
@@ -74,11 +75,13 @@ export default async function UnifiedContentTopicsPage({
     supabase
       .from("topic_categories")
       .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
     supabase
       .from("topic_series")
       .select("id,name,status,deleted_at")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true }),
     readAdminColumnPreferences(CONTENT_LIST_VIEW_KEY, {
@@ -135,6 +138,12 @@ export default async function UnifiedContentTopicsPage({
             <AdminActionButton href={ADMIN_CONTENT_ROUTES.series} variant="dark">
               سلاسل المحتوى
             </AdminActionButton>
+            <AdminActionButton
+              href={`${ADMIN_CONTENT_ROUTES.topics}?view=trash`}
+              variant="dark"
+            >
+              المحذوفات
+            </AdminActionButton>
           </>
         }
       />
@@ -149,6 +158,7 @@ export default async function UnifiedContentTopicsPage({
 
       {!listLoadError && initialResult ? (
         <TopicsListClient
+          key={query.filters.view}
           categories={flattenedCategories}
           series={series}
           initialQuery={query}

@@ -134,7 +134,7 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
               </div>
 
               {topic.showTitleOnPage ? (
-                <h1 className="text-3xl font-semibold leading-[1.4] text-white md:text-5xl">
+                <h1 className="text-3xl font-semibold leading-[1.4] text-white md:text-2xl">
                   {topic.title}
                 </h1>
               ) : null}

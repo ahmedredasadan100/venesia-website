@@ -160,6 +160,7 @@ export const categoriesLinkProvider: AdminLinkProvider = {
     const { data, error } = await getSupabaseAdmin()
       .from("topic_categories")
       .select("id,name,slug,parent_id")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .limit(300);
 
@@ -199,6 +200,7 @@ export const seriesLinkProvider: AdminLinkProvider = {
     const { data, error } = await getSupabaseAdmin()
       .from("topic_series")
       .select("id,name,slug")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .limit(200);
 

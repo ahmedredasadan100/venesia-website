@@ -19,6 +19,7 @@ export const seriesListRowSchema = z.object({
   category_name: z.string().nullable(),
   created_at: z.string().nullable(),
   updated_at: z.string().nullable(),
+  deleted_at: z.string().nullable(),
   topics_count: z.number().int().nonnegative(),
 });
 
@@ -38,14 +39,16 @@ export async function loadSeriesListData() {
     getSupabaseAdmin()
       .from("topic_series")
       .select(
-        "id, name, slug, status, sort_order, category_id, created_at, updated_at",
+        "id, name, slug, status, sort_order, category_id, created_at, updated_at, deleted_at",
       )
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("id", { ascending: false }),
     loadActiveSeriesTopicCounts(),
     getSupabaseAdmin()
       .from("topic_categories")
       .select("id, name, slug, parent_id, sort_order, is_active")
+      .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
   ]);

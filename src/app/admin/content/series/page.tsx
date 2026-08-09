@@ -23,6 +23,7 @@ export const dynamic = "force-dynamic";
 
 type SeriesSearchParams = {
   q?: string;
+  view?: string;
   status?: string;
   category?: string;
   sort?: string;
@@ -49,6 +50,7 @@ export default async function Page({
     new URLSearchParams(
       Object.entries({
         q: params?.q,
+        view: params?.view,
         status: params?.status,
         category: params?.category,
         sort: params?.sort,
@@ -117,6 +119,12 @@ export default async function Page({
             <AdminActionButton href="/admin/content/categories" variant="dark">
               عرض التصنيفات
             </AdminActionButton>
+            <AdminActionButton
+              href="/admin/content/series?view=trash"
+              variant="dark"
+            >
+              المحذوفات
+            </AdminActionButton>
           </>
         }
       />
@@ -131,6 +139,7 @@ export default async function Page({
 
       {listResult.data ? (
         <SeriesTableClient
+          key={query.filters.view}
           initialQuery={query}
           initialResult={listResult.data}
           initialVisibleColumns={visibleColumns}

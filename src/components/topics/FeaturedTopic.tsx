@@ -49,7 +49,7 @@ export default function FeaturedTopic({ topic }: FeaturedTopicProps) {
             <span className="text-xs text-white/60">{topic.date}</span>
           </div>
 
-          <h2 className="max-w-3xl text-3xl font-semibold leading-tight text-white md:text-4xl">
+          <h2 className="max-w-3xl text-3xl font-semibold leading-tight text-white md:text-2xl">
             {topic.title}
           </h2>
 

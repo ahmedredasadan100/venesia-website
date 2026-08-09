@@ -22,6 +22,7 @@ type SeriesOption = {
 
 export type UnifiedContentFilterState = {
   q: string;
+  view: "active" | "trash";
   contentType: string;
   category: string;
   series: string;
@@ -137,7 +138,7 @@ export function useUnifiedContentToolbar({
       selectionAction: "set_query" as const,
       async load(query: string, { signal }: { signal: AbortSignal }) {
         const response = await fetch(
-          `${BASE_PATH}/search?q=${encodeURIComponent(query)}`,
+          `${BASE_PATH}/search?q=${encodeURIComponent(query)}${values.view === "trash" ? "&view=trash" : ""}`,
           { signal, headers: { Accept: "application/json" } },
         );
         if (!response.ok) throw new Error("تعذر تحميل اقتراحات الموضوعات.");
@@ -158,13 +159,13 @@ export function useUnifiedContentToolbar({
         );
       },
     }),
-    [],
+    [values.view],
   );
 
   return {
     basePath: BASE_PATH,
     hash: "#content-topics-table",
-    preserveParams: ["sort", "limit"],
+    preserveParams: ["sort", "limit", "view"],
     search: {
       placeholder: "ابحث في الموضوعات",
       value: values.q,
@@ -194,6 +195,7 @@ export function useUnifiedContentToolbar({
       onNavigate(
         {
           q: "q" in patch ? (patch.q ?? "") : values.q,
+          view: values.view,
           contentType:
             "content_type" in patch
               ? (patch.content_type ?? "all")

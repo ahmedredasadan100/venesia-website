@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
+import {
+  AdminFeedbackRegion,
+  useAdminFeedback,
+} from "../../../../components/admin/AdminFeedbackProvider";
 import AdminEntityListFilters from "../../../../components/admin/entity-list/AdminEntityListFilters";
 import MediaSynchronizationWarningNotice from "../../../../components/admin/media/MediaSynchronizationWarningNotice";
 import {
@@ -22,7 +25,6 @@ import {
   AdminDataGridStatusCell,
   AdminPageExperience,
   AdminPageHeader,
-  AdminStatusPill,
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
@@ -31,6 +33,7 @@ import {
   applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
 } from "../../../../lib/admin/entity-list";
+import { useAdminBoundedClientInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -57,6 +60,10 @@ type BlockTemplateSummaryListClientProps = {
   description: string;
   detailLabel: string;
   rows: BlockTemplateSummaryRow[];
+  toggleAction: (
+    id: number,
+    nextStatus: "published" | "unpublished",
+  ) => Promise<void>;
   errorMessage?: string | null;
   mediaSynchronizationWarning?: boolean;
   initialVisibleColumns?: readonly string[] | null;
@@ -78,12 +85,20 @@ export default function BlockTemplateSummaryListClient({
   description,
   detailLabel,
   rows,
+  toggleAction,
   errorMessage = null,
   mediaSynchronizationWarning = false,
   initialVisibleColumns = null,
   preferenceError = null,
 }: BlockTemplateSummaryListClientProps) {
   const searchParams = useSearchParams();
+  const feedbackChannel = `block-manager:${moduleKey}`;
+  const { publishFeedback, clearFeedback } = useAdminFeedback();
+  const instant = useAdminBoundedClientInstantMutation<BlockTemplateSummaryRow>({
+    entity: `${moduleKey}-block-templates`,
+    initialRows: rows,
+    datasetKey: moduleKey,
+  });
   const columnPreferenceId = COLUMN_PREFERENCE_ID_BY_MODULE[moduleKey];
   const columnConfig = getPageCompositionColumnPreferenceConfig(columnPreferenceId);
   const defaultColumns = getPageCompositionDefaultColumnKeys(columnPreferenceId);
@@ -113,13 +128,13 @@ export default function BlockTemplateSummaryListClient({
   const search = searchParams.get("q") ?? "";
   const filteredRows = useMemo(
     () =>
-      rows.filter((row) =>
+      instant.rows.filter((row) =>
         adminCollectionSearchIncludes(
           `${row.name} ${row.slug} ${row.detail} ${row.status}`,
           search,
         ),
       ),
-    [rows, search],
+    [instant.rows, search],
   );
   const pagination = useAdminBoundedClientPagination({
     rows: filteredRows,
@@ -128,6 +143,57 @@ export default function BlockTemplateSummaryListClient({
   });
   const paginatedRows = pagination.rows;
   const basePath = `/admin/pages-blocks/blocks/${moduleKey}`;
+
+  async function runVisibilityMutation(
+    row: BlockTemplateSummaryRow,
+    nextStatus: "published" | "unpublished",
+  ) {
+    const successMessage =
+      nextStatus === "published" ? "تم نشر الموديول." : "تم إخفاء الموديول.";
+    clearFeedback(feedbackChannel);
+    try {
+      await instant.mutateAsync({
+        rowId: row.id,
+        action: "visibility",
+        optimistic: (cache) =>
+          cache.patchRows((candidate) =>
+            candidate.id === row.id
+              ? { ...candidate, status: nextStatus }
+              : candidate,
+          ),
+        execute: async () => {
+          await toggleAction(row.id, nextStatus);
+          return { ok: true, message: successMessage };
+        },
+      });
+      publishFeedback(
+        {
+          variant: "success",
+          title: "تم تنفيذ الإجراء",
+          message: successMessage,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline" },
+      );
+    } catch (error) {
+      publishFeedback(
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline", reveal: true },
+      );
+    }
+  }
 
   return (
     <AdminPageExperience dir="rtl">
@@ -230,6 +296,9 @@ export default function BlockTemplateSummaryListClient({
         {paginatedRows.map((row) => {
           const status = statusMeta(row.status);
           const hidden = { access: "hidden" as const };
+          const visibilityPending =
+            instant.rowPending?.rowId === row.id &&
+            instant.rowPending.action === "visibility";
           const capability: AdminRowActionsCapability = {
             entityType: `${moduleKey}_block_template`,
             entityId: row.id,
@@ -250,7 +319,30 @@ export default function BlockTemplateSummaryListClient({
                 ],
               },
               copyPublicLink: hidden,
-              visibility: hidden,
+              visibility: visibilityPending
+                ? {
+                    access: "disabled",
+                    disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                    pending: true,
+                    isVisible: row.status === "published",
+                  }
+                : instant.rowPending !== null || instant.bulkPending !== null
+                  ? {
+                      access: "disabled",
+                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                      isVisible: row.status === "published",
+                    }
+                  : {
+                      access: "allowed",
+                      isVisible: row.status === "published",
+                      onSelect: () =>
+                        runVisibilityMutation(
+                          row,
+                          row.status === "published"
+                            ? "unpublished"
+                            : "published",
+                        ),
+                    },
               featured: hidden,
               duplicate: hidden,
               archive: hidden,
@@ -280,7 +372,11 @@ export default function BlockTemplateSummaryListClient({
               ) : null}
               {visibleColumnSet.has("status") ? (
                 <AdminDataGridStatusCell>
-                  <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+                  <AdminDataGridRowActions
+                    capability={capability}
+                    display="visibility"
+                    size="compact"
+                  />
                 </AdminDataGridStatusCell>
               ) : null}
               <AdminDataGridRowActions capability={capability} size="compact" />
@@ -301,6 +397,9 @@ export default function BlockTemplateSummaryListClient({
         pageSize={String(pagination.pageSize)}
         onPageChange={pagination.setPage}
         onPageSizeChange={pagination.setPageSize}
+        pending={
+          instant.rowPending !== null || instant.bulkPending !== null
+        }
       />
     </AdminPageExperience>
   );

@@ -7,13 +7,18 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   await requireAdminSession();
-  const q = cleanContentTitleSearch(new URL(request.url).searchParams.get("q"));
+  const params = new URL(request.url).searchParams;
+  const q = cleanContentTitleSearch(params.get("q"));
+  const trashView = params.get("view") === "trash";
   if (q.length < 2) return NextResponse.json({ results: [] });
 
   let query = getSupabaseAdmin()
     .from("admin_content_topics")
-    .select("id,title,category_name")
-    .is("deleted_at", null);
+    .select("id,title,category_name");
+
+  query = trashView
+    ? query.not("deleted_at", "is", null)
+    : query.is("deleted_at", null);
 
   for (const word of q.split(" ").filter(Boolean)) {
     query = query.ilike("title", `%${word}%`);

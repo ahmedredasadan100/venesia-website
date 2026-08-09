@@ -14,7 +14,6 @@ import {
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   AdminDataGridRowActions,
   AdminPageContextHeader,
-  AdminStatusPill,
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
@@ -30,6 +29,7 @@ import type {
   AdminEntityListQuery,
   AdminEntityListResult,
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list/feedback-codes";
 import {
@@ -86,10 +86,12 @@ function PageRowActions({
   row,
   handlers,
   onMutationResult,
+  display = "menu",
 }: {
   row: AdminPageListRow;
   handlers: PageRowActionHandlers;
   onMutationResult?: (result: AdminActionResult) => void;
+  display?: "menu" | "visibility";
 }) {
   const pendingAction = handlers.rowPendingAction(row.id);
   const status = statusMeta(row.status);
@@ -185,7 +187,13 @@ function PageRowActions({
     },
   };
 
-  return <AdminDataGridRowActions capability={capability} size="compact" />;
+  return (
+    <AdminDataGridRowActions
+      capability={capability}
+      display={display}
+      size="compact"
+    />
+  );
 }
 
 function createPageColumns(
@@ -222,10 +230,14 @@ function createPageColumns(
       sortKey: "status",
       minWidth: 128,
       width: 128,
-      renderCell: ({ row }) => {
-        const status = statusMeta(row.status);
-        return <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>;
-      },
+      renderCell: ({ row, onMutationResult }) => (
+        <PageRowActions
+          row={row}
+          handlers={handlers}
+          onMutationResult={onMutationResult}
+          display="visibility"
+        />
+      ),
     },
     {
       key: "type",
@@ -507,7 +519,12 @@ export default function PagesTableClient({
             enableColumnManagement
             enableSelection
             selectionLabel="تحديد كل الصفحات في الصفحة الحالية"
-            bulkOptions={[{ value: "delete", label: "حذف المحدد" }]}
+            bulkOptions={[
+              {
+                value: "delete",
+                label: ADMIN_BULK_ACTION_LABELS.deleteSelected,
+              },
+            ]}
             bulkEntityLabel="صفحة"
             onBulkExecute={(action, ids) =>
               action === "delete"

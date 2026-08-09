@@ -6,10 +6,9 @@ import AdminCategoryBadge from "../../../../components/admin/content/AdminCatego
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
+import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import {
-  AdminStatusPill,
-} from "../../../../components/admin/ui";
-import {
+  ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
   ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
@@ -107,6 +106,7 @@ export type CategoryColumnLayoutOptions = {
 
 export function createCategoryColumns(
   tree: {
+    view: "active" | "trash";
     isExpanded: (categoryId: number) => boolean;
     onToggle: (categoryId: number) => void;
     rowPendingAction: (categoryId: number) => string | null;
@@ -117,10 +117,11 @@ export function createCategoryColumns(
     onDuplicate: (
       category: CategoryListRow,
     ) => Promise<CategoryDuplicateMutationResult>;
-    onDelete: (
-      categoryId: number,
-      transferToId: number | null,
-    ) => Promise<{ ok: boolean; message?: string }>;
+    onDelete: (category: CategoryListRow) => Promise<AdminActionResult>;
+    onRestore: (category: CategoryListRow) => Promise<AdminActionResult>;
+    onPermanentDelete: (
+      category: CategoryListRow,
+    ) => Promise<AdminActionResult>;
   },
   { maxVisibleDepth = 0 }: CategoryColumnLayoutOptions = {},
 ): AdminEntityColumnDef<CategoryListRow, CategoryColumnKey, CategorySortKey>[] {
@@ -174,19 +175,32 @@ export function createCategoryColumns(
                 <FolderIcon large={row.depth === 0} />
               </span>
             )}
-            <Link
-              href={`/admin/content/categories/${row.id}`}
-              data-category-edit-link=""
-              className="min-w-0 flex-1 cursor-pointer rounded-[8px] px-1.5 py-1 text-right transition hover:bg-white/[0.04] hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
-              style={{ maxWidth: ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH }}
-              title={`تعديل ${row.name}`}
-            >
-              <AdminCategoryBadge
-                name={row.name}
-                colorToken={row.color_token}
-                className={row.depth === 0 ? "text-sm font-bold" : "font-semibold"}
-              />
-            </Link>
+            {tree.view === "trash" ? (
+              <span
+                className="min-w-0 flex-1 rounded-[8px] px-1.5 py-1 text-right"
+                style={{ maxWidth: ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH }}
+              >
+                <AdminCategoryBadge
+                  name={row.name}
+                  colorToken={row.color_token}
+                  className={row.depth === 0 ? "text-sm font-bold" : "font-semibold"}
+                />
+              </span>
+            ) : (
+              <Link
+                href={`/admin/content/categories/${row.id}`}
+                data-category-edit-link=""
+                className="min-w-0 flex-1 cursor-pointer rounded-[8px] px-1.5 py-1 text-right transition hover:bg-white/[0.04] hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                style={{ maxWidth: ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH }}
+                title={`تعديل ${row.name}`}
+              >
+                <AdminCategoryBadge
+                  name={row.name}
+                  colorToken={row.color_token}
+                  className={row.depth === 0 ? "text-sm font-bold" : "font-semibold"}
+                />
+              </Link>
+            )}
           </div>
         );
       },
@@ -200,10 +214,20 @@ export function createCategoryColumns(
       sortKey: "status",
       minWidth: 104,
       width: 104,
-      renderCell: ({ row }) => (
-        <AdminStatusPill tone={row.status === "published" ? "green" : "gold"}>
-          {row.status === "published" ? "منشور" : "غير منشور"}
-        </AdminStatusPill>
+      renderCell: ({ row, onMutationResult }) => (
+        <CategoryRowActions
+          category={row}
+          view={tree.view}
+          onMutationResult={onMutationResult}
+          pendingAction={tree.rowPendingAction(row.id)}
+          mutationBusy={tree.mutationBusy}
+          onToggle={tree.onToggleStatus}
+          onDuplicate={tree.onDuplicate}
+          onDelete={tree.onDelete}
+          onRestore={tree.onRestore}
+          onPermanentDelete={tree.onPermanentDelete}
+          display="visibility"
+        />
       ),
     },
     {
@@ -225,8 +249,8 @@ export function createCategoryColumns(
       hideable: true,
       sortable: true,
       sortKey: "count",
-      minWidth: 80,
-      width: 80,
+      minWidth: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
       renderCell: ({ row }) => (
         <span className="font-en tabular-nums text-sm font-semibold text-white/82">
           {row.totalCount}
@@ -319,12 +343,15 @@ export function createCategoryColumns(
       renderCell: ({ row, onMutationResult }) => (
         <CategoryRowActions
           category={row}
+          view={tree.view}
           onMutationResult={onMutationResult}
           pendingAction={tree.rowPendingAction(row.id)}
           mutationBusy={tree.mutationBusy}
           onToggle={tree.onToggleStatus}
           onDuplicate={tree.onDuplicate}
           onDelete={tree.onDelete}
+          onRestore={tree.onRestore}
+          onPermanentDelete={tree.onPermanentDelete}
         />
       ),
     },

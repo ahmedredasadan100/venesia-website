@@ -19,6 +19,8 @@ const occurrences = (source: string, token: string) => source.split(token).lengt
 const paths = {
   shared: "src/components/admin/seo/AdminEntitySeoPanel.tsx",
   contract: "src/lib/seo/entity-seo-types.ts",
+  score: "src/lib/admin/seo-score.ts",
+  loader: "src/lib/admin/content/load-unified-content.ts",
   topic: "src/components/admin/SeoPanel.tsx",
   project: "src/components/admin/projects/entry/ProjectSeoPanel.tsx",
   media: "src/components/admin/content/editors/media/MediaEntitySeoPanel.tsx",
@@ -62,6 +64,43 @@ check(
 );
 
 check(
+  "one existing SEO Score owner exposes one input and one official output contract",
+  ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE.scoreContractOwner === paths.score &&
+    source.score.includes("export type SeoScoreInput") &&
+    source.score.includes("export type SeoScoreOutput") &&
+    source.score.includes("export function analyzeEntitySeo(input: SeoScoreInput): SeoScoreOutput") &&
+    source.score.includes("score: number") &&
+    !source.score.includes("export function analyzeTopicSeo") &&
+    !source.score.includes("export type EntitySeoScoreInput"),
+);
+
+check(
+  "Editor, Entity List, and Metrics consume the same SEO Score contract and official score",
+  source.shared.includes("analyzeEntitySeo(analysisInput)") &&
+    source.shared.includes("{analysis.score}") &&
+    source.shared.includes("analysis.metrics.map") &&
+    source.shared.includes("analysisExtension.resolveFaq(analysisState)") &&
+    !source.shared.includes(".overallScore") &&
+    !source.shared.includes(".seoScore") &&
+    !source.shared.includes("analysisExtension?.analyze") &&
+    source.loader.includes("return analyzeEntitySeo({") &&
+    source.loader.includes("}).score") &&
+    source.loader.includes("getUnifiedContentSeoScore(row)") &&
+    !source.loader.includes("analyzeTopicSeo") &&
+    !source.loader.includes(".overallScore") &&
+    !source.loader.includes(".seoScore"),
+);
+
+check(
+  "all eligible editor declarations submit the complete SEO Score input contract",
+  source.topic.includes('profile: "article"') &&
+    source.topic.includes("faq: props.faq ?? []") &&
+    [source.project, source.media, source.page].every(
+      (adapter) => adapter.includes('profile: "entity"') && adapter.includes("faq: []"),
+    ),
+);
+
+check(
   "the migration makes Topic and Page schemas match the established Project SEO column contract",
   ["public.topics", "public.pages"].every((table) => source.migration.includes(`alter table ${table}`)) &&
     ["focus_keyword", "canonical_url", "robots_index", "robots_follow", "og_image", "og_image_alt"].every(
@@ -95,11 +134,11 @@ check(
 
 check(
   "Open Graph preview uses explicit override first and the entity image only as fallback",
-  source.shared.includes("const effectiveImage = live.ogImage.trim() || live.image.trim()") &&
+  source.shared.includes("const previewImage = live.ogImage.trim() || live.image.trim()") &&
     source.shared.includes("live.ogImage.trim()") &&
     source.shared.includes("live.ogImageAlt.trim()") &&
-    source.shared.includes("url(${effectiveImage})") &&
-    source.shared.includes("aria-label={effectiveImageAlt || title}"),
+    source.shared.includes("url(${previewImage})") &&
+    source.shared.includes("aria-label={previewImageAlt || title}"),
 );
 
 const persistenceFiles = [

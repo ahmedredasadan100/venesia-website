@@ -10,7 +10,11 @@ async function fetchSlugMap(table: "topics" | "topic_categories" | "projects", i
   const slugMap = new Map<number, string>();
   if (!ids.length) return slugMap;
 
-  const { data, error } = await getSupabaseAdmin().from(table).select("id, slug").in("id", ids);
+  let query = getSupabaseAdmin().from(table).select("id, slug").in("id", ids);
+  if (table === "topics" || table === "topic_categories") {
+    query = query.is("deleted_at", null);
+  }
+  const { data, error } = await query;
 
   if (error) {
     logError(`Failed to resolve ${table} slugs for navigation API`, error, { ids });
