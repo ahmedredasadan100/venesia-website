@@ -19,10 +19,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -30,51 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Verify migrations present
-        run: npm run verify:migrations
-
-      - name: Verify legacy media admin closed
-        run: npm run verify:legacy-media-admin
-
-      - name: Verify Media coordination SQL contracts
-        run: |
-          npm run verify:media-coordination-rpc-acl
-          npm run verify:media-coordination-sql
-
-      - name: Verify Media library and delete Saga
-        run: |
-          npm run verify:production-media-storage
-          npm run verify:media-library-system
-          npm run verify:media-delete-saga
-
-      - name: Verify Media write adoption and QA guards
-        run: |
-          npm run verify:media-write-adoption
-          npm run verify:media-live-qa-guards
-
-      - name: Verify Unified Content Engine
-        run: npm run verify:unified-content
-
-      - name: Verify audit coverage
-        run: npm run verify:audit-coverage
-
-      - name: Verify Admin Runtime
-        run: npm run verify:admin-runtime
-
-      - name: Verify Dashboard Truth closure
-        run: npm run verify:dashboard-truth
-
-      - name: Verify Reports and Analytics closure
-        run: npm run verify:reports-analytics
-
-      - name: Production build
-        run: npm run build
+      - name: Run canonical PR-safe Quality Gate
+        run: npm run ci:check
 
   media-coordination-postgres:
     name: Media Coordination · PostgreSQL 15
@@ -103,10 +60,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -150,10 +107,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -191,10 +148,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm

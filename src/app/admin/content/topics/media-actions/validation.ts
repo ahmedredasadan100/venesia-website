@@ -1,5 +1,6 @@
 "use server";
 
+import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { logError } from "../../../../../lib/logging";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
@@ -16,6 +17,8 @@ export async function resolveMediaSection(
   requestedContentType?: string | null,
   currentCategoryId?: number | null,
 ) {
+  await requireAdminSession();
+
   const normalizedId = Number(categoryId);
   if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
     return { ok: false as const, message: "التصنيف المختار غير صالح." };
@@ -49,6 +52,8 @@ export async function resolveMediaSection(
 }
 
 export async function ensureUniqueSlug(slug: string, id?: string) {
+  await requireAdminSession();
+
   let query = getSupabaseAdmin().from("topics").select("id").eq("slug", slug).limit(1);
 
   if (id) {
@@ -61,6 +66,8 @@ export async function ensureUniqueSlug(slug: string, id?: string) {
 }
 
 export async function getEditableMediaTopicById(id: string) {
+  await requireAdminSession();
+
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
