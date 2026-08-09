@@ -313,6 +313,7 @@ export default function PageBlocksClient({
   }
 
   function canMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
+    if (table.sort.key !== null) return false;
     const siblings = assignments
       .filter((candidate) => candidate.slot === row.slot)
       .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
@@ -321,6 +322,7 @@ export default function PageBlocksClient({
   }
 
   function handleMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
+    if (table.sort.key !== null) return;
     const siblings = assignments
       .filter((candidate) => candidate.slot === row.slot)
       .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
@@ -553,6 +555,7 @@ export default function PageBlocksClient({
                   onDelete={handleDeleteAssignment}
                   canMove={canMoveAssignment}
                   onMove={handleMoveAssignment}
+                  manualReorderEnabled={table.sort.key === null}
                   visibleColumns={visibleColumnSet}
                 />
 

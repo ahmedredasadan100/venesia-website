@@ -10,7 +10,9 @@ if (!connectionString) throw new Error("SUPABASE_DB_URL is required.");
 const migrationVersion = "20260805180000";
 const migrationAuditKey = "20260805180000_global_truth_atomic_operations_closure";
 const migrationPath = "sql/migrations/20260805180000_global_truth_atomic_operations_closure.sql";
-const migrationSource = readFileSync(migrationPath, "utf8").replace(/^\uFEFF/u, "");
+const migrationSource = readFileSync(migrationPath, "utf8")
+  .replace(/^\uFEFF/u, "")
+  .replace(/\r\n?/gu, "\n");
 const migrationSha256 = createHash("sha256").update(migrationSource).digest("hex");
 const failures: string[] = [];
 const check = (condition: unknown, message: string) => {

@@ -3,6 +3,7 @@ import { loadPagesEntityListResult } from "../../../../lib/admin/pages/entity-li
 import { pagesQueryContract } from "../../../../lib/admin/pages/entity-list-contract";
 import {
   getPagesDefaultColumnKeys,
+  PAGES_LIST_COLUMN_CONTRACT_VERSION,
   PAGES_LIST_VIEW_KEY,
 } from "../../../../lib/admin/pages/pages-list-config";
 import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
@@ -19,7 +20,9 @@ export default async function PagesManagerPage({ searchParams }: {
   const initialQuery = normalizeAdminEntityListQuery(pagesQueryContract, params);
   const [initialResult, preference] = await Promise.all([
     loadPagesEntityListResult(initialQuery),
-    readAdminColumnPreferences(PAGES_LIST_VIEW_KEY),
+    readAdminColumnPreferences(PAGES_LIST_VIEW_KEY, {
+      contractVersion: PAGES_LIST_COLUMN_CONTRACT_VERSION,
+    }),
   ]);
   return (
     <PagesTableClient

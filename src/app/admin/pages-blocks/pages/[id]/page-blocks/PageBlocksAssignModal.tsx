@@ -9,8 +9,12 @@ import {
   adminFormFieldClassName,
   adminFormLabelClassName,
 } from "../../../../../../components/admin/ui";
+import { getContentStatusMetadata } from "../../../../../../lib/admin/content/content-status-metadata";
 import type { PageBlockActionResult } from "../../../../../../lib/page-blocks/action-result";
-import { blockModuleListHref } from "../../../../../../lib/page-blocks/admin-utils";
+import {
+  blockModuleListHref,
+  moduleKindLabel,
+} from "../../../../../../lib/page-blocks/admin-utils";
 import { LAYOUT_SLOT_LABELS_AR, type PageLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import type { PageBlockType } from "../../../../../../lib/page-blocks/types";
 import type { AssignableModuleKind } from "./use-page-blocks-assign-modal";
@@ -18,6 +22,16 @@ import type { AssignableModuleKind } from "./use-page-blocks-assign-modal";
 type TemplateOption = { id: number; name: string; slug: string; status: string };
 
 const slotLabels = LAYOUT_SLOT_LABELS_AR;
+const ASSIGNABLE_MODULE_KINDS = [
+  "hero",
+  "breadcrumb",
+  "content",
+  "cta",
+  "cards",
+  "feed",
+  "media-sidebar",
+  "media-hub",
+] as const satisfies readonly AssignableModuleKind[];
 
 type PageBlocksAssignModalProps = {
   pageId: number;
@@ -67,8 +81,8 @@ export default function PageBlocksAssignModal({
   return (
     <VenesiaModal
       open
-      title="ربط بلوك بالصفحة"
-      description="اختر قالبًا موجودًا — لن يُنشأ صف فارغ."
+      title="ربط موديول بالصفحة"
+      description="اختر قالب موديول موجودًا — لن يُنشأ قالب فارغ."
       size="lg"
       onClose={onClose}
       footer={(
@@ -79,7 +93,7 @@ export default function PageBlocksAssignModal({
             form="assign-page-block-form"
             disabled={!assignableTemplates.length || assignPending}
           >
-            ربط البلوك
+            ربط الموديول
           </AdminModalPrimaryButton>
         </>
       )}
@@ -115,14 +129,9 @@ export default function PageBlocksAssignModal({
               }}
               className={adminFormFieldClassName()}
             >
-              <option value="hero">Hero</option>
-              <option value="breadcrumb">Breadcrumb</option>
-              <option value="content">Content</option>
-              <option value="cta">CTA</option>
-              <option value="cards">Cards</option>
-              <option value="feed">Feed</option>
-              <option value="media-sidebar">Media Sidebar</option>
-              <option value="media-hub">Media Hub</option>
+              {ASSIGNABLE_MODULE_KINDS.map((kind) => (
+                <option key={kind} value={kind}>{moduleKindLabel(kind)}</option>
+              ))}
             </select>
           </label>
 
@@ -138,10 +147,10 @@ export default function PageBlocksAssignModal({
                 onAssignTemplateIdChange(Number.isFinite(value) && value > 0 ? value : null);
               }}
             >
-              <option value="" disabled>اختر قالبًا…</option>
+              <option value="" disabled>اختر قالب موديول…</option>
               {assignableTemplates.map((template) => (
                 <option key={template.id} value={template.id}>
-                  {template.name} ({template.status})
+                  {template.name} ({getContentStatusMetadata(template.status).label})
                 </option>
               ))}
             </select>

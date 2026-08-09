@@ -1,4 +1,4 @@
-export type { PagesTableRow, PagesTableResult } from "./types";
+export type { PagesTableResult } from "./types";
 export { createPage } from "./create-page";
 export type { CreatePageFormActionState } from "./create-page";
 export { togglePageStatus } from "./page-status";

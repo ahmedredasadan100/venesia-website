@@ -4,17 +4,18 @@ import { z } from "zod";
 
 import type { AdminEntityListAdapter } from "../entity-list/data-engine/adapter";
 import {
-  createAdminEntityListResultSchema,
   type AdminEntityListQuery,
 } from "../entity-list/data-engine/contracts";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   pagesQueryContract,
+  pagesEntityListResultSchema,
+  type PageEntityListRow,
   type PageFilters,
   type PageSortField,
 } from "./entity-list-contract";
 
-export const pageEntityListRowSchema = z.object({
+const pagesReadModelRowSchema = z.object({
   id: z.number().int().positive(),
   title: z.string(),
   slug: z.string(),
@@ -23,13 +24,9 @@ export const pageEntityListRowSchema = z.object({
   status: z.string(),
   block_count: z.number().int().nonnegative(),
 });
-export type PageEntityListRow = z.infer<typeof pageEntityListRowSchema>;
-
-export const pagesEntityListResultSchema =
-  createAdminEntityListResultSchema(pageEntityListRowSchema);
 
 const pagesReadModelSchema = z.object({
-  rows: z.array(pageEntityListRowSchema),
+  rows: z.array(pagesReadModelRowSchema),
   total_count: z.coerce.number().int().nonnegative().finite(),
   page: z.number().int().positive(),
 });
@@ -67,11 +64,14 @@ export async function loadPagesEntityListResult(
   const totalPages = Math.max(1, Math.ceil(totalRows / query.pageSize));
   const page = readModel.page;
 
-  return {
-    rows: readModel.rows,
+  return pagesEntityListResultSchema.parse({
+    rows: readModel.rows.map(({ block_count, ...row }) => ({
+      ...row,
+      moduleCount: block_count,
+    })),
     pagination: { page, pageSize: query.pageSize, totalRows, totalPages },
     meta: { generatedAt: new Date().toISOString(), mode: query.mode },
-  };
+  });
 }
 
 export const pagesEntityListAdapter: AdminEntityListAdapter<

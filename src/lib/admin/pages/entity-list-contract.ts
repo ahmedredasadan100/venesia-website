@@ -1,10 +1,27 @@
 import { z } from "zod";
 
-import type { AdminEntityListQueryContract } from "../entity-list/data-engine/contracts";
+import {
+  createAdminEntityListResultSchema,
+  type AdminEntityListQueryContract,
+} from "../entity-list/data-engine/contracts";
 
 export const pageSortFields = ["id", "title", "status"] as const;
 export type PageSortField = (typeof pageSortFields)[number];
 export type PageFilters = Record<string, never>;
+
+export const pageEntityListRowSchema = z.object({
+  id: z.number().int().positive(),
+  title: z.string(),
+  slug: z.string(),
+  path: z.string(),
+  page_type: z.string(),
+  status: z.string(),
+  moduleCount: z.number().int().nonnegative(),
+});
+export type PageEntityListRow = z.infer<typeof pageEntityListRowSchema>;
+
+export const pagesEntityListResultSchema =
+  createAdminEntityListResultSchema(pageEntityListRowSchema);
 
 export const pagesQueryContract: AdminEntityListQueryContract<PageFilters, PageSortField> = {
   mode: "server-page",

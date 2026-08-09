@@ -1,5 +1,3 @@
-export type { PagesTableRow } from "../../../../../lib/admin/pages/load-pages-table-rows";
-
 export type PageMutationResult =
   | { ok: true; message: string }
   | { ok: false; code: string; message: string };

@@ -38,6 +38,7 @@ type PageBlocksAssignmentsGridProps = {
   onDelete: (row: PageBlockAssignmentRow) => void;
   canMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => boolean;
   onMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => void;
+  manualReorderEnabled: boolean;
   visibleColumns: ReadonlySet<PageCompositionColumnKey<"pageAssignments">>;
 };
 
@@ -57,6 +58,7 @@ export default function PageBlocksAssignmentsGrid({
   onDelete,
   canMove,
   onMove,
+  manualReorderEnabled,
   visibleColumns,
 }: PageBlocksAssignmentsGridProps) {
   const gridColumns = [
@@ -126,6 +128,7 @@ export default function PageBlocksAssignmentsGrid({
             onDelete={() => onDelete(row)}
             canMoveUp={canMove(row, -1)}
             canMoveDown={canMove(row, 1)}
+            manualReorderEnabled={manualReorderEnabled}
             onMoveUp={() => onMove(row, -1)}
             onMoveDown={() => onMove(row, 1)}
             showModule={visibleColumns.has("module")}
