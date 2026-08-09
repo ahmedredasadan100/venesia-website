@@ -58,6 +58,11 @@ export type AdminEntityListTableProps<
   actionsColumnWidth: number;
   empty: ReactNode;
   className?: string;
+  /**
+   * Keeps the historical automatic flexible-track fallback by default.
+   * Set to false when every column in a consumer has an intentional fixed width.
+   */
+  implicitFlexibleColumn?: boolean;
   /** Optional hierarchy depth for indent capability. */
   getRowDepth?: (row: TRow) => number;
   rowClassName?: (row: TRow) => string;
@@ -88,20 +93,26 @@ export default function AdminEntityListTable<
   actionsColumnWidth,
   empty,
   className = "",
+  implicitFlexibleColumn = true,
   getRowDepth,
   rowClassName,
   onMutationResult,
 }: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>) {
   const selectionColumnWidth = 46;
   const showSelection = Boolean(selection);
+  const explicitFlexibleColumnKey = columns.find(
+    (column) => column.flexible,
+  )?.key;
   const flexibleColumnKey =
-    columns.find((column) => column.flexible)?.key ??
-    columns.find(
-      (column) =>
-        !column.primary &&
-        column.sticky !== "start" &&
-        column.sticky !== "end",
-    )?.key;
+    explicitFlexibleColumnKey ??
+    (implicitFlexibleColumn
+      ? columns.find(
+          (column) =>
+            !column.primary &&
+            column.sticky !== "start" &&
+            column.sticky !== "end",
+        )?.key
+      : undefined);
 
   function getColumnBaseWidth(
     column: AdminEntityColumnDef<TRow, TKey, TSortKey>,

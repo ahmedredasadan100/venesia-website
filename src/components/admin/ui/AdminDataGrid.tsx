@@ -24,6 +24,8 @@ type SortLabelProps = BaseProps & {
 type GridProps = BaseProps & {
   summary?: ReactNode;
   scrollLabel?: string;
+  /** Standalone owns its card boundary; embedded delegates it to a parent surface. */
+  surface?: "standalone" | "embedded";
 };
 
 type GridLineProps = BaseProps & {
@@ -483,11 +485,19 @@ export function AdminDataGrid({
   children,
   summary,
   scrollLabel = "منطقة بيانات الإدارة",
+  surface = "standalone",
   className = "",
 }: GridProps) {
+  const embedded = surface === "embedded";
+
   return (
     <section
-      className={`rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl ${className}`}
+      data-admin-data-grid-surface={surface}
+      className={`${
+        embedded
+          ? "min-w-0"
+          : "rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl"
+      } ${className}`.trim()}
     >
       <div
         dir="rtl"
@@ -495,7 +505,9 @@ export function AdminDataGrid({
         aria-label={scrollLabel}
         tabIndex={0}
         data-admin-data-grid-scroll=""
-        className={`overflow-x-auto overflow-y-hidden rounded-[14px] border border-white/8 bg-black/14 overscroll-x-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
+        className={`overflow-x-auto overflow-y-hidden bg-black/14 overscroll-x-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+          embedded ? "" : "rounded-[14px] border border-white/8"
+        } ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`.trim()}
       >
         {children}
       </div>

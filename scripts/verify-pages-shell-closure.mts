@@ -9,6 +9,9 @@ const read = (path: string) =>
 const migrationPath =
   "sql/migrations/20260810010000_page_delete_hero_assignment_integrity.sql";
 const migration = read(migrationPath);
+const sortMigrationPath =
+  "sql/migrations/20260810020000_admin_pages_sort_adoption.sql";
+const sortMigration = read(sortMigrationPath);
 const contract = read("src/lib/admin/pages/entity-list-contract.ts");
 const adapter = read("src/lib/admin/pages/entity-list-adapter.ts");
 const config = read("src/lib/admin/pages/pages-list-config.ts");
@@ -20,8 +23,18 @@ const preferenceAction = read(
 const compositionClient = read(
   "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
 );
+const compositionSurface = read(
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageCompositionTableSurface.tsx",
+);
 const assignmentGrid = read(
   "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx",
+);
+const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
+const entityListTable = read(
+  "src/components/admin/entity-list/AdminEntityListTable.tsx",
+);
+const entityListFilters = read(
+  "src/components/admin/entity-list/AdminEntityListFilters.tsx",
 );
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const dataEngineContracts = read(
@@ -65,6 +78,24 @@ assert.equal((deleteReplacement.match(/delete from public\.hero_assignments/gu) 
 assert.doesNotMatch(deleteReplacement, /delete from public\.hero_templates|target_type\s*(?:<>|!=|in\s*\()/iu);
 assert.doesNotMatch(migration.replace(/^\s*--.*$/gmu, ""), /drop\s+table|alter\s+table|truncate\s+table/iu);
 
+assert.match(
+  sortMigration,
+  /create or replace function public\.admin_list_pages\([\s\S]*p_sort_field text default 'id'[\s\S]*p_search text default ''[\s\S]*\)\s*returns jsonb/iu,
+);
+assert.match(
+  sortMigration,
+  /p_sort_field = 'slug' and p_sort_direction = 'asc' then slug end asc,[\s\S]*p_sort_field = 'slug' and p_sort_direction = 'desc' then slug end desc/iu,
+);
+assert.match(
+  sortMigration,
+  /p_sort_field = 'moduleCount' and p_sort_direction = 'asc' then block_count end asc,[\s\S]*p_sort_field = 'moduleCount' and p_sort_direction = 'desc' then block_count end desc/iu,
+);
+assert.match(sortMigration, /case when p_sort_field = 'status'[\s\S]*id asc/iu);
+assert.doesNotMatch(
+  sortMigration.replace(/^\s*--.*$/gmu, ""),
+  /\b(?:insert\s+into|update|delete\s+from|truncate)\s+public\./iu,
+);
+
 assert.match(contract, /moduleCount:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)/u);
 assert.match(contract, /createAdminEntityListResultSchema\(pageEntityListRowSchema\)/u);
 assert.match(adapter, /block_count:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)/u);
@@ -76,6 +107,7 @@ for (const key of ["page", "slug", "moduleCount", "status", "actions"]) {
   assert.ok(config.includes(`key: "${key}"`), `Pages column contract missing ${key}`);
 }
 assert.doesNotMatch(config, /key:\s*"type"/u);
+assert.doesNotMatch(config, /key:\s*"selection"/u);
 assert.match(page, /contractVersion:\s*PAGES_LIST_COLUMN_CONTRACT_VERSION/u);
 assert.match(preferenceAction, /contractVersion:\s*PAGES_LIST_COLUMN_CONTRACT_VERSION/u);
 assert.match(client, /type PageEntityListRow/u);
@@ -114,20 +146,38 @@ const orderedColumnOffsets = [
 assert.deepEqual(orderedColumnOffsets, [...orderedColumnOffsets].sort((left, right) => left - right));
 assert.match(pageColumn, /sortable:\s*true[\s\S]*sortKey:\s*"title"/u);
 assert.doesNotMatch(pageColumn, /flexible:\s*true/u);
-assert.match(slugColumn, /minWidth:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH/u);
-assert.match(slugColumn, /flexible:\s*true/u);
-assert.doesNotMatch(slugColumn, /sortable:\s*true/u);
+assert.match(pageColumn, /minWidth:\s*ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS\.textOnly \+ 40/u);
+assert.match(
+  slugColumn,
+  /sortable:\s*true[\s\S]*sortKey:\s*"slug"[\s\S]*minWidth:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH/u,
+);
+assert.doesNotMatch(slugColumn, /flexible:\s*true/u);
 assert.match(
   moduleCountColumn,
-  /minWidth:\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH/u,
+  /sortable:\s*true[\s\S]*sortKey:\s*"moduleCount"[\s\S]*minWidth:\s*PAGE_MODULE_COUNT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_MODULE_COUNT_COLUMN_WIDTH/u,
 );
-assert.doesNotMatch(moduleCountColumn, /sortable:\s*true/u);
 assert.match(statusColumn, /sortable:\s*true[\s\S]*sortKey:\s*"status"/u);
 assert.match(
   actionsColumn,
   /sortable:\s*false[\s\S]*minWidth:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH/u,
 );
-assert.match(contract, /pageSortFields\s*=\s*\["id",\s*"title",\s*"status"\]/u);
+assert.match(
+  contract,
+  /pageSortFields\s*=\s*\[\s*"id",\s*"title",\s*"slug",\s*"moduleCount",\s*"status",?\s*\]/u,
+);
+assert.doesNotMatch(contract, /"selection"/u);
+assert.match(
+  client,
+  /PAGE_MODULE_COUNT_COLUMN_WIDTH\s*=\s*\n\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH \+ 24/u,
+);
+assert.match(client, /implicitFlexibleColumn=\{false\}/u);
+assert.match(entityList, /implicitFlexibleColumn=\{implicitFlexibleColumn\}/u);
+assert.match(entityListTable, /implicitFlexibleColumn\?: boolean/u);
+assert.match(entityListTable, /implicitFlexibleColumn = true/u);
+assert.match(
+  entityListTable,
+  /explicitFlexibleColumnKey \?\?[\s\S]*\(implicitFlexibleColumn[\s\S]*!column\.primary[\s\S]*: undefined\)/u,
+);
 assert.match(
   client,
   /sortMode=\{\{[\s\S]*mode:\s*"callback"[\s\S]*controller\.setSort\([\s\S]*current\.field === field && current\.direction === "asc"[\s\S]*\? "desc"[\s\S]*: "asc"/u,
@@ -160,13 +210,29 @@ assert.match(compositionClient, /if \(table\.sort\.key !== null\) return false;/
 assert.match(compositionClient, /if \(table\.sort\.key !== null\) return;/u);
 assert.match(
   compositionClient,
-  /<section className="space-y-4" dir="rtl">[\s\S]*className="flex flex-col gap-0"[\s\S]*data-page-composition-table-shell=""/u,
+  /<PageCompositionTableSurface[\s\S]*toolbar=\{[\s\S]*<AdminEntityListFilters[\s\S]*surface="embedded"[\s\S]*table=\{[\s\S]*<PageBlocksAssignmentsGrid[\s\S]*pagination=\{[\s\S]*<AdminTablePagination/u,
 );
 assert.doesNotMatch(
   compositionClient,
-  /space-y-4 rounded-\[28px\] border border-white\/10 bg-\[#080B10\]\/92 p-6/u,
+  /data-page-composition-table-shell|className="flex flex-col gap-0"/u,
 );
-assert.match(assignmentGrid, /<AdminDataGrid className="!rounded-t-none !border-t-0">/u);
+assert.match(
+  compositionSurface,
+  /data-page-composition-table-surface=""[\s\S]*data-page-composition-table-frame=""/u,
+);
+assert.equal(
+  (compositionSurface.match(/rounded-\[20px\]/gu) ?? []).length,
+  1,
+  "Page Composition table surface must own exactly one rounded card boundary.",
+);
+assert.match(assignmentGrid, /<AdminDataGrid surface="embedded">/u);
+assert.doesNotMatch(assignmentGrid, /!rounded-t-none|!border-t-0/u);
+assert.match(entityListFilters, /surface\?: "standalone" \| "embedded"/u);
+assert.match(entityListFilters, /surface = "standalone"/u);
+assert.match(entityListFilters, /surface === "embedded"[\s\S]*overflow-visible border-b/u);
+assert.match(dataGrid, /surface\?: "standalone" \| "embedded"/u);
+assert.match(dataGrid, /surface = "standalone"/u);
+assert.match(dataGrid, /embedded \? "" : "rounded-\[14px\] border border-white\/8"/u);
 assert.match(uiRules, /عند تفعيل فرز عرض مختلف، يُعطّل reorder/u);
 assert.match(assignmentReorder, /mutatePageComposition\([\s\S]*"reorder"/u);
 

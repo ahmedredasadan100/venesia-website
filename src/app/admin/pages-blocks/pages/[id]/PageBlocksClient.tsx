@@ -48,6 +48,7 @@ import PageSeoPanel from "./PageSeoPanel";
 import PageBlocksAssignModal from "./page-blocks/PageBlocksAssignModal";
 import PageBlocksAssignmentsGrid from "./page-blocks/PageBlocksAssignmentsGrid";
 import PageBlocksHeader, { PageModuleKindsSummary } from "./page-blocks/PageBlocksHeader";
+import PageCompositionTableSurface from "./page-blocks/PageCompositionTableSurface";
 import {
   assignmentRowId,
   isManageableAssignment,
@@ -458,8 +459,9 @@ export default function PageBlocksClient({
             sectionSummary: <PageModuleKindsSummary usedModuleKinds={usedModuleKinds} />,
             icon: "section",
             content: (
-              <section className="space-y-4" dir="rtl">
-                <AdminFeedbackRegion
+              <PageCompositionTableSurface
+                feedback={
+                  <AdminFeedbackRegion
                     channel={`page-composition:${page.id}:columns`}
                     label="حالة تفضيلات أعمدة موديولات الصفحة"
                     feedback={
@@ -474,12 +476,11 @@ export default function PageBlocksClient({
                           }
                         : null
                     }
-                />
-                <div
-                  className="flex flex-col gap-0"
-                  data-page-composition-table-shell=""
-                >
+                  />
+                }
+                toolbar={
                   <AdminEntityListFilters
+                    surface="embedded"
                     basePath={`/admin/pages-blocks/pages/${page.id}`}
                     search={{
                       value: search,
@@ -539,7 +540,8 @@ export default function PageBlocksClient({
                       );
                     }}
                   />
-
+                }
+                table={
                   <PageBlocksAssignmentsGrid
                     rows={paginatedRows}
                     previewHref={previewHref}
@@ -562,9 +564,9 @@ export default function PageBlocksClient({
                     manualReorderEnabled={table.sort.key === null}
                     visibleColumns={visibleColumnSet}
                   />
-                </div>
-
-                <AdminTablePagination
+                }
+                pagination={
+                  <AdminTablePagination
                   basePath={`/admin/pages-blocks/pages/${page.id}`}
                   currentPage={pagination.page}
                   totalPages={pagination.totalPages}
@@ -573,8 +575,9 @@ export default function PageBlocksClient({
                   onPageChange={pagination.setPage}
                   onPageSizeChange={pagination.setPageSize}
                   pending={isPending}
-                />
-              </section>
+                  />
+                }
+              />
             ),
           },
         ]}

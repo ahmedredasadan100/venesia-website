@@ -51,6 +51,8 @@ export type AdminEntityListFiltersProps = {
   /** Bulk actions replace chips while selection is active. */
   contextOverride?: ReactNode;
   contextOverrideActive?: boolean;
+  /** Standalone owns its card boundary; embedded delegates it to a parent surface. */
+  surface?: "standalone" | "embedded";
   /** Temporary compatibility slots removed from eligible adopters in this pass. */
   trailing?: ReactNode;
   searchSlot?: ReactNode;
@@ -237,6 +239,7 @@ export default function AdminEntityListFilters({
   columnsControl,
   contextOverride,
   contextOverrideActive = false,
+  surface = "standalone",
   className = "",
 }: AdminEntityListFiltersProps) {
   const router = useRouter();
@@ -499,7 +502,12 @@ export default function AdminEntityListFilters({
       <section
         dir="rtl"
         data-admin-collection-toolbar-owner=""
-        className={`overflow-visible rounded-t-[20px] border border-b-0 border-[#D8B87A]/14 bg-[#080B10]/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] ${className}`.trim()}
+        data-admin-collection-toolbar-surface={surface}
+        className={`${
+          surface === "embedded"
+            ? "overflow-visible border-b border-[#D8B87A]/14 bg-[#080B10]/90"
+            : "overflow-visible rounded-t-[20px] border border-b-0 border-[#D8B87A]/14 bg-[#080B10]/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
+        } ${className}`.trim()}
       >
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 p-3 sm:p-4">
           <div className="flex min-w-0 flex-1 items-center gap-2.5">

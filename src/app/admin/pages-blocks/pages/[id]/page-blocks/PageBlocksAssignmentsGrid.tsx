@@ -80,7 +80,7 @@ export default function PageBlocksAssignmentsGrid({
   }
 
   return (
-    <AdminDataGrid className="!rounded-t-none !border-t-0">
+    <AdminDataGrid surface="embedded">
       <AdminDataGridHeader columns={gridColumns}>
         <AdminDataGridCheckboxCell>
           <AdminDataGridCheckbox

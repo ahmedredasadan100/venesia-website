@@ -5,7 +5,13 @@ import {
   type AdminEntityListQueryContract,
 } from "../entity-list/data-engine/contracts";
 
-export const pageSortFields = ["id", "title", "status"] as const;
+export const pageSortFields = [
+  "id",
+  "title",
+  "slug",
+  "moduleCount",
+  "status",
+] as const;
 export type PageSortField = (typeof pageSortFields)[number];
 export type PageFilters = Record<string, never>;
 

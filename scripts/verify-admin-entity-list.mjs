@@ -215,6 +215,30 @@ check(
     entityTable.includes("<tbody"),
 );
 
+check(
+  "Entity List preserves implicit flexible tracks by default and exposes an explicit consumer opt-out",
+  entityTable.includes("implicitFlexibleColumn?: boolean") &&
+    entityTable.includes("implicitFlexibleColumn = true") &&
+    entityTable.includes("explicitFlexibleColumnKey ??") &&
+    entityTable.includes("(implicitFlexibleColumn") &&
+    entityList.includes("implicitFlexibleColumn?: boolean") &&
+    entityList.includes(
+      "implicitFlexibleColumn={implicitFlexibleColumn}",
+    ),
+);
+
+check(
+  "Shared toolbar and Data Grid keep standalone surfaces while supporting an opt-in embedded surface",
+  entityFilters.includes('surface?: "standalone" | "embedded"') &&
+    entityFilters.includes('surface = "standalone"') &&
+    entityFilters.includes('surface === "embedded"') &&
+    entityFilters.includes("data-admin-collection-toolbar-surface={surface}") &&
+    dataGrid.includes('surface?: "standalone" | "embedded"') &&
+    dataGrid.includes('surface = "standalone"') &&
+    dataGrid.includes("data-admin-data-grid-surface={surface}") &&
+    dataGrid.includes('const embedded = surface === "embedded"'),
+);
+
 const coreSources = [
   entityList,
   entityTable,

@@ -81,6 +81,11 @@ type PageRowActionHandlers = {
   onToggle: (row: AdminPageListRow) => Promise<AdminActionResult>;
 };
 
+// Pages needs more room than the shared compact numeric preset for its Arabic
+// aggregate header, while remaining an intentional fixed-width track.
+const PAGE_MODULE_COUNT_COLUMN_WIDTH =
+  ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH + 24;
+
 function PageRowActions({
   row,
   handlers,
@@ -206,7 +211,7 @@ function createPageColumns(
       hideable: false,
       sortable: true,
       sortKey: "title",
-      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly + 60,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly + 40,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -224,9 +229,10 @@ function createPageColumns(
       label: "Slug",
       defaultVisible: true,
       hideable: true,
-      sortable: false,
+      sortable: true,
+      sortKey: "slug",
       minWidth: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
-      flexible: true,
+      width: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
       align: "center",
       renderCell: ({ row }) => (
         <span className="block truncate font-mono text-xs text-white/55" dir="ltr">
@@ -239,9 +245,10 @@ function createPageColumns(
       label: "عدد الموديولات",
       defaultVisible: true,
       hideable: true,
-      sortable: false,
-      minWidth: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
-      width: ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
+      sortable: true,
+      sortKey: "moduleCount",
+      minWidth: PAGE_MODULE_COUNT_COLUMN_WIDTH,
+      width: PAGE_MODULE_COUNT_COLUMN_WIDTH,
       align: "center",
       renderCell: ({ row }) => (
         <span className="tabular-nums text-sm font-semibold text-white/70">
@@ -529,6 +536,7 @@ export default function PagesTableClient({
             getRowLabel={(row) => row.title}
             initialVisibleColumns={initialVisibleColumns}
             defaultVisibleColumns={[...getPagesDefaultColumnKeys()]}
+            implicitFlexibleColumn={false}
             onPersistColumns={savePagesTablePreferences}
             onRestoreColumns={restorePagesTablePreferences}
             enableColumnManagement
