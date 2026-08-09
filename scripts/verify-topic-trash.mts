@@ -236,10 +236,13 @@ check(
     emptyTrashAction.includes('getString(formData, "confirm_permanent") !== "true"'),
 );
 check(
-  "Featured state is read-only in Trash",
-  columns.includes('rowActionHandlers?.view === "trash"') &&
-    columns.includes('role="img"') &&
-    columns.includes("عرض فقط"),
+  "Featured state is read-only in Trash through the shared inline contract",
+  columns.includes('display="featured"') &&
+    !columns.includes('role="img"') &&
+    rowActions.includes('display === "featured"') &&
+    rowActions.includes('disabledReason: "عرض فقط داخل المحذوفات."') &&
+    rowActions.includes("isFeatured: Boolean(row.is_featured)") &&
+    sharedRowActions.includes('display?: "menu" | "visibility" | "featured"'),
 );
 check(
   "The Topics client adopts restore and purge through the instant mutation owner",

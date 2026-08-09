@@ -65,3 +65,23 @@ export async function updateMediaHubModule(formData: FormData) {
   revalidatePath(`/admin/pages-blocks/blocks/media-hub/${id}`, "page");
   redirect(`/admin/pages-blocks/blocks/media-hub/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }
+
+export async function toggleMediaHubModuleStatus(
+  id: number,
+  nextStatus: "published" | "unpublished",
+) {
+  await requireAdminSession();
+  if (!id) throw new Error("معرّف الموديول مفقود.");
+  const normalizedStatus = getStatus(nextStatus);
+
+  const { error } = await getSupabaseAdmin()
+    .from("media_hub_module_templates")
+    .update({
+      status: normalizedStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+  await revalidateBlockModulePaths("media-hub");
+}

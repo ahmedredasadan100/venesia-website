@@ -4,7 +4,6 @@ import Link from "next/link";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import {
   AdminDataGridRowActions,
-  AdminStatusPill,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
 import {
@@ -66,11 +65,6 @@ function SeriesIcon() {
   );
 }
 
-function statusMeta(status?: string | null) {
-  if (status === "published") return { label: "منشور", tone: "green" as const };
-  return { label: "غير منشور", tone: "gold" as const };
-}
-
 function singleLine(value: string) {
   return (
     <span className="block truncate text-sm text-white/68" title={value}>
@@ -83,10 +77,12 @@ function SeriesRowActions({
   row,
   onMutationResult,
   handlers,
+  display = "menu",
 }: {
   row: SeriesListRow;
   onMutationResult?: (result: AdminActionResult) => void;
   handlers: SeriesRowActionHandlers;
+  display?: "menu" | "visibility";
 }) {
   const pendingAction = handlers.rowPendingAction(row.id);
   const isTrashView = handlers.view === "trash";
@@ -175,7 +171,13 @@ function SeriesRowActions({
       },
       copyPublicLink: { access: "hidden" },
       visibility: isTrashView
-        ? { access: "hidden" }
+        ? display === "visibility"
+          ? {
+              access: "disabled",
+              disabledReason: "عرض فقط داخل المحذوفات.",
+              isVisible: !isHidden,
+            }
+          : { access: "hidden" }
         : pendingAction === "visibility"
           ? {
               access: "disabled",
@@ -290,7 +292,13 @@ function SeriesRowActions({
     },
   };
 
-  return <AdminDataGridRowActions capability={capability} size="compact" />;
+  return (
+    <AdminDataGridRowActions
+      capability={capability}
+      display={display}
+      size="compact"
+    />
+  );
 }
 
 export type SeriesRowActionHandlers = {
@@ -358,12 +366,14 @@ export function createSeriesColumns(
       sortKey: "status",
       minWidth: 104,
       width: 104,
-      renderCell: ({ row }) => {
-        const status = statusMeta(row.status);
-        return (
-          <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-        );
-      },
+      renderCell: ({ row, onMutationResult }) => (
+        <SeriesRowActions
+          row={row}
+          onMutationResult={onMutationResult}
+          handlers={handlers}
+          display="visibility"
+        />
+      ),
     },
     {
       key: "category",

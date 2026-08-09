@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { formatAdminDateTime } from "../../../lib/content-dates";
 import { getContentTypeLabel } from "../../../lib/admin/content/content-types";
-import { getContentStatusMetadata } from "../../../lib/admin/content/content-status-metadata";
 import { adminContentTopicPath } from "../../../lib/admin/content-routes";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
 import type { AdminEntityColumnDef } from "../../../lib/admin/entity-list";
 import { AdminStatusPill } from "../ui";
 import {
-  AdminDataGridActionIcon,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
 } from "../ui/AdminDataGrid";
@@ -171,14 +169,19 @@ export function createUnifiedContentColumns(
       sortKey: "status",
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.status,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.status,
-      renderCell: ({ row }) => {
+      renderCell: ({ row, onMutationResult }) => {
         if (row.deleted_at) {
           return <AdminStatusPill tone="red">في المحذوفات</AdminStatusPill>;
         }
-        const status = getContentStatusMetadata(row.status);
-        return (
-          <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-        );
+        return rowActionHandlers ? (
+          <UnifiedContentRowActions
+            row={row}
+            currentListPath={currentListPath}
+            onMutationResult={onMutationResult}
+            handlers={rowActionHandlers}
+            display="visibility"
+          />
+        ) : null;
       },
     },
     {
@@ -229,55 +232,16 @@ export function createUnifiedContentColumns(
       sortKey: "featured",
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.featured,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.featured,
-      renderCell: ({ row, onMutationResult }) => {
-        const active = Boolean(row.is_featured);
-        if (rowActionHandlers?.view === "trash") {
-          return (
-            <span
-              role="img"
-              aria-label={active ? "موضوع مميز — عرض فقط" : "موضوع غير مميز — عرض فقط"}
-              title={active ? "مميز — عرض فقط" : "غير مميز — عرض فقط"}
-              className={`inline-flex size-7 items-center justify-center rounded-full border ${
-                active
-                  ? "border-[#D8B87A]/30 bg-[#D8B87A]/10 text-[#E7B94F]/75"
-                  : "border-white/8 bg-white/[0.025] text-white/22"
-              }`}
-            >
-              <AdminDataGridActionIcon action="feature" active={active} />
-            </span>
-          );
-        }
-        const pending = rowActionHandlers?.rowPendingAction(row.id) === "featured";
-        const disabled = !rowActionHandlers || rowActionHandlers.mutationBusy;
-        const label = active
-          ? "إلغاء تمييز المحتوى"
-          : "تعيين المحتوى كمميز";
-        return (
-          <button
-            type="button"
-            aria-label={label}
-            aria-pressed={active}
-            aria-busy={pending || undefined}
-            title={label}
-            disabled={disabled}
-            onClick={async () => {
-              if (!rowActionHandlers) return;
-              const result = await rowActionHandlers.onFeatured(row);
-              onMutationResult?.(result);
-            }}
-            className={`inline-flex size-7 items-center justify-center rounded-full border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
-              active
-                ? "border-[#D8B87A]/45 bg-[#D8B87A]/16 text-[#E7B94F] shadow-[0_0_0_1px_rgba(216,184,122,0.08)]"
-                : "cursor-pointer border-white/10 bg-white/[0.035] text-white/28 hover:border-[#D8B87A]/30 hover:text-[#D8B87A]/75"
-            }`}
-          >
-            <AdminDataGridActionIcon
-              action="feature"
-              active={active}
-            />
-          </button>
-        );
-      },
+      renderCell: ({ row, onMutationResult }) =>
+        rowActionHandlers ? (
+          <UnifiedContentRowActions
+            row={row}
+            currentListPath={currentListPath}
+            onMutationResult={onMutationResult}
+            handlers={rowActionHandlers}
+            display="featured"
+          />
+        ) : null,
     },
     {
       key: "seo",

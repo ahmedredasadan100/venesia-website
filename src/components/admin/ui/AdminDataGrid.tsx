@@ -72,7 +72,7 @@ type ActionButtonProps = {
   pending?: boolean;
   active?: boolean;
   buttonRef?: Ref<HTMLButtonElement>;
-  size?: "default" | "compact";
+  size?: "default" | "compact" | "inline";
 };
 
 type CheckboxProps = {
@@ -234,6 +234,7 @@ export const ADMIN_DATA_GRID_RULES = {
   actionOrder: ["edit", "preview", "more"],
   actionButton: "h-11 w-11 rounded-[8px] cursor-pointer shrink-0",
   actionButtonCompact: "h-10 w-10 rounded-[8px] cursor-pointer shrink-0",
+  actionButtonInline: "h-7 w-7 rounded-full cursor-pointer shrink-0",
   actionIcon: "h-4 w-4 shrink-0",
   checkbox: "h-4 w-4 accent-[#D8B87A] cursor-pointer",
   /** Shared cell inset matches the compact Row Actions column. */
@@ -788,7 +789,12 @@ export function AdminDataGridActionButton({
   ) : (
     children
   );
-  const sizeClass = size === "compact" ? ADMIN_DATA_GRID_RULES.actionButtonCompact : ADMIN_DATA_GRID_RULES.actionButton;
+  const sizeClass =
+    size === "inline"
+      ? ADMIN_DATA_GRID_RULES.actionButtonInline
+      : size === "compact"
+        ? ADMIN_DATA_GRID_RULES.actionButtonCompact
+        : ADMIN_DATA_GRID_RULES.actionButton;
   const classes = `flex ${sizeClass} items-center justify-center border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${actionTones[resolvedTone]} ${className}`;
 
   if (href && !disabled && !pending) {

@@ -29,6 +29,7 @@ type CategoryRowActionsProps = {
   onDelete: (category: CategoryListRow) => Promise<AdminActionResult>;
   onRestore: (category: CategoryListRow) => Promise<AdminActionResult>;
   onPermanentDelete: (category: CategoryListRow) => Promise<AdminActionResult>;
+  display?: "menu" | "visibility";
 };
 
 export default function CategoryRowActions({
@@ -42,6 +43,7 @@ export default function CategoryRowActions({
   onDelete,
   onRestore,
   onPermanentDelete,
+  display = "menu",
 }: CategoryRowActionsProps) {
   const isTrashView = view === "trash";
   const isActive = category.status === "published";
@@ -128,7 +130,13 @@ export default function CategoryRowActions({
       },
       copyPublicLink: { access: "hidden" },
       visibility: isTrashView
-        ? { access: "hidden" }
+        ? display === "visibility"
+          ? {
+              access: "disabled",
+              disabledReason: "عرض فقط داخل المحذوفات.",
+              isVisible: isActive,
+            }
+          : { access: "hidden" }
         : pendingAction === "visibility"
           ? {
               access: "disabled",
@@ -243,5 +251,11 @@ export default function CategoryRowActions({
     },
   };
 
-  return <AdminDataGridRowActions capability={capability} size="compact" />;
+  return (
+    <AdminDataGridRowActions
+      capability={capability}
+      display={display}
+      size="compact"
+    />
+  );
 }

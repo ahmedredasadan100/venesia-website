@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
+
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) =>
   readFileSync(resolve(root, path), "utf8").replace(/\r\n?/g, "\n");
@@ -11,6 +13,16 @@ function check(label: string, condition: unknown) {
   assert.ok(condition, label);
   passed += 1;
   console.log(`PASS ${label}`);
+}
+
+function functionSection(source: string, functionName: string) {
+  const start = source.indexOf(`async function ${functionName}`);
+  if (start < 0) return "";
+  const tail = source.slice(start);
+  const nextFunction = tail.indexOf("\n  function ", 1);
+  const nextReturn = tail.indexOf("\n\n  return (", 1);
+  const ends = [nextFunction, nextReturn].filter((value) => value > 0);
+  return tail.slice(0, ends.length ? Math.min(...ends) : undefined);
 }
 
 const migration = read("sql/migrations/20260807120000_system_publication_summary_cards_closure.sql");
@@ -29,6 +41,9 @@ const heroLoader = read("src/lib/load-hero-section.ts");
 const assignmentLoader = read("src/lib/page-blocks/admin-queries.ts");
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const pagesConfig = read("src/lib/admin/pages/pages-list-config.ts");
+const statusRenderer = read("src/components/admin/ui/AdminDataGridRowActions.tsx");
+const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const instantMutation = read("src/lib/admin/entity-list/data-engine/instant-mutation.ts");
 
 const binaryRuntimeSources = [
   read("src/lib/admin/content/content-status-metadata.ts"),
@@ -63,6 +78,114 @@ const statusTables = [
   "media_sidebar_module_templates",
   "hero_templates",
 ] as const;
+
+const inlineStatus =
+  ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.inlineStatusExtension;
+const expectedInlineStatusEntities = [...statusTables, "projects"];
+
+check(
+  "Shared Status Icon extension retains the existing architecture owners and contracts",
+  inlineStatus.owner === "shared_capabilities" &&
+    inlineStatus.runtime === "data_runtime" &&
+    inlineStatus.capability === "shared_admin_row_actions" &&
+    inlineStatus.adapter === "existing_domain_action_callbacks" &&
+    inlineStatus.inputContract === "AdminRowActionsCapability" &&
+    inlineStatus.outputContract ===
+      "inline_visibility_and_featured_action_state" &&
+    inlineStatus.sourceOfTruth === "domain_publication_and_featured_fields",
+);
+check(
+  "Shared Status Icon extension maps Eye, Eye-Off, filled Star, and outline Star at the existing renderer",
+  inlineStatus.icons.published === "eye" &&
+    inlineStatus.icons.unpublished === "eye_off" &&
+    inlineStatus.icons.featured === "star_filled" &&
+    inlineStatus.icons.notFeatured === "star_outline" &&
+    statusRenderer.includes('display?: "menu" | "visibility" | "featured"') &&
+    statusRenderer.includes('action={isVisibility ? "visibility" : "feature"}') &&
+    statusRenderer.includes('size="inline"') &&
+    dataGrid.includes('if (action === "visibility")') &&
+    dataGrid.includes('if (action === "feature")') &&
+    dataGrid.includes('fill={active ? "currentColor" : "none"}'),
+);
+check(
+  "Shared Status Icon adoption covers every binary publication table and only the two real Featured consumers",
+  inlineStatus.consumers.length === expectedInlineStatusEntities.length &&
+    expectedInlineStatusEntities.every((entity) =>
+      inlineStatus.consumers.some((entry) => entry.entity === entity),
+    ) &&
+    new Set(inlineStatus.consumers.map((entry) => entry.entity)).size ===
+      inlineStatus.consumers.length &&
+    inlineStatus.consumers
+      .filter((entry) => "featuredField" in entry && entry.featuredField)
+      .map((entry) => entry.entity)
+      .sort()
+      .join(",") === "projects,topics",
+);
+check(
+  "every declared Shared Status Icon consumer adopts the same inline output contract",
+  inlineStatus.consumers.every((entry) => {
+    const source = read(entry.consumerSourceFile);
+    return (
+      source.includes('display="visibility"') &&
+      (!("featuredField" in entry) ||
+        !entry.featuredField ||
+        source.includes('display="featured"'))
+    );
+  }),
+);
+check(
+  "bounded Page Block consumers extend the existing Instant Mutation Runtime without a new adapter",
+  inlineStatus.consumers
+    .filter((entry) => entry.dataMode === "bounded-client")
+    .every((entry) =>
+      read(entry.consumerSourceFile).includes(
+        "useAdminBoundedClientInstantMutation",
+      ),
+    ) &&
+    instantMutation.includes(
+      "export function useAdminBoundedClientInstantMutation",
+    ) &&
+    instantMutation.includes("useAdminEntityInstantMutation<Row, Metrics>") &&
+    !instantMutation.includes("router.refresh"),
+);
+
+const specializedStatusConsumers = [
+  "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+  "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+  "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+  "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+].map(read);
+check(
+  "specialized publication columns removed local pills and keep status mutations instant",
+  specializedStatusConsumers.every(
+    (source) =>
+      !source.includes("AdminStatusPill") &&
+      functionSection(source, "runVisibilityMutation").includes(
+        "instant.mutateAsync",
+      ) &&
+      functionSection(source, "runVisibilityMutation").includes(
+        "optimistic:",
+      ) &&
+      !functionSection(source, "runVisibilityMutation").includes(
+        "router.refresh",
+      ),
+  ),
+);
+check(
+  "Media Hub and Sidebar list toggles stay in their existing domain action owners",
+  read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts").includes(
+    "export async function toggleMediaHubModuleStatus",
+  ) &&
+    read("src/app/admin/pages-blocks/blocks/media-sidebar/actions.ts").includes(
+      "export async function toggleMediaSidebarModuleStatus",
+    ) &&
+    read("src/app/admin/pages-blocks/blocks/media-hub/page.tsx").includes(
+      "toggleAction={toggleMediaHubModuleStatus}",
+    ) &&
+    read("src/app/admin/pages-blocks/blocks/media-sidebar/page.tsx").includes(
+      "toggleAction={toggleMediaSidebarModuleStatus}",
+    ),
+);
 
 check(
   "migration maps every status table and installs binary constraints",

@@ -8,9 +8,6 @@ import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import {
-  AdminStatusPill,
-} from "../../../../components/admin/ui";
-import {
   ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
   ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
@@ -217,10 +214,20 @@ export function createCategoryColumns(
       sortKey: "status",
       minWidth: 104,
       width: 104,
-      renderCell: ({ row }) => (
-        <AdminStatusPill tone={row.status === "published" ? "green" : "gold"}>
-          {row.status === "published" ? "منشور" : "غير منشور"}
-        </AdminStatusPill>
+      renderCell: ({ row, onMutationResult }) => (
+        <CategoryRowActions
+          category={row}
+          view={tree.view}
+          onMutationResult={onMutationResult}
+          pendingAction={tree.rowPendingAction(row.id)}
+          mutationBusy={tree.mutationBusy}
+          onToggle={tree.onToggleStatus}
+          onDuplicate={tree.onDuplicate}
+          onDelete={tree.onDelete}
+          onRestore={tree.onRestore}
+          onPermanentDelete={tree.onPermanentDelete}
+          display="visibility"
+        />
       ),
     },
     {

@@ -32,7 +32,6 @@ import {
   AdminModalPrimaryButton,
   AdminPageExperience,
   AdminPageHeader,
-  AdminStatusPill,
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
@@ -50,6 +49,7 @@ import {
   useAdminBoundedClientPagination,
 } from "../../../lib/admin/entity-list";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../lib/admin/entity-list/bulk-action-labels";
+import { useAdminBoundedClientInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -133,6 +133,11 @@ export default function BlockModuleManagerClient({
   const createRuntimeRef = useRef<AdminFormRuntimeHandle>(null);
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const [isRefreshPending, startRefreshTransition] = useTransition();
+  const instant = useAdminBoundedClientInstantMutation<BlockModuleRow>({
+    entity: `${moduleKey}-block-templates`,
+    initialRows: rows,
+    datasetKey: moduleKey,
+  });
   const columnPreferenceId = COLUMN_PREFERENCE_ID_BY_MODULE[moduleKey];
   const columnConfig = getPageCompositionColumnPreferenceConfig(columnPreferenceId);
   const defaultColumns = getPageCompositionDefaultColumnKeys(columnPreferenceId);
@@ -163,13 +168,13 @@ export default function BlockModuleManagerClient({
   const search = searchParams.get("q") ?? "";
   const filteredRows = useMemo(
     () =>
-      rows.filter((row) =>
+      instant.rows.filter((row) =>
         adminCollectionSearchIncludes(
           `${row.name} ${row.slug} ${row.description ?? ""} ${row.variant}`,
           search,
         ),
       ),
-    [rows, search],
+    [instant.rows, search],
   );
   const pagination = useAdminBoundedClientPagination({
     rows: filteredRows,
@@ -182,7 +187,11 @@ export default function BlockModuleManagerClient({
     [paginatedRows],
   );
   const selection = useAdminGridSelection<number>(visibleIds);
-  const isBusy = pendingRowId !== null || isRefreshPending;
+  const isBusy =
+    pendingRowId !== null ||
+    isRefreshPending ||
+    instant.rowPending !== null ||
+    instant.bulkPending !== null;
   const loadFeedback = useMemo(
     () =>
       loadError
@@ -239,6 +248,59 @@ export default function BlockModuleManagerClient({
       return false;
     } finally {
       setPendingRowId(null);
+    }
+  }
+
+  async function runVisibilityMutation(
+    row: BlockModuleRow,
+    nextStatus: "published" | "unpublished",
+  ) {
+    const successMessage =
+      nextStatus === "published" ? "تم نشر البلوك." : "تم إخفاء البلوك.";
+    clearFeedback(feedbackChannel);
+    try {
+      await instant.mutateAsync({
+        rowId: row.id,
+        action: "visibility",
+        optimistic: (cache) =>
+          cache.patchRows((candidate) =>
+            candidate.id === row.id
+              ? { ...candidate, status: nextStatus }
+              : candidate,
+          ),
+        execute: async () => {
+          await toggleAction(
+            mutationFormData({ id: row.id, next_status: nextStatus }),
+          );
+          return { ok: true, message: successMessage };
+        },
+      });
+      publishFeedback(
+        {
+          variant: "success",
+          title: "تم تنفيذ الإجراء",
+          message: successMessage,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline" },
+      );
+    } catch (error) {
+      publishFeedback(
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline", reveal: true },
+      );
     }
   }
 
@@ -392,6 +454,9 @@ export default function BlockModuleManagerClient({
           const nextStatus = row.status === "published" ? "unpublished" : "published";
           const hidden = { access: "hidden" as const };
           const rowPending = pendingRowId === row.id;
+          const visibilityPending =
+            instant.rowPending?.rowId === row.id &&
+            instant.rowPending.action === "visibility";
           const capability: AdminRowActionsCapability = {
             entityType: `${moduleKey}_block_template`,
             entityId: row.id,
@@ -415,49 +480,71 @@ export default function BlockModuleManagerClient({
                 ],
               },
               copyPublicLink: hidden,
-              visibility: {
-                access: "allowed",
-                isVisible: row.status === "published",
-                pending: rowPending,
-                onSelect: async () => {
-                  await runMutation(
-                    row.id,
-                    () => toggleAction(mutationFormData({ id: row.id, next_status: nextStatus })),
-                    row.status === "published" ? "تم إخفاء البلوك." : "تم نشر البلوك.",
-                  );
-                },
-              },
+              visibility: visibilityPending
+                ? {
+                    access: "disabled",
+                    disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                    pending: true,
+                    isVisible: row.status === "published",
+                  }
+                : isBusy
+                  ? {
+                      access: "disabled",
+                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                      isVisible: row.status === "published",
+                    }
+                  : {
+                      access: "allowed",
+                      isVisible: row.status === "published",
+                      onSelect: () => runVisibilityMutation(row, nextStatus),
+                    },
               featured: hidden,
-              duplicate: {
-                access: "allowed",
-                pending: rowPending,
-                onSelect: async () => {
-                  await runMutation(
-                    row.id,
-                    () => duplicateAction(mutationFormData({ id: row.id })),
-                    "تم إنشاء نسخة من البلوك.",
-                  );
-                },
-              },
+              duplicate:
+                isBusy && !rowPending
+                  ? {
+                      access: "disabled",
+                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                    }
+                  : {
+                      access: "allowed",
+                      pending: rowPending,
+                      onSelect: async () => {
+                        await runMutation(
+                          row.id,
+                          () =>
+                            duplicateAction(
+                              mutationFormData({ id: row.id }),
+                            ),
+                          "تم إنشاء نسخة من البلوك.",
+                        );
+                      },
+                    },
               archive: hidden,
-              delete: {
-                access: "allowed",
-                pending: rowPending,
-                onSelect: async () => {
-                  const succeeded = await runMutation(
-                    row.id,
-                    () => deleteAction(mutationFormData({ id: row.id })),
-                    "تم حذف البلوك.",
-                  );
-                  if (!succeeded) throw new Error("block delete failed");
-                },
-                confirmation: {
-                  mode: "shared",
-                  title: "تأكيد حذف البلوك",
-                  description: `حذف البلوك «${row.name}» نهائيًا؟`,
-                  confirmLabel: "حذف البلوك",
-                },
-              },
+              delete:
+                isBusy && !rowPending
+                  ? {
+                      access: "disabled",
+                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                    }
+                  : {
+                      access: "allowed",
+                      pending: rowPending,
+                      onSelect: async () => {
+                        const succeeded = await runMutation(
+                          row.id,
+                          () =>
+                            deleteAction(mutationFormData({ id: row.id })),
+                          "تم حذف البلوك.",
+                        );
+                        if (!succeeded) throw new Error("block delete failed");
+                      },
+                      confirmation: {
+                        mode: "shared",
+                        title: "تأكيد حذف البلوك",
+                        description: `حذف البلوك «${row.name}» نهائيًا؟`,
+                        confirmLabel: "حذف البلوك",
+                      },
+                    },
             },
           };
 
@@ -497,11 +584,12 @@ export default function BlockModuleManagerClient({
               ) : null}
 
               {visibleColumnSet.has("status") ? (
-                <AdminDataGridStatusCell className="flex-col gap-1">
-                  <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
-                  {row.status !== "published" ? (
-                    <p className="mt-1 text-[10px] leading-5 text-amber-200/75">غير منشور — لن يظهر على الصفحات العامة.</p>
-                  ) : null}
+                <AdminDataGridStatusCell>
+                  <AdminDataGridRowActions
+                    capability={capability}
+                    display="visibility"
+                    size="compact"
+                  />
                 </AdminDataGridStatusCell>
               ) : null}
 

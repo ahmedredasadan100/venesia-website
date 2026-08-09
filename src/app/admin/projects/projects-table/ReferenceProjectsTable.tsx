@@ -4,7 +4,6 @@ import Link from "next/link";
 
 import {
   AdminDataGridRowActions,
-  AdminStatusPill,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
 import {
@@ -66,10 +65,12 @@ function ProjectRowActions({
   row,
   handlers,
   onMutationResult,
+  display = "menu",
 }: {
   row: ProjectGridRow;
   handlers: ProjectRowActionHandlers;
   onMutationResult?: (result: AdminActionResult) => void;
+  display?: "menu" | "visibility" | "featured";
 }) {
   const pendingAction = handlers.rowPendingAction(row.id);
   const pendingState = {
@@ -208,7 +209,11 @@ function ProjectRowActions({
   };
 
   return (
-    <AdminDataGridRowActions capability={capability} size="compact" />
+    <AdminDataGridRowActions
+      capability={capability}
+      display={display}
+      size="compact"
+    />
   );
 }
 
@@ -265,14 +270,14 @@ export function createProjectColumns(
       align: "center",
       minWidth: 118,
       width: 124,
-      renderCell: ({ row }) => {
-        const metadata = getProjectPublicationMetadata(row.publication_status);
-        return (
-          <AdminStatusPill tone={metadata.tone}>
-            {metadata.label}
-          </AdminStatusPill>
-        );
-      },
+      renderCell: ({ row, onMutationResult }) => (
+        <ProjectRowActions
+          row={row}
+          handlers={handlers}
+          onMutationResult={onMutationResult}
+          display="visibility"
+        />
+      ),
     },
     {
       key: "featured",
@@ -283,10 +288,13 @@ export function createProjectColumns(
       align: "center",
       minWidth: 96,
       width: 96,
-      renderCell: ({ row }) => (
-        <AdminStatusPill tone={row.featured ? "gold" : "muted"}>
-          {row.featured ? "مميز" : "غير مميز"}
-        </AdminStatusPill>
+      renderCell: ({ row, onMutationResult }) => (
+        <ProjectRowActions
+          row={row}
+          handlers={handlers}
+          onMutationResult={onMutationResult}
+          display="featured"
+        />
       ),
     },
     {

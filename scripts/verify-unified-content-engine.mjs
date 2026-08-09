@@ -445,6 +445,11 @@ check(
 );
 
 const columns = read("src/components/admin/content/unified-content-columns.tsx");
+const unifiedRowActions = read(
+  "src/components/admin/content/UnifiedContentRowActions.tsx",
+);
+const featuredColumnSource =
+  columns.match(/key: "featured"[\s\S]*?key: "seo"/)?.[0] ?? "";
 const columnsPath = "src/components/admin/content/unified-content-columns.tsx";
 const columnFactoryContract = getColumnFactoryContract(
   columnsPath,
@@ -540,9 +545,15 @@ check(
     /key: "actions"[\s\S]*?sortable: false/.test(columns),
 );
 check(
-  "Featured star must remain the row-local shared icon while delegating toggle, pending, and feedback to current owners",
-  /key: "featured"[\s\S]*?<button[\s\S]*?aria-pressed=\{active\}[\s\S]*?rowActionHandlers\.onFeatured\(row\)[\s\S]*?onMutationResult\?\.\(result\)[\s\S]*?AdminDataGridActionIcon[\s\S]*?key: "seo"/.test(columns) &&
-    columns.includes('rowPendingAction(row.id) === "featured"'),
+  "Featured delegates the shared inline Star contract, pending state, mutation, and feedback to existing owners",
+  featuredColumnSource.includes("<UnifiedContentRowActions") &&
+    featuredColumnSource.includes('display="featured"') &&
+    !featuredColumnSource.includes("<button") &&
+    !featuredColumnSource.includes("AdminDataGridActionIcon") &&
+    unifiedRowActions.includes('display?: "menu" | "visibility" | "featured"') &&
+    unifiedRowActions.includes('pendingAction === "featured"') &&
+    unifiedRowActions.includes("handlers.onFeatured(row)") &&
+    unifiedRowActions.includes("onMutationResult?.(resolved)"),
 );
 check(
   "Topics rows and metrics must expose one official SEO score through the current owner contract",

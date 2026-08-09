@@ -33,11 +33,13 @@ export default function UnifiedContentRowActions({
   currentListPath,
   onMutationResult,
   handlers,
+  display = "menu",
 }: {
   row: UnifiedContentRow;
   currentListPath: string;
   onMutationResult?: (result: AdminActionResult) => void;
   handlers: UnifiedContentRowActionHandlers;
+  display?: "menu" | "visibility" | "featured";
 }) {
   const visibility = getContentPublicVisibilityState({
     status: row.status,
@@ -146,7 +148,13 @@ export default function UnifiedContentRowActions({
             disabledReason: visibility.tooltip,
           },
       featured: isTrashView
-        ? { access: "hidden" }
+        ? display === "featured"
+          ? {
+              access: "disabled",
+              disabledReason: "عرض فقط داخل المحذوفات.",
+              isFeatured: Boolean(row.is_featured),
+            }
+          : { access: "hidden" }
         :
         pendingAction === "featured"
           ? {
@@ -264,5 +272,11 @@ export default function UnifiedContentRowActions({
     },
   };
 
-  return <AdminDataGridRowActions capability={capability} size="compact" />;
+  return (
+    <AdminDataGridRowActions
+      capability={capability}
+      display={display}
+      size="compact"
+    />
+  );
 }

@@ -32,7 +32,7 @@ export default function TopicCard({
         <div dir="rtl" className="space-y-4 text-right">
           <p className="text-sm font-medium text-[#D8B87A]">{category}</p>
 
-          <h2 className="text-2xl font-semibold leading-relaxed text-white transition-colors duration-300 group-hover:text-[#D8B87A] md:text-[1.65rem]">
+          <h2 className="text-2xl font-semibold leading-relaxed text-white transition-colors duration-300 group-hover:text-[#D8B87A] md:text-[1.25rem]">
             {title}
           </h2>
 

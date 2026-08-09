@@ -14,7 +14,6 @@ import {
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   AdminDataGridRowActions,
   AdminPageContextHeader,
-  AdminStatusPill,
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
@@ -87,10 +86,12 @@ function PageRowActions({
   row,
   handlers,
   onMutationResult,
+  display = "menu",
 }: {
   row: AdminPageListRow;
   handlers: PageRowActionHandlers;
   onMutationResult?: (result: AdminActionResult) => void;
+  display?: "menu" | "visibility";
 }) {
   const pendingAction = handlers.rowPendingAction(row.id);
   const status = statusMeta(row.status);
@@ -186,7 +187,13 @@ function PageRowActions({
     },
   };
 
-  return <AdminDataGridRowActions capability={capability} size="compact" />;
+  return (
+    <AdminDataGridRowActions
+      capability={capability}
+      display={display}
+      size="compact"
+    />
+  );
 }
 
 function createPageColumns(
@@ -223,10 +230,14 @@ function createPageColumns(
       sortKey: "status",
       minWidth: 128,
       width: 128,
-      renderCell: ({ row }) => {
-        const status = statusMeta(row.status);
-        return <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>;
-      },
+      renderCell: ({ row, onMutationResult }) => (
+        <PageRowActions
+          row={row}
+          handlers={handlers}
+          onMutationResult={onMutationResult}
+          display="visibility"
+        />
+      ),
     },
     {
       key: "type",
