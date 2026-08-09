@@ -29,14 +29,26 @@ const compositionSurface = read(
 const assignmentGrid = read(
   "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx",
 );
+const pageSeoPanel = read(
+  "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
+);
 const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
 const entityListTable = read(
   "src/components/admin/entity-list/AdminEntityListTable.tsx",
+);
+const sharedSeoPill = read(
+  "src/components/admin/seo/AdminSeoScorePill.tsx",
+);
+const unifiedContentColumns = read(
+  "src/components/admin/content/unified-content-columns.tsx",
 );
 const entityListFilters = read(
   "src/components/admin/entity-list/AdminEntityListFilters.tsx",
 );
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const adminTable = read("src/components/admin/table-engine/useAdminTable.ts");
+const officialSeoOwner = read("src/lib/admin/seo-score.ts");
+const adminDateOwner = read("src/lib/content-dates.ts");
 const dataEngineContracts = read(
   "src/lib/admin/entity-list/data-engine/contracts.ts",
 );
@@ -54,6 +66,18 @@ const assignmentDelete = read(
 );
 const assignmentReorder = read(
   "src/app/admin/pages-blocks/pages/page-actions/assignment-reorder.ts",
+);
+const pageStatusAction = read(
+  "src/app/admin/pages-blocks/pages/page-actions/page-status.ts",
+);
+const pageSeoAction = read(
+  "src/app/admin/pages-blocks/pages/page-seo-actions.ts",
+);
+const foundationalSchema = read(
+  "sql/migrations/20250618000000_foundational_schema_baseline.sql",
+);
+const sharedEntitySeoMigration = read(
+  "sql/migrations/20260803153000_shared_entity_seo_capability.sql",
 );
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const uiRules = read("src/components/admin/ui/ADMIN_UI_RULES.md");
@@ -84,27 +108,122 @@ assert.match(
 );
 assert.match(
   sortMigration,
+  /p_sort_field = 'path' and p_sort_direction = 'asc' then path end asc,[\s\S]*p_sort_field = 'path' and p_sort_direction = 'desc' then path end desc/iu,
+);
+assert.match(
+  sortMigration,
   /p_sort_field = 'slug' and p_sort_direction = 'asc' then slug end asc,[\s\S]*p_sort_field = 'slug' and p_sort_direction = 'desc' then slug end desc/iu,
 );
 assert.match(
   sortMigration,
   /p_sort_field = 'moduleCount' and p_sort_direction = 'asc' then block_count end asc,[\s\S]*p_sort_field = 'moduleCount' and p_sort_direction = 'desc' then block_count end desc/iu,
 );
+assert.match(
+  sortMigration,
+  /p_sort_field = 'updatedAt' and p_sort_direction = 'asc' then updated_at end asc,[\s\S]*p_sort_field = 'updatedAt' and p_sort_direction = 'desc' then updated_at end desc/iu,
+);
 assert.match(sortMigration, /case when p_sort_field = 'status'[\s\S]*id asc/iu);
+for (const sourceField of [
+  "p.updated_at",
+  "p.seo_title",
+  "p.seo_description",
+  "p.seo_keywords",
+  "p.focus_keyword",
+  "p.og_image",
+  "p.og_image_alt",
+]) {
+  assert.ok(
+    sortMigration.includes(sourceField),
+    `Pages RPC output is missing ${sourceField}`,
+  );
+}
+assert.doesNotMatch(sortMigration, /p_sort_field\s*=\s*'seo'/iu);
+assert.doesNotMatch(
+  sortMigration,
+  /seo_score|seoScore|blockingErrors|analyzeEntitySeo/iu,
+);
 assert.doesNotMatch(
   sortMigration.replace(/^\s*--.*$/gmu, ""),
   /\b(?:insert\s+into|update|delete\s+from|truncate)\s+public\./iu,
 );
 
 assert.match(contract, /moduleCount:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)/u);
+assert.match(contract, /updatedAt:\s*z\.string\(\)/u);
+assert.match(contract, /seoScore:\s*z\.number\(\)\.int\(\)\.min\(0\)\.max\(100\)/u);
+assert.match(contract, /seoLabel:\s*z\.string\(\)/u);
+assert.match(contract, /seoBlockingErrors:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)/u);
 assert.match(contract, /createAdminEntityListResultSchema\(pageEntityListRowSchema\)/u);
 assert.match(adapter, /block_count:\s*z\.number\(\)\.int\(\)\.nonnegative\(\)/u);
 assert.match(adapter, /moduleCount:\s*block_count/u);
+assert.match(adapter, /updatedAt:\s*updated_at/u);
+assert.match(adapter, /analyzeEntitySeo\(\{/u);
+assert.match(
+  adapter,
+  /profile:\s*"entity"[\s\S]*title:\s*source\.title[\s\S]*description:\s*""[\s\S]*content:\s*""[\s\S]*slug:\s*[\s\S]*source\.path === "\/" \? "" : source\.path\.replace\(\/\^\\\/\+\/, ""\)[\s\S]*image:\s*""[\s\S]*imageAlt:\s*""[\s\S]*ogImage:\s*og_image \?\? ""[\s\S]*ogImageAlt:\s*og_image_alt[\s\S]*seoTitle:\s*seo_title[\s\S]*seoDescription:\s*seo_description[\s\S]*seoKeywords:\s*seo_keywords[\s\S]*focusKeyword:\s*focus_keyword[\s\S]*faq:\s*\[\]/u,
+);
+assert.match(adapter, /seoScore:\s*seo\.score/u);
+assert.match(adapter, /seoLabel:\s*seo\.label/u);
+assert.match(adapter, /seoBlockingErrors:\s*seo\.blockingErrors/u);
 assert.equal((adapter.match(/\.rpc\(/gu) ?? []).length, 1);
+assert.equal((adapter.match(/analyzeEntitySeo\(/gu) ?? []).length, 1);
+assert.match(officialSeoOwner, /export function analyzeEntitySeo/u);
+assert.doesNotMatch(adapter, /function\s+(?:calculate|get)Seo|score\s*[+*/-]=/iu);
 
-assert.match(config, /PAGES_LIST_COLUMN_CONTRACT_VERSION\s*=\s*2/u);
-for (const key of ["page", "slug", "moduleCount", "status", "actions"]) {
-  assert.ok(config.includes(`key: "${key}"`), `Pages column contract missing ${key}`);
+assert.match(
+  foundationalSchema,
+  /create table if not exists public\.pages \([\s\S]*updated_at timestamp with time zone not null default now\(\)/iu,
+);
+assert.match(
+  sharedEntitySeoMigration,
+  /alter table public\.pages[\s\S]*alter column seo_title set not null[\s\S]*alter column seo_description set not null[\s\S]*alter column focus_keyword set not null[\s\S]*alter column seo_keywords set not null[\s\S]*alter column og_image_alt set not null/iu,
+);
+assert.match(pageStatusAction, /update\(\{ status: nextStatus, updated_at: new Date\(\)\.toISOString\(\) \}\)/u);
+assert.match(pageSeoAction, /toEntitySeoPersistence\(seo\)[\s\S]*updated_at:\s*new Date\(\)\.toISOString\(\)/u);
+assert.match(adminDateOwner, /ADMIN_TIME_ZONE\s*=\s*"Africa\/Cairo"/u);
+assert.match(adminDateOwner, /export function formatAdminDateTime/u);
+
+assert.match(pageSeoPanel, /const publicSlug = props\.path === "\/" \? "" : props\.path\.replace\(\/\^\\\/\+\/, ""\)/u);
+for (const input of [
+  'name="page_description" value=""',
+  'name="page_content" value=""',
+  'name="page_image" value=""',
+  'name="page_image_alt" value=""',
+]) {
+  assert.ok(pageSeoPanel.includes(input), `Page SEO input contract missing ${input}`);
+}
+assert.match(pageSeoPanel, /initial=\{\{[\s\S]*profile:\s*"entity"[\s\S]*faq:\s*\[\]/u);
+
+assert.match(config, /PAGES_LIST_COLUMN_CONTRACT_VERSION\s*=\s*3/u);
+const configuredColumnKeys = Array.from(
+  config.matchAll(/\bkey:\s*"([^"]+)"/gu),
+  (match) => match[1],
+);
+assert.deepEqual(configuredColumnKeys, [
+  "page",
+  "path",
+  "slug",
+  "moduleCount",
+  "seo",
+  "updatedAt",
+  "status",
+  "actions",
+]);
+const configColumnSlice = (key: string, nextKey?: string) => {
+  const start = config.indexOf(`key: "${key}"`);
+  const end = nextKey ? config.indexOf(`key: "${nextKey}"`, start) : config.indexOf("] as const", start);
+  return config.slice(start, end);
+};
+assert.match(configColumnSlice("slug", "moduleCount"), /defaultVisible:\s*false/u);
+for (const [key, nextKey] of [
+  ["page", "path"],
+  ["path", "slug"],
+  ["moduleCount", "seo"],
+  ["seo", "updatedAt"],
+  ["updatedAt", "status"],
+  ["status", "actions"],
+  ["actions", undefined],
+] as const) {
+  assert.match(configColumnSlice(key, nextKey), /defaultVisible:\s*true/u);
 }
 assert.doesNotMatch(config, /key:\s*"type"/u);
 assert.doesNotMatch(config, /key:\s*"selection"/u);
@@ -116,6 +235,10 @@ assert.match(client, /row\.moduleCount/u);
 
 const pageColumn = client.slice(
   client.indexOf('key: "page"'),
+  client.indexOf('key: "path"'),
+);
+const pathColumn = client.slice(
+  client.indexOf('key: "path"'),
   client.indexOf('key: "slug"'),
 );
 const slugColumn = client.slice(
@@ -124,6 +247,14 @@ const slugColumn = client.slice(
 );
 const moduleCountColumn = client.slice(
   client.indexOf('key: "moduleCount"'),
+  client.indexOf('key: "seo"'),
+);
+const seoColumn = client.slice(
+  client.indexOf('key: "seo"'),
+  client.indexOf('key: "updatedAt"'),
+);
+const updatedAtColumn = client.slice(
+  client.indexOf('key: "updatedAt"'),
   client.indexOf('key: "status"'),
 );
 const statusColumn = client.slice(
@@ -137,8 +268,11 @@ const actionsColumn = client.slice(
 );
 const orderedColumnOffsets = [
   client.indexOf('key: "page"'),
+  client.indexOf('key: "path"'),
   client.indexOf('key: "slug"'),
   client.indexOf('key: "moduleCount"'),
+  client.indexOf('key: "seo"'),
+  client.indexOf('key: "updatedAt"'),
   client.indexOf('key: "status"'),
   client.indexOf('key: "actions"'),
 ];
@@ -148,13 +282,26 @@ assert.match(pageColumn, /sortable:\s*true[\s\S]*sortKey:\s*"title"/u);
 assert.doesNotMatch(pageColumn, /flexible:\s*true/u);
 assert.match(pageColumn, /minWidth:\s*ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS\.textOnly \+ 40/u);
 assert.match(
+  pathColumn,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*true[\s\S]*sortKey:\s*"path"[\s\S]*minWidth:\s*PAGE_PATH_COLUMN_WIDTH[\s\S]*width:\s*PAGE_PATH_COLUMN_WIDTH/u,
+);
+assert.match(
   slugColumn,
-  /sortable:\s*true[\s\S]*sortKey:\s*"slug"[\s\S]*minWidth:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH/u,
+  /defaultVisible:\s*false[\s\S]*sortable:\s*true[\s\S]*sortKey:\s*"slug"[\s\S]*minWidth:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH/u,
 );
 assert.doesNotMatch(slugColumn, /flexible:\s*true/u);
 assert.match(
   moduleCountColumn,
   /sortable:\s*true[\s\S]*sortKey:\s*"moduleCount"[\s\S]*minWidth:\s*PAGE_MODULE_COUNT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_MODULE_COUNT_COLUMN_WIDTH/u,
+);
+assert.match(
+  seoColumn,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*false[\s\S]*minWidth:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*width:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*<AdminSeoScorePill[\s\S]*score=\{row\.seoScore\}[\s\S]*label=\{row\.seoLabel\}[\s\S]*blockingErrors=\{row\.seoBlockingErrors\}/u,
+);
+assert.doesNotMatch(seoColumn, /sortKey:/u);
+assert.match(
+  updatedAtColumn,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*true[\s\S]*sortKey:\s*"updatedAt"[\s\S]*minWidth:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*formatAdminDateTime\(row\.updatedAt\)/u,
 );
 assert.match(statusColumn, /sortable:\s*true[\s\S]*sortKey:\s*"status"/u);
 assert.match(
@@ -163,21 +310,51 @@ assert.match(
 );
 assert.match(
   contract,
-  /pageSortFields\s*=\s*\[\s*"id",\s*"title",\s*"slug",\s*"moduleCount",\s*"status",?\s*\]/u,
+  /pageSortFields\s*=\s*\[\s*"id",\s*"title",\s*"path",\s*"slug",\s*"moduleCount",\s*"updatedAt",\s*"status",?\s*\]/u,
 );
+assert.doesNotMatch(contract, /pageSortFields[\s\S]*"seo"[\s\S]*as const/u);
 assert.doesNotMatch(contract, /"selection"/u);
 assert.match(
   client,
   /PAGE_MODULE_COUNT_COLUMN_WIDTH\s*=\s*\n\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH \+ 24/u,
 );
+assert.match(client, /PAGE_PATH_COLUMN_WIDTH\s*=\s*200/u);
+assert.match(client, /PAGE_SEO_COLUMN_WIDTH\s*=\s*96/u);
+assert.match(client, /PAGE_UPDATED_AT_COLUMN_WIDTH\s*=\s*176/u);
 assert.match(client, /implicitFlexibleColumn=\{false\}/u);
+assert.match(client, /fillAvailableWidth/u);
 assert.match(entityList, /implicitFlexibleColumn=\{implicitFlexibleColumn\}/u);
+assert.match(entityList, /fillAvailableWidth\?: boolean/u);
+assert.match(entityList, /fillAvailableWidth=\{fillAvailableWidth\}/u);
 assert.match(entityListTable, /implicitFlexibleColumn\?: boolean/u);
 assert.match(entityListTable, /implicitFlexibleColumn = true/u);
+assert.match(entityListTable, /fillAvailableWidth\?: boolean/u);
+assert.match(entityListTable, /fillAvailableWidth = false/u);
 assert.match(
   entityListTable,
   /explicitFlexibleColumnKey \?\?[\s\S]*\(implicitFlexibleColumn[\s\S]*!column\.primary[\s\S]*: undefined\)/u,
 );
+assert.match(
+  entityListTable,
+  /const showFillSpacer = fillAvailableWidth && flexibleColumnKey === undefined/u,
+);
+assert.match(
+  entityListTable,
+  /flexibleColumnKey === undefined && !showFillSpacer[\s\S]*\? tableMinWidth[\s\S]*: "100%"/u,
+);
+assert.equal(
+  (entityListTable.match(/data-admin-table-fill-spacer/gu) ?? []).length,
+  6,
+  "The fill spacer must remain presentation-only in both sticky-end and trailing placement branches.",
+);
+assert.doesNotMatch(config, /fillSpacer|fill-spacer/u);
+assert.doesNotMatch(contract, /fillSpacer|fill-spacer/u);
+
+assert.match(sharedSeoPill, /Shared presentation for the official analyzeEntitySeo score output/u);
+assert.match(sharedSeoPill, /<AdminStatusPill tone=\{getSeoScoreTone\(score\)\}>/u);
+assert.doesNotMatch(sharedSeoPill, /analyzeEntitySeo\(|seoKeywords|focusKeyword/u);
+assert.match(unifiedContentColumns, /<AdminSeoScorePill score=\{row\.seo_score\} \/>/u);
+assert.doesNotMatch(unifiedContentColumns, /function getSeoScoreTone/u);
 assert.match(
   client,
   /sortMode=\{\{[\s\S]*mode:\s*"callback"[\s\S]*controller\.setSort\([\s\S]*current\.field === field && current\.direction === "asc"[\s\S]*\? "desc"[\s\S]*: "asc"/u,
@@ -195,6 +372,15 @@ assert.match(
   /const setSort = useCallback\([\s\S]*commitQuery\([\s\S]*sort,[\s\S]*page:[\s\S]*"push"/u,
 );
 assert.match(dataEngineController, /window\.history\[[\s\S]*pushState/u);
+assert.match(assignmentGrid, /AdminDataGridSortLabel/u);
+assert.match(
+  assignmentGrid,
+  /function sortProps\(key: SortKey\)[\s\S]*active:\s*sort\.key === key[\s\S]*direction:\s*sort\.direction[\s\S]*onClick:\s*\(\) => onToggleSort\(key\)/u,
+);
+assert.match(
+  adminTable,
+  /function toggleSort\(key: TSortKey\)[\s\S]*current\.key !== key\) return \{ key, direction: "asc" \}[\s\S]*current\.direction === "asc"\) return \{ key, direction: "desc" \}[\s\S]*return \{ key: null, direction: "asc" \}/u,
+);
 
 for (const retiredPath of [
   "src/lib/admin/pages/load-pages-table-rows.ts",
@@ -208,6 +394,8 @@ assert.match(assignmentRow, /AdminDataGridRowActions[\s\S]*display="visibility"/
 assert.equal((assignmentRow.match(/const capability: AdminRowActionsCapability/gu) ?? []).length, 1);
 assert.match(compositionClient, /if \(table\.sort\.key !== null\) return false;/u);
 assert.match(compositionClient, /if \(table\.sort\.key !== null\) return;/u);
+assert.match(compositionClient, /table\.toggleSort\(key\)/u);
+assert.match(compositionClient, /manualReorderEnabled=\{table\.sort\.key === null\}/u);
 assert.match(
   compositionClient,
   /<PageCompositionTableSurface[\s\S]*toolbar=\{[\s\S]*<AdminEntityListFilters[\s\S]*surface="embedded"[\s\S]*table=\{[\s\S]*<PageBlocksAssignmentsGrid[\s\S]*pagination=\{[\s\S]*<AdminTablePagination/u,

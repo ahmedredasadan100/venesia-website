@@ -619,7 +619,7 @@ check(
     entityListTableSource.includes("<AdminDataGridStickyActionsCell"),
 );
 check(
-  "fixed table tracks and explicit no-implicit-flex consumers do not absorb remaining viewport width",
+  "fixed data tracks stay fixed while opt-in presentation spacers can fill the remaining viewport width",
   entityListTableSource.includes("const flexibleColumnKey =") &&
     entityListTableSource.includes("const explicitFlexibleColumnKey =") &&
     entityListTableSource.includes("implicitFlexibleColumn?: boolean") &&
@@ -632,8 +632,14 @@ check(
     entityListTableSource.includes("const tableMinWidth =") &&
     entityListTableSource.includes('className="w-full table-fixed') &&
     entityListTableSource.includes("column.key === flexibleColumnKey") &&
+    entityListTableSource.includes("fillAvailableWidth?: boolean") &&
+    entityListTableSource.includes("fillAvailableWidth = false") &&
     entityListTableSource.includes(
-      'width: flexibleColumnKey === undefined ? tableMinWidth : "100%"',
+      "const showFillSpacer = fillAvailableWidth && flexibleColumnKey === undefined",
+    ) &&
+    entityListTableSource.includes("data-admin-table-fill-spacer") &&
+    entityListTableSource.includes(
+      "flexibleColumnKey === undefined && !showFillSpacer",
     ) &&
     !entityListTableSource.includes("w-max min-w-full table-fixed"),
 );

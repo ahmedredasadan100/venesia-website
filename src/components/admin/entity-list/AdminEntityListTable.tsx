@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { AdminEntityColumnDef } from "../../../lib/admin/entity-list";
 import {
   AdminDataGrid,
@@ -63,6 +63,11 @@ export type AdminEntityListTableProps<
    * Set to false when every column in a consumer has an intentional fixed width.
    */
   implicitFlexibleColumn?: boolean;
+  /**
+   * Fills the available table surface without allowing a data column to absorb
+   * the remaining width. A presentation-only spacer track owns the remainder.
+   */
+  fillAvailableWidth?: boolean;
   /** Optional hierarchy depth for indent capability. */
   getRowDepth?: (row: TRow) => number;
   rowClassName?: (row: TRow) => string;
@@ -94,6 +99,7 @@ export default function AdminEntityListTable<
   empty,
   className = "",
   implicitFlexibleColumn = true,
+  fillAvailableWidth = false,
   getRowDepth,
   rowClassName,
   onMutationResult,
@@ -113,6 +119,12 @@ export default function AdminEntityListTable<
             column.sticky !== "end",
         )?.key
       : undefined);
+  const fillSpacerBeforeColumnKey = columns.find(
+    (column) => column.sticky === "end",
+  )?.key;
+  const showFillSpacer = fillAvailableWidth && flexibleColumnKey === undefined;
+  const showTrailingFillSpacer =
+    showFillSpacer && fillSpacerBeforeColumnKey === undefined;
 
   function getColumnBaseWidth(
     column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
@@ -196,7 +208,10 @@ export default function AdminEntityListTable<
     >
       <table
         style={{
-          width: flexibleColumnKey === undefined ? tableMinWidth : "100%",
+          width:
+            flexibleColumnKey === undefined && !showFillSpacer
+              ? tableMinWidth
+              : "100%",
           minWidth: tableMinWidth,
         }}
         className="w-full table-fixed border-separate border-spacing-0 text-right"
@@ -208,11 +223,16 @@ export default function AdminEntityListTable<
             />
           ) : null}
           {columns.map((column) => (
-            <col
-              key={column.key}
-              style={getColumnTrackStyle(column)}
-            />
+            <Fragment key={column.key}>
+              {showFillSpacer && column.key === fillSpacerBeforeColumnKey ? (
+                <col data-admin-table-fill-spacer="" />
+              ) : null}
+              <col style={getColumnTrackStyle(column)} />
+            </Fragment>
           ))}
+          {showTrailingFillSpacer ? (
+            <col data-admin-table-fill-spacer="" />
+          ) : null}
         </colgroup>
         <thead>
           <tr
@@ -232,15 +252,25 @@ export default function AdminEntityListTable<
             ) : null}
             {columns.map((column) => {
               const content = renderHeaderLabel(column);
+              const fillSpacer =
+                showFillSpacer && column.key === fillSpacerBeforeColumnKey ? (
+                  <th
+                    aria-hidden="true"
+                    data-admin-table-fill-spacer=""
+                    style={{ padding: 0, borderInlineStart: 0 }}
+                  />
+                ) : null;
               if (column.sticky === "end") {
                 return (
-                  <AdminDataGridStickyActionsHeaderCell
-                    key={column.key}
-                    width={actionsColumnWidth}
-                    columnKey={column.key}
-                  >
-                    {content}
-                  </AdminDataGridStickyActionsHeaderCell>
+                  <Fragment key={column.key}>
+                    {fillSpacer}
+                    <AdminDataGridStickyActionsHeaderCell
+                      width={actionsColumnWidth}
+                      columnKey={column.key}
+                    >
+                      {content}
+                    </AdminDataGridStickyActionsHeaderCell>
+                  </Fragment>
                 );
               }
 
@@ -260,16 +290,25 @@ export default function AdminEntityListTable<
                     : "text-center";
 
               return (
-                <th
-                  key={column.key}
-                  data-admin-column-key={column.key}
-                  style={getColumnTrackStyle(column)}
-                  className={`whitespace-nowrap ${alignmentClass} ${stickyPrimary}`}
-                >
-                  {content}
-                </th>
+                <Fragment key={column.key}>
+                  {fillSpacer}
+                  <th
+                    data-admin-column-key={column.key}
+                    style={getColumnTrackStyle(column)}
+                    className={`whitespace-nowrap ${alignmentClass} ${stickyPrimary}`}
+                  >
+                    {content}
+                  </th>
+                </Fragment>
               );
             })}
+            {showTrailingFillSpacer ? (
+              <th
+                aria-hidden="true"
+                data-admin-table-fill-spacer=""
+                style={{ padding: 0, borderInlineStart: 0 }}
+              />
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -302,16 +341,27 @@ export default function AdminEntityListTable<
                     rowId,
                     onMutationResult,
                   });
+                  const fillSpacer =
+                    showFillSpacer &&
+                    column.key === fillSpacerBeforeColumnKey ? (
+                      <td
+                        aria-hidden="true"
+                        data-admin-table-fill-spacer=""
+                        style={{ padding: 0, borderInlineStart: 0 }}
+                      />
+                    ) : null;
                   if (column.sticky === "end") {
                     return (
-                      <AdminDataGridStickyActionsCell
-                        key={column.key}
-                        width={actionsColumnWidth}
-                        columnKey={column.key}
-                        className="border-b border-white/8 group-last:border-b-0"
-                      >
-                        {content}
-                      </AdminDataGridStickyActionsCell>
+                      <Fragment key={column.key}>
+                        {fillSpacer}
+                        <AdminDataGridStickyActionsCell
+                          width={actionsColumnWidth}
+                          columnKey={column.key}
+                          className="border-b border-white/8 group-last:border-b-0"
+                        >
+                          {content}
+                        </AdminDataGridStickyActionsCell>
+                      </Fragment>
                     );
                   }
 
@@ -331,21 +381,30 @@ export default function AdminEntityListTable<
                         : "text-center";
 
                   return (
-                    <td
-                      key={column.key}
-                      data-admin-column-key={column.key}
-                      style={{
-                        ...(getColumnTrackStyle(column) ?? {}),
-                        ...(column.primary && depth > 0
-                          ? { paddingInlineStart: undefined }
-                          : {}),
-                      }}
-                      className={`min-w-0 overflow-hidden border-b border-white/8 text-sm text-white/68 group-last:border-b-0 ${alignmentClass} ${stickyPrimary}`}
-                    >
-                      {content}
-                    </td>
+                    <Fragment key={column.key}>
+                      {fillSpacer}
+                      <td
+                        data-admin-column-key={column.key}
+                        style={{
+                          ...(getColumnTrackStyle(column) ?? {}),
+                          ...(column.primary && depth > 0
+                            ? { paddingInlineStart: undefined }
+                            : {}),
+                        }}
+                        className={`min-w-0 overflow-hidden border-b border-white/8 text-sm text-white/68 group-last:border-b-0 ${alignmentClass} ${stickyPrimary}`}
+                      >
+                        {content}
+                      </td>
+                    </Fragment>
                   );
                 })}
+                {showTrailingFillSpacer ? (
+                  <td
+                    aria-hidden="true"
+                    data-admin-table-fill-spacer=""
+                    style={{ padding: 0, borderInlineStart: 0 }}
+                  />
+                ) : null}
               </tr>
             );
           })}

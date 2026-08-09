@@ -1,6 +1,6 @@
--- Complete Admin Pages server sorting for every visible stable data column.
--- This replaces only the existing read-model function body; no Page or
--- assignment data is mutated.
+-- Complete Admin Pages server sorting/output for every server-owned stable
+-- data column. SEO source fields are returned for analysis by the official
+-- application owner; no SQL SEO calculator or data mutation is introduced.
 begin;
 
 do $$
@@ -40,7 +40,20 @@ as $$
     ) assignments
     group by page_id
   ), listed as (
-    select p.id, p.title, p.slug, p.path, p.page_type, p.status,
+    select
+      p.id,
+      p.title,
+      p.slug,
+      p.path,
+      p.page_type,
+      p.status,
+      p.updated_at,
+      p.seo_title,
+      p.seo_description,
+      p.seo_keywords,
+      p.focus_keyword,
+      p.og_image,
+      p.og_image_alt,
       coalesce(ac.block_count, 0)::bigint as block_count
     from public.pages p
     left join assignment_counts ac on ac.page_id = p.id
@@ -72,10 +85,14 @@ as $$
         order by
           case when p_sort_field = 'title' and p_sort_direction = 'asc' then title end asc,
           case when p_sort_field = 'title' and p_sort_direction = 'desc' then title end desc,
+          case when p_sort_field = 'path' and p_sort_direction = 'asc' then path end asc,
+          case when p_sort_field = 'path' and p_sort_direction = 'desc' then path end desc,
           case when p_sort_field = 'slug' and p_sort_direction = 'asc' then slug end asc,
           case when p_sort_field = 'slug' and p_sort_direction = 'desc' then slug end desc,
           case when p_sort_field = 'moduleCount' and p_sort_direction = 'asc' then block_count end asc,
           case when p_sort_field = 'moduleCount' and p_sort_direction = 'desc' then block_count end desc,
+          case when p_sort_field = 'updatedAt' and p_sort_direction = 'asc' then updated_at end asc,
+          case when p_sort_field = 'updatedAt' and p_sort_direction = 'desc' then updated_at end desc,
           case when p_sort_field = 'status' and p_sort_direction = 'asc' then status end asc,
           case when p_sort_field = 'status' and p_sort_direction = 'desc' then status end desc,
           id asc

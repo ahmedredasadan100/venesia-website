@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
+import { analyzeEntitySeo } from "../seo-score";
 import type { AdminEntityListAdapter } from "../entity-list/data-engine/adapter";
 import {
   type AdminEntityListQuery,
@@ -23,6 +24,13 @@ const pagesReadModelRowSchema = z.object({
   page_type: z.string(),
   status: z.string(),
   block_count: z.number().int().nonnegative(),
+  updated_at: z.string(),
+  seo_title: z.string(),
+  seo_description: z.string(),
+  seo_keywords: z.array(z.string()),
+  focus_keyword: z.string(),
+  og_image: z.string().nullable(),
+  og_image_alt: z.string(),
 });
 
 const pagesReadModelSchema = z.object({
@@ -65,10 +73,48 @@ export async function loadPagesEntityListResult(
   const page = readModel.page;
 
   return pagesEntityListResultSchema.parse({
-    rows: readModel.rows.map(({ block_count, ...row }) => ({
-      ...row,
-      moduleCount: block_count,
-    })),
+    rows: readModel.rows.map((source) => {
+      const {
+        block_count,
+        updated_at,
+        seo_title,
+        seo_description,
+        seo_keywords,
+        focus_keyword,
+        og_image,
+        og_image_alt,
+        ...row
+      } = source;
+      // This deliberately mirrors PageSeoPanel's entity-profile source shape:
+      // Pages have no description/content/content-image fields in the current
+      // domain contract, so those official inputs remain empty in both places.
+      const seo = analyzeEntitySeo({
+        profile: "entity",
+        title: source.title,
+        description: "",
+        content: "",
+        slug:
+          source.path === "/" ? "" : source.path.replace(/^\/+/, ""),
+        image: "",
+        imageAlt: "",
+        ogImage: og_image ?? "",
+        ogImageAlt: og_image_alt,
+        seoTitle: seo_title,
+        seoDescription: seo_description,
+        seoKeywords: seo_keywords,
+        focusKeyword: focus_keyword,
+        faq: [],
+      });
+
+      return {
+        ...row,
+        moduleCount: block_count,
+        updatedAt: updated_at,
+        seoScore: seo.score,
+        seoLabel: seo.label,
+        seoBlockingErrors: seo.blockingErrors,
+      };
+    }),
     pagination: { page, pageSize: query.pageSize, totalRows, totalPages },
     meta: { generatedAt: new Date().toISOString(), mode: query.mode },
   });

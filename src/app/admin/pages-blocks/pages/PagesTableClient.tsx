@@ -22,12 +22,14 @@ import {
   ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
   ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
 } from "../../../../components/admin/ui/AdminDataGrid";
+import AdminSeoScorePill from "../../../../components/admin/seo/AdminSeoScorePill";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import {
   adminActionFailure,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import { getContentStatusMetadata } from "../../../../lib/admin/content/content-status-metadata";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
 import type {
@@ -85,6 +87,9 @@ type PageRowActionHandlers = {
 // aggregate header, while remaining an intentional fixed-width track.
 const PAGE_MODULE_COUNT_COLUMN_WIDTH =
   ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH + 24;
+const PAGE_PATH_COLUMN_WIDTH = 200;
+const PAGE_SEO_COLUMN_WIDTH = 96;
+const PAGE_UPDATED_AT_COLUMN_WIDTH = 176;
 
 function PageRowActions({
   row,
@@ -225,9 +230,25 @@ function createPageColumns(
       ),
     },
     {
+      key: "path",
+      label: "المسار",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "path",
+      minWidth: PAGE_PATH_COLUMN_WIDTH,
+      width: PAGE_PATH_COLUMN_WIDTH,
+      align: "center",
+      renderCell: ({ row }) => (
+        <span className="block truncate font-mono text-xs text-white/62" dir="ltr">
+          {row.path}
+        </span>
+      ),
+    },
+    {
       key: "slug",
       label: "Slug",
-      defaultVisible: true,
+      defaultVisible: false,
       hideable: true,
       sortable: true,
       sortKey: "slug",
@@ -253,6 +274,41 @@ function createPageColumns(
       renderCell: ({ row }) => (
         <span className="tabular-nums text-sm font-semibold text-white/70">
           {row.moduleCount}
+        </span>
+      ),
+    },
+    {
+      key: "seo",
+      label: "SEO",
+      defaultVisible: true,
+      hideable: true,
+      // The score is computed by analyzeEntitySeo after the server-page RPC.
+      // Sorting stays disabled until an official server-owned projection exists.
+      sortable: false,
+      minWidth: PAGE_SEO_COLUMN_WIDTH,
+      width: PAGE_SEO_COLUMN_WIDTH,
+      align: "center",
+      renderCell: ({ row }) => (
+        <AdminSeoScorePill
+          score={row.seoScore}
+          label={row.seoLabel}
+          blockingErrors={row.seoBlockingErrors}
+        />
+      ),
+    },
+    {
+      key: "updatedAt",
+      label: "آخر تحديث",
+      defaultVisible: true,
+      hideable: true,
+      sortable: true,
+      sortKey: "updatedAt",
+      minWidth: PAGE_UPDATED_AT_COLUMN_WIDTH,
+      width: PAGE_UPDATED_AT_COLUMN_WIDTH,
+      align: "center",
+      renderCell: ({ row }) => (
+        <span className="font-en whitespace-nowrap text-xs tabular-nums text-white/58">
+          {formatAdminDateTime(row.updatedAt)}
         </span>
       ),
     },
@@ -537,6 +593,7 @@ export default function PagesTableClient({
             initialVisibleColumns={initialVisibleColumns}
             defaultVisibleColumns={[...getPagesDefaultColumnKeys()]}
             implicitFlexibleColumn={false}
+            fillAvailableWidth
             onPersistColumns={savePagesTablePreferences}
             onRestoreColumns={restorePagesTablePreferences}
             enableColumnManagement

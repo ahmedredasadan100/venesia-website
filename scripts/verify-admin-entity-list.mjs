@@ -228,6 +228,19 @@ check(
 );
 
 check(
+  "Entity List exposes opt-in surface fill through a presentation-only spacer track",
+  entityTable.includes("fillAvailableWidth?: boolean") &&
+    entityTable.includes("fillAvailableWidth = false") &&
+    entityTable.includes(
+      "const showFillSpacer = fillAvailableWidth && flexibleColumnKey === undefined",
+    ) &&
+    entityTable.includes("data-admin-table-fill-spacer") &&
+    entityTable.includes("flexibleColumnKey === undefined && !showFillSpacer") &&
+    entityList.includes("fillAvailableWidth?: boolean") &&
+    entityList.includes("fillAvailableWidth={fillAvailableWidth}"),
+);
+
+check(
   "Shared toolbar and Data Grid keep standalone surfaces while supporting an opt-in embedded surface",
   entityFilters.includes('surface?: "standalone" | "embedded"') &&
     entityFilters.includes('surface = "standalone"') &&

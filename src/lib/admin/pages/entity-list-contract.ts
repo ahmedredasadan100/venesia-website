@@ -8,8 +8,10 @@ import {
 export const pageSortFields = [
   "id",
   "title",
+  "path",
   "slug",
   "moduleCount",
+  "updatedAt",
   "status",
 ] as const;
 export type PageSortField = (typeof pageSortFields)[number];
@@ -23,6 +25,10 @@ export const pageEntityListRowSchema = z.object({
   page_type: z.string(),
   status: z.string(),
   moduleCount: z.number().int().nonnegative(),
+  updatedAt: z.string(),
+  seoScore: z.number().int().min(0).max(100),
+  seoLabel: z.string(),
+  seoBlockingErrors: z.number().int().nonnegative(),
 });
 export type PageEntityListRow = z.infer<typeof pageEntityListRowSchema>;
 
