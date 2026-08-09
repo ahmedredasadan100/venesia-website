@@ -619,10 +619,15 @@ check(
     entityListTableSource.includes("<AdminDataGridStickyActionsCell"),
 );
 check(
-  "fixed table tracks do not absorb remaining viewport width",
+  "fixed table tracks and explicit no-implicit-flex consumers do not absorb remaining viewport width",
   entityListTableSource.includes("const flexibleColumnKey =") &&
-    entityListTableSource.includes("columns.find((column) => column.flexible)?.key") &&
+    entityListTableSource.includes("const explicitFlexibleColumnKey =") &&
+    entityListTableSource.includes("implicitFlexibleColumn?: boolean") &&
+    entityListTableSource.includes("implicitFlexibleColumn = true") &&
+    entityListTableSource.includes("explicitFlexibleColumnKey ??") &&
+    entityListTableSource.includes("(implicitFlexibleColumn") &&
     entityListTableSource.includes("!column.primary") &&
+    entityListTableSource.includes(": undefined);") &&
     entityListTableSource.includes("function getColumnBaseWidth") &&
     entityListTableSource.includes("const tableMinWidth =") &&
     entityListTableSource.includes('className="w-full table-fixed') &&
