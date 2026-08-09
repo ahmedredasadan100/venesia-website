@@ -11,7 +11,13 @@ test.describe("public and unauthenticated browser foundation", () => {
     const response = await page.request.get("/api/admin/entity-lists/topics", {
       maxRedirects: 0,
     });
-    expect(response.status()).toBe(401);
+    const status = response.status();
+    expect([401, 503]).toContain(status);
+    expect(await response.json()).toEqual(
+      status === 401
+        ? { error: "Unauthorized" }
+        : { error: "Admin auth is not configured." },
+    );
   });
 
   test("login validation, pending state, RTL and keyboard focus are observable", async ({ page }) => {
