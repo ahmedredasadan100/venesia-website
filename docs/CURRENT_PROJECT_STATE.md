@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-09
+**Updated:** 2026-08-10
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -21,6 +21,8 @@ The final release commit and automatic Production deployment are recorded by Git
 - Projects use the database as their only project truth and persist the aggregate through the Project domain RPC owners.
 - Media writes use the Media coordination contract; the global writer-adoption manifest is closed and contains no unadopted tooling owner.
 - Menu ordering and Page Composition assignment ordering use their aggregate atomic mutation RPCs; direct parallel ordering writes are guarded.
+- Page deletion remains a hard delete in `mutate_page_composition`; its `delete_page` branch removes only page-target Hero assignments before deleting the Page and never deletes Hero templates.
+- The official Pages Collection read model is the only Pages list path and exposes its existing assignment aggregate as `moduleCount` through the shared output contract.
 - Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
 - Existing `/images/**` and `/files/**` values are an explicit read-compatibility boundary for live content, not a write owner and not permission for filesystem uploads in Production.
@@ -35,8 +37,8 @@ The Final Legacy Cleanup reconciliation established the following live facts aga
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 73 |
-| Production registry versions | 73 |
+| Repository migration files | 74 |
+| Production registry versions | 74 |
 | Registry SQL provenance | Exact repository SQL for every version |
 | Public tables | 51 |
 | Public tables with RLS enabled | 51 |

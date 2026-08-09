@@ -23,4 +23,4 @@ export {
 export type {
   CreatePageFormActionState,
 } from "./page-actions/index";
-export type { PagesTableResult, PagesTableRow } from "./page-actions/types";
+export type { PagesTableResult } from "./page-actions/types";

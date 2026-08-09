@@ -10,6 +10,7 @@ import {
   AdminEntityListTableRegion,
 } from "../../../../components/admin/entity-list";
 import {
+  ADMIN_DATA_GRID_COLUMNS,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   AdminDataGridRowActions,
@@ -34,6 +35,7 @@ import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list/feedback-codes";
 import {
   pagesQueryContract,
+  type PageEntityListRow,
   type PageFilters,
   type PageSortField,
 } from "../../../../lib/admin/pages/entity-list-contract";
@@ -56,14 +58,7 @@ import {
   togglePageStatus,
 } from "./actions";
 
-export type AdminPageListRow = {
-  id: number;
-  title: string;
-  slug: string;
-  path: string;
-  page_type: string;
-  status: string;
-};
+export type AdminPageListRow = PageEntityListRow;
 
 const PAGE_DELETE_CONFIRM =
   "سيتم حذف الصفحة وروابط الموديولات الخاصة بها فقط. الموديولات والقوالب نفسها لن يتم حذفها.";
@@ -207,8 +202,8 @@ function createPageColumns(
       hideable: false,
       sortable: true,
       sortKey: "title",
-      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
-      width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly + 60,
+      flexible: true,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -222,14 +217,45 @@ function createPageColumns(
       ),
     },
     {
+      key: "slug",
+      label: "Slug",
+      defaultVisible: true,
+      hideable: true,
+      sortable: false,
+      minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.slug, 10),
+      width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.slug, 10),
+      align: "center",
+      renderCell: ({ row }) => (
+        <span className="block truncate font-mono text-xs text-white/55" dir="ltr">
+          {row.slug}
+        </span>
+      ),
+    },
+    {
+      key: "moduleCount",
+      label: "عدد الموديولات",
+      defaultVisible: true,
+      hideable: true,
+      sortable: false,
+      minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.count, 10),
+      width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.count, 10),
+      align: "center",
+      renderCell: ({ row }) => (
+        <span className="tabular-nums text-sm font-semibold text-white/70">
+          {row.moduleCount}
+        </span>
+      ),
+    },
+    {
       key: "status",
       label: "الحالة",
       defaultVisible: true,
       hideable: true,
       sortable: true,
       sortKey: "status",
-      minWidth: 128,
-      width: 128,
+      minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.statusCompact, 10),
+      width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.statusCompact, 10),
+      align: "center",
       renderCell: ({ row, onMutationResult }) => (
         <PageRowActions
           row={row}
@@ -237,20 +263,6 @@ function createPageColumns(
           onMutationResult={onMutationResult}
           display="visibility"
         />
-      ),
-    },
-    {
-      key: "type",
-      label: "النوع",
-      defaultVisible: true,
-      hideable: true,
-      sortable: false,
-      minWidth: 160,
-      width: 160,
-      renderCell: ({ row }) => (
-        <span className="block truncate text-sm text-white/55">
-          {formatPageTypeLabel(row.page_type)}
-        </span>
       ),
     },
     {

@@ -650,8 +650,9 @@ check(
     ]) &&
     appearsInOrder(pagesListConfig, [
       'key: "page"',
+      'key: "slug"',
+      'key: "moduleCount"',
       'key: "status"',
-      'key: "type"',
       'key: "actions"',
     ]) &&
     appearsInOrder(projectsListConfig, [
@@ -676,7 +677,7 @@ check(
     topicsWithoutImageClient,
   ].every(
     (source) =>
-      !/label:\s*"(?:ID|Slug|Variant|IP|Name|Status|Type|Actions|Created|Updated|Order|Title)"/.test(
+      !/label:\s*"(?:ID|Variant|IP|Name|Status|Type|Actions|Created|Updated|Order|Title)"/.test(
         source,
       ),
   ) &&

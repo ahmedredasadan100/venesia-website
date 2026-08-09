@@ -4,6 +4,7 @@ import { saveAdminColumnPreferences } from "../../../../../lib/admin/preferences
 import {
   getPagesDefaultColumnKeys,
   getPagesPreferenceColumnKeys,
+  PAGES_LIST_COLUMN_CONTRACT_VERSION,
   PAGES_LIST_VIEW_KEY,
   type PageColumnKey,
 } from "../../../../../lib/admin/pages/pages-list-config";
@@ -13,6 +14,7 @@ export async function savePagesTablePreferences(visibleColumns: string[]) {
     viewKey: PAGES_LIST_VIEW_KEY,
     visibleColumns,
     allowedColumns: getPagesPreferenceColumnKeys(),
+    contractVersion: PAGES_LIST_COLUMN_CONTRACT_VERSION,
   });
 }
 

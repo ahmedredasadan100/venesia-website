@@ -9,7 +9,6 @@ import {
   AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridStatusCell,
-  AdminStatusPill,
   type AdminRowActionsCapability,
 } from "../../../../../../components/admin/ui";
 import { moduleEditHref, moduleKindLabel } from "../../../../../../lib/page-blocks/admin-utils";
@@ -31,6 +30,7 @@ type PageBlocksAssignmentRowProps = {
   onDelete: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  manualReorderEnabled: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
   showModule: boolean;
@@ -53,12 +53,15 @@ export default function PageBlocksAssignmentRow({
   onDelete,
   canMoveUp,
   canMoveDown,
+  manualReorderEnabled,
   onMoveUp,
   onMoveDown,
   showModule,
   showStatus,
 }: PageBlocksAssignmentRowProps) {
   const hidden = { access: "hidden" as const };
+  const reorderDisabledTitle =
+    "أعد فرز العرض إلى الترتيب الافتراضي لاستخدام الترتيب اليدوي.";
   const capability: AdminRowActionsCapability = {
     entityType: "page_module_assignment",
     entityId: rowId,
@@ -141,8 +144,8 @@ export default function PageBlocksAssignmentRow({
 
       <AdminDataGridPrimaryCell className="flex items-center gap-2">
         <span className="flex shrink-0 gap-1">
-          <AdminDataGridActionButton size="compact" title="تحريك لأعلى" disabled={!canMoveUp || isPending} pending={isPending} onClick={onMoveUp}>↑</AdminDataGridActionButton>
-          <AdminDataGridActionButton size="compact" title="تحريك لأسفل" disabled={!canMoveDown || isPending} onClick={onMoveDown}>↓</AdminDataGridActionButton>
+          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأعلى" : reorderDisabledTitle} disabled={!canMoveUp || isPending} pending={isPending} onClick={onMoveUp}>↑</AdminDataGridActionButton>
+          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأسفل" : reorderDisabledTitle} disabled={!canMoveDown || isPending} pending={isPending} onClick={onMoveDown}>↓</AdminDataGridActionButton>
         </span>
         <Link
           href={moduleEditHref(row.module_kind, row.template_id)}
@@ -166,9 +169,11 @@ export default function PageBlocksAssignmentRow({
 
       {showStatus ? (
         <AdminDataGridStatusCell>
-          <AdminStatusPill tone={isVisible ? "green" : "muted"}>
-            {isVisible ? "ظاهر" : "مخفي"}
-          </AdminStatusPill>
+          <AdminDataGridRowActions
+            capability={capability}
+            display="visibility"
+            size="compact"
+          />
         </AdminDataGridStatusCell>
       ) : null}
 

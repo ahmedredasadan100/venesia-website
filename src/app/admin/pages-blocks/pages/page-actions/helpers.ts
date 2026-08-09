@@ -1,5 +1,3 @@
-import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
-import { loadPagesTableRows } from "../../../../../lib/admin/pages/load-pages-table-rows";
 import { BLOCK_MODULE_REGISTRY } from "../../../../../lib/page-blocks/block-module-registry";
 import {
   MEDIA_HUB_ASSIGNMENT_TABLE,
@@ -145,9 +143,4 @@ export function parseAssignmentKeys(formData: FormData): ParsedAssignmentKey[] {
       };
     })
     .filter((entry) => Number.isFinite(entry.assignmentId) && entry.moduleKind);
-}
-
-export async function loadPagesTableRowsForAdmin() {
-  await requireAdminSession();
-  return loadPagesTableRows();
 }
