@@ -6,7 +6,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let passed = 0;
 
 function read(path: string) {
-  return readFileSync(resolve(ROOT, path), "utf8");
+  return readFileSync(resolve(ROOT, path), "utf8").replace(/\r\n?/gu, "\n");
 }
 
 function check(label: string, condition: unknown) {

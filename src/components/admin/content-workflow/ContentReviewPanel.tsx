@@ -27,6 +27,10 @@ type ReviewState = ContentReviewInput & {
   showTitle: boolean;
   showImage: boolean;
   showExcerpt: boolean;
+  showDate: boolean;
+  showCategory: boolean;
+  showSeries: boolean;
+  showIntroCard: boolean;
 };
 
 type ContentReviewPanelProps = {
@@ -46,6 +50,10 @@ type ContentReviewPanelProps = {
     title?: boolean | null;
     image?: boolean | null;
     excerpt?: boolean | null;
+    date?: boolean | null;
+    category?: boolean | null;
+    series?: boolean | null;
+    introCard?: boolean | null;
   };
 };
 
@@ -161,6 +169,10 @@ function read(form: HTMLFormElement, seed: ReviewState): ReviewState {
     showTitle: checked(form, "show_title_on_page", seed.showTitle),
     showImage: checked(form, "show_image_on_page", seed.showImage),
     showExcerpt: checked(form, "show_excerpt_on_page", seed.showExcerpt),
+    showDate: checked(form, "show_date_on_page", seed.showDate),
+    showCategory: checked(form, "show_category_on_page", seed.showCategory),
+    showSeries: checked(form, "show_series_on_page", seed.showSeries),
+    showIntroCard: checked(form, "show_intro_card_on_page", seed.showIntroCard),
   };
 }
 
@@ -191,6 +203,10 @@ export default function ContentReviewPanel({
       showTitle: initialDisplay?.title !== false,
       showImage: initialDisplay?.image !== false,
       showExcerpt: initialDisplay?.excerpt !== false,
+      showDate: initialDisplay?.date !== false,
+      showCategory: initialDisplay?.category !== false,
+      showSeries: initialDisplay?.series !== false,
+      showIntroCard: initialDisplay?.introCard !== false,
     }),
     [initial, status, publishedAt, featured, popular, initialDisplay],
   );
@@ -237,7 +253,7 @@ export default function ContentReviewPanel({
               description="ما سيظهر داخل صفحة المحتوى."
               badge={
                 <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[10px] text-white/45">
-                  3 خيارات
+                  7 خيارات
                 </span>
               }
             >
@@ -245,6 +261,10 @@ export default function ContentReviewPanel({
                 <DisplayDecision label="إظهار العنوان" enabled={input.showTitle} />
                 <DisplayDecision label="إظهار الصورة" enabled={input.showImage} />
                 <DisplayDecision label="إظهار المقتطف" enabled={input.showExcerpt} />
+                <DisplayDecision label="إظهار التاريخ" enabled={input.showDate} />
+                <DisplayDecision label="إظهار التصنيف" enabled={input.showCategory} />
+                <DisplayDecision label="إظهار السلسلة" enabled={input.showSeries} />
+                <DisplayDecision label="إظهار بطاقة مقدمة الموضوع" enabled={input.showIntroCard} />
               </dl>
               <AdminEntityReviewCorrectionButton
                 navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}

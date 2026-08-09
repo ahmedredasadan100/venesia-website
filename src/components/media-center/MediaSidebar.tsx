@@ -74,11 +74,17 @@ function SidebarMediaList({
               </p>
             ) : null}
 
+            {showLabel && item.seriesLabel ? (
+              <p className="mb-1 text-[11px] text-[#D8B87A]/75">
+                {item.seriesLabel}
+              </p>
+            ) : null}
+
             <h4 className="line-clamp-2 text-sm leading-6 text-white/70 transition group-hover:text-[#D8B87A]">
               {item.title}
             </h4>
 
-            <p className="mt-1 text-xs text-white/35">{item.date}</p>
+            {item.date ? <p className="mt-1 text-xs text-white/35">{item.date}</p> : null}
           </div>
         </Link>
       ))}

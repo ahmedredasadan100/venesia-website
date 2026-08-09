@@ -26,6 +26,13 @@ export default function FeaturedTopic({ topic }: FeaturedTopicProps) {
     );
   }
 
+  const showCategory =
+    topic.showCategoryOnPage !== false && Boolean(topic.category && topic.categorySlug);
+  const showSeries =
+    topic.showSeriesOnPage !== false && Boolean(topic.series && topic.seriesSlug);
+  const showDate = topic.showDateOnPage !== false && Boolean(topic.date);
+  const showMetadata = showCategory || showSeries || showDate;
+
   return (
     <article className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-[0_25px_90px_rgba(0,0,0,0.32)]">
       <div className="relative h-[390px] overflow-hidden">
@@ -41,13 +48,31 @@ export default function FeaturedTopic({ topic }: FeaturedTopicProps) {
         />
 
         <div className="absolute inset-x-0 bottom-0 p-7 md:p-9">
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
-              {topic.category}
-            </span>
+          {showMetadata ? (
+            <div dir="rtl" className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {showCategory ? (
+                  <Link
+                    href={`/topics?category=${encodeURIComponent(topic.categorySlug)}`}
+                    className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur transition hover:border-[#D8B87A]/60"
+                  >
+                    {topic.category}
+                  </Link>
+                ) : null}
 
-            <span className="text-xs text-white/60">{topic.date}</span>
-          </div>
+                {showDate ? <span className="text-xs text-white/60">{topic.date}</span> : null}
+              </div>
+
+              {showSeries ? (
+                <Link
+                  href={`/topics?series=${encodeURIComponent(topic.seriesSlug ?? "")}`}
+                  className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur transition hover:border-[#D8B87A]/60"
+                >
+                  {topic.series}
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
 
           <h2 className="max-w-3xl text-3xl font-semibold leading-tight text-white md:text-2xl">
             {topic.title}

@@ -148,6 +148,15 @@ export default function ArticleCreateEditor({
                   }
                   status="unpublished"
                   contentTypeLabel="مقال"
+                  initialDisplay={{
+                    title: true,
+                    image: true,
+                    excerpt: true,
+                    date: true,
+                    category: true,
+                    series: true,
+                    introCard: true,
+                  }}
                 />
               ),
             },

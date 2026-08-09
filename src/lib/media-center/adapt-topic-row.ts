@@ -19,6 +19,8 @@ export type UnifiedMediaTopicRow = {
   image: string | null;
   category: string | null;
   category_slug: string | null;
+  series?: string | null;
+  series_slug?: string | null;
   date_label: string | null;
   published_at: string | null;
   content_type: string | null;
@@ -38,6 +40,10 @@ export type UnifiedMediaTopicRow = {
   show_title_on_page?: boolean | null;
   show_image_on_page?: boolean | null;
   show_excerpt_on_page?: boolean | null;
+  show_date_on_page?: boolean | null;
+  show_category_on_page?: boolean | null;
+  show_series_on_page?: boolean | null;
+  show_intro_card_on_page?: boolean | null;
   media_project?: string | null;
 };
 
@@ -104,6 +110,8 @@ export function adaptTopicRowToMediaItem(row: UnifiedMediaTopicRow): MediaConten
     excerpt: row.excerpt ?? "",
     category: row.category ?? "",
     categorySlug: row.category_slug ?? undefined,
+    series: row.series ?? undefined,
+    seriesSlug: row.series_slug ?? undefined,
     date: row.date_label || formatDateLabel(publishedAt),
     publishedAt,
     image: resolveTopicImage(row.image, galleryCover),
@@ -127,5 +135,9 @@ export function adaptTopicRowToMediaItem(row: UnifiedMediaTopicRow): MediaConten
     showTitleOnPage: row.show_title_on_page !== false,
     showImageOnPage: row.show_image_on_page !== false,
     showExcerptOnPage: row.show_excerpt_on_page !== false,
+    showDateOnPage: row.show_date_on_page !== false,
+    showCategoryOnPage: row.show_category_on_page !== false,
+    showSeriesOnPage: row.show_series_on_page !== false,
+    showIntroCardOnPage: row.show_intro_card_on_page !== false,
   };
 }

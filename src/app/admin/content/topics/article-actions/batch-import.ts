@@ -184,6 +184,10 @@ function toArticleFormData(item: ArticleBatchImportItem) {
   setBoolean(formData, "show_title_on_page", item.show_title_on_page);
   setBoolean(formData, "show_image_on_page", item.show_image_on_page);
   setBoolean(formData, "show_excerpt_on_page", item.show_excerpt_on_page);
+  setBoolean(formData, "show_date_on_page", true);
+  setBoolean(formData, "show_category_on_page", true);
+  setBoolean(formData, "show_series_on_page", true);
+  setBoolean(formData, "show_intro_card_on_page", true);
   setBoolean(formData, "show_faq_on_page", item.show_faq_on_page);
   setBoolean(
     formData,

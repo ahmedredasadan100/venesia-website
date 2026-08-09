@@ -66,6 +66,14 @@ export default function MediaCenterHubVideos({
             ) : null}
 
             <div className="absolute inset-x-0 bottom-0 p-6">
+              {featuredVideo.showDateOnPage || featuredVideo.showCategoryOnPage || featuredVideo.showSeriesOnPage ? (
+                <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-white/55">
+                  {featuredVideo.showCategoryOnPage && featuredVideo.category ? <span>{featuredVideo.category}</span> : null}
+                  {featuredVideo.showSeriesOnPage && featuredVideo.series ? <span>{featuredVideo.series}</span> : null}
+                  {featuredVideo.showDateOnPage && featuredVideo.date ? <span>{featuredVideo.date}</span> : null}
+                </div>
+              ) : null}
+
               <h3 className="text-xl font-semibold leading-8 text-white">
                 {featuredVideo.title}
               </h3>
@@ -106,7 +114,17 @@ export default function MediaCenterHubVideos({
                     </span>
                   ) : null}
 
-                  <span className="text-xs text-white/35">{item.date}</span>
+                  {item.showCategoryOnPage && item.category ? (
+                    <span className="text-xs text-[#D8B87A]/70">{item.category}</span>
+                  ) : null}
+
+                  {item.showSeriesOnPage && item.series ? (
+                    <span className="text-xs text-[#D8B87A]/70">{item.series}</span>
+                  ) : null}
+
+                  {item.showDateOnPage && item.date ? (
+                    <span className="text-xs text-white/35">{item.date}</span>
+                  ) : null}
                 </div>
 
                 <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-white transition group-hover:text-[#D8B87A]">

@@ -172,17 +172,18 @@ export async function getMediaSidebarData() {
 
   const latestNewsSidebar: MediaSidebarItem[] = latestNews.map((item) => ({
     title: item.title,
-    date: item.date,
+    ...(item.showDateOnPage && item.date ? { date: item.date } : {}),
     image: item.image,
     href: getMediaHref(item),
   }));
 
   const popularMediaSidebarItems: MediaSidebarItem[] = popularItems.map((item) => ({
     title: item.title,
-    date: item.date,
+    ...(item.showDateOnPage && item.date ? { date: item.date } : {}),
     image: item.image,
     href: getMediaHref(item),
-    label: item.category,
+    ...(item.showCategoryOnPage && item.category ? { label: item.category } : {}),
+    ...(item.showSeriesOnPage && item.series ? { seriesLabel: item.series } : {}),
   }));
 
   return { latestNewsSidebar, popularMediaSidebarItems };

@@ -69,6 +69,10 @@ export type ArticleEditorTopic = {
   show_title_on_page?: boolean | null;
   show_image_on_page?: boolean | null;
   show_excerpt_on_page?: boolean | null;
+  show_date_on_page?: boolean | null;
+  show_category_on_page?: boolean | null;
+  show_series_on_page?: boolean | null;
+  show_intro_card_on_page?: boolean | null;
   show_faq_on_page?: boolean | null;
   show_faq_title_on_page?: boolean | null;
 };
@@ -172,6 +176,10 @@ export default function ArticleEditor({
                       showTitle={topic.show_title_on_page}
                       showImage={topic.show_image_on_page}
                       showExcerpt={topic.show_excerpt_on_page}
+                      showDate={topic.show_date_on_page}
+                      showCategory={topic.show_category_on_page}
+                      showSeries={topic.show_series_on_page}
+                      showIntroCard={topic.show_intro_card_on_page}
                     />
                   }
                   values={{
@@ -256,7 +264,15 @@ export default function ArticleEditor({
                     contentTypeLabel="مقال"
                     categoryLabel={selectedCategory}
                     seriesLabel={topic.series ?? "—"}
-                  initialDisplay={{ title: topic.show_title_on_page, image: topic.show_image_on_page, excerpt: topic.show_excerpt_on_page }}
+                  initialDisplay={{
+                    title: topic.show_title_on_page,
+                    image: topic.show_image_on_page,
+                    excerpt: topic.show_excerpt_on_page,
+                    date: topic.show_date_on_page,
+                    category: topic.show_category_on_page,
+                    series: topic.show_series_on_page,
+                    introCard: topic.show_intro_card_on_page,
+                  }}
                 />
               ),
             },

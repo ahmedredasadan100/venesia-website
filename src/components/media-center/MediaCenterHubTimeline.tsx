@@ -52,11 +52,19 @@ export default function MediaCenterHubTimeline({
 
               <div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-xs text-[#D8B87A]/75">
-                    {item.project ?? item.category}
-                  </span>
+                  {item.project || (item.showCategoryOnPage && item.category) ? (
+                    <span className="text-xs text-[#D8B87A]/75">
+                      {item.project ?? item.category}
+                    </span>
+                  ) : null}
 
-                  <span className="text-xs text-white/35">{item.date}</span>
+                  {item.showSeriesOnPage && item.series ? (
+                    <span className="text-xs text-[#D8B87A]/75">{item.series}</span>
+                  ) : null}
+
+                  {item.showDateOnPage && item.date ? (
+                    <span className="text-xs text-white/35">{item.date}</span>
+                  ) : null}
                 </div>
 
                 <h3 className="mt-2 line-clamp-2 text-base font-semibold leading-7 text-white transition group-hover:text-[#D8B87A]">

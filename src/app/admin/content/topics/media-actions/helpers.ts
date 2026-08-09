@@ -147,6 +147,10 @@ export function getPayload(formData: FormData) {
     showTitleOnPage: getBoolean(formData, "show_title_on_page"),
     showImageOnPage: getBoolean(formData, "show_image_on_page"),
     showExcerptOnPage: getBoolean(formData, "show_excerpt_on_page"),
+    showDateOnPage: getBoolean(formData, "show_date_on_page"),
+    showCategoryOnPage: getBoolean(formData, "show_category_on_page"),
+    showSeriesOnPage: getBoolean(formData, "show_series_on_page"),
+    showIntroCardOnPage: getBoolean(formData, "show_intro_card_on_page"),
     ...seo,
   };
 }
@@ -270,6 +274,10 @@ export function buildMediaWritePayload(
     show_title_on_page: payload.showTitleOnPage,
     show_image_on_page: payload.showImageOnPage,
     show_excerpt_on_page: payload.showExcerptOnPage,
+    show_date_on_page: payload.showDateOnPage,
+    show_category_on_page: payload.showCategoryOnPage,
+    show_series_on_page: payload.showSeriesOnPage,
+    show_intro_card_on_page: payload.showIntroCardOnPage,
     published_at: resolveTopicPublishedAt({
       formPublishedDate: payload.publishedAt,
       currentPublishedAt: currentTopic?.published_at ?? null,

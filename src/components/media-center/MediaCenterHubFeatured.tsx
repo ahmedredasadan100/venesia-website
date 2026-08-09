@@ -74,7 +74,9 @@ export default function MediaCenterHubFeatured({
                   </div>
 
                   <div className="min-w-0">
-                    <p className="text-xs text-white/38">{item.date}</p>
+                    {item.showDateOnPage && item.date ? (
+                      <p className="text-xs text-white/38">{item.date}</p>
+                    ) : null}
 
                     <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-white transition group-hover:text-[#D8B87A]">
                       {item.title}
@@ -129,13 +131,23 @@ export default function MediaCenterHubFeatured({
 
             <div className="absolute inset-x-0 bottom-0 p-6 md:p-8">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
-                  {activeItem.category}
-                </span>
+                {activeItem.showCategoryOnPage && activeItem.category ? (
+                  <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
+                    {activeItem.category}
+                  </span>
+                ) : null}
 
-                <span className="text-xs text-white/55">
-                  {activeItem.date}
-                </span>
+                {activeItem.showSeriesOnPage && activeItem.series ? (
+                  <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
+                    {activeItem.series}
+                  </span>
+                ) : null}
+
+                {activeItem.showDateOnPage && activeItem.date ? (
+                  <span className="text-xs text-white/55">
+                    {activeItem.date}
+                  </span>
+                ) : null}
               </div>
 
               <h3 className="max-w-2xl text-2xl font-semibold leading-tight text-white md:text-3xl">

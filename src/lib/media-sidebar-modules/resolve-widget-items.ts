@@ -13,10 +13,11 @@ import type { MediaSidebarModulesState, MediaSidebarWidgetKey } from "./types";
 function mapMediaItemToSidebarItem(item: MediaContentItem, showLabel: boolean): MediaSidebarItem {
   return {
     title: item.title,
-    date: item.date,
+    ...(item.showDateOnPage && item.date ? { date: item.date } : {}),
     image: item.image,
     href: getMediaHref(item),
-    ...(showLabel && item.category ? { label: item.category } : {}),
+    ...(showLabel && item.showCategoryOnPage && item.category ? { label: item.category } : {}),
+    ...(showLabel && item.showSeriesOnPage && item.series ? { seriesLabel: item.series } : {}),
   };
 }
 

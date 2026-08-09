@@ -25,11 +25,21 @@ export default function FeaturedNews({ item }: FeaturedNewsProps) {
 
         <div className="absolute inset-x-0 bottom-0 p-8 md:p-10">
           <div className="mb-4 flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
-              {item.category}
-            </span>
+            {item.showCategoryOnPage && item.category ? (
+              <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
+                {item.category}
+              </span>
+            ) : null}
 
-            <span className="text-xs text-white/60">{item.date}</span>
+            {item.showSeriesOnPage && item.series ? (
+              <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
+                {item.series}
+              </span>
+            ) : null}
+
+            {item.showDateOnPage && item.date ? (
+              <span className="text-xs text-white/60">{item.date}</span>
+            ) : null}
           </div>
 
           <h2 className="max-w-3xl text-3xl font-semibold leading-tight text-white md:text-4xl">

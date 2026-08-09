@@ -56,9 +56,15 @@ export default function MediaCenterHubGallery({
               />
 
               <div className="absolute inset-x-0 bottom-0 p-4">
-                <span className="mb-2 inline-flex rounded-full border border-white/15 bg-black/35 px-3 py-1 text-[11px] text-white/70 backdrop-blur">
-                  {item.category}
-                </span>
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
+                  {item.showCategoryOnPage && item.category ? (
+                    <span className="inline-flex rounded-full border border-white/15 bg-black/35 px-3 py-1 backdrop-blur">{item.category}</span>
+                  ) : null}
+                  {item.showSeriesOnPage && item.series ? (
+                    <span className="inline-flex rounded-full border border-white/15 bg-black/35 px-3 py-1 backdrop-blur">{item.series}</span>
+                  ) : null}
+                  {item.showDateOnPage && item.date ? <span>{item.date}</span> : null}
+                </div>
 
                 <h3 className="truncate text-sm font-semibold leading-6 text-white md:text-base">
                   {item.title}
@@ -86,9 +92,15 @@ export default function MediaCenterHubGallery({
           />
 
           <div className="absolute inset-x-0 bottom-0 p-4">
-            <span className="mb-2 inline-flex rounded-full border border-white/15 bg-black/35 px-3 py-1 text-[11px] text-white/70 backdrop-blur">
-              {featuredImage.category}
-            </span>
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
+              {featuredImage.showCategoryOnPage && featuredImage.category ? (
+                <span className="inline-flex rounded-full border border-white/15 bg-black/35 px-3 py-1 backdrop-blur">{featuredImage.category}</span>
+              ) : null}
+              {featuredImage.showSeriesOnPage && featuredImage.series ? (
+                <span className="inline-flex rounded-full border border-white/15 bg-black/35 px-3 py-1 backdrop-blur">{featuredImage.series}</span>
+              ) : null}
+              {featuredImage.showDateOnPage && featuredImage.date ? <span>{featuredImage.date}</span> : null}
+            </div>
 
             <h3 className="truncate text-lg font-semibold leading-8 text-white md:text-xl">
               {featuredImage.title}

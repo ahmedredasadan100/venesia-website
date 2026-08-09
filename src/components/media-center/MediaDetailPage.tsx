@@ -77,9 +77,6 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
           content={content}
           config={config}
           relatedItems={relatedItems}
-          showTitle={item.showTitleOnPage !== false}
-          showImage={item.showImageOnPage !== false}
-          showExcerpt={item.showExcerptOnPage !== false}
         />
       </MediaPageShell>
     </InternalPageLayout>

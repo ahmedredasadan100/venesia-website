@@ -19,6 +19,10 @@ export type Topic = {
   content?: string;
   series?: string;
   seriesSlug?: string;
+  showDateOnPage?: boolean;
+  showCategoryOnPage?: boolean;
+  showSeriesOnPage?: boolean;
+  showIntroCardOnPage?: boolean;
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string[];
