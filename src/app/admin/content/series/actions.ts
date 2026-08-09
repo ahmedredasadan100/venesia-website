@@ -41,11 +41,8 @@ type SeriesLifecycleRow = {
 function revalidateSeriesPaths() {
   revalidateTopicsCache();
   revalidatePath("/admin/content/series");
-  revalidatePath("/admin/content/series/new");
-  revalidatePath("/admin/content/categories");
   revalidatePath("/admin/content/topics");
   revalidatePath("/admin/content/topics/new");
-  revalidatePath("/topics");
 }
 
 function uniquePositiveIds(ids: number[]) {

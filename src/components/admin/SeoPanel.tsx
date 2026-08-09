@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  analyzeTopicSeo,
-  type EntitySeoScoreInput,
-  type FaqItem,
-} from "../../lib/admin/seo-score";
+import { type FaqItem } from "../../lib/admin/seo-score";
 import AdminEntitySeoPanel, {
   type AdminEntitySeoAnalysisExtension,
   type AdminEntitySeoCorrectionTarget,
@@ -76,13 +72,6 @@ const TOPIC_SEO_CORRECTION_TARGETS = {
   faq: { tabId: "faq", targetId: "topic-faq-editor" },
 } satisfies Record<string, AdminEntitySeoCorrectionTarget>;
 
-const TOPIC_EXTENSION_ISSUE_IDS = new Set([
-  "keyword-intro",
-  "image-alt-length",
-  "keyword-alt",
-  "keyword-density",
-]);
-
 function readTopicFaq(form: HTMLFormElement, fallback: FaqItem[]) {
   const questions = Array.from(
     form.querySelectorAll<HTMLInputElement>('[name="faq_question"]'),
@@ -107,66 +96,7 @@ function createTopicAnalysisExtension(
     readState: (form, initialState) => ({
       faq: readTopicFaq(form, initialState.faq),
     }),
-    analyze: (input: EntitySeoScoreInput, state) => {
-      const topicAnalysis = analyzeTopicSeo({
-        title: input.title,
-        excerpt: input.description,
-        slug: input.slug,
-        content: input.content,
-        image: input.image,
-        imageAlt: input.imageAlt,
-        seoTitle: input.seoTitle,
-        seoDescription: input.seoDescription,
-        seoKeywords: input.seoKeywords,
-        focusKeyword: input.focusKeyword,
-        faq: state.faq,
-      });
-      const extensionIssues = topicAnalysis.issues.seo.filter((issue) =>
-        TOPIC_EXTENSION_ISSUE_IDS.has(issue.id ?? ""),
-      );
-      const faqIssue = topicAnalysis.issues.content.find(
-        (issue) => issue.id === "faq",
-      );
-
-      return {
-        score: topicAnalysis.seoScore,
-        label: "تحليل SEO للموضوع",
-        issues: faqIssue
-          ? [...extensionIssues, faqIssue]
-          : extensionIssues,
-        issueOrder: [
-          "seo-title-length",
-          "meta-description-length",
-          "focus-keyword",
-          "keyword-title",
-          "keyword-description",
-          "keyword-intro",
-          "keyword-content",
-          "image",
-          "image-alt",
-          "image-alt-length",
-          "keyword-alt",
-          "seo-keywords",
-          "slug",
-          "keyword-density",
-          "faq",
-        ],
-        metrics: [
-          {
-            id: "keyword-density",
-            label: "كثافة الكلمة المفتاحية",
-            value: input.focusKeyword.trim()
-              ? `${topicAnalysis.keywordDensity}%`
-              : "غير متاح",
-          },
-          {
-            id: "faq-count",
-            label: "أسئلة FAQ المكتملة",
-            value: String(topicAnalysis.faqCount),
-          },
-        ],
-      };
-    },
+    resolveFaq: (state) => state.faq,
   };
 }
 
@@ -196,6 +126,7 @@ export default function SeoPanel(props: SeoPanelProps) {
         },
       }}
       initial={{
+        profile: "article",
         title: props.title,
         description: props.excerpt,
         content: props.content,
@@ -211,6 +142,7 @@ export default function SeoPanel(props: SeoPanelProps) {
         robotsFollow: props.robotsFollow,
         ogImage: props.ogImage,
         ogImageAlt: props.ogImageAlt,
+        faq: props.faq ?? [],
       }}
       correctionTargets={TOPIC_SEO_CORRECTION_TARGETS}
       analysisExtension={createTopicAnalysisExtension(props.faq ?? [])}

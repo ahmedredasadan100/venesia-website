@@ -406,17 +406,23 @@ check(
 check(
   "Derived SEO sorting must reuse the existing score owner over the complete filtered server dataset before pagination",
   loader.includes("isSeoContentSortValue(filters.sort)") &&
-    loader.includes("sourceRows.map(toUnifiedContentRow)") &&
+    loader.includes("(seoSourceRows ?? []).map(toUnifiedContentRow)") &&
     loader.includes("sortUnifiedContentRowsBySeo(") &&
-    loader.includes("for (let offset = 0; offset < totalCount; offset += batchSize)") &&
+    loader.includes('.select(CONTENT_LIST_SELECT, { count: "exact" })') &&
+    loader.includes("while (seoSourceRows.length < totalCount)") &&
+    !loader.includes("const batchSize = 500") &&
     loader.includes(".slice(from, to + 1)") &&
     loader.includes("seo_score: getUnifiedContentSeoScore(source)"),
 );
 check(
-  "Metrics must query the complete non-deleted topics dataset",
+  "Metrics must derive active summaries and SEO average from one complete Topics scan",
   loader.includes('supabase.from("topics")') &&
+    loader.includes('.select(CONTENT_METRICS_SELECT, { count: "exact" })') &&
     loader.includes('.is("deleted_at", null)') &&
-    !/loadUnifiedContentMetrics[\s\S]*?\.range\(/.test(loader),
+    loader.includes("while (!activeError && activeRows.length < activeCount)") &&
+    loader.includes('row.status === "published"') &&
+    loader.includes('row.status === "unpublished"') &&
+    !loader.includes("const base = () =>"),
 );
 
 const filters = read("src/components/admin/content/UnifiedContentFilters.tsx");
@@ -539,14 +545,19 @@ check(
     columns.includes('rowPendingAction(row.id) === "featured"'),
 );
 check(
-  "Topics rows must expose the existing SEO truth through the current adapter",
+  "Topics rows and metrics must expose one official SEO score through the current owner contract",
   containsAll(loader, [
-    "analyzeTopicSeo",
-    ").seoScore",
     "analyzeEntitySeo",
-    ").overallScore",
+    'profile: row.content_type === "article" ? "article" : "entity"',
+    "}).score",
     "seo_score: getUnifiedContentSeoScore(source)",
+    "getUnifiedContentSeoScore(row)",
+    '.from("admin_content_topics")',
+    ".select(CONTENT_LIST_SELECT)",
   ]) &&
+    !loader.includes("analyzeTopicSeo") &&
+    !loader.includes(".seoScore") &&
+    !loader.includes(".overallScore") &&
     topicsAdapter.includes("seo_score: z.number().int().min(0).max(100)") &&
     topicsListConfig.includes('"seo"'),
 );

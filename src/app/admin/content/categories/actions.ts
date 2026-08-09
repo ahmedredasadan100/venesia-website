@@ -46,8 +46,6 @@ async function revalidateCategories() {
   revalidateTopicsCache();
   revalidatePath("/admin/content/categories");
   revalidatePath("/admin/content/categories/new");
-  revalidatePath("/admin/content/series");
-  revalidatePath("/admin/content/series/new");
   revalidatePath("/admin/content/topics");
   revalidatePath("/admin/content/topics/new");
   revalidatePath("/topics");

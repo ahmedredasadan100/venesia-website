@@ -26,6 +26,7 @@ export const ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE = {
   id: "shared_entity_seo_capability",
   owner: "src/components/admin/seo/AdminEntitySeoPanel.tsx",
   dataContractOwner: "src/lib/seo/entity-seo-types.ts",
+  scoreContractOwner: "src/lib/admin/seo-score.ts",
   scope: "all_eligible_public_entity_editors",
   allowedClaim: "eligible_entity_seo_capability_closed",
   globalClosed: true,
@@ -40,6 +41,7 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
     classification: "shared_reference",
     sourceFiles: [
       "src/components/admin/seo/AdminEntitySeoPanel.tsx",
+      "src/lib/admin/seo-score.ts",
       "src/lib/seo/entity-seo-types.ts",
       "src/lib/seo/resolve-seo-metadata.ts",
     ],

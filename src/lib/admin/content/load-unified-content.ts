@@ -2,7 +2,6 @@ import "server-only";
 
 import {
   analyzeEntitySeo,
-  analyzeTopicSeo,
   type FaqItem,
 } from "../seo-score";
 import { getSupabaseAdmin } from "../../supabase-admin";
@@ -110,7 +109,9 @@ export type UnifiedContentListResult = {
   error: string | null;
 };
 
-type UnifiedContentSeoSourceRow = Omit<UnifiedContentRow, "seo_score"> & {
+type UnifiedContentSeoInputRow = {
+  title: string | null;
+  content_type: ContentType;
   slug: string | null;
   excerpt: string | null;
   content: string | null;
@@ -123,6 +124,16 @@ type UnifiedContentSeoSourceRow = Omit<UnifiedContentRow, "seo_score"> & {
   og_image: string | null;
   og_image_alt: string | null;
   faq: unknown;
+};
+
+type UnifiedContentSeoSourceRow = Omit<UnifiedContentRow, "seo_score"> &
+  UnifiedContentSeoInputRow;
+
+type UnifiedContentMetricsSourceRow = UnifiedContentSeoInputRow & {
+  id: number;
+  status: string | null;
+  is_featured: boolean | null;
+  series_id: number | null;
 };
 
 function normalizeSeoKeywords(value: unknown) {
@@ -140,36 +151,23 @@ function normalizeFaq(value: unknown): FaqItem[] {
   });
 }
 
-function getUnifiedContentSeoScore(row: UnifiedContentSeoSourceRow) {
-  const hasOgImage = Boolean(row.og_image?.trim());
-  const image = hasOgImage ? row.og_image ?? "" : row.image ?? "";
-  const imageAlt = hasOgImage
-    ? row.og_image_alt ?? ""
-    : row.image_alt ?? "";
-  const commonInput = {
+function getUnifiedContentSeoScore(row: UnifiedContentSeoInputRow) {
+  return analyzeEntitySeo({
+    profile: row.content_type === "article" ? "article" : "entity",
     title: row.title ?? "",
+    description: row.excerpt ?? "",
     content: row.content ?? "",
     slug: row.slug ?? "",
-    image,
-    imageAlt,
+    image: row.image ?? "",
+    imageAlt: row.image_alt ?? "",
+    ogImage: row.og_image ?? "",
+    ogImageAlt: row.og_image_alt ?? "",
     seoTitle: row.seo_title ?? "",
     seoDescription: row.seo_description ?? "",
     seoKeywords: normalizeSeoKeywords(row.seo_keywords),
     focusKeyword: row.focus_keyword ?? "",
-  };
-
-  if (row.content_type === "article") {
-    return analyzeTopicSeo({
-      ...commonInput,
-      excerpt: row.excerpt ?? "",
-      faq: normalizeFaq(row.faq),
-    }).seoScore;
-  }
-
-  return analyzeEntitySeo({
-    ...commonInput,
-    description: row.excerpt ?? "",
-  }).overallScore;
+    faq: normalizeFaq(row.faq),
+  }).score;
 }
 
 function toUnifiedContentRow(
@@ -340,65 +338,91 @@ function applySort(query: any, sort: Exclude<ContentSortValue, SeoContentSortVal
 
 const CONTENT_LIST_SELECT =
   "id,title,slug,excerpt,content,image,image_alt,content_type,category_id,category_name,category_color_token,series_id,series_name,status,is_featured,views_count,created_at,updated_at,published_at,created_by_display,updated_by_display,published_by_display,deleted_at,seo_title,seo_description,seo_keywords,focus_keyword,og_image,og_image_alt,faq";
+const CONTENT_METRICS_SELECT =
+  "id,title,slug,excerpt,content,image,image_alt,content_type,status,is_featured,series_id,seo_title,seo_description,seo_keywords,focus_keyword,og_image,og_image_alt,faq";
 
 export async function loadUnifiedContentList(
   filters: UnifiedContentFilters,
   categories: AdminContentCategory[],
 ): Promise<UnifiedContentListResult> {
   const supabase = getSupabaseAdmin();
-  const { count, error: countError } = await applyFilters(
-    supabase.from("admin_content_topics").select("id", { count: "exact", head: true }),
-    filters,
-    categories,
-  );
+  let totalCount = 0;
+  let seoSourceRows: UnifiedContentSeoSourceRow[] | null = null;
+  let dataError: string | null = null;
 
-  if (countError) {
+  if (isSeoContentSortValue(filters.sort)) {
+    const { data, count, error } = await applyFilters(
+      supabase
+        .from("admin_content_topics")
+        .select(CONTENT_LIST_SELECT, { count: "exact" }),
+      filters,
+      categories,
+    ).order("id", { ascending: true });
+
+    if (error) {
+      dataError = error.message;
+    } else {
+      seoSourceRows = (data ?? []) as UnifiedContentSeoSourceRow[];
+      totalCount = count ?? seoSourceRows.length;
+
+      // PostgREST may cap a response. Continue only when the authoritative
+      // count proves that the first response was truncated; no fixed fan-out.
+      while (seoSourceRows.length < totalCount) {
+        const offset = seoSourceRows.length;
+        const { data: nextData, error: nextError } = await applyFilters(
+          supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
+          filters,
+          categories,
+        )
+          .order("id", { ascending: true })
+          .range(offset, totalCount - 1);
+        if (nextError) {
+          dataError = nextError.message;
+          break;
+        }
+        const nextRows = (nextData ?? []) as UnifiedContentSeoSourceRow[];
+        if (!nextRows.length) {
+          dataError = "The complete SEO sorting source could not be read.";
+          break;
+        }
+        seoSourceRows.push(...nextRows);
+      }
+    }
+  } else {
+    const { count, error: countError } = await applyFilters(
+      supabase
+        .from("admin_content_topics")
+        .select("id", { count: "exact", head: true }),
+      filters,
+      categories,
+    );
+    if (countError) dataError = countError.message;
+    else totalCount = count ?? 0;
+  }
+
+  if (dataError) {
     return {
       rows: [],
-      totalCount: 0,
+      totalCount,
       page: 1,
       pageSize: filters.pageSize,
-      totalPages: 1,
-      error: countError.message,
+      totalPages: Math.max(1, Math.ceil(totalCount / filters.pageSize)),
+      error: dataError,
     };
   }
 
-  const totalCount = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / filters.pageSize));
   const page = Math.min(filters.page, totalPages);
   const from = (page - 1) * filters.pageSize;
   const to = from + filters.pageSize - 1;
   let rows: UnifiedContentRow[] = [];
-  let dataError: string | null = null;
 
   if (isSeoContentSortValue(filters.sort)) {
-    // SEO is derived by the existing shared score owner, not persisted as a
-    // second source of truth. Read the full filtered dataset in bounded server
-    // chunks, score it once, then paginate the sorted rows.
-    const sourceRows: UnifiedContentSeoSourceRow[] = [];
-    const batchSize = 500;
-    for (let offset = 0; offset < totalCount; offset += batchSize) {
-      const { data, error } = await applyFilters(
-        supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
-        filters,
-        categories,
-      )
-        .order("id", { ascending: true })
-        .range(offset, Math.min(offset + batchSize - 1, totalCount - 1));
-      if (error) {
-        dataError = error.message;
-        break;
-      }
-      sourceRows.push(...((data ?? []) as UnifiedContentSeoSourceRow[]));
-    }
-
-    if (!dataError) {
-      const direction = filters.sort === "seo_asc" ? "asc" : "desc";
-      rows = sortUnifiedContentRowsBySeo(
-        sourceRows.map(toUnifiedContentRow),
-        direction,
-      ).slice(from, to + 1);
-    }
+    const direction = filters.sort === "seo_asc" ? "asc" : "desc";
+    rows = sortUnifiedContentRowsBySeo(
+      (seoSourceRows ?? []).map(toUnifiedContentRow),
+      direction,
+    ).slice(from, to + 1);
   } else {
     const { data, error } = await applySort(
       applyFilters(
@@ -428,76 +452,68 @@ export async function loadUnifiedContentList(
 
 export async function loadUnifiedContentMetrics() {
   const supabase = getSupabaseAdmin();
-  const base = () =>
-    supabase.from("topics").select("id", { count: "exact", head: true }).is("deleted_at", null);
+  const [active, trashed] = await Promise.all([
+    supabase
+      .from("topics")
+      .select(CONTENT_METRICS_SELECT, { count: "exact" })
+      .is("deleted_at", null)
+      .order("id", { ascending: true }),
+    supabase.from("topics").select("id", { count: "exact", head: true }).not("deleted_at", "is", null),
+  ]);
 
-  const [
-    total,
-    trashed,
+  const activeCount = active.count ?? active.data?.length ?? 0;
+  const activeRows = active.error
+    ? []
+    : ((active.data ?? []) as UnifiedContentMetricsSourceRow[]);
+  let activeError = active.error?.message ?? null;
+
+  while (!activeError && activeRows.length < activeCount) {
+    const offset = activeRows.length;
+    const { data, error } = await supabase
+      .from("topics")
+      .select(CONTENT_METRICS_SELECT)
+      .is("deleted_at", null)
+      .order("id", { ascending: true })
+      .range(offset, activeCount - 1);
+    if (error) {
+      activeError = error.message;
+      break;
+    }
+    const nextRows = (data ?? []) as UnifiedContentMetricsSourceRow[];
+    if (!nextRows.length) {
+      activeError = "The complete Topics metrics source could not be read.";
+      break;
+    }
+    activeRows.push(...nextRows);
+  }
+
+  const completeRows = activeError ? [] : activeRows;
+  const published = completeRows.filter((row) => row.status === "published").length;
+  const unpublished = completeRows.filter((row) => row.status === "unpublished").length;
+  const withoutImage = completeRows.filter((row) => !row.image).length;
+  const withSeries = completeRows.filter((row) => row.series_id !== null).length;
+  const featured = completeRows.filter((row) => row.is_featured === true).length;
+  const seoAverage = completeRows.length
+    ? Math.round(
+        completeRows.reduce(
+          (sum, row) => sum + getUnifiedContentSeoScore(row),
+          0,
+        ) / completeRows.length,
+      )
+    : 0;
+
+  return {
+    total: activeError ? 0 : activeCount,
+    trashed: trashed.count ?? 0,
     published,
     unpublished,
     withoutImage,
     withSeries,
     featured,
-    { data: seoRows, error: seoError },
-  ] = await Promise.all([
-    base(),
-    supabase.from("topics").select("id", { count: "exact", head: true }).not("deleted_at", "is", null),
-    base().eq("status", "published"),
-    base().eq("status", "unpublished"),
-    base().or("image.is.null,image.eq."),
-    base().not("series_id", "is", null),
-    base().eq("is_featured", true),
-    supabase
-      .from("topics")
-      .select(
-        "title,slug,excerpt,image,image_alt,seo_title,seo_description,seo_keywords,focus_keyword",
-      )
-      .is("deleted_at", null),
-  ]);
-
-  const safeSeoRows = seoError ? [] : (seoRows ?? []);
-  const seoAverage = safeSeoRows.length
-    ? Math.round(
-        safeSeoRows.reduce(
-          (sum, row) =>
-            sum +
-            analyzeTopicSeo({
-              title: row.title ?? "",
-              excerpt: row.excerpt ?? "",
-              slug: row.slug ?? "",
-              content: "",
-              image: row.image ?? "",
-              imageAlt: row.image_alt ?? "",
-              seoTitle: row.seo_title ?? "",
-              seoDescription: row.seo_description ?? "",
-              seoKeywords: Array.isArray(row.seo_keywords) ? row.seo_keywords.map(String) : [],
-              focusKeyword: row.focus_keyword ?? "",
-              faq: [],
-            }).overallScore,
-          0,
-        ) / safeSeoRows.length,
-      )
-    : 0;
-
-  return {
-    total: total.count ?? 0,
-    trashed: trashed.count ?? 0,
-    published: published.count ?? 0,
-    unpublished: unpublished.count ?? 0,
-    withoutImage: withoutImage.count ?? 0,
-    withSeries: withSeries.count ?? 0,
-    featured: featured.count ?? 0,
     seoAverage,
     error:
-      total.error?.message ??
+      activeError ??
       trashed.error?.message ??
-      published.error?.message ??
-      unpublished.error?.message ??
-      withoutImage.error?.message ??
-      withSeries.error?.message ??
-      featured.error?.message ??
-      seoError?.message ??
       null,
   };
 }

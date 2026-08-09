@@ -32,7 +32,7 @@ const {
   buildTopicPublishChecklist,
   getTopicPublishOnlyValidationError,
 } = require("../src/lib/admin/content-workflow/topic-publish-validation.ts") as typeof import("../src/lib/admin/content-workflow/topic-publish-validation.ts");
-const { analyzeTopicSeo } = require("../src/lib/admin/seo-score.ts") as typeof import("../src/lib/admin/seo-score.ts");
+const { analyzeEntitySeo } = require("../src/lib/admin/seo-score.ts") as typeof import("../src/lib/admin/seo-score.ts");
 const {
   SEO_LENGTH_STANDARDS,
   assessSeoLength,
@@ -303,6 +303,52 @@ const basePublishInput = {
   faq: [],
 };
 
+const articleScoreInput = {
+  profile: "article" as const,
+  title: "عقد SEO موحد",
+  description: "وصف عقد SEO موحد يشرح المحتوى بصورة واضحة ومباشرة للزائر ومحرك البحث.",
+  content: "# عقد SEO موحد\n\n## القسم الأول\n\nعقد SEO موحد داخل المحتوى.\n\n## القسم الثاني\n\nعقد SEO موحد مع رابط [داخلي](/topics/example).",
+  slug: "unified-seo-contract",
+  image: "/images/content.jpg",
+  imageAlt: "صورة عقد SEO موحد داخل المحتوى",
+  ogImage: "/images/seo.jpg",
+  ogImageAlt: "صورة عقد SEO موحد للمشاركة الاجتماعية",
+  seoTitle: "عقد SEO موحد لكل مستهلك داخل النظام الحالي",
+  seoDescription: "وصف تعريفي يثبت أن عقد SEO الموحد يستخدم نفس المدخلات والدرجة الرسمية في المحرر والقائمة وبطاقة المتوسط دون أي مسار مواز.",
+  seoKeywords: ["عقد SEO", "عقد SEO", "المستهلكون"],
+  focusKeyword: "عقد SEO",
+  faq: [{ question: " ما العقد الموحد؟ ", answer: " عقد واحد لكل المستهلكين. " }],
+};
+const articleScore = analyzeEntitySeo(articleScoreInput);
+const effectiveOgScore = analyzeEntitySeo({
+  ...articleScoreInput,
+  image: articleScoreInput.ogImage,
+  imageAlt: articleScoreInput.ogImageAlt,
+  ogImage: "",
+  ogImageAlt: "",
+  seoKeywords: ["عقد SEO", "المستهلكون"],
+  faq: [{ question: "ما العقد الموحد؟", answer: "عقد واحد لكل المستهلكين." }],
+});
+check(
+  "the SEO Score owner returns one official score after shared OG, keyword, and FAQ normalization",
+  Number.isInteger(articleScore.score) &&
+    articleScore.score === effectiveOgScore.score &&
+    !Object.hasOwn(articleScore, "seoScore") &&
+    !Object.hasOwn(articleScore, "overallScore") &&
+    articleScore.metrics.some((metric) => metric.id === "keyword-density") &&
+    articleScore.metrics.some((metric) => metric.id === "faq-count"),
+);
+check(
+  "the SEO Score owner shares each article Markdown render across visible-text and heading checks",
+  (seoScore.match(/const renderedContent = renderMarkdown\(input\.content\)/g) ?? [])
+    .length === 1 &&
+    seoScore.includes("countHeadings(renderedContent, 1)") &&
+    seoScore.includes("countHeadings(renderedContent, 2)") &&
+    seoScore.includes("countHeadings(renderedContent, 3)") &&
+    !seoScore.includes("countWords(visibleContent)") &&
+    !seoScore.includes("countMatches(visibleContent"),
+);
+
 const whitespaceOnlySeoTitle = " ".repeat(SEO_LENGTH_STANDARDS.title.min);
 const whitespaceOnlyAssessment = assessSeoLength(
   whitespaceOnlySeoTitle,
@@ -364,10 +410,22 @@ for (const field of [
     const checklistStatus = buildTopicPublishChecklist(input).find(
       (item) => item.id === field.checklistId,
     )?.status;
-    const analysisIssue = analyzeTopicSeo({
-      ...input,
+    const analysisIssue = analyzeEntitySeo({
+      profile: "article",
+      title: input.title,
+      description: input.excerpt,
+      slug: input.slug,
+      content: input.content,
+      image: input.image,
+      imageAlt: input.imageAlt,
+      ogImage: "",
+      ogImageAlt: "",
+      seoTitle: input.seoTitle,
+      seoDescription: input.seoDescription,
       seoKeywords: [],
-    }).issues.seo.find((issue) => issue.id === field.issueId);
+      focusKeyword: input.focusKeyword,
+      faq: input.faq,
+    }).issues.find((issue) => issue.id === field.issueId);
     const expectedIssueType =
       boundary.state === "success"
         ? "success"

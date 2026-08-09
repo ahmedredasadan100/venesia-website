@@ -255,7 +255,6 @@ export default function SeriesTableClient({
                 };
           },
         });
-        await controller.invalidate();
         if (resultHolder.current) return resultHolder.current;
       } catch (error) {
         if (resultHolder.current) return resultHolder.current;
@@ -275,7 +274,7 @@ export default function SeriesTableClient({
         entityId: row.id,
       };
     },
-    [controller, instant],
+    [instant],
   );
 
   const deleteSeries = useCallback(

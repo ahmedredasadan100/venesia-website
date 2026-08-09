@@ -159,6 +159,31 @@ check(
       source.includes("getBulkConfirmation"),
   ),
 );
+const categoryLifecycleClient = categoryClient.slice(
+  categoryClient.indexOf("const runLifecycleMutation"),
+  categoryClient.indexOf("const remove", categoryClient.indexOf("const runLifecycleMutation")),
+);
+const seriesLifecycleClient = seriesClient.slice(
+  seriesClient.indexOf("const runLifecycleMutation"),
+  seriesClient.indexOf("const deleteSeries", seriesClient.indexOf("const runLifecycleMutation")),
+);
+check(
+  "Taxonomy row lifecycle delegates the single success invalidation to the Instant Runtime",
+  [categoryLifecycleClient, seriesLifecycleClient].every(
+    (source) =>
+      source.includes("instant.mutateAsync({") &&
+      !source.includes("controller.invalidate()"),
+  ),
+);
+check(
+  "Taxonomy cache invalidation stays inside the original owning paths",
+  categoryActions.includes('revalidatePath("/admin/content/categories")') &&
+    categoryActions.includes('revalidatePath("/admin/content/topics")') &&
+    !categoryActions.includes('revalidatePath("/admin/content/series")') &&
+    seriesActions.includes('revalidatePath("/admin/content/series")') &&
+    seriesActions.includes('revalidatePath("/admin/content/topics")') &&
+    !seriesActions.includes('revalidatePath("/admin/content/categories")'),
+);
 check(
   "Retired category delete adapter files are absent",
   !existsSync(

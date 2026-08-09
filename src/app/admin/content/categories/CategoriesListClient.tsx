@@ -342,7 +342,6 @@ export default function CategoriesListClient({
                 };
           },
         });
-        await controller.invalidate();
         if (actionResult) return actionResult;
       } catch (error) {
         if (actionResult) return actionResult;
@@ -362,7 +361,7 @@ export default function CategoriesListClient({
         entityId: category.id,
       };
     },
-    [controller, instant],
+    [instant],
   );
 
   const removeCategory = useCallback(

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   analyzeEntitySeo,
-  type EntitySeoScoreInput,
+  type SeoScoreInput,
   type SeoIssue,
 } from "../../../lib/admin/seo-score";
 import {
@@ -79,27 +79,10 @@ export type AdminEntitySeoSocialContract = {
   };
 };
 
-export type AdminEntitySeoAnalysisMetric = {
-  id: string;
-  label: string;
-  value: string;
-};
-
-export type AdminEntitySeoAnalysisExtensionResult = {
-  issues?: readonly SeoIssue[];
-  metrics?: readonly AdminEntitySeoAnalysisMetric[];
-  issueOrder?: readonly string[];
-  score?: number;
-  label?: string;
-};
-
 export type AdminEntitySeoAnalysisExtension<TState> = {
   initialState: TState;
   readState: (form: HTMLFormElement, initialState: TState) => TState;
-  analyze: (
-    input: EntitySeoScoreInput,
-    state: TState,
-  ) => AdminEntitySeoAnalysisExtensionResult;
+  resolveFaq: (state: TState) => SeoScoreInput["faq"];
 };
 
 export type AdminEntitySeoPanelProps<TAnalysisState = undefined> = {
@@ -119,12 +102,10 @@ export type AdminEntitySeoPanelProps<TAnalysisState = undefined> = {
   fieldNames: AdminEntitySeoFieldNames;
   fieldIds: AdminEntitySeoFieldIds;
   social: AdminEntitySeoSocialContract;
-  initial: EntitySeoScoreInput & {
+  initial: SeoScoreInput & {
     canonicalUrl: string;
     robotsIndex: boolean | null;
     robotsFollow: boolean | null;
-    ogImage: string;
-    ogImageAlt: string;
   };
   correctionTargets: Partial<
     Record<string, AdminEntitySeoCorrectionTarget>
@@ -378,33 +359,6 @@ function IssueRow({
   );
 }
 
-function mergeMetrics(
-  base: readonly AdminEntitySeoAnalysisMetric[],
-  extra: readonly AdminEntitySeoAnalysisMetric[] = [],
-) {
-  const metrics = new Map<string, AdminEntitySeoAnalysisMetric>();
-  for (const metric of [...base, ...extra]) metrics.set(metric.id, metric);
-  return [...metrics.values()];
-}
-
-function orderIssues(issues: readonly SeoIssue[], order?: readonly string[]) {
-  if (!order?.length) return [...issues];
-  const positions = new Map(order.map((id, index) => [id, index]));
-  return issues
-    .map((issue, index) => ({ issue, index }))
-    .sort((left, right) => {
-      const leftPosition = positions.get(left.issue.id ?? "");
-      const rightPosition = positions.get(right.issue.id ?? "");
-      if (leftPosition === undefined && rightPosition === undefined) {
-        return left.index - right.index;
-      }
-      if (leftPosition === undefined) return 1;
-      if (rightPosition === undefined) return -1;
-      return leftPosition - rightPosition;
-    })
-    .map(({ issue }) => issue);
-}
-
 export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   id = "admin-entity-seo-panel",
   entityLabel,
@@ -433,6 +387,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
 
     const read = () => {
       setLive({
+        profile: initial.profile,
         title: readValue(form, sourceFieldNames.title, initial.title),
         description: readValue(
           form,
@@ -474,6 +429,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
         ),
         ogImage: readValue(form, fieldNames.ogImage, initial.ogImage),
         ogImageAlt: readValue(form, fieldNames.ogImageAlt, initial.ogImageAlt),
+        faq: initial.faq,
       });
       if (analysisExtension) {
         setAnalysisState(
@@ -491,39 +447,35 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
     };
   }, [analysisExtension, fieldNames, id, initial, social, sourceFieldNames]);
 
-  const effectiveImage = live.ogImage.trim() || live.image.trim();
-  const effectiveImageAlt = live.ogImage.trim()
+  const analysisInput = useMemo<SeoScoreInput>(
+    () => ({
+      profile: live.profile,
+      title: live.title,
+      description: live.description,
+      content: live.content,
+      slug: live.slug,
+      image: live.image,
+      imageAlt: live.imageAlt,
+      ogImage: live.ogImage,
+      ogImageAlt: live.ogImageAlt,
+      seoTitle: live.seoTitle,
+      seoDescription: live.seoDescription,
+      seoKeywords: live.seoKeywords,
+      focusKeyword: live.focusKeyword,
+      faq: analysisExtension
+        ? analysisExtension.resolveFaq(analysisState)
+        : live.faq,
+    }),
+    [analysisExtension, analysisState, live],
+  );
+  const analysis = useMemo(
+    () => analyzeEntitySeo(analysisInput),
+    [analysisInput],
+  );
+  const previewImage = live.ogImage.trim() || live.image.trim();
+  const previewImageAlt = live.ogImage.trim()
     ? live.ogImageAlt.trim()
     : live.imageAlt.trim();
-  const analysisInput = useMemo(
-    () => ({ ...live, image: effectiveImage, imageAlt: effectiveImageAlt }),
-    [effectiveImage, effectiveImageAlt, live],
-  );
-  const baseAnalysis = useMemo(() => analyzeEntitySeo(analysisInput), [analysisInput]);
-  const extensionAnalysis = useMemo(
-    () => analysisExtension?.analyze(analysisInput, analysisState),
-    [analysisExtension, analysisInput, analysisState],
-  );
-  const analysis = {
-    score: extensionAnalysis?.score ?? baseAnalysis.overallScore,
-    label: extensionAnalysis?.label ?? baseAnalysis.label,
-    issues: orderIssues(
-      [...baseAnalysis.issues, ...(extensionAnalysis?.issues ?? [])],
-      extensionAnalysis?.issueOrder,
-    ),
-    metrics: mergeMetrics(
-      [
-        {
-          id: "keyword-density",
-          label: "كثافة الكلمة المفتاحية",
-          value: live.focusKeyword.trim()
-            ? `${baseAnalysis.keywordDensity}%`
-            : "غير متاح",
-        },
-      ],
-      extensionAnalysis?.metrics,
-    ),
-  };
   const title =
     live.seoTitle.trim() || live.title.trim() || `عنوان ${entityLabel}`;
   const description =
@@ -701,12 +653,12 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       className="overflow-hidden rounded-xl border border-white/10 bg-[#0B0F14]"
       data-admin-entity-seo-social-preview
     >
-      {effectiveImage ? (
+      {previewImage ? (
         <div
           className="aspect-[1.91/1] bg-cover bg-center"
-          style={{ backgroundImage: `url(${effectiveImage})` }}
+          style={{ backgroundImage: `url(${previewImage})` }}
           role="img"
-          aria-label={effectiveImageAlt || title}
+          aria-label={previewImageAlt || title}
         />
       ) : (
         <div className="grid aspect-[1.91/1] place-items-center border-b border-white/10 text-xs text-white/30">
