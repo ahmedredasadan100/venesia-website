@@ -646,7 +646,7 @@ export default function BlockModuleManagerClient({
                 <AdminFormError name="name" />
               </label>
               <label className={adminFormLabelClassName()}>
-                Slug
+                {moduleKey === "feed" ? "المعرّف التقني (Slug)" : "Slug"}
                 <input
                   name="slug"
                   dir="ltr"
@@ -660,7 +660,7 @@ export default function BlockModuleManagerClient({
                 <AdminFormError name="slug" />
               </label>
               <label className={adminFormLabelClassName()}>
-                {moduleKey === "feed" ? "Feed Type" : "Variant"}
+                {moduleKey === "feed" ? "نوع موديول المحتوى" : "Variant"}
                 <select
                   name={moduleKey === "feed" ? "feed_type" : "variant"}
                   defaultValue={defaultVariant}
@@ -674,7 +674,7 @@ export default function BlockModuleManagerClient({
               {moduleKey === "feed" ? (
                 <>
                   <label className={adminFormLabelClassName()}>
-                    {MODULE_EDITOR_TERMINOLOGY.internalModuleName.labelAr}
+                    {MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}
                     <input
                       name="widget_title"
                       required
@@ -688,7 +688,7 @@ export default function BlockModuleManagerClient({
                     <AdminFormError name="widget_title" />
                   </label>
                   <label className={adminFormLabelClassName()}>
-                    Limit
+                    عدد النتائج
                     <input
                       name="limit"
                       type="number"

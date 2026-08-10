@@ -150,7 +150,7 @@ async function loadTopicImagesBySeriesSlug(seriesSlugs: string[]) {
 async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayload> {
   let query = getSupabaseAdmin()
     .from("topic_series")
-    .select("id, name, slug, status, sort_order, category_id")
+    .select("id, name, slug, description, status, sort_order, category_id")
     .eq("status", "published")
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -196,7 +196,7 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
 
       return {
         title: row.name,
-        subtitle: "",
+        subtitle: row.description ?? "",
         image: resolveLocalPublicImage(firstInSeries?.image, DEFAULT_IMAGE),
         href: getSeriesFilterHref(row.slug),
         slug: row.slug,

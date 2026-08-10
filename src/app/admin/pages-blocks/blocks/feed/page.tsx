@@ -5,6 +5,10 @@ import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import BlockModuleManagerClient from "../../../../../components/admin/page-blocks/BlockModuleManagerClient";
 import {
+  TOPICS_FEED_TYPE_LABELS_AR,
+  TOPICS_FEED_TYPES,
+} from "../../../../../lib/feed-modules/types";
+import {
   bulkFeedModules,
   createFeedModule,
   deleteFeedModule,
@@ -47,12 +51,9 @@ export default async function FeedModulesPage({ searchParams }: PageProps) {
       toggleAction={toggleFeedModuleStatus}
       bulkAction={bulkFeedModules}
       defaultVariant="latest"
-      variantOptions={[
-        ["latest", "Latest Topics"],
-        ["popular", "Popular Topics"],
-        ["categories", "Categories"],
-        ["series", "Series"],
-      ]}
+      variantOptions={TOPICS_FEED_TYPES.map(
+        (feedType): [string, string] => [feedType, TOPICS_FEED_TYPE_LABELS_AR[feedType]],
+      )}
       loadError={error ? `حدث خطأ أثناء قراءة Feed Modules: ${error.message}` : null}
       mediaSynchronizationWarning={query.notice === "saved_with_media_sync_warning"}
       initialVisibleColumns={preference.visibleColumns}

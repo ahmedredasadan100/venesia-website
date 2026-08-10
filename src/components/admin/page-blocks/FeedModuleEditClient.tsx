@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
 import FeedModuleFilterFields from "./FeedModuleFilterFields";
 import {
@@ -18,8 +20,12 @@ import {
 } from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
-import type { FeedModuleConfig } from "../../../lib/feed-modules/types";
-import { TOPICS_FEED_TYPES } from "../../../lib/feed-modules/types";
+import type { FeedModuleConfig, TopicsFeedType } from "../../../lib/feed-modules/types";
+import {
+  FEED_MODULE_PRESENTATION_SUPPORT,
+  TOPICS_FEED_TYPE_LABELS_AR,
+  TOPICS_FEED_TYPES,
+} from "../../../lib/feed-modules/types";
 import type { TopicFilterOptions } from "../../../lib/feed-modules/load-topic-filter-options";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 
@@ -30,20 +36,13 @@ type FeedModuleEditClientProps = {
     slug: string;
     description: string | null;
     status: string;
-    feed_type: string;
+    feed_type: TopicsFeedType;
   };
   config: FeedModuleConfig;
   filterOptions: TopicFilterOptions;
   assignmentContext: ModuleAssignmentContext;
   saved?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
-};
-
-const FEED_TYPE_LABELS: Record<string, string> = {
-  latest: "Latest Topics",
-  popular: "Popular Topics",
-  categories: "Categories",
-  series: "Series",
 };
 
 export default function FeedModuleEditClient({
@@ -54,13 +53,17 @@ export default function FeedModuleEditClient({
   saved,
   updateAction,
 }: FeedModuleEditClientProps) {
+  const [feedType, setFeedType] = useState<TopicsFeedType>(block.feed_type);
+  const presentationSupport = FEED_MODULE_PRESENTATION_SUPPORT[feedType];
+  const hasPresentationControls = Object.values(presentationSupport).some(Boolean);
+
   return (
     <div className="space-y-6 pb-10" dir="rtl">
       <ModuleEditorHeader
         moduleKind="feed"
         entityName={block.name}
         backHref="/admin/pages-blocks/blocks/feed"
-        backLabel="الرجوع لكل Feed Modules"
+        backLabel="الرجوع إلى موديولات المحتوى"
         status={block.status}
         saved={saved}
       />
@@ -78,7 +81,7 @@ export default function FeedModuleEditClient({
                 <ModuleEditorSection>
                   <ModuleEditorFieldGrid>
                   <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.internalModuleName.labelAr}</span>
+                    <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}</span>
                     <input
                       name="widget_title"
                       defaultValue={config.presentation.title}
@@ -89,11 +92,16 @@ export default function FeedModuleEditClient({
 
                   <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
                     name="feed_type"
-                    label="Feed Type"
-                    defaultValue={block.feed_type}
+                    label="نوع موديول المحتوى"
+                    value={feedType}
+                    onChange={(nextFeedType) => {
+                      if (TOPICS_FEED_TYPES.includes(nextFeedType as TopicsFeedType)) {
+                        setFeedType(nextFeedType as TopicsFeedType);
+                      }
+                    }}
                     options={TOPICS_FEED_TYPES.map((feedType) => ({
                       value: feedType,
-                      label: FEED_TYPE_LABELS[feedType] ?? feedType,
+                      label: TOPICS_FEED_TYPE_LABELS_AR[feedType],
                     }))}
                   /></ModuleEditorField>
 
@@ -111,22 +119,53 @@ export default function FeedModuleEditClient({
 
                   <FeedModuleFilterFields config={config} filterOptions={filterOptions} />
 
-                  <AdminFormGrid columns={3}>
-                    <AdminFormSwitch name="show_image" label="Show Image" value="true" defaultChecked={config.presentation.showImage} surface />
-                    <AdminFormSwitch name="show_date" label="Show Date" value="true" defaultChecked={config.presentation.showDate} surface />
-                    <AdminFormSwitch name="show_excerpt" label="Show Excerpt" value="true" defaultChecked={config.presentation.showExcerpt} surface />
-                  </AdminFormGrid>
+                  {hasPresentationControls ? (
+                    <AdminFormGrid columns={3}>
+                      {presentationSupport.showImage ? (
+                        <AdminFormSwitch
+                          name="show_image"
+                          label="عرض الصورة"
+                          value="true"
+                          uncheckedValue="false"
+                          defaultChecked={config.presentation.showImage}
+                          surface
+                        />
+                      ) : null}
+                      {presentationSupport.showDate ? (
+                        <AdminFormSwitch
+                          name="show_date"
+                          label="عرض التاريخ"
+                          value="true"
+                          uncheckedValue="false"
+                          defaultChecked={config.presentation.showDate}
+                          surface
+                        />
+                      ) : null}
+                      {presentationSupport.showExcerpt ? (
+                        <AdminFormSwitch
+                          name="show_excerpt"
+                          label="عرض الوصف"
+                          value="true"
+                          uncheckedValue="false"
+                          defaultChecked={config.presentation.showExcerpt}
+                          surface
+                        />
+                      ) : null}
+                    </AdminFormGrid>
+                  ) : null}
 
                   <AdminFormGrid>
                     <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr} (التصنيفات / السلاسل)</span>
+                      <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
                       <input name="eyebrow" defaultValue={config.presentation.eyebrow ?? ""} className={fieldClassName()} />
                     </label>
 
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Series Link Text</span>
-                      <input name="link_text" defaultValue={config.presentation.linkText ?? ""} className={fieldClassName()} />
-                    </label>
+                    {feedType === "series" ? (
+                      <label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">نص رابط السلسلة</span>
+                        <input name="link_text" defaultValue={config.presentation.linkText ?? ""} className={fieldClassName()} />
+                      </label>
+                    ) : null}
                   </AdminFormGrid>
 
                 </ModuleEditorSection>

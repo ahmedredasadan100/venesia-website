@@ -9,6 +9,8 @@ type SidebarSeriesWidgetProps = {
   eyebrow: string;
   title: string;
   linkText: string;
+  showImage?: boolean;
+  showExcerpt?: boolean;
 };
 
 export default function SidebarSeriesWidget({
@@ -16,6 +18,8 @@ export default function SidebarSeriesWidget({
   eyebrow,
   title,
   linkText,
+  showImage = true,
+  showExcerpt = false,
 }: SidebarSeriesWidgetProps) {
   if (!items.length) return null;
 
@@ -29,22 +33,24 @@ export default function SidebarSeriesWidget({
             scroll={false}
             className="group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition-all duration-500 hover:-translate-y-0.5 hover:border-[#D8B87A]/35 hover:bg-[#D8B87A]/[0.05]"
           >
-            <div className="relative h-28 overflow-hidden">
-              <Image
-                src={item.image}
-                alt={item.title}
-                fill
-                sizes="(max-width: 1024px) 100vw, 340px"
-                className="object-cover opacity-80 transition-transform duration-700 group-hover:scale-105"
-              />
+            {showImage ? (
+              <div className="relative h-28 overflow-hidden">
+                <Image
+                  src={item.image}
+                  alt={item.title}
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 340px"
+                  className="object-cover opacity-80 transition-transform duration-700 group-hover:scale-105"
+                />
 
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
-            </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+              </div>
+            ) : null}
 
             <div className="p-4">
               <h4 className="text-base font-semibold text-white">{item.title}</h4>
 
-              {item.subtitle ? (
+              {showExcerpt && item.subtitle ? (
                 <p className="mt-2 text-sm leading-6 text-white/50">{item.subtitle}</p>
               ) : null}
 

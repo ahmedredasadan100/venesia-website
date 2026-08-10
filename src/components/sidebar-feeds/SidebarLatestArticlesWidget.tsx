@@ -6,6 +6,7 @@ import { SidebarFeedPanel } from "./SidebarFeedPanel";
 
 type SidebarLatestArticlesWidgetProps = {
   items: SidebarArticleItem[];
+  eyebrow?: string | null;
   title: string;
   showImage?: boolean;
   showDate?: boolean;
@@ -14,6 +15,7 @@ type SidebarLatestArticlesWidgetProps = {
 
 export default function SidebarLatestArticlesWidget({
   items,
+  eyebrow,
   title,
   showImage = true,
   showDate = true,
@@ -22,7 +24,7 @@ export default function SidebarLatestArticlesWidget({
   if (!items.length) return null;
 
   return (
-    <SidebarFeedPanel title={title}>
+    <SidebarFeedPanel eyebrow={eyebrow ?? undefined} title={title}>
       <div className="space-y-4">
         {items.map((item) => (
           <Link

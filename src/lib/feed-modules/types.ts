@@ -7,6 +7,26 @@ import type {
 export const TOPICS_FEED_TYPES = ["latest", "popular", "categories", "series"] as const;
 export type TopicsFeedType = (typeof TOPICS_FEED_TYPES)[number];
 
+export const TOPICS_FEED_TYPE_LABELS_AR: Record<TopicsFeedType, string> = {
+  latest: "أحدث الموضوعات",
+  popular: "الموضوعات الأكثر قراءة",
+  categories: "تصنيفات الموضوعات",
+  series: "سلاسل المحتوى",
+};
+
+export type FeedModulePresentationField = "showImage" | "showDate" | "showExcerpt";
+
+/** The canonical public-rendering support matrix used by the Feed editor and serializer. */
+export const FEED_MODULE_PRESENTATION_SUPPORT: Record<
+  TopicsFeedType,
+  Record<FeedModulePresentationField, boolean>
+> = {
+  latest: { showImage: true, showDate: true, showExcerpt: true },
+  popular: { showImage: true, showDate: true, showExcerpt: true },
+  categories: { showImage: false, showDate: false, showExcerpt: false },
+  series: { showImage: true, showDate: false, showExcerpt: true },
+};
+
 export type FeedModulePresentation = {
   title: string;
   eyebrow?: string | null;

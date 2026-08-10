@@ -23,7 +23,7 @@ export function parseNumber(value: FormDataEntryValue | null, fallback = 0) {
 /** Reads checkbox / boolean fields from FormData (hidden "true"/"false" or checkbox "on"). */
 export function parseFormBoolean(formData: FormData, key: string, defaultWhenAbsent = false) {
   if (!formData.has(key)) return defaultWhenAbsent;
-  const value = String(formData.get(key)).trim().toLowerCase();
+  const value = String(formData.getAll(key).at(-1)).trim().toLowerCase();
   if (value === "false" || value === "0" || value === "off" || value === "no" || value === "f") {
     return false;
   }

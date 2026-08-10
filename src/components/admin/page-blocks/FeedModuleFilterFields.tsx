@@ -35,14 +35,14 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
     <AdminFormGrid>
       <AdminFormListboxSelect
           name="category_slug"
-          label="Category Filter"
+          label="تصفية حسب التصنيف"
           value={categorySlug}
           onChange={(nextCategory) => {
             setCategorySlug(nextCategory);
             setSeriesSlug("__all__");
           }}
           options={[
-            { value: "__all__", label: "All" },
+            { value: "__all__", label: "الكل" },
             ...filterOptions.categories.map((category) => ({ value: category.slug, label: category.name })),
           ]}
           hint="يُحمَّل من Topics Categories Admin."
@@ -52,12 +52,12 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
         {seriesDisabled ? <input type="hidden" name="series_slug" value="__all__" /> : null}
         <AdminFormListboxSelect
           name="series_slug"
-          label="Series Filter"
+          label="تصفية حسب السلسلة"
           value={seriesDisabled ? "__all__" : seriesSlug}
           onChange={setSeriesSlug}
           disabled={seriesDisabled}
           options={[
-            { value: "__all__", label: "All" },
+            { value: "__all__", label: "الكل" },
             ...seriesOptions.map((item) => ({ value: item.slug, label: item.name })),
           ]}
           hint={seriesDisabled

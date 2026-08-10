@@ -80,7 +80,7 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
     const template = joinedTemplate(row.feed_module_templates) as FeedModuleTemplateRow | null;
     if (!template || !isPublishedTemplate(template.status)) continue;
 
-    const config = parseFeedModuleConfig(template.config);
+    const config = parseFeedModuleConfig(template.config, template.feed_type);
     const payload = await resolveTopicsFeedModule(template, config);
 
     modules.push({
