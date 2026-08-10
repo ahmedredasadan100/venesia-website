@@ -25,7 +25,7 @@ export default function FeedCarouselDots({
           className="group inline-flex h-8 min-w-8 items-center justify-center"
         >
           <span
-            className={`block h-1.5 rounded-full transition-all duration-300 ${
+            className={`block h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${
               index === activeIndex
                 ? "w-7 bg-[#D8B87A]"
                 : "w-2 bg-[#D8B87A]/25 group-hover:bg-[#D8B87A]/55"

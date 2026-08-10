@@ -48,7 +48,7 @@ export default function ContactFloatingTrustCards({
   if (!cmsCards?.length) return null;
 
   return (
-    <section className="relative z-20 mx-auto -mt-28 max-w-7xl px-5 sm:px-8 lg:px-10">
+    <section className="relative z-20 mx-auto -mt-[5.5rem] max-w-7xl px-5 sm:px-8 lg:px-10">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cmsCards.map((item) => {
           const isMail = item.type === "mail";

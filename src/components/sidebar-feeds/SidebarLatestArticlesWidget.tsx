@@ -58,7 +58,7 @@ export default function SidebarLatestArticlesWidget({
       >
         <div
           key={activeIndex}
-          className="space-y-4 motion-safe:animate-[featuredFade_450ms_ease-out]"
+          className="grid grid-cols-3 gap-3 motion-safe:animate-[feedCarouselFade_450ms_ease-out]"
           role="group"
           aria-roledescription="slide"
           aria-label={`مجموعة ${activeIndex + 1} من ${slides.length}`}
@@ -67,22 +67,25 @@ export default function SidebarLatestArticlesWidget({
             <Link
               key={`${item.href}-${item.title}`}
               href={item.href}
-              className="group flex gap-3 border-b border-white/10 pb-4 last:border-0 last:pb-0"
+              className="group flex min-w-0 flex-col"
             >
               {showImage ? (
-                <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-xl">
+                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl">
                   <Image
                     src={item.image}
                     alt={item.title}
                     fill
-                    sizes="80px"
+                    sizes="(max-width: 1024px) 30vw, 100px"
                     className="object-cover transition-transform duration-700 group-hover:scale-105"
                   />
                 </div>
               ) : null}
 
-              <div>
-                <h4 className="line-clamp-2 text-sm leading-7 text-white/70 transition group-hover:text-[#D8B87A]">
+              <div className={showImage ? "mt-3 min-w-0 w-full" : "min-w-0 w-full"}>
+                <h4
+                  className="line-clamp-2 text-sm text-white/70 transition group-hover:text-[#D8B87A]"
+                  style={{ lineHeight: 1.75 }}
+                >
                   {item.title}
                 </h4>
 
