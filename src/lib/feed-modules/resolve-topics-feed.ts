@@ -15,7 +15,7 @@ import type {
 const DEFAULT_IMAGE = "/images/topics/default.jpg";
 
 function getCategoryFilterHref(slug: string) {
-  return `/topics?category=${slug}`;
+  return `/topics?category=${encodeURIComponent(slug)}`;
 }
 
 function getSeriesFilterHref(slug: string) {
@@ -72,13 +72,43 @@ async function resolveLatestOrPopular(
 }
 
 async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePayload> {
-  const { data: categories, error: categoriesError } = await getSupabaseAdmin()
+  let seriesCategoryId: number | null = null;
+
+  if (config.query.seriesSlug) {
+    const { data: seriesRow, error: seriesError } = await getSupabaseAdmin()
+      .from("topic_series")
+      .select("category_id")
+      .eq("slug", config.query.seriesSlug)
+      .eq("status", "published")
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (seriesError) {
+      logError("resolveTopicsFeed: series lookup for categories failed", seriesError);
+      return { kind: "categories", items: [] };
+    }
+
+    if (!seriesRow?.category_id) return { kind: "categories", items: [] };
+    seriesCategoryId = seriesRow.category_id;
+  }
+
+  let categoriesQuery = getSupabaseAdmin()
     .from("topic_categories")
     .select("id, name, slug, status, topics_count:topics(count)")
     .eq("status", "published")
     .is("deleted_at", null)
     // Soft-deleted topics must never count toward a public category.
-    .is("topics.deleted_at", null)
+    .is("topics.deleted_at", null);
+
+  if (config.query.categorySlug) {
+    categoriesQuery = categoriesQuery.eq("slug", config.query.categorySlug);
+  }
+
+  if (seriesCategoryId !== null) {
+    categoriesQuery = categoriesQuery.eq("id", seriesCategoryId);
+  }
+
+  const { data: categories, error: categoriesError } = await categoriesQuery
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true })
     .limit(config.query.limit);
@@ -88,42 +118,21 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
     return { kind: "categories", items: [] };
   }
 
-  let rows = categories ?? [];
-
-  if (config.query.categorySlug) {
-    rows = rows.filter((row) => row.slug === config.query.categorySlug);
-  }
-
-  if (config.query.seriesSlug) {
-    const { data: seriesRow, error: seriesError } = await getSupabaseAdmin()
-      .from("topic_series")
-      .select("category_id")
-      .eq("slug", config.query.seriesSlug)
-      .is("deleted_at", null)
-      .maybeSingle();
-
-    if (seriesError) {
-      logError("resolveTopicsFeed: series lookup for categories failed", seriesError);
-      return { kind: "categories", items: [] };
-    }
-
-    if (seriesRow?.category_id) {
-      rows = rows.filter((row) => row.id === seriesRow.category_id);
-    } else {
-      rows = [];
-    }
-  }
-
   return {
     kind: "categories",
-    items: rows.map((row) => {
-      const countValue = Array.isArray(row.topics_count) ? (row.topics_count[0]?.count ?? 0) : 0;
+    items: (categories ?? []).flatMap((row) => {
+      const name = String(row.name ?? "").trim();
+      const slug = String(row.slug ?? "").trim();
+      if (!name || !slug) return [];
 
-      return {
-        name: row.name,
-        href: getCategoryFilterHref(row.slug),
-        count: countValue,
-      };
+      const rawCount = Array.isArray(row.topics_count) ? (row.topics_count[0]?.count ?? 0) : 0;
+      const parsedCount = Number(rawCount);
+
+      return [{
+        name,
+        href: getCategoryFilterHref(slug),
+        count: Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0,
+      }];
     }),
   };
 }

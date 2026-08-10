@@ -214,14 +214,16 @@ check(
 
 check(
   "public rendering requires both published template state and visible assignment state",
-  pageBlockPublicLoader.includes('return status === "published"') &&
+  blockStatusOwner.includes("export function isPublishedPageBlockStatus") &&
+    blockStatusOwner.includes('return value === "published"') &&
+    pageBlockPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
     pageBlockPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
-    feedPublicLoader.includes('return status === "published"') &&
+    feedPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
     feedPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
-    mediaSidebarPublicLoader.includes('template.status !== "published"') &&
+    mediaSidebarPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
     mediaSidebarPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
     mediaSidebarRenderer.includes(".filter((widget) => widget.isVisible)") &&
-    mediaHubPublicLoader.includes('template.status !== "published"') &&
+    mediaHubPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
     mediaHubPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
     mediaHubRenderPlan.includes(".filter((module) => module.isVisible)"),
 );

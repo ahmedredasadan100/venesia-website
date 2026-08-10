@@ -51,6 +51,11 @@ export function getStatus(value: string): PageBlockStatus {
   return BLOCK_STATUSES.includes(value as PageBlockStatus) ? (value as PageBlockStatus) : "unpublished";
 }
 
+/** Canonical public-read predicate for Page Block template publication. */
+export function isPublishedPageBlockStatus(value: string | null | undefined) {
+  return value === "published";
+}
+
 export function statusMeta(status?: string | null) {
   return getContentStatusMetadata(status);
 }
