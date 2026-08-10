@@ -15,6 +15,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { revalidateHeroCache } from "../../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { parseFormStatus } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import {
   normalizeHeroElementOrder,
@@ -231,7 +232,7 @@ export async function createHeroTemplate(
       style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
       source_type: cleanText(formData.get("source_type")) || "manual",
       limit_count: parseNumber(formData.get("limit_count"), 1),
-      status: formData.get("is_published") === "on" ? "published" : "unpublished",
+      status: parseFormStatus(formData),
       config: buildHeroConfig(formData),
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
@@ -469,7 +470,7 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     source_type: cleanText(formData.get("source_type")) || "manual",
     source_slug: cleanText(formData.get("source_slug")) || null,
     limit_count: parseNumber(formData.get("limit_count"), 1),
-    status: formData.get("is_published") === "on" ? "published" : "unpublished",
+    status: parseFormStatus(formData),
     config: buildHeroConfig(formData),
     updated_at: new Date().toISOString(),
   };

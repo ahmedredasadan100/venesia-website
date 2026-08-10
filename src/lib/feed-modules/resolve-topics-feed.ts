@@ -33,8 +33,8 @@ async function resolveLatestOrPopular(
     .eq("status", "published")
     .is("deleted_at", null);
 
-  if (config.query.categorySlug) {
-    query = query.eq("category_slug", config.query.categorySlug);
+  if (config.query.categorySlugs.length) {
+    query = query.in("category_slug", config.query.categorySlugs);
   }
 
   if (config.query.seriesSlug) {
@@ -51,7 +51,7 @@ async function resolveLatestOrPopular(
 
   if (error) {
     logError(`resolveTopicsFeed: ${feedType} query failed`, error, {
-      categorySlug: config.query.categorySlug,
+      categorySlugs: config.query.categorySlugs,
       seriesSlug: config.query.seriesSlug,
     });
     return { kind: "articles", items: [] };
@@ -100,8 +100,8 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
     // Soft-deleted topics must never count toward a public category.
     .is("topics.deleted_at", null);
 
-  if (config.query.categorySlug) {
-    categoriesQuery = categoriesQuery.eq("slug", config.query.categorySlug);
+  if (config.query.categorySlugs.length) {
+    categoriesQuery = categoriesQuery.in("slug", config.query.categorySlugs);
   }
 
   if (seriesCategoryId !== null) {
@@ -165,23 +165,23 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
 
-  if (config.query.categorySlug) {
-    const { data: category, error: categoryError } = await getSupabaseAdmin()
+  if (config.query.categorySlugs.length) {
+    const { data: categories, error: categoryError } = await getSupabaseAdmin()
       .from("topic_categories")
       .select("id")
-      .eq("slug", config.query.categorySlug)
+      .in("slug", config.query.categorySlugs)
       .is("deleted_at", null)
-      .eq("status", "published")
-      .maybeSingle();
+      .eq("status", "published");
 
     if (categoryError) {
       logError("resolveTopicsFeed: category lookup for series failed", categoryError);
       return { kind: "series", items: [] };
     }
 
-    if (!category?.id) return { kind: "series", items: [] };
+    const categoryIds = (categories ?? []).map((category) => category.id).filter(Boolean);
+    if (!categoryIds.length) return { kind: "series", items: [] };
 
-    query = query.eq("category_id", category.id);
+    query = query.in("category_id", categoryIds);
   }
 
   if (config.query.seriesSlug) {

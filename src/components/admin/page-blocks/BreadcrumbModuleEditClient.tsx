@@ -2,7 +2,6 @@
 
 import { AdminFormListboxSelect, AdminFormSwitch } from "../ui";
 import {
-  MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
   ModuleEditorField,
   ModuleEditorFieldGrid,
@@ -12,6 +11,7 @@ import {
   ModuleEditorSection,
   ModuleEditorSectionHeading,
   ModuleEditorSettingsComposition,
+  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
   ModuleEditorTechnicalIdentity,
 } from "./ModuleEditorPresentation";
@@ -49,7 +49,7 @@ export default function BreadcrumbModuleEditClient({
         moduleKind="breadcrumb"
         entityName={block.name}
         backHref="/admin/pages-blocks/blocks/breadcrumb"
-        backLabel="الرجوع لكل موديولات Breadcrumb"
+        backLabel="الرجوع لكل موديولات مسار التنقل"
         status={block.status}
         saved={saved}
       />
@@ -128,14 +128,14 @@ export default function BreadcrumbModuleEditClient({
                     <ModuleEditorSectionHeading intent="settings" className="text-lg">إعدادات العرض</ModuleEditorSectionHeading>
                     <AdminFormListboxSelect
                       name="variant"
-                      label="Variant"
+                      label="نمط العرض"
                       defaultValue={block.variant}
                       options={[
-                        { value: "hero-inline", label: "Hero Inline — داخل الهيرو" },
-                        { value: "standalone", label: "Standalone — موضع مستقل في الـ slot" },
+                        { value: "hero-inline", label: "داخل الهيرو" },
+                        { value: "standalone", label: "موضع مستقل في الصفحة" },
                       ]}
                     />
-                    <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
+                    <ModuleEditorStatusSwitch status={block.status} />
                     <p className="text-xs leading-6 text-white/42">
                       الموديول المخفي أو غير المنشور لا يظهر على الموقع حتى لو كان مربوطًا بصفحة.
                     </p>

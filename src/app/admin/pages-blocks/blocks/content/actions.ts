@@ -16,6 +16,7 @@ import {
   cleanText,
   getStatus,
   parseFormBoolean,
+  parseFormStatus,
   parseNumber,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -684,7 +685,7 @@ export async function createContentBlock(
       description: readTemplateInternalDescription(formData),
       variant,
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+      status: parseFormStatus(formData),
       config: await buildContentConfig(formData, slug),
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
@@ -779,7 +780,7 @@ export async function updateContentBlock(formData: FormData) {
     description: readTemplateInternalDescription(formData),
     variant,
     style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+    status: parseFormStatus(formData),
     config: nextConfig,
     updated_at: new Date().toISOString(),
   };

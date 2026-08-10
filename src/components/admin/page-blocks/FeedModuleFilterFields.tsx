@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { AdminFormGrid, AdminFormListboxSelect } from "../ui";
+import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
 import type { FeedModuleConfig } from "../../../lib/feed-modules/types";
 import type { TopicFilterOptions } from "../../../lib/feed-modules/load-topic-filter-options";
 
@@ -11,42 +11,87 @@ type FeedModuleFilterFieldsProps = {
   filterOptions: TopicFilterOptions;
 };
 
+function getSeriesOptions(
+  categorySlugs: readonly string[],
+  seriesByCategorySlug: TopicFilterOptions["seriesByCategorySlug"],
+) {
+  const seen = new Set<number>();
+  return categorySlugs.flatMap((categorySlug) =>
+    (seriesByCategorySlug[categorySlug] ?? []).filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    }),
+  );
+}
+
 export default function FeedModuleFilterFields({ config, filterOptions }: FeedModuleFilterFieldsProps) {
-  const initialCategory = config.query.categorySlug ?? "__all__";
-  const initialSeries = config.query.seriesSlug ?? "__all__";
+  const [filters, setFilters] = useState(() => {
+    const initialSeries = config.query.seriesSlug ?? "__all__";
+    const initialSeriesOptions = getSeriesOptions(
+      config.query.categorySlugs,
+      filterOptions.seriesByCategorySlug,
+    );
+    const initialSeriesValid =
+      initialSeries === "__all__" || initialSeriesOptions.some((item) => item.slug === initialSeries);
 
-  const [categorySlug, setCategorySlug] = useState(initialCategory);
+    return {
+      categorySlugs: config.query.categorySlugs,
+      seriesSlug: initialSeriesValid ? initialSeries : "__all__",
+    };
+  });
+  const { categorySlugs, seriesSlug } = filters;
 
-  const seriesOptions = useMemo(() => {
-    if (categorySlug === "__all__") return [];
-    return filterOptions.seriesByCategorySlug[categorySlug] ?? [];
-  }, [categorySlug, filterOptions.seriesByCategorySlug]);
+  const seriesOptions = useMemo(
+    () => getSeriesOptions(categorySlugs, filterOptions.seriesByCategorySlug),
+    [categorySlugs, filterOptions.seriesByCategorySlug],
+  );
 
-  const initialSeriesValid =
-    initialCategory === "__all__"
-      ? initialSeries === "__all__"
-      : initialSeries === "__all__" || seriesOptions.some((item) => item.slug === initialSeries);
+  const seriesDisabled = categorySlugs.length === 0;
 
-  const [seriesSlug, setSeriesSlug] = useState(initialSeriesValid ? initialSeries : "__all__");
+  function toggleCategory(categorySlug: string, checked: boolean) {
+    setFilters((current) => {
+      const nextCategorySlugs = checked
+        ? current.categorySlugs.includes(categorySlug)
+          ? current.categorySlugs
+          : [...current.categorySlugs, categorySlug]
+        : current.categorySlugs.filter((slug) => slug !== categorySlug);
+      const seriesStillAllowed =
+        current.seriesSlug === "__all__" ||
+        getSeriesOptions(nextCategorySlugs, filterOptions.seriesByCategorySlug)
+          .some((item) => item.slug === current.seriesSlug);
 
-  const seriesDisabled = categorySlug === "__all__";
+      return {
+        categorySlugs: nextCategorySlugs,
+        seriesSlug: seriesStillAllowed ? current.seriesSlug : "__all__",
+      };
+    });
+  }
 
   return (
     <AdminFormGrid>
-      <AdminFormListboxSelect
-          name="category_slug"
-          label="تصفية حسب التصنيف"
-          value={categorySlug}
-          onChange={(nextCategory) => {
-            setCategorySlug(nextCategory);
-            setSeriesSlug("__all__");
-          }}
-          options={[
-            { value: "__all__", label: "الكل" },
-            ...filterOptions.categories.map((category) => ({ value: category.slug, label: category.name })),
-          ]}
-          hint="يُحمَّل من Topics Categories Admin."
-      />
+      <fieldset className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+        <legend className="px-1 text-sm font-medium text-white/70">تصفية حسب التصنيفات</legend>
+        <p className="text-xs leading-5 text-white/40">
+          اختر تصنيفًا أو أكثر. عدم اختيار أي تصنيف يعرض كل التصنيفات.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {filterOptions.categories.map((category) => (
+            <AdminFormSwitch
+              key={category.id}
+              name="category_slugs"
+              label={category.name}
+              value={category.slug}
+              checked={categorySlugs.includes(category.slug)}
+              onChange={(event) => toggleCategory(category.slug, event.currentTarget.checked)}
+              surface
+            />
+          ))}
+        </div>
+        {!filterOptions.categories.length ? (
+          <p className="text-xs text-white/45">لا توجد تصنيفات منشورة متاحة.</p>
+        ) : null}
+      </fieldset>
 
       <div>
         {seriesDisabled ? <input type="hidden" name="series_slug" value="__all__" /> : null}
@@ -54,7 +99,9 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
           name="series_slug"
           label="تصفية حسب السلسلة"
           value={seriesDisabled ? "__all__" : seriesSlug}
-          onChange={setSeriesSlug}
+          onChange={(nextSeriesSlug) =>
+            setFilters((current) => ({ ...current, seriesSlug: nextSeriesSlug }))
+          }
           disabled={seriesDisabled}
           options={[
             { value: "__all__", label: "الكل" },

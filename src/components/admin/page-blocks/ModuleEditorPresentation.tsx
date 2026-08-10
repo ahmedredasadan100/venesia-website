@@ -33,11 +33,6 @@ import {
   type ModuleEditorFieldSpan,
 } from "../../../lib/page-blocks/module-editor-presentation-contract";
 
-export const MODULE_EDITOR_STATUS_OPTIONS = [
-  { value: "published", label: "منشور" },
-  { value: "unpublished", label: "غير منشور" },
-] as const;
-
 type ModuleEditorMetadataScope = {
   moduleKind: string;
   moduleSlug?: string | null;
@@ -265,6 +260,28 @@ export function ModuleEditorHeadingVisibilityRow({
         className="md:min-w-52"
       />
     </div>
+  );
+}
+
+export function ModuleEditorStatusSwitch({
+  status,
+  label = "منشور",
+  className = "",
+}: {
+  status: string | null | undefined;
+  label?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <AdminFormSwitch
+      name="status"
+      label={label}
+      value="published"
+      uncheckedValue="unpublished"
+      defaultChecked={status === "published"}
+      surface
+      className={className}
+    />
   );
 }
 

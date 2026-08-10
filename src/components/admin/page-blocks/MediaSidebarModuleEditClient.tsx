@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { AdminFormListboxSelect } from "../ui";
 import {
-  MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
   ModuleEditorField,
   ModuleEditorFieldGrid,
@@ -14,6 +13,7 @@ import {
   ModuleEditorSection,
   ModuleEditorSectionHeading,
   ModuleEditorSettingsComposition,
+  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
@@ -48,11 +48,6 @@ function readInitialWidgetKey(value: string): MediaSidebarWidgetKey {
   return value === "sections" || value === "latest" || value === "popular" ? value : "latest";
 }
 
-function readInitialDataSource(widgetKey: MediaSidebarWidgetKey, config: Record<string, unknown>) {
-  const parsed = parseMediaSidebarModuleConfig(config, widgetKey);
-  return parsed.source;
-}
-
 function readInitialLimit(widgetKey: MediaSidebarWidgetKey, config: Record<string, unknown>) {
   const parsed = parseMediaSidebarModuleConfig(config, widgetKey);
   return typeof parsed.limit === "number" ? parsed.limit : MEDIA_SIDEBAR_WIDGET_DEFAULTS[widgetKey].defaultLimit ?? "";
@@ -68,26 +63,10 @@ export default function MediaSidebarModuleEditClient({
   const initialConfig = block.config ?? {};
 
   const [widgetKey, setWidgetKey] = useState<MediaSidebarWidgetKey>(initialWidgetKey);
-  const [dataSource, setDataSource] = useState<"navigation" | "topics">(
-    readInitialDataSource(initialWidgetKey, initialConfig),
-  );
   const [limit, setLimit] = useState<number | "">(readInitialLimit(initialWidgetKey, initialConfig));
-
-  const dataSourceOptions = useMemo(() => {
-    if (widgetKey === "sections") {
-      return [{ value: "navigation", label: "navigation / menu — قائمة التنقل" }];
-    }
-
-    if (widgetKey === "latest") {
-      return [{ value: "topics", label: "topics — type: news" }];
-    }
-
-    return [{ value: "topics", label: "topics — isPopular: true" }];
-  }, [widgetKey]);
 
   function handleWidgetChange(nextWidgetKey: MediaSidebarWidgetKey) {
     setWidgetKey(nextWidgetKey);
-    setDataSource(MEDIA_SIDEBAR_WIDGET_DEFAULTS[nextWidgetKey].config.source);
     setLimit(MEDIA_SIDEBAR_WIDGET_DEFAULTS[nextWidgetKey].defaultLimit ?? "");
   }
 
@@ -97,13 +76,18 @@ export default function MediaSidebarModuleEditClient({
         moduleKind="media-sidebar"
         entityName={block.name}
         backHref="/admin/pages-blocks/blocks/media-sidebar"
-        backLabel="الرجوع لكل Media Sidebar Modules"
+        backLabel="الرجوع لكل موديولات الشريط الإعلامي الجانبي"
         status={block.status}
         saved={saved}
       />
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
+        <input
+          type="hidden"
+          name="data_source"
+          value={MEDIA_SIDEBAR_WIDGET_DEFAULTS[widgetKey].config.source}
+        />
 
         <ModuleEditorTabs
           moduleKind="media-sidebar"
@@ -121,26 +105,26 @@ export default function MediaSidebarModuleEditClient({
 
                   <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
                     name="widget_key"
-                    label="نوع الـ widget"
+                    label="نوع الموديول"
                     value={widgetKey}
                     onChange={(value) => handleWidgetChange(readInitialWidgetKey(value))}
                     options={WIDGET_KEYS.map((key) => ({ value: key, label: MEDIA_SIDEBAR_WIDGET_LABELS[key] }))}
                   /></ModuleEditorField>
 
-                  <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
-                    name="data_source"
-                    label="مصدر البيانات"
-                    value={dataSource}
-                    onChange={(value) => setDataSource(value === "navigation" ? "navigation" : "topics")}
-                    options={dataSourceOptions}
-                    dir="ltr"
-                  /></ModuleEditorField>
+                  <ModuleEditorField nature="standard" span={4}>
+                    <div className="space-y-2">
+                      <span className="block text-sm font-medium text-white/70">مصدر البيانات</span>
+                      <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/60">
+                        {widgetKey === "sections" ? "قائمة التنقل" : "المحتوى الموحّد (topics)"}
+                      </p>
+                    </div>
+                  </ModuleEditorField>
 
                   {widgetKey === "sections" ? (
                     <ModuleEditorField nature="standard" span={4}><p className="rounded-xl border border-white/10 bg-black/16 px-4 py-3 text-xs leading-6 text-white/42">عدد العناصر غير مطبق على أقسام المركز الإعلامي.</p></ModuleEditorField>
                   ) : (
                     <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Limit</span>
+                      <span className="text-xs font-semibold text-white/55">عدد العناصر</span>
                       <input
                         name="limit"
                         type="number"
@@ -176,7 +160,7 @@ export default function MediaSidebarModuleEditClient({
                   secondary={
                   <ModuleEditorSection>
                     <ModuleEditorSectionHeading intent="settings" className="text-lg">حالة النشر</ModuleEditorSectionHeading>
-                    <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
+                    <ModuleEditorStatusSwitch status={block.status} />
                   </ModuleEditorSection>
                   }
                 />

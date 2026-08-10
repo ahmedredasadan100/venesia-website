@@ -13,6 +13,7 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  parseFormStatus,
   parseNumber,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -28,7 +29,7 @@ import {
   isPersistedFeedModuleConfigEqual,
 } from "../../../../../lib/feed-modules/parse-feed-config";
 import {
-  isSeriesAllowedForCategory,
+  isSeriesAllowedForCategories,
   loadTopicFilterOptionsForAdmin,
 } from "../../../../../lib/feed-modules/load-topic-filter-options";
 import { TOPICS_FEED_TYPES, type TopicsFeedType } from "../../../../../lib/feed-modules/types";
@@ -39,14 +40,14 @@ function readFeedType(value: FormDataEntryValue | null): TopicsFeedType | null {
 }
 
 async function sanitizeFeedModuleConfig(config: ReturnType<typeof buildFeedModuleConfig>) {
-  if (!config.query.categorySlug) {
+  if (!config.query.categorySlugs.length) {
     config.query.seriesSlug = null;
     return config;
   }
 
   if (config.query.seriesSlug) {
     const filterOptions = await loadTopicFilterOptionsForAdmin();
-    if (!isSeriesAllowedForCategory(filterOptions, config.query.categorySlug, config.query.seriesSlug)) {
+    if (!isSeriesAllowedForCategories(filterOptions, config.query.categorySlugs, config.query.seriesSlug)) {
       config.query.seriesSlug = null;
     }
   }
@@ -138,7 +139,7 @@ export async function createFeedModule(
       name,
       slug,
       description: cleanText(formData.get("description")) || null,
-      status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+      status: parseFormStatus(formData),
       feed_type: feedType,
       config,
     };
@@ -204,7 +205,7 @@ export async function updateFeedModule(formData: FormData) {
     name,
     slug,
     description: cleanText(formData.get("description")) || null,
-    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+    status: parseFormStatus(formData),
     feed_type: feedType,
     config,
     updated_at: new Date().toISOString(),

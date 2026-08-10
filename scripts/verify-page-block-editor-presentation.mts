@@ -22,6 +22,7 @@ const blockEditorHeader = read("src/components/admin/page-blocks/BlockEditorCont
 const assignmentField = read("src/components/admin/page-blocks/ModulePageAssignmentsField.tsx");
 const crossPageUsageBanner = read("src/components/admin/page-blocks/ModuleCrossPageUsageBanner.tsx");
 const blockStatusOwner = read("src/lib/page-blocks/admin-utils.ts");
+const formSwitchOwner = read("src/components/admin/ui/AdminFormSwitch.tsx");
 const blockTypes = read("src/lib/page-blocks/types.ts");
 const mediaOwner = read("src/components/admin/media/AdminMediaImageField.tsx");
 const routeSlotPolicy = read("src/lib/page-composition/route-slot-policy.ts");
@@ -179,8 +180,21 @@ const statusEditorAdopters = [
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
 ];
 const statusEditorSources = statusEditorAdopters.map(read);
+const statusActionAdopters = [
+  "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
+  "src/app/admin/pages-blocks/blocks/cards/actions.ts",
+  "src/app/admin/pages-blocks/blocks/content/actions.ts",
+  "src/app/admin/pages-blocks/blocks/cta/actions.ts",
+  "src/app/admin/pages-blocks/blocks/feed/actions.ts",
+  "src/app/admin/pages-blocks/blocks/media-hub/actions.ts",
+  "src/app/admin/pages-blocks/blocks/media-sidebar/actions.ts",
+  "src/app/admin/pages-blocks/blocks/hero/actions.ts",
+];
+const statusActionSources = statusActionAdopters.map(read);
+const heroManager = read("src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx");
 const lifecycleTables = [
   "content_block_templates",
   "cta_block_templates",
@@ -201,15 +215,49 @@ check(
       publicationClosureMigration.includes(`constraint ${table}_status_check`) &&
       publicationClosureMigration.includes(allowedStatusConstraint),
     ) &&
-    ["published", "unpublished"].every((status) =>
-      presentation.includes(`{ value: "${status}"`),
-    ) &&
-    !presentation.includes('{ value: "draft"') &&
-    !presentation.includes('{ value: "archived"') &&
+    presentation.includes("export function ModuleEditorStatusSwitch") &&
+    presentation.includes('name="status"') &&
+    presentation.includes('value="published"') &&
+    presentation.includes('uncheckedValue="unpublished"') &&
+    formSwitchOwner.indexOf('<input type="hidden" name={name} value={uncheckedValue}') <
+      formSwitchOwner.indexOf('type="checkbox"') &&
+    blockStatusOwner.includes('formData.getAll(key).at(-1)') &&
     statusEditorSources.every((source) =>
-      source.includes('name="status"') && source.includes("MODULE_EDITOR_STATUS_OPTIONS"),
+      source.includes("ModuleEditorStatusSwitch"),
     ) &&
-    statusEditorSources.every((source) => !/<AdminFormSwitch\b[^>]*\bname="status"/.test(source)),
+    statusEditorSources.every((source) =>
+      !source.includes("MODULE_EDITOR_STATUS_OPTIONS") &&
+      !/<AdminFormListboxSelect\b[^>]*\bname="status"/.test(source),
+    ) &&
+    statusActionSources.every((source) =>
+      source.includes("parseFormStatus(formData)"),
+    ) &&
+    heroManager.includes("ModuleEditorStatusSwitch") &&
+    !heroManager.includes('name="is_published"'),
+);
+
+const mediaHubEditor = read("src/components/admin/page-blocks/MediaHubModuleEditClient.tsx");
+const mediaSidebarEditor = read("src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx");
+const scopedModuleEditors = [
+  ...statusEditorSources,
+  heroManager,
+].join("\n");
+
+check(
+  "module editor labels are Arabic and fixed data sources are not fake selects",
+  [
+    'label="Variant"',
+    'label="Source"',
+    'label="Background Style"',
+    "Primary CTA Label",
+    "Secondary CTA Label",
+    ">Limit<",
+    "Image Position Class",
+  ].every((staleLabel) => !scopedModuleEditors.includes(staleLabel)) &&
+    /<input\s+type="hidden"\s+name="data_source"\s+value="topics"/u.test(mediaHubEditor) &&
+    mediaSidebarEditor.includes('name="data_source"') &&
+    !/<AdminFormListboxSelect\b[^>]*\bname="data_source"/u.test(mediaHubEditor) &&
+    !/<AdminFormListboxSelect\b[^>]*\bname="data_source"/u.test(mediaSidebarEditor),
 );
 
 check(

@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import { AdminFormListboxSelect } from "../ui";
 import {
-  MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
   ModuleEditorField,
   ModuleEditorFieldGrid,
@@ -14,6 +13,7 @@ import {
   ModuleEditorSection,
   ModuleEditorSectionHeading,
   ModuleEditorSettingsComposition,
+  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
@@ -64,7 +64,6 @@ export default function MediaHubModuleEditClient({
   const parsedInitial = parseMediaHubModuleConfig(initialConfig, initialSectionKey);
 
   const [sectionKey, setSectionKey] = useState<MediaHubSectionKey>(initialSectionKey);
-  const [dataSource, setDataSource] = useState<"topics">("topics");
   const [limit, setLimit] = useState<number | "">(
     typeof parsedInitial.limit === "number" ? parsedInitial.limit : MEDIA_HUB_SECTION_DEFAULTS[initialSectionKey].defaultLimit ?? "",
   );
@@ -77,7 +76,6 @@ export default function MediaHubModuleEditClient({
 
   function handleSectionChange(nextSectionKey: MediaHubSectionKey) {
     setSectionKey(nextSectionKey);
-    setDataSource("topics");
 
     if (nextSectionKey === "featured") {
       setSideLimit(MEDIA_HUB_SECTION_DEFAULTS.featured.defaultSideLimit ?? 3);
@@ -97,13 +95,14 @@ export default function MediaHubModuleEditClient({
         moduleKind="media-hub"
         entityName={block.name}
         backHref="/admin/pages-blocks/blocks/media-hub"
-        backLabel="الرجوع لكل Media Hub Modules"
+        backLabel="الرجوع لكل موديولات المركز الإعلامي"
         status={block.status}
         saved={saved}
       />
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
+        <input type="hidden" name="data_source" value="topics" />
 
         <ModuleEditorTabs
           moduleKind="media-hub"
@@ -127,19 +126,19 @@ export default function MediaHubModuleEditClient({
                     options={SECTION_KEYS.map((key) => ({ value: key, label: MEDIA_HUB_SECTION_LABELS[key] }))}
                   /></ModuleEditorField>
 
-                  <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
-                    name="data_source"
-                    label="مصدر البيانات"
-                    value={dataSource}
-                    onChange={() => setDataSource("topics")}
-                    options={[{ value: "topics", label: "topics — Unified Content" }]}
-                    dir="ltr"
-                  /></ModuleEditorField>
+                  <ModuleEditorField nature="standard" span={4}>
+                    <div className="space-y-2">
+                      <span className="block text-sm font-medium text-white/70">مصدر البيانات</span>
+                      <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/60">
+                        المحتوى الموحّد (topics)
+                      </p>
+                    </div>
+                  </ModuleEditorField>
 
                   {sectionKey === "featured" ? (
                     <ModuleEditorField nature="standard" span={6}><div className="grid gap-5 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-xs font-semibold text-white/55">Featured limit — قائمة الأخبار</span>
+                        <span className="text-xs font-semibold text-white/55">عدد أخبار القائمة المميزة</span>
                         <input
                           name="list_limit"
                           type="number"
@@ -155,7 +154,7 @@ export default function MediaHubModuleEditClient({
                         />
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-xs font-semibold text-white/55">Side carousel limit — جانبي</span>
+                        <span className="text-xs font-semibold text-white/55">عدد عناصر العرض الجانبي</span>
                         <input
                           name="side_limit"
                           type="number"
@@ -173,7 +172,7 @@ export default function MediaHubModuleEditClient({
                     </div></ModuleEditorField>
                   ) : (
                     <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Limit</span>
+                      <span className="text-xs font-semibold text-white/55">عدد العناصر</span>
                       <input
                         name="limit"
                         type="number"
@@ -209,7 +208,7 @@ export default function MediaHubModuleEditClient({
                   secondary={
                   <ModuleEditorSection>
                     <ModuleEditorSectionHeading intent="settings" className="text-lg">حالة النشر</ModuleEditorSectionHeading>
-                    <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
+                    <ModuleEditorStatusSwitch status={block.status} />
                   </ModuleEditorSection>
                   }
                 />

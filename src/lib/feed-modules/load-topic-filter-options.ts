@@ -93,20 +93,26 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
   };
 }
 
-export function getSeriesOptionsForCategory(
+export function getSeriesOptionsForCategories(
   options: TopicFilterOptions,
-  categorySlug: string | null | undefined,
+  categorySlugs: readonly string[],
 ) {
-  if (!categorySlug) return [];
-  return options.seriesByCategorySlug[categorySlug] ?? [];
+  const seen = new Set<number>();
+  return categorySlugs.flatMap((categorySlug) =>
+    (options.seriesByCategorySlug[categorySlug] ?? []).filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    }),
+  );
 }
 
-export function isSeriesAllowedForCategory(
+export function isSeriesAllowedForCategories(
   options: TopicFilterOptions,
-  categorySlug: string | null | undefined,
+  categorySlugs: readonly string[],
   seriesSlug: string | null | undefined,
 ) {
   if (!seriesSlug) return true;
-  if (!categorySlug) return false;
-  return getSeriesOptionsForCategory(options, categorySlug).some((item) => item.slug === seriesSlug);
+  if (!categorySlugs.length) return false;
+  return getSeriesOptionsForCategories(options, categorySlugs).some((item) => item.slug === seriesSlug);
 }

@@ -21,7 +21,7 @@ const DEFAULT_PRESENTATION: FeedModulePresentation = {
 
 const DEFAULT_QUERY: FeedModuleQueryConfig = {
   limit: 3,
-  categorySlug: null,
+  categorySlugs: [],
   seriesSlug: null,
 };
 
@@ -41,7 +41,7 @@ export const feedModuleConfigSchema: z.ZodType<FeedModuleConfig> = z
     query: z
       .object({
         limit: z.number().int().min(1),
-        categorySlug: z.string().nullable(),
+        categorySlugs: z.array(z.string().min(1)),
         seriesSlug: z.string().nullable(),
       })
       .strict(),
@@ -63,6 +63,29 @@ export class FeedModuleConfigValidationError extends Error {
 function readOptionalSlug(value: unknown) {
   const slug = String(value ?? "").trim();
   return slug || null;
+}
+
+function normalizeSlugList(values: readonly unknown[]) {
+  return [...new Set(values.map(readOptionalSlug).filter((value): value is string => Boolean(value)))];
+}
+
+function readPersistedCategorySlugs(queryRaw: Record<string, unknown>) {
+  const categorySlugs = Array.isArray(queryRaw.categorySlugs)
+    ? normalizeSlugList(queryRaw.categorySlugs)
+    : [];
+  if (categorySlugs.length) return categorySlugs;
+
+  const legacyCategorySlug = readOptionalSlug(queryRaw.categorySlug);
+  return legacyCategorySlug ? [legacyCategorySlug] : [];
+}
+
+function readFormCategorySlugs(formData: FormData) {
+  const categorySlugs = normalizeSlugList(formData.getAll("category_slugs"))
+    .filter((slug) => slug !== "__all__");
+  if (categorySlugs.length || formData.has("category_slugs")) return categorySlugs;
+
+  return normalizeSlugList(formData.getAll("category_slug"))
+    .filter((slug) => slug !== "__all__");
 }
 
 export function parseFeedModuleConfig(
@@ -99,7 +122,7 @@ export function parseFeedModuleConfig(
     },
     query: {
       limit,
-      categorySlug: readOptionalSlug(queryRaw.categorySlug),
+      categorySlugs: readPersistedCategorySlugs(queryRaw),
       seriesSlug: readOptionalSlug(queryRaw.seriesSlug),
     },
   });
@@ -123,7 +146,7 @@ export function buildFeedModuleConfig(
     );
   }
 
-  const categorySlug = String(formData.get("category_slug") ?? "").trim();
+  const categorySlugs = readFormCategorySlugs(formData);
   const seriesSlug = String(formData.get("series_slug") ?? "").trim();
   const support = FEED_MODULE_PRESENTATION_SUPPORT[feedType];
 
@@ -140,7 +163,7 @@ export function buildFeedModuleConfig(
     },
     query: {
       limit,
-      categorySlug: categorySlug && categorySlug !== "__all__" ? categorySlug : null,
+      categorySlugs,
       seriesSlug: seriesSlug && seriesSlug !== "__all__" ? seriesSlug : null,
     },
   });

@@ -2,7 +2,6 @@
 
 import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../ui";
 import {
-  MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
   ModuleEditorField,
   ModuleEditorFieldGrid,
@@ -11,6 +10,7 @@ import {
   ModuleEditorSaveArea,
   ModuleEditorSection,
   ModuleEditorSettingsComposition,
+  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
   ModuleEditorTechnicalIdentity,
 } from "./ModuleEditorPresentation";
@@ -48,7 +48,7 @@ export default function CtaModuleEditClient({
         moduleKind="cta"
         entityName={block.name}
         backHref="/admin/pages-blocks/blocks/cta"
-        backLabel="الرجوع لبلوكات CTA"
+        backLabel="الرجوع لبلوكات الدعوة للإجراء"
         status={block.status}
         saved={saved}
       />
@@ -94,22 +94,22 @@ export default function CtaModuleEditClient({
                   </ModuleEditorFieldGrid>
                   <AdminFormGrid>
                     <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Primary CTA Label</span>
+                      <span className="text-xs font-semibold text-white/55">نص زر الإجراء الأساسي</span>
                       <input name="primary_cta_label" defaultValue={config.primaryCta?.label ?? ""} className={fieldClassName()} />
                     </label>
                     <AdminLinkField
                       prefix="primary_cta"
-                      label="Primary CTA — Link"
+                      label="رابط زر الإجراء الأساسي"
                       defaultValue={linkDefaultFromContainer(config.primaryCta as Record<string, unknown>)}
                       showAnchor
                     />
                     <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Secondary CTA Label</span>
+                      <span className="text-xs font-semibold text-white/55">نص زر الإجراء الثانوي</span>
                       <input name="secondary_cta_label" defaultValue={config.secondaryCta?.label ?? ""} className={fieldClassName()} />
                     </label>
                     <AdminLinkField
                       prefix="secondary_cta"
-                      label="Secondary CTA — Link"
+                      label="رابط زر الإجراء الثانوي"
                       defaultValue={linkDefaultFromContainer(config.secondaryCta as Record<string, unknown>)}
                       showAnchor
                     />
@@ -132,20 +132,15 @@ export default function CtaModuleEditClient({
                     value={block.slug}
                     inputClassName={fieldClassName()}
                   />
-                  <AdminFormListboxSelect
-                    name="status"
-                    label="الحالة"
-                    defaultValue={block.status}
-                    options={MODULE_EDITOR_STATUS_OPTIONS}
-                  />
+                  <ModuleEditorStatusSwitch status={block.status} />
                   <AdminFormListboxSelect
                     name="background_style"
-                    label="Background Style"
+                    label="نمط الخلفية"
                     defaultValue={config.backgroundStyle ?? "dark"}
                     options={[
-                      { value: "dark", label: "Dark" },
-                      { value: "gold", label: "Gold" },
-                      { value: "gradient", label: "Gradient" },
+                      { value: "dark", label: "داكن" },
+                      { value: "gold", label: "ذهبي" },
+                      { value: "gradient", label: "متدرّج" },
                     ]}
                   />
                   </ModuleEditorSection>

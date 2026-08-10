@@ -13,6 +13,7 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  parseFormStatus,
   parseNumber,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -122,7 +123,7 @@ export async function createCtaBlock(
       description: cleanText(formData.get("description")) || null,
       variant: cleanText(formData.get("variant")) || "band",
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+      status: parseFormStatus(formData),
       config: buildCtaConfig(formData),
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
@@ -182,7 +183,7 @@ export async function updateCtaBlock(formData: FormData) {
     description: cleanText(formData.get("description")) || null,
     variant: cleanText(formData.get("variant")) || "band",
     style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+    status: parseFormStatus(formData),
     config: buildCtaConfig(formData),
     updated_at: new Date().toISOString(),
   };

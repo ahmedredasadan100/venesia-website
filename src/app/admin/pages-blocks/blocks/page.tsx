@@ -85,7 +85,7 @@ const modules: BlockModule[] = [
     href: "/admin/pages-blocks/blocks/feed",
     status: "active",
     description:
-      "Feed Widget لموضوعات تهمك — Latest / Popular / Categories / Series مع فلاتر category_slug و series_slug.",
+      "موديول موضوعات يدعم أحدث الموضوعات والأكثر قراءة والتصنيفات والسلاسل، مع تعدد التصنيفات وفلترة السلسلة.",
     examples: ["أحدث الموضوعات", "الأكثر قراءة", "مواضيع تهمك", "سلاسل المحتوى"],
   },
   {
