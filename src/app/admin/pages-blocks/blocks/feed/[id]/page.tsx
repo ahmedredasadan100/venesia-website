@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
 import { parseFeedModuleConfig } from "../../../../../../lib/feed-modules/parse-feed-config";
+import { TOPICS_FEED_TYPES, type TopicsFeedType } from "../../../../../../lib/feed-modules/types";
 import { loadTopicFilterOptionsForAdmin } from "../../../../../../lib/feed-modules/load-topic-filter-options";
 import { getModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
 import FeedModuleEditClient from "../../../../../../components/admin/page-blocks/FeedModuleEditClient";
@@ -27,11 +28,16 @@ export default async function FeedModuleEditPage({ params, searchParams }: PageP
 
   if (error || !block) notFound();
 
-  const config = parseFeedModuleConfig(block.config);
+  const feedType = TOPICS_FEED_TYPES.includes(block.feed_type as TopicsFeedType)
+    ? (block.feed_type as TopicsFeedType)
+    : null;
+  if (!feedType) notFound();
+
+  const config = parseFeedModuleConfig(block.config, feedType);
 
   return (
     <FeedModuleEditClient
-      block={block}
+      block={{ ...block, feed_type: feedType }}
       config={config}
       filterOptions={filterOptions}
       assignmentContext={assignmentContext}

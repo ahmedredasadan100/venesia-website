@@ -115,14 +115,18 @@ check(
 const feedCreateAction = read(
   "src/app/admin/pages-blocks/blocks/feed/actions.ts",
 );
+const feedConfigContract = read(
+  "src/lib/feed-modules/parse-feed-config.ts",
+);
 const genericBlockManager = read(
   "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
 );
 check(
-  "Feed quick-create validates required title and integer limit at the Server Action boundary",
-  feedCreateAction.includes('field?: "name" | "slug" | "widget_title" | "limit"') &&
-    feedCreateAction.includes("if (!widgetTitle)") &&
-    feedCreateAction.includes("!Number.isInteger(limit) || limit < 1") &&
+  "Feed quick-create delegates required title and integer-limit validation to the canonical config contract",
+  feedCreateAction.includes("buildFeedModuleConfig(formData, feedType)") &&
+    feedCreateAction.includes("error instanceof FeedModuleConfigValidationError") &&
+    feedConfigContract.includes("if (!title)") &&
+    feedConfigContract.includes("!Number.isInteger(limit) || limit < 1") &&
     genericBlockManager.includes('<AdminFormError name="widget_title" />') &&
     genericBlockManager.includes('<AdminFormError name="limit" />'),
 );

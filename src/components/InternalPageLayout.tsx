@@ -1,13 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { useMemo } from "react";
-import { usePathname } from "next/navigation";
 
-import { buildBreadcrumbsFromNavigation } from "../lib/public-navigation";
-import { usePublicNavigation } from "./PublicNavigationProvider";
 import type { HeroSectionData } from "../lib/page-sections";
+import BreadcrumbModuleSection from "./modules/BreadcrumbModuleSection";
 import DynamicHeroSection from "./sections/DynamicHeroSection";
 
 type InternalPageLayoutProps = {
@@ -46,19 +42,6 @@ export default function InternalPageLayout({
   showHeroImage = true,
   showSubtitle = true,
 }: InternalPageLayoutProps) {
-  const pathname = usePathname();
-  const navItems = usePublicNavigation();
-
-  const breadcrumbs = useMemo(
-    () => buildBreadcrumbsFromNavigation(pathname ?? "/", navItems),
-    [pathname, navItems],
-  );
-
-  const resolvedBreadcrumbs =
-    breadcrumbCurrentLabel && breadcrumbs.length > 0
-      ? [...breadcrumbs.slice(0, -1), { label: breadcrumbCurrentLabel }]
-      : breadcrumbs;
-
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white" dir="rtl">
       <div aria-hidden className="venesia-grain pointer-events-none fixed inset-0 z-[4]" />
@@ -140,28 +123,10 @@ export default function InternalPageLayout({
                     </p>
                   ) : null}
 
-                  <nav className="mt-6" aria-label="Breadcrumb">
-                    <ol className="flex flex-wrap items-center gap-2 text-sm text-white/62">
-                      {resolvedBreadcrumbs.map((item, index) => (
-                        <li key={`${item.label}-${index}`} className="flex items-center gap-2">
-                          {item.href ? (
-                            <Link
-                              href={item.href}
-                              className="transition-colors duration-300 hover:text-white/88"
-                            >
-                              {item.label}
-                            </Link>
-                          ) : (
-                            <span className="text-[#D8B87A]/90">{item.label}</span>
-                          )}
-
-                          {index < resolvedBreadcrumbs.length - 1 ? (
-                            <span className="text-[#D8B87A]/45">•</span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ol>
-                  </nav>
+                  <BreadcrumbModuleSection
+                    currentLabelOverride={breadcrumbCurrentLabel}
+                    className="mt-6"
+                  />
                 </div>
 
                 <div aria-hidden className="hidden min-w-0 lg:block" />

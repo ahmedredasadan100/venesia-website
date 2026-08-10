@@ -24,6 +24,19 @@ function markRevealed(element: Element) {
   clearWillChange(element);
 }
 
+function isVisibleInViewport(element: Element) {
+  const rect = element.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+
+  return (
+    rect.bottom > 0 &&
+    rect.right > 0 &&
+    rect.top < viewportHeight &&
+    rect.left < viewportWidth
+  );
+}
+
 /**
  * Safe scroll reveal:
  * - Content is visible by default (no JS = readable).
@@ -73,6 +86,12 @@ export default function RevealAnimations() {
 
       // Off-screen / inert slider pages must stay readable when later activated.
       if (element.closest("[inert], [aria-hidden='true']")) {
+        revealNow(element);
+        return;
+      }
+
+      // Hydration must never move content that is already visible back into a hidden state.
+      if (isVisibleInViewport(element)) {
         revealNow(element);
         return;
       }

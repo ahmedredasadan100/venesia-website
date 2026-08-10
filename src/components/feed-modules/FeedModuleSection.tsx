@@ -38,6 +38,8 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
         eyebrow={presentation.eyebrow ?? "Series"}
         title={presentation.title}
         linkText={presentation.linkText ?? "عرض كل الموضوعات"}
+        showImage={presentation.showImage}
+        showExcerpt={presentation.showExcerpt}
       />
     );
   }
@@ -46,8 +48,10 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
     return (
       <SidebarMostReadWidget
         items={payload.items}
+        eyebrow={presentation.eyebrow}
         title={presentation.title}
         showImage={presentation.showImage}
+        showDate={presentation.showDate}
         showExcerpt={presentation.showExcerpt}
       />
     );
@@ -56,6 +60,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
   return (
     <SidebarLatestArticlesWidget
       items={payload.items}
+      eyebrow={presentation.eyebrow}
       title={presentation.title}
       showImage={presentation.showImage}
       showDate={presentation.showDate}

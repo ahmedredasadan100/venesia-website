@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 
@@ -10,6 +9,7 @@ import type { BreadcrumbBlockConfig } from "../../lib/page-blocks/configs";
 import type { HeroTextAlignment } from "../../lib/hero/hero-content-controls";
 import { heroTextAlignClass } from "../../lib/hero/hero-content-controls";
 import { usePublicNavigation } from "../PublicNavigationProvider";
+import PublicGoldPill from "../public/PublicGoldPill";
 
 type BreadcrumbModuleSectionProps = {
   config?: BreadcrumbBlockConfig | unknown | null;
@@ -103,13 +103,9 @@ export default function BreadcrumbModuleSection({
       >
         {items.map((item, index) => (
           <li key={`${item.label}-${index}`} className="flex items-center gap-2">
-            {item.href ? (
-              <Link href={item.href} className="transition-colors duration-300 hover:text-white/88">
-                {item.label}
-              </Link>
-            ) : (
-              <span className="text-[#D8B87A]/90">{item.label}</span>
-            )}
+            <PublicGoldPill href={item.href} current={index === items.length - 1}>
+              {item.label}
+            </PublicGoldPill>
 
             {index < items.length - 1 ? <span className="text-[#D8B87A]/45">•</span> : null}
           </li>

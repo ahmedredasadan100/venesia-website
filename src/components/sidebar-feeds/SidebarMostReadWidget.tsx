@@ -6,21 +6,25 @@ import { SidebarFeedPanel } from "./SidebarFeedPanel";
 
 type SidebarMostReadWidgetProps = {
   items: SidebarArticleItem[];
+  eyebrow?: string | null;
   title: string;
   showImage?: boolean;
+  showDate?: boolean;
   showExcerpt?: boolean;
 };
 
 export default function SidebarMostReadWidget({
   items,
+  eyebrow,
   title,
   showImage = true,
+  showDate = true,
   showExcerpt = false,
 }: SidebarMostReadWidgetProps) {
   if (!items.length) return null;
 
   return (
-    <SidebarFeedPanel title={title}>
+    <SidebarFeedPanel eyebrow={eyebrow ?? undefined} title={title}>
       <div className="space-y-4">
         {items.map((item, index) => (
           <Link
@@ -48,6 +52,8 @@ export default function SidebarMostReadWidget({
               <h4 className="line-clamp-2 text-sm leading-6 text-white/65 transition group-hover:text-[#D8B87A]">
                 {item.title}
               </h4>
+
+              {showDate && item.date ? <p className="mt-1 text-xs text-white/35">{item.date}</p> : null}
 
               {showExcerpt && item.excerpt ? (
                 <p className="mt-1 line-clamp-2 text-xs leading-6 text-white/45">{item.excerpt}</p>

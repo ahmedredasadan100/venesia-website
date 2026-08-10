@@ -22,21 +22,23 @@ import {
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import { revalidatePath } from "next/cache";
-import { buildFeedModuleConfig } from "../../../../../lib/feed-modules/parse-feed-config";
+import {
+  buildFeedModuleConfig,
+  FeedModuleConfigValidationError,
+  isPersistedFeedModuleConfigEqual,
+} from "../../../../../lib/feed-modules/parse-feed-config";
 import {
   isSeriesAllowedForCategory,
   loadTopicFilterOptionsForAdmin,
 } from "../../../../../lib/feed-modules/load-topic-filter-options";
 import { TOPICS_FEED_TYPES, type TopicsFeedType } from "../../../../../lib/feed-modules/types";
 
-function readFeedType(value: FormDataEntryValue | null): TopicsFeedType {
+function readFeedType(value: FormDataEntryValue | null): TopicsFeedType | null {
   const feedType = cleanText(value);
-  return TOPICS_FEED_TYPES.includes(feedType as TopicsFeedType) ? (feedType as TopicsFeedType) : "latest";
+  return TOPICS_FEED_TYPES.includes(feedType as TopicsFeedType) ? (feedType as TopicsFeedType) : null;
 }
 
-async function sanitizeFeedModuleConfig(formData: FormData) {
-  const config = buildFeedModuleConfig(formData);
-
+async function sanitizeFeedModuleConfig(config: ReturnType<typeof buildFeedModuleConfig>) {
   if (!config.query.categorySlug) {
     config.query.seriesSlug = null;
     return config;
@@ -64,7 +66,7 @@ export type CreateFeedModuleFormActionState = AdminFormActionState;
 function createFeedModuleFailure(
   revision: number,
   message: string,
-  field?: "name" | "slug" | "widget_title" | "limit",
+  field?: "name" | "slug" | "feed_type" | "widget_title" | "limit",
 ): CreateFeedModuleFormActionState {
   return {
     status: "error",
@@ -110,24 +112,20 @@ export async function createFeedModule(
   const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
-  const widgetTitle = cleanText(formData.get("widget_title"));
-  const limit = Number(cleanText(formData.get("limit")));
+  const feedType = readFeedType(formData.get("feed_type"));
 
   if (!name) return createFeedModuleFailure(revision, "اسم الموديول مطلوب.", "name");
   if (!slug) return createFeedModuleFailure(revision, "اكتب slug صالحًا للموديول.", "slug");
-  if (!widgetTitle) {
-    return createFeedModuleFailure(
-      revision,
-      "عنوان الـWidget مطلوب.",
-      "widget_title",
-    );
-  }
-  if (!Number.isInteger(limit) || limit < 1) {
-    return createFeedModuleFailure(
-      revision,
-      "Limit يجب أن يكون رقمًا صحيحًا أكبر من أو يساوي 1.",
-      "limit",
-    );
+  if (!feedType) return createFeedModuleFailure(revision, "نوع الموديول غير صالح.", "feed_type");
+
+  let config: ReturnType<typeof buildFeedModuleConfig>;
+  try {
+    config = await sanitizeFeedModuleConfig(buildFeedModuleConfig(formData, feedType));
+  } catch (error) {
+    if (error instanceof FeedModuleConfigValidationError) {
+      return createFeedModuleFailure(revision, error.message, error.field);
+    }
+    throw error;
   }
   if (!(await ensureUniqueSlug(slug))) {
     return createFeedModuleFailure(revision, "الـ slug مستخدم بالفعل.", "slug");
@@ -141,8 +139,8 @@ export async function createFeedModule(
       slug,
       description: cleanText(formData.get("description")) || null,
       status: getStatus(cleanText(formData.get("status")) || "unpublished"),
-      feed_type: readFeedType(formData.get("feed_type")),
-      config: await sanitizeFeedModuleConfig(formData),
+      feed_type: feedType,
+      config,
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
     const coordinated = await coordinateMediaReferenceEntityMutation({
@@ -155,8 +153,8 @@ export async function createFeedModule(
         const { data, error } = await getSupabaseAdmin()
           .from("feed_module_templates")
           .insert(nextRow)
-          .select("id")
-          .single<{ id: number }>();
+          .select("id,config")
+          .single<{ id: number; config: unknown }>();
         if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء Feed Module.");
         return data;
       },
@@ -165,6 +163,9 @@ export async function createFeedModule(
     const data = coordinated.value;
     createdId = data.id;
     mediaWarning = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
+    if (!isPersistedFeedModuleConfigEqual(data.config, config)) {
+      throw new Error("تم إنشاء الموديول، لكن قراءة الإعدادات المحفوظة لم تطابق الطلب.");
+    }
 
     await revalidateBlockModulePaths("feed");
     return createFeedModuleSuccess(revision, data.id, mediaWarning);
@@ -191,17 +192,21 @@ export async function updateFeedModule(formData: FormData) {
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
   const slug = slugify(cleanText(formData.get("slug")) || name);
+  const feedType = readFeedType(formData.get("feed_type"));
 
   if (!id || !name || !slug) throw new Error("بيانات الموديول غير مكتملة.");
+  if (!feedType) throw new Error("نوع الموديول غير صالح.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
+
+  const config = await sanitizeFeedModuleConfig(buildFeedModuleConfig(formData, feedType));
 
   const nextRow = {
     name,
     slug,
     description: cleanText(formData.get("description")) || null,
     status: getStatus(cleanText(formData.get("status")) || "unpublished"),
-    feed_type: readFeedType(formData.get("feed_type")),
-    config: await sanitizeFeedModuleConfig(formData),
+    feed_type: feedType,
+    config,
     updated_at: new Date().toISOString(),
   };
   const coordinated = await coordinateMediaReferenceEntityMutation({
@@ -215,13 +220,17 @@ export async function updateFeedModule(formData: FormData) {
         .from("feed_module_templates")
         .update(nextRow)
         .eq("id", id)
-        .select("id")
-        .maybeSingle<{ id: number }>();
-      if (error || !data) throw new Error(error?.message ?? "Unable to update feed module.");
+        .select("id,config")
+        .maybeSingle<{ id: number; config: unknown }>();
+      if (error || !data) throw new Error(error?.message ?? "تعذر تحديث موديول المحتوى.");
       return data;
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
+
+  if (!isPersistedFeedModuleConfigEqual(coordinated.value.config, config)) {
+    throw new Error("قراءة الإعدادات المحفوظة لم تطابق الطلب؛ لم يتم إعلان نجاح الحفظ.");
+  }
 
   await syncBlockModulePageAssignments("feed", id, parsePageIdsFromForm(formData), actor);
   await revalidateBlockModulePaths("feed");
