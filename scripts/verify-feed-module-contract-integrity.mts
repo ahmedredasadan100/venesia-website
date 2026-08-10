@@ -89,12 +89,62 @@ const normalizeBoolean = adminUtils.normalizeBoolean as (
   value: unknown,
   fallback?: boolean,
 ) => boolean;
+const parseFormStatus = adminUtils.parseFormStatus as (
+  formData: FormData,
+  key?: string,
+) => "published" | "unpublished";
+const topicFilterOptionsContract = loadTranspiledModule(
+  "src/lib/feed-modules/load-topic-filter-options.ts",
+  {
+    "server-only": {},
+    "../supabase-admin": { getSupabaseAdmin: () => ({}) },
+    "../logging": { logError: () => undefined },
+  },
+);
+const getSeriesOptionsForCategories = topicFilterOptionsContract.getSeriesOptionsForCategories as (
+  options: {
+    seriesByCategorySlug: Record<string, Array<{ id: number; slug: string; name: string; categoryId: number }>>;
+  },
+  categorySlugs: readonly string[],
+) => Array<{ id: number; slug: string }>;
+const isSeriesAllowedForCategories = topicFilterOptionsContract.isSeriesAllowedForCategories as (
+  options: Parameters<typeof getSeriesOptionsForCategories>[0],
+  categorySlugs: readonly string[],
+  seriesSlug: string | null,
+) => boolean;
+
+const seriesFilterFixture = {
+  seriesByCategorySlug: {
+    "bait-al-watan": [{ id: 1, slug: "district-guide", name: "دليل الحي", categoryId: 10 }],
+    "real-estate": [
+      { id: 1, slug: "district-guide", name: "دليل الحي", categoryId: 10 },
+      { id: 2, slug: "buying-guide", name: "دليل الشراء", categoryId: 20 },
+    ],
+  },
+};
+assert.deepEqual(
+  getSeriesOptionsForCategories(seriesFilterFixture, ["bait-al-watan", "real-estate"]).map((item) => item.slug),
+  ["district-guide", "buying-guide"],
+);
+assert.equal(
+  isSeriesAllowedForCategories(seriesFilterFixture, ["bait-al-watan", "real-estate"], "buying-guide"),
+  true,
+);
+assert.equal(isSeriesAllowedForCategories(seriesFilterFixture, [], "buying-guide"), false);
+
+const checkedStatusForm = new FormData();
+checkedStatusForm.append("status", "unpublished");
+checkedStatusForm.append("status", "published");
+assert.equal(parseFormStatus(checkedStatusForm), "published");
+
+const uncheckedStatusForm = new FormData();
+uncheckedStatusForm.append("status", "unpublished");
+assert.equal(parseFormStatus(uncheckedStatusForm), "unpublished");
 
 function createFeedForm() {
   const formData = new FormData();
   formData.set("widget_title", "أحدث الموضوعات");
   formData.set("limit", "3");
-  formData.set("category_slug", "__all__");
   formData.set("series_slug", "__all__");
   formData.set("eyebrow", "مختارات");
   return formData;
@@ -137,6 +187,20 @@ assert.equal(categoryConfig.presentation.showImage, false);
 assert.equal(categoryConfig.presentation.showDate, false);
 assert.equal(categoryConfig.presentation.showExcerpt, false);
 
+const multiCategoryForm = createFeedForm();
+multiCategoryForm.append("category_slugs", "bait-al-watan");
+multiCategoryForm.append("category_slugs", "real-estate");
+multiCategoryForm.append("category_slugs", "bait-al-watan");
+const multiCategoryConfig = buildFeedModuleConfig(multiCategoryForm, "latest");
+assert.deepEqual(multiCategoryConfig.query.categorySlugs, ["bait-al-watan", "real-estate"]);
+
+const legacyCategoryForm = createFeedForm();
+legacyCategoryForm.set("category_slug", "bait-al-watan");
+assert.deepEqual(
+  buildFeedModuleConfig(legacyCategoryForm, "latest").query.categorySlugs,
+  ["bait-al-watan"],
+);
+
 const invalidLimitForm = createFeedForm();
 invalidLimitForm.set("limit", "0");
 assert.throws(
@@ -158,7 +222,7 @@ const legacyConfig = parseFeedModuleConfig(
       showDate: "true",
       showExcerpt: "invalid",
     },
-    query: { limit: "invalid" },
+    query: { limit: "invalid", categorySlug: "bait-al-watan" },
   },
   "latest",
 );
@@ -166,6 +230,14 @@ assert.equal(legacyConfig.presentation.showImage, false);
 assert.equal(legacyConfig.presentation.showDate, true);
 assert.equal(legacyConfig.presentation.showExcerpt, false);
 assert.equal(legacyConfig.query.limit, 3);
+assert.deepEqual(legacyConfig.query.categorySlugs, ["bait-al-watan"]);
+assert.deepEqual(
+  parseFeedModuleConfig(
+    { query: { categorySlugs: ["bait-al-watan", "real-estate", "bait-al-watan"] } },
+    "latest",
+  ).query.categorySlugs,
+  ["bait-al-watan", "real-estate"],
+);
 assert.equal(isPersistedFeedModuleConfigEqual(disabledConfig, disabledConfig), true);
 assert.equal(
   isPersistedFeedModuleConfigEqual(
@@ -270,6 +342,14 @@ class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
     return this;
   }
 
+  in(column: string, values: readonly unknown[]) {
+    this.filters.push([column, [...values]]);
+    if (this.table === "topic_categories") {
+      resolverFixture.categoryFilters.push([column, [...values]]);
+    }
+    return this;
+  }
+
   is() {
     return this;
   }
@@ -300,7 +380,11 @@ class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
 
   private applyFilters<T extends object>(rows: T[]) {
     return this.filters.reduce((filtered, [column, value]) =>
-      filtered.filter((row) => (row as Record<string, unknown>)[column] === value), [...rows]);
+      filtered.filter((row) =>
+        Array.isArray(value)
+          ? value.includes((row as Record<string, unknown>)[column])
+          : (row as Record<string, unknown>)[column] === value,
+      ), [...rows]);
   }
 
   private resolveResult(): ResolverQueryResult {
@@ -352,7 +436,7 @@ const selectedCategoryPayload = await resolveTopicsFeedModule(
   { feed_type: "categories" },
   {
     ...categoryConfig,
-    query: { ...categoryConfig.query, limit: 1, categorySlug: "bait-al-watan" },
+    query: { ...categoryConfig.query, limit: 1, categorySlugs: ["bait-al-watan"] },
   },
 );
 assert.deepEqual(selectedCategoryPayload, {
@@ -361,9 +445,37 @@ assert.deepEqual(selectedCategoryPayload, {
 });
 assert.ok(
   resolverFixture.categoryFilters.some(
-    ([column, value]) => column === "slug" && value === "bait-al-watan",
+    ([column, value]) => column === "slug" && Array.isArray(value) && value.includes("bait-al-watan"),
   ),
   "category filter must be applied by the source query before limit",
+);
+
+resolverFixture.categories = [
+  { id: 1, name: "تصنيف آخر", slug: "other", status: "published", topics_count: [{ count: 4 }] },
+  { id: 2, name: "بيت الوطن", slug: "bait-al-watan", status: "published", topics_count: [{ count: "260" }] },
+  { id: 3, name: "غير مختار", slug: "unselected", status: "published", topics_count: [{ count: 7 }] },
+];
+resolverFixture.categoryFilters = [];
+const multiCategoryPayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  {
+    ...categoryConfig,
+    query: { ...categoryConfig.query, limit: 2, categorySlugs: ["other", "bait-al-watan"] },
+  },
+);
+assert.deepEqual(multiCategoryPayload.items, [
+  { name: "تصنيف آخر", href: "/topics?category=other", count: 4 },
+  { name: "بيت الوطن", href: "/topics?category=bait-al-watan", count: 260 },
+]);
+assert.ok(
+  resolverFixture.categoryFilters.some(
+    ([column, value]) =>
+      column === "slug" &&
+      Array.isArray(value) &&
+      value.includes("other") &&
+      value.includes("bait-al-watan"),
+  ),
+  "multiple categories must be applied as one OR source filter before limit",
 );
 
 resolverFixture.categories = [
@@ -452,12 +564,16 @@ for (const staleLabel of ["Show Image", "Show Date", "Show Excerpt", "Feed Type"
 }
 assert.equal((editor.match(/uncheckedValue="false"/gu) ?? []).length, 3);
 assert.ok(editor.includes("FEED_MODULE_PRESENTATION_SUPPORT[feedType]"));
-assert.ok(filters.includes('label="تصفية حسب التصنيف"'));
+assert.ok(filters.includes("تصفية حسب التصنيفات"));
 assert.ok(filters.includes('label="تصفية حسب السلسلة"'));
 assert.equal(filters.includes('label="All"'), false);
+assert.ok(filters.includes('name="category_slugs"'));
+assert.ok(filters.includes("AdminFormSwitch"));
+assert.equal(filters.includes('name="category_slug"'), false);
 
 assert.ok(actions.includes('.select("id,config")'));
 assert.ok(actions.includes("isPersistedFeedModuleConfigEqual"));
+assert.ok(actions.includes("isSeriesAllowedForCategories"));
 assert.ok(actions.includes("if (!feedType)"));
 assert.equal(actions.includes('? (feedType as TopicsFeedType) : "latest"'), false);
 assert.ok(
@@ -471,7 +587,9 @@ assert.ok(loader.includes("isPublishedPageBlockStatus(template.status)"));
 assert.equal(loader.includes("function isPublishedTemplate"), false);
 assert.ok(resolver.includes('.select("id, name, slug, description, status, sort_order, category_id")'));
 assert.ok(resolver.includes('subtitle: row.description ?? ""'));
-assert.ok(resolver.includes('categoriesQuery = categoriesQuery.eq("slug", config.query.categorySlug)'));
+assert.ok(resolver.includes('categoriesQuery = categoriesQuery.in("slug", config.query.categorySlugs)'));
+assert.ok(resolver.includes('query = query.in("category_slug", config.query.categorySlugs)'));
+assert.ok(resolver.includes('query = query.in("category_id", categoryIds)'));
 assert.ok(resolver.includes('if (!name || !slug) return []'));
 assert.ok(adminUtilsSource.includes("export function isPublishedPageBlockStatus"));
 assert.ok(blockLoader.includes("isPublishedPageBlockStatus(template.status)"));

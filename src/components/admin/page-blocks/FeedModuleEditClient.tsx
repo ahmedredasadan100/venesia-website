@@ -5,7 +5,6 @@ import { useState } from "react";
 import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
 import FeedModuleFilterFields from "./FeedModuleFilterFields";
 import {
-  MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
   ModuleEditorField,
   ModuleEditorFieldGrid,
@@ -15,6 +14,7 @@ import {
   ModuleEditorSection,
   ModuleEditorSectionHeading,
   ModuleEditorSettingsComposition,
+  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
   ModuleEditorTechnicalIdentity,
 } from "./ModuleEditorPresentation";
@@ -178,7 +178,7 @@ export default function FeedModuleEditClient({
                   primary={
                   <ModuleEditorSection>
                     <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">اسم الموديول (Admin)</span>
+                    <span className="text-xs font-semibold text-white/55">اسم الموديول داخل لوحة التحكم</span>
                       <input name="name" defaultValue={block.name} required className={fieldClassName()} />
                     </label>
                     <ModuleEditorTechnicalIdentity mode="editable" value={block.slug} inputClassName={fieldClassName()} />
@@ -192,7 +192,7 @@ export default function FeedModuleEditClient({
                   secondary={
                   <ModuleEditorSection>
                     <ModuleEditorSectionHeading intent="settings" className="text-lg">حالة النشر</ModuleEditorSectionHeading>
-                    <AdminFormListboxSelect name="status" label="حالة الموديول" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
+                    <ModuleEditorStatusSwitch status={block.status} />
                   </ModuleEditorSection>
                   }
                 />

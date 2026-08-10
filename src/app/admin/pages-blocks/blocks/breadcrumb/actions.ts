@@ -14,6 +14,7 @@ import {
   cleanText,
   getStatus,
   parseFormBoolean,
+  parseFormStatus,
   parseNumber,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -125,7 +126,7 @@ export async function createBreadcrumbBlock(
       description: cleanText(formData.get("description")) || null,
       variant: cleanText(formData.get("variant")) || "hero-inline",
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+      status: parseFormStatus(formData),
       config: buildBreadcrumbConfig(formData),
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
@@ -185,7 +186,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
     description: cleanText(formData.get("description")) || null,
     variant: cleanText(formData.get("variant")) || "hero-inline",
     style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+    status: parseFormStatus(formData),
     config: buildBreadcrumbConfig(formData),
     updated_at: new Date().toISOString(),
   };

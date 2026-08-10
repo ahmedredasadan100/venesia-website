@@ -19,8 +19,8 @@ const sourceOptions: [string, string][] = [
 ];
 
 const variantOptions: [string, string][] = [
-  ["home-cinematic", "Home Cinematic"],
-  ["internal-page", "Internal Page"],
+  ["home-cinematic", "سينمائي للصفحة الرئيسية"],
+  ["internal-page", "صفحة داخلية"],
 ];
 
 function imagesToTextarea(config: Record<string, unknown> | null) {

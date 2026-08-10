@@ -1,12 +1,8 @@
 "use client";
 
 import AdminNotice from "../AdminNotice";
+import { AdminActionButton } from "../ui";
 import {
-  AdminActionButton,
-  AdminFormListboxSelect,
-} from "../ui";
-import {
-  MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorHeader,
   ModuleEditorFeedback,
   ModuleEditorField,
@@ -15,6 +11,7 @@ import {
   ModuleEditorSaveArea,
   ModuleEditorSection,
   ModuleEditorSettingsComposition,
+  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
   ModuleEditorTechnicalIdentity,
 } from "./ModuleEditorPresentation";
@@ -198,12 +195,9 @@ export default function ContentModuleEditClient({
           </label>
         )}
         </ModuleEditorField>
-        <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
-          name="status"
-          label="الحالة"
-          defaultValue={block.status}
-          options={MODULE_EDITOR_STATUS_OPTIONS}
-        /></ModuleEditorField>
+        <ModuleEditorField nature="binary-state" span={4}>
+          <ModuleEditorStatusSwitch status={block.status} />
+        </ModuleEditorField>
         </ModuleEditorFieldGrid>
         </ModuleEditorSection>
         }

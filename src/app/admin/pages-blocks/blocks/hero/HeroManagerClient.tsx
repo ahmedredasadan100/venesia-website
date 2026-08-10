@@ -9,6 +9,7 @@ import {
   useAdminFeedback,
 } from "../../../../../components/admin/AdminFeedbackProvider";
 import MediaSynchronizationWarningNotice from "../../../../../components/admin/media/MediaSynchronizationWarningNotice";
+import { ModuleEditorStatusSwitch } from "../../../../../components/admin/page-blocks/ModuleEditorPresentation";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
@@ -673,10 +674,7 @@ export default function HeroManagerClient({
                   {Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
-              <label className={`${ADMIN_FORM.checkboxRow} md:col-span-2`}>
-                <span>منشور</span>
-                <input type="checkbox" name="is_published" className="h-4 w-4 accent-[#D8B87A]" />
-              </label>
+              <ModuleEditorStatusSwitch status="unpublished" className="md:col-span-2" />
               <input type="hidden" name="style_preset" value="cinematic-gold" />
               <input type="hidden" name="limit_count" value="1" />
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end md:col-span-2">

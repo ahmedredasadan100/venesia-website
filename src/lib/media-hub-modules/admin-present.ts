@@ -1,11 +1,11 @@
 import type { MediaHubSectionKey } from "./types";
 
 export const MEDIA_HUB_SECTION_LABELS: Record<MediaHubSectionKey, string> = {
-  featured: "Featured News — أخبار مميزة",
-  "site-updates": "Site Updates — تحديثات المواقع",
-  videos: "Videos — الفيديوهات",
-  gallery: "Gallery — معرض الصور",
-  press: "Press — الصحافة",
+  featured: "أخبار مميزة",
+  "site-updates": "تحديثات المواقع",
+  videos: "الفيديوهات",
+  gallery: "معرض الصور",
+  press: "الصحافة",
 };
 
 export const MEDIA_HUB_SECTION_SUMMARIES: Record<MediaHubSectionKey, string> = {

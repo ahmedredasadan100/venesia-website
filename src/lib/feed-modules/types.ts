@@ -39,7 +39,7 @@ export type FeedModulePresentation = {
 
 export type FeedModuleQueryConfig = {
   limit: number;
-  categorySlug: string | null;
+  categorySlugs: string[];
   seriesSlug: string | null;
 };
 

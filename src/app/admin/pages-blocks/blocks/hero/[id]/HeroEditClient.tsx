@@ -12,6 +12,7 @@ import {
   ModuleEditorSaveArea,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
+  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
   ModuleEditorTechnicalIdentity,
 } from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
@@ -312,7 +313,7 @@ export default function HeroEditClient({
                       helperText="اختر أو ارفع الصور من المكتبة. استخدم الأسهم لترتيب الشرائح في العرض."
                     />
                     <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Image Position Class</span>
+                      <span className="text-xs font-semibold text-white/55">موضع الصورة</span>
                       <input
                         name="image_position_class"
                         defaultValue={String(config.imagePositionClassName ?? "")}
@@ -403,24 +404,24 @@ export default function HeroEditClient({
                 <div>
                   <ModuleEditorPagesTab moduleName={hero.name} assignmentContext={assignmentContext}>
                     <ModuleEditorSection>
-                    <AdminFormSwitch name="is_published" label="منشور" defaultChecked={hero.status === "published"} surface />
+                    <ModuleEditorStatusSwitch status={hero.status} />
 
                     <AdminFormListboxSelect
                       name="variant"
-                      label="Variant"
+                      label="نمط العرض"
                       defaultValue={hero.variant}
                       options={variantOptions.map(([value, label]) => ({ value, label }))}
                     />
 
                     <AdminFormListboxSelect
                       name="source_type"
-                      label="Source"
+                      label="المصدر"
                       defaultValue={hero.source_type}
                       options={sourceOptions.map(([value, label]) => ({ value, label }))}
                     />
 
                     <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Source Slug</span>
+                      <span className="text-xs font-semibold text-white/55">المعرّف التقني للمصدر</span>
                       <input
                         name="source_slug"
                         defaultValue={hero.source_slug ?? ""}
@@ -430,7 +431,7 @@ export default function HeroEditClient({
                     </label>
 
                     <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">Limit</span>
+                      <span className="text-xs font-semibold text-white/55">عدد العناصر</span>
                       <input
                         name="limit_count"
                         type="number"

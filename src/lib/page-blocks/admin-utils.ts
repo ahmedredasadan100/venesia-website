@@ -51,6 +51,12 @@ export function getStatus(value: string): PageBlockStatus {
   return BLOCK_STATUSES.includes(value as PageBlockStatus) ? (value as PageBlockStatus) : "unpublished";
 }
 
+/** Reads the final value emitted by the shared status switch. */
+export function parseFormStatus(formData: FormData, key = "status"): PageBlockStatus {
+  const value = String(formData.getAll(key).at(-1) ?? "").trim();
+  return getStatus(value || "unpublished");
+}
+
 /** Canonical public-read predicate for Page Block template publication. */
 export function isPublishedPageBlockStatus(value: string | null | undefined) {
   return value === "published";

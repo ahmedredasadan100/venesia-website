@@ -2,7 +2,6 @@
 
 import { AdminFormListboxSelect } from "../ui";
 import {
-  MODULE_EDITOR_STATUS_OPTIONS,
   ModuleEditorFeedback,
   ModuleEditorField,
   ModuleEditorFieldGrid,
@@ -11,6 +10,7 @@ import {
   ModuleEditorSaveArea,
   ModuleEditorSection,
   ModuleEditorSettingsComposition,
+  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
   ModuleEditorTechnicalIdentity,
 } from "./ModuleEditorPresentation";
@@ -111,8 +111,8 @@ export default function CardsModuleEditClient({
                       <ModuleEditorField nature="technical" span={4}>
                         <ModuleEditorTechnicalIdentity mode="editable" value={block.slug} inputClassName={fieldClassName()} />
                       </ModuleEditorField>
-                      <ModuleEditorField nature="standard" span={4}>
-                        <AdminFormListboxSelect name="status" label="الحالة" defaultValue={block.status} options={MODULE_EDITOR_STATUS_OPTIONS} />
+                      <ModuleEditorField nature="binary-state" span={4}>
+                        <ModuleEditorStatusSwitch status={block.status} />
                       </ModuleEditorField>
                       <ModuleEditorField nature="standard" span={4}>
                         <AdminFormListboxSelect

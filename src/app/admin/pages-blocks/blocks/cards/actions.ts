@@ -13,6 +13,7 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  parseFormStatus,
   parseNumber,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -154,7 +155,7 @@ export async function createCardsBlock(
       description: cleanText(formData.get("description")) || null,
       variant: cleanText(formData.get("variant")) || "glass",
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-      status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+      status: parseFormStatus(formData),
       config: buildCardsConfig(formData),
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
@@ -214,7 +215,7 @@ export async function updateCardsBlock(formData: FormData) {
     description: cleanText(formData.get("description")) || null,
     variant: cleanText(formData.get("variant")) || "glass",
     style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
-    status: getStatus(cleanText(formData.get("status")) || "unpublished"),
+    status: parseFormStatus(formData),
     config: buildCardsConfig(formData),
     updated_at: new Date().toISOString(),
   };
