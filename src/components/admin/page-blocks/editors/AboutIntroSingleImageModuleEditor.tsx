@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ModuleEditorContentGroup,
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorRepeaterCard,
@@ -42,6 +43,7 @@ export default function AboutIntroSingleImageModuleEditor({
       <input type="hidden" name="image_position" value={imagePosition} />
 
       <ModuleEditorSection>
+        <ModuleEditorContentGroup kind="short">
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={3}><label className="block space-y-1.5">
           <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
@@ -55,6 +57,10 @@ export default function AboutIntroSingleImageModuleEditor({
           <span className="text-xs font-semibold text-white/55">العنوان الفرعي</span>
           <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
         </label></ModuleEditorField>
+        </ModuleEditorFieldGrid>
+        </ModuleEditorContentGroup>
+        <ModuleEditorContentGroup kind="long">
+        <ModuleEditorFieldGrid>
         <ModuleEditorField nature="long-content" span={12}><div>
           <AdminRichTextEditor
             name="body"
@@ -68,6 +74,7 @@ export default function AboutIntroSingleImageModuleEditor({
           />
         </div></ModuleEditorField>
         </ModuleEditorFieldGrid>
+        </ModuleEditorContentGroup>
       </ModuleEditorSection>
 
       <ModuleEditorSection>

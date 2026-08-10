@@ -10,6 +10,7 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
 } from "../ModuleEditorPresentation";
+import { MODULE_EDITOR_TERMINOLOGY } from "../../../../lib/page-blocks/module-editor-presentation-contract";
 
 type AdminCardsItemsFieldProps = {
   items: CardsBlockItem[];
@@ -98,23 +99,23 @@ export default function AdminCardsItemsField({
               </>
             )}
           >
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <div className="space-y-3">
               {showIcon ? (
                 <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">أيقونة / رقم</span>
+                  <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
                   <input name={`item_${index}_icon`} value={item.icon ?? ""} onChange={(event) => updateItem(index, { icon: event.target.value })} className={fieldClassName()} />
                 </label>
               ) : null}
-              <label className={`block space-y-2 ${showIcon ? "" : "md:col-span-2"}`}>
+              <label className="block space-y-2">
                 <span className="text-xs font-semibold text-white/55">العنوان</span>
                 <input name={`item_${index}_title`} value={item.title ?? ""} onChange={(event) => updateItem(index, { title: event.target.value })} className={fieldClassName()} />
               </label>
-              <label className="block space-y-2 md:col-span-2 xl:col-span-1 2xl:col-span-2">
-                <span className="text-xs font-semibold text-white/55">النص</span>
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}</span>
                 <textarea name={`item_${index}_body`} value={item.body ?? ""} onChange={(event) => updateItem(index, { body: event.target.value })} rows={2} className={fieldClassName("resize-y leading-7")} />
               </label>
               {showHref ? (
-                <div className="md:col-span-2 xl:col-span-1 2xl:col-span-2">
+                <div>
                   <AdminLinkField
                     prefix={`item_${index}`}
                     label="الرابط (اختياري)"

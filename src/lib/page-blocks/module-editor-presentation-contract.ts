@@ -15,9 +15,13 @@ export const MODULE_EDITOR_TERMINOLOGY = {
     canonical: "short-description",
     labelAr: "الوصف المختصر",
   },
+  shortContent: {
+    canonical: "short-content",
+    labelAr: "المحتوى القصير",
+  },
   longContent: {
     canonical: "long-content",
-    labelAr: "المحتوى",
+    labelAr: "المحتوى الطويل",
   },
   imageAlt: {
     canonical: "image-alt",

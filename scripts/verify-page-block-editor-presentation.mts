@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getModuleEditorSectionMetadata } from "../src/lib/page-composition/module-registry-metadata.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
@@ -236,6 +237,32 @@ check(
     !heroManager.includes('name="is_published"'),
 );
 
+check(
+  "compact Block Editor content tabs do not repeat their tab title in a second heading card",
+  ["breadcrumb", "cards", "cta"].every((moduleKind) => {
+    const metadata = getModuleEditorSectionMetadata(moduleKind, "content");
+    return metadata?.sectionChrome === "implicit" &&
+      metadata.sectionHeadingAr === null &&
+      metadata.sectionDescriptionAr === null;
+  }),
+);
+
+const groupedContentEditors = [
+  "src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+];
+check(
+  "Content editors distinguish short and long content through the shared presentation owner",
+  presentation.includes("export function ModuleEditorContentGroup") &&
+    presentation.includes("data-module-editor-content-group") &&
+    groupedContentEditors.every((path) => {
+      const source = read(path);
+      return source.includes('<ModuleEditorContentGroup kind="short">') &&
+        source.includes('<ModuleEditorContentGroup kind="long">');
+    }),
+);
+
 const mediaHubEditor = read("src/components/admin/page-blocks/MediaHubModuleEditClient.tsx");
 const mediaSidebarEditor = read("src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx");
 const scopedModuleEditors = [
@@ -325,6 +352,17 @@ check(
   cardsActions.includes("assertValidCardsItems") &&
     cardsActions.includes("تحتاج عنوانًا ووصفًا مختصرًا") &&
     !read("src/components/admin/page-blocks/CardsModuleEditClient.tsx").includes("تحتاج عنوانًا ووصفًا مختصرًا"),
+);
+
+check(
+  "Cards repeater keeps the shared three-column owner and a compact eyebrow-title-description field order",
+  presentation.includes("lg:grid-cols-2 xl:grid-cols-3") &&
+    cardsRepeater.includes("ModuleEditorRepeaterGrid") &&
+    cardsRepeater.indexOf("MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr") <
+      cardsRepeater.indexOf("item_${index}_title") &&
+    cardsRepeater.indexOf("item_${index}_title") <
+      cardsRepeater.indexOf("MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr") &&
+    !cardsRepeater.includes("xl:grid-cols-1"),
 );
 
 console.log(`Page Block Editor Presentation verification passed (${passed} checks).`);
