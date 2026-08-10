@@ -56,6 +56,30 @@ export type SeoScoreOutput = {
   metrics: SeoScoreMetric[];
 };
 
+export function sortRowsBySeoScore<T>(
+  rows: readonly T[],
+  direction: "asc" | "desc",
+  getScore: (row: T) => number | null,
+  getId: (row: T) => number,
+) {
+  const multiplier = direction === "asc" ? 1 : -1;
+
+  return [...rows].sort((left, right) => {
+    const leftScore = getScore(left);
+    const rightScore = getScore(right);
+
+    if (leftScore === null && rightScore === null) {
+      return getId(left) - getId(right);
+    }
+    if (leftScore === null) return 1;
+    if (rightScore === null) return -1;
+
+    return (
+      (leftScore - rightScore) * multiplier || getId(left) - getId(right)
+    );
+  });
+}
+
 function hasValue(value?: string | null) {
   return Boolean(value && value.trim().length > 0);
 }

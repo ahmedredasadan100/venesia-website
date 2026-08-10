@@ -11,6 +11,7 @@ export const pageSortFields = [
   "path",
   "slug",
   "moduleCount",
+  "seo",
   "updatedAt",
   "status",
 ] as const;

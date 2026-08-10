@@ -297,9 +297,10 @@ function createPageColumns(
       label: "SEO",
       defaultVisible: true,
       hideable: true,
-      // The score is computed by analyzeEntitySeo after the server-page RPC.
-      // Sorting stays disabled until an official server-owned projection exists.
-      sortable: false,
+      // The server adapter sorts the complete filtered RPC dataset by the
+      // official analyzeEntitySeo output before applying collection paging.
+      sortable: supportedSortFields.has("seo"),
+      sortKey: "seo",
       minWidth: PAGE_SEO_COLUMN_WIDTH,
       width: PAGE_SEO_COLUMN_WIDTH,
       align: "center",

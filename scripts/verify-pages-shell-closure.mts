@@ -210,6 +210,24 @@ assert.match(adapter, /extendedSortFields:\s*pageSortFields/u);
 assert.match(adapter, /metrics:\s*readModel\.metrics/u);
 assert.equal((adapter.match(/\.rpc\(/gu) ?? []).length, 1);
 assert.match(officialSeoOwner, /export function analyzeEntitySeo/u);
+assert.match(officialSeoOwner, /export function sortRowsBySeoScore/u);
+assert.match(
+  officialSeoOwner,
+  /leftScore === null && rightScore === null[\s\S]*getId\(left\) - getId\(right\)[\s\S]*if \(leftScore === null\) return 1;[\s\S]*if \(rightScore === null\) return -1;[\s\S]*\(leftScore - rightScore\) \* multiplier/u,
+);
+assert.match(
+  adapter,
+  /query\.sort\.field === "seo"[\s\S]*loadSeoSortedPagesReadModel\(query\)/u,
+);
+assert.match(
+  adapter,
+  /batchSize = pagesQueryContract\.maxPageSize[\s\S]*sortField:\s*"id"[\s\S]*for \(let page = 2; page <= totalBatches; page \+= 1\)[\s\S]*batch\.totalRows !== totalRows/u,
+);
+assert.match(
+  adapter,
+  /sortRowsBySeoScore\([\s\S]*row\.seoScore[\s\S]*sortedRows\.slice\(from, from \+ query\.pageSize\)/u,
+);
+assert.doesNotMatch(adapter, /\.from\("pages"\)/u);
 assert.doesNotMatch(
   `${adapter}\n${readModelBoundary}`,
   /function\s+(?:calculate|get)Seo|score\s*[+*/-]=/iu,
@@ -230,6 +248,7 @@ const transitionOptions = {
     "path",
     "slug",
     "moduleCount",
+    "seo",
     "updatedAt",
     "status",
   ] as const,
@@ -309,6 +328,7 @@ assert.deepEqual(extendedReadModel.metrics.supportedSortFields, [
   "path",
   "slug",
   "moduleCount",
+  "seo",
   "updatedAt",
   "status",
 ]);
@@ -486,9 +506,8 @@ assert.match(
 );
 assert.match(
   seoColumn,
-  /defaultVisible:\s*true[\s\S]*sortable:\s*false[\s\S]*minWidth:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*width:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*<AdminSeoScorePill[\s\S]*score=\{row\.seoScore\}[\s\S]*label=\{row\.seoLabel\}[\s\S]*blockingErrors=\{row\.seoBlockingErrors\}[\s\S]*unavailableReason=\{PAGES_READ_MODEL_TRANSITION_NOTICE\.message\}/u,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("seo"\)[\s\S]*sortKey:\s*"seo"[\s\S]*minWidth:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*width:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*<AdminSeoScorePill[\s\S]*score=\{row\.seoScore\}[\s\S]*label=\{row\.seoLabel\}[\s\S]*blockingErrors=\{row\.seoBlockingErrors\}[\s\S]*unavailableReason=\{PAGES_READ_MODEL_TRANSITION_NOTICE\.message\}/u,
 );
-assert.doesNotMatch(seoColumn, /sortKey:/u);
 assert.match(
   updatedAtColumn,
   /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("updatedAt"\)[\s\S]*sortKey:\s*"updatedAt"[\s\S]*minWidth:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*row\.updatedAt \? formatAdminDateTime\(row\.updatedAt\) : "غير متاح"/u,
@@ -500,9 +519,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /pageSortFields\s*=\s*\[\s*"id",\s*"title",\s*"path",\s*"slug",\s*"moduleCount",\s*"updatedAt",\s*"status",?\s*\]/u,
+  /pageSortFields\s*=\s*\[\s*"id",\s*"title",\s*"path",\s*"slug",\s*"moduleCount",\s*"seo",\s*"updatedAt",\s*"status",?\s*\]/u,
 );
-assert.doesNotMatch(contract, /pageSortFields[\s\S]*"seo"[\s\S]*as const/u);
 assert.doesNotMatch(contract, /"selection"/u);
 assert.match(
   client,
