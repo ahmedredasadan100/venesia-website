@@ -64,6 +64,10 @@ const dataEngineController = read(
 const assignmentRow = read(
   "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
 );
+const bulkActionBar = read("src/components/admin/ui/AdminBulkActionBar.tsx");
+const compositionBulkAction = read(
+  "src/app/admin/pages-blocks/pages/page-actions/bulk.ts",
+);
 const assignModal = read(
   "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx",
 );
@@ -482,7 +486,7 @@ assert.match(
 );
 assert.match(
   seoColumn,
-  /defaultVisible:\s*true[\s\S]*sortable:\s*false[\s\S]*minWidth:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*width:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*<AdminSeoScorePill[\s\S]*score=\{row\.seoScore\}[\s\S]*label=\{row\.seoLabel\}[\s\S]*blockingErrors=\{row\.seoBlockingErrors\}[\s\S]*unavailableReason=\{PAGES_READ_MODEL_TRANSITION_MESSAGE\}/u,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*false[\s\S]*minWidth:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*width:\s*PAGE_SEO_COLUMN_WIDTH[\s\S]*<AdminSeoScorePill[\s\S]*score=\{row\.seoScore\}[\s\S]*label=\{row\.seoLabel\}[\s\S]*blockingErrors=\{row\.seoBlockingErrors\}[\s\S]*unavailableReason=\{PAGES_READ_MODEL_TRANSITION_NOTICE\.message\}/u,
 );
 assert.doesNotMatch(seoColumn, /sortKey:/u);
 assert.match(
@@ -549,8 +553,20 @@ assert.match(
 );
 assert.match(
   client,
-  /readModelContractVersion \?\? 1\) >= 2[\s\S]*title:\s*"بيانات Pages جزئية مؤقتًا"[\s\S]*message:\s*PAGES_READ_MODEL_TRANSITION_MESSAGE[\s\S]*kind:\s*"critical_system"/u,
+  /const PAGES_READ_MODEL_TRANSITION_NOTICE: AdminActionFeedback = \{[\s\S]*variant:\s*"warning"[\s\S]*title:\s*"تنبيه مؤقت"[\s\S]*بعض بيانات Pages المتقدمة غير متاحة حتى تطبيق تحديث قاعدة البيانات\.[\s\S]*layout:\s*"inline"[\s\S]*lifecycle:\s*"persistent"/u,
 );
+assert.match(
+  client,
+  /readModelContractVersion \?\? 1\) >= 2\) \{[\s\S]*return null;[\s\S]*return PAGES_READ_MODEL_TRANSITION_NOTICE;/u,
+);
+assert.doesNotMatch(client, /kind:\s*"critical_system"/u);
+const pagesBulkOptions = client.match(
+  /bulkOptions=\{\[([\s\S]*?)\]\}\s*bulkEntityLabel=/u,
+)?.[1];
+assert.ok(pagesBulkOptions, "Pages bulk options config is missing.");
+assert.match(pagesBulkOptions, /value:\s*"delete"/u);
+assert.match(pagesBulkOptions, /ADMIN_BULK_ACTION_LABELS\.deleteSelected/u);
+assert.doesNotMatch(pagesBulkOptions, /value:\s*"(?:show|hide|detach)"/u);
 assert.match(
   client,
   /sortMode=\{\{[\s\S]*mode:\s*"callback"[\s\S]*controller\.setSort\([\s\S]*current\.field === field && current\.direction === "asc"[\s\S]*\? "desc"[\s\S]*: "asc"/u,
@@ -588,6 +604,31 @@ for (const retiredPath of [
 assert.doesNotMatch(assignmentRow, /AdminStatusPill/u);
 assert.match(assignmentRow, /AdminDataGridRowActions[\s\S]*display="visibility"/u);
 assert.equal((assignmentRow.match(/const capability: AdminRowActionsCapability/gu) ?? []).length, 1);
+assert.match(
+  assignmentRow,
+  /delete:\s*manageable[\s\S]*label:\s*"إزالة من الصفحة"[\s\S]*onSelect:\s*onDetach[\s\S]*confirmLabel:\s*"إزالة من الصفحة"/u,
+);
+assert.match(
+  compositionClient,
+  /value:\s*"detach"[\s\S]*label:\s*"إزالة المحدد من الصفحة"[\s\S]*title:\s*"إزالة الروابط المحددة من الصفحة؟"[\s\S]*ستبقى الموديولات وقوالبها في المكتبة/u,
+);
+assert.doesNotMatch(
+  compositionClient,
+  /value:\s*"delete"\s*,\s*label:\s*"إزالة/u,
+);
+assert.match(
+  assignmentDelete,
+  /export async function detachPageBlockAssignment\(/u,
+);
+assert.doesNotMatch(assignmentDelete, /function deletePageBlockAssignment\(/u);
+assert.match(
+  compositionBulkAction,
+  /action !== "show" && action !== "hide" && action !== "detach"[\s\S]*const databaseAction = action === "detach" \? "delete" : action;[\s\S]*action:\s*databaseAction/u,
+);
+assert.match(
+  bulkActionBar,
+  /confirmation\?: \{[\s\S]*resolvedOption\?\.confirmation[\s\S]*if \(resolvedConfirmation\)[\s\S]*<AdminBulkActionConfirm/u,
+);
 assert.match(compositionClient, /if \(table\.sort\.key !== null\) return false;/u);
 assert.match(compositionClient, /if \(table\.sort\.key !== null\) return;/u);
 assert.match(compositionClient, /table\.toggleSort\(key\)/u);

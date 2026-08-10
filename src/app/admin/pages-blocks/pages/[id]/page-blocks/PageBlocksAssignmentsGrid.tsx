@@ -35,7 +35,7 @@ type PageBlocksAssignmentsGridProps = {
   isPending: boolean;
   onToggleVisibility: (row: PageBlockAssignmentRow) => void;
   onDuplicate: (row: PageBlockAssignmentRow) => void;
-  onDelete: (row: PageBlockAssignmentRow) => void;
+  onDetach: (row: PageBlockAssignmentRow) => void;
   canMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => boolean;
   onMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => void;
   manualReorderEnabled: boolean;
@@ -55,7 +55,7 @@ export default function PageBlocksAssignmentsGrid({
   isPending,
   onToggleVisibility,
   onDuplicate,
-  onDelete,
+  onDetach,
   canMove,
   onMove,
   manualReorderEnabled,
@@ -125,7 +125,7 @@ export default function PageBlocksAssignmentsGrid({
             onToggleSelect={(checked) => onToggleSelect(rowId, checked)}
             onToggleVisibility={() => onToggleVisibility(row)}
             onDuplicate={() => onDuplicate(row)}
-            onDelete={() => onDelete(row)}
+            onDetach={() => onDetach(row)}
             canMoveUp={canMove(row, -1)}
             canMoveDown={canMove(row, 1)}
             manualReorderEnabled={manualReorderEnabled}

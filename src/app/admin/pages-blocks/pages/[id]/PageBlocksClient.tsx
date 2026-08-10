@@ -35,7 +35,7 @@ import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/type
 import { resolvePagePublicPath } from "../../../../../lib/pages/page-admin-policy";
 import {
   bulkPageBlockAssignments,
-  deletePageBlockAssignment,
+  detachPageBlockAssignment,
   duplicateAssignedPageModule,
   reorderPageComposition,
   togglePageBlockAssignment,
@@ -298,13 +298,13 @@ export default function PageBlocksClient({
     });
   }
 
-  async function handleDeleteAssignment(row: PageBlockAssignmentRow) {
+  async function handleDetachAssignment(row: PageBlockAssignmentRow) {
     const formData = new FormData();
     formData.set("page_id", String(page.id));
     formData.set("assignment_id", String(row.id));
     formData.set("block_type", row.module_kind);
 
-    const result = await deletePageBlockAssignment(formData);
+    const result = await detachPageBlockAssignment(formData);
     if (!result.ok) {
       setActionFeedback({ message: result.message ?? "تعذرت إزالة الموديول من الصفحة.", ok: false });
       return;
@@ -362,7 +362,7 @@ export default function PageBlocksClient({
           selection.clearSelection();
           setActionFeedback({
             message:
-              action === "delete"
+              action === "detach"
                 ? "تمت إزالة الروابط المحددة من الصفحة."
                 : "تم تحديث الروابط المحددة.",
             ok: true,
@@ -374,7 +374,7 @@ export default function PageBlocksClient({
             message: "تعذر تنفيذ الإجراء الجماعي. لم يكتمل التغيير ويمكنك المحاولة مرة أخرى.",
             ok: false,
           });
-          if (action === "delete") {
+          if (action === "detach") {
             reject(error);
             return;
           }
@@ -518,7 +518,16 @@ export default function PageBlocksClient({
                         options={[
                           { value: "show", label: "إظهار على الموقع" },
                           { value: "hide", label: "إخفاء من الموقع" },
-                          { value: "delete", label: "إزالة من الصفحة" },
+                          {
+                            value: "detach",
+                            label: "إزالة المحدد من الصفحة",
+                            confirmation: {
+                              title: "إزالة الروابط المحددة من الصفحة؟",
+                              description:
+                                "ستتم إزالة روابط الموديولات المحددة من هذه الصفحة فقط. ستبقى الموديولات وقوالبها في المكتبة.",
+                              confirmLabel: "إزالة من الصفحة",
+                            },
+                          },
                         ]}
                         onExecute={handleBulkExecute}
                         onClearSelection={selection.clearSelection}
@@ -558,7 +567,7 @@ export default function PageBlocksClient({
                     isPending={isPending}
                     onToggleVisibility={handleToggleVisibility}
                     onDuplicate={handleDuplicateAssignment}
-                    onDelete={handleDeleteAssignment}
+                    onDetach={handleDetachAssignment}
                     canMove={canMoveAssignment}
                     onMove={handleMoveAssignment}
                     manualReorderEnabled={table.sort.key === null}

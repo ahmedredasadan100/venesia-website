@@ -23,7 +23,10 @@ import {
   ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import AdminSeoScorePill from "../../../../components/admin/seo/AdminSeoScorePill";
-import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
+import {
+  mapAdminActionResultToFeedback,
+  type AdminActionFeedback,
+} from "../../../../lib/admin/admin-action-feedback";
 import {
   adminActionFailure,
   type AdminActionResult,
@@ -92,8 +95,15 @@ const PAGE_MODULE_COUNT_COLUMN_WIDTH =
 const PAGE_PATH_COLUMN_WIDTH = 200;
 const PAGE_SEO_COLUMN_WIDTH = 96;
 const PAGE_UPDATED_AT_COLUMN_WIDTH = 176;
-const PAGES_READ_MODEL_TRANSITION_MESSAGE =
-  "بيئة البيانات الحالية لم تطبق عقد Pages Read Model المحدث بعد؛ درجات SEO وتاريخ آخر تحديث والفرز الموسع غير متاحة مؤقتًا.";
+const PAGES_READ_MODEL_TRANSITION_NOTICE: AdminActionFeedback = {
+  variant: "warning",
+  title: "تنبيه مؤقت",
+  message:
+    "بعض بيانات Pages المتقدمة غير متاحة حتى تطبيق تحديث قاعدة البيانات.",
+  layout: "inline",
+  dismissible: true,
+  lifecycle: "persistent",
+};
 
 function PageRowActions({
   row,
@@ -298,7 +308,7 @@ function createPageColumns(
           score={row.seoScore}
           label={row.seoLabel}
           blockingErrors={row.seoBlockingErrors}
-          unavailableReason={PAGES_READ_MODEL_TRANSITION_MESSAGE}
+          unavailableReason={PAGES_READ_MODEL_TRANSITION_NOTICE.message}
         />
       ),
     },
@@ -316,7 +326,9 @@ function createPageColumns(
         <span
           className="font-en whitespace-nowrap text-xs tabular-nums text-white/58"
           title={
-            row.updatedAt ? undefined : PAGES_READ_MODEL_TRANSITION_MESSAGE
+            row.updatedAt
+              ? undefined
+              : PAGES_READ_MODEL_TRANSITION_NOTICE.message
           }
         >
           {row.updatedAt ? formatAdminDateTime(row.updatedAt) : "غير متاح"}
@@ -582,15 +594,7 @@ export default function PagesTableClient({
       if ((initialResult.metrics?.readModelContractVersion ?? 1) >= 2) {
         return null;
       }
-      return mapAdminActionResultToFeedback(
-        {
-          ok: false,
-          feedbackStatus: "warning",
-          title: "بيانات Pages جزئية مؤقتًا",
-          message: PAGES_READ_MODEL_TRANSITION_MESSAGE,
-        },
-        { kind: "critical_system", variant: "warning" },
-      );
+      return PAGES_READ_MODEL_TRANSITION_NOTICE;
     },
     [initialResult.metrics?.readModelContractVersion, preferenceError],
   );

@@ -8,7 +8,7 @@ export {
   bulkPageBlockAssignments,
   deletePage,
   deletePages,
-  deletePageBlockAssignment,
+  detachPageBlockAssignment,
   duplicateAssignedPageModule,
   duplicatePageAjax,
   reorderPageComposition,

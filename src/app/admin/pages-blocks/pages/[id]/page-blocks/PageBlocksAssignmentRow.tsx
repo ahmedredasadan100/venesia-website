@@ -27,7 +27,7 @@ type PageBlocksAssignmentRowProps = {
   onToggleSelect: (checked: boolean) => void;
   onToggleVisibility: () => void;
   onDuplicate: () => void;
-  onDelete: () => void;
+  onDetach: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
   manualReorderEnabled: boolean;
@@ -50,7 +50,7 @@ export default function PageBlocksAssignmentRow({
   onToggleSelect,
   onToggleVisibility,
   onDuplicate,
-  onDelete,
+  onDetach,
   canMoveUp,
   canMoveDown,
   manualReorderEnabled,
@@ -112,8 +112,9 @@ export default function PageBlocksAssignmentRow({
       delete: manageable
         ? {
             access: "allowed",
+            label: "إزالة من الصفحة",
             pending: isPending,
-            onSelect: onDelete,
+            onSelect: onDetach,
             confirmation: {
               mode: "shared",
               title: "تأكيد الإزالة من الصفحة",

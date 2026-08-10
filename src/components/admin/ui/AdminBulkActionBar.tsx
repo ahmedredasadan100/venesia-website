@@ -10,6 +10,11 @@ import type { AdminGridId } from "./useAdminGridSelection";
 type BulkOption = {
   value: string;
   label: string;
+  confirmation?: {
+    title: string;
+    description: string;
+    confirmLabel: string;
+  };
 };
 
 type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
@@ -29,18 +34,16 @@ type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
   actionValue?: string;
 };
 
-function AdminBulkDeleteConfirm({
+function AdminBulkActionConfirm({
   open,
-  count,
-  entityLabel,
+  confirmation,
   busy,
   triggerRef,
   onCancel,
   onConfirm,
 }: {
   open: boolean;
-  count: number;
-  entityLabel: string;
+  confirmation: NonNullable<BulkOption["confirmation"]>;
   busy: boolean;
   triggerRef: RefObject<HTMLButtonElement | null>;
   onCancel: () => void;
@@ -51,9 +54,9 @@ function AdminBulkDeleteConfirm({
   return (
     <AdminConfirmDialog
       open={open}
-      title={`تأكيد حذف ${entityLabel}`}
-      description={`سيتم حذف ${count} ${entityLabel} من العناصر المحددة. لا يمكن التراجع عن هذا الإجراء.`}
-      confirmLabel="تأكيد الحذف"
+      title={confirmation.title}
+      description={confirmation.description}
+      confirmLabel={confirmation.confirmLabel}
       pending={busy || pending}
       returnFocusRef={triggerRef}
       onCancel={onCancel}
@@ -79,20 +82,32 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   actionValue,
 }: AdminBulkActionBarProps<T>) {
   const [selectedAction, setSelectedAction] = useState(options[0]?.value ?? "");
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
   const confirmedSubmitRef = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
   const resolvedAction = actionValue ?? selectedAction;
+  const resolvedOption = options.find(
+    (option) => option.value === resolvedAction,
+  );
+  const resolvedConfirmation =
+    resolvedOption?.confirmation ??
+    (resolvedAction === "delete"
+      ? {
+          title: `تأكيد حذف ${entityLabel}`,
+          description: `سيتم حذف ${selectedIds.length} ${entityLabel} من العناصر المحددة. لا يمكن التراجع عن هذا الإجراء.`,
+          confirmLabel: "تأكيد الحذف",
+        }
+      : null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     if (confirmedSubmitRef.current) {
       confirmedSubmitRef.current = false;
       return;
     }
-    if (resolvedAction === "delete") {
+    if (resolvedConfirmation) {
       event.preventDefault();
-      setDeleteConfirmOpen(true);
+      setConfirmationOpen(true);
       return;
     }
     if (!onExecute) return;
@@ -100,10 +115,10 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
     void onExecute(resolvedAction, selectedIds);
   }
 
-  async function handleConfirmedDelete() {
+  async function handleConfirmedAction() {
     if (onExecute) {
       await onExecute(resolvedAction, selectedIds);
-      setDeleteConfirmOpen(false);
+      setConfirmationOpen(false);
       return;
     }
     confirmedSubmitRef.current = true;
@@ -166,15 +181,16 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
         </button>
       </div>
 
-      <AdminBulkDeleteConfirm
-        open={deleteConfirmOpen}
-        count={selectedIds.length}
-        entityLabel={entityLabel}
-        busy={isBusy}
-        triggerRef={submitRef}
-        onCancel={() => setDeleteConfirmOpen(false)}
-        onConfirm={handleConfirmedDelete}
-      />
+      {resolvedConfirmation ? (
+        <AdminBulkActionConfirm
+          open={confirmationOpen}
+          confirmation={resolvedConfirmation}
+          busy={isBusy}
+          triggerRef={submitRef}
+          onCancel={() => setConfirmationOpen(false)}
+          onConfirm={handleConfirmedAction}
+        />
+      ) : null}
     </form>
   );
 }
