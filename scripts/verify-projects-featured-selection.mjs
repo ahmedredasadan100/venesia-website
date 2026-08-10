@@ -189,8 +189,13 @@ assert.ok(
 );
 assert.match(
   contentModuleEditorSource,
-  /<AdminFormListboxSelect[\s\S]*?name="status"/,
-  "Content module status must use the shared form listbox",
+  /<ModuleEditorStatusSwitch\b[^>]*\bstatus=\{block\.status\}/,
+  "Content module status must use the shared Page Block status switch",
+);
+assert.doesNotMatch(
+  contentModuleEditorSource,
+  /<AdminFormListboxSelect\b[^>]*\bname="status"/,
+  "Content module status must not restore a local form listbox",
 );
 
 let evaluatedStates = 0;
