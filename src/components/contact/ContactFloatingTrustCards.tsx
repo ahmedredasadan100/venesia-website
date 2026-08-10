@@ -48,27 +48,42 @@ export default function ContactFloatingTrustCards({
   if (!cmsCards?.length) return null;
 
   return (
-    <section className="relative z-10 mx-auto -mt-28 max-w-7xl px-5 sm:px-8 lg:px-10">
+    <section className="relative z-20 mx-auto -mt-28 max-w-7xl px-5 sm:px-8 lg:px-10">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {cmsCards.map((item) => (
-          <a
-            key={`${item.type}-${item.label}`}
-            href={item.href}
-            className="group rounded-[28px] border border-white/10 bg-[#070d12]/95 p-6 backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-[#d2a75a]/35 hover:shadow-[0_18px_45px_rgba(0,0,0,0.28)]"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-white/55">{item.label}</p>
-                <p className="mt-2 text-lg font-semibold text-white">{item.value}</p>
-                <p className="mt-2 text-sm text-white/50">{item.description}</p>
+        {cmsCards.map((item) => {
+          const isMail = item.type === "mail";
+
+          return (
+            <a
+              key={`${item.type}-${item.label}`}
+              href={item.href}
+              className="group min-w-0 rounded-[28px] border border-white/10 bg-[#070d12]/95 p-6 backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-[#d2a75a]/35 hover:shadow-[0_18px_45px_rgba(0,0,0,0.28)]"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#d2a75a]/20 bg-[#d2a75a]/10">
+                  <ContactIcon type={item.type} />
+                </span>
+
+                <p className="min-w-0 text-sm font-medium text-white/68">{item.label}</p>
               </div>
 
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#d2a75a]/20 bg-[#d2a75a]/10">
-                <ContactIcon type={item.type} />
-              </span>
-            </div>
-          </a>
-        ))}
+              <p
+                dir={isMail ? "ltr" : undefined}
+                className={`mt-4 min-w-0 font-bold text-white ${
+                  isMail
+                    ? "whitespace-nowrap text-right text-[clamp(0.72rem,1.1vw,0.875rem)] tracking-[-0.02em]"
+                    : "text-lg"
+                }`}
+              >
+                {item.value}
+              </p>
+
+              {item.description ? (
+                <p className="mt-2 text-sm leading-6 text-white/50">{item.description}</p>
+              ) : null}
+            </a>
+          );
+        })}
       </div>
     </section>
   );

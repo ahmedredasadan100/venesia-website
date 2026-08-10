@@ -7,7 +7,6 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   Fragment,
   type ReactNode,
 } from "react";
@@ -22,6 +21,7 @@ import {
 import { isHtmlContent } from "../../lib/rich-text/html-utils";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
+import { usePrefersReducedMotion } from "../../hooks/use-prefers-reduced-motion";
 import RichTextContent from "../content/RichTextContent";
 
 type DynamicHeroSectionProps = {
@@ -56,35 +56,6 @@ export default function DynamicHeroSection({
       fallbackImage={fallbackImage}
       belowTitle={belowTitle}
     />
-  );
-}
-
-const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-
-function subscribeReducedMotion(callback: () => void) {
-  if (typeof window === "undefined" || !window.matchMedia) return () => {};
-  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
-  mq.addEventListener("change", callback);
-  return () => mq.removeEventListener("change", callback);
-}
-
-function getReducedMotionSnapshot() {
-  return (
-    typeof window !== "undefined" &&
-    !!window.matchMedia &&
-    window.matchMedia(REDUCED_MOTION_QUERY).matches
-  );
-}
-
-function getReducedMotionServerSnapshot() {
-  return false;
-}
-
-function usePrefersReducedMotion() {
-  return useSyncExternalStore(
-    subscribeReducedMotion,
-    getReducedMotionSnapshot,
-    getReducedMotionServerSnapshot,
   );
 }
 

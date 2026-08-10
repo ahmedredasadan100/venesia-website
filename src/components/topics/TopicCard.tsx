@@ -1,5 +1,6 @@
 import TopicImage from "./TopicImage";
 import Link from "next/link";
+import PublicGoldPill from "../public/PublicGoldPill";
 
 type TopicCardProps = {
   slug: string;
@@ -48,21 +49,19 @@ export default function TopicCard({
           {showCategory || showSeries ? (
             <div className="mb-4 flex items-center justify-between gap-3">
               {showCategory ? (
-                <Link
+                <PublicGoldPill
                   href={`/topics?category=${encodeURIComponent(categorySlug)}`}
-                  className="text-sm font-medium text-[#D8B87A] transition hover:text-[#ead3a5]"
                 >
                   {category}
-                </Link>
+                </PublicGoldPill>
               ) : <span />}
 
               {showSeries ? (
-                <Link
+                <PublicGoldPill
                   href={`/topics?series=${encodeURIComponent(seriesSlug ?? "")}`}
-                  className="text-sm font-medium text-[#D8B87A] transition hover:text-[#ead3a5]"
                 >
                   {series}
-                </Link>
+                </PublicGoldPill>
               ) : null}
             </div>
           ) : null}
