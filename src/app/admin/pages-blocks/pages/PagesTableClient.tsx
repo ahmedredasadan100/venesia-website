@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import {
   AdminEntityList,
@@ -18,12 +18,21 @@ import {
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
-import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
+import {
+  ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
+  ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
+} from "../../../../components/admin/ui/AdminDataGrid";
+import AdminSeoScorePill from "../../../../components/admin/seo/AdminSeoScorePill";
+import {
+  mapAdminActionResultToFeedback,
+  type AdminActionFeedback,
+} from "../../../../lib/admin/admin-action-feedback";
 import {
   adminActionFailure,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import { getContentStatusMetadata } from "../../../../lib/admin/content/content-status-metadata";
+import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
 import type {
@@ -34,8 +43,10 @@ import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list/feedback-codes";
 import {
+  legacyPageSortFields,
   pagesQueryContract,
   type PageEntityListRow,
+  type PageEntityListMetrics,
   type PageFilters,
   type PageSortField,
 } from "../../../../lib/admin/pages/entity-list-contract";
@@ -75,6 +86,23 @@ type PageRowActionHandlers = {
   onDelete: (row: AdminPageListRow) => Promise<AdminActionResult>;
   onDuplicate: (row: AdminPageListRow) => Promise<AdminActionResult>;
   onToggle: (row: AdminPageListRow) => Promise<AdminActionResult>;
+};
+
+// Pages needs more room than the shared compact numeric preset for its Arabic
+// aggregate header, while remaining an intentional fixed-width track.
+const PAGE_MODULE_COUNT_COLUMN_WIDTH =
+  ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH + 24;
+const PAGE_PATH_COLUMN_WIDTH = 200;
+const PAGE_SEO_COLUMN_WIDTH = 96;
+const PAGE_UPDATED_AT_COLUMN_WIDTH = 176;
+const PAGES_READ_MODEL_TRANSITION_NOTICE: AdminActionFeedback = {
+  variant: "warning",
+  title: "تنبيه مؤقت",
+  message:
+    "بعض بيانات Pages المتقدمة غير متاحة حتى تطبيق تحديث قاعدة البيانات.",
+  layout: "inline",
+  dismissible: true,
+  lifecycle: "persistent",
 };
 
 function PageRowActions({
@@ -193,6 +221,7 @@ function PageRowActions({
 
 function createPageColumns(
   handlers: PageRowActionHandlers,
+  supportedSortFields: ReadonlySet<PageSortField>,
 ): AdminEntityColumnDef<AdminPageListRow, PageColumnKey, PageSortField>[] {
   return [
     {
@@ -200,10 +229,9 @@ function createPageColumns(
       label: "الصفحة",
       defaultVisible: true,
       hideable: false,
-      sortable: true,
+      sortable: supportedSortFields.has("title"),
       sortKey: "title",
-      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly + 60,
-      flexible: true,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly + 40,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -217,13 +245,30 @@ function createPageColumns(
       ),
     },
     {
-      key: "slug",
-      label: "Slug",
+      key: "path",
+      label: "المسار",
       defaultVisible: true,
       hideable: true,
-      sortable: false,
-      minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.slug, 10),
-      width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.slug, 10),
+      sortable: supportedSortFields.has("path"),
+      sortKey: "path",
+      minWidth: PAGE_PATH_COLUMN_WIDTH,
+      width: PAGE_PATH_COLUMN_WIDTH,
+      align: "center",
+      renderCell: ({ row }) => (
+        <span className="block truncate font-mono text-xs text-white/62" dir="ltr">
+          {row.path}
+        </span>
+      ),
+    },
+    {
+      key: "slug",
+      label: "Slug",
+      defaultVisible: false,
+      hideable: true,
+      sortable: supportedSortFields.has("slug"),
+      sortKey: "slug",
+      minWidth: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
+      width: ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
       align: "center",
       renderCell: ({ row }) => (
         <span className="block truncate font-mono text-xs text-white/55" dir="ltr">
@@ -236,9 +281,10 @@ function createPageColumns(
       label: "عدد الموديولات",
       defaultVisible: true,
       hideable: true,
-      sortable: false,
-      minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.count, 10),
-      width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.count, 10),
+      sortable: supportedSortFields.has("moduleCount"),
+      sortKey: "moduleCount",
+      minWidth: PAGE_MODULE_COUNT_COLUMN_WIDTH,
+      width: PAGE_MODULE_COUNT_COLUMN_WIDTH,
       align: "center",
       renderCell: ({ row }) => (
         <span className="tabular-nums text-sm font-semibold text-white/70">
@@ -247,11 +293,55 @@ function createPageColumns(
       ),
     },
     {
+      key: "seo",
+      label: "SEO",
+      defaultVisible: true,
+      hideable: true,
+      // The server adapter sorts the complete filtered RPC dataset by the
+      // official analyzeEntitySeo output before applying collection paging.
+      sortable: supportedSortFields.has("seo"),
+      sortKey: "seo",
+      minWidth: PAGE_SEO_COLUMN_WIDTH,
+      width: PAGE_SEO_COLUMN_WIDTH,
+      align: "center",
+      renderCell: ({ row }) => (
+        <AdminSeoScorePill
+          score={row.seoScore}
+          label={row.seoLabel}
+          blockingErrors={row.seoBlockingErrors}
+          unavailableReason={PAGES_READ_MODEL_TRANSITION_NOTICE.message}
+        />
+      ),
+    },
+    {
+      key: "updatedAt",
+      label: "آخر تحديث",
+      defaultVisible: true,
+      hideable: true,
+      sortable: supportedSortFields.has("updatedAt"),
+      sortKey: "updatedAt",
+      minWidth: PAGE_UPDATED_AT_COLUMN_WIDTH,
+      width: PAGE_UPDATED_AT_COLUMN_WIDTH,
+      align: "center",
+      renderCell: ({ row }) => (
+        <span
+          className="font-en whitespace-nowrap text-xs tabular-nums text-white/58"
+          title={
+            row.updatedAt
+              ? undefined
+              : PAGES_READ_MODEL_TRANSITION_NOTICE.message
+          }
+        >
+          {row.updatedAt ? formatAdminDateTime(row.updatedAt) : "غير متاح"}
+        </span>
+      ),
+    },
+    {
       key: "status",
       label: "الحالة",
       defaultVisible: true,
       hideable: true,
-      sortable: true,
+      sortable: supportedSortFields.has("status"),
       sortKey: "status",
       minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.statusCompact, 10),
       width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.statusCompact, 10),
@@ -293,16 +383,37 @@ export default function PagesTableClient({
   preferenceError = null,
 }: {
   initialQuery: AdminEntityListQuery<PageFilters, PageSortField>;
-  initialResult: AdminEntityListResult<AdminPageListRow>;
+  initialResult: AdminEntityListResult<
+    AdminPageListRow,
+    PageEntityListMetrics
+  >;
   initialVisibleColumns?: readonly string[];
   preferenceError?: string | null;
 }) {
+  const supportedSortFields = useMemo(
+    () =>
+      new Set<PageSortField>(
+        initialResult.metrics?.supportedSortFields ?? legacyPageSortFields,
+      ),
+    [initialResult.metrics?.supportedSortFields],
+  );
+  const constrainQueryToReadModel = useCallback(
+    (candidate: AdminEntityListQuery<PageFilters, PageSortField>) =>
+      supportedSortFields.has(candidate.sort.field)
+        ? candidate
+        : {
+            ...candidate,
+            sort: { field: "id" as const, direction: "asc" as const },
+          },
+    [supportedSortFields],
+  );
   const controller = useAdminEntityListController({
     entity: "pages",
     contract: pagesQueryContract,
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    constrainQuery: constrainQueryToReadModel,
   });
   const instant = useAdminEntityInstantMutation<AdminPageListRow>(
     "pages",
@@ -456,28 +567,37 @@ export default function PagesTableClient({
 
   const columns = useMemo(
     () =>
-      createPageColumns({
-        rowPendingAction: (id) =>
-          instant.rowPending?.rowId === id ? instant.rowPending.action : null,
-        mutationBusy:
-          instant.rowPending !== null || instant.bulkPending !== null,
-        onCopyPublicLink: copyPublicLink,
-        onDelete: deletePage,
-        onDuplicate: duplicate,
-        onToggle: toggle,
-      }),
+      createPageColumns(
+        {
+          rowPendingAction: (id) =>
+            instant.rowPending?.rowId === id ? instant.rowPending.action : null,
+          mutationBusy:
+            instant.rowPending !== null || instant.bulkPending !== null,
+          onCopyPublicLink: copyPublicLink,
+          onDelete: deletePage,
+          onDuplicate: duplicate,
+          onToggle: toggle,
+        },
+        supportedSortFields,
+      ),
     // The handlers intentionally close over the current normalized-list mutation owner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [instant.bulkPending, instant.rowPending],
+    [instant.bulkPending, instant.rowPending, supportedSortFields],
   );
   const initialFeedback = useMemo(
-    () =>
-      resolveAdminNoticeFeedback(
+    () => {
+      const preferenceFeedback = resolveAdminNoticeFeedback(
         {},
         preferenceError ? "error" : null,
         preferenceError,
-      ),
-    [preferenceError],
+      );
+      if (preferenceFeedback) return preferenceFeedback;
+      if ((initialResult.metrics?.readModelContractVersion ?? 1) >= 2) {
+        return null;
+      }
+      return PAGES_READ_MODEL_TRANSITION_NOTICE;
+    },
+    [initialResult.metrics?.readModelContractVersion, preferenceError],
   );
 
   return (
@@ -526,6 +646,8 @@ export default function PagesTableClient({
             getRowLabel={(row) => row.title}
             initialVisibleColumns={initialVisibleColumns}
             defaultVisibleColumns={[...getPagesDefaultColumnKeys()]}
+            implicitFlexibleColumn={false}
+            fillAvailableWidth
             onPersistColumns={savePagesTablePreferences}
             onRestoreColumns={restorePagesTablePreferences}
             enableColumnManagement

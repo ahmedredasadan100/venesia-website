@@ -37,9 +37,9 @@ The Final Legacy Cleanup reconciliation established the following live facts aga
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 74 |
+| Repository migration files | 75 |
 | Production registry versions | 74 |
-| Registry SQL provenance | Exact repository SQL for every version |
+| Registry SQL provenance | Exact repository SQL for all 74 deployed versions; `20260810020000` is pending deployment |
 | Public tables | 51 |
 | Public tables with RLS enabled | 51 |
 | Public catalog objects with repository provenance | 265 |

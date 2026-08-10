@@ -619,16 +619,27 @@ check(
     entityListTableSource.includes("<AdminDataGridStickyActionsCell"),
 );
 check(
-  "fixed table tracks do not absorb remaining viewport width",
+  "fixed data tracks stay fixed while opt-in presentation spacers can fill the remaining viewport width",
   entityListTableSource.includes("const flexibleColumnKey =") &&
-    entityListTableSource.includes("columns.find((column) => column.flexible)?.key") &&
+    entityListTableSource.includes("const explicitFlexibleColumnKey =") &&
+    entityListTableSource.includes("implicitFlexibleColumn?: boolean") &&
+    entityListTableSource.includes("implicitFlexibleColumn = true") &&
+    entityListTableSource.includes("explicitFlexibleColumnKey ??") &&
+    entityListTableSource.includes("(implicitFlexibleColumn") &&
     entityListTableSource.includes("!column.primary") &&
+    entityListTableSource.includes(": undefined);") &&
     entityListTableSource.includes("function getColumnBaseWidth") &&
     entityListTableSource.includes("const tableMinWidth =") &&
     entityListTableSource.includes('className="w-full table-fixed') &&
     entityListTableSource.includes("column.key === flexibleColumnKey") &&
+    entityListTableSource.includes("fillAvailableWidth?: boolean") &&
+    entityListTableSource.includes("fillAvailableWidth = false") &&
     entityListTableSource.includes(
-      'width: flexibleColumnKey === undefined ? tableMinWidth : "100%"',
+      "const showFillSpacer = fillAvailableWidth && flexibleColumnKey === undefined",
+    ) &&
+    entityListTableSource.includes("data-admin-table-fill-spacer") &&
+    entityListTableSource.includes(
+      "flexibleColumnKey === undefined && !showFillSpacer",
     ) &&
     !entityListTableSource.includes("w-max min-w-full table-fixed"),
 );

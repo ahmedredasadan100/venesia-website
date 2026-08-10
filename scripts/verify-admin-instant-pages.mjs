@@ -12,6 +12,7 @@ const [
   controller,
   normalizedCache,
   adapter,
+  readModelBoundary,
   migration,
   correctiveMigration,
   searchMigration,
@@ -30,6 +31,7 @@ const [
   read("src/lib/admin/entity-list/data-engine/client-controller.ts"),
   read("src/lib/admin/entity-list/data-engine/normalized-result-cache.ts"),
   read("src/lib/admin/pages/entity-list-adapter.ts"),
+  read("src/lib/admin/pages/entity-list-read-model-boundary.ts"),
   read("sql/migrations/20260720060000_admin_pages_list_read_model.sql"),
   read("sql/migrations/20260720100000_admin_pages_list_read_model_page_normalization.sql"),
   read("sql/migrations/20260805120000_admin_pages_search_read_model.sql"),
@@ -90,10 +92,10 @@ assert.match(adapter, /\.rpc\("admin_list_pages"/);
 assert.match(adapter, /p_search:\s*query\.search/);
 assert.equal((adapter.match(/\.rpc\(/g) ?? []).length, 1);
 assert.doesNotMatch(adapter, /return loadPagesEntityListResult/);
-assert.match(adapter, /z\.coerce\.number\(\)\.int\(\)\.nonnegative\(\)\.finite\(\)/);
-assert.doesNotMatch(adapter, /Number\(readModel\.total_count\)/);
+assert.match(readModelBoundary, /z\.coerce\.number\(\)\.int\(\)\.nonnegative\(\)\.finite\(\)/);
+assert.doesNotMatch(readModelBoundary, /Number\(readModel\.total_count\)/);
 assert.match(adapter, /PagesEntityListDatabaseError/);
-assert.match(adapter, /page:\s*z\.number\(\)\.int\(\)\.positive\(\)/);
+assert.match(readModelBoundary, /page:\s*z\.number\(\)\.int\(\)\.positive\(\)/);
 for (const table of ["page_content_block_assignments", "page_cta_block_assignments", "page_cards_block_assignments", "page_breadcrumb_block_assignments", "page_feed_module_assignments", "page_media_sidebar_module_assignments", "page_media_hub_module_assignments", "hero_assignments"]) assert.ok(migration.includes(table), table);
 assert.match(correctiveMigration, /normalized_state/);
 assert.match(correctiveMigration, /'page', \(select page from normalized_state\)/);

@@ -5,6 +5,7 @@ import { adminContentTopicPath } from "../../../lib/admin/content-routes";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
 import type { AdminEntityColumnDef } from "../../../lib/admin/entity-list";
 import { AdminStatusPill } from "../ui";
+import AdminSeoScorePill from "../seo/AdminSeoScorePill";
 import {
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
@@ -90,13 +91,6 @@ function compactSingleLine(value?: string | null, fallback = "—") {
       {text}
     </span>
   );
-}
-
-function getSeoScoreTone(score: number) {
-  if (score >= 80) return "green" as const;
-  if (score >= 60) return "gold" as const;
-  if (score >= 40) return "blue" as const;
-  return "red" as const;
 }
 
 export function createUnifiedContentColumns(
@@ -253,14 +247,7 @@ export function createUnifiedContentColumns(
       minWidth: TOPICS_COMPACT_COLUMN_WIDTHS.seo,
       width: TOPICS_COMPACT_COLUMN_WIDTHS.seo,
       renderCell: ({ row }) => (
-        <AdminStatusPill tone={getSeoScoreTone(row.seo_score)}>
-          <span
-            className="font-en tabular-nums"
-            title={`SEO: ${row.seo_score} من 100`}
-          >
-            {row.seo_score}%
-          </span>
-        </AdminStatusPill>
+        <AdminSeoScorePill score={row.seo_score} />
       ),
     },
     {

@@ -100,6 +100,7 @@ check(
   feedbackOwner.includes("export function AdminFeedbackRegion") &&
     feedbackOwner.includes("AdminFeedbackChannelViewport") &&
     bulkActionOwner.includes("AdminConfirmDialog") &&
+    bulkActionOwner.includes("resolvedOption?.confirmation") &&
     bulkActionOwner.includes('resolvedAction === "delete"') &&
     rowActionsOwner.includes("AdminConfirmDialog") &&
     confirmOwner.includes("pendingRef.current || invokingRef.current") &&
@@ -119,10 +120,12 @@ check(
     rowActionsOwner.includes("sticky={sticky}"),
 );
 check(
-  "Page Composition bulk confirmation awaits one atomic mutation and preserves failure retry",
+  "Page Composition bulk detach uses semantic confirmation and one atomic mutation",
   pageCompositionClient.includes("return new Promise<void>") &&
     pageCompositionClient.includes("await bulkPageBlockAssignments(formData)") &&
-    pageCompositionClient.includes('if (action === "delete")') &&
+    pageCompositionClient.includes('value: "detach"') &&
+    pageCompositionClient.includes('label: "إزالة المحدد من الصفحة"') &&
+    pageCompositionClient.includes('if (action === "detach")') &&
     pageCompositionClient.includes("reject(error)") &&
     pageCompositionClient.indexOf("selection.clearSelection()") >
       pageCompositionClient.indexOf("await bulkPageBlockAssignments(formData)") &&
@@ -130,6 +133,10 @@ check(
     !pageCompositionBulkAction.includes("Promise.all") &&
     !pageCompositionBulkAction.includes("mutationResults") &&
     !pageCompositionBulkAction.includes(".from(") &&
+    pageCompositionBulkAction.includes(
+      'const databaseAction = action === "detach" ? "delete" : action',
+    ) &&
+    pageCompositionBulkAction.includes("action: databaseAction") &&
     pageCompositionBulkAction.includes('throw new Error("Unsupported page block bulk action.")'),
 );
 check(

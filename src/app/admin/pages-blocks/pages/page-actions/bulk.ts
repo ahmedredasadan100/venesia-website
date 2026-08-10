@@ -11,14 +11,15 @@ export async function bulkPageBlockAssignments(formData: FormData) {
   const action = cleanText(formData.get("bulk_action"));
   const entries = parseAssignmentKeys(formData);
   if (!pageId || !entries.length) throw new Error("Invalid page block bulk request.");
-  if (action !== "show" && action !== "hide" && action !== "delete") {
+  if (action !== "show" && action !== "hide" && action !== "detach") {
     throw new Error("Unsupported page block bulk action.");
   }
+  const databaseAction = action === "detach" ? "delete" : action;
   await mutatePageComposition(pageId, "bulk", {
     changes: entries.map((entry) => ({
       kind: databaseAssignmentKind(entry.moduleKind),
       id: entry.assignmentId,
-      action,
+      action: databaseAction,
     })),
   }, actor);
   await revalidatePageBlocksPath(pageId);

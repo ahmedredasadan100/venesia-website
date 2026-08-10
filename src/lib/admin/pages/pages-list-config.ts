@@ -1,10 +1,13 @@
 export const PAGES_LIST_VIEW_KEY = "pages";
-export const PAGES_LIST_COLUMN_CONTRACT_VERSION = 2;
+export const PAGES_LIST_COLUMN_CONTRACT_VERSION = 3;
 
 export type PageColumnKey =
   | "page"
+  | "path"
   | "slug"
   | "moduleCount"
+  | "seo"
+  | "updatedAt"
   | "status"
   | "actions";
 
@@ -23,14 +26,32 @@ export const PAGES_LIST_COLUMNS = [
     hideable: false,
   },
   {
+    key: "path",
+    label: "المسار",
+    defaultVisible: true,
+    hideable: true,
+  },
+  {
     key: "slug",
     label: "Slug",
-    defaultVisible: true,
+    defaultVisible: false,
     hideable: true,
   },
   {
     key: "moduleCount",
     label: "عدد الموديولات",
+    defaultVisible: true,
+    hideable: true,
+  },
+  {
+    key: "seo",
+    label: "SEO",
+    defaultVisible: true,
+    hideable: true,
+  },
+  {
+    key: "updatedAt",
+    label: "آخر تحديث",
     defaultVisible: true,
     hideable: true,
   },

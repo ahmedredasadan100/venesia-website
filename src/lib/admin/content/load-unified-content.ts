@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   analyzeEntitySeo,
+  sortRowsBySeoScore,
   type FaqItem,
 } from "../seo-score";
 import { getSupabaseAdmin } from "../../supabase-admin";
@@ -200,10 +201,11 @@ export function sortUnifiedContentRowsBySeo(
   rows: readonly UnifiedContentRow[],
   direction: "asc" | "desc",
 ) {
-  const multiplier = direction === "asc" ? 1 : -1;
-  return [...rows].sort(
-    (left, right) =>
-      (left.seo_score - right.seo_score) * multiplier || left.id - right.id,
+  return sortRowsBySeoScore(
+    rows,
+    direction,
+    (row) => row.seo_score,
+    (row) => row.id,
   );
 }
 

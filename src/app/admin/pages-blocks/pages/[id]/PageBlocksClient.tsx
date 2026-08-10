@@ -35,7 +35,7 @@ import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/type
 import { resolvePagePublicPath } from "../../../../../lib/pages/page-admin-policy";
 import {
   bulkPageBlockAssignments,
-  deletePageBlockAssignment,
+  detachPageBlockAssignment,
   duplicateAssignedPageModule,
   reorderPageComposition,
   togglePageBlockAssignment,
@@ -48,6 +48,7 @@ import PageSeoPanel from "./PageSeoPanel";
 import PageBlocksAssignModal from "./page-blocks/PageBlocksAssignModal";
 import PageBlocksAssignmentsGrid from "./page-blocks/PageBlocksAssignmentsGrid";
 import PageBlocksHeader, { PageModuleKindsSummary } from "./page-blocks/PageBlocksHeader";
+import PageCompositionTableSurface from "./page-blocks/PageCompositionTableSurface";
 import {
   assignmentRowId,
   isManageableAssignment,
@@ -297,13 +298,13 @@ export default function PageBlocksClient({
     });
   }
 
-  async function handleDeleteAssignment(row: PageBlockAssignmentRow) {
+  async function handleDetachAssignment(row: PageBlockAssignmentRow) {
     const formData = new FormData();
     formData.set("page_id", String(page.id));
     formData.set("assignment_id", String(row.id));
     formData.set("block_type", row.module_kind);
 
-    const result = await deletePageBlockAssignment(formData);
+    const result = await detachPageBlockAssignment(formData);
     if (!result.ok) {
       setActionFeedback({ message: result.message ?? "تعذرت إزالة الموديول من الصفحة.", ok: false });
       return;
@@ -361,7 +362,7 @@ export default function PageBlocksClient({
           selection.clearSelection();
           setActionFeedback({
             message:
-              action === "delete"
+              action === "detach"
                 ? "تمت إزالة الروابط المحددة من الصفحة."
                 : "تم تحديث الروابط المحددة.",
             ok: true,
@@ -373,7 +374,7 @@ export default function PageBlocksClient({
             message: "تعذر تنفيذ الإجراء الجماعي. لم يكتمل التغيير ويمكنك المحاولة مرة أخرى.",
             ok: false,
           });
-          if (action === "delete") {
+          if (action === "detach") {
             reject(error);
             return;
           }
@@ -458,8 +459,9 @@ export default function PageBlocksClient({
             sectionSummary: <PageModuleKindsSummary usedModuleKinds={usedModuleKinds} />,
             icon: "section",
             content: (
-              <section className="space-y-4 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <AdminFeedbackRegion
+              <PageCompositionTableSurface
+                feedback={
+                  <AdminFeedbackRegion
                     channel={`page-composition:${page.id}:columns`}
                     label="حالة تفضيلات أعمدة موديولات الصفحة"
                     feedback={
@@ -474,92 +476,106 @@ export default function PageBlocksClient({
                           }
                         : null
                     }
-                />
-                <AdminEntityListFilters
-                  basePath={`/admin/pages-blocks/pages/${page.id}`}
-                  search={{
-                    value: search,
-                    placeholder: "ابحث باسم الموديول أو نوعه أو المعرّف…",
-                    minLength: 1,
-                    pending: isPending,
-                  }}
-                  filters={assignmentFilters}
-                  values={{ module_type: moduleType, visibility }}
-                  preserveParams={["tab"]}
-                  columnsControl={
-                    <AdminColumnVisibilityMenu
-                      columns={columnConfig.columns}
-                      visibleColumns={visibleColumns}
-                      defaultColumns={defaultColumns}
-                      onChange={setVisibleColumns}
-                      onPersist={(next) =>
-                        savePageCompositionColumnPreferences(
-                          "pageAssignments",
-                          next,
-                        )
-                      }
-                      onRestore={() =>
-                        restorePageCompositionColumnPreferences(
-                          "pageAssignments",
-                        )
-                      }
-                    />
-                  }
-                  contextOverrideActive={selection.selectedIds.length > 0}
-                  contextOverride={
-                    <AdminBulkActionBar
-                      selectedIds={selection.selectedIds}
-                      entityLabel="ربط"
-                      options={[
-                        { value: "show", label: "إظهار على الموقع" },
-                        { value: "hide", label: "إخفاء من الموقع" },
-                        { value: "delete", label: "إزالة من الصفحة" },
-                      ]}
-                      onExecute={handleBulkExecute}
-                      onClearSelection={selection.clearSelection}
-                      isBusy={isPending}
-                    />
-                  }
-                  onQueryPatch={(patch, behavior = "push") => {
-                    const next = applyAdminEntityUrlPatch(
-                      new URLSearchParams(window.location.search),
-                      patch,
-                    );
-                    const query = next.toString();
-                    window.history[
-                      behavior === "replace" ? "replaceState" : "pushState"
-                    ](
-                      window.history.state,
-                      "",
-                      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-                    );
-                  }}
-                />
-
-                <PageBlocksAssignmentsGrid
-                  rows={paginatedRows}
-                  previewHref={previewHref}
-                  sort={table.sort}
-                  onToggleSort={(key) => {
-                    pagination.resetPage();
-                    table.toggleSort(key);
-                  }}
-                  allSelected={selection.allSelected}
-                  selectedSet={selection.selectedSet}
-                  selectAllRef={selection.selectAllRef}
-                  onToggleAll={(checked) => selection.toggleAll(checked)}
-                  onToggleSelect={(rowId, checked) => selection.toggleOne(rowId, checked)}
-                  isPending={isPending}
-                  onToggleVisibility={handleToggleVisibility}
-                  onDuplicate={handleDuplicateAssignment}
-                  onDelete={handleDeleteAssignment}
-                  canMove={canMoveAssignment}
-                  onMove={handleMoveAssignment}
-                  manualReorderEnabled={table.sort.key === null}
-                  visibleColumns={visibleColumnSet}
-                />
-
-                <AdminTablePagination
+                  />
+                }
+                toolbar={
+                  <AdminEntityListFilters
+                    surface="embedded"
+                    basePath={`/admin/pages-blocks/pages/${page.id}`}
+                    search={{
+                      value: search,
+                      placeholder: "ابحث باسم الموديول أو نوعه أو المعرّف…",
+                      minLength: 1,
+                      pending: isPending,
+                    }}
+                    filters={assignmentFilters}
+                    values={{ module_type: moduleType, visibility }}
+                    preserveParams={["tab"]}
+                    columnsControl={
+                      <AdminColumnVisibilityMenu
+                        columns={columnConfig.columns}
+                        visibleColumns={visibleColumns}
+                        defaultColumns={defaultColumns}
+                        onChange={setVisibleColumns}
+                        onPersist={(next) =>
+                          savePageCompositionColumnPreferences(
+                            "pageAssignments",
+                            next,
+                          )
+                        }
+                        onRestore={() =>
+                          restorePageCompositionColumnPreferences(
+                            "pageAssignments",
+                          )
+                        }
+                      />
+                    }
+                    contextOverrideActive={selection.selectedIds.length > 0}
+                    contextOverride={
+                      <AdminBulkActionBar
+                        selectedIds={selection.selectedIds}
+                        entityLabel="ربط"
+                        options={[
+                          { value: "show", label: "إظهار على الموقع" },
+                          { value: "hide", label: "إخفاء من الموقع" },
+                          {
+                            value: "detach",
+                            label: "إزالة المحدد من الصفحة",
+                            confirmation: {
+                              title: "إزالة الروابط المحددة من الصفحة؟",
+                              description:
+                                "ستتم إزالة روابط الموديولات المحددة من هذه الصفحة فقط. ستبقى الموديولات وقوالبها في المكتبة.",
+                              confirmLabel: "إزالة من الصفحة",
+                            },
+                          },
+                        ]}
+                        onExecute={handleBulkExecute}
+                        onClearSelection={selection.clearSelection}
+                        isBusy={isPending}
+                      />
+                    }
+                    onQueryPatch={(patch, behavior = "push") => {
+                      const next = applyAdminEntityUrlPatch(
+                        new URLSearchParams(window.location.search),
+                        patch,
+                      );
+                      const query = next.toString();
+                      window.history[
+                        behavior === "replace" ? "replaceState" : "pushState"
+                      ](
+                        window.history.state,
+                        "",
+                        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+                      );
+                    }}
+                  />
+                }
+                table={
+                  <PageBlocksAssignmentsGrid
+                    rows={paginatedRows}
+                    previewHref={previewHref}
+                    sort={table.sort}
+                    onToggleSort={(key) => {
+                      pagination.resetPage();
+                      table.toggleSort(key);
+                    }}
+                    allSelected={selection.allSelected}
+                    selectedSet={selection.selectedSet}
+                    selectAllRef={selection.selectAllRef}
+                    onToggleAll={(checked) => selection.toggleAll(checked)}
+                    onToggleSelect={(rowId, checked) => selection.toggleOne(rowId, checked)}
+                    isPending={isPending}
+                    onToggleVisibility={handleToggleVisibility}
+                    onDuplicate={handleDuplicateAssignment}
+                    onDetach={handleDetachAssignment}
+                    canMove={canMoveAssignment}
+                    onMove={handleMoveAssignment}
+                    manualReorderEnabled={table.sort.key === null}
+                    visibleColumns={visibleColumnSet}
+                  />
+                }
+                pagination={
+                  <AdminTablePagination
                   basePath={`/admin/pages-blocks/pages/${page.id}`}
                   currentPage={pagination.page}
                   totalPages={pagination.totalPages}
@@ -568,8 +584,9 @@ export default function PageBlocksClient({
                   onPageChange={pagination.setPage}
                   onPageSizeChange={pagination.setPageSize}
                   pending={isPending}
-                />
-              </section>
+                  />
+                }
+              />
             ),
           },
         ]}

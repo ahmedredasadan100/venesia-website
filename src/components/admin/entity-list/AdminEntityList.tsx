@@ -65,6 +65,8 @@ export type AdminEntityListProps<
   enableSelection?: boolean;
   selectionLabel?: string;
   scrollLabel?: string;
+  implicitFlexibleColumn?: boolean;
+  fillAvailableWidth?: boolean;
   bulkOptions?: readonly AdminEntityBulkOption[];
   bulkEntityLabel?: string;
   onBulkExecute?: (action: string, ids: TId[]) => Promise<AdminActionResult>;
@@ -131,6 +133,8 @@ function AdminEntityListInner<
     enableSelection = Boolean(props.bulkOptions?.length),
     selectionLabel,
     scrollLabel,
+    implicitFlexibleColumn,
+    fillAvailableWidth,
     bulkOptions = [],
     bulkEntityLabel = "عنصر",
     onBulkExecute,
@@ -390,6 +394,8 @@ function AdminEntityListInner<
           selection={enableSelection ? selection : null}
           selectionLabel={selectionLabel}
           scrollLabel={scrollLabel}
+          implicitFlexibleColumn={implicitFlexibleColumn}
+          fillAvailableWidth={fillAvailableWidth}
           actionsColumnWidth={actionsColumnWidth}
           empty={resolveAdminEntityListEmptyState(emptyState)}
           getRowDepth={getRowDepth}
