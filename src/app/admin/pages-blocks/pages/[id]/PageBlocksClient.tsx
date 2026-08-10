@@ -31,6 +31,11 @@ import {
   moduleKindLabel,
   normalizeBoolean,
 } from "../../../../../lib/page-blocks/admin-utils";
+import {
+  LAYOUT_SLOT_LABELS_AR,
+  PAGE_LAYOUT_SLOT_ORDER,
+  normalizeLayoutSlot,
+} from "../../../../../lib/page-blocks/layout-slots";
 import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/types";
 import { resolvePagePublicPath } from "../../../../../lib/pages/page-admin-policy";
 import {
@@ -97,7 +102,7 @@ type PageBlocksClientProps = {
   preferenceError?: string | null;
 };
 
-type SortKey = "module_kind" | "template_name" | "visibility";
+type SortKey = "module_kind" | "template_name" | "slot" | "visibility";
 
 export default function PageBlocksClient({
   page,
@@ -166,6 +171,7 @@ export default function PageBlocksClient({
     () => ({
       module_kind: (row: PageBlockAssignmentRow) => moduleKindLabel(row.module_kind),
       template_name: (row: PageBlockAssignmentRow) => row.template_name,
+      slot: (row: PageBlockAssignmentRow) => PAGE_LAYOUT_SLOT_ORDER.indexOf(normalizeLayoutSlot(row.slot)),
       visibility: (row: PageBlockAssignmentRow) => (normalizeBoolean(row.is_visible, true) ? 0 : 1),
     }),
     [],
@@ -178,6 +184,7 @@ export default function PageBlocksClient({
   });
   const search = searchParams.get("q") ?? "";
   const moduleType = searchParams.get("module_type") ?? "all";
+  const slot = searchParams.get("slot") ?? "all";
   const visibility = searchParams.get("visibility") ?? "all";
   const assignmentFilters = useMemo<readonly AdminEntityFilterDef[]>(() => {
     const kinds = [...new Set(assignments.map((row) => row.module_kind))];
@@ -190,6 +197,18 @@ export default function PageBlocksClient({
         allValue: "all",
         placeholder: "نوع الموديول",
         options: kinds.map((kind) => ({ value: kind, label: moduleKindLabel(kind) })),
+      },
+      {
+        id: "assignment-slot",
+        paramKey: "slot",
+        label: "الموضع",
+        type: "single_select",
+        allValue: "all",
+        placeholder: "الموضع",
+        options: PAGE_LAYOUT_SLOT_ORDER.map((value) => ({
+          value,
+          label: LAYOUT_SLOT_LABELS_AR[value],
+        })),
       },
       {
         id: "assignment-visibility",
@@ -211,19 +230,20 @@ export default function PageBlocksClient({
         if (
           search &&
           !adminCollectionSearchIncludes(
-            `${row.template_name} ${moduleKindLabel(row.module_kind)} ${row.template_id}`,
+            `${row.template_name} ${moduleKindLabel(row.module_kind)} ${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]} ${row.template_id}`,
             search,
           )
         ) return false;
         if (moduleType !== "all" && row.module_kind !== moduleType) return false;
+        if (slot !== "all" && normalizeLayoutSlot(row.slot) !== slot) return false;
         const rowVisibility = normalizeBoolean(row.is_visible, true) ? "visible" : "hidden";
         return visibility === "all" || rowVisibility === visibility;
       }),
-    [moduleType, search, table.rows, visibility],
+    [moduleType, search, slot, table.rows, visibility],
   );
   const assignmentDatasetKey = useMemo(
-    () => `${search}|${moduleType}|${visibility}|${filteredRows.map(assignmentRowId).sort().join("|")}`,
-    [filteredRows, moduleType, search, visibility],
+    () => `${search}|${moduleType}|${slot}|${visibility}|${filteredRows.map(assignmentRowId).sort().join("|")}`,
+    [filteredRows, moduleType, search, slot, visibility],
   );
   const pagination = useAdminBoundedClientPagination({
     rows: filteredRows,
@@ -489,7 +509,7 @@ export default function PageBlocksClient({
                       pending: isPending,
                     }}
                     filters={assignmentFilters}
-                    values={{ module_type: moduleType, visibility }}
+                    values={{ module_type: moduleType, slot, visibility }}
                     preserveParams={["tab"]}
                     columnsControl={
                       <AdminColumnVisibilityMenu

@@ -24,7 +24,7 @@ import {
   AdminDataGridRowActions,
   AdminDataGridStatusCell,
   AdminPageExperience,
-  AdminPageHeader,
+  AdminPageContextHeader,
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
@@ -197,8 +197,8 @@ export default function BlockTemplateSummaryListClient({
 
   return (
     <AdminPageExperience dir="rtl">
-      <AdminPageHeader
-        eyebrow="Admin Panel"
+      <AdminPageContextHeader
+        eyebrow="إدارة الموديولات"
         title={title}
         description={description}
       />
@@ -282,7 +282,7 @@ export default function BlockTemplateSummaryListClient({
         <AdminDataGridHeader columns={columns}>
           <AdminDataGridPrimaryCell>الاسم</AdminDataGridPrimaryCell>
           {visibleColumnSet.has("slug") ? (
-            <AdminDataGridCenterCell>Slug</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>المعرّف</AdminDataGridCenterCell>
           ) : null}
           {visibleColumnSet.has("detail") ? (
             <AdminDataGridCenterCell>{detailLabel}</AdminDataGridCenterCell>
@@ -313,7 +313,7 @@ export default function BlockTemplateSummaryListClient({
                 access: "allowed",
                 title: `معلومات ${row.name}`,
                 items: [
-                  { label: "Slug", value: row.slug },
+                  { label: "المعرّف", value: row.slug },
                   { label: detailLabel, value: row.detail },
                   { label: "الحالة", value: status.label },
                 ],

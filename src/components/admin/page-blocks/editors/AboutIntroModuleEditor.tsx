@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ModuleEditorContentGroup,
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorRepeaterCard,
@@ -212,6 +213,7 @@ export default function AboutIntroModuleEditor({
 
       {showText ? (
       <ModuleEditorSection>
+        <ModuleEditorContentGroup kind="short">
           <ModuleEditorFieldGrid>
           <ModuleEditorField nature="short-text" span={3}><label className="block space-y-1.5">
             <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
@@ -227,6 +229,10 @@ export default function AboutIntroModuleEditor({
               <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
             </label></ModuleEditorField>
           ) : null}
+          </ModuleEditorFieldGrid>
+        </ModuleEditorContentGroup>
+        <ModuleEditorContentGroup kind="long">
+          <ModuleEditorFieldGrid>
           <ModuleEditorField nature="long-content" span={12}><div>
             <AdminRichTextEditor
               name="body"
@@ -240,6 +246,7 @@ export default function AboutIntroModuleEditor({
             />
           </div></ModuleEditorField>
           </ModuleEditorFieldGrid>
+        </ModuleEditorContentGroup>
       </ModuleEditorSection>
       ) : null}
 

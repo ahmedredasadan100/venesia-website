@@ -24,9 +24,9 @@ export default async function MediaHubModulesPage({ searchParams }: PageProps) {
   return (
     <BlockTemplateSummaryListClient
       moduleKey="media-hub"
-      title="Media Hub Modules"
+      title="إدارة موديولات المركز الإعلامي"
       description="قوالب سكاشن Hub في /media-center — الظهور والترتيب يُدار من ربط الصفحة."
-      detailLabel="Section"
+      detailLabel="القسم"
       toggleAction={toggleMediaHubModuleStatus}
       rows={(templates ?? []).map((template) => ({
         id: Number(template.id),

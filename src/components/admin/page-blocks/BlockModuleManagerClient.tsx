@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useRef, useState } from "react";
 import AdminEntityListFilters from "../entity-list/AdminEntityListFilters";
 import {
   AdminFeedbackRegion,
@@ -31,7 +31,7 @@ import {
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   AdminPageExperience,
-  AdminPageHeader,
+  AdminPageContextHeader,
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
@@ -81,6 +81,7 @@ type BlockModuleManagerClientProps = {
   duplicateAction: (formData: FormData) => Promise<void>;
   toggleAction: (formData: FormData) => Promise<void>;
   bulkAction: (formData: FormData) => Promise<void>;
+  reloadRowsAction: () => Promise<BlockModuleRow[]>;
   defaultVariant: string;
   variantOptions: Array<[string, string]>;
   loadError?: string | null;
@@ -118,6 +119,7 @@ export default function BlockModuleManagerClient({
   duplicateAction,
   toggleAction,
   bulkAction,
+  reloadRowsAction,
   defaultVariant,
   variantOptions,
   loadError = null,
@@ -125,19 +127,21 @@ export default function BlockModuleManagerClient({
   initialVisibleColumns = null,
   preferenceError = null,
 }: BlockModuleManagerClientProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const feedbackChannel = `block-manager:${moduleKey}`;
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const createRuntimeRef = useRef<AdminFormRuntimeHandle>(null);
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
-  const [isRefreshPending, startRefreshTransition] = useTransition();
   const instant = useAdminBoundedClientInstantMutation<BlockModuleRow>({
     entity: `${moduleKey}-block-templates`,
     initialRows: rows,
     datasetKey: moduleKey,
   });
+  const variantLabelByValue = useMemo(
+    () => new Map(variantOptions),
+    [variantOptions],
+  );
   const columnPreferenceId = COLUMN_PREFERENCE_ID_BY_MODULE[moduleKey];
   const columnConfig = getPageCompositionColumnPreferenceConfig(columnPreferenceId);
   const defaultColumns = getPageCompositionDefaultColumnKeys(columnPreferenceId);
@@ -170,11 +174,11 @@ export default function BlockModuleManagerClient({
     () =>
       instant.rows.filter((row) =>
         adminCollectionSearchIncludes(
-          `${row.name} ${row.slug} ${row.description ?? ""} ${row.variant}`,
+          `${row.name} ${row.slug} ${row.description ?? ""} ${row.variant} ${variantLabelByValue.get(row.variant) ?? ""}`,
           search,
         ),
       ),
-    [instant.rows, search],
+    [instant.rows, search, variantLabelByValue],
   );
   const pagination = useAdminBoundedClientPagination({
     rows: filteredRows,
@@ -189,7 +193,6 @@ export default function BlockModuleManagerClient({
   const selection = useAdminGridSelection<number>(visibleIds);
   const isBusy =
     pendingRowId !== null ||
-    isRefreshPending ||
     instant.rowPending !== null ||
     instant.bulkPending !== null;
   const loadFeedback = useMemo(
@@ -220,6 +223,8 @@ export default function BlockModuleManagerClient({
     setPendingRowId(rowId ?? -1);
     try {
       await action();
+      const nextRows = await reloadRowsAction();
+      instant.hydrateRows(nextRows);
       publishFeedback(
         {
           variant: "success",
@@ -231,7 +236,6 @@ export default function BlockModuleManagerClient({
         },
         { channel: feedbackChannel, placement: "inline" },
       );
-      startRefreshTransition(() => router.refresh());
       return true;
     } catch (error) {
       publishFeedback(
@@ -310,8 +314,8 @@ export default function BlockModuleManagerClient({
 
   return (
     <AdminPageExperience dir="rtl">
-      <AdminPageHeader
-        eyebrow="Admin Panel"
+      <AdminPageContextHeader
+        eyebrow="إدارة الموديولات"
         title={moduleTitle}
         description={moduleDescription}
         actions={(
@@ -356,7 +360,7 @@ export default function BlockModuleManagerClient({
         basePath={`/admin/pages-blocks/blocks/${moduleKey}`}
         search={{
           value: search,
-          placeholder: "ابحث باسم البلوك أو الـslug أو الـvariant…",
+          placeholder: "ابحث باسم البلوك أو المعرّف أو النمط…",
           minLength: 1,
           pending: isBusy,
         }}
@@ -438,10 +442,10 @@ export default function BlockModuleManagerClient({
           </AdminDataGridCheckboxCell>
           <AdminDataGridPrimaryCell>الاسم</AdminDataGridPrimaryCell>
           {visibleColumnSet.has("slug") ? (
-            <AdminDataGridCenterCell>Slug</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>المعرّف</AdminDataGridCenterCell>
           ) : null}
           {visibleColumnSet.has("variant") ? (
-            <AdminDataGridCenterCell>Variant</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>النمط</AdminDataGridCenterCell>
           ) : null}
           {visibleColumnSet.has("status") ? (
             <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
@@ -474,8 +478,8 @@ export default function BlockModuleManagerClient({
                 access: "allowed",
                 title: `معلومات ${row.name}`,
                 items: [
-                  { label: "Slug", value: row.slug },
-                  { label: "Variant", value: row.variant },
+                  { label: "المعرّف", value: row.slug },
+                  { label: "النمط", value: variantLabelByValue.get(row.variant) ?? row.variant },
                   { label: "الحالة", value: status.label },
                 ],
               },
@@ -580,7 +584,9 @@ export default function BlockModuleManagerClient({
               ) : null}
 
               {visibleColumnSet.has("variant") ? (
-                <AdminDataGridCenterCell className="text-white/58">{row.variant}</AdminDataGridCenterCell>
+                <AdminDataGridCenterCell className="text-white/58">
+                  {variantLabelByValue.get(row.variant) ?? row.variant}
+                </AdminDataGridCenterCell>
               ) : null}
 
               {visibleColumnSet.has("status") ? (
@@ -646,7 +652,7 @@ export default function BlockModuleManagerClient({
                 <AdminFormError name="name" />
               </label>
               <label className={adminFormLabelClassName()}>
-                {moduleKey === "feed" ? "المعرّف التقني (Slug)" : "Slug"}
+                المعرّف التقني
                 <input
                   name="slug"
                   dir="ltr"
@@ -660,7 +666,7 @@ export default function BlockModuleManagerClient({
                 <AdminFormError name="slug" />
               </label>
               <label className={adminFormLabelClassName()}>
-                {moduleKey === "feed" ? "نوع موديول المحتوى" : "Variant"}
+                {moduleKey === "feed" ? "نوع موديول المحتوى" : "النمط"}
                 <select
                   name={moduleKey === "feed" ? "feed_type" : "variant"}
                   defaultValue={defaultVariant}

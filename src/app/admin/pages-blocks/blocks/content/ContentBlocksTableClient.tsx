@@ -33,7 +33,7 @@ import {
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   AdminPageExperience,
-  AdminPageHeader,
+  AdminPageContextHeader,
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
@@ -75,9 +75,9 @@ import {
 const MODULE_PATH = "/admin/pages-blocks/blocks/content";
 
 const VARIANT_OPTIONS: Array<[string, string]> = [
-  ["default", "Default"],
-  ["split-image-right", "Split Image Right"],
-  ["quote-emphasis", "Quote Emphasis"],
+  ["default", "افتراضي"],
+  ["split-image-right", "صورة منقسمة يمينًا"],
+  ["quote-emphasis", "اقتباس بارز"],
 ];
 
 type ContentSortKey = "name" | "slug" | "variant" | "status" | "updated_at";
@@ -183,10 +183,10 @@ export default function ContentBlocksTableClient({
     {
       id: "content-blocks-variant",
       paramKey: "variant",
-      label: "Variant",
+      label: "النمط",
       type: "single_select",
       allValue: "all",
-      placeholder: "Variant",
+      placeholder: "النمط",
       options: VARIANT_OPTIONS.map(([value, label]) => ({ value, label })),
     },
   ], [rows]);
@@ -327,10 +327,10 @@ export default function ContentBlocksTableClient({
 
   return (
     <AdminPageExperience dir="rtl">
-      <AdminPageHeader
-        eyebrow="Admin Panel"
+      <AdminPageContextHeader
+        eyebrow="إدارة الموديولات"
         title="إدارة بلوكات المحتوى"
-        description="قوالب المحتوى النصي القابلة لإعادة الاستخدام. اربطها بالصفحات من Pages Manager."
+        description="قوالب المحتوى النصي القابلة لإعادة الاستخدام والربط بالصفحات."
         actions={(
           <button
             type="button"
@@ -473,14 +473,14 @@ export default function ContentBlocksTableClient({
             {visibleColumnSet.has("slug") ? (
               <AdminDataGridCenterCell>
                 <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
-                  Slug
+                  المعرّف
                 </AdminDataGridSortLabel>
               </AdminDataGridCenterCell>
             ) : null}
             {visibleColumnSet.has("variant") ? (
               <AdminDataGridCenterCell>
                 <AdminDataGridSortLabel {...sortProps("variant")} className="justify-center">
-                  Variant
+                  النمط
                 </AdminDataGridSortLabel>
               </AdminDataGridCenterCell>
             ) : null}
@@ -528,8 +528,8 @@ export default function ContentBlocksTableClient({
                     access: "allowed",
                     title: `معلومات ${row.name}`,
                     items: [
-                      { label: "Slug", value: row.slug },
-                      { label: "Variant", value: variantLabel(row.variant) },
+                      { label: "المعرّف", value: row.slug },
+                      { label: "النمط", value: variantLabel(row.variant) },
                       { label: "الحالة", value: status.label },
                       { label: "آخر تحديث", value: formatAdminDateTime(row.updated_at) },
                     ],
@@ -700,7 +700,7 @@ export default function ContentBlocksTableClient({
                 <AdminFormError name="name" />
               </label>
               <label className={adminFormLabelClassName()}>
-                Slug
+                المعرّف التقني
                 <input
                   name="slug"
                   dir="ltr"
@@ -714,7 +714,7 @@ export default function ContentBlocksTableClient({
                 <AdminFormError name="slug" />
               </label>
               <label className={adminFormLabelClassName()}>
-                Variant
+                النمط
                 <select name="variant" defaultValue="default" className={adminFormFieldClassName()}>
                   {VARIANT_OPTIONS.map(([value, label]) => (
                     <option key={value} value={value}>

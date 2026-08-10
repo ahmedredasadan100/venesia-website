@@ -1,6 +1,11 @@
 "use client";
 
-import { ModuleEditorField, ModuleEditorFieldGrid, ModuleEditorSection } from "../ModuleEditorPresentation";
+import {
+  ModuleEditorContentGroup,
+  ModuleEditorField,
+  ModuleEditorFieldGrid,
+  ModuleEditorSection,
+} from "../ModuleEditorPresentation";
 import { AdminFormListboxSelect } from "../../ui";
 
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
@@ -14,6 +19,7 @@ type GenericContentModuleEditorProps = {
 export default function GenericContentModuleEditor({ config }: GenericContentModuleEditorProps) {
   return (
     <ModuleEditorSection>
+      <ModuleEditorContentGroup kind="short">
       <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={3}>
           <label className="block space-y-2">
@@ -33,12 +39,20 @@ export default function GenericContentModuleEditor({ config }: GenericContentMod
             <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName()} />
           </label>
         </ModuleEditorField>
+      </ModuleEditorFieldGrid>
+      </ModuleEditorContentGroup>
+      <ModuleEditorContentGroup kind="long">
+        <ModuleEditorFieldGrid>
         <ModuleEditorField nature="long-content">
           <label className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.longContent.labelAr} — فقرات مفصولة بسطر فارغ</span>
+            <span className="text-xs font-semibold text-white/55">النص</span>
             <textarea name="body" defaultValue={config.body ?? ""} rows={8} className={fieldClassName("resize-y leading-7")} />
+            <span className="block text-xs leading-6 text-white/45">استخدم سطرًا فارغًا للفصل بين الفقرات.</span>
           </label>
         </ModuleEditorField>
+        </ModuleEditorFieldGrid>
+      </ModuleEditorContentGroup>
+      <ModuleEditorFieldGrid>
         <ModuleEditorField nature="standard" span={4}>
           <AdminFormListboxSelect
             name="alignment"
@@ -51,6 +65,6 @@ export default function GenericContentModuleEditor({ config }: GenericContentMod
           />
         </ModuleEditorField>
       </ModuleEditorFieldGrid>
-      </ModuleEditorSection>
+    </ModuleEditorSection>
   );
 }

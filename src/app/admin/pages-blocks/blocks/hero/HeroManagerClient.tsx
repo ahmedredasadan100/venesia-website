@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useRef, useState } from "react";
 import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   AdminFeedbackRegion,
@@ -32,7 +32,7 @@ import {
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   AdminPageExperience,
-  AdminPageHeader,
+  AdminPageContextHeader,
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
@@ -64,26 +64,13 @@ import {
   createHeroTemplate,
   deleteHeroTemplate,
   duplicateHeroTemplate,
+  getHeroTemplateRows,
   toggleHeroTemplate,
+  type HeroTemplateRow,
 } from "./actions";
 
-type HeroAssignment = {
-  id: number;
-  path: string | null;
-  is_active: boolean;
-};
-
-type HeroRow = {
-  id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  status: "published" | "unpublished";
-  hero_assignments: HeroAssignment[];
-};
-
 type HeroManagerClientProps = {
-  heroes: HeroRow[];
+  heroes: HeroTemplateRow[];
   mediaSynchronizationWarning?: boolean;
   loadError?: string | null;
   initialVisibleColumns?: readonly string[] | null;
@@ -125,7 +112,7 @@ function mutationFormData(fields: Record<string, string | number | boolean>) {
   return formData;
 }
 
-function resolveHeroPreviewPath(hero: HeroRow) {
+function resolveHeroPreviewPath(hero: HeroTemplateRow) {
   const activeAssignment = hero.hero_assignments.find((assignment) => assignment.is_active && assignment.path);
   if (activeAssignment?.path) return activeAssignment.path;
   const anyAssignment = hero.hero_assignments.find((assignment) => assignment.path);
@@ -139,7 +126,6 @@ export default function HeroManagerClient({
   initialVisibleColumns = null,
   preferenceError = null,
 }: HeroManagerClientProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const feedbackChannel = "block-manager:hero";
   const { publishFeedback, clearFeedback } = useAdminFeedback();
@@ -171,8 +157,7 @@ export default function HeroManagerClient({
     [visibleColumnSet],
   );
   const [pendingRowId, setPendingRowId] = useState<number | null>(null);
-  const [isRefreshPending, startRefreshTransition] = useTransition();
-  const instant = useAdminBoundedClientInstantMutation<HeroRow>({
+  const instant = useAdminBoundedClientInstantMutation<HeroTemplateRow>({
     entity: "hero-templates",
     initialRows: heroes,
   });
@@ -201,7 +186,6 @@ export default function HeroManagerClient({
   const selection = useAdminGridSelection<number>(visibleIds);
   const isBusy =
     pendingRowId !== null ||
-    isRefreshPending ||
     instant.rowPending !== null ||
     instant.bulkPending !== null;
   const loadFeedback = useMemo(
@@ -232,6 +216,8 @@ export default function HeroManagerClient({
     setPendingRowId(rowId ?? -1);
     try {
       await action();
+      const nextRows = await getHeroTemplateRows();
+      instant.hydrateRows(nextRows);
       publishFeedback(
         {
           variant: "success",
@@ -243,7 +229,6 @@ export default function HeroManagerClient({
         },
         { channel: feedbackChannel, placement: "inline" },
       );
-      startRefreshTransition(() => router.refresh());
       return true;
     } catch (error) {
       publishFeedback(
@@ -264,7 +249,7 @@ export default function HeroManagerClient({
   }
 
   async function runVisibilityMutation(
-    hero: HeroRow,
+    hero: HeroTemplateRow,
     nextStatus: "published" | "unpublished",
   ) {
     const successMessage =
@@ -322,10 +307,10 @@ export default function HeroManagerClient({
 
   return (
     <AdminPageExperience dir="rtl">
-      <AdminPageHeader
-        eyebrow="HERO MODULE"
+      <AdminPageContextHeader
+        eyebrow="إدارة الموديولات"
         title="إدارة الهيرو"
-        description="جدول موحّد لكل الهيروهات. كل Hero يدار كـ Module مستقل ويمكن ربطه بصفحة أو أكثر."
+        description="جدول موحّد لكل قوالب الهيرو، ويمكن ربط كل قالب بصفحة أو أكثر."
         actions={(
           <button
             type="button"
@@ -441,7 +426,7 @@ export default function HeroManagerClient({
             </AdminDataGridCheckboxCell>
             <AdminDataGridPrimaryCell>اسم الهيرو</AdminDataGridPrimaryCell>
             {visibleColumnSet.has("slug") ? (
-              <AdminDataGridCenterCell>Slug</AdminDataGridCenterCell>
+              <AdminDataGridCenterCell>المعرّف</AdminDataGridCenterCell>
             ) : null}
             {visibleColumnSet.has("status") ? (
               <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
@@ -472,7 +457,7 @@ export default function HeroManagerClient({
                   access: "allowed",
                   title: `معلومات ${hero.name}`,
                   items: [
-                    { label: "Slug", value: hero.slug },
+                    { label: "المعرّف", value: hero.slug },
                     { label: "الحالة", value: hero.status === "published" ? "منشور" : "غير منشور" },
                     { label: "الصفحات المربوطة", value: String(hero.hero_assignments.length) },
                   ],
@@ -644,7 +629,7 @@ export default function HeroManagerClient({
                 <AdminFormError name="name" />
               </label>
               <label className={adminFormLabelClassName()}>
-                Slug
+                المعرّف التقني
                 <input
                   name="slug"
                   placeholder="hero-about"
@@ -662,10 +647,10 @@ export default function HeroManagerClient({
                 <input name="template_description" placeholder="وصف مختصر يظهر في جدول الإدارة" className={adminFormFieldClassName()} />
               </label>
               <label className={adminFormLabelClassName()}>
-                Variant
+                النمط
                 <select name="variant" defaultValue="internal-page" className={adminFormFieldClassName()}>
-                  <option value="internal-page">Internal Page</option>
-                  <option value="home-cinematic">Home Cinematic</option>
+                  <option value="internal-page">صفحة داخلية</option>
+                  <option value="home-cinematic">سينمائي للصفحة الرئيسية</option>
                 </select>
               </label>
               <label className={adminFormLabelClassName()}>

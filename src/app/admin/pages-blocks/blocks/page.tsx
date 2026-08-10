@@ -1,16 +1,14 @@
 import Link from "next/link";
-import AdminPageHeader from "../../../../components/admin/AdminPageHeader";
 import { DEPRECATED_BLOCK_MODULE_CATALOG } from "../../../../lib/page-blocks/deprecated-block-modules";
 import {
   AdminActionButton,
   AdminCard,
-  AdminInfoBar,
+  AdminPageContextHeader,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
 
 type BlockModule = {
   key: string;
-  title: string;
   titleAr: string;
   href: string;
   status: "active" | "planned" | "deprecated";
@@ -21,7 +19,6 @@ type BlockModule = {
 const modules: BlockModule[] = [
   {
     key: "hero",
-    title: "Hero Module",
     titleAr: "الهيرو",
     href: "/admin/pages-blocks/blocks/hero",
     status: "active",
@@ -31,7 +28,6 @@ const modules: BlockModule[] = [
   },
   {
     key: "content",
-    title: "Content Module",
     titleAr: "محتوى حر",
     href: "/admin/pages-blocks/blocks/content",
     status: "active",
@@ -41,7 +37,6 @@ const modules: BlockModule[] = [
   },
   {
     key: "cta",
-    title: "CTA Module",
     titleAr: "دعوات الإجراء",
     href: "/admin/pages-blocks/blocks/cta",
     status: "active",
@@ -51,7 +46,6 @@ const modules: BlockModule[] = [
   },
   {
     key: "cards",
-    title: "Cards Module",
     titleAr: "الكروت",
     href: "/admin/pages-blocks/blocks/cards",
     status: "active",
@@ -61,7 +55,6 @@ const modules: BlockModule[] = [
   },
   {
     key: "breadcrumb",
-    title: "Breadcrumb Module",
     titleAr: "مسار التنقل",
     href: "/admin/pages-blocks/blocks/breadcrumb",
     status: "active",
@@ -70,18 +63,16 @@ const modules: BlockModule[] = [
   },
   {
     key: "gallery",
-    title: "Gallery Module",
     titleAr: "معرض الصور",
     href: "#",
     status: "planned",
     description:
-      "بلوكات صور قابلة للربط بوسائط أو مشاريع أو مصادر يدوية، مع Variants مختلفة للعرض.",
+      "بلوكات صور قابلة للربط بوسائط أو مشاريع أو مصادر يدوية، مع أنماط مختلفة للعرض.",
     examples: ["صور المشروع", "صور الموقع", "قبل وبعد"],
   },
   {
     key: "feed",
-    title: "Feed Module",
-    titleAr: "Feed Widget",
+    titleAr: "خلاصة المحتوى",
     href: "/admin/pages-blocks/blocks/feed",
     status: "active",
     description:
@@ -90,7 +81,6 @@ const modules: BlockModule[] = [
   },
   {
     key: "faq",
-    title: "FAQ Module",
     titleAr: "الأسئلة الشائعة",
     href: "#",
     status: "planned",
@@ -100,7 +90,6 @@ const modules: BlockModule[] = [
   },
   ...DEPRECATED_BLOCK_MODULE_CATALOG.map((entry) => ({
     key: entry.key,
-    title: entry.title,
     titleAr: entry.titleAr,
     href: "#",
     status: "deprecated" as const,
@@ -117,13 +106,10 @@ function ModuleCard({ module }: { module: BlockModule }) {
     <AdminCard interactive={isActive} className={`group h-full p-5 ${isDeprecated ? "opacity-70" : ""}`}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#D8B87A]/65">
-            {module.title}
-          </p>
-          <h2 className="mt-3 text-xl font-semibold text-white">{module.titleAr}</h2>
+          <h2 className="text-xl font-semibold text-white">{module.titleAr}</h2>
         </div>
         <AdminStatusPill tone={isActive ? "green" : isDeprecated ? "gold" : "muted"}>
-          {isActive ? "نشط" : isDeprecated ? "Deprecated" : "قريبًا"}
+          {isActive ? "نشط" : isDeprecated ? "متوقف" : "قريبًا"}
         </AdminStatusPill>
       </div>
 
@@ -145,7 +131,7 @@ function ModuleCard({ module }: { module: BlockModule }) {
       ) : null}
 
       <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#D8B87A]">
-        {isActive ? "فتح الموديول" : isDeprecated ? "غير متاح — استخدم Hero" : "سيتم تفعيله لاحقًا"}
+        {isActive ? "فتح الموديول" : isDeprecated ? "غير متاح — استخدم الهيرو" : "سيتم تفعيله لاحقًا"}
         {isActive ? <span aria-hidden="true">←</span> : null}
       </div>
     </AdminCard>
@@ -164,25 +150,17 @@ const visibleModules = modules.filter((module) => module.status !== "deprecated"
 const deprecatedModules = modules.filter((module) => module.status === "deprecated");
 
 export default function BlocksPage() {
-  const activeModules = visibleModules.filter((module) => module.status === "active").length;
-
   return (
     <div className="space-y-6 pb-10" dir="rtl">
-      <AdminPageHeader
-        eyebrow="Admin Panel"
+      <AdminPageContextHeader
+        eyebrow="إدارة الصفحات والموديولات"
         title="البلوكات"
-        description="مكتبة الموديولات القابلة لإعادة الاستخدام. الصفحة لا تُبنى هنا؛ هنا يتم إدارة نوع البلوك نفسه، ثم يتم ربطه بالصفحات من Pages Manager."
+        description="مكتبة الموديولات القابلة لإعادة الاستخدام. تُدار القوالب هنا ثم تُربط بالصفحات من شاشة إدارة الصفحات."
         actions={
           <AdminActionButton href="/admin/pages-blocks/pages" variant="gold">
-            فتح Pages Manager
+            فتح إدارة الصفحات
           </AdminActionButton>
         }
-      />
-
-      <AdminInfoBar
-        label="Generic CMS Layer"
-        description="Blocks منفصلة عن Pages — كل Module يتدار كمكتبة مستقلة."
-        meta={`${visibleModules.length} Modules / ${activeModules} Active`}
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -193,7 +171,7 @@ export default function BlocksPage() {
 
       {deprecatedModules.length ? (
         <section className="rounded-[28px] border border-amber-400/15 bg-amber-400/[0.04] p-5">
-          <p className="text-sm font-semibold text-amber-100/90">موديولات Deprecated</p>
+          <p className="text-sm font-semibold text-amber-100/90">موديولات متوقفة</p>
           <p className="mt-2 text-sm leading-7 text-white/50">
             هذه الموديولات لم تُنفَّذ backend لها أو استُبدلت بنظام أحدث. لا تظهر ضمن خيارات الإنشاء
             العادية.

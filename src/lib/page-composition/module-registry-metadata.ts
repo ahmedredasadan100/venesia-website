@@ -127,9 +127,10 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
-        sectionHeadingAr: "محتوى مسار التنقل",
-        sectionDescriptionAr: "حدّد مصدر المسار وتسميات عناصره وخيارات ظهوره.",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
         icon: "content",
+        sectionChrome: "implicit",
       },
       settings: {
         ...SETTINGS_SECTION,
@@ -151,9 +152,10 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
-        sectionHeadingAr: "محتوى الدعوة للإجراء",
-        sectionDescriptionAr: "أدر النصوص والأزرار والروابط الأساسية للموديول.",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
         icon: "content",
+        sectionChrome: "implicit",
       },
       meta: SETTINGS_SECTION,
       pages: PAGES_SECTION,
@@ -166,9 +168,10 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
-        sectionHeadingAr: "محتوى شبكة البطاقات",
-        sectionDescriptionAr: "أدر عنوان القسم ووصفه والبطاقات وروابطها.",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
         icon: "content",
+        sectionChrome: "implicit",
       },
       meta: {
         ...SETTINGS_SECTION,

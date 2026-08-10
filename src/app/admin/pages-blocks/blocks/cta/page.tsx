@@ -9,6 +9,7 @@ import {
   createCtaBlock,
   deleteCtaBlock,
   duplicateCtaBlock,
+  getCtaBlockRows,
   toggleCtaBlockStatus,
 } from "./actions";
 
@@ -31,7 +32,7 @@ export default async function CtaBlocksPage({ searchParams }: PageProps) {
   return (
     <BlockModuleManagerClient
       moduleKey="cta"
-      moduleTitle="إدارة بلوكات CTA"
+      moduleTitle="إدارة دعوات الإجراء"
       moduleDescription="قوالب الدعوة للإجراء — أزرار، عناوين، وخلفيات قابلة لإعادة الاستخدام."
       rows={(data ?? []).map((row) => ({ ...row, description: row.description ?? null }))}
       createAction={createCtaBlock}
@@ -39,8 +40,9 @@ export default async function CtaBlocksPage({ searchParams }: PageProps) {
       duplicateAction={duplicateCtaBlock}
       toggleAction={toggleCtaBlockStatus}
       bulkAction={bulkCtaBlocks}
+      reloadRowsAction={getCtaBlockRows}
       defaultVariant="band"
-      variantOptions={[["band", "Band"], ["split-image", "Split Image"], ["minimal", "Minimal"]]}
+      variantOptions={[["band", "شريط"], ["split-image", "صورة منقسمة"], ["minimal", "مبسّط"]]}
       loadError={error ? `حدث خطأ أثناء قراءة بلوكات CTA: ${error.message}` : null}
       mediaSynchronizationWarning={query.notice === "saved_with_media_sync_warning"}
       initialVisibleColumns={preference.visibleColumns}

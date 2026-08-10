@@ -19,7 +19,7 @@ import type { PageCompositionColumnKey } from "../../../../../../lib/page-blocks
 import PageBlocksAssignmentRow from "./PageBlocksAssignmentRow";
 import { assignmentRowId, isManageableAssignment } from "./page-blocks-utils";
 
-type SortKey = "module_kind" | "template_name" | "visibility";
+type SortKey = "module_kind" | "template_name" | "slot" | "visibility";
 
 // 150px = secondary module-type column (no dedicated preset).
 type PageBlocksAssignmentsGridProps = {
@@ -65,6 +65,7 @@ export default function PageBlocksAssignmentsGrid({
     ADMIN_DATA_GRID_COLUMNS.checkbox,
     ADMIN_DATA_GRID_COLUMNS.primaryStandard,
     visibleColumns.has("module") ? "150px" : null,
+    "150px",
     visibleColumns.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusCompact : null,
     ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
   ]
@@ -98,6 +99,9 @@ export default function PageBlocksAssignmentsGrid({
             <AdminDataGridSortLabel {...sortProps("module_kind")} className="justify-center">النوع</AdminDataGridSortLabel>
           </AdminDataGridCenterCell>
         ) : null}
+        <AdminDataGridCenterCell>
+          <AdminDataGridSortLabel {...sortProps("slot")} className="justify-center">الموضع</AdminDataGridSortLabel>
+        </AdminDataGridCenterCell>
         {visibleColumns.has("status") ? (
           <AdminDataGridCenterCell>
             <AdminDataGridSortLabel {...sortProps("visibility")} className="justify-center">الحالة</AdminDataGridSortLabel>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getModuleEditorSectionMetadata } from "../src/lib/page-composition/module-registry-metadata.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
@@ -41,6 +42,22 @@ const mediaHubPublicLoader = read("src/lib/media-hub-modules/load-media-hub-modu
 const mediaSidebarRenderer = read("src/components/media-center/MediaSidebar.tsx");
 const mediaHubRenderPlan = read("src/lib/media-hub-modules/build-media-hub-render-plan.ts");
 const publicationClosureMigration = read("sql/migrations/20260807120000_system_publication_summary_cards_closure.sql");
+const pagesListClient = read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx");
+const blocksHub = read("src/app/admin/pages-blocks/blocks/page.tsx");
+const blockManager = read("src/components/admin/page-blocks/BlockModuleManagerClient.tsx");
+const contentManager = read("src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx");
+const summaryManager = read("src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx");
+const pageCompositionRoute = read("src/app/admin/pages-blocks/pages/[id]/page.tsx");
+const assignmentColumns = read("src/lib/page-blocks/admin-collection-columns.ts");
+const assignmentGrid = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx");
+const assignmentRow = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx");
+const adminQueries = read("src/lib/page-blocks/admin-queries.ts");
+const assignmentContextQuery = read("src/lib/page-blocks/module-assignments-query.ts");
+const heroDetailRoute = read("src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx");
+const breadcrumbListActions = read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts");
+const feedListActions = read("src/app/admin/pages-blocks/blocks/feed/actions.ts");
+const heroListActions = read("src/app/admin/pages-blocks/blocks/hero/actions.ts");
+const adoptionManifest = read("src/lib/admin/interaction-system/adoption-manifest.ts");
 
 check(
   "Page Modules summary is owned by the shared Section Hero",
@@ -236,6 +253,32 @@ check(
     !heroManager.includes('name="is_published"'),
 );
 
+check(
+  "compact Block Editor content tabs do not repeat their tab title in a second heading card",
+  ["breadcrumb", "cards", "cta"].every((moduleKind) => {
+    const metadata = getModuleEditorSectionMetadata(moduleKind, "content");
+    return metadata?.sectionChrome === "implicit" &&
+      metadata.sectionHeadingAr === null &&
+      metadata.sectionDescriptionAr === null;
+  }),
+);
+
+const groupedContentEditors = [
+  "src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+];
+check(
+  "Content editors distinguish short and long content through the shared presentation owner",
+  presentation.includes("export function ModuleEditorContentGroup") &&
+    presentation.includes("data-module-editor-content-group") &&
+    groupedContentEditors.every((path) => {
+      const source = read(path);
+      return source.includes('<ModuleEditorContentGroup kind="short">') &&
+        source.includes('<ModuleEditorContentGroup kind="long">');
+    }),
+);
+
 const mediaHubEditor = read("src/components/admin/page-blocks/MediaHubModuleEditClient.tsx");
 const mediaSidebarEditor = read("src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx");
 const scopedModuleEditors = [
@@ -325,6 +368,88 @@ check(
   cardsActions.includes("assertValidCardsItems") &&
     cardsActions.includes("تحتاج عنوانًا ووصفًا مختصرًا") &&
     !read("src/components/admin/page-blocks/CardsModuleEditClient.tsx").includes("تحتاج عنوانًا ووصفًا مختصرًا"),
+);
+
+check(
+  "Cards repeater keeps the shared three-column owner and a compact eyebrow-title-description field order",
+  presentation.includes("lg:grid-cols-2 xl:grid-cols-3") &&
+    cardsRepeater.includes("ModuleEditorRepeaterGrid") &&
+    cardsRepeater.indexOf("MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr") <
+      cardsRepeater.indexOf("item_${index}_title") &&
+    cardsRepeater.indexOf("item_${index}_title") <
+      cardsRepeater.indexOf("MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr") &&
+    !cardsRepeater.includes("xl:grid-cols-1"),
+);
+
+const pageBlockCollectionHeaders = [
+  pagesListClient,
+  blocksHub,
+  blockManager,
+  contentManager,
+  summaryManager,
+  heroManager,
+  pageCompositionRoute,
+];
+check(
+  "Page Blocks collection and composition headers use the shared context owner with unified Arabic eyebrows",
+  pageBlockCollectionHeaders.every((source) =>
+    source.includes("AdminPageContextHeader") && !source.includes("AdminPageHeader"),
+  ) &&
+    !pageBlockCollectionHeaders.join("\n").includes("Admin Panel") &&
+    !pageBlockCollectionHeaders.join("\n").includes("PAGES CONTROL") &&
+    !pageBlockCollectionHeaders.join("\n").includes("HERO MODULE") &&
+    !blocksHub.includes("Generic CMS Layer") &&
+    adoptionManifest.includes('engineLabel: "إدارة الصفحات والموديولات"'),
+);
+
+check(
+  "Page Composition exposes the mandatory shared Slot contract in columns, filters, sorting, and rows",
+  assignmentColumns.includes('{ key: "slot", label: "الموضع", defaultVisible: true, hideable: false }') &&
+    assignmentGrid.includes('sortProps("slot")') &&
+    assignmentGrid.includes(">الموضع</") &&
+    assignmentRow.includes("LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]") &&
+    pagesClient.includes('paramKey: "slot"') &&
+    pagesClient.includes("PAGE_LAYOUT_SLOT_ORDER.map") &&
+    pagesClient.includes('slot: (row: PageBlockAssignmentRow)') &&
+    pagesClient.includes('values={{ module_type: moduleType, slot, visibility }}'),
+);
+
+check(
+  "specialized Page Block tables retain their declared shared grid, toolbar, pagination, and row-action owners",
+  [blockManager, contentManager, summaryManager, heroManager].every((source) =>
+    source.includes("AdminDataGrid") &&
+    source.includes("AdminEntityListFilters") &&
+    source.includes("AdminTablePagination") &&
+    source.includes("AdminDataGridRowActions"),
+  ),
+);
+
+check(
+  "module collection mutations hydrate authoritative rows without a full RSC refresh",
+  blockManager.includes("reloadRowsAction") &&
+    blockManager.includes("instant.hydrateRows(nextRows)") &&
+    !blockManager.includes("router.refresh") &&
+    heroManager.includes("getHeroTemplateRows") &&
+    heroManager.includes("instant.hydrateRows(nextRows)") &&
+    !heroManager.includes("router.refresh") &&
+    breadcrumbListActions.includes("getBreadcrumbBlockRows") &&
+    feedListActions.includes("getFeedModuleRows") &&
+    heroListActions.includes("getHeroTemplateRows"),
+);
+
+check(
+  "Page Blocks read owners avoid duplicate template and page payloads while keeping parallel reads",
+  adminQueries.includes("const contentTemplateById = new Map") &&
+    adminQueries.includes("const heroTemplateById = new Map") &&
+    !adminQueries.includes("content_block_templates(name") &&
+    !adminQueries.includes("hero_templates(id") &&
+    assignmentContextQuery.includes("const pageById = new Map") &&
+    !assignmentContextQuery.includes("pages(title,slug,path)") &&
+    heroDetailRoute.includes("getHeroModuleAssignmentContext(heroId)") &&
+    !heroDetailRoute.includes('.from("pages")') &&
+    !heroDetailRoute.includes("hero_assignments(") &&
+    pageCompositionRoute.includes("const [pageResult, preference, assignmentsResult] = await Promise.all") &&
+    !pageCompositionRoute.includes("assignmentsData = await getPageModuleAssignmentsForAdmin"),
 );
 
 console.log(`Page Block Editor Presentation verification passed (${passed} checks).`);

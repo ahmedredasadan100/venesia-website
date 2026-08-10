@@ -29,6 +29,7 @@ import ModuleCrossPageUsageBanner from "./ModuleCrossPageUsageBanner";
 import ModulePageAssignmentsField from "./ModulePageAssignmentsField";
 import {
   getModuleEditorFieldSpan,
+  MODULE_EDITOR_TERMINOLOGY,
   type ModuleEditorFieldNature,
   type ModuleEditorFieldSpan,
 } from "../../../lib/page-blocks/module-editor-presentation-contract";
@@ -187,6 +188,30 @@ export function ModuleEditorField({
         {children}
       </div>
     </AdminFormGridItem>
+  );
+}
+
+export function ModuleEditorContentGroup({
+  kind,
+  children,
+  className = "",
+}: {
+  kind: "short" | "long";
+  children: ReactNode;
+  className?: string;
+}) {
+  const label = kind === "short"
+    ? MODULE_EDITOR_TERMINOLOGY.shortContent.labelAr
+    : MODULE_EDITOR_TERMINOLOGY.longContent.labelAr;
+
+  return (
+    <div
+      data-module-editor-content-group={kind}
+      className={`space-y-3 ${kind === "long" ? "border-t border-white/10 pt-4" : ""} ${className}`.trim()}
+    >
+      <ModuleEditorSectionHeading intent="domain">{label}</ModuleEditorSectionHeading>
+      {children}
+    </div>
   );
 }
 

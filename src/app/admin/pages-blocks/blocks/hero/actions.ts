@@ -26,6 +26,19 @@ import {
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
 import { mutatePageComposition } from "../../pages/page-actions/helpers";
 
+export type HeroTemplateRow = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: "published" | "unpublished";
+  hero_assignments: Array<{
+    id: number;
+    path: string | null;
+    is_active: boolean;
+  }>;
+};
+
 function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
@@ -502,4 +515,16 @@ export async function updateHeroTemplateDetails(formData: FormData) {
   redirect(
     `/admin/pages-blocks/blocks/hero/${id}?saved=1${notice ? `&notice=${notice}` : ""}`,
   );
+}
+
+export async function getHeroTemplateRows(): Promise<HeroTemplateRow[]> {
+  await requireAdminSession();
+  const { data, error } = await getSupabaseAdmin()
+    .from("hero_templates")
+    .select("id,name,slug,description,status,hero_assignments(id,path,is_active)")
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as HeroTemplateRow[];
 }

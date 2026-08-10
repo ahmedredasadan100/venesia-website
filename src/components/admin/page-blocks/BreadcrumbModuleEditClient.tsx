@@ -70,7 +70,7 @@ export default function BreadcrumbModuleEditClient({
                     <ModuleEditorField nature="standard" span={4}>
                       <AdminFormListboxSelect
                         name="source"
-                        label="مصدر المسار"
+                        label="مصدر الرابط"
                         defaultValue={config.source ?? "navigation"}
                         options={[
                           { value: "navigation", label: "من قائمة التنقل (تلقائي)" },
@@ -80,7 +80,7 @@ export default function BreadcrumbModuleEditClient({
                     </ModuleEditorField>
                     <ModuleEditorField nature="short-text" span={5}>
                       <label className="block space-y-2">
-                        <span className="text-xs font-semibold text-white/55">تسمية الصفحة الحالية (اختياري)</span>
+                        <span className="text-xs font-semibold text-white/55">تسمية الرابط (اختياري)</span>
                         <input
                           name="current_label_override"
                           defaultValue={config.currentLabelOverride ?? ""}

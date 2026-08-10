@@ -32,12 +32,6 @@ import HeroElementOrderEditor from "./HeroElementOrderEditor";
 import HeroTextFieldRow from "./HeroTextFieldRow";
 import HeroVisibilityAlignRow from "./HeroVisibilityAlignRow";
 
-type PageOption = {
-  id: number;
-  title: string;
-  path: string;
-};
-
 type HeroEditClientProps = {
   hero: {
     id: number;
@@ -54,8 +48,6 @@ type HeroEditClientProps = {
   config: Record<string, unknown>;
   imagesText: string;
   mobileImagesText: string;
-  assignedPageIds: number[];
-  pages: PageOption[];
   sourceOptions: [string, string][];
   variantOptions: [string, string][];
   saved?: boolean;

@@ -24,9 +24,9 @@ export default async function MediaSidebarModulesPage({ searchParams }: PageProp
   return (
     <BlockTemplateSummaryListClient
       moduleKey="media-sidebar"
-      title="Media Sidebar Modules"
+      title="إدارة موديولات الشريط الجانبي الإعلامي"
       description="قوالب لوحات الشريط الجانبي للمركز الإعلامي — تُدار الربط من صفحات Pages Blocks."
-      detailLabel="Widget"
+      detailLabel="الودجت"
       toggleAction={toggleMediaSidebarModuleStatus}
       rows={(templates ?? []).map((template) => ({
         id: Number(template.id),

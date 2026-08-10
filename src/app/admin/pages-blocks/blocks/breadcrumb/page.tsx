@@ -9,6 +9,7 @@ import {
   createBreadcrumbBlock,
   deleteBreadcrumbBlock,
   duplicateBreadcrumbBlock,
+  getBreadcrumbBlockRows,
   toggleBreadcrumbBlockStatus,
 } from "./actions";
 
@@ -31,16 +32,17 @@ export default async function BreadcrumbBlocksPage({ searchParams }: PageProps) 
   return (
     <BlockModuleManagerClient
       moduleKey="breadcrumb"
-      moduleTitle="إدارة Breadcrumb"
-      moduleDescription="موديولات مسار التنقل المستقلة. اربطها بالصفحات من Pages Manager — منفصلة تمامًا عن Hero."
+      moduleTitle="إدارة مسارات التنقل"
+      moduleDescription="موديولات مسار التنقل المستقلة القابلة للربط بالصفحات."
       rows={(data ?? []).map((row) => ({ ...row, description: row.description ?? null }))}
       createAction={createBreadcrumbBlock}
       deleteAction={deleteBreadcrumbBlock}
       duplicateAction={duplicateBreadcrumbBlock}
       toggleAction={toggleBreadcrumbBlockStatus}
       bulkAction={bulkBreadcrumbBlocks}
+      reloadRowsAction={getBreadcrumbBlockRows}
       defaultVariant="hero-inline"
-      variantOptions={[["hero-inline", "Hero Inline"], ["standalone", "Standalone"]]}
+      variantOptions={[["hero-inline", "مدمج مع الهيرو"], ["standalone", "مستقل"]]}
       loadError={error ? `حدث خطأ أثناء قراءة بلوكات Breadcrumb: ${error.message}` : null}
       mediaSynchronizationWarning={query.notice === "saved_with_media_sync_warning"}
       initialVisibleColumns={preference.visibleColumns}
