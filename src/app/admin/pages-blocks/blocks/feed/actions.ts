@@ -393,3 +393,22 @@ export async function bulkFeedModules(formData: FormData) {
   }
   await revalidateBlockModulePaths("feed");
 }
+
+export async function getFeedModuleRows() {
+  await requireAdminSession();
+  const { data, error } = await getSupabaseAdmin()
+    .from("feed_module_templates")
+    .select("id,name,slug,description,feed_type,status")
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description ?? row.feed_type,
+    variant: row.feed_type,
+    status: row.status,
+  }));
+}

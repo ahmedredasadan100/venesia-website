@@ -2,22 +2,10 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import HeroManagerClient from "./HeroManagerClient";
+import type { HeroTemplateRow } from "./actions";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string }> | { notice?: string };
-};
-
-type HeroRow = {
-  id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  status: "published" | "unpublished";
-  hero_assignments: Array<{
-    id: number;
-    path: string | null;
-    is_active: boolean;
-  }>;
 };
 
 export default async function HeroesManagerPage({ searchParams }: PageProps) {
@@ -36,7 +24,7 @@ export default async function HeroesManagerPage({ searchParams }: PageProps) {
 
   return (
     <HeroManagerClient
-      heroes={(data ?? []) as HeroRow[]}
+      heroes={(data ?? []) as HeroTemplateRow[]}
       loadError={error ? `حدث خطأ أثناء قراءة الهيروهات: ${error.message}` : null}
       mediaSynchronizationWarning={
         resolvedSearch.notice === "saved_with_media_sync_warning"

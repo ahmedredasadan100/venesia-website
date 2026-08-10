@@ -8,8 +8,8 @@ export type PageCompositionColumnMeta<Key extends string = string> = {
 const contentTemplateColumns = [
   { key: "selection", label: "التحديد", defaultVisible: true, hideable: false },
   { key: "name", label: "الاسم", defaultVisible: true, hideable: false },
-  { key: "slug", label: "Slug", defaultVisible: true, hideable: true },
-  { key: "variant", label: "Variant", defaultVisible: true, hideable: true },
+  { key: "slug", label: "المعرّف", defaultVisible: true, hideable: true },
+  { key: "variant", label: "النمط", defaultVisible: true, hideable: true },
   { key: "status", label: "الحالة", defaultVisible: true, hideable: true },
   { key: "updatedAt", label: "آخر تحديث", defaultVisible: true, hideable: true },
   { key: "actions", label: "الإجراءات", defaultVisible: true, hideable: false },
@@ -18,7 +18,7 @@ const contentTemplateColumns = [
 const heroTemplateColumns = [
   { key: "selection", label: "التحديد", defaultVisible: true, hideable: false },
   { key: "name", label: "اسم الهيرو", defaultVisible: true, hideable: false },
-  { key: "slug", label: "Slug", defaultVisible: true, hideable: true },
+  { key: "slug", label: "المعرّف", defaultVisible: true, hideable: true },
   { key: "status", label: "الحالة", defaultVisible: true, hideable: true },
   { key: "actions", label: "الإجراءات", defaultVisible: true, hideable: false },
 ] as const satisfies readonly PageCompositionColumnMeta[];
@@ -26,15 +26,15 @@ const heroTemplateColumns = [
 const blockTemplateColumns = [
   { key: "selection", label: "التحديد", defaultVisible: true, hideable: false },
   { key: "name", label: "الاسم", defaultVisible: true, hideable: false },
-  { key: "slug", label: "Slug", defaultVisible: true, hideable: true },
-  { key: "variant", label: "Variant", defaultVisible: true, hideable: true },
+  { key: "slug", label: "المعرّف", defaultVisible: true, hideable: true },
+  { key: "variant", label: "النمط", defaultVisible: true, hideable: true },
   { key: "status", label: "الحالة", defaultVisible: true, hideable: true },
   { key: "actions", label: "الإجراءات", defaultVisible: true, hideable: false },
 ] as const satisfies readonly PageCompositionColumnMeta[];
 
 const blockSummaryColumns = [
   { key: "name", label: "الاسم", defaultVisible: true, hideable: false },
-  { key: "slug", label: "Slug", defaultVisible: true, hideable: true },
+  { key: "slug", label: "المعرّف", defaultVisible: true, hideable: true },
   { key: "detail", label: "التفاصيل", defaultVisible: true, hideable: true },
   { key: "status", label: "الحالة", defaultVisible: true, hideable: true },
   { key: "actions", label: "الإجراءات", defaultVisible: true, hideable: false },
@@ -60,6 +60,7 @@ const pageAssignmentColumns = [
   { key: "selection", label: "التحديد", defaultVisible: true, hideable: false },
   { key: "template", label: "القالب", defaultVisible: true, hideable: false },
   { key: "module", label: "النوع", defaultVisible: true, hideable: true },
+  { key: "slot", label: "الموضع", defaultVisible: true, hideable: false },
   { key: "status", label: "الحالة", defaultVisible: true, hideable: true },
   { key: "actions", label: "الإجراءات", defaultVisible: true, hideable: false },
 ] as const satisfies readonly PageCompositionColumnMeta[];

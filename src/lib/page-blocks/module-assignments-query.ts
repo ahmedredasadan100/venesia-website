@@ -32,7 +32,7 @@ async function loadModuleAssignmentContext(
   const [{ data: assignments }, { data: pages }] = await Promise.all([
     getSupabaseAdmin()
       .from(assignmentTable)
-      .select("id,page_id,template_id,slot,sort_order,is_visible,pages(title,slug,path)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible")
       .eq("template_id", templateId)
       .order("sort_order", { ascending: true }),
     getSupabaseAdmin()
@@ -41,10 +41,11 @@ async function loadModuleAssignmentContext(
       .order("sort_order", { ascending: true }),
   ]);
 
+  const pageById = new Map((pages ?? []).map((page) => [page.id, page]));
   const rows: ModuleAssignmentRow[] = [];
 
   for (const row of assignments ?? []) {
-    const page = Array.isArray(row.pages) ? row.pages[0] : row.pages;
+    const page = pageById.get(row.page_id);
     rows.push({
       id: row.id,
       page_id: row.page_id,

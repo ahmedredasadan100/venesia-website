@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
-import { AdminPageExperience, AdminPageHeader } from "../../../../../components/admin/ui";
+import { AdminPageContextHeader, AdminPageExperience } from "../../../../../components/admin/ui";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageModuleAssignmentsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
@@ -23,8 +23,8 @@ function resolveInitialTabId(tab: string | undefined, hasSeoFeedback: boolean) {
 function PageCompositionLoadError({ title, message }: { title: string; message: string }) {
   return (
     <AdminPageExperience state="error" dir="rtl">
-      <AdminPageHeader
-        eyebrow="Page Composition"
+      <AdminPageContextHeader
+        eyebrow="تكوين الصفحات"
         title={title}
         description="تعذر تحميل بيانات تكوين الصفحة. لم تُنفذ أي تغييرات."
         status="error"
@@ -54,7 +54,7 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     notFound();
   }
 
-  const [pageResult, preference] = await Promise.all([
+  const [pageResult, preference, assignmentsResult] = await Promise.all([
     getSupabaseAdmin()
       .from("pages")
       .select("id,title,slug,path,page_type,status,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt")
@@ -63,6 +63,9 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     readAdminColumnPreferences(
       getPageCompositionColumnPreferenceConfig("pageAssignments").viewKey,
     ),
+    getPageModuleAssignmentsForAdmin(pageId)
+      .then((data) => ({ data, error: null }))
+      .catch((error: unknown) => ({ data: null, error })),
   ]);
   const { data: page, error: pageError } = pageResult;
 
@@ -79,11 +82,10 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     notFound();
   }
 
-  let assignmentsData;
-  try {
-    assignmentsData = await getPageModuleAssignmentsForAdmin(pageId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "خطأ غير معروف";
+  if (assignmentsResult.error || !assignmentsResult.data) {
+    const message = assignmentsResult.error instanceof Error
+      ? assignmentsResult.error.message
+      : "خطأ غير معروف";
     return (
       <PageCompositionLoadError
         title={`تكوين ${page.title}`}
@@ -91,6 +93,8 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       />
     );
   }
+
+  const assignmentsData = assignmentsResult.data;
 
   const seoNotice = resolvedSearchParams?.seo_notice ?? null;
   const seoError = resolvedSearchParams?.seo_error

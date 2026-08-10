@@ -13,6 +13,7 @@ import {
   createFeedModule,
   deleteFeedModule,
   duplicateFeedModule,
+  getFeedModuleRows,
   toggleFeedModuleStatus,
 } from "./actions";
 
@@ -35,8 +36,8 @@ export default async function FeedModulesPage({ searchParams }: PageProps) {
   return (
     <BlockModuleManagerClient
       moduleKey="feed"
-      moduleTitle="إدارة Feed Modules"
-      moduleDescription="قوالب Feed Widget لموضوعات تهمك — إعدادات الاستعلام والعرض فقط. اربطها بالصفحات من Pages Manager."
+      moduleTitle="إدارة موديولات الخلاصة"
+      moduleDescription="قوالب خلاصة المحتوى وإعدادات الاستعلام والعرض القابلة للربط بالصفحات."
       rows={(data ?? []).map((row) => ({
         id: row.id,
         name: row.name,
@@ -50,6 +51,7 @@ export default async function FeedModulesPage({ searchParams }: PageProps) {
       duplicateAction={duplicateFeedModule}
       toggleAction={toggleFeedModuleStatus}
       bulkAction={bulkFeedModules}
+      reloadRowsAction={getFeedModuleRows}
       defaultVariant="latest"
       variantOptions={TOPICS_FEED_TYPES.map(
         (feedType): [string, string] => [feedType, TOPICS_FEED_TYPE_LABELS_AR[feedType]],

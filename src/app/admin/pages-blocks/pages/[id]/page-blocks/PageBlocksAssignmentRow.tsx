@@ -12,6 +12,7 @@ import {
   type AdminRowActionsCapability,
 } from "../../../../../../components/admin/ui";
 import { moduleEditHref, moduleKindLabel } from "../../../../../../lib/page-blocks/admin-utils";
+import { LAYOUT_SLOT_LABELS_AR, normalizeLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
 
 type PageBlocksAssignmentRowProps = {
@@ -87,7 +88,8 @@ export default function PageBlocksAssignmentRow({
         title: `معلومات ${row.template_name}`,
         items: [
           { label: "نوع الموديول", value: moduleKindLabel(row.module_kind) },
-          { label: "Slug", value: row.template_slug },
+          { label: "المعرّف", value: row.template_slug },
+          { label: "الموضع", value: LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)] },
           { label: "الحالة", value: isVisible ? "ظاهر" : "مخفي" },
         ],
       },
@@ -167,6 +169,10 @@ export default function PageBlocksAssignmentRow({
           {moduleKindLabel(row.module_kind)}
         </AdminDataGridCenterCell>
       ) : null}
+
+      <AdminDataGridCenterCell className="truncate text-sm text-white/70">
+        {LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]}
+      </AdminDataGridCenterCell>
 
       {showStatus ? (
         <AdminDataGridStatusCell>

@@ -892,7 +892,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       sourceOwner:
         "src/lib/admin/pages/entity-list-adapter.ts#pagesEntityListAdapter",
       headerOwner: "AdminPageContextHeader",
-      engineLabel: "PAGES CONTROL",
+      engineLabel: "إدارة الصفحات والموديولات",
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",

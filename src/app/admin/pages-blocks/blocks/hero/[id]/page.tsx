@@ -40,26 +40,18 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
 
   if (!heroId) notFound();
 
-  const [{ data: hero, error }, { data: pages }, assignmentContext] = await Promise.all([
+  const [{ data: hero, error }, assignmentContext] = await Promise.all([
     getSupabaseAdmin()
       .from("hero_templates")
-      .select("*,hero_assignments(id,target_type,target_id,target_slug,path,is_active)")
+      .select("*")
       .eq("id", heroId)
       .maybeSingle(),
-    getSupabaseAdmin()
-      .from("pages")
-      .select("id,title,slug,path,page_type,status")
-      .order("sort_order", { ascending: true }),
     getHeroModuleAssignmentContext(heroId),
   ]);
 
   if (error || !hero) notFound();
 
   const config = (hero.config ?? {}) as Record<string, unknown>;
-  const assignedPageIds = ((hero.hero_assignments ?? []) as { target_type: string; target_id: number; is_active: boolean }[])
-    .filter((item) => item.target_type === "page" && item.is_active)
-    .map((item) => Number(item.target_id));
-
   return (
     <HeroEditClient
       hero={{
@@ -77,12 +69,6 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
       config={config}
       imagesText={imagesToTextarea(config)}
       mobileImagesText={mobileImagesToTextarea(config)}
-      assignedPageIds={assignedPageIds}
-      pages={(pages ?? []).map((page) => ({
-        id: page.id,
-        title: page.title,
-        path: page.path,
-      }))}
       sourceOptions={sourceOptions}
       variantOptions={variantOptions}
       saved={Boolean(resolvedSearch.saved)}
