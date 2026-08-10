@@ -484,6 +484,16 @@ p {
     transform: translateY(0) scale(1);
   }
 }
+
+@keyframes feedCarouselFade {
+  0% {
+    opacity: 0.35;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
  @keyframes heroProjectCard {
   0% {
     opacity: 0;

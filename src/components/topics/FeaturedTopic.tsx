@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { Topic } from "../../lib/topics/types";
+import PublicGoldPill from "../public/PublicGoldPill";
 import TopicImage from "./TopicImage";
 
 type FeaturedTopicProps = {
@@ -56,24 +57,22 @@ export default function FeaturedTopic({ topic }: FeaturedTopicProps) {
             <div dir="rtl" className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 {showCategory ? (
-                  <Link
+                  <PublicGoldPill
                     href={`/topics?category=${encodeURIComponent(topic.categorySlug)}`}
-                    className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur transition hover:border-[#D8B87A]/60"
                   >
                     {topic.category}
-                  </Link>
+                  </PublicGoldPill>
                 ) : null}
 
                 {showDate ? <span className="text-xs text-white/60">{topic.date}</span> : null}
               </div>
 
               {showSeries ? (
-                <Link
+                <PublicGoldPill
                   href={`/topics?series=${encodeURIComponent(topic.seriesSlug ?? "")}`}
-                  className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur transition hover:border-[#D8B87A]/60"
                 >
                   {topic.series}
-                </Link>
+                </PublicGoldPill>
               ) : null}
             </div>
           ) : null}
