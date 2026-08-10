@@ -82,6 +82,13 @@ const isPersistedFeedModuleConfigEqual =
     raw: unknown,
     expected: FeedModuleConfig,
   ) => boolean;
+const isPublishedPageBlockStatus = adminUtils.isPublishedPageBlockStatus as (
+  value: string | null | undefined,
+) => boolean;
+const normalizeBoolean = adminUtils.normalizeBoolean as (
+  value: unknown,
+  fallback?: boolean,
+) => boolean;
 
 function createFeedForm() {
   const formData = new FormData();
@@ -167,6 +174,10 @@ assert.equal(
   ),
   false,
 );
+assert.equal(isPublishedPageBlockStatus("published"), true);
+assert.equal(isPublishedPageBlockStatus("unpublished"), false);
+assert.equal(isPublishedPageBlockStatus(null), false);
+assert.equal(normalizeBoolean("false", true), false);
 
 const db = await PGlite.create();
 try {
@@ -207,6 +218,186 @@ try {
   await db.close();
 }
 
+type CategoryResolverRow = {
+  id: number;
+  name: string | null;
+  slug: string | null;
+  status: string;
+  topics_count: Array<{ count: number | string | null }>;
+};
+
+type SeriesResolverRow = {
+  slug: string;
+  status: string;
+  category_id: number | null;
+};
+
+type ResolverQueryResult = {
+  data: unknown;
+  error: Error | null;
+};
+
+const resolverFixture: {
+  categories: CategoryResolverRow[];
+  series: SeriesResolverRow[];
+  categoryError: Error | null;
+  categoryFilters: Array<[string, unknown]>;
+} = {
+  categories: [],
+  series: [],
+  categoryError: null,
+  categoryFilters: [],
+};
+
+class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
+  private readonly table: string;
+  private readonly filters: Array<[string, unknown]> = [];
+  private resultLimit: number | null = null;
+
+  constructor(table: string) {
+    this.table = table;
+  }
+
+  select() {
+    return this;
+  }
+
+  eq(column: string, value: unknown) {
+    this.filters.push([column, value]);
+    if (this.table === "topic_categories") {
+      resolverFixture.categoryFilters.push([column, value]);
+    }
+    return this;
+  }
+
+  is() {
+    return this;
+  }
+
+  order() {
+    return this;
+  }
+
+  limit(value: number) {
+    this.resultLimit = value;
+    return this;
+  }
+
+  async maybeSingle() {
+    const rows = this.applyFilters(
+      this.table === "topic_series" ? resolverFixture.series : [],
+    );
+    return { data: rows[0] ?? null, error: null };
+  }
+
+  then<TResult1 = ResolverQueryResult, TResult2 = never>(
+    onfulfilled?: ((value: ResolverQueryResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    const result = this.resolveResult();
+    return Promise.resolve(result).then(onfulfilled, onrejected);
+  }
+
+  private applyFilters<T extends object>(rows: T[]) {
+    return this.filters.reduce((filtered, [column, value]) =>
+      filtered.filter((row) => (row as Record<string, unknown>)[column] === value), [...rows]);
+  }
+
+  private resolveResult(): ResolverQueryResult {
+    if (this.table !== "topic_categories") return { data: [], error: null };
+    if (resolverFixture.categoryError) {
+      return { data: null, error: resolverFixture.categoryError };
+    }
+
+    const rows = this.applyFilters(resolverFixture.categories);
+    return {
+      data: this.resultLimit === null ? rows : rows.slice(0, this.resultLimit),
+      error: null,
+    };
+  }
+}
+
+const resolverContract = loadTranspiledModule(
+  "src/lib/feed-modules/resolve-topics-feed.ts",
+  {
+    "server-only": {},
+    "../supabase-admin": {
+      getSupabaseAdmin: () => ({
+        from: (table: string) => new ResolverQueryMock(table),
+      }),
+    },
+    "../admin/cms-test-data": { filterPublicTopics: (rows: unknown[]) => rows },
+    "../logging": { logError: () => undefined },
+    "../content-dates": { formatArabicContentDate: () => "" },
+    "../media/resolve-local-public-image": {
+      resolveLocalPublicImage: (value: unknown, fallback: string) =>
+        typeof value === "string" && value ? value : fallback,
+    },
+  },
+);
+const resolveTopicsFeedModule = resolverContract.resolveTopicsFeedModule as (
+  template: { feed_type: TopicsFeedType },
+  config: FeedModuleConfig,
+) => Promise<{
+  kind: string;
+  items: Array<{ name: string; href: string; count: number }>;
+}>;
+
+resolverFixture.categories = [
+  { id: 1, name: "ØªØµÙ†ÙŠÙ Ø¢Ø®Ø±", slug: "other", status: "published", topics_count: [{ count: 4 }] },
+  { id: 2, name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", slug: "bait-al-watan", status: "published", topics_count: [{ count: "260" }] },
+];
+resolverFixture.categoryFilters = [];
+const selectedCategoryPayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  {
+    ...categoryConfig,
+    query: { ...categoryConfig.query, limit: 1, categorySlug: "bait-al-watan" },
+  },
+);
+assert.deepEqual(selectedCategoryPayload, {
+  kind: "categories",
+  items: [{ name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", href: "/topics?category=bait-al-watan", count: 260 }],
+});
+assert.ok(
+  resolverFixture.categoryFilters.some(
+    ([column, value]) => column === "slug" && value === "bait-al-watan",
+  ),
+  "category filter must be applied by the source query before limit",
+);
+
+resolverFixture.categories = [
+  { id: 3, name: "  ", slug: "blank-label", status: "published", topics_count: [{ count: 1 }] },
+  { id: 2, name: " Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù† ", slug: "bait-al-watan", status: "published", topics_count: [{ count: 2 }] },
+];
+const guardedCategoryPayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  { ...categoryConfig, query: { ...categoryConfig.query, limit: 2 } },
+);
+assert.deepEqual(guardedCategoryPayload.items, [
+  { name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", href: "/topics?category=bait-al-watan", count: 2 },
+]);
+
+resolverFixture.categoryError = new Error("category query failed");
+const categoryFailurePayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  categoryConfig,
+);
+assert.deepEqual(categoryFailurePayload, { kind: "categories", items: [] });
+resolverFixture.categoryError = null;
+
+resolverFixture.series = [
+  { slug: "hidden-series", status: "unpublished", category_id: 2 },
+];
+const unpublishedSeriesPayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  {
+    ...categoryConfig,
+    query: { ...categoryConfig.query, seriesSlug: "hidden-series" },
+  },
+);
+assert.deepEqual(unpublishedSeriesPayload, { kind: "categories", items: [] });
+
 const editor = readFileSync(
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
   "utf8",
@@ -221,6 +412,16 @@ const actions = readFileSync(
 );
 const loader = readFileSync("src/lib/feed-modules/load-feed-modules.ts", "utf8");
 const resolver = readFileSync("src/lib/feed-modules/resolve-topics-feed.ts", "utf8");
+const adminUtilsSource = readFileSync("src/lib/page-blocks/admin-utils.ts", "utf8");
+const blockLoader = readFileSync("src/lib/page-blocks/load-page-blocks.ts", "utf8");
+const mediaHubLoader = readFileSync(
+  "src/lib/media-hub-modules/load-media-hub-modules.ts",
+  "utf8",
+);
+const mediaSidebarLoader = readFileSync(
+  "src/lib/media-sidebar-modules/load-media-sidebar-modules.ts",
+  "utf8",
+);
 const section = readFileSync("src/components/feed-modules/FeedModuleSection.tsx", "utf8");
 const latest = readFileSync(
   "src/components/sidebar-feeds/SidebarLatestArticlesWidget.tsx",
@@ -266,8 +467,17 @@ assert.ok(
 );
 
 assert.ok(loader.includes("parseFeedModuleConfig(template.config, template.feed_type)"));
+assert.ok(loader.includes("isPublishedPageBlockStatus(template.status)"));
+assert.equal(loader.includes("function isPublishedTemplate"), false);
 assert.ok(resolver.includes('.select("id, name, slug, description, status, sort_order, category_id")'));
 assert.ok(resolver.includes('subtitle: row.description ?? ""'));
+assert.ok(resolver.includes('categoriesQuery = categoriesQuery.eq("slug", config.query.categorySlug)'));
+assert.ok(resolver.includes('if (!name || !slug) return []'));
+assert.ok(adminUtilsSource.includes("export function isPublishedPageBlockStatus"));
+assert.ok(blockLoader.includes("isPublishedPageBlockStatus(template.status)"));
+assert.equal(blockLoader.includes("function isPublishedTemplate"), false);
+assert.ok(mediaHubLoader.includes("isPublishedPageBlockStatus(template.status)"));
+assert.ok(mediaSidebarLoader.includes("isPublishedPageBlockStatus(template.status)"));
 assert.ok(section.includes("showImage={presentation.showImage}"));
 assert.ok(section.includes("showDate={presentation.showDate}"));
 assert.ok(section.includes("showExcerpt={presentation.showExcerpt}"));

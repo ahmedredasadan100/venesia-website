@@ -1,6 +1,9 @@
 import "server-only";
 
-import { normalizeBoolean } from "../page-blocks/admin-utils";
+import {
+  isPublishedPageBlockStatus,
+  normalizeBoolean,
+} from "../page-blocks/admin-utils";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseMediaSidebarModuleConfig } from "./parse-config";
 import { enrichMediaSidebarModules } from "./resolve-widget-items";
@@ -39,7 +42,7 @@ export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaS
     const template = joinedTemplate(row.media_sidebar_module_templates) as {
       widget_key: string; name: string; status: string; config: unknown;
     } | null;
-    if (!template || template.status !== "published" || !isWidgetKey(template.widget_key)) continue;
+    if (!template || !isPublishedPageBlockStatus(template.status) || !isWidgetKey(template.widget_key)) continue;
     widgets.push({
       widgetKey: template.widget_key,
       assignmentId: row.id,

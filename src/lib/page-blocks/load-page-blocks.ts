@@ -14,14 +14,10 @@ import {
   resolveCtaBlockConfigLinks,
   resolveContentBlockConfigLinks,
 } from "../admin/links/block-config-links";
-import { normalizeBoolean } from "./admin-utils";
+import { isPublishedPageBlockStatus, normalizeBoolean } from "./admin-utils";
 import { sortPageBlocks } from "./page-block-layout";
 import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageBlockTemplateBase, ResolvedPageBlock } from "./types";
-
-function isPublishedTemplate(status: string | null | undefined) {
-  return status === "published";
-}
 
 type TemplateRow = PageBlockTemplateBase & { config: Record<string, unknown> | null };
 
@@ -136,7 +132,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
       continue;
     }
 
-    if (!template || !isPublishedTemplate(template.status)) continue;
+    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
     const resolvedConfig = await resolveContentBlockConfigLinks(
       resolveContentBlockConfig(template) as Record<string, unknown>,
@@ -163,7 +159,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
     if (!normalizeBoolean(row.is_visible, true)) continue;
 
     const template = joinedTemplate(row.cta_block_templates) as TemplateRow | null;
-    if (!template || !isPublishedTemplate(template.status)) continue;
+    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
     blocks.push({
       assignmentId: row.id,
@@ -183,7 +179,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
     if (!normalizeBoolean(row.is_visible, true)) continue;
 
     const template = joinedTemplate(row.cards_block_templates) as TemplateRow | null;
-    if (!template || !isPublishedTemplate(template.status)) continue;
+    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
     blocks.push({
       assignmentId: row.id,
@@ -203,7 +199,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
     if (!normalizeBoolean(row.is_visible, true)) continue;
 
     const template = joinedTemplate(row.breadcrumb_block_templates) as TemplateRow | null;
-    if (!template || !isPublishedTemplate(template.status)) continue;
+    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
     blocks.push({
       assignmentId: row.id,

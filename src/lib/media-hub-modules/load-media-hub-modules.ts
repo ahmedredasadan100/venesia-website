@@ -1,6 +1,9 @@
 import "server-only";
 
-import { normalizeBoolean } from "../page-blocks/admin-utils";
+import {
+  isPublishedPageBlockStatus,
+  normalizeBoolean,
+} from "../page-blocks/admin-utils";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseMediaHubModuleConfig } from "./parse-config";
 import { enrichMediaHubModules } from "./resolve-hub-section-data";
@@ -39,7 +42,7 @@ export async function queryMediaHubModules(pageSlug: string): Promise<MediaHubMo
     const template = joinedTemplate(row.media_hub_module_templates) as {
       section_key: string; name: string; slug: string; status: string; config: unknown;
     } | null;
-    if (!template || template.status !== "published" || !isSectionKey(template.section_key)) continue;
+    if (!template || !isPublishedPageBlockStatus(template.status) || !isSectionKey(template.section_key)) continue;
     modules.push({
       sectionKey: template.section_key,
       assignmentId: row.id,

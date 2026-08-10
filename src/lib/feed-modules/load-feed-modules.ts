@@ -6,16 +6,15 @@ import { unstable_cache } from "next/cache";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import { getPublishedPageBySlug } from "../pages/get-published-page-by-slug";
-import { normalizeBoolean } from "../page-blocks/admin-utils";
+import {
+  isPublishedPageBlockStatus,
+  normalizeBoolean,
+} from "../page-blocks/admin-utils";
 import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
 import type { PageLayoutSlot } from "../page-blocks/layout-slots";
 import { parseFeedModuleConfig } from "./parse-feed-config";
 import { resolveTopicsFeedModule } from "./resolve-topics-feed";
 import type { FeedModuleTemplateRow, ResolvedFeedModule, TopicsFeedType } from "./types";
-
-function isPublishedTemplate(status: string | null | undefined) {
-  return status === "published";
-}
 
 function joinedTemplate<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
@@ -78,7 +77,7 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
     if (!normalizeBoolean(row.is_visible, true)) continue;
 
     const template = joinedTemplate(row.feed_module_templates) as FeedModuleTemplateRow | null;
-    if (!template || !isPublishedTemplate(template.status)) continue;
+    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
     const config = parseFeedModuleConfig(template.config, template.feed_type);
     const payload = await resolveTopicsFeedModule(template, config);
