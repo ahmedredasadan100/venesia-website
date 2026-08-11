@@ -12,6 +12,7 @@ type PageProps = {
   searchParams?: Promise<{
     page?: string;
     sort?: string;
+    q?: string;
   }>;
 };
 

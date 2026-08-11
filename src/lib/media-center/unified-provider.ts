@@ -1,233 +1,94 @@
 import "server-only";
 
-import { logError } from "../logging";
-import { getSupabaseAdmin } from "../supabase-admin";
-import { adaptTopicRowToMediaItem, type UnifiedMediaTopicRow } from "./adapt-topic-row";
-import type { MediaContentItem, MediaContentType } from "./types";
-
-/** Card / list / sidebar / hub fields — excludes body content and SEO blobs. */
-export const UNIFIED_LISTING_SELECT =
-  "id, slug, title, excerpt, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, canonical_url, robots_index, robots_follow, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
-
-/** Detail page fields — includes full content + SEO. */
-export const UNIFIED_DETAIL_SELECT =
-  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
-
-const UNIFIED_MEDIA_CONTENT_TYPES = ["news", "press", "site_update", "video", "gallery"] as const satisfies readonly MediaContentType[];
+import {
+  loadPublicContentCollection,
+  loadPublicContentDetail,
+  loadPublicContentSlugs,
+} from "../content/public-content-read/owner";
+import { adaptPublicContentToMediaItem } from "./adapt-topic-row";
+import {
+  MEDIA_CONTENT_TYPES,
+  type MediaContentItem,
+  type MediaContentType,
+} from "./types";
 
 type ListingSort = "newest" | "oldest";
 
-function mapRows(data: unknown) {
-  return ((data ?? []) as UnifiedMediaTopicRow[])
-    .map(adaptTopicRowToMediaItem)
-    .filter(Boolean) as MediaContentItem[];
+function adaptItems(items: Awaited<ReturnType<typeof loadPublicContentCollection>>["items"]) {
+  return items.flatMap((item) => {
+    const adapted = adaptPublicContentToMediaItem(item);
+    return adapted ? [adapted] : [];
+  });
 }
 
-function applyTypeFilter<T extends { eq: (column: string, value: string) => T }>(
-  query: T,
-  type?: MediaContentType,
-) {
-  if (!type) return query;
-  return query.eq("content_type", type);
-}
-
-function buildUnifiedMediaQuery(select: string, type?: MediaContentType, ascending = false) {
-  const query = getSupabaseAdmin()
-    .from("topics")
-    .select(select)
-    .in("content_type", [...UNIFIED_MEDIA_CONTENT_TYPES])
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .order("published_at", { ascending })
-    .order("id", { ascending });
-
-  return applyTypeFilter(query, type);
-}
-
+/** Media provider is an adapter only. It never constructs a database query. */
 export async function unifiedGetMediaItems(type?: MediaContentType) {
-  const { data, error } = await buildUnifiedMediaQuery(UNIFIED_LISTING_SELECT, type);
-
-  if (error) {
-    logError("Unified media topics fetch failed", error, { type });
-    return [];
-  }
-
-  return mapRows(data);
+  const result = await loadPublicContentCollection({
+    contentTypes: type ? [type] : MEDIA_CONTENT_TYPES,
+    page: 1,
+    pageSize: 60,
+    sort: "newest",
+  });
+  return adaptItems(result.items);
 }
 
 export async function unifiedGetMediaItemBySlug(type: MediaContentType, slug: string) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select(UNIFIED_DETAIL_SELECT)
-    .eq("content_type", type)
-    .eq("slug", slug)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) {
-    logError("Unified media topic fetch failed", error, { type, slug });
-    return null;
-  }
-
-  return data ? adaptTopicRowToMediaItem(data as UnifiedMediaTopicRow) : null;
+  const item = await loadPublicContentDetail(type, slug);
+  return item ? adaptPublicContentToMediaItem(item) : null;
 }
 
 export async function unifiedGetMediaStaticParams(type: MediaContentType) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("slug")
-    .eq("content_type", type)
-    .eq("status", "published")
-    .is("deleted_at", null);
-
-  if (error) {
-    logError("Unified media static params fetch failed", error, { type });
-    return [];
-  }
-
-  return (data ?? [])
-    .map((item) => ({ slug: item.slug }))
-    .filter((item): item is { slug: string } => Boolean(item.slug));
-}
-
-export type UnifiedMediaListingPageParams = {
-  type: MediaContentType;
-  page: number;
-  pageSize: number;
-  sort: ListingSort;
-  pickFeatured: boolean;
-};
-
-export type UnifiedMediaListingPageResult = {
-  featured: MediaContentItem | null;
-  items: MediaContentItem[];
-  totalRegular: number;
-  totalPages: number;
-  currentPage: number;
-};
-
-async function resolveFeaturedItem(
-  type: MediaContentType,
-  sort: ListingSort,
-): Promise<MediaContentItem | null> {
-  const ascending = sort === "oldest";
-
-  const featuredQuery = buildUnifiedMediaQuery(UNIFIED_LISTING_SELECT, type, ascending)
-    .eq("is_featured", true)
-    .limit(1);
-
-  const { data: featuredRows, error: featuredError } = await featuredQuery;
-  if (featuredError) {
-    logError("Unified media featured fetch failed", featuredError, { type });
-  } else {
-    const featured = mapRows(featuredRows)[0];
-    if (featured) return featured;
-  }
-
-  const { data: firstRows, error: firstError } = await buildUnifiedMediaQuery(
-    UNIFIED_LISTING_SELECT,
-    type,
-    ascending,
-  ).limit(1);
-
-  if (firstError) {
-    logError("Unified media first-item featured fallback failed", firstError, { type });
-    return null;
-  }
-
-  return mapRows(firstRows)[0] ?? null;
+  return loadPublicContentSlugs(type);
 }
 
 export async function unifiedGetMediaListingPage(
-  params: UnifiedMediaListingPageParams,
-): Promise<UnifiedMediaListingPageResult> {
-  const pageSize = Math.max(1, params.pageSize);
-  const ascending = params.sort === "oldest";
-
-  const featured = params.pickFeatured
-    ? await resolveFeaturedItem(params.type, params.sort)
-    : null;
-  const excludeId = featured ? Number(featured.id) : null;
-
-  let countQuery = getSupabaseAdmin()
-    .from("topics")
-    .select("id", { count: "exact", head: true })
-    .in("content_type", [...UNIFIED_MEDIA_CONTENT_TYPES])
-    .eq("status", "published")
-    .is("deleted_at", null);
-
-  countQuery = applyTypeFilter(countQuery, params.type);
-  if (excludeId !== null && Number.isFinite(excludeId)) {
-    countQuery = countQuery.neq("id", excludeId);
-  }
-
-  const { count, error: countError } = await countQuery;
-  if (countError) {
-    logError("Unified media listing count failed", countError, { type: params.type });
-  }
-
-  const totalRegular = count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalRegular / pageSize) || 1);
-  const currentPage = Math.min(Math.max(params.page, 1), totalPages);
-
-  if (totalRegular === 0) {
-    return { featured, items: [], totalRegular: 0, totalPages: 1, currentPage: 1 };
-  }
-
-  const from = (currentPage - 1) * pageSize;
-  const to = from + pageSize - 1;
-
-  let pageQuery = buildUnifiedMediaQuery(UNIFIED_LISTING_SELECT, params.type, ascending);
-  if (excludeId !== null && Number.isFinite(excludeId)) {
-    pageQuery = pageQuery.neq("id", excludeId);
-  }
-
-  const { data, error } = await pageQuery.range(from, to);
-  if (error) {
-    logError("Unified media listing page fetch failed", error, {
-      type: params.type,
-      page: currentPage,
-    });
-    return { featured, items: [], totalRegular, totalPages, currentPage };
-  }
+  params: {
+    type: MediaContentType;
+    page: number;
+    pageSize: number;
+    sort: ListingSort;
+    pickFeatured: boolean;
+    search?: string;
+  },
+) {
+  const result = await loadPublicContentCollection({
+    contentTypes: [params.type],
+    page: params.page,
+    pageSize: params.pageSize,
+    sort: params.sort,
+    search: params.search,
+    featured: params.pickFeatured ? "separate" : "none",
+  });
 
   return {
-    featured,
-    items: mapRows(data),
-    totalRegular,
-    totalPages,
-    currentPage,
+    featured: result.featured
+      ? adaptPublicContentToMediaItem(result.featured)
+      : null,
+    items: adaptItems(result.items),
+    totalRegular: result.totalCount,
+    totalPages: result.totalPages,
+    currentPage: result.page,
   };
 }
 
-export type UnifiedMediaLimitedQuery = {
-  type?: MediaContentType;
-  limit: number;
-  popularOnly?: boolean;
-  sort?: ListingSort;
-};
-
 export async function unifiedGetMediaItemsLimited(
-  options: UnifiedMediaLimitedQuery,
+  options: {
+    type?: MediaContentType;
+    limit: number;
+    popularOnly?: boolean;
+    featuredOnly?: boolean;
+    sort?: ListingSort;
+    excludeIds?: readonly number[];
+  },
 ): Promise<MediaContentItem[]> {
-  const limit = Math.max(1, options.limit);
-  const ascending = options.sort === "oldest";
-
-  let query = buildUnifiedMediaQuery(UNIFIED_LISTING_SELECT, options.type, ascending).limit(limit);
-  if (options.popularOnly) {
-    query = query.eq("is_popular", true);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    logError("Unified media limited fetch failed", error, {
-      type: options.type,
-      popularOnly: options.popularOnly,
-      limit,
-    });
-    return [];
-  }
-
-  return mapRows(data);
+  const result = await loadPublicContentCollection({
+    contentTypes: options.type ? [options.type] : MEDIA_CONTENT_TYPES,
+    page: 1,
+    pageSize: options.limit,
+    popularOnly: options.popularOnly,
+    featured: options.featuredOnly ? "only" : "none",
+    sort: options.sort,
+    excludeIds: options.excludeIds,
+  });
+  return adaptItems(result.items);
 }

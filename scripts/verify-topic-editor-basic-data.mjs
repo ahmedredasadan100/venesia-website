@@ -105,7 +105,7 @@ for (const field of ["show_title_on_page", "show_image_on_page", "show_excerpt_o
   check(`${field} remains additive and persisted`, migration.includes(`${field} boolean not null default true`) && helpers.includes(`getBoolean(formData, "${field}")`) && validation.includes(field));
 }
 
-check("public topic loader defaults legacy display settings safely", publicLoader.includes("topic.show_title_on_page !== false") && publicLoader.includes("topic.show_image_on_page !== false") && publicLoader.includes("topic.show_excerpt_on_page !== false"));
+check("public topic adapter receives legacy-safe display settings", publicLoader.includes("showTitleOnPage: item.display.title") && publicLoader.includes("showImageOnPage: item.display.image") && publicLoader.includes("showExcerptOnPage: item.display.excerpt"));
 check("public article output retains image-alt and display controls", publicPage.includes("alt={topic.imageAlt}") && publicPage.includes("topic.showTitleOnPage") && publicPage.includes("topic.showImageOnPage") && publicPage.includes("topic.showExcerptOnPage") && publicPage.includes("topic.showFaqTitleOnPage"));
 check("shared public layout can hide hero elements", publicLayout.includes("showHeroImage") && publicLayout.includes("showSubtitle") && publicLayout.includes("showTitle"));
 check("public path resolver maps article and media detail roots", publicPath.includes('article: "/topics"') && publicPath.includes('site_update: "/media-center/site-updates"') && publicPath.includes('gallery: "/media-center/gallery"'));

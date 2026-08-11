@@ -6,10 +6,10 @@ export const PUBLIC_CACHE_TAG_GROUPS = {
   navigation: ["navigation", "menus"],
   footer: ["footer", "site-settings"],
   projects: ["projects", "project"],
-  media: ["media-center", "media-item", "media-sidebar"],
+  media: ["public-content", "media-center", "media-item", "media-sidebar"],
   pageComposition: ["page-composition", "hero", "page-blocks", "feed-modules", "media-center", "media-sidebar"],
-  topics: ["topics", "topic", "topic-related"],
-  seo: ["seo-global", "site-settings", "page-seo", "projects", "topics", "media-center"],
+  topics: ["public-content", "topics", "topic", "topic-related"],
+  seo: ["seo-global", "site-settings", "page-seo", "projects", "public-content", "topics", "media-center"],
 } as const;
 
 export function revalidatePublicCacheTags(tags: readonly string[]) {

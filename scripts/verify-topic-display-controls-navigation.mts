@@ -30,6 +30,7 @@ const [
   articleValidation,
   batchImport,
   publicLoader,
+  publicContentOwner,
   topicsPage,
   featuredTopic,
   topicCard,
@@ -60,6 +61,7 @@ const [
   read("src/app/admin/content/topics/article-actions/validation.ts"),
   read("src/app/admin/content/topics/article-actions/batch-import.ts"),
   read("src/lib/topics/load-public-topics.ts"),
+  read("src/lib/content/public-content-read/owner.ts"),
   read("src/app/(site)/topics/page.tsx"),
   read("src/components/topics/FeaturedTopic.tsx"),
   read("src/components/topics/TopicCard.tsx"),
@@ -160,12 +162,13 @@ check(
 
 check(
   "the canonical public Topic output defaults legacy rows to visible and carries every control",
-  [
-    "topic.show_date_on_page !== false",
-    "topic.show_category_on_page !== false",
-    "topic.show_series_on_page !== false",
-    "topic.show_intro_card_on_page !== false",
-  ].every((token) => publicLoader.split(token).length - 1 === 2) &&
+  fields.every((field) => publicContentOwner.includes(field)) &&
+    [
+      "showDateOnPage: item.display.date",
+      "showCategoryOnPage: item.display.category",
+      "showSeriesOnPage: item.display.series",
+      "showIntroCardOnPage: item.display.introCard",
+    ].every((token) => publicLoader.includes(token)) &&
     ["showDateOnPage", "showCategoryOnPage", "showSeriesOnPage", "showIntroCardOnPage"].every(
       (field) => topicTypes.includes(`${field}?: boolean`),
     ),
@@ -184,12 +187,13 @@ check(
   ].every((field) => mediaPublicTypes.includes(`${field}: boolean`)) &&
     fields.every(
       (field) =>
-        mediaAdapter.includes(`row.${field} !== false`) &&
-        mediaProvider.split(field).length - 1 === 2,
+        publicContentOwner.includes(field),
     ) &&
-    ["series, series_slug", "UNIFIED_LISTING_SELECT", "UNIFIED_DETAIL_SELECT"].every((token) =>
-      mediaProvider.includes(token),
-    ),
+    ["PUBLIC_CONTENT_COLLECTION_SELECT", "PUBLIC_CONTENT_DETAIL_SELECT"].every((token) =>
+      publicContentOwner.includes(token)
+    ) &&
+    mediaAdapter.includes("item.display.date") &&
+    mediaProvider.includes("loadPublicContentCollection"),
 );
 
 check(
@@ -218,25 +222,26 @@ check(
     mediaSidebar.includes("item.date ?"),
 );
 
-const filterOwner = publicLoader.slice(
-  publicLoader.indexOf("function applyPublicTopicFilters"),
-  publicLoader.indexOf("async function queryFeaturedPublicTopic"),
+const filterOwner = publicContentOwner.slice(
+  publicContentOwner.indexOf("function applyPublicFilters"),
+  publicContentOwner.indexOf("function buildCollectionQuery"),
 );
 check(
-  "one existing public filter owner applies publication, category, and series contracts",
+  "one Unified Content public filter owner applies publication, category, and series contracts",
   filterOwner.includes('.eq("status", "published")') &&
-    filterOwner.includes('.eq("category_slug", filters.categorySlug)') &&
-    filterOwner.includes('.eq("series_slug", filters.seriesSlug)') &&
-    (publicLoader.match(/applyPublicTopicFilters\(/g)?.length ?? 0) >= 5,
+    filterOwner.includes('.in("category_slug", input.categorySlugs)') &&
+    filterOwner.includes('.eq("series_slug", input.seriesSlug)') &&
+    publicContentOwner.includes("applyPublicFilters(selected, input)"),
 );
 
 check(
   "the /topics query, pagination, sort, and cache contract carry the series filter",
   topicsPage.includes("series?: string") &&
     topicsPage.includes("seriesSlug: seriesSlug || undefined") &&
-    topicsPage.includes("buildTopicsQuery(sort, categorySlug, seriesSlug)") &&
+    topicsPage.includes("seriesSlug={seriesSlug}") &&
     publicLoader.includes("seriesSlug?: string") &&
-    publicLoader.includes('next = next.eq("series_slug", filters.seriesSlug)'),
+    publicLoader.includes("seriesSlug: params.seriesSlug") &&
+    publicContentOwner.includes('.eq("series_slug", input.seriesSlug)'),
 );
 
 check(

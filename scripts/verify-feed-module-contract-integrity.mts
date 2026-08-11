@@ -410,7 +410,9 @@ const resolverContract = loadTranspiledModule(
         from: (table: string) => new ResolverQueryMock(table),
       }),
     },
-    "../admin/cms-test-data": { filterPublicTopics: (rows: unknown[]) => rows },
+    "../content/public-content-read/owner": {
+      loadPublicContentCollection: async () => ({ items: [] }),
+    },
     "../logging": { logError: () => undefined },
     "../content-dates": { formatArabicContentDate: () => "" },
     "../media/resolve-local-public-image": {
@@ -588,7 +590,7 @@ assert.equal(loader.includes("function isPublishedTemplate"), false);
 assert.ok(resolver.includes('.select("id, name, slug, description, status, sort_order, category_id")'));
 assert.ok(resolver.includes('subtitle: row.description ?? ""'));
 assert.ok(resolver.includes('categoriesQuery = categoriesQuery.in("slug", config.query.categorySlugs)'));
-assert.ok(resolver.includes('query = query.in("category_slug", config.query.categorySlugs)'));
+assert.ok(resolver.includes("categorySlugs: config.query.categorySlugs"));
 assert.ok(resolver.includes('query = query.in("category_id", categoryIds)'));
 assert.ok(resolver.includes('if (!name || !slug) return []'));
 assert.ok(adminUtilsSource.includes("export function isPublishedPageBlockStatus"));

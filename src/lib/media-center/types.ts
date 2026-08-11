@@ -1,4 +1,4 @@
-import type { ContentType } from "../admin/content/content-types";
+import { CONTENT_TYPES, type ContentType } from "../admin/content/content-types";
 import { resolvePublicContentPath } from "../content/public-content-path";
 
 export type MediaContentType = Exclude<ContentType, "article">;
@@ -62,13 +62,9 @@ export const MEDIA_TYPE_PATHS: Record<MediaContentType, string> = {
   site_update: "site-updates",
 };
 
-export const MEDIA_CONTENT_TYPES: MediaContentType[] = [
-  "news",
-  "video",
-  "gallery",
-  "press",
-  "site_update",
-];
+export const MEDIA_CONTENT_TYPES = CONTENT_TYPES.filter(
+  (contentType): contentType is MediaContentType => contentType !== "article",
+);
 
 export function isMediaContentType(value: string | null | undefined): value is MediaContentType {
   return MEDIA_CONTENT_TYPES.includes(value as MediaContentType);

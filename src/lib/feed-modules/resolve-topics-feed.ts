@@ -1,9 +1,8 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "../supabase-admin";
-import { filterPublicTopics } from "../admin/cms-test-data";
 import { logError } from "../logging";
-import { formatArabicContentDate } from "../content-dates";
+import { loadPublicContentCollection } from "../content/public-content-read/owner";
 import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
 import type {
   FeedModuleConfig,
@@ -26,48 +25,25 @@ async function resolveLatestOrPopular(
   feedType: Extract<TopicsFeedType, "latest" | "popular">,
   config: FeedModuleConfig,
 ): Promise<FeedModulePayload> {
-  let query = getSupabaseAdmin()
-    .from("topics")
-    .select("slug, title, excerpt, image, date_label, published_at")
-    .eq("content_type", "article")
-    .eq("status", "published")
-    .is("deleted_at", null);
-
-  if (config.query.categorySlugs.length) {
-    query = query.in("category_slug", config.query.categorySlugs);
-  }
-
-  if (config.query.seriesSlug) {
-    query = query.eq("series_slug", config.query.seriesSlug);
-  }
-
-  if (feedType === "popular") {
-    query = query.eq("is_popular", true);
-  }
-
-  const { data, error } = await query
-    .order("published_at", { ascending: false })
-    .limit(config.query.limit + 5);
-
-  if (error) {
-    logError(`resolveTopicsFeed: ${feedType} query failed`, error, {
-      categorySlugs: config.query.categorySlugs,
-      seriesSlug: config.query.seriesSlug,
-    });
-    return { kind: "articles", items: [] };
-  }
+  const result = await loadPublicContentCollection({
+    contentTypes: ["article"],
+    categorySlugs: config.query.categorySlugs,
+    seriesSlug: config.query.seriesSlug ?? undefined,
+    popularOnly: feedType === "popular",
+    page: 1,
+    pageSize: config.query.limit,
+    sort: "newest",
+  });
 
   return {
     kind: "articles",
-    items: filterPublicTopics(data ?? [])
-      .slice(0, config.query.limit)
-      .map((row) => ({
-        title: row.title ?? "",
-        excerpt: row.excerpt ?? "",
-        date: row.date_label || formatArabicContentDate(row.published_at) || "",
-        image: resolveLocalPublicImage(row.image, DEFAULT_IMAGE),
-        href: `/topics/${row.slug}`,
-      })),
+    items: result.items.map((item) => ({
+      title: item.title,
+      excerpt: item.excerpt,
+      date: item.date,
+      image: item.image,
+      href: item.href,
+    })),
   };
 }
 
@@ -139,21 +115,14 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
 
 async function loadTopicImagesBySeriesSlug(seriesSlugs: string[]) {
   if (!seriesSlugs.length) return [];
-
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("series_slug, image, slug")
-    .eq("content_type", "article")
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .in("series_slug", seriesSlugs);
-
-  if (error) {
-    logError("resolveTopicsFeed: series image lookup failed", error);
-    return [];
-  }
-
-  return filterPublicTopics(data ?? []);
+  const result = await loadPublicContentCollection({
+    contentTypes: ["article"],
+    seriesSlugs,
+    page: 1,
+    pageSize: 60,
+    sort: "newest",
+  });
+  return result.items;
 }
 
 async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayload> {
@@ -201,7 +170,7 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
   return {
     kind: "series",
     items: rows.map((row) => {
-      const firstInSeries = topicImages.find((topic) => topic.series_slug === row.slug);
+      const firstInSeries = topicImages.find((topic) => topic.seriesSlug === row.slug);
 
       return {
         title: row.name,

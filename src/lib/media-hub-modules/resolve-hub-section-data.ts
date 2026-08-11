@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { MediaContentItem } from "../media-center";
-import { getFeaturedNews, getMediaItems } from "../media-center";
+import { getMediaItems } from "../media-center";
 import { parseMediaHubModuleConfig, type MediaHubModuleConfig } from "./parse-config";
 import type { MediaHubModulesState, MediaHubSectionData, MediaHubSectionKey } from "./types";
 
@@ -15,8 +15,7 @@ type HubDataCaches = {
 };
 
 async function loadHubDataCaches(): Promise<HubDataCaches> {
-  const [featuredNews, news, siteUpdates, videos, gallery, press] = await Promise.all([
-    getFeaturedNews(),
+  const [news, siteUpdates, videos, gallery, press] = await Promise.all([
     getMediaItems("news"),
     getMediaItems("site_update"),
     getMediaItems("video"),
@@ -24,6 +23,7 @@ async function loadHubDataCaches(): Promise<HubDataCaches> {
     getMediaItems("press"),
   ]);
 
+  const featuredNews = news.find((item) => item.featured) ?? news[0] ?? null;
   return { featuredNews, news, siteUpdates, videos, gallery, press };
 }
 

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import InternalPageLayout from "../InternalPageLayout";
 import JsonLd from "../seo/JsonLd";
 import TopicViewTracker from "../content/TopicViewTracker";
-import { getMediaItemBySlug, getMediaItems } from "../../lib/media-center";
+import { getMediaItemBySlug, getRelatedMediaItems } from "../../lib/media-center";
 import { MEDIA_DETAIL_PAGE_CONFIG, type MediaDetailPageKey } from "../../lib/media-center/detail-page-config";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 import { buildPageJsonLd } from "../../lib/seo/build-jsonld";
@@ -19,9 +19,8 @@ type MediaDetailPageProps = {
 export default async function MediaDetailPage({ configKey, slug }: MediaDetailPageProps) {
   const config = MEDIA_DETAIL_PAGE_CONFIG[configKey];
 
-  const [item, allItems, composition] = await Promise.all([
+  const [item, composition] = await Promise.all([
     getMediaItemBySlug(config.mediaType, slug),
-    getMediaItems(config.mediaType),
     loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
   ]);
 
@@ -30,9 +29,7 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
   }
   if (!composition.mediaSidebarModules) return null;
 
-  const relatedItems = allItems
-    .filter((relatedItem) => relatedItem.slug !== item.slug)
-    .slice(0, 3);
+  const relatedItems = await getRelatedMediaItems(config.mediaType, item.topicId ?? Number(item.id), 3);
 
   const pagePath = `${config.basePath}/${item.slug}`;
   const content = item.content?.length ? item.content : config.fallbackContent;
@@ -71,7 +68,10 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
       {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}
       <JsonLd data={pageJsonLd} />
 
-      <MediaPageShell sidebarModules={composition.mediaSidebarModules}>
+      <MediaPageShell
+        sidebarModules={composition.mediaSidebarModules}
+        searchBasePath={config.basePath}
+      >
         <MediaDetailArticle
           item={item}
           content={content}
