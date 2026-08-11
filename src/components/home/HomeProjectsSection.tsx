@@ -228,13 +228,18 @@ function HomeProjectsFooterCta({
   target: "_self" | "_blank";
 }) {
   const { pressProps } = usePressFeedback();
+  const [prefetchEnabled, setPrefetchEnabled] = useState(false);
 
   return (
     <Link
       href={href}
+      prefetch={prefetchEnabled ? null : false}
       target={target === "_blank" ? "_blank" : undefined}
       rel={target === "_blank" ? "noopener noreferrer" : undefined}
       {...pressProps}
+      onFocus={() => setPrefetchEnabled(true)}
+      onMouseEnter={() => setPrefetchEnabled(true)}
+      onTouchStart={() => setPrefetchEnabled(true)}
       className="home-pressable home-pressable--projects-footer cursor-pointer rounded-full border border-white/10 bg-white/[0.045] px-7 py-3 text-sm font-medium text-white/80 transition duration-300 hover:border-[#D8B87A]/40 hover:bg-white/[0.08] hover:text-[#D8B87A]"
     >
       {label}

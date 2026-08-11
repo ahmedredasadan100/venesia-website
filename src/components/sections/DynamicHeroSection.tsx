@@ -69,8 +69,17 @@ function HeroPressableLink({
   children: ReactNode;
 }) {
   const { pressProps } = usePressFeedback();
+  const [prefetchEnabled, setPrefetchEnabled] = useState(false);
   return (
-    <Link href={href} {...pressProps} className={`home-pressable ${className}`}>
+    <Link
+      href={href}
+      prefetch={prefetchEnabled ? null : false}
+      {...pressProps}
+      onFocus={() => setPrefetchEnabled(true)}
+      onMouseEnter={() => setPrefetchEnabled(true)}
+      onTouchStart={() => setPrefetchEnabled(true)}
+      className={`home-pressable ${className}`}
+    >
       {children}
     </Link>
   );
