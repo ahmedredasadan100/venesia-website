@@ -99,6 +99,24 @@ for (const source of [navbar, homeProjects, dynamicHero]) {
   assert.ok(source.includes("onFocus"));
   assert.ok(source.includes("onTouchStart"));
 }
+assert.ok(
+  navbar.includes(
+    "const [brandPrefetchEnabled, setBrandPrefetchEnabled] = useState(false)",
+  ),
+);
+assert.equal(
+  navbar.match(/prefetch=\{brandPrefetchEnabled \? null : false\}/gu)?.length,
+  2,
+  "desktop and mobile brand links must defer prefetch until intent",
+);
+for (const handler of ["onMouseEnter", "onFocus", "onTouchStart"]) {
+  assert.equal(
+    navbar.match(new RegExp(`${handler}=\\{\\(\\) => setBrandPrefetchEnabled\\(true\\)\\}`, "gu"))
+      ?.length,
+    2,
+    `desktop and mobile brand links must enable prefetch on ${handler}`,
+  );
+}
 assert.ok(navbar.includes("group-focus-within/media:visible"));
 assert.ok(navbar.includes("aria-expanded={isSubmenuOpen}"));
 assert.ok(publicE2e.includes('page.route("**/api/content/topics/*/view"'));

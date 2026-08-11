@@ -100,6 +100,7 @@ export default function SiteNavbar() {
   const [pathnameKey, setPathnameKey] = useState(routerPathname);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const [brandPrefetchEnabled, setBrandPrefetchEnabled] = useState(false);
   const mounted = useMounted();
 
   // usePathname() is unreliable during SSR/ISR revalidation (wrong value for "/"),
@@ -150,7 +151,11 @@ export default function SiteNavbar() {
         >
           <Link
             href="/"
+            prefetch={brandPrefetchEnabled ? null : false}
             className="flex h-10 min-w-0 shrink-0 items-center gap-3"
+            onMouseEnter={() => setBrandPrefetchEnabled(true)}
+            onFocus={() => setBrandPrefetchEnabled(true)}
+            onTouchStart={() => setBrandPrefetchEnabled(true)}
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-white/[0.03]">
@@ -275,8 +280,12 @@ export default function SiteNavbar() {
         <div className="flex items-center justify-between border-b border-[#D8B87A]/10 px-5 py-5">
           <Link
             href="/"
+            prefetch={brandPrefetchEnabled ? null : false}
             className="flex items-center gap-3"
             onClick={() => setMobileOpen(false)}
+            onMouseEnter={() => setBrandPrefetchEnabled(true)}
+            onFocus={() => setBrandPrefetchEnabled(true)}
+            onTouchStart={() => setBrandPrefetchEnabled(true)}
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D8B87A]/25 bg-white/[0.03]">
               <span className="text-[10px] leading-none text-[#D8B87A]">◆</span>
