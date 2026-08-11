@@ -3,10 +3,11 @@ import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
 import {
-  getMediaItems,
+  getMediaHref,
   getMediaListingPage,
   MEDIA_LISTING_PAGE_SIZE,
 } from "../../lib/media-center";
+import { normalizePublicContentSearchQuery } from "../../lib/content/public-content-read";
 import {
   MEDIA_LISTING_PAGE_CONFIG,
   type MediaListingPageKey,
@@ -18,6 +19,7 @@ type MediaListingPageProps = {
   searchParams?: Promise<{
     page?: string;
     sort?: string;
+    q?: string;
   }>;
 };
 
@@ -26,35 +28,47 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
   const params = await searchParams;
 
   const sort = params?.sort === "oldest" ? "oldest" : "newest";
+  const searchQuery = normalizePublicContentSearchQuery(params?.q);
   const rawPage = Number(params?.page ?? "1");
   const requestedPage = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
-  const pickFeatured = "showFeaturedNews" in config && Boolean(config.showFeaturedNews);
+  const pickFeatured =
+    !searchQuery && "showFeaturedNews" in config && Boolean(config.showFeaturedNews);
 
-  const [listing, searchIndex, composition] = await Promise.all([
+  const [listing, composition] = await Promise.all([
     getMediaListingPage({
       type: config.mediaType,
       page: requestedPage,
       sort,
       pageSize: MEDIA_LISTING_PAGE_SIZE,
       pickFeatured,
+      search: searchQuery,
     }),
-    // Lean catalog for client-side sidebar search (no body content).
-    getMediaItems(config.mediaType),
     loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
   ]);
   if (!composition.mediaSidebarModules) return null;
 
   const featuredNews = pickFeatured ? listing.featured : null;
-  const searchCatalog = featuredNews
-    ? searchIndex.filter((item) => item.slug !== featuredNews.slug)
-    : searchIndex;
+  const searchSuggestions = searchQuery
+    ? listing.items.slice(0, 8).map((item) => ({
+        id: `${item.type}:${item.id}`,
+        title: item.title,
+        href: getMediaHref(item),
+        meta: [item.category, item.series].filter(Boolean).join(" · ") || undefined,
+      }))
+    : [];
 
   return (
     <MediaCenterShellLayout cmsPageSlug={config.cmsPageSlug} composition={composition}>
-      <MediaPageShell sidebarModules={composition.mediaSidebarModules}>
+      <MediaPageShell
+        sidebarModules={composition.mediaSidebarModules}
+        searchBasePath={config.basePath}
+        searchQuery={searchQuery}
+        searchSuggestions={searchSuggestions}
+        searchResultCount={listing.totalRegular}
+      >
         <MediaListingContent
           items={listing.items}
-          searchCatalog={searchCatalog}
+          searchQuery={searchQuery}
           currentPage={listing.currentPage}
           totalPages={listing.totalPages}
           totalCount={listing.totalRegular}

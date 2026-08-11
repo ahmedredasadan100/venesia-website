@@ -66,7 +66,7 @@ const editEditor = read("src/components/admin/content/editors/ArticleEditor.tsx"
 const previewCapability = read("src/lib/admin/interaction-system/entity-preview-capability.ts");
 const contentPreviewCapability = read("src/lib/admin/content/entity-preview-capabilities.ts");
 const previewActions = read("src/components/admin/ui/AdminEntityPreviewActions.tsx");
-const publicLoader = read("src/lib/topics/load-public-topics.ts");
+const publicContentOwner = read("src/lib/content/public-content-read/owner.ts");
 const publicPage = read("src/app/(site)/topics/[slug]/page.tsx");
 const newMigration = read("sql/migrations/20260722120000_topics_seo_overrides.sql");
 const finalMigration = read("sql/migrations/20260803153000_shared_entity_seo_capability.sql");
@@ -214,7 +214,7 @@ for (const field of ["canonical_url", "robots_index", "robots_follow"]) {
   check(`${field} is added only by the new migration`, newMigration.includes(`add column if not exists ${field}`) && !lockedMigration.includes(field));
   check(`${field} is selected for edit/duplicate retrieval`, validation.match(new RegExp(field, "g"))?.length === 2);
   check(`${field} is mapped through the shared topic write payload`, helpers.includes("toEntitySeoPersistence(payload)") && entitySeoContract.includes(`${field}:`));
-  check(`${field} reaches the public topic model`, publicLoader.includes(field));
+  check(`${field} reaches the Unified Content public detail model`, publicContentOwner.includes(field));
 }
 check("robots parser preserves true, false, and inherit null", entitySeoContract.includes('if (value === "true") return true') && entitySeoContract.includes('if (value === "false") return false') && entitySeoContract.includes("return null"));
 check("canonical and robots UI offer per-topic override plus global inheritance", seoPanel.includes("ENTITY_SEO_FIELD_NAMES") && ["canonicalUrl", "robotsIndex", "robotsFollow"].every((name) => sharedSeoPanel.includes(`fieldNames.${name}`)) && sharedSeoPanel.includes("الإعداد العام"));

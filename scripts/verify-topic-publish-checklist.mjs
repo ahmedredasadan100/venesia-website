@@ -18,7 +18,7 @@ const createEditor = read("src/components/admin/content/editors/ArticleCreateEdi
 const editEditor = read("src/components/admin/content/editors/ArticleEditor.tsx");
 const mediaEditor = read("src/components/admin/content/editors/media/MediaContentForm.tsx");
 const mediaHelpers = read("src/app/admin/content/topics/media-actions/helpers.ts");
-const mediaLoader = read("src/lib/media-center/unified-provider.ts");
+const publicContentOwner = read("src/lib/content/public-content-read/owner.ts");
 const mediaDetail = read("src/components/media-center/MediaDetailPage.tsx");
 const publicationDecision = inspectReviewDecisionCard(
   publishing,
@@ -58,7 +58,7 @@ check("legacy publication choices are absent from the binary editor", !publishin
 check("featured popular and visible date render for every content type", ["is_featured", "is_popular", "TopicDateLabelField"].every((token) => publishing.includes(token)) && mediaEditor.includes("popular={Boolean(values?.is_popular)}") && mediaEditor.includes("publishedAt={values?.published_at}"));
 check("one display settings owner is mounted by article and media", [createEditor, editEditor, mediaEditor].every((source) => source.includes("<ContentDisplaySettings")) && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => display.includes(`name="${name}"`)));
 check("media persistence saves the full shared publishing and display contract", ["is_popular: payload.isPopular", "date_label: payload.dateLabel", "formPublishedDate: payload.publishedAt", "show_title_on_page: payload.showTitleOnPage", "show_image_on_page: payload.showImageOnPage", "show_excerpt_on_page: payload.showExcerptOnPage"].every((token) => mediaHelpers.includes(token)));
-check("media public detail read model selects all display flags", ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((field) => mediaLoader.includes(field)));
+check("Unified Content public detail selects all display flags", ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((field) => publicContentOwner.includes(field)));
 check("media public detail applies all display flags", ["showTitle={item.showTitleOnPage !== false}", "showHeroImage={item.showImageOnPage !== false}", "showSubtitle={item.showExcerptOnPage !== false}"].every((token) => mediaDetail.includes(token)));
 
 console.log(`verify:topic-publish-checklist passed (${passed} assertions)`);

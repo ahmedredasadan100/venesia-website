@@ -4,11 +4,11 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
 import { resolveHeroConfigLinks } from "./admin/links/hero-config";
-import { getMediaHref, getMediaItems } from "./media-center";
+import { loadPublicContentCollection } from "./content/public-content-read/owner";
+import { MEDIA_CONTENT_TYPES } from "./media-center/types";
 import { getPublishedPageBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { logError } from "./logging";
-import { supabase } from "./supabase";
 import type {
   HeroSectionData,
   HeroSourceType,
@@ -119,37 +119,23 @@ async function resolveHeroItems(hero: PageSectionRecord): Promise<HeroSectionDat
     hero.source_type === "featured_topics" ||
     hero.source_type === "topic_category"
   ) {
-    let query = supabase
-      .from("topics")
-      .select("id,title,excerpt,image,slug,category")
-      .eq("status", "published")
-      .is("deleted_at", null)
-      .order("published_at", { ascending: false })
-      .limit(limit);
+    const result = await loadPublicContentCollection({
+      contentTypes: ["article"],
+      page: 1,
+      pageSize: limit,
+      sort: "newest",
+      featured: hero.source_type === "featured_topics" ? "only" : "none",
+      categorySlugs: hero.source_type === "topic_category" && hero.source_slug
+        ? [hero.source_slug]
+        : [],
+    });
 
-    if (hero.source_type === "featured_topics") {
-      query = query.eq("is_featured", true);
-    }
-
-    if (hero.source_type === "topic_category" && hero.source_slug) {
-      query = query.eq("category_slug", hero.source_slug);
-    }
-
-    const { data } = await query;
-
-    return (data ?? []).map((item: {
-      id: number;
-      title: string;
-      excerpt: string | null;
-      image: string | null;
-      slug: string;
-      category: string | null;
-    }) => ({
+    return result.items.map((item) => ({
       id: item.id,
       title: item.title,
       excerpt: item.excerpt,
       image: item.image,
-      href: `/topics/${item.slug}`,
+      href: item.href,
       category: item.category,
     }));
   }
@@ -159,22 +145,23 @@ async function resolveHeroItems(hero: PageSectionRecord): Promise<HeroSectionDat
     hero.source_type === "featured_media" ||
     hero.source_type === "media_category"
   ) {
-    let items = await getMediaItems();
+    const result = await loadPublicContentCollection({
+      contentTypes: MEDIA_CONTENT_TYPES,
+      page: 1,
+      pageSize: limit,
+      sort: "newest",
+      featured: hero.source_type === "featured_media" ? "only" : "none",
+      categorySlugs: hero.source_type === "media_category" && hero.source_slug
+        ? [hero.source_slug]
+        : [],
+    });
 
-    if (hero.source_type === "featured_media") {
-      items = items.filter((item) => item.featured);
-    }
-
-    if (hero.source_type === "media_category" && hero.source_slug) {
-      items = items.filter((item) => item.categorySlug === hero.source_slug);
-    }
-
-    return items.slice(0, limit).map((item) => ({
-      id: Number(item.id),
+    return result.items.map((item) => ({
+      id: item.id,
       title: item.title,
       excerpt: item.excerpt,
       image: item.image,
-      href: getMediaHref(item),
+      href: item.href,
       category: item.category,
     }));
   }

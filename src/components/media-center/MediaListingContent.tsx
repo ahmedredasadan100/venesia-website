@@ -1,17 +1,13 @@
-"use client";
-
 import { ReactNode } from "react";
 import Link from "next/link";
 import Pagination from "../Pagination";
 import MediaContentCard from "./MediaContentCard";
-import { useMediaSearch } from "./MediaPageShell";
 import type { MediaContentItem } from "../../lib/media-center/types";
 
 type MediaListingContentProps = {
   /** Current server-paginated page items (browse mode). */
   items: MediaContentItem[];
-  /** Lean full-type catalog for client search only (no body content). */
-  searchCatalog: MediaContentItem[];
+  searchQuery?: string;
   currentPage: number;
   totalPages: number;
   totalCount: number;
@@ -27,37 +23,9 @@ type MediaListingContentProps = {
   children?: ReactNode;
 };
 
-function normalizeSearchValue(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
-}
-
-function itemMatchesSearch(item: MediaContentItem, query: string) {
-  if (!query) return true;
-
-  const searchableItem = item as MediaContentItem & Record<string, unknown>;
-
-  const searchableText = [
-    searchableItem.title,
-    searchableItem.category,
-    searchableItem.date,
-    searchableItem.publishedAt,
-    searchableItem.slug,
-    searchableItem.excerpt,
-    searchableItem.description,
-    searchableItem.summary,
-    searchableItem.label,
-  ]
-    .map(normalizeSearchValue)
-    .join(" ");
-
-  return searchableText.includes(query);
-}
-
 export default function MediaListingContent({
   items,
-  searchCatalog,
+  searchQuery = "",
   currentPage,
   totalPages,
   totalCount,
@@ -72,24 +40,9 @@ export default function MediaListingContent({
   itemsLabel = "عناصر",
   children,
 }: MediaListingContentProps) {
-  const { searchQuery } = useMediaSearch();
-  const normalizedSearchQuery = normalizeSearchValue(searchQuery);
-  const isSearching = normalizedSearchQuery.length > 0;
-
-  const searchResults = isSearching
-    ? [...searchCatalog]
-        .filter((item) => itemMatchesSearch(item, normalizedSearchQuery))
-        .sort((a, b) => {
-          const aTime = new Date(a.publishedAt).getTime();
-          const bTime = new Date(b.publishedAt).getTime();
-          return sort === "oldest" ? aTime - bTime : bTime - aTime;
-        })
-    : [];
-
-  const visibleItems = isSearching ? searchResults : items;
-  const hasItems = visibleItems.length > 0;
+  const isSearching = searchQuery.length > 0;
+  const hasItems = items.length > 0;
   const countLabel = isSearching ? "نتائج البحث" : itemsLabel;
-  const displayTotal = isSearching ? searchResults.length : totalCount;
   const safePage = Math.min(Math.max(currentPage, 1), Math.max(totalPages, 1));
 
   return (
@@ -112,7 +65,7 @@ export default function MediaListingContent({
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-5 py-4">
         <p className="text-sm text-white/55">
-          عرض {visibleItems.length} من {displayTotal} {countLabel}
+          عرض {items.length} من {totalCount} {countLabel}
         </p>
 
         {isSearching ? (
@@ -153,7 +106,7 @@ export default function MediaListingContent({
       {hasItems ? (
         <>
           <div className="grid gap-8 md:grid-cols-2">
-            {visibleItems.map((item) => (
+            {items.map((item) => (
               <MediaContentCard
                 key={item.id}
                 item={item}

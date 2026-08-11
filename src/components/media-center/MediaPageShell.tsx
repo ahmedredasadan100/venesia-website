@@ -1,39 +1,18 @@
 "use client";
 
-import {
-  createContext,
-  ReactNode,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
+import { ReactNode } from "react";
 import MediaSidebar from "./MediaSidebar";
 import { useMediaCenterCmsBlocks } from "./MediaCenterCmsBlocksContext";
 import type { MediaSidebarModulesState } from "../../lib/media-sidebar-modules/types";
-
-type MediaSearchContextValue = {
-  searchQuery: string;
-  setSearchQuery: (value: string) => void;
-};
-
-const MediaSearchContext = createContext<MediaSearchContextValue | null>(null);
-
-export function useMediaSearch() {
-  const context = useContext(MediaSearchContext);
-
-  if (!context) {
-    return {
-      searchQuery: "",
-      setSearchQuery: () => {},
-    };
-  }
-
-  return context;
-}
+import type { PublicContentSearchSuggestion } from "../../lib/content/public-content-read";
 
 type MediaPageShellProps = {
   children: ReactNode;
   sidebarModules: MediaSidebarModulesState;
+  searchBasePath?: string;
+  searchQuery?: string;
+  searchSuggestions?: readonly PublicContentSearchSuggestion[];
+  searchResultCount?: number;
   prefixBlocks?: ReactNode;
   suffixBlocks?: ReactNode;
 };
@@ -41,27 +20,26 @@ type MediaPageShellProps = {
 export default function MediaPageShell({
   children,
   sidebarModules,
+  searchBasePath,
+  searchQuery,
+  searchSuggestions,
+  searchResultCount,
   prefixBlocks: prefixBlocksProp,
   suffixBlocks: suffixBlocksProp,
 }: MediaPageShellProps) {
   const cmsBlocks = useMediaCenterCmsBlocks();
   const prefixBlocks = prefixBlocksProp ?? cmsBlocks.prefixBlocks;
   const suffixBlocks = suffixBlocksProp ?? cmsBlocks.suffixBlocks;
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const searchValue = useMemo(
-    () => ({ searchQuery, setSearchQuery }),
-    [searchQuery]
-  );
 
   return (
-    <MediaSearchContext.Provider value={searchValue}>
-      <section className="relative py-12">
+    <section className="relative py-12">
         <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
           <div className="lg:sticky lg:top-24 lg:self-start">
             <MediaSidebar
+              searchBasePath={searchBasePath}
               searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
+              searchSuggestions={searchSuggestions}
+              searchResultCount={searchResultCount}
               sidebarModules={sidebarModules}
             />
           </div>
@@ -80,7 +58,6 @@ export default function MediaPageShell({
             </div>
           </div>
         </div>
-      </section>
-    </MediaSearchContext.Provider>
+    </section>
   );
 }

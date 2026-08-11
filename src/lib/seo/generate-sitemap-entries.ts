@@ -1,7 +1,7 @@
 import "server-only";
 
 import { SEO_ROUTES } from "../../config/seo/seo-routes";
-import { getMediaHref, getMediaItems } from "../media-center";
+import { loadPublicContentSitemapRows } from "../content/public-content-read/owner";
 import { logError } from "../logging";
 import { isReservedPublicPath } from "../pages/reserved-public-paths";
 import { loadPublishedProjectSitemapRows } from "../projects/load-published-projects";
@@ -44,37 +44,6 @@ function mapSourceFromRouteKind(kind: string | undefined, path: string): Sitemap
   }
   if (kind === "project-listing") return "static_pages";
   return "static_pages";
-}
-
-async function getPublishedTopicEntries(baseUrl: string): Promise<SitemapEntry[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("id, slug, published_at, updated_at, is_featured, canonical_url, robots_index")
-    .eq("content_type", "article")
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .not("slug", "is", null);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? [])
-    .filter((topic) => topic.slug && topic.robots_index !== false)
-    .map((topic) => {
-      const path = `/topics/${topic.slug}`;
-      return {
-        url: buildSitemapAbsoluteUrl(path, baseUrl),
-        path,
-        source: "articles" as const,
-        entityId: topic.id,
-        slug: topic.slug,
-        canonicalOverride: typeof topic.canonical_url === "string" ? topic.canonical_url : undefined,
-        lastModified: safeDate(topic.updated_at ?? topic.published_at ?? undefined),
-        changeFrequency: "monthly" as const,
-        priority: topic.is_featured ? 0.75 : 0.65,
-      };
-    });
 }
 
 /** Published catch-all CMS pages; reserved/static/project paths are excluded. */
@@ -153,7 +122,7 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
     priority: route.priority ?? 0.7,
   }));
 
-  const [projectsResult, mediaResult, topicsResult, cmsResult] = await Promise.all([
+  const [projectsResult, publicContentResult, cmsResult] = await Promise.all([
     loadSourceEntries("projects", async () => {
       const projects = await loadPublishedProjectSitemapRows();
       return projects.filter((project) => project.robotsIndex !== false).map((project) => {
@@ -170,34 +139,37 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
         };
       });
     }),
-    loadSourceEntries("media", async () => {
-      const mediaItems = await getMediaItems();
-      return mediaItems.filter((item) => item.robotsIndex !== false).map((item) => {
-        const path = getMediaHref(item);
+    loadSourceEntries("articles", async () => {
+      const items = await loadPublicContentSitemapRows();
+      return items.filter((item) => item.robotsIndex !== false).map((item) => {
+        const path = item.href;
+        const isArticle = item.contentType === "article";
         return {
           url: buildSitemapAbsoluteUrl(path, baseUrl),
           path,
-          source: "media" as const,
+          source: isArticle ? ("articles" as const) : ("media" as const),
+          entityId: item.id,
           slug: item.slug,
-          canonicalOverride: item.canonicalUrl,
-          lastModified: safeDate(item.publishedAt),
-          changeFrequency: item.type === "site_update" ? ("weekly" as const) : ("monthly" as const),
-          priority: item.featured ? 0.8 : item.type === "site_update" ? 0.75 : 0.65,
+          canonicalOverride: item.canonicalUrl || undefined,
+          lastModified: safeDate(item.updatedAt || item.publishedAt),
+          changeFrequency: item.contentType === "site_update" ? ("weekly" as const) : ("monthly" as const),
+          priority: isArticle
+            ? item.isFeatured ? 0.75 : 0.65
+            : item.isFeatured ? 0.8 : item.contentType === "site_update" ? 0.75 : 0.65,
         };
       });
     }),
-    loadSourceEntries("articles", () => getPublishedTopicEntries(baseUrl)),
     loadSourceEntries("cms_pages", () => getPublishedCmsPageEntries(baseUrl)),
   ]);
 
   const projectEntries = projectsResult.entries;
-  const mediaEntries = mediaResult.entries;
-  const topicEntries = topicsResult.entries;
+  const mediaEntries = publicContentResult.entries.filter((entry) => entry.source === "media");
+  const topicEntries = publicContentResult.entries.filter((entry) => entry.source === "articles");
   const cmsEntries = cmsResult.entries;
   const sourceErrors = [
     { source: "projects" as const, message: projectsResult.error },
-    { source: "media" as const, message: mediaResult.error },
-    { source: "articles" as const, message: topicsResult.error },
+    { source: "media" as const, message: publicContentResult.error },
+    { source: "articles" as const, message: publicContentResult.error },
     { source: "cms_pages" as const, message: cmsResult.error },
   ].flatMap((item): Array<{ source: SitemapEntrySource; message: string }> =>
     item.message ? [{ source: item.source, message: item.message }] : [],

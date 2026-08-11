@@ -1,53 +1,12 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
-import { cache } from "react";
-
-import { filterPublicTopics, isTestTopicSlug } from "../admin/cms-test-data";
-import { formatArabicContentDate } from "../content-dates";
-import { logError } from "../logging";
-import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
-import { getSupabaseAdmin } from "../supabase-admin";
-import { estimateReadingTimeLabel } from "./reading-time";
+import {
+  loadPublicContentCollection,
+  loadPublicContentDetail,
+  type PublicContentDetail,
+} from "../content/public-content-read/owner";
+import type { PublicContentSummary } from "../content/public-content-read/contract";
 import type { Topic } from "./types";
-
-const DEFAULT_TOPIC_IMAGE = "/images/topics/default.jpg";
-
-type DbTopic = {
-  id: number;
-  slug: string;
-  title: string | null;
-  excerpt: string | null;
-  content: string | null;
-  image: string | null;
-  image_alt?: string | null;
-  category: string | null;
-  category_slug: string | null;
-  series: string | null;
-  series_slug: string | null;
-  date_label: string | null;
-  published_at: string | null;
-  is_featured: boolean;
-  is_popular: boolean;
-  seo_title: string | null;
-  seo_description: string | null;
-  seo_keywords: string[] | null;
-  canonical_url?: string | null;
-  robots_index?: boolean | null;
-  robots_follow?: boolean | null;
-  og_image?: string | null;
-  og_image_alt?: string | null;
-  faq: { question: string; answer: string }[] | null;
-  show_title_on_page?: boolean | null;
-  show_image_on_page?: boolean | null;
-  show_excerpt_on_page?: boolean | null;
-  show_date_on_page?: boolean | null;
-  show_category_on_page?: boolean | null;
-  show_series_on_page?: boolean | null;
-  show_intro_card_on_page?: boolean | null;
-  show_faq_on_page?: boolean | null;
-  show_faq_title_on_page?: boolean | null;
-};
 
 export type PublicTopicDetail = {
   id: number;
@@ -87,344 +46,121 @@ export type PublicTopicDetail = {
   showFaqTitleOnPage: boolean;
 };
 
-function mapDbTopicToListingTopic(topic: DbTopic): Topic {
+function adaptPublicContentSummaryToTopic(item: PublicContentSummary): Topic {
   return {
-    id: topic.id,
-    slug: topic.slug,
-    title: topic.title ?? "",
-    excerpt: topic.excerpt ?? "",
-    image: resolveLocalPublicImage(topic.image, DEFAULT_TOPIC_IMAGE),
-    category: topic.category ?? "",
-    categorySlug: topic.category_slug ?? "",
-    date: topic.date_label || formatArabicContentDate(topic.published_at ?? ""),
-    publishedAt: topic.published_at ?? "",
-    readingTime: estimateReadingTimeLabel(topic.content),
-    isFeatured: topic.is_featured,
-    isPopular: topic.is_popular,
-    content: topic.content ?? undefined,
-    series: topic.series ?? undefined,
-    seriesSlug: topic.series_slug ?? undefined,
-    showDateOnPage: topic.show_date_on_page !== false,
-    showCategoryOnPage: topic.show_category_on_page !== false,
-    showSeriesOnPage: topic.show_series_on_page !== false,
-    showIntroCardOnPage: topic.show_intro_card_on_page !== false,
-    seoTitle: topic.seo_title ?? undefined,
-    seoDescription: topic.seo_description ?? undefined,
-    seoKeywords: topic.seo_keywords ?? undefined,
-    faq: topic.faq ?? undefined,
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    excerpt: item.excerpt,
+    image: item.image,
+    category: item.category,
+    categorySlug: item.categorySlug,
+    date: item.date,
+    publishedAt: item.publishedAt,
+    readingTime: "",
+    isFeatured: item.isFeatured,
+    isPopular: item.isPopular,
+    series: item.series || undefined,
+    seriesSlug: item.seriesSlug || undefined,
+    showDateOnPage: item.display.date,
+    showCategoryOnPage: item.display.category,
+    showSeriesOnPage: item.display.series,
+    showIntroCardOnPage: item.display.introCard,
   };
 }
 
-function mapDbTopicToDetail(topic: DbTopic): PublicTopicDetail {
+function adaptPublicContentDetailToTopic(item: PublicContentDetail): PublicTopicDetail {
   return {
-    id: topic.id,
-    slug: topic.slug,
-    title: topic.title ?? "",
-    excerpt: topic.excerpt ?? "",
-    content: topic.content ?? "",
-    image: resolveLocalPublicImage(topic.image, DEFAULT_TOPIC_IMAGE),
-    metadataImage: resolveLocalPublicImage(topic.image, ""),
-    imageAlt: topic.image_alt ?? topic.title ?? "",
-    ogImage: resolveLocalPublicImage(topic.og_image, ""),
-    ogImageAlt: topic.og_image_alt ?? "",
-    category: topic.category ?? "",
-    categorySlug: topic.category_slug ?? "",
-    series: topic.series ?? "",
-    seriesSlug: topic.series_slug ?? "",
-    date: topic.date_label || formatArabicContentDate(topic.published_at ?? ""),
-    publishedAt: topic.published_at ?? "",
-    readingTime: estimateReadingTimeLabel(topic.content),
-    isFeatured: topic.is_featured,
-    isPopular: topic.is_popular,
-    seoTitle: topic.seo_title ?? "",
-    seoDescription: topic.seo_description ?? "",
-    seoKeywords: topic.seo_keywords ?? [],
-    canonicalUrl: topic.canonical_url ?? "",
-    robotsIndex: topic.robots_index ?? null,
-    robotsFollow: topic.robots_follow ?? null,
-    faq: topic.faq ?? [],
-    showTitleOnPage: topic.show_title_on_page !== false,
-    showImageOnPage: topic.show_image_on_page !== false,
-    showExcerptOnPage: topic.show_excerpt_on_page !== false,
-    showDateOnPage: topic.show_date_on_page !== false,
-    showCategoryOnPage: topic.show_category_on_page !== false,
-    showSeriesOnPage: topic.show_series_on_page !== false,
-    showIntroCardOnPage: topic.show_intro_card_on_page !== false,
-    showFaqOnPage: topic.show_faq_on_page !== false,
-    showFaqTitleOnPage: topic.show_faq_title_on_page !== false,
+    id: item.id,
+    slug: item.slug,
+    title: item.title,
+    excerpt: item.excerpt,
+    content: item.content,
+    image: item.image,
+    metadataImage: item.metadataImage,
+    imageAlt: item.imageAlt,
+    ogImage: item.ogImage,
+    ogImageAlt: item.ogImageAlt,
+    category: item.category,
+    categorySlug: item.categorySlug,
+    series: item.series,
+    seriesSlug: item.seriesSlug,
+    date: item.date,
+    publishedAt: item.publishedAt,
+    readingTime: item.readingTime,
+    isFeatured: item.isFeatured,
+    isPopular: item.isPopular,
+    seoTitle: item.seoTitle,
+    seoDescription: item.seoDescription,
+    seoKeywords: item.seoKeywords,
+    canonicalUrl: item.canonicalUrl,
+    robotsIndex: item.robotsIndex,
+    robotsFollow: item.robotsFollow,
+    faq: item.faq,
+    showTitleOnPage: item.display.title,
+    showImageOnPage: item.display.image,
+    showExcerptOnPage: item.display.excerpt,
+    showDateOnPage: item.display.date,
+    showCategoryOnPage: item.display.category,
+    showSeriesOnPage: item.display.series,
+    showIntroCardOnPage: item.display.introCard,
+    showFaqOnPage: item.showFaqOnPage,
+    showFaqTitleOnPage: item.showFaqTitleOnPage,
   };
 }
 
-const LISTING_SELECT =
-  "id, slug, title, excerpt, image, category, category_slug, series, series_slug, date_label, published_at, is_featured, is_popular, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
-
-/** Public /topics routes only expose article topics; media lives under /media-center. */
-const PUBLIC_TOPIC_CONTENT_TYPE = "article";
-
-function applyPublicTopicFilters(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query: any,
-  filters: { categorySlug?: string; seriesSlug?: string } = {},
+/** Topics is a public presentation adapter; Unified Content owns the read. */
+export async function loadPublicTopicsListing(
+  params: {
+    sort: "latest" | "oldest";
+    categorySlug?: string;
+    seriesSlug?: string;
+    page: number;
+    itemsPerPage: number;
+    search?: string;
+  },
 ) {
-  let next = query
-    .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .not("slug", "like", "e2e-test%");
-
-  if (filters.categorySlug) {
-    next = next.eq("category_slug", filters.categorySlug);
-  }
-
-  if (filters.seriesSlug) {
-    next = next.eq("series_slug", filters.seriesSlug);
-  }
-
-  return next;
-}
-
-async function queryFeaturedPublicTopic(
-  filters: { categorySlug?: string; seriesSlug?: string },
-): Promise<Topic | undefined> {
-  const supabase = getSupabaseAdmin();
-
-  const { data: featuredRow, error: featuredError } = await applyPublicTopicFilters(
-    supabase.from("topics").select(LISTING_SELECT),
-    filters,
-  )
-    .eq("is_featured", true)
-    .limit(1)
-    .maybeSingle();
-
-  if (featuredError) {
-    logError("loadFeaturedPublicTopic failed", featuredError);
-    return undefined;
-  }
-
-  if (featuredRow) {
-    return mapDbTopicToListingTopic(featuredRow as DbTopic);
-  }
-
-  const { data: fallbackRow, error: fallbackError } = await applyPublicTopicFilters(
-    supabase.from("topics").select(LISTING_SELECT),
-    filters,
-  )
-    .limit(1)
-    .maybeSingle();
-
-  if (fallbackError) {
-    logError("loadFeaturedPublicTopic fallback failed", fallbackError);
-    return undefined;
-  }
-
-  return fallbackRow ? mapDbTopicToListingTopic(fallbackRow as DbTopic) : undefined;
-}
-
-export type PublicTopicsListingParams = {
-  sort: "latest" | "oldest";
-  categorySlug?: string;
-  seriesSlug?: string;
-  page: number;
-  itemsPerPage: number;
-};
-
-export type PublicTopicsListingResult = {
-  featuredTopic?: Topic;
-  visibleTopics: Topic[];
-  totalRegularTopics: number;
-  currentPage: number;
-  totalPages: number;
-  startIndex: number;
-  endIndex: number;
-};
-
-async function queryPublicTopicsListing(
-  params: PublicTopicsListingParams,
-): Promise<PublicTopicsListingResult> {
-  const categorySlug = params.categorySlug?.trim() ?? "";
-  const seriesSlug = params.seriesSlug?.trim() ?? "";
-  const taxonomyFilters = {
-    categorySlug: categorySlug || undefined,
-    seriesSlug: seriesSlug || undefined,
-  };
-  const featuredTopic = await queryFeaturedPublicTopic(taxonomyFilters);
-  const featuredId = featuredTopic?.id;
-
-  const supabase = getSupabaseAdmin();
-
-  let countQuery = applyPublicTopicFilters(
-    supabase.from("topics").select("id", { count: "exact", head: true }),
-    taxonomyFilters,
-  );
-
-  if (featuredId) {
-    countQuery = countQuery.neq("id", featuredId);
-  }
-
-  const { count, error: countError } = await countQuery;
-
-  if (countError) {
-    logError("loadPublicTopicsListing count failed", countError);
-  }
-
-  const totalRegularTopics = count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalRegularTopics / params.itemsPerPage));
-  const currentPage = Math.min(Math.max(params.page, 1), totalPages);
-  const startIndex = totalRegularTopics === 0 ? 0 : (currentPage - 1) * params.itemsPerPage;
-  const endIndex = Math.min(startIndex + params.itemsPerPage, totalRegularTopics);
-
-  let listQuery = applyPublicTopicFilters(
-    supabase.from("topics").select(LISTING_SELECT),
-    taxonomyFilters,
-  );
-
-  if (featuredId) {
-    listQuery = listQuery.neq("id", featuredId);
-  }
-
-  listQuery = listQuery.order("published_at", {
-    ascending: params.sort === "oldest",
+  const result = await loadPublicContentCollection({
+    contentTypes: ["article"],
+    sort: params.sort === "oldest" ? "oldest" : "newest",
+    page: params.page,
+    pageSize: params.itemsPerPage,
+    search: params.search,
+    categorySlugs: params.categorySlug ? [params.categorySlug] : [],
+    seriesSlug: params.seriesSlug,
+    featured: params.search ? "none" : "separate",
   });
 
-  if (totalRegularTopics > 0) {
-    listQuery = listQuery.range(startIndex, endIndex - 1);
-  } else {
-    listQuery = listQuery.limit(0);
-  }
-
-  const { data, error: listError } = await listQuery;
-
-  if (listError) {
-    logError("loadPublicTopicsListing failed", listError);
-    return {
-      featuredTopic,
-      visibleTopics: [],
-      totalRegularTopics: 0,
-      currentPage: 1,
-      totalPages: 1,
-      startIndex: 0,
-      endIndex: 0,
-    };
-  }
-
   return {
-    featuredTopic,
-    visibleTopics: ((data ?? []) as DbTopic[]).map((topic) => mapDbTopicToListingTopic(topic)),
-    totalRegularTopics,
-    currentPage,
-    totalPages,
-    startIndex,
-    endIndex,
+    featuredTopic: result.featured
+      ? adaptPublicContentSummaryToTopic(result.featured)
+      : undefined,
+    visibleTopics: result.items.map(adaptPublicContentSummaryToTopic),
+    totalRegularTopics: result.totalCount,
+    currentPage: result.page,
+    totalPages: result.totalPages,
+    startIndex: result.startIndex,
+    endIndex: result.endIndex,
   };
 }
 
-export async function loadPublicTopicsListing(
-  params: PublicTopicsListingParams,
-): Promise<PublicTopicsListingResult> {
-  const categorySlug = params.categorySlug?.trim() ?? "";
-  const seriesSlug = params.seriesSlug?.trim() ?? "";
-  const cacheKey = [
-    "public-topics-listing",
-    params.sort,
-    categorySlug,
-    seriesSlug,
-    String(params.page),
-    String(params.itemsPerPage),
-  ];
-
-  return unstable_cache(
-    async () => queryPublicTopicsListing(params),
-    cacheKey,
-    { revalidate: 300, tags: ["topics"] },
-  )();
+export async function loadPublicTopicBySlug(slug: string): Promise<PublicTopicDetail | null> {
+  const item = await loadPublicContentDetail("article", slug);
+  return item ? adaptPublicContentDetailToTopic(item) : null;
 }
 
-async function queryPublishedPublicTopics(): Promise<Topic[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("*")
-    .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
-    .eq("status", "published")
-    .is("deleted_at", null);
-
-  if (error) {
-    logError("loadPublishedPublicTopics failed", error);
-    return [];
-  }
-
-  return filterPublicTopics(data ?? []).map((topic) => mapDbTopicToListingTopic(topic as DbTopic));
-}
-
-export async function loadPublishedPublicTopics(): Promise<Topic[]> {
-  return unstable_cache(
-    async () => queryPublishedPublicTopics(),
-    ["public-topics"],
-    { revalidate: 300, tags: ["topics"] },
-  )();
-}
-
-async function queryPublicTopicBySlug(slug: string): Promise<PublicTopicDetail | null> {
-  if (isTestTopicSlug(slug)) return null;
-
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("*")
-    .eq("slug", slug)
-    .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error || !data) return null;
-
-  return mapDbTopicToDetail(data as DbTopic);
-}
-
-export const loadPublicTopicBySlug = cache(async function loadPublicTopicBySlug(
-  slug: string,
-): Promise<PublicTopicDetail | null> {
-  return unstable_cache(
-    async () => queryPublicTopicBySlug(slug),
-    ["public-topic", slug],
-    { revalidate: 300, tags: ["topics", "topic"] },
-  )();
-});
-
-async function queryRelatedPublicTopics(topic: PublicTopicDetail): Promise<PublicTopicDetail[]> {
-  const filters: string[] = [];
-
-  if (topic.categorySlug) {
-    filters.push(`category_slug.eq.${topic.categorySlug}`);
-  }
-
-  if (topic.seriesSlug) {
-    filters.push(`series_slug.eq.${topic.seriesSlug}`);
-  }
-
-  if (!filters.length) return [];
-
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("*")
-    .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .neq("id", topic.id)
-    .or(filters.join(","))
-    .limit(6);
-
-  if (error || !data?.length) return [];
-
-  return data
-    .map((item) => mapDbTopicToDetail(item as DbTopic))
-    .filter((item) => item.id !== topic.id && item.slug !== topic.slug && !isTestTopicSlug(item.slug))
-    .slice(0, 3);
-}
-
-export async function loadRelatedPublicTopics(topic: PublicTopicDetail): Promise<PublicTopicDetail[]> {
-  return unstable_cache(
-    async () => queryRelatedPublicTopics(topic),
-    ["related-topics", topic.slug],
-    { revalidate: 300, tags: ["topics", "topic-related"] },
-  )();
+export async function loadRelatedPublicTopics(topic: PublicTopicDetail): Promise<Topic[]> {
+  if (!topic.categorySlug && !topic.seriesSlug) return [];
+  const result = await loadPublicContentCollection({
+    contentTypes: ["article"],
+    page: 1,
+    pageSize: 3,
+    sort: "newest",
+    excludeIds: [topic.id],
+    relatedTo: {
+      categorySlug: topic.categorySlug,
+      seriesSlug: topic.seriesSlug,
+    },
+  });
+  return result.items.map(adaptPublicContentSummaryToTopic);
 }

@@ -122,10 +122,16 @@ for (const route of listingRoutes) {
 
 try {
   const provider = read("src/lib/media-center/unified-provider.ts");
-  if (provider.includes('.from("topics")') && !provider.includes("media_items")) {
-    pass("Public Media reads Unified Content topics only");
+  const publicContentOwner = read("src/lib/content/public-content-read/owner.ts");
+  if (
+    provider.includes("loadPublicContentCollection") &&
+    !provider.includes('.from("topics")') &&
+    publicContentOwner.includes('.from("topics")') &&
+    !provider.includes("media_items")
+  ) {
+    pass("Public Media adapts the Unified Content Public Collection owner");
   } else {
-    fail("Public Media data source", "expected topics-only provider");
+    fail("Public Media data source", "expected owner delegation with no provider database read");
   }
 } catch (error) {
   fail("Public Media provider", error instanceof Error ? error.message : String(error));

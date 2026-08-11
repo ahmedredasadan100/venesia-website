@@ -56,7 +56,8 @@ const publicPaths = read("src/lib/content/public-content-path.ts");
 const mediaContract = read("src/lib/media-center/types.ts");
 const topicLoader = read("src/lib/topics/load-public-topics.ts");
 const mediaLoader = read("src/lib/media-center/unified-provider.ts");
-const mediaAdapter = read("src/lib/media-center/adapt-topic-row.ts");
+const publicContentOwner = read("src/lib/content/public-content-read/owner.ts");
+const publicContentContract = read("src/lib/content/public-content-read/contract.ts");
 const mediaDetail = read("src/components/media-center/MediaDetailArticle.tsx");
 const entitySeo = read("src/components/admin/seo/AdminEntitySeoPanel.tsx");
 const topicSeo = read("src/components/admin/SeoPanel.tsx");
@@ -194,8 +195,7 @@ check(
     mediaHelpers.includes(`${field}: payload.`) &&
     mediaTypes.includes(`${field}: boolean | null`) &&
     mediaValidation.includes(field) &&
-    mediaLoader.split(field).length - 1 === 2 &&
-    mediaAdapter.includes(`row.${field} !== false`)
+    publicContentOwner.includes(field)
   ) &&
     !displaySettings.includes("topicMetadata") &&
     !contentReview.includes("hasTopicMetadataDisplay") &&
@@ -306,16 +306,28 @@ check(
     !routeEdit.includes("resolveContentEditor(topic.category"),
 );
 check(
-  "article public consumers remain article-only",
-  topicLoader.includes('PUBLIC_TOPIC_CONTENT_TYPE = "article"') &&
+  "article public adapter adopts the one Public Collection owner as article-only",
+  topicLoader.includes('contentTypes: ["article"]') &&
+    topicLoader.includes('from "../content/public-content-read/owner"') &&
+    !topicLoader.includes('.from("topics")') &&
     publicPaths.includes('article: "/topics"'),
 );
 check(
-  "all media public consumers map from the same five topic types",
+  "all media public adapters derive their five types and never own a database read",
   mediaContract.includes('Exclude<ContentType, "article">') &&
     mediaContract.includes('site_update: "site-updates"') &&
-    mediaLoader.includes('.from("topics")') &&
+    mediaContract.includes("CONTENT_TYPES.filter") &&
+    mediaLoader.includes("loadPublicContentCollection") &&
+    !mediaLoader.includes('.from("topics")') &&
     !mediaLoader.includes("toTopicsContentType"),
+);
+check(
+  "one Unified Content Public Collection input and output contract owns all six types",
+  publicContentContract.includes("export type PublicContentCollectionInput") &&
+    publicContentContract.includes("export type PublicContentCollectionResult") &&
+    publicContentOwner.includes('from("topics")') &&
+    publicContentOwner.includes("PUBLIC_CONTENT_COLLECTION_SELECT") &&
+    CONTENT_TYPES.every((contentType) => publicPaths.includes(`${contentType}:`)),
 );
 check(
   "every manifest public consumer has a real route",

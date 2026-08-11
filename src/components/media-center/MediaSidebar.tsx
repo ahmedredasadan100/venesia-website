@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 import { usePublicNavigation } from "../PublicNavigationProvider";
+import PublicContentSearchInput from "../public/PublicContentSearchInput";
+import type { PublicContentSearchSuggestion } from "../../lib/content/public-content-read";
 import type { MediaSidebarItem } from "../../lib/media-center/types";
 import type { MediaSidebarModulesState, MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
 
@@ -165,8 +167,10 @@ function SectionsPanel({
 }
 
 type MediaSidebarProps = {
+  searchBasePath?: string;
   searchQuery?: string;
-  onSearchChange?: (value: string) => void;
+  searchSuggestions?: readonly PublicContentSearchSuggestion[];
+  searchResultCount?: number;
   sidebarModules: MediaSidebarModulesState;
 };
 
@@ -208,13 +212,14 @@ function renderWidgetPanel(
 }
 
 export default function MediaSidebar({
+  searchBasePath,
   searchQuery = "",
-  onSearchChange,
+  searchSuggestions = [],
+  searchResultCount = 0,
   sidebarModules,
 }: MediaSidebarProps) {
   const pathname = usePathname();
   const navItems = usePublicNavigation();
-  const hasSearchValue = searchQuery.trim().length > 0;
 
   const visibleWidgets = useMemo(
     () =>
@@ -226,33 +231,19 @@ export default function MediaSidebar({
 
   return (
     <aside className="space-y-6 text-right" dir="rtl">
-      <SidebarPanel eyebrow="Search" title="ابحث في المركز الإعلامي">
-        <div className="relative">
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(event) => onSearchChange?.(event.target.value)}
+      {searchBasePath ? (
+        <SidebarPanel eyebrow="Search" title="ابحث في المركز الإعلامي">
+          <PublicContentSearchInput
+            basePath={searchBasePath}
+            query={searchQuery}
+            suggestions={searchSuggestions}
+            resultCount={searchResultCount}
             placeholder="اكتب كلمة البحث..."
-            aria-label="ابحث داخل القسم الحالي من المركز الإعلامي"
-            className="w-full rounded-full border border-white/10 bg-black/20 py-3 pl-12 pr-5 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:bg-black/30 focus:ring-2 focus:ring-[#D8B87A]/10"
+            ariaLabel="ابحث داخل القسم الحالي من المركز الإعلامي"
+            helpText="البحث يعمل داخل القسم الحالي فقط."
           />
-
-          {hasSearchValue ? (
-            <button
-              type="button"
-              onClick={() => onSearchChange?.("")}
-              aria-label="مسح البحث"
-              className="absolute left-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-xs text-white/45 transition hover:border-[#D8B87A]/30 hover:text-[#D8B87A]"
-            >
-              ×
-            </button>
-          ) : null}
-        </div>
-
-        <p className="mt-3 text-xs leading-6 text-white/35">
-          البحث يعمل داخل القسم الحالي فقط.
-        </p>
-      </SidebarPanel>
+        </SidebarPanel>
+      ) : null}
 
       {visibleWidgets.map((widget) =>
         renderWidgetPanel(widget, {
