@@ -73,7 +73,9 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
     .select("id, name, slug, status, topics_count:topics(count)")
     .eq("status", "published")
     .is("deleted_at", null)
-    // Soft-deleted topics must never count toward a public category.
+    // Category counters follow the same public Article truth as the collection owner.
+    .eq("topics.status", "published")
+    .eq("topics.content_type", "article")
     .is("topics.deleted_at", null);
 
   if (config.query.categorySlugs.length) {

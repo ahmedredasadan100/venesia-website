@@ -15,13 +15,25 @@ import {
 const MENU_ITEM_SELECT =
   "id, parent_id, label, item_type, href, linked_type, linked_id, anchor, target, css_class, style_preset, is_visible, sort_order";
 
+export type PublicNavigationSnapshot = {
+  menu: {
+    id: number;
+    name: string;
+    slug: string;
+    location: string;
+  } | null;
+  items: PublicNavigationItem[];
+};
+
 async function fetchSlugMap(table: "topics" | "topic_categories" | "projects", ids: number[]) {
   const slugMap = new Map<number, string>();
   if (!ids.length) return slugMap;
 
   let query = getSupabaseAdmin().from(table).select("id, slug").in("id", ids);
   if (table === "topics" || table === "topic_categories") {
-    query = query.is("deleted_at", null);
+    query = query.eq("status", "published").is("deleted_at", null);
+  } else {
+    query = query.eq("publication_status", "published");
   }
   const { data, error } = await query;
 
@@ -65,9 +77,9 @@ export const getPublicNavigationItemsByMenuId = cache(async function getPublicNa
     async () => {
       const { data: menu, error: menuError } = await getSupabaseAdmin()
         .from("menus")
-        .select("id, status")
+        .select("id, is_active")
         .eq("id", menuId)
-        .eq("status", "published")
+        .eq("is_active", true)
         .maybeSingle();
 
       if (menuError) {
@@ -84,7 +96,7 @@ export const getPublicNavigationItemsByMenuId = cache(async function getPublicNa
   )();
 });
 
-async function queryPublicNavigationItems(location: string): Promise<PublicNavigationItem[]> {
+async function queryPublicNavigationSnapshot(location: string): Promise<PublicNavigationSnapshot> {
   const { data: menu, error: menuError } = await getSupabaseAdmin()
     .from("menus")
     .select("id, name, slug, location, is_active")
@@ -96,20 +108,35 @@ async function queryPublicNavigationItems(location: string): Promise<PublicNavig
 
   if (menuError) {
     logError("Failed to load navigation menu", menuError, { location, resource: `menu-location:${location}` });
-    return [];
+    return { menu: null, items: [] };
   }
 
-  if (!menu) return [];
+  if (!menu) return { menu: null, items: [] };
 
-  return getPublicNavigationItemsForMenuId(menu.id);
+  return {
+    menu: {
+      id: menu.id,
+      name: menu.name,
+      slug: menu.slug,
+      location: menu.location,
+    },
+    items: await getPublicNavigationItemsForMenuId(menu.id),
+  };
 }
+
+export const getPublicNavigationSnapshot = cache(async function getPublicNavigationSnapshot(
+  location = "main",
+): Promise<PublicNavigationSnapshot> {
+  return unstable_cache(
+    async () => queryPublicNavigationSnapshot(location),
+    ["public-navigation-snapshot", location],
+    { revalidate: 300, tags: ["navigation", "menus"] },
+  )();
+});
 
 export const getPublicNavigationItems = cache(async function getPublicNavigationItems(
   location = "main",
 ): Promise<PublicNavigationItem[]> {
-  return unstable_cache(
-    async () => queryPublicNavigationItems(location),
-    ["public-navigation", location],
-    { revalidate: 300, tags: ["navigation", "menus"] },
-  )();
+  const snapshot = await getPublicNavigationSnapshot(location);
+  return snapshot.items;
 });

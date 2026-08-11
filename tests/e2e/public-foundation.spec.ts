@@ -22,7 +22,7 @@ test.describe("public and unauthenticated browser foundation", () => {
 
   test("login validation, pending state, RTL and keyboard focus are observable", async ({ page }) => {
     await page.route("**/api/admin/auth/login", async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await route.fulfill({
         status: 401,
         contentType: "application/json",
@@ -57,6 +57,10 @@ test.describe("public and unauthenticated browser foundation", () => {
   });
 
   test("public Topics pages expose one logical H1 and ordered article headings", async ({ page }) => {
+    await page.route("**/api/content/topics/*/view", async (route) => {
+      await route.fulfill({ status: 204 });
+    });
+
     const listingResponse = await page.goto("/topics", { waitUntil: "domcontentloaded" });
     expect(listingResponse?.ok()).toBeTruthy();
     await expect(page.locator("h1")).toHaveCount(1);

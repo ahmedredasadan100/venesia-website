@@ -101,6 +101,17 @@ function resolveProjectsLimit(limit?: number | string | null) {
 
 const CARDS_PER_PAGE = 3;
 
+function useIntentPrefetch() {
+  const [prefetchEnabled, setPrefetchEnabled] = useState(false);
+
+  return {
+    prefetch: prefetchEnabled ? null : false,
+    onMouseEnter: () => setPrefetchEnabled(true),
+    onFocus: () => setPrefetchEnabled(true),
+    onTouchStart: () => setPrefetchEnabled(true),
+  };
+}
+
 function buildProjectPages(projects: HomepageProjectCard[]) {
   return chunkProjects(projects, CARDS_PER_PAGE);
 }
@@ -147,6 +158,7 @@ function HomeProjectCard({
   revealDelay: number;
 }) {
   const { pressProps } = usePressFeedback();
+  const prefetchProps = useIntentPrefetch();
 
   return (
     <div
@@ -156,6 +168,7 @@ function HomeProjectCard({
     >
       <Link
         href={getProjectHref(project)}
+        {...prefetchProps}
         {...pressProps}
         className="home-project-card group relative block cursor-pointer overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] text-white shadow-2xl backdrop-blur transition-all duration-500 hover:-translate-y-2 hover:border-[#D8B87A]/20 hover:bg-white/[0.07] hover:shadow-[0_20px_56px_rgba(0,0,0,0.42),0_0_0_1px_rgba(216,184,122,0.06)]"
       >
@@ -228,12 +241,14 @@ function HomeProjectsFooterCta({
   target: "_self" | "_blank";
 }) {
   const { pressProps } = usePressFeedback();
+  const prefetchProps = useIntentPrefetch();
 
   return (
     <Link
       href={href}
       target={target === "_blank" ? "_blank" : undefined}
       rel={target === "_blank" ? "noopener noreferrer" : undefined}
+      {...prefetchProps}
       {...pressProps}
       className="home-pressable home-pressable--projects-footer cursor-pointer rounded-full border border-white/10 bg-white/[0.045] px-7 py-3 text-sm font-medium text-white/80 transition duration-300 hover:border-[#D8B87A]/40 hover:bg-white/[0.08] hover:text-[#D8B87A]"
     >
