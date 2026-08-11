@@ -1422,4 +1422,4 @@ end;
 $$;
 rollback;
 
-select 'PASS media coordination PostgreSQL 15 integration assertions' as result;
+select 'PASS media coordination PostgreSQL 17 integration assertions' as result;

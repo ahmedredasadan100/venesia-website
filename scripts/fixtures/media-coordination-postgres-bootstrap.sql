@@ -4,8 +4,8 @@ do $$
 declare
   server_major integer := current_setting('server_version_num')::integer / 10000;
 begin
-  if server_major <> 15 then
-    raise exception 'media_coordination_requires_postgresql_15 (found %)', version();
+  if server_major <> 17 then
+    raise exception 'media_coordination_requires_postgresql_17 (found %)', version();
   end if;
 end;
 $$;

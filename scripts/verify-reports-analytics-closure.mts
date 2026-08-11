@@ -372,7 +372,7 @@ assert.match(navigation, /id: "reports-overview"/);
 for (const reportId of ADMIN_REPORT_IDS) {
   assert.match(navigation, new RegExp(`href: "/admin/reports/${reportId}"`));
 }
-assert.match(workflow, /Reports Analytics · PostgreSQL 15/);
+assert.match(workflow, /Reports Analytics · PostgreSQL 17/);
 
 const runtimeSources = `${page}\n${reportPage}\n${exportRoute}\n${loader}\n${analyticsRoot}\n${view}\n${detailView}\n${informationArchitecture}\n${overviewPresentation}\n${reportPresentation}`;
 assert.doesNotMatch(runtimeSources, /\b(?:mock|placeholder|dummy|fake)\b/i);
