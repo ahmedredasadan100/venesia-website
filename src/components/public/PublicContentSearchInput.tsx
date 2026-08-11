@@ -43,6 +43,7 @@ export default function PublicContentSearchInput({
   const requestedQueryRef = useRef(initialQuery);
   const draftQueryRef = useRef(initialQuery);
   const hasPendingNavigationRef = useRef(false);
+  const searchTimerRef = useRef<number | null>(null);
   const listboxId = useId();
   const statusId = useId();
   const [draftQuery, setDraftQuery] = useState(query);
@@ -102,11 +103,17 @@ export default function PublicContentSearchInput({
   useEffect(() => {
     if (normalizedDraft === requestedQueryRef.current) return;
 
-    const timer = window.setTimeout(() => {
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = null;
       navigateToSearch(normalizedDraft);
     }, PUBLIC_CONTENT_SEARCH_DEBOUNCE_MS);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      if (searchTimerRef.current !== null) {
+        window.clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+    };
   }, [navigateToSearch, normalizedDraft]);
 
   function selectSuggestion(index: number) {
@@ -118,6 +125,18 @@ export default function PublicContentSearchInput({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter" && normalizedDraft !== committedQuery) {
+      event.preventDefault();
+      if (searchTimerRef.current !== null) {
+        window.clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+      setListboxOpen(false);
+      setActiveSuggestion(-1);
+      navigateToSearch(normalizedDraft);
+      return;
+    }
+
     if (!suggestions.length || normalizedDraft !== committedQuery) {
       if (event.key === "Escape") setListboxOpen(false);
       return;

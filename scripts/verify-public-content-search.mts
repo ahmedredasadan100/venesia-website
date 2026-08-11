@@ -123,6 +123,9 @@ assert.ok(input.includes('role="listbox"'));
 assert.ok(input.includes('role="option"'));
 assert.ok(input.includes('aria-live="polite"'));
 assert.ok(input.includes("ArrowDown") && input.includes("ArrowUp") && input.includes("Escape"));
+assert.ok(input.includes('event.key === "Enter" && normalizedDraft !== committedQuery'));
+assert.ok(input.includes("window.clearTimeout(searchTimerRef.current)"));
+assert.ok(input.includes("navigateToSearch(normalizedDraft)"));
 for (const forbidden of ["router.refresh", "window.location.reload", "fetch("]) {
   assert.ok(!input.includes(forbidden), `Shared search input must not use ${forbidden}`);
 }
