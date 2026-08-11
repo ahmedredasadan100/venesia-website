@@ -350,7 +350,10 @@ class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
     return this;
   }
 
-  is() {
+  is(column: string, value: unknown) {
+    if (this.table === "topic_categories") {
+      resolverFixture.categoryFilters.push([column, value]);
+    }
     return this;
   }
 
@@ -380,11 +383,13 @@ class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
 
   private applyFilters<T extends object>(rows: T[]) {
     return this.filters.reduce((filtered, [column, value]) =>
-      filtered.filter((row) =>
-        Array.isArray(value)
-          ? value.includes((row as Record<string, unknown>)[column])
-          : (row as Record<string, unknown>)[column] === value,
-      ), [...rows]);
+      column.includes(".")
+        ? filtered
+        : filtered.filter((row) =>
+            Array.isArray(value)
+              ? value.includes((row as Record<string, unknown>)[column])
+              : (row as Record<string, unknown>)[column] === value,
+          ), [...rows]);
   }
 
   private resolveResult(): ResolverQueryResult {
@@ -451,6 +456,18 @@ assert.ok(
   ),
   "category filter must be applied by the source query before limit",
 );
+for (const [column, value] of [
+  ["topics.status", "published"],
+  ["topics.content_type", "article"],
+  ["topics.deleted_at", null],
+] as const) {
+  assert.ok(
+    resolverFixture.categoryFilters.some(
+      ([actualColumn, actualValue]) => actualColumn === column && actualValue === value,
+    ),
+    `public category counters must filter ${column}`,
+  );
+}
 
 resolverFixture.categories = [
   { id: 1, name: "تصنيف آخر", slug: "other", status: "published", topics_count: [{ count: 4 }] },
@@ -590,6 +607,9 @@ assert.equal(loader.includes("function isPublishedTemplate"), false);
 assert.ok(resolver.includes('.select("id, name, slug, description, status, sort_order, category_id")'));
 assert.ok(resolver.includes('subtitle: row.description ?? ""'));
 assert.ok(resolver.includes('categoriesQuery = categoriesQuery.in("slug", config.query.categorySlugs)'));
+assert.ok(resolver.includes('.eq("topics.status", "published")'));
+assert.ok(resolver.includes('.eq("topics.content_type", "article")'));
+assert.ok(resolver.includes('.is("topics.deleted_at", null)'));
 assert.ok(resolver.includes("categorySlugs: config.query.categorySlugs"));
 assert.ok(resolver.includes('query = query.in("category_id", categoryIds)'));
 assert.ok(resolver.includes('if (!name || !slug) return []'));

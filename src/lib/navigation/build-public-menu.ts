@@ -52,24 +52,30 @@ function appendAnchor(href: string, anchor?: string | null) {
   return `${href.split("#")[0]}#${cleanAnchor}`;
 }
 
-function resolveHref(item: MenuItemRow, maps: SlugMaps) {
+function resolveHref(item: MenuItemRow, maps: SlugMaps): string | null {
   if (item.item_type === "parent") return "#";
 
   let href = item.href?.trim() || "#";
 
-  if (item.linked_type === "topics" && item.linked_id) {
+  if (item.linked_type === "topics") {
+    if (!item.linked_id) return null;
     const slug = maps.topics.get(Number(item.linked_id));
-    if (slug) href = `/topics/${slug}`;
+    if (!slug) return null;
+    href = `/topics/${slug}`;
   }
 
-  if (item.linked_type === "topic_categories" && item.linked_id) {
+  if (item.linked_type === "topic_categories") {
+    if (!item.linked_id) return null;
     const slug = maps.topicCategories.get(Number(item.linked_id));
-    if (slug) href = `/topics?category=${slug}`;
+    if (!slug) return null;
+    href = `/topics?category=${slug}`;
   }
 
-  if (item.linked_type === "projects" && item.linked_id) {
+  if (item.linked_type === "projects") {
+    if (!item.linked_id) return null;
     const slug = maps.projects.get(Number(item.linked_id));
-    if (slug) href = `/projects/${slug}`;
+    if (!slug) return null;
+    href = `/projects/${slug}`;
   }
 
   return appendAnchor(href, item.anchor);
@@ -83,17 +89,21 @@ export function buildPublicMenuTree(
   return rows
     .filter((item) => item.parent_id === parentId)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((item) => {
+    .flatMap((item) => {
       const children = buildPublicMenuTree(rows, maps, item.id);
+      const href = resolveHref(item, maps);
+      if (href === null || (item.item_type === "parent" && children.length === 0)) {
+        return [];
+      }
 
-      return {
+      return [{
         id: item.id,
         label: item.label,
-        href: resolveHref(item, maps),
+        href,
         target: item.target === "_blank" ? "_blank" : "_self",
         cssClass: item.css_class || undefined,
         stylePreset: item.style_preset || undefined,
         submenu: children.length ? children : undefined,
-      };
+      }];
     });
 }

@@ -75,9 +75,11 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
 
   if (!topic) notFound();
 
-  const relatedTopics = await loadRelatedPublicTopics(topic);
-  const sidebarFeeds = await loadFeedModulesForPageSlug("topics");
-  const globalSeo = await loadResolvedGlobalSeo();
+  const [relatedTopics, sidebarFeeds, globalSeo] = await Promise.all([
+    loadRelatedPublicTopics(topic),
+    loadFeedModulesForPageSlug("topics"),
+    loadResolvedGlobalSeo(),
+  ]);
   const pagePath = `/topics/${topic.slug}`;
   const showCategoryMetadata =
     topic.showCategoryOnPage && Boolean(topic.category && topic.categorySlug);

@@ -69,8 +69,37 @@ function HeroPressableLink({
   children: ReactNode;
 }) {
   const { pressProps } = usePressFeedback();
+  const prefetchProps = useIntentPrefetch();
   return (
-    <Link href={href} {...pressProps} className={`home-pressable ${className}`}>
+    <Link href={href} {...prefetchProps} {...pressProps} className={`home-pressable ${className}`}>
+      {children}
+    </Link>
+  );
+}
+
+function useIntentPrefetch() {
+  const [prefetchEnabled, setPrefetchEnabled] = useState(false);
+
+  return {
+    prefetch: prefetchEnabled ? null : false,
+    onMouseEnter: () => setPrefetchEnabled(true),
+    onFocus: () => setPrefetchEnabled(true),
+    onTouchStart: () => setPrefetchEnabled(true),
+  };
+}
+
+function HeroIntentLink({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className: string;
+  children: ReactNode;
+}) {
+  const prefetchProps = useIntentPrefetch();
+  return (
+    <Link href={href} {...prefetchProps} className={className}>
       {children}
     </Link>
   );
@@ -318,7 +347,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               <div className="rounded-[2.5rem] border border-white/[0.14] bg-white/[0.05] p-3 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-md">
                 <div className="space-y-3 rounded-[2rem] bg-black/20 p-4">
                   {hero.resolvedItems.slice(0, 3).map((item) => (
-                    <Link
+                    <HeroIntentLink
                       key={item.id}
                       href={item.href ?? "#"}
                       className="group flex gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3 transition hover:border-[#D8B87A]/35 hover:bg-white/[0.07]"
@@ -340,7 +369,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
                           {item.title}
                         </span>
                       </span>
-                    </Link>
+                    </HeroIntentLink>
                   ))}
                 </div>
               </div>

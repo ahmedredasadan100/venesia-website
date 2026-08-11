@@ -18,10 +18,13 @@ type MediaDetailPageProps = {
 
 export default async function MediaDetailPage({ configKey, slug }: MediaDetailPageProps) {
   const config = MEDIA_DETAIL_PAGE_CONFIG[configKey];
+  const itemPromise = getMediaItemBySlug(config.mediaType, slug);
+  const compositionPromise = loadPageCompositionBySlug(config.cmsPageSlug, "stack");
+  const globalSeoPromise = loadResolvedGlobalSeo();
 
   const [item, composition] = await Promise.all([
-    getMediaItemBySlug(config.mediaType, slug),
-    loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
+    itemPromise,
+    compositionPromise,
   ]);
 
   if (!item) {
@@ -29,11 +32,13 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
   }
   if (!composition.mediaSidebarModules) return null;
 
-  const relatedItems = await getRelatedMediaItems(config.mediaType, item.topicId ?? Number(item.id), 3);
+  const [relatedItems, globalSeo] = await Promise.all([
+    getRelatedMediaItems(config.mediaType, item.topicId ?? Number(item.id), 3),
+    globalSeoPromise,
+  ]);
 
   const pagePath = `${config.basePath}/${item.slug}`;
   const content = item.content?.length ? item.content : config.fallbackContent;
-  const globalSeo = await loadResolvedGlobalSeo();
 
   const pageJsonLd = buildPageJsonLd(
     {

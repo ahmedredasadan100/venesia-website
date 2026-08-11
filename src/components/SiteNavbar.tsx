@@ -59,6 +59,7 @@ function MenuLink({
   const target = item.target === "_blank" ? "_blank" : undefined;
   const rel = target ? "noreferrer" : undefined;
   const finalClassName = [className, item.cssClass].filter(Boolean).join(" ");
+  const [prefetchEnabled, setPrefetchEnabled] = useState(false);
 
   if (isExternalHref(item.href) || target || item.href === "#") {
     return (
@@ -78,8 +79,12 @@ function MenuLink({
   return (
     <Link
       href={item.href}
+      prefetch={prefetchEnabled ? null : false}
       className={finalClassName}
       onClick={onClick}
+      onMouseEnter={() => setPrefetchEnabled(true)}
+      onFocus={() => setPrefetchEnabled(true)}
+      onTouchStart={() => setPrefetchEnabled(true)}
       aria-current={ariaCurrent}
     >
       {children}
@@ -198,7 +203,7 @@ export default function SiteNavbar() {
                   >
                     <span>{item.label}</span>
                     <span
-                      className="translate-y-px text-[10px] text-[#D8B87A]/55 transition-transform duration-500 ease-out group-hover/media:rotate-180"
+                      className="translate-y-px text-[10px] text-[#D8B87A]/55 transition-transform duration-500 ease-out group-hover/media:rotate-180 group-focus-within/media:rotate-180"
                       aria-hidden
                     >
                       ▾
@@ -208,7 +213,7 @@ export default function SiteNavbar() {
 
                   <div className="absolute left-1/2 top-full h-8 w-72 -translate-x-1/2" />
 
-                  <div className="invisible absolute left-1/2 top-[calc(100%+1rem)] w-72 -translate-x-1/2 translate-y-2 rounded-2xl border border-[#D8B87A]/[0.14] bg-[#05070B]/72 p-2 opacity-0 shadow-[0_18px_60px_rgba(0,0,0,0.38),0_1px_0_0_rgba(216,184,122,0.12)_inset] backdrop-blur-[24px] transition-[opacity,transform,visibility] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/media:visible group-hover/media:translate-y-0 group-hover/media:opacity-100">
+                  <div className="invisible absolute left-1/2 top-[calc(100%+1rem)] w-72 -translate-x-1/2 translate-y-2 rounded-2xl border border-[#D8B87A]/[0.14] bg-[#05070B]/72 p-2 opacity-0 shadow-[0_18px_60px_rgba(0,0,0,0.38),0_1px_0_0_rgba(216,184,122,0.12)_inset] backdrop-blur-[24px] transition-[opacity,transform,visibility] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/media:visible group-hover/media:translate-y-0 group-hover/media:opacity-100 group-focus-within/media:visible group-focus-within/media:translate-y-0 group-focus-within/media:opacity-100">
                     <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-[#D8B87A]/35 to-transparent" />
                     <div className="space-y-1">
                       {item.submenu?.map((subItem) => (
@@ -308,6 +313,7 @@ export default function SiteNavbar() {
               const active = isActivePath(pathname, item.href);
               const itemKey = getItemKey(item);
               const isSubmenuOpen = openSubmenu === itemKey;
+              const submenuId = `mobile-submenu-${itemKey.replace(/[^a-zA-Z0-9_-]/gu, "-")}`;
 
               if (!hasSubmenu) {
                 return (
@@ -337,6 +343,8 @@ export default function SiteNavbar() {
                     onClick={() =>
                       setOpenSubmenu(isSubmenuOpen ? null : itemKey)
                     }
+                    aria-expanded={isSubmenuOpen}
+                    aria-controls={submenuId}
                     className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-[14px] font-medium text-white/65 transition-colors duration-200 hover:bg-white/[0.05] hover:text-white/90"
                   >
                     {item.label}
@@ -348,7 +356,7 @@ export default function SiteNavbar() {
                   </button>
 
                   {isSubmenuOpen ? (
-                    <ul className="mt-1 space-y-0.5 pr-3">
+                    <ul id={submenuId} className="mt-1 space-y-0.5 pr-3">
                       {item.submenu?.map((sub) => (
                         <li key={getItemKey(sub)}>
                           <MenuLink

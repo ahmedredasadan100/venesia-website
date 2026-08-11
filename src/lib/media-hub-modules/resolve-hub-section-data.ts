@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { MediaContentItem } from "../media-center";
+import type { MediaContentItem, MediaContentType } from "../media-center";
 import { getMediaItems } from "../media-center";
 import { parseMediaHubModuleConfig, type MediaHubModuleConfig } from "./parse-config";
 import type { MediaHubModulesState, MediaHubSectionData, MediaHubSectionKey } from "./types";
@@ -14,14 +14,32 @@ type HubDataCaches = {
   press: MediaContentItem[];
 };
 
-async function loadHubDataCaches(): Promise<HubDataCaches> {
-  const [news, siteUpdates, videos, gallery, press] = await Promise.all([
-    getMediaItems("news"),
-    getMediaItems("site_update"),
-    getMediaItems("video"),
-    getMediaItems("gallery"),
-    getMediaItems("press"),
-  ]);
+const SECTION_MEDIA_TYPE: Record<MediaHubSectionKey, MediaContentType> = {
+  featured: "news",
+  "site-updates": "site_update",
+  videos: "video",
+  gallery: "gallery",
+  press: "press",
+};
+
+async function loadHubDataCaches(state: MediaHubModulesState): Promise<HubDataCaches> {
+  const requiredTypes = Array.from(
+    new Set(
+      state.modules
+        .filter((module) => module.isVisible)
+        .map((module) => SECTION_MEDIA_TYPE[module.sectionKey]),
+    ),
+  );
+  const entries = await Promise.all(
+    requiredTypes.map(async (type) => [type, await getMediaItems(type)] as const),
+  );
+  const itemsByType = new Map<MediaContentType, MediaContentItem[]>(entries);
+
+  const news = itemsByType.get("news") ?? [];
+  const siteUpdates = itemsByType.get("site_update") ?? [];
+  const videos = itemsByType.get("video") ?? [];
+  const gallery = itemsByType.get("gallery") ?? [];
+  const press = itemsByType.get("press") ?? [];
 
   const featuredNews = news.find((item) => item.featured) ?? news[0] ?? null;
   return { featuredNews, news, siteUpdates, videos, gallery, press };
@@ -72,7 +90,7 @@ function resolveSectionData(
 }
 
 export async function enrichMediaHubModules(state: MediaHubModulesState): Promise<MediaHubModulesState> {
-  const caches = await loadHubDataCaches();
+  const caches = await loadHubDataCaches(state);
 
   const modules = state.modules.map((module) => {
     const config = parseMediaHubModuleConfig(module.config, module.sectionKey);

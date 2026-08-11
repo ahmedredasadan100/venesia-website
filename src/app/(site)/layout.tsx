@@ -22,23 +22,25 @@ export default async function SiteLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  let navigationItems: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
-  let footerNavItems: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
-  let footerSettings = await loadFooterSettings().catch(() => null);
-  const globalSeo = await loadResolvedGlobalSeo();
-  const organizationIdentity = resolveGlobalOrganizationIdentity(globalSeo);
-
-  try {
-    [navigationItems, footerNavItems] = await Promise.all([
+  const emptyNavigation: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
+  const navigationPromise = Promise.all([
       getPublicNavigationItems("main"),
       getPublicNavigationItems("footer"),
-    ]);
-  } catch (error) {
-    logError("Failed to preload public navigation in site layout", error, {
-      location: "main/footer",
-      resource: "layout:navigation",
+    ]).catch((error) => {
+      logError("Failed to preload public navigation in site layout", error, {
+        location: "main/footer",
+        resource: "layout:navigation",
+      });
+      return [emptyNavigation, emptyNavigation] as const;
     });
-  }
+
+  const [loadedFooterSettings, globalSeo, [navigationItems, footerNavItems]] = await Promise.all([
+    loadFooterSettings().catch(() => null),
+    loadResolvedGlobalSeo(),
+    navigationPromise,
+  ]);
+  let footerSettings = loadedFooterSettings;
+  const organizationIdentity = resolveGlobalOrganizationIdentity(globalSeo);
 
   if (!footerSettings) {
     const { EMPTY_FOOTER_SETTINGS } = await import("../../lib/footer/defaults");
