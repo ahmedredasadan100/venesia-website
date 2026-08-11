@@ -40,7 +40,7 @@ npm run ci:check
 
 GitHub Actions workflow: `.github/workflows/quality-gate.yml`
 
-Runs on pull requests and pushes to `main`. The canonical application job runs `npm run ci:check`: lint, typecheck, architecture/contract verifiers, Production build, and the public/unauthenticated Playwright suite. Separate PostgreSQL 15 jobs prove Media coordination, Dashboard Truth, and Reports Analytics database behavior in disposable databases.
+Runs on pull requests and pushes to `main`. The canonical application job runs `npm run ci:check`: lint, typecheck, architecture/contract verifiers, Production build, and the public/unauthenticated Playwright suite. Separate PostgreSQL 17 jobs prove Media coordination, Dashboard Truth, and Reports Analytics database behavior in disposable databases.
 
 Playwright uses one repository configuration:
 

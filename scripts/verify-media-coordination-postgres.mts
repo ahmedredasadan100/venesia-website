@@ -810,5 +810,5 @@ await verifyPhysicalMoveAgainstStaleSafeDelete();
 applySqlFile("scripts/fixtures/media-coordination-postgres-tests.sql");
 
 console.log(
-  `PASS verify-media-coordination-postgres (${setupSqlFiles.length + 1} isolated PostgreSQL 15 fixture/migration/test files plus multi-session race proof).`,
+  `PASS verify-media-coordination-postgres (${setupSqlFiles.length + 1} isolated PostgreSQL 17 fixture/migration/test files plus multi-session race proof).`,
 );
