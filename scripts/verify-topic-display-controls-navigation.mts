@@ -224,7 +224,7 @@ const filterOwner = publicLoader.slice(
 );
 check(
   "one existing public filter owner applies publication, category, and series contracts",
-  filterOwner.includes('.eq("status", "published")') &&
+  filterOwner.includes('.eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)') &&
     filterOwner.includes('.eq("category_slug", filters.categorySlug)') &&
     filterOwner.includes('.eq("series_slug", filters.seriesSlug)') &&
     (publicLoader.match(/applyPublicTopicFilters\(/g)?.length ?? 0) >= 5,

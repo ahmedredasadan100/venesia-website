@@ -158,7 +158,7 @@ check(
 );
 check(
   "Marketing loaders filter publication in the database before aggregate mapping",
-  (publicLoader.match(/\.eq\("publication_status", "published"\)/g) ?? [])
+    (publicLoader.match(/\.eq\("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT\.status\)/g) ?? [])
     .length >= 3 &&
     publicDetail.includes("loadProjectBySlugResult") &&
     !publicDetail.includes("loadProjectForAdminPreviewResult"),
@@ -189,7 +189,7 @@ check(
     sitemap.includes("project.robotsIndex !== false") &&
     sitemap.includes("canonicalOverride: project.canonicalUrl") &&
     publicLoader.includes('.select("slug,updated_at,canonical_url,robots_index")') &&
-    publicLoader.includes('.eq("publication_status", "published")') &&
+      publicLoader.includes('.eq("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)') &&
     !sitemap.includes("loadPublishedProjectSlugs"),
 );
 check(

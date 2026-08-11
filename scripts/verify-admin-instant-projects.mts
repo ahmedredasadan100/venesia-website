@@ -338,7 +338,10 @@ check(
 );
 check(
   publicLoader.includes('"publication_status", "published_at"') &&
-    publicLoader.includes('.eq("publication_status", "published")') &&
+    publicLoader.includes('import { PUBLIC_CONTENT_VISIBILITY_CONTRACT }') &&
+    publicLoader.includes(
+      '.eq("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)',
+    ) &&
     publicMapper.includes("featured: project.featured === true") &&
     publicHelpers.includes("projects.filter((project) => project.featured)") &&
     publicHelpers.includes("return `/projects/${project.slug}`") &&

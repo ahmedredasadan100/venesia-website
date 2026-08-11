@@ -59,6 +59,10 @@ const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "../admin/content/content-status-metadata": {
     getContentStatusMetadata: () => ({}),
   },
+  "../content-public-visibility": {
+    isContentPubliclyVisible: (input: { status?: string | null }) =>
+      input.status === "published",
+  },
 });
 const feedTypes = loadTranspiledModule("src/lib/feed-modules/types.ts");
 const feedConfigContract = loadTranspiledModule(
@@ -97,6 +101,9 @@ const topicFilterOptionsContract = loadTranspiledModule(
   "src/lib/feed-modules/load-topic-filter-options.ts",
   {
     "server-only": {},
+    "../content-public-visibility": {
+      PUBLIC_CONTENT_VISIBILITY_CONTRACT: { status: "published", deletedAt: null },
+    },
     "../supabase-admin": { getSupabaseAdmin: () => ({}) },
     "../logging": { logError: () => undefined },
   },
@@ -380,11 +387,13 @@ class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
 
   private applyFilters<T extends object>(rows: T[]) {
     return this.filters.reduce((filtered, [column, value]) =>
-      filtered.filter((row) =>
-        Array.isArray(value)
-          ? value.includes((row as Record<string, unknown>)[column])
-          : (row as Record<string, unknown>)[column] === value,
-      ), [...rows]);
+      column.includes(".")
+        ? filtered
+        : filtered.filter((row) =>
+            Array.isArray(value)
+              ? value.includes((row as Record<string, unknown>)[column])
+              : (row as Record<string, unknown>)[column] === value,
+          ), [...rows]);
   }
 
   private resolveResult(): ResolverQueryResult {
@@ -411,6 +420,9 @@ const resolverContract = loadTranspiledModule(
       }),
     },
     "../admin/cms-test-data": { filterPublicTopics: (rows: unknown[]) => rows },
+    "../content-public-visibility": {
+      PUBLIC_CONTENT_VISIBILITY_CONTRACT: { status: "published", deletedAt: null },
+    },
     "../logging": { logError: () => undefined },
     "../content-dates": { formatArabicContentDate: () => "" },
     "../media/resolve-local-public-image": {

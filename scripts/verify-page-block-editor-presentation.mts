@@ -306,7 +306,7 @@ check(
 check(
   "public rendering requires both published template state and visible assignment state",
   blockStatusOwner.includes("export function isPublishedPageBlockStatus") &&
-    blockStatusOwner.includes('return value === "published"') &&
+    blockStatusOwner.includes("isContentPubliclyVisible({ status: value })") &&
     pageBlockPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
     pageBlockPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
     feedPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&

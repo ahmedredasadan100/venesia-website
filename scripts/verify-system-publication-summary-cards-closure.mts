@@ -207,8 +207,14 @@ check(
 
 check(
   "Hero publication status is canonical while assignment visibility stays independent",
-  heroLoader.includes('template.status === "published"') &&
-    assignmentLoader.includes('normalizeBoolean(row.is_active, true) && template.status === "published"') &&
+  heroLoader.includes("isContentPubliclyVisible,") &&
+    heroLoader.includes('from "./content-public-visibility"') &&
+    heroLoader.includes(
+      'is_visible: isContentPubliclyVisible({ status: template.status })',
+    ) &&
+    assignmentLoader.includes(
+      'normalizeBoolean(row.is_active, true) && isPublishedPageBlockStatus(template.status)',
+    ) &&
     migration.includes("sync_hero_template_publication_compatibility") &&
     migration.includes("before insert or update of status, is_visible on public.hero_templates"),
 );

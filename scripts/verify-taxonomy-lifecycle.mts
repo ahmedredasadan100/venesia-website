@@ -23,7 +23,13 @@ function hasActiveFilter(source: string, table: string) {
     tableIndex,
     nextQuery < 0 ? source.length : nextQuery,
   );
-  return slice.includes('.is("deleted_at", null)');
+  return (
+    slice.includes('.is("deleted_at", null)') ||
+    (source.includes('import { PUBLIC_CONTENT_VISIBILITY_CONTRACT }') &&
+      slice.includes(
+        '.is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)',
+      ))
+  );
 }
 
 const migration = read(
