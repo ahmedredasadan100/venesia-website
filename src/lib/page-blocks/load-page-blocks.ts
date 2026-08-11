@@ -82,7 +82,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   const page = await getPublishedPageBySlug(pageSlug);
   if (!page) return emptyPageBlockLoadResult();
 
-  const blocks: ResolvedPageBlock[] = [];
+  const blockPromises: Array<Promise<ResolvedPageBlock>> = [];
   const hiddenHomeModuleSlugs = new Set<HomeModuleSlug>();
   let assignmentRowCount = 0;
 
@@ -134,24 +134,22 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
 
     if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
-    const resolvedConfig = await resolveContentBlockConfigLinks(
-      resolveContentBlockConfig(template) as Record<string, unknown>,
-      template.slug,
-      template.variant,
-    );
-
-    blocks.push({
+    blockPromises.push((async () => ({
       assignmentId: row.id,
-      blockType: "content",
+      blockType: "content" as const,
       templateId: template.id,
       slot: normalizeLayoutSlot(row.slot),
       sortOrder: row.sort_order ?? 0,
       isVisible: true,
       template: {
         ...template,
-        config: resolvedConfig,
+        config: await resolveContentBlockConfigLinks(
+          resolveContentBlockConfig(template) as Record<string, unknown>,
+          template.slug,
+          template.variant,
+        ),
       },
-    });
+    }))());
 
   }
 
@@ -161,9 +159,9 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
     const template = joinedTemplate(row.cta_block_templates) as TemplateRow | null;
     if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
-    blocks.push({
+    blockPromises.push((async () => ({
       assignmentId: row.id,
-      blockType: "cta",
+      blockType: "cta" as const,
       templateId: template.id,
       slot: normalizeLayoutSlot(row.slot),
       sortOrder: row.sort_order ?? 0,
@@ -172,7 +170,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
         ...template,
         config: await resolveCtaBlockConfigLinks(asCtaConfig(template.config)),
       },
-    });
+    }))());
   }
 
   for (const row of cardsAssignments ?? []) {
@@ -181,9 +179,9 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
     const template = joinedTemplate(row.cards_block_templates) as TemplateRow | null;
     if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
-    blocks.push({
+    blockPromises.push((async () => ({
       assignmentId: row.id,
-      blockType: "cards",
+      blockType: "cards" as const,
       templateId: template.id,
       slot: normalizeLayoutSlot(row.slot),
       sortOrder: row.sort_order ?? 0,
@@ -192,7 +190,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
         ...template,
         config: await resolveCardsBlockConfigLinks(asCardsConfig(template.config)),
       },
-    });
+    }))());
   }
 
   for (const row of breadcrumbAssignments ?? []) {
@@ -201,9 +199,9 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
     const template = joinedTemplate(row.breadcrumb_block_templates) as TemplateRow | null;
     if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
-    blocks.push({
+    blockPromises.push((async () => ({
       assignmentId: row.id,
-      blockType: "breadcrumb",
+      blockType: "breadcrumb" as const,
       templateId: template.id,
       slot: normalizeLayoutSlot(row.slot),
       sortOrder: row.sort_order ?? 0,
@@ -212,9 +210,10 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
         ...template,
         config: await resolveBreadcrumbBlockConfigLinks(asBreadcrumbConfig(template.config)),
       },
-    });
+    }))());
   }
 
+  const blocks = await Promise.all(blockPromises);
   const hasRenderableModules = blocks.length > 0;
   const hasAnyAssignmentRows = assignmentRowCount > 0;
 

@@ -70,28 +70,26 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
     return { modules: [], hasAnyAssignmentRows: false, hasCompositionError: true };
   }
 
-  const modules: LoadedFeedModule[] = [];
   const hasAnyAssignmentRows = (assignments?.length ?? 0) > 0;
-
-  for (const row of assignments ?? []) {
-    if (!normalizeBoolean(row.is_visible, true)) continue;
+  const visibleAssignments = (assignments ?? []).flatMap((row) => {
+    if (!normalizeBoolean(row.is_visible, true)) return [];
 
     const template = joinedTemplate(row.feed_module_templates) as FeedModuleTemplateRow | null;
-    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
+    if (!template || !isPublishedPageBlockStatus(template.status)) return [];
 
-    const config = parseFeedModuleConfig(template.config, template.feed_type);
-    const payload = await resolveTopicsFeedModule(template, config);
-
-    modules.push({
+    return [{ row, template, config: parseFeedModuleConfig(template.config, template.feed_type) }];
+  });
+  const modules = await Promise.all(
+    visibleAssignments.map(async ({ row, template, config }): Promise<LoadedFeedModule> => ({
       assignmentId: row.id,
       templateId: template.id,
       sortOrder: row.sort_order ?? 0,
       feedType: template.feed_type as TopicsFeedType,
       presentation: config.presentation,
-      payload,
+      payload: await resolveTopicsFeedModule(template, config),
       slot: normalizeLayoutSlot(row.slot),
-    });
-  }
+    })),
+  );
 
   return {
     modules,

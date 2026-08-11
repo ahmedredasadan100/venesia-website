@@ -4,6 +4,7 @@ import {
   isPublishedPageBlockStatus,
   normalizeBoolean,
 } from "../page-blocks/admin-utils";
+import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseMediaSidebarModuleConfig } from "./parse-config";
 import { enrichMediaSidebarModules } from "./resolve-widget-items";
@@ -20,18 +21,20 @@ function isWidgetKey(value: string): value is MediaSidebarWidgetKey {
 
 /** Internal query used only by the canonical Page Composition resolver. */
 export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaSidebarModulesState> {
-  const pageResult = await getSupabaseAdmin().from("pages").select("id").eq("slug", pageSlug).maybeSingle();
-  if (pageResult.error) {
-    return { widgets: [], sourceStatus: "error", sourceIssues: [pageResult.error.message] };
+  const pageResult = await getPublishedPageStateBySlug(pageSlug);
+  if (!pageResult.page) {
+    return {
+      widgets: [],
+      sourceStatus: pageResult.sourceStatus,
+      sourceIssues: [pageResult.sourceIssue ?? `Published page ${pageSlug} is not available.`],
+    };
   }
-  if (!pageResult.data) {
-    return { widgets: [], sourceStatus: "missing", sourceIssues: [`Page ${pageSlug} is not persisted.`] };
-  }
+  const page = pageResult.page;
 
   const { data: rows, error } = await getSupabaseAdmin()
     .from("page_media_sidebar_module_assignments")
     .select("id,sort_order,is_visible,media_sidebar_module_templates(widget_key,name,status,config)")
-    .eq("page_id", pageResult.data.id)
+    .eq("page_id", page.id)
     .eq("slot", "sidebar")
     .order("sort_order", { ascending: true });
 

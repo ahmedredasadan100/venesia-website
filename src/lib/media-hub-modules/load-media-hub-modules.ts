@@ -4,6 +4,7 @@ import {
   isPublishedPageBlockStatus,
   normalizeBoolean,
 } from "../page-blocks/admin-utils";
+import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseMediaHubModuleConfig } from "./parse-config";
 import { enrichMediaHubModules } from "./resolve-hub-section-data";
@@ -20,18 +21,20 @@ function isSectionKey(value: string): value is MediaHubSectionKey {
 
 /** Internal query used only by the canonical Page Composition resolver. */
 export async function queryMediaHubModules(pageSlug: string): Promise<MediaHubModulesState> {
-  const pageResult = await getSupabaseAdmin().from("pages").select("id").eq("slug", pageSlug).maybeSingle();
-  if (pageResult.error) {
-    return { modules: [], sourceStatus: "error", sourceIssues: [pageResult.error.message] };
+  const pageResult = await getPublishedPageStateBySlug(pageSlug);
+  if (!pageResult.page) {
+    return {
+      modules: [],
+      sourceStatus: pageResult.sourceStatus,
+      sourceIssues: [pageResult.sourceIssue ?? `Published page ${pageSlug} is not available.`],
+    };
   }
-  if (!pageResult.data) {
-    return { modules: [], sourceStatus: "missing", sourceIssues: [`Page ${pageSlug} is not persisted.`] };
-  }
+  const page = pageResult.page;
 
   const { data: rows, error } = await getSupabaseAdmin()
     .from("page_media_hub_module_assignments")
     .select("id,sort_order,is_visible,media_hub_module_templates(section_key,name,slug,status,config)")
-    .eq("page_id", pageResult.data.id)
+    .eq("page_id", page.id)
     .eq("slot", "main")
     .order("sort_order", { ascending: true });
 

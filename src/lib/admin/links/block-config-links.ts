@@ -30,16 +30,18 @@ async function resolveNestedLink(
 
 export async function resolveCtaBlockConfigLinks(config: CtaBlockConfig): Promise<CtaBlockConfig> {
   const raw = config as unknown as Record<string, unknown>;
-  const primaryCta = await resolveNestedLink(
-    config.primaryCta as Record<string, unknown> | undefined,
-    "link",
-    "href",
-  );
-  const secondaryCta = await resolveNestedLink(
-    config.secondaryCta as Record<string, unknown> | undefined,
-    "link",
-    "href",
-  );
+  const [primaryCta, secondaryCta] = await Promise.all([
+    resolveNestedLink(
+      config.primaryCta as Record<string, unknown> | undefined,
+      "link",
+      "href",
+    ),
+    resolveNestedLink(
+      config.secondaryCta as Record<string, unknown> | undefined,
+      "link",
+      "href",
+    ),
+  ]);
 
   return {
     ...config,
@@ -57,18 +59,19 @@ export async function resolveAboutIntroConfigLinks<T extends Record<string, unkn
 }
 
 export async function resolveAboutCtaConfigLinks(config: AboutCtaModuleConfig): Promise<AboutCtaModuleConfig> {
-  const button = config.button
-    ? ((await resolveNestedLink(config.button as Record<string, unknown>, "link", "href")) as AboutCtaModuleConfig["button"])
-    : config.button;
-
-  const contacts = config.contacts
-    ? await Promise.all(
+  const [button, contacts] = await Promise.all([
+    config.button
+      ? (resolveNestedLink(config.button as Record<string, unknown>, "link", "href") as Promise<AboutCtaModuleConfig["button"]>)
+      : Promise.resolve(config.button),
+    config.contacts
+      ? Promise.all(
         config.contacts.map(async (contact) => {
           if (!contact) return contact;
           return (await resolveNestedLink(contact as Record<string, unknown>, "link", "href")) as typeof contact;
         }),
       )
-    : config.contacts;
+      : Promise.resolve(config.contacts),
+  ]);
 
   return { ...config, button, contacts };
 }

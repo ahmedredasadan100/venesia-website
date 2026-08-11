@@ -14,7 +14,6 @@ import TopicsIntroSection from "../../../components/topics/TopicsIntroSection";
 
 import { loadPublicTopicsListing } from "../../../lib/topics/load-public-topics";
 import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
-import { getHeroSectionByPageSlug } from "../../../lib/load-hero-section";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { loadFeedModulesForPageSlug } from "../../../lib/feed-modules/load-feed-modules";
 import { findBreadcrumbInComposition, findHeroInComposition } from "../../../lib/page-blocks/page-composition-utils";
@@ -45,9 +44,19 @@ function buildTopicsQuery(sort: string, categorySlug: string, seriesSlug: string
 
 export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const params = await searchParams;
-  const [dynamicHero, composition] = await Promise.all([
-    getHeroSectionByPageSlug("topics"),
+  const sort = params?.sort === "oldest" ? "oldest" : "latest";
+  const categorySlug = params?.category?.trim() ?? "";
+  const seriesSlug = params?.series?.trim() ?? "";
+  const requestedPage = Number(params?.page ?? 1);
+  const [composition, listing] = await Promise.all([
     loadPageCompositionBySlug("topics", "main-sidebar"),
+    loadPublicTopicsListing({
+      sort,
+      categorySlug: categorySlug || undefined,
+      seriesSlug: seriesSlug || undefined,
+      page: Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+      itemsPerPage: ITEMS_PER_PAGE,
+    }),
   ]);
   // Presence (any assignment rows) or load failure → CMS path; never resurrect static shell.
   const useCmsLayout =
@@ -57,11 +66,6 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const heroEntry = findHeroInComposition(composition);
   const breadcrumbBlock = findBreadcrumbInComposition(composition);
 
-  const sort = params?.sort === "oldest" ? "oldest" : "latest";
-  const categorySlug = params?.category?.trim() ?? "";
-  const seriesSlug = params?.series?.trim() ?? "";
-  const requestedPage = Number(params?.page ?? 1);
-
   const {
     featuredTopic,
     visibleTopics,
@@ -70,13 +74,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
     totalPages,
     startIndex,
     endIndex,
-  } = await loadPublicTopicsListing({
-    sort,
-    categorySlug: categorySlug || undefined,
-    seriesSlug: seriesSlug || undefined,
-    page: Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1,
-    itemsPerPage: ITEMS_PER_PAGE,
-  });
+  } = listing;
 
   const pageQuery = buildTopicsQuery(sort, categorySlug, seriesSlug);
 
@@ -86,7 +84,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
       eyebrow="Knowledge Center"
       subtitle="محتوى توعوي واستثماري وهندسي يساعدك على اتخاذ قرارات عقارية أكثر وعيًا."
       heroImage="/images/venesia-5.png"
-      dynamicHero={heroEntry?.hero ?? dynamicHero}
+      dynamicHero={heroEntry?.hero}
       heroBelowTitle={
         breadcrumbBlock ? (
           <BreadcrumbModuleSection config={asBreadcrumbConfig(breadcrumbBlock.template.config)} />

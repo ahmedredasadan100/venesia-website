@@ -1,7 +1,7 @@
 import "server-only";
 
-import type { MediaContentItem } from "../media-center";
-import { getFeaturedNews, getMediaItems } from "../media-center";
+import type { MediaContentItem, MediaContentType } from "../media-center";
+import { getMediaItems } from "../media-center";
 import { parseMediaHubModuleConfig, type MediaHubModuleConfig } from "./parse-config";
 import type { MediaHubModulesState, MediaHubSectionData, MediaHubSectionKey } from "./types";
 
@@ -14,17 +14,36 @@ type HubDataCaches = {
   press: MediaContentItem[];
 };
 
-async function loadHubDataCaches(): Promise<HubDataCaches> {
-  const [featuredNews, news, siteUpdates, videos, gallery, press] = await Promise.all([
-    getFeaturedNews(),
-    getMediaItems("news"),
-    getMediaItems("site_update"),
-    getMediaItems("video"),
-    getMediaItems("gallery"),
-    getMediaItems("press"),
-  ]);
+const SECTION_MEDIA_TYPES = {
+  featured: "news",
+  "site-updates": "site_update",
+  videos: "video",
+  gallery: "gallery",
+  press: "press",
+} as const satisfies Record<MediaHubSectionKey, MediaContentType>;
 
-  return { featuredNews, news, siteUpdates, videos, gallery, press };
+async function loadHubDataCaches(state: MediaHubModulesState): Promise<HubDataCaches> {
+  const requiredTypes = Array.from(
+    new Set(
+      state.modules
+        .filter((module) => module.isVisible)
+        .map((module) => SECTION_MEDIA_TYPES[module.sectionKey]),
+    ),
+  );
+  const entries = await Promise.all(
+    requiredTypes.map(async (type) => [type, await getMediaItems(type)] as const),
+  );
+  const itemsByType = new Map<MediaContentType, MediaContentItem[]>(entries);
+  const news = itemsByType.get("news") ?? [];
+
+  return {
+    featuredNews: news.find((item) => item.featured) ?? news[0] ?? null,
+    news,
+    siteUpdates: itemsByType.get("site_update") ?? [],
+    videos: itemsByType.get("video") ?? [],
+    gallery: itemsByType.get("gallery") ?? [],
+    press: itemsByType.get("press") ?? [],
+  };
 }
 
 function resolveSectionData(
@@ -72,7 +91,7 @@ function resolveSectionData(
 }
 
 export async function enrichMediaHubModules(state: MediaHubModulesState): Promise<MediaHubModulesState> {
-  const caches = await loadHubDataCaches();
+  const caches = await loadHubDataCaches(state);
 
   const modules = state.modules.map((module) => {
     const config = parseMediaHubModuleConfig(module.config, module.sectionKey);

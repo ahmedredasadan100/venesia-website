@@ -19,10 +19,11 @@ type MediaDetailPageProps = {
 export default async function MediaDetailPage({ configKey, slug }: MediaDetailPageProps) {
   const config = MEDIA_DETAIL_PAGE_CONFIG[configKey];
 
-  const [item, allItems, composition] = await Promise.all([
+  const [item, allItems, composition, globalSeo] = await Promise.all([
     getMediaItemBySlug(config.mediaType, slug),
     getMediaItems(config.mediaType),
     loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
+    loadResolvedGlobalSeo(),
   ]);
 
   if (!item) {
@@ -36,8 +37,6 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
 
   const pagePath = `${config.basePath}/${item.slug}`;
   const content = item.content?.length ? item.content : config.fallbackContent;
-  const globalSeo = await loadResolvedGlobalSeo();
-
   const pageJsonLd = buildPageJsonLd(
     {
       path: pagePath,
