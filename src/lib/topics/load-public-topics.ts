@@ -5,6 +5,7 @@ import { cache } from "react";
 
 import { filterPublicTopics, isTestTopicSlug } from "../admin/cms-test-data";
 import { formatArabicContentDate } from "../content-dates";
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { logError } from "../logging";
 import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -168,8 +169,8 @@ function applyPublicTopicFilters(
 ) {
   let next = query
     .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .not("slug", "like", "e2e-test%");
 
   if (filters.categorySlug) {
@@ -344,8 +345,8 @@ async function queryPublishedPublicTopics(): Promise<Topic[]> {
     .from("topics")
     .select("*")
     .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
-    .eq("status", "published")
-    .is("deleted_at", null);
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt);
 
   if (error) {
     logError("loadPublishedPublicTopics failed", error);
@@ -371,8 +372,8 @@ async function queryPublicTopicBySlug(slug: string): Promise<PublicTopicDetail |
     .select("*")
     .eq("slug", slug)
     .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .maybeSingle();
 
   if (error || !data) return null;
@@ -407,8 +408,8 @@ async function queryRelatedPublicTopics(topic: PublicTopicDetail): Promise<Publi
     .from("topics")
     .select("*")
     .eq("content_type", PUBLIC_TOPIC_CONTENT_TYPE)
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .neq("id", topic.id)
     .or(filters.join(","))
     .limit(6);

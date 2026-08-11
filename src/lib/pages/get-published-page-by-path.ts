@@ -1,5 +1,6 @@
 import "server-only";
 
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import type { EntitySeoPersistenceRecord } from "../seo/entity-seo-types";
@@ -30,7 +31,7 @@ export async function getPublishedPageByPath(path: string): Promise<PublishedPag
       .from("pages")
       .select("id,title,slug,path,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,status")
       .eq("path", path)
-      .eq("status", "published")
+      .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
       .maybeSingle<DbPublishedPageRow>();
 
     if (error) {
@@ -56,7 +57,7 @@ export async function getPublishedPageByPath(path: string): Promise<PublishedPag
       robots_follow: data.robots_follow,
       og_image: data.og_image,
       og_image_alt: data.og_image_alt,
-      status: "published",
+      status: PUBLIC_CONTENT_VISIBILITY_CONTRACT.status,
     };
   } catch (error) {
     logError("getPublishedPageByPath unexpected failure", error, { path });

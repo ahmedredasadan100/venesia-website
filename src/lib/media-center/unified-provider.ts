@@ -1,5 +1,6 @@
 import "server-only";
 
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { adaptTopicRowToMediaItem, type UnifiedMediaTopicRow } from "./adapt-topic-row";
@@ -36,8 +37,8 @@ function buildUnifiedMediaQuery(select: string, type?: MediaContentType, ascendi
     .from("topics")
     .select(select)
     .in("content_type", [...UNIFIED_MEDIA_CONTENT_TYPES])
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .order("published_at", { ascending })
     .order("id", { ascending });
 
@@ -61,8 +62,8 @@ export async function unifiedGetMediaItemBySlug(type: MediaContentType, slug: st
     .select(UNIFIED_DETAIL_SELECT)
     .eq("content_type", type)
     .eq("slug", slug)
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .maybeSingle();
 
   if (error) {
@@ -78,8 +79,8 @@ export async function unifiedGetMediaStaticParams(type: MediaContentType) {
     .from("topics")
     .select("slug")
     .eq("content_type", type)
-    .eq("status", "published")
-    .is("deleted_at", null);
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt);
 
   if (error) {
     logError("Unified media static params fetch failed", error, { type });
@@ -154,8 +155,8 @@ export async function unifiedGetMediaListingPage(
     .from("topics")
     .select("id", { count: "exact", head: true })
     .in("content_type", [...UNIFIED_MEDIA_CONTENT_TYPES])
-    .eq("status", "published")
-    .is("deleted_at", null);
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt);
 
   countQuery = applyTypeFilter(countQuery, params.type);
   if (excludeId !== null && Number.isFinite(excludeId)) {

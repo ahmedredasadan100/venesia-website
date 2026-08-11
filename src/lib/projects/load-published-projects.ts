@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import type { ProjectPublicationStatus } from "../admin/projects/project-publishing-capability";
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
 import {
@@ -93,7 +94,7 @@ async function queryPublicProjects(featuredOnly = false) {
   let request = getSupabaseAdmin()
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
-    .eq("publication_status", "published");
+    .eq("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status);
   if (featuredOnly) request = request.eq("featured", true);
   const result = await request
     .order("updated_at", { ascending: false })
@@ -138,7 +139,7 @@ export async function loadPublishedProjectSitemapRows(): Promise<
       const { data, error } = await getSupabaseAdmin()
         .from("projects")
         .select("slug,updated_at,canonical_url,robots_index")
-        .eq("publication_status", "published")
+        .eq("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
         .order("updated_at", { ascending: false });
       if (error) throwReadError("Published project sitemap query failed", error);
       return (data ?? []).map((row) => ({
@@ -242,7 +243,7 @@ async function queryProjectBySlug(
     .select(PUBLIC_PROJECT_COLUMNS)
     .eq("slug", slug);
   if (source === "marketing") {
-    request = request.eq("publication_status", "published");
+    request = request.eq("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status);
   }
   const rootResult = await request.maybeSingle();
 

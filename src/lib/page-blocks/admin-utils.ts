@@ -1,5 +1,6 @@
 import type { PageBlockStatus, PageBlockType } from "./types";
 import { getContentStatusMetadata } from "../admin/content/content-status-metadata";
+import { isContentPubliclyVisible } from "../content-public-visibility";
 
 export const BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"];
 
@@ -59,7 +60,7 @@ export function parseFormStatus(formData: FormData, key = "status"): PageBlockSt
 
 /** Canonical public-read predicate for Page Block template publication. */
 export function isPublishedPageBlockStatus(value: string | null | undefined) {
-  return value === "published";
+  return isContentPubliclyVisible({ status: value });
 }
 
 export function statusMeta(status?: string | null) {

@@ -1,4 +1,11 @@
-export type ContentPublicationStatus = "published" | "unpublished";
+export const PUBLIC_CONTENT_VISIBILITY_CONTRACT = {
+  status: "published",
+  deletedAt: null,
+} as const;
+
+export type ContentPublicationStatus =
+  | typeof PUBLIC_CONTENT_VISIBILITY_CONTRACT.status
+  | "unpublished";
 
 export type ContentVisibilityActionIntent =
   | "hide"
@@ -27,7 +34,7 @@ export function getContentPublicVisibilityState(input: {
     };
   }
 
-  if (input.status === "published") {
+  if (input.status === PUBLIC_CONTENT_VISIBILITY_CONTRACT.status) {
     return {
       isPubliclyVisible: true,
       actionIntent: "hide",

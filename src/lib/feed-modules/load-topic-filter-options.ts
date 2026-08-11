@@ -1,5 +1,6 @@
 import "server-only";
 
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 
@@ -37,15 +38,15 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
       supabase
         .from("topic_categories")
         .select("id,name,slug")
-        .eq("status", "published")
-        .is("deleted_at", null)
+        .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+        .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true }),
       supabase
         .from("topic_series")
         .select("id,name,slug,category_id")
-        .eq("status", "published")
-        .is("deleted_at", null)
+        .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+        .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
         .not("category_id", "is", null)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true }),

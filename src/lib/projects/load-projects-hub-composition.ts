@@ -2,6 +2,7 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { normalizeBoolean } from "../page-blocks/admin-utils";
 import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -39,7 +40,7 @@ async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoad
     .from("pages")
     .select("id,slug,path,status")
     .eq("slug", PROJECTS_HUB_PAGE_SLUG)
-    .eq("status", "published")
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
     .maybeSingle();
 
   if (pageError) {

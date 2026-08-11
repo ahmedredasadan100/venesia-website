@@ -1,5 +1,6 @@
 import "server-only";
 
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { getSupabaseAdmin } from "../supabase-admin";
 import {
   countEntriesBySource,
@@ -44,19 +45,19 @@ async function loadExcludedCounts(): Promise<SitemapExcludedCounts> {
     supabase
       .from("projects")
       .select("id", { count: "exact", head: true })
-      .neq("publication_status", "published"),
+      .neq("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status),
     supabase
       .from("topics")
       .select("id", { count: "exact", head: true })
       .eq("content_type", "article")
-      .neq("status", "published")
-      .is("deleted_at", null),
+      .neq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+      .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt),
     supabase
       .from("topics")
       .select("id", { count: "exact", head: true })
       .neq("content_type", "article")
-      .neq("status", "published")
-      .is("deleted_at", null),
+      .neq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+      .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt),
     supabase
       .from("topics")
       .select("id", { count: "exact", head: true })
@@ -75,12 +76,12 @@ async function loadExcludedCounts(): Promise<SitemapExcludedCounts> {
       .select("id", { count: "exact", head: true })
       .or("slug.is.null,slug.eq."),
     supabase.from("projects").select("id", { count: "exact", head: true })
-      .eq("publication_status", "published")
+      .eq("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
       .eq("robots_index", false),
     supabase.from("topics").select("id", { count: "exact", head: true })
-      .eq("status", "published").is("deleted_at", null).eq("robots_index", false),
+      .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status).is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt).eq("robots_index", false),
     supabase.from("pages").select("id", { count: "exact", head: true })
-      .eq("status", "published").eq("robots_index", false),
+      .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status).eq("robots_index", false),
   ]);
 
   const failed = [
@@ -121,7 +122,7 @@ async function findMissingPublishedRecords(entries: SitemapEntry[]) {
   const { data: projects, error: projectsError } = await getSupabaseAdmin()
     .from("projects")
     .select("slug,robots_index")
-    .eq("publication_status", "published")
+    .eq("publication_status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
     .not("slug", "is", null);
 
   if (projectsError) throw new Error(projectsError.message);
@@ -137,8 +138,8 @@ async function findMissingPublishedRecords(entries: SitemapEntry[]) {
     .from("topics")
     .select("slug,robots_index")
     .eq("content_type", "article")
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .not("slug", "is", null);
 
   if (topicsError) throw new Error(topicsError.message);
@@ -180,14 +181,14 @@ async function findUnpublishedSitemapTargets(entries: SitemapEntry[]) {
   const topicStatus = new Map((topics.data ?? []).map((row) => [String(row.id), row]));
   const pageStatus = new Map((pages.data ?? []).map((row) => [String(row.id), row.status]));
   for (const entry of projectEntries) {
-    if (projectStatus.get(String(entry.entityId)) !== "published") invalid.push(entry.path);
+    if (projectStatus.get(String(entry.entityId)) !== PUBLIC_CONTENT_VISIBILITY_CONTRACT.status) invalid.push(entry.path);
   }
   for (const entry of topicEntries) {
     const row = topicStatus.get(String(entry.entityId));
-    if (!row || row.status !== "published" || row.deleted_at) invalid.push(entry.path);
+    if (!row || row.status !== PUBLIC_CONTENT_VISIBILITY_CONTRACT.status || row.deleted_at) invalid.push(entry.path);
   }
   for (const entry of pageEntries) {
-    if (pageStatus.get(String(entry.entityId)) !== "published") invalid.push(entry.path);
+    if (pageStatus.get(String(entry.entityId)) !== PUBLIC_CONTENT_VISIBILITY_CONTRACT.status) invalid.push(entry.path);
   }
 
   return invalid;

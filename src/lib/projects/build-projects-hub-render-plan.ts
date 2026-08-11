@@ -1,3 +1,4 @@
+import { isContentPubliclyVisible } from "../content-public-visibility";
 import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
 import {
   asProjectsHubFeaturedConfig,
@@ -154,7 +155,7 @@ export function buildProjectsHubRenderPlan(composition: ProjectsHubComposition):
       continue;
     }
 
-    if (assignment.templateStatus !== "published") {
+    if (!isContentPubliclyVisible({ status: assignment.templateStatus })) {
       skipped.push({
         assignmentId: assignment.assignmentId,
         slug: supportedSlug,

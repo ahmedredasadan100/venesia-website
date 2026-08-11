@@ -4,6 +4,10 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
 import { resolveHeroConfigLinks } from "./admin/links/hero-config";
+import {
+  isContentPubliclyVisible,
+  PUBLIC_CONTENT_VISIBILITY_CONTRACT,
+} from "./content-public-visibility";
 import { getMediaHref, getMediaItems } from "./media-center";
 import { getPublishedPageBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
@@ -49,7 +53,7 @@ function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): 
     source_id: template.source_id,
     source_slug: template.source_slug,
     limit_count: template.limit_count,
-    is_visible: template.status === "published",
+    is_visible: isContentPubliclyVisible({ status: template.status }),
     sort_order: template.sort_order,
     config: template.config,
     page,
@@ -86,7 +90,7 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
     logError("getAssignedHeroTemplate by id failed", byId.error, { pageId: page.id });
   } else if (byId.data?.hero_templates) {
     const template = byId.data.hero_templates as unknown as HeroTemplateRecord;
-    return template.status === "published" ? template : null;
+    return isContentPubliclyVisible({ status: template.status }) ? template : null;
   }
 
   const byPath = await supabaseAdmin
@@ -103,7 +107,7 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
     logError("getAssignedHeroTemplate by path failed", byPath.error, { path: page.path });
   } else if (byPath.data?.hero_templates) {
     const template = byPath.data.hero_templates as unknown as HeroTemplateRecord;
-    return template.status === "published" ? template : null;
+    return isContentPubliclyVisible({ status: template.status }) ? template : null;
   }
 
   return null;
@@ -122,8 +126,8 @@ async function resolveHeroItems(hero: PageSectionRecord): Promise<HeroSectionDat
     let query = supabase
       .from("topics")
       .select("id,title,excerpt,image,slug,category")
-      .eq("status", "published")
-      .is("deleted_at", null)
+      .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+      .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
       .order("published_at", { ascending: false })
       .limit(limit);
 

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { SEO_ROUTES } from "../../config/seo/seo-routes";
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { getMediaHref, getMediaItems } from "../media-center";
 import { logError } from "../logging";
 import { isReservedPublicPath } from "../pages/reserved-public-paths";
@@ -51,8 +52,8 @@ async function getPublishedTopicEntries(baseUrl: string): Promise<SitemapEntry[]
     .from("topics")
     .select("id, slug, published_at, updated_at, is_featured, canonical_url, robots_index")
     .eq("content_type", "article")
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .not("slug", "is", null);
 
   if (error) {
@@ -82,7 +83,7 @@ async function getPublishedCmsPageEntries(baseUrl: string): Promise<SitemapEntry
   const { data, error } = await getSupabaseAdmin()
     .from("pages")
     .select("id, slug, path, status, updated_at, canonical_url, robots_index")
-    .eq("status", "published")
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
     .not("path", "is", null);
 
   if (error) {

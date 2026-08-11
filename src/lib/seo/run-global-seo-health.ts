@@ -6,6 +6,7 @@ import {
   GLOBAL_SEO_SPECIALIZED_OWNERS,
 } from "../admin/seo/global-seo-adoption-manifest";
 import { normalizeYouTubeUrl } from "../admin/media-topic-payload";
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { validateRedirectInput } from "../redirects/validate-redirect";
 import type { UrlRedirectRecord } from "../redirects/redirect-types";
@@ -248,8 +249,8 @@ async function buildPublicMediaDataChecks(): Promise<GlobalSeoHealthCheck[]> {
     .from("topics")
     .select("id,slug,title,excerpt,image,category_id,content_type,media_payload")
     .in("content_type", ["news", "press", "site_update", "video", "gallery"])
-    .eq("status", "published")
-    .is("deleted_at", null);
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt);
   if (error) {
     return [{
       id: "public_media_editorial_contract_query",

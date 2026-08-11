@@ -1,7 +1,12 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "../supabase-admin";
-import { blockModuleHref, blockModuleListHref, normalizeBoolean } from "./admin-utils";
+import {
+  blockModuleHref,
+  blockModuleListHref,
+  isPublishedPageBlockStatus,
+  normalizeBoolean,
+} from "./admin-utils";
 import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageBlockAssignmentRow } from "./types";
 
@@ -105,7 +110,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: template.id,
       slot: "hero",
       sort_order: Math.max(0, 1000 - Number(row.priority ?? 1000)),
-      is_visible: normalizeBoolean(row.is_active, true) && template.status === "published",
+      is_visible: normalizeBoolean(row.is_active, true) && isPublishedPageBlockStatus(template.status),
       updated_at: String(row.updated_at),
       module_kind: "hero",
       block_type: null,

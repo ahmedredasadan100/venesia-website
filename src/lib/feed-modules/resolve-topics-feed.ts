@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "../supabase-admin";
 import { filterPublicTopics } from "../admin/cms-test-data";
 import { logError } from "../logging";
 import { formatArabicContentDate } from "../content-dates";
+import { PUBLIC_CONTENT_VISIBILITY_CONTRACT } from "../content-public-visibility";
 import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
 import type {
   FeedModuleConfig,
@@ -30,8 +31,8 @@ async function resolveLatestOrPopular(
     .from("topics")
     .select("slug, title, excerpt, image, date_label, published_at")
     .eq("content_type", "article")
-    .eq("status", "published")
-    .is("deleted_at", null);
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt);
 
   if (config.query.categorySlugs.length) {
     query = query.in("category_slug", config.query.categorySlugs);
@@ -79,8 +80,8 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
       .from("topic_series")
       .select("category_id")
       .eq("slug", config.query.seriesSlug)
-      .eq("status", "published")
-      .is("deleted_at", null)
+      .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+      .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
       .maybeSingle();
 
     if (seriesError) {
@@ -95,10 +96,12 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
   let categoriesQuery = getSupabaseAdmin()
     .from("topic_categories")
     .select("id, name, slug, status, topics_count:topics(count)")
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     // Soft-deleted topics must never count toward a public category.
-    .is("topics.deleted_at", null);
+    .eq("topics.status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .eq("topics.content_type", "article")
+    .is("topics.deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt);
 
   if (config.query.categorySlugs.length) {
     categoriesQuery = categoriesQuery.in("slug", config.query.categorySlugs);
@@ -144,8 +147,8 @@ async function loadTopicImagesBySeriesSlug(seriesSlugs: string[]) {
     .from("topics")
     .select("series_slug, image, slug")
     .eq("content_type", "article")
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .in("series_slug", seriesSlugs);
 
   if (error) {
@@ -160,8 +163,8 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
   let query = getSupabaseAdmin()
     .from("topic_series")
     .select("id, name, slug, description, status, sort_order, category_id")
-    .eq("status", "published")
-    .is("deleted_at", null)
+    .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status)
+    .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
 
@@ -170,8 +173,8 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
       .from("topic_categories")
       .select("id")
       .in("slug", config.query.categorySlugs)
-      .is("deleted_at", null)
-      .eq("status", "published");
+      .is("deleted_at", PUBLIC_CONTENT_VISIBILITY_CONTRACT.deletedAt)
+      .eq("status", PUBLIC_CONTENT_VISIBILITY_CONTRACT.status);
 
     if (categoryError) {
       logError("resolveTopicsFeed: category lookup for series failed", categoryError);
