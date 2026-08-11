@@ -7,12 +7,14 @@
  * must never appear publicly — that inverse expectation is asserted below.
  */
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-for (const line of readFileSync(resolve(ROOT, ".env.local"), "utf8").split(/\r?\n/)) {
+const envPath = resolve(ROOT, ".env.local");
+const envLines = existsSync(envPath) ? readFileSync(envPath, "utf8").split(/\r?\n/) : [];
+for (const line of envLines) {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith("#")) continue;
   const eq = trimmed.indexOf("=");
@@ -26,6 +28,7 @@ for (const line of readFileSync(resolve(ROOT, ".env.local"), "utf8").split(/\r?\
 }
 
 const port = process.argv[2] || process.env.PORT || "3000";
+const searchOnly = process.argv.includes("--search-only");
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
@@ -35,6 +38,10 @@ const res = await fetch(`http://localhost:${port}/topics`, {
 });
 console.log("HTTP", res.status);
 const html = await res.text();
+const topicsListingSource = readFileSync(
+  resolve(ROOT, "src/components/topics/TopicsListingContent.tsx"),
+  "utf8",
+);
 
 // Same filters/ordering as resolveLatestOrPopular in src/lib/feed-modules/resolve-topics-feed.ts.
 async function loadFeedTitles(popularOnly) {
@@ -55,10 +62,31 @@ async function loadFeedTitles(popularOnly) {
 
 const latestTitles = await loadFeedTitles(false);
 const popularTitles = await loadFeedTitles(true);
+const searchTerm = latestTitles[0]?.slice(0, 32) ?? "";
+const searchRes = await fetch(
+  `http://localhost:${port}/topics?q=${encodeURIComponent(searchTerm)}`,
+  { headers: { "Cache-Control": "no-cache" } },
+);
+const searchHtml = await searchRes.text();
 
-const checks = [
+const searchChecks = [
+  ["Search HTTP 200", () => searchRes.status === 200],
+  ["Search panel", () => searchHtml.includes("ابحث في الموضوعات")],
+  [
+    "Topics search renders the owner item array",
+    () => topicsListingSource.includes(
+      "const hasResults = isSearching ? topics.length > 0 : totalCount > 0;",
+    ),
+  ],
+  [
+    "Topics q renders a matching owner result",
+    () => Boolean(searchTerm && latestTitles[0] && searchHtml.includes(latestTitles[0])),
+  ],
+];
+
+const checks = searchOnly ? searchChecks : [
   ["HTTP 200", () => res.status === 200],
-  ["Search panel", () => html.includes("ابحث في الموضوعات")],
+  ...searchChecks,
   ["Categories feed", () => html.includes("مواضيع تهمك")],
   ["Latest feed", () => html.includes("أحدث الموضوعات")],
   ["Popular feed", () => html.includes("الأكثر قراءة")],

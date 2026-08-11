@@ -42,6 +42,10 @@ export default function TopicsListingContent({
   showCompositionError = false,
 }: TopicsListingContentProps) {
   const isSearching = searchQuery.length > 0;
+  const hasResults = isSearching ? topics.length > 0 : totalCount > 0;
+  const displayedTotalCount = isSearching
+    ? Math.max(totalCount, topics.length)
+    : totalCount;
   const pageQuery = buildTopicsQuery(sort, categorySlug, seriesSlug);
 
   return (
@@ -57,12 +61,12 @@ export default function TopicsListingContent({
 
       {!isSearching ? <FeaturedTopic topic={featuredTopic} /> : null}
 
-      {totalCount > 0 ? (
+      {hasResults ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.5rem] border border-white/10 bg-white/[0.025] px-5 py-4">
             <p className="text-sm text-white/45">
               {isSearching
-                ? `عرض ${topics.length} من ${totalCount} نتائج البحث`
+                ? `عرض ${topics.length} من ${displayedTotalCount} نتائج البحث`
                 : `عرض ${startIndex + 1}-${endIndex} من ${totalCount} موضوع`}
             </p>
 
