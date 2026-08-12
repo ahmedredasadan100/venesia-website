@@ -532,7 +532,7 @@ assert.match(
 assert.match(client, /PAGE_PATH_COLUMN_WIDTH\s*=\s*200/u);
 assert.match(client, /PAGE_SEO_COLUMN_WIDTH\s*=\s*96/u);
 assert.match(client, /PAGE_UPDATED_AT_COLUMN_WIDTH\s*=\s*176/u);
-assert.match(client, /implicitFlexibleColumn=\{false\}/u);
+assert.doesNotMatch(client, /implicitFlexibleColumn=\{false\}/u);
 assert.doesNotMatch(client, /fillAvailableWidth/u);
 assert.match(entityList, /implicitFlexibleColumn=\{implicitFlexibleColumn\}/u);
 assert.match(entityList, /fillAvailableWidth\?: boolean/u);

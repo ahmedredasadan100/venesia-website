@@ -646,7 +646,6 @@ export default function PagesTableClient({
             getRowLabel={(row) => row.title}
             initialVisibleColumns={initialVisibleColumns}
             defaultVisibleColumns={[...getPagesDefaultColumnKeys()]}
-            implicitFlexibleColumn={false}
             onPersistColumns={savePagesTablePreferences}
             onRestoreColumns={restorePagesTablePreferences}
             enableColumnManagement
