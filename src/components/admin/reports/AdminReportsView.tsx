@@ -78,7 +78,7 @@ function RecordColumn({
   emptyHref: string;
 }) {
   return (
-    <section className="rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
+    <section className="min-w-0 rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
       <SectionHeading title={title} description={description} />
       <div className="space-y-2">
         {items.length ? items.map((item, index) => (
@@ -111,7 +111,7 @@ function OverviewState({ model }: { model: AdminReportsModel }) {
   const content = {
     ready: "جميع مصادر النظام المطلوبة أعادت حقيقة موثوقة.",
     partial: "المصادر المتاحة معروضة كما هي؛ المصادر غير المفعلة لم تُستبدل ببيانات وهمية.",
-    unavailable: "تعذر تكوين نظرة تنفيذية موثوقة، لذلك لم تُعرض أصفار أوCharts بديلة.",
+    unavailable: "تعذر تكوين نظرة تنفيذية موثوقة، لذلك لم تُعرض أصفار أو Charts بديلة.",
   }[model.state];
   return (
     <Link
@@ -157,7 +157,7 @@ export default function AdminReportsView({ model }: { model: AdminReportsModel }
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
-        <div className="rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
+        <div className="min-w-0 rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
           <SectionHeading title="أهم التنبيهات" description="الإشارات ذات القيمة غير الصفرية فقط، مع رابط مباشر إلى نفس سياق المشكلة." />
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {overview.alerts.length ? overview.alerts.slice(0, 6).map((alert) => (
@@ -170,7 +170,7 @@ export default function AdminReportsView({ model }: { model: AdminReportsModel }
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
+        <div className="min-w-0 rounded-[28px] border border-white/10 bg-[#080B10]/64 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.20)]">
           <SectionHeading title="Analytics Providers" description="حالة الـAdapter Registry الواحد؛ ليست أرقام أداء." />
           <div className="space-y-2">
             {overview.providers.map((provider) => (

@@ -64,6 +64,7 @@ export default function MediaRecoveryCenter() {
   } | null>(null);
   const confirmationTriggerRef = useRef<HTMLButtonElement>(null);
   const recoveryRootRef = useRef<HTMLElement>(null);
+  const queueRequestRef = useRef<Promise<MediaRecoveryQueue> | null>(null);
 
   const announce = useCallback((input: {
     variant: "success" | "warning" | "danger";
@@ -87,10 +88,20 @@ export default function MediaRecoveryCenter() {
     );
   }, [clearFeedback, publishFeedback]);
 
+  const requestQueue = useCallback(() => {
+    if (queueRequestRef.current) return queueRequestRef.current;
+
+    const request: Promise<MediaRecoveryQueue> = requestRecoveryQueue().finally(() => {
+      if (queueRequestRef.current === request) queueRequestRef.current = null;
+    });
+    queueRequestRef.current = request;
+    return request;
+  }, []);
+
   const loadQueue = useCallback(async () => {
     setLoading(true);
     try {
-      setQueue(await requestRecoveryQueue());
+      setQueue(await requestQueue());
     } catch (error) {
       announce({
         variant: "danger",
@@ -100,11 +111,11 @@ export default function MediaRecoveryCenter() {
     } finally {
       setLoading(false);
     }
-  }, [announce]);
+  }, [announce, requestQueue]);
 
   useEffect(() => {
     let active = true;
-    void requestRecoveryQueue()
+    void requestQueue()
       .then((nextQueue) => {
         if (active) setQueue(nextQueue);
       })
@@ -122,7 +133,7 @@ export default function MediaRecoveryCenter() {
     return () => {
       active = false;
     };
-  }, [announce]);
+  }, [announce, requestQueue]);
 
   async function execute(
     action: MediaRecoveryAction,

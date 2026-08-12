@@ -294,7 +294,7 @@ export function buildAdminDashboardModel(input: {
       source: "Next.js force-dynamic request-time rendering",
       checkedAt: input.checkedAt,
       message:
-        "لا توجد نسخة Dashboard مشتركة بين الطلبات؛ كل فتح أوRefresh يعيد قراءة المصادر الحالية، لذلك لا يلزم mutation invalidation موازٍ.",
+        "لا توجد نسخة Dashboard مشتركة بين الطلبات؛ كل فتح أو Refresh يعيد قراءة المصادر الحالية، لذلك لا يلزم mutation invalidation موازٍ.",
     },
   };
 }

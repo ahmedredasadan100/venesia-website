@@ -97,7 +97,12 @@ function CompanyMark({
         // Configured company media can be local or remote, so the shell does
         // not impose a Next Image host allowlist on company identity.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={source} alt="" className="h-full w-full object-contain p-1.5" />
+        <img
+          src={source}
+          alt=""
+          loading="eager"
+          className="h-full w-full object-contain p-1.5"
+        />
       ) : (
         fallback
       )}

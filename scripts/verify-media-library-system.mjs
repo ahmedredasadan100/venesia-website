@@ -847,6 +847,7 @@ const settings = source("src/lib/admin/media-catalog/settings.ts");
 check("media settings expose policy but never provider credentials", settings.includes("maxImageBytes") && settings.includes("safeDeletePolicy") && !/service.role|credential|secret/i.test(settings));
 const settingsPanel = source("src/app/admin/settings/media/MediaSettingsPanel.tsx");
 const settingsAction = source("src/app/admin/settings/media/actions.ts");
+const recoveryCenter = source("src/app/admin/settings/media/MediaRecoveryCenter.tsx");
 check("Media Settings exposes user-facing scan controls and readiness without credentials", settingsPanel.includes("معاينة الفحص") && settingsPanel.includes("تنفيذ الفحص والمزامنة") && settingsPanel.includes("آخر فحص مكتمل") && settingsPanel.includes("نتائج الاستخدام") && !/credential|service.role|bucket/i.test(settingsPanel));
 check("execution remains blocked until the current preview is reliable", settingsPanel.includes("const canApplyScan") && settingsPanel.includes("!canApplyScan || scanBusy !== null"));
 check("choosing PDF automatically enables the document kind", settingsPanel.includes('setAllowedKinds((current) => [...new Set([...current, "document" as const])])'));
@@ -854,6 +855,14 @@ const reconciliation = source("src/lib/admin/media-catalog/reconciliation.ts");
 check("Dry Run simulates Catalog registration before provider reference discovery", reconciliation.includes("simulatedCatalogAsset") && reconciliation.includes("simulatedMap.set") && reconciliation.includes("assetMap: simulatedMap"));
 check("Reconciliation state is bound to environment provider and registry version", ["environmentKey: context.identity", "provider: context.provider", "environment: context.environment", "MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION"].every((token) => reconciliation.includes(token)));
 check("Media Settings adopts Form Runtime with explicit validation and colocated field feedback", settingsAction.includes("Number.isInteger") && settingsAction.includes("fieldErrors") && settingsPanel.includes("AdminFormRuntime") && settingsPanel.includes("AdminFormError") && settingsPanel.includes("AdminFeedbackChannelViewport"));
+check(
+  "Media Recovery reuses one in-flight queue read during effect replay",
+  recoveryCenter.includes("const queueRequestRef = useRef<Promise<MediaRecoveryQueue> | null>(null)") &&
+    recoveryCenter.includes("if (queueRequestRef.current) return queueRequestRef.current") &&
+    recoveryCenter.includes("queueRequestRef.current === request") &&
+    recoveryCenter.includes("void requestQueue()") &&
+    !recoveryCenter.includes("void requestRecoveryQueue()"),
+);
 
 const actionSourceFile = ts.createSourceFile(
   "actions.ts",

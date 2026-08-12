@@ -153,6 +153,10 @@ check(
 check("Navigation registry exposes contract fields", ["id:", "href:", "label:", "icon:", "order:", "enabled:", "moduleKey:", "permission:"].every((field) => registry.includes(field)));
 check("Current admins remain allowed", registry.includes('mode: "allow-current-admins"'));
 check("Company default is isolated in company config", company.includes("ADMIN_COMPANY_DEFAULT") && !shell.toLowerCase().includes("venesia"));
+check(
+  "Above-fold company identity loads eagerly from the shared shell owner",
+  /<img\s+src=\{source\}\s+alt=""\s+loading="eager"/.test(shell),
+);
 check("Company identity is editable through existing media management", settings.includes("AdminMediaImageField") && settings.includes("logoUrl") && settings.includes("compactLogoUrl"));
 check("Selection resets when the visible entity set changes", selection.includes("previousVisibleSignature") && selection.includes("setSelectedIds([])"));
 check("Unified loading and error boundaries exist", read("src/app/admin/loading.tsx").includes('state="loading"') && read("src/app/admin/error.tsx").includes('state="error"'));
