@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.0.0
-> **Effective date:** 2026-07-24
+> **Version:** 3.1.0
+> **Effective date:** 2026-08-12
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** *Venesia CMS — Official Architecture Principle (Version 1.0)* and every shorter or conflicting architecture summary
@@ -776,6 +776,38 @@ An ADR is required when introducing or materially changing:
 - a closure definition;
 - a security boundary.
 
+## 5.30 Input Contract
+
+An **Input Contract** defines the validated intent accepted by an owner at one boundary. It includes shape, defaults, rejected states, normalization rules, authority, and failure semantics.
+
+## 5.31 Output Contract
+
+An **Output Contract** defines the stable result, error surface, metadata, and guarantees returned by an owner to its consumers. An output contract is not whatever shape the current implementation happens to emit.
+
+## 5.32 Contract Drift
+
+**Contract Drift** exists when documentation, types, runtime validation, implementation, guards, consumers, or deployed behavior disagree about a boundary.
+
+Drift is not resolved by choosing the most convenient source. It must be classified as stale documentation, legacy implementation debt, an incomplete adoption, or an unapproved architecture change, then corrected in the authoritative owner.
+
+## 5.33 Product Decision
+
+A **Product Decision** chooses intended user or business behavior, such as permission semantics, failure policy, availability, retention, copy, or UX outcome.
+
+Architecture must implement an approved Product Decision; it must not invent one merely to unblock an implementation.
+
+## 5.34 Architecture Decision
+
+An **Architecture Decision** chooses ownership, dependency direction, lifecycle boundaries, contracts, source of truth, adoption strategy, or infrastructure responsibility.
+
+It does not decide product policy. A task may require both decision types, but they must be named and approved separately.
+
+## 5.35 Delta Recovery
+
+**Delta Recovery** is the recovery of still-valid behavior from a stale branch or PR by comparing actual code states, classifying each behavior, and reimplementing only the missing compatible delta on the latest approved baseline.
+
+It is not a rebase, full cherry-pick, old-baseline merge, or restoration of superseded owners, runtimes, capabilities, adapters, or contracts.
+
 ---
 
 # 6. Architecture Map and Dependency Direction
@@ -935,7 +967,7 @@ The following current paths are architecture evidence, not permanent folder-law:
 | Entity List API boundary | `src/app/api/admin/entity-lists/[entity]/route.ts` |
 | Form contract | `src/lib/admin/form-runtime.ts` |
 | Form Runtime UI/orchestration | `src/components/admin/ui/AdminFormRuntime.tsx` |
-| Form adoption ledger | `src/lib/admin/form-system/adoption-manifest.ts` on the active Form closure branch |
+| Form adoption ledger | `src/lib/admin/form-system/adoption-manifest.ts` |
 | Feedback Runtime | `src/components/admin/AdminFeedbackProvider.tsx` |
 | Confirmation Runtime | `src/components/admin/ui/AdminConfirmDialog.tsx` |
 | Media storage contract | `src/lib/admin/media-storage-adapter.ts` |
@@ -1551,9 +1583,7 @@ It must adopt:
 
 ### Current Maturity
 
-Topic workflow and Save/Publishing phases are merged. The active Form closure branch removes the parallel Topic SaveBar/create/update/status action engine and moves Topic Article create/edit to one structured save owner.
-
-The active branch must not be described as merged until it is merged.
+Topic Article create/edit is a merged reference consumer of the current Form Runtime and structured save owner. Current adopter and closure truth remains owned by the exact-code adoption manifest and its architecture guard, not by this catalogue paragraph.
 
 ---
 
@@ -1605,7 +1635,7 @@ Domain system / entity family.
 
 The Projects collection is a reference consumer of the Admin Instant Data Runtime.
 
-Project create and edit forms remain generic Form Runtime adoption gaps on the active adoption ledger.
+Project create and edit forms are registered adopters of the current Form Runtime. Project aggregate validation, persistence, publication, and relation invariants remain owned by the Project domain and its RPC/service boundaries.
 
 Residential and commercial variants MUST share the same underlying architecture where their lifecycle is equivalent. Variant differences should be domain configuration, validation, or capability declarations — not duplicate systems.
 
@@ -2145,6 +2175,29 @@ Fallback behavior is permitted only when:
 - it does not hide data corruption or authorization failure.
 
 A fallback MUST NOT transform a failed write into apparent success.
+
+## 13.8 Contract Drift Policy
+
+Every architecture-affecting review MUST compare, for each touched boundary:
+
+1. owner;
+2. runtime or lifecycle;
+3. capability;
+4. adapter;
+5. input contract;
+6. output contract;
+7. consumers;
+8. source of truth.
+
+The reviewer MUST then compare the typed contract, runtime validation, implementation, architecture guard, consumer assumptions, current-state documentation, and deployed evidence when deployment is part of the claim.
+
+If they disagree:
+
+- do not silently edit the contract to match a local implementation;
+- do not preserve stale documentation as authority merely because it is constitutional text;
+- classify whether code is debt, documentation is stale, adoption is partial, or a new decision is required;
+- correct the authoritative owner and its guard within the approved scope;
+- record unresolved drift as blocking debt when it can produce competing owners, wrong data, unsafe security behavior, or false closure.
 
 ---
 
@@ -3493,31 +3546,18 @@ Required when a deployed production behavior is part of the closure claim.
 
 ## 25.3 Current Quality-Gate Commands
 
-The repository currently exposes architecture-relevant commands including:
+The stable entry points are:
 
 ```bash
 npm run lint
 npm run typecheck
-npm run verify:migrations
-npm run verify:legacy-media-admin
-npm run verify:production-media-storage
-npm run verify:unified-content
-npm run verify:topic-image-clear-persistence
-npm run verify:admin-form-system
-npm run verify:admin-entity-list
-npm run verify:admin-data-engine-contracts
-npm run verify:content-taxonomy
-npm run verify:admin-instant-pages
-npm run qa:admin-instant-pages
-npm run verify:admin-instant-projects
-npm run verify:admin-shell-system
-npm run verify:audit-coverage
-npm run verify:admin-runtime
 npm run verify
 npm run ci:check
+npm run test:e2e:public
+npm run test:e2e:authenticated
 ```
 
-The exact script list may evolve. Removing a gate requires an explicit reason and equivalent proof.
+`package.json` is the executable authority for the exact current targeted script inventory; `docs/QA_RELEASE_CLOSURE.md` owns the human-readable command matrix. Removing a gate requires an explicit reason and equivalent proof.
 
 ## 25.4 Targeted First, Final Gate Once
 
@@ -3767,13 +3807,14 @@ Valid:
 
 # 27. PR Architecture Checklist
 
-The following checklist is mandatory for any PR that changes Admin architecture, shared behavior, data flow, storage, migrations, or cross-cutting UI.
+The following checklist is mandatory for any PR that changes architecture governance, Admin architecture, shared behavior, data flow, storage, migrations, or cross-cutting UI.
 
 Copy it into the PR body and answer truthfully.
 
 ```md
 ## Architecture Classification
 
+- [ ] Documentation-only governance change
 - [ ] UI-only consumer change
 - [ ] Existing Runtime adoption
 - [ ] Existing Capability adoption
@@ -3784,6 +3825,19 @@ Copy it into the PR body and answer truthfully.
 - [ ] Database/read-model/RPC change
 - [ ] Storage/infrastructure change
 - [ ] Auth/permission/security change
+
+## Architecture Review Matrix
+
+- Owner: `<owner or N/A with reason>`
+- Runtime: `<runtime/lifecycle owner or N/A with reason>`
+- Capability: `<capability or N/A with reason>`
+- Adapter: `<adapter or N/A with reason>`
+- Input Contract: `<contract or N/A with reason>`
+- Output Contract: `<contract or N/A with reason>`
+- Consumers: `<complete in-scope inventory>`
+- Source of Truth: `<authoritative source>`
+- Contract Drift: `<none | classified finding and resolution>`
+- Blocking Issues: `<count>`
 
 ## Ownership
 
@@ -3914,6 +3968,34 @@ A reviewer should reject or require correction when the PR:
 - lacks failure-path proof for optimistic or atomic behavior;
 - hides migration provenance uncertainty.
 
+## 27.2 Mandatory Architecture Review Matrix
+
+Before a PR that affects architecture can become Ready, the reviewer MUST record a verdict for every axis below:
+
+| Axis | Required proof |
+|---|---|
+| Owner | Existing owner, any owner change, and duplicate-owner scan |
+| Runtime | Lifecycle owner, state owner, and duplicate-runtime scan |
+| Capability | Reusable product function and adopter eligibility |
+| Adapter | Boundary translation only; no lifecycle ownership |
+| Input Contract | Validated intent, rejected states, defaults, and authority |
+| Output Contract | Stable result/error shape and runtime validation |
+| Consumers | Complete in-scope inventory and compatibility impact |
+| Source of Truth | One authoritative state and reconciliation of derived copies |
+
+Use `PASS` only when the axis is applicable and proven, or `N/A` with a concrete reason. Unexplained `N/A`, unchecked boilerplate, or a PR body added only after implementation without truthful answers does not satisfy the checklist.
+
+## 27.3 Blocking Issue Rule
+
+An architecture review outcome MUST state:
+
+- `Architecture PASS` or `Architecture FAIL`;
+- blocking issues only;
+- whether `Blocking Issues = 0`;
+- whether the exact head is eligible for the next authorized gate.
+
+The review does not itself authorize Ready, Merge, deployment, migration, or Production mutation.
+
 ---
 # 28. AI Execution Rules
 
@@ -3923,16 +4005,17 @@ This section is a binding behavioral contract for Codex, Cursor, and any AI agen
 
 Before changing code, an AI agent MUST read, in this order:
 
-1. this file;
-2. the current user/task instruction;
-3. `AGENTS.md` files applicable to the target path;
-4. current Git branch, status, baseline, and PR state;
-5. the relevant System/Runtime/Capability contracts;
-6. the adapter/registry for the target Entity;
-7. one accepted reference consumer;
-8. relevant architecture and behavior tests;
-9. relevant migrations;
-10. the package scripts used by the Quality Gate.
+1. the current user/task instruction;
+2. `AGENTS.md` files applicable to the target path;
+3. this file;
+4. `docs/AI_WORKING_RULES.md` and `docs/CURRENT_PROJECT_STATE.md`;
+5. current Git branch, status, baseline, and PR state;
+6. the relevant System/Runtime/Capability contracts;
+7. the adapter/registry for the target Entity;
+8. one accepted reference consumer;
+9. relevant architecture and behavior tests;
+10. relevant migrations;
+11. the package scripts used by the Quality Gate.
 
 The repository’s `AGENTS.md` currently warns that the installed Next.js version contains breaking changes and that agents must read the relevant guides under `node_modules/next/dist/docs/` before relying on remembered APIs. AI agents MUST follow that instruction.
 
@@ -4052,6 +4135,55 @@ The preferred workflow is:
 6. commit/push/PR only when authorized.
 
 Do not waste usage by repeatedly asking another agent to “review again” without new code or evidence.
+
+## 28.8.1 Read-Only Investigation Gate
+
+When a task is `Audit Only`, `Review Only`, `Inventory`, `Classification`, or `Plan Only`:
+
+- inspect current Git, code, contracts, manifests, guards, PR state, and environment evidence;
+- do not create or switch branches solely for the investigation;
+- do not edit files, commit, push, merge, deploy, migrate, create fixtures, or mutate database/storage/settings;
+- report proven facts, gaps, assumptions, skipped proof, and required decisions;
+- stop after the report unless the Project Owner separately authorizes implementation.
+
+A read-only finding is not implicit authorization to fix it.
+
+## 28.8.2 Product Decision vs Architecture Decision Gate
+
+Before implementation, classify every unresolved choice:
+
+- **Product Decision:** intended user/business behavior;
+- **Architecture Decision:** owner, contract, lifecycle, dependency, source of truth, or infrastructure boundary;
+- **Implementation Detail:** a bounded choice already determined by approved product and architecture rules.
+
+The AI MAY resolve implementation details within scope. It MUST NOT invent Product Decisions or approve material Architecture Decisions. When both are required, record and obtain them separately.
+
+## 28.8.3 Delta Recovery Pattern
+
+When recovering behavior from a stale branch or PR:
+
+1. use current `main` as the baseline;
+2. compare actual files and behaviors, not commit dates or SHA differences alone;
+3. classify every delta as already merged, superseded, still missing, partial, or conflicting with current architecture;
+4. exclude old owners, runtimes, capabilities, adapters, contracts, and implementations that were superseded;
+5. reimplement only still-valid missing or partial behavior inside current owners and contracts;
+6. rebuild guards against current architecture rather than copying old assumptions;
+7. use a fresh branch from current `main` when implementation is authorized;
+8. close the old PR as superseded only after the recovered delta is merged and closure evidence is complete.
+
+Rebase, full cherry-pick, or merging the stale PR is prohibited unless evidence proves it is the only safe solution and the Project Owner explicitly approves it.
+
+## 28.8.4 Architecture Review After the Pass
+
+After one coherent implementation pass and targeted verification:
+
+1. run the architecture review matrix;
+2. if blockers exist and the direction remains correct, perform one focused correction pass addressing those blockers only;
+3. rerun only affected targeted checks;
+4. run one final architecture review;
+5. advance only when `Blocking Issues = 0` and the next gate is separately authorized.
+
+Repeated broad review/correction cycles without new evidence are prohibited.
 
 ## 28.9 Keep Scope Surgical
 
@@ -4409,6 +4541,17 @@ Review architecture in this order:
 
 Do not begin with naming or formatting while ownership is wrong.
 
+## 29.4.1 Boundary Review Record
+
+For every changed behavior, record this chain before the general review order:
+
+```text
+Owner -> Runtime -> Capability -> Adapter -> Input Contract
+      -> Output Contract -> Consumers -> Source of Truth
+```
+
+The chain may contain `N/A` only with a reason. A missing link is either an undeclared boundary, a contract gap, or evidence that the change belongs to a different owner.
+
 ## 29.5 Reviewer Questions
 
 - Did this PR add a new owner?
@@ -4600,6 +4743,38 @@ The following ADRs are part of this constitution.
 **Decision:** Keep one architecture constitution, one agent operating contract, one volatile current-state file, and a small set of domain/process references. Store routine execution evidence outside canonical docs.
 **Consequences:** Old reports may be removed after accepted facts are integrated. Git history remains evidence. New dated documentation requires an explicit reason and cannot become a second authority.
 
+## ADR-022 — Contract Drift Is a Blocking Ownership Defect
+
+**Status:** Accepted
+**Context:** A type, runtime validator, implementation, guard, consumer, or document can evolve independently and create multiple interpretations of one boundary.
+**Decision:** Architecture review compares Owner, Runtime, Capability, Adapter, Input Contract, Output Contract, Consumers, and Source of Truth. Material disagreement is classified and corrected at the authoritative owner; unsafe unresolved drift blocks closure.
+**Consequences:** A passing local behavior or stale document cannot silently redefine the contract. Guards and state records must follow the accepted owner.
+**Evidence:** The 2026-08-12 refresh found a stale Projects Form classification and a stale documented Production migration-registry count while the current manifest and read-only live registry proved newer truth.
+
+## ADR-023 — Product and Architecture Decisions Are Separate Gates
+
+**Status:** Accepted
+**Context:** Permission policy, failure behavior, availability, retention, and UX outcomes cannot be inferred from technical convenience, while ownership decisions cannot be hidden as product preference.
+**Decision:** Product behavior and architecture ownership are classified and approved separately. AI agents may execute bounded implementation details but do not invent either decision class.
+**Consequences:** Product deferrals remain explicit; architecture cannot manufacture policy to claim closure.
+**Evidence:** The current ledger keeps role semantics, throttling, blocking audit, failure policy, Analytics providers, and monitoring selection open because repository architecture cannot choose those product/security outcomes.
+
+## ADR-024 — Recover Delta on Current Main, Never the Stale Baseline
+
+**Status:** Accepted
+**Context:** A stale PR may contain some valid behavior alongside owners, contracts, or implementations superseded by newer `main`.
+**Decision:** Recovery compares real behavior, classifies each delta, and reimplements only the still-valid missing portion inside current owners and contracts on a fresh current-main branch.
+**Consequences:** SHA inequality is not proof of a missing feature. Old-baseline rebase, full cherry-pick, merge, and restoration of superseded architecture are rejected by default.
+**Evidence:** PR #84 recovered the remaining valid PR #82 behavior on then-current `main`; PR #82 was closed unmerged after its superseded owners and contracts were excluded.
+
+## ADR-025 — Investigation, Implementation, Review, and Delivery Are Separate Gates
+
+**Status:** Accepted
+**Context:** Audit findings have repeatedly been confused with authorization to edit, and implementation completion with authorization to Ready, Merge, deploy, migrate, or mutate Production.
+**Decision:** Read-only investigation, implementation, architecture review, focused correction, Ready, Merge, deployment, migration, and Production mutation are separately authorized gates.
+**Consequences:** A completed gate reports its evidence and stops unless the next gate was explicitly authorized.
+**Evidence:** PR #84 required a focused architecture correction before Ready, while PR #85 required a separate GitHub protection correction before its independently authorized merge.
+
 ---
 
 # 31. Current State Is External
@@ -4652,12 +4827,14 @@ The repository maintains a deliberately small canonical set:
 |---|---|
 | `AGENTS.md` | Mandatory coding-agent entry point |
 | `AI_ARCHITECTURE_PRINCIPLES.md` | Highest architecture constitution |
+| `docs/README.md` | Canonical documentation index and authority routing |
 | `docs/AI_WORKING_RULES.md` | Execution, QA, Git, and delivery contract |
 | `docs/CURRENT_PROJECT_STATE.md` | Volatile verified project state |
 | `docs/SYSTEMS_RUNTIMES_CAPABILITIES.md` | Operational ownership map |
 | `docs/DATABASE_MIGRATIONS_STORAGE.md` | Data, migration, audit, and storage contract |
 | `docs/QA_RELEASE_CLOSURE.md` | Verification, Ready, Merge, Production, and closure |
 | `docs/ROADMAP_AND_DEBT_REGISTER.md` | Confirmed findings, exceptions, debt, and roadmap |
+| `docs/ADR_MEDIA_CATALOG_REFERENCE_SAFETY.md` | Linked bounded ADR for Media catalog/reference safety |
 
 ## 32.2 No Parallel Documentation Owners
 
@@ -4691,6 +4868,8 @@ Do not create a new dated report.
 This file is the only architecture constitution.
 
 The canonical documentation set is listed in Section 32. Each file has one limited owner.
+
+`docs/ADR_MEDIA_CATALOG_REFERENCE_SAFETY.md` is the accepted linked dedicated ADR permitted by Sections 2.2 and 32.1. It records one bounded Media decision and does not become a second constitution.
 
 Two competing constitutions, two current-state files, or duplicate Runtime/Capability owners are prohibited.
 
@@ -4815,6 +4994,11 @@ These rules are the fastest summary of the constitution.
 28. **Final Quality Gate runs on the exact final head.**
 29. **Evidence before claims.**
 30. **If architecture is wrong, working code is still wrong.**
+31. **Audit findings do not authorize implementation.**
+32. **Product decisions and architecture decisions are separate.**
+33. **Recover valid delta on current `main`; never restore a superseded baseline.**
+34. **Review Owner, Runtime, Capability, Adapter, contracts, consumers, and source of truth.**
+35. **Advance gates only with explicit authorization and zero blocking issues.**
 
 > **Final constitutional statement:**
 > Venesia Entities do not own shared interaction logic. Runtimes own reusable lifecycle. Capabilities own reusable product functions. Adapters translate boundaries. Shared Components render the result. Systems organize the contract, adoption, tests, and closure.
@@ -5177,6 +5361,14 @@ Use these questions before approving any meaningful change.
 
 # 38. Changelog
 
+## 3.1.0 — 2026-08-12
+
+- Refreshed stale Form Runtime maturity statements to match current executable adoption manifests.
+- Added formal Input Contract, Output Contract, Contract Drift, Product Decision, Architecture Decision, and Delta Recovery definitions.
+- Added the mandatory eight-axis Architecture Review matrix and blocking-issue verdict.
+- Formalized Read-Only Investigation, Product-vs-Architecture decision gates, current-main Delta Recovery, and one-pass review/correction flow.
+- Added ADR-022 through ADR-025 for contract drift, decision separation, delta recovery, and gate authorization.
+- Preserved volatile SHA, PR, deployment, adopter, and debt facts in their external canonical records.
 
 ## 3.0.0 — 2026-07-24
 

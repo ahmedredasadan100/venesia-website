@@ -29,6 +29,8 @@ This document is an operational map. It does not override the architecture const
 | Confirmation System | Accessible dangerous-action confirmation | Confirmation Runtime | Deletion policy owner |
 | Media System | Durable upload/list/delete provider contract | Media Storage Adapter and secured boundaries | Form or entity workflow owner |
 | Unified Content Domain | Topics and specialized content types in one Admin content source | Topic entity, content registry, specialized editors | Parallel Media or Article Admin engine |
+| Public Content Read | Entity-neutral public Topic/media collection and detail reads, search, filters, and pagination | `src/lib/content/public-content-read/` owner and contract | Entity-specific public search/read Runtime |
+| Public Navigation and Redirects | Active menu/published-target navigation snapshots and exact active redirect resolution | Current navigation and redirect read owners | API-local Supabase read path or full redirect collection load |
 | Taxonomy Domain | Categories, hierarchy, series, relation-safe mutations | Category/Series domain services and RPCs | Generic Runtime |
 | Page Composition Domain | Pages, blocks, assignments, menus, footer | Specialized composition workflows | Forced generic form without analysis |
 | Projects Domain | Project entity family and project-specific children | Project domain services and adapters | Duplicate systems per residential/commercial variant |
@@ -348,6 +350,8 @@ Current closure and adoption details come from executable manifests and guards. 
 | Dashboard | `admin_dashboard_truth_v1()` is the request-time KPI/diagnostics read-model owner | Dashboard presentation must not create another KPI source |
 | Reports and Analytics | `admin_reports_truth_v1()` plus the Analytics adapter registry and normalized `analytics_provider_read_models` are the reporting/analytics owners | Reports never call providers or infer connection state |
 | External Integrations | `src/lib/admin/integrations` plus `integration_connections` own OAuth, Vault references, asset binding, provider adapters, connection diagnostics, sync leases/retry/backoff, and watermarks | Vercel Cron is a thin trigger; provider metrics cross only through the Analytics ingestion adapter |
+| Public Content Read | `src/lib/content/public-content-read/` owns current public collection/detail query input and output contracts across Topics and media consumers | Public pages compose this owner; they do not branch into entity-specific search runtimes or restore superseded direct read helpers |
+| Public Navigation and Redirects | Navigation API/layout share the current navigation owner; redirect resolution uses exact capped active lookup | Menu activity and published-target truth remain owner-side; consumers do not create duplicate Supabase read paths |
 | Auth / Users / Security | Server session and user-management foundations exist; all public application tables have live RLS enabled | Role semantics and rate limiting require explicit Product/Security decisions |
 | Database reconciliation | Repository corpus, registry provenance, catalog ownership, validity, and drift are guarded structurally and live | Supabase platform objects remain platform-owned exceptions, not application legacy |
 
@@ -362,3 +366,4 @@ Current closure and adoption details come from executable manifests and guards. 
 - Integrations owns connection management and provider synchronization, but Analytics owns normalized report projections; neither side may infer the other's truth or expose provider secrets to clients, logs, or audit.
 - Performance work begins with measurement owned by the relevant read model; it does not justify a new global performance Runtime.
 - UI/UX, RTL, responsive, focus, and accessibility closure require Browser QA after the relevant implementation tranche.
+- Architecture reviews use the eight-axis matrix and Contract Drift policy defined in Constitution Sections 13.8, 27.2, and 29.4.1; this ownership map does not redefine that process.

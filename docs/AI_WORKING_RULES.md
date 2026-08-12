@@ -65,6 +65,14 @@
 - Security / Auth Change
 - New Runtime / System Proposal
 
+ويصنّف كذلك أي اختيار غير محسوم إلى:
+
+- Product Decision: سلوك المستخدم أو العمل المقصود.
+- Architecture Decision: المالك أو الـLifecycle أو العقد أو اتجاه الاعتماد أو مصدر الحقيقة.
+- Implementation Detail: اختيار محدود حسمته القواعد المعتمدة بالفعل.
+
+الوكيل ينفذ الـImplementation Detail داخل النطاق، لكنه لا يخترع Product Decision ولا يعتمد Architecture Decision ماديًا من تلقاء نفسه.
+
 لا يسمّي Adoption نظامًا جديدًا، ولا يحول عيب شاشة واحدة إلى مرحلة معمارية عامة دون دليل.
 
 ---
@@ -194,6 +202,10 @@ Adoption غير مكتمل طالما المالك القديم ما زال فع
 
 الهدف هو أصغر تغيير صحيح داخل المالك الصحيح.
 
+### Delta Recovery
+
+عند التعامل مع PR أو Branch قديم، يطبق نمط Delta Recovery الحاكم في Sections 5.35 و28.8.3 وADR-024 من الدستور: أحدث `main` هو الـBaseline، والسلوك الفعلي هو الدليل، ولا تُستعاد ملكية أو عقود Superseded.
+
 ---
 
 ## 8. متى ينفذ ومتى يتوقف؟
@@ -242,6 +254,8 @@ Full Access لا يعني Merge أو Deployment أو توسعًا تلقائيً
 
 ينتهي العمل بتقرير وخطة وقرارات مطلوبة فقط.
 
+نتيجة التحقيق Read-only لا تمنح تصريحًا ضمنيًا للتنفيذ. كما أن Architecture Review لا تمنح تلقائيًا تصريح Ready أو Merge أو Deployment أو Migration أو Production Mutation.
+
 ---
 
 ## 10. ترتيب الاختبارات
@@ -261,6 +275,8 @@ Full Access لا يعني Merge أو Deployment أو توسعًا تلقائيً
 لا يُعاد Full QA أو Gate ناجحة بلا تغيير جديد أو دليل جديد أو فشل Gate أو سبب محدد.
 
 Quality Gate على Commit قديم لا تثبت Commit أحدث.
+
+بعد الـPass القوي الواحد، تُطبق Architecture Review Matrix الحاكمة في Sections 27.2 و29.4.1 من الدستور. إذا كانت Blocking Issues أكبر من صفر وكان الاتجاه المعماري صحيحًا، يُنفذ Focused Correction Pass واحد للنقاط الحاجبة فقط، ثم تُعاد الاختبارات المستهدفة المتأثرة وArchitecture Review نهائية. لا تُنقل المرحلة إلى البوابة التالية إلا عندما `Blocking Issues = 0` ومع وجود تصريح مستقل للبوابة التالية.
 
 ---
 

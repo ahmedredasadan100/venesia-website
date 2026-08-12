@@ -91,6 +91,20 @@ Required only when Production behavior is part of the closure claim and a safe t
 
 Do not repeat expensive full suites without a code change, new evidence, a failed gate, or a defined risk.
 
+## 3.1 Architecture review sequence
+
+After the coherent implementation pass and targeted proof, apply the mandatory matrix in Constitution Sections 27.2 and 29.4.1 to every changed behavior.
+
+The review reports only blocking issues and ends with:
+
+```text
+Architecture PASS | Architecture FAIL
+Blocking Issues: <count>
+Eligible for next authorized gate: yes | no
+```
+
+If the architecture direction is correct but blockers remain, perform one focused correction pass for those blockers only, rerun affected targeted checks, and run one final architecture review. Architecture PASS does not itself authorize Ready, Merge, deployment, migration, or Production mutation.
+
 ## 4. Repository command matrix
 
 The current package exposes commands including:
@@ -271,6 +285,7 @@ Ready requires:
 - branch is pushed and aligned;
 - PR evidence is complete;
 - Project Owner explicitly authorizes Ready.
+- the mandatory Architecture Review matrix is complete and `Blocking Issues = 0` when architecture is in scope.
 
 Ready does not authorize Merge.
 
@@ -353,9 +368,9 @@ What remains before the next broader gate.
 
 Finish with one exact closure claim.
 
-## 15. Documentation-only reset QA
+## 15. Documentation-only architecture refresh QA
 
-A documentation reset should prove:
+A documentation-only architecture refresh should prove:
 
 - only canonical docs, entry files, and approved ignore rules changed;
 - no application, package, migration, database, environment, or deployment behavior changed;
@@ -367,8 +382,13 @@ A documentation reset should prove:
 - deleted evidence remains available in Git history;
 - `git diff --check` passes;
 - the Project Owner reviewed the canonical authority order.
+- constitutional rule changes identify their evidence and ADR;
+- stale implementation/adopter statements were compared with current manifests and guards;
+- current SHA, PR, check, deployment, and database facts were independently reverified or explicitly labeled historical;
+- Contract Drift, duplication, contradictory closure wording, and repeated rules were scanned;
+- proofreading covers headings, numbering, code fences, local links, and terminology.
 
-For a Documentation Reset correction pass, run in this order:
+For a documentation-only correction pass, run in this order:
 
 1. targeted reference scan for every deleted file and `docs/qa`;
 2. syntax and output-path checks for any changed QA scripts, without Browser execution when behavior did not change;
@@ -378,4 +398,4 @@ For a Documentation Reset correction pass, run in this order:
 6. `git diff --cached --stat`;
 7. `git status --short`.
 
-The historical Documentation Reset procedure is retained for that narrow task type only. Current findings and decisions come from `CURRENT_PROJECT_STATE.md`, `ROADMAP_AND_DEBT_REGISTER.md`, executable manifests, and current guards; an old audit baseline must never be treated as live truth.
+Current findings and decisions come from `CURRENT_PROJECT_STATE.md`, `ROADMAP_AND_DEBT_REGISTER.md`, executable manifests, current guards, and independently verified environment evidence when explicitly in scope; an old audit baseline must never be treated as live truth.
