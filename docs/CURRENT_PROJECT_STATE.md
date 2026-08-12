@@ -29,9 +29,10 @@ Live Git, GitHub, and deployment evidence supersede this snapshot when they chan
 
 | PR | State | Architecture status |
 |---|---|---|
+| #86 — `AI Architecture Constitution Refresh (Version 3)` | Draft; opened 2026-08-12 | Documentation-only Version 3.1.0 proposal from current baseline; Architecture PASS with zero blocking issues. Not Ready, merged, deployed, or Production-authoritative. |
 | #1 — `chore: set up Cursor Cloud dev environment` | Draft; last updated 2026-07-17 | Historical environment proposal on an old head. It is not current architecture or current-main evidence and requires a fresh delta/architecture review before use. |
 
-This inventory records GitHub state at the beginning of the Constitution Refresh. The refresh PR is recorded after it is created; closed and merged history belongs in GitHub and the durable phase summary below.
+This inventory records GitHub state at the Constitution Refresh delivery gate. Closed and merged history belongs in GitHub and the durable phase summary below.
 
 ## Active phase
 
@@ -39,7 +40,7 @@ This inventory records GitHub state at the beginning of the Constitution Refresh
 - **Baseline:** `5948620314083008a73c668835f1ec789e36dab2`
 - **Branch:** `codex/ai-architecture-constitution-v3-refresh`
 - **Scope:** canonical documentation only; no application, database, Supabase, GitHub-setting, Vercel, deployment, or Production mutation.
-- **PR:** pending creation at this snapshot; the PR body and GitHub become the delivery-state authority after creation.
+- **PR:** Draft #86; the PR body and GitHub are the delivery-state authority.
 
 ## Current architecture truth
 
