@@ -647,7 +647,6 @@ export default function PagesTableClient({
             initialVisibleColumns={initialVisibleColumns}
             defaultVisibleColumns={[...getPagesDefaultColumnKeys()]}
             implicitFlexibleColumn={false}
-            fillAvailableWidth
             onPersistColumns={savePagesTablePreferences}
             onRestoreColumns={restorePagesTablePreferences}
             enableColumnManagement
