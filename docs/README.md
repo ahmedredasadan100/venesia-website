@@ -30,6 +30,8 @@ A lower source must not silently override a higher source.
 | `ROADMAP_AND_DEBT_REGISTER.md` | Confirmed findings, approved exceptions, debt, and execution roadmap | High |
 | `ADR_MEDIA_CATALOG_REFERENCE_SAFETY.md` | Accepted canonical identity, reference, deletion, and replacement decision for Media | Low |
 
+The constitution embeds project-wide ADRs. A dedicated ADR file is allowed only for a bounded decision that needs operational detail; it must remain linked from this index and must not create a second constitutional owner.
+
 ## Update rules
 
 ### Architecture constitution
@@ -55,6 +57,10 @@ Update when an owner, contract, adopter class, or bounded-context relationship c
 ### Roadmap and debt register
 
 Only confirmed, evidence-backed findings belong here. Ideas and product options must remain clearly separated from defects and required work.
+
+### Contract drift review
+
+When a current fact conflicts with a canonical document, compare the exact code, typed contracts, runtime validation, manifests, guards, consumers, GitHub state, and environment proof. Classify the conflict before editing: stale documentation, legacy implementation debt, incomplete adoption, or a new decision. Do not let either old prose or incidental code silently redefine the owner.
 
 ## Documentation anti-patterns
 
