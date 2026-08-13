@@ -91,40 +91,40 @@ values
   ('images/projects/b84/gallery-04.jpg', '/images/projects/b84/gallery-04.jpg', 'images/projects/b84', 'gallery-04.jpg', 'jpg', 'image/jpeg', 258666, '27f07f0c197c5e0f573fd751655a22c0217d64ca2453accf54dbf5757bcfef34'),
   ('images/projects/b84/hero.jpg', '/images/projects/b84/hero.jpg', 'images/projects/b84', 'hero.jpg', 'jpg', 'image/jpeg', 838746, 'f6820d3216d1e2d7f25fe14a3ff9bb4a728c37b8cb949397b556ec41cb9447cc'),
   ('images/projects/b84/location-map.jpg', '/images/projects/b84/location-map.jpg', 'images/projects/b84', 'location-map.jpg', 'jpg', 'image/jpeg', 3109321, 'b556282d86b07a23f2f3ee2f82b3282290b9c094b6782cd4c2bb100725bdb2eb'),
-  ('images/projects/b84/progress-01 - Copy (2).jpg', '/images/projects/b84/progress-01 - Copy (2).jpg', 'images/projects/b84', 'progress-01 - Copy (2).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
-  ('images/projects/b84/progress-01 - Copy (3).jpg', '/images/projects/b84/progress-01 - Copy (3).jpg', 'images/projects/b84', 'progress-01 - Copy (3).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
-  ('images/projects/b84/progress-01 - Copy (4).jpg', '/images/projects/b84/progress-01 - Copy (4).jpg', 'images/projects/b84', 'progress-01 - Copy (4).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
-  ('images/projects/b84/progress-01 - Copy (5).jpg', '/images/projects/b84/progress-01 - Copy (5).jpg', 'images/projects/b84', 'progress-01 - Copy (5).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
-  ('images/projects/b84/progress-01 - Copy (6).jpg', '/images/projects/b84/progress-01 - Copy (6).jpg', 'images/projects/b84', 'progress-01 - Copy (6).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
-  ('images/projects/b84/progress-01 - Copy.jpg', '/images/projects/b84/progress-01 - Copy.jpg', 'images/projects/b84', 'progress-01 - Copy.jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
+  ('images/projects/b84/progress-01 - copy (2).jpg', '/images/projects/b84/progress-01 - copy (2).jpg', 'images/projects/b84', 'progress-01 - copy (2).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
+  ('images/projects/b84/progress-01 - copy (3).jpg', '/images/projects/b84/progress-01 - copy (3).jpg', 'images/projects/b84', 'progress-01 - copy (3).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
+  ('images/projects/b84/progress-01 - copy (4).jpg', '/images/projects/b84/progress-01 - copy (4).jpg', 'images/projects/b84', 'progress-01 - copy (4).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
+  ('images/projects/b84/progress-01 - copy (5).jpg', '/images/projects/b84/progress-01 - copy (5).jpg', 'images/projects/b84', 'progress-01 - copy (5).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
+  ('images/projects/b84/progress-01 - copy (6).jpg', '/images/projects/b84/progress-01 - copy (6).jpg', 'images/projects/b84', 'progress-01 - copy (6).jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
+  ('images/projects/b84/progress-01 - copy.jpg', '/images/projects/b84/progress-01 - copy.jpg', 'images/projects/b84', 'progress-01 - copy.jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
   ('images/projects/b84/progress-01.jpg', '/images/projects/b84/progress-01.jpg', 'images/projects/b84', 'progress-01.jpg', 'jpg', 'image/jpeg', 262155, '4f8835b0ec55c13bc70e24a825e2a77366a25059de1960ef568756529d556cab'),
-  ('images/projects/b84/progress-02 - Copy (2).jpg', '/images/projects/b84/progress-02 - Copy (2).jpg', 'images/projects/b84', 'progress-02 - Copy (2).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
-  ('images/projects/b84/progress-02 - Copy (3).jpg', '/images/projects/b84/progress-02 - Copy (3).jpg', 'images/projects/b84', 'progress-02 - Copy (3).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
-  ('images/projects/b84/progress-02 - Copy (4).jpg', '/images/projects/b84/progress-02 - Copy (4).jpg', 'images/projects/b84', 'progress-02 - Copy (4).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
-  ('images/projects/b84/progress-02 - Copy (5).jpg', '/images/projects/b84/progress-02 - Copy (5).jpg', 'images/projects/b84', 'progress-02 - Copy (5).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
-  ('images/projects/b84/progress-02 - Copy (6).jpg', '/images/projects/b84/progress-02 - Copy (6).jpg', 'images/projects/b84', 'progress-02 - Copy (6).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
-  ('images/projects/b84/progress-02 - Copy.jpg', '/images/projects/b84/progress-02 - Copy.jpg', 'images/projects/b84', 'progress-02 - Copy.jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
+  ('images/projects/b84/progress-02 - copy (2).jpg', '/images/projects/b84/progress-02 - copy (2).jpg', 'images/projects/b84', 'progress-02 - copy (2).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
+  ('images/projects/b84/progress-02 - copy (3).jpg', '/images/projects/b84/progress-02 - copy (3).jpg', 'images/projects/b84', 'progress-02 - copy (3).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
+  ('images/projects/b84/progress-02 - copy (4).jpg', '/images/projects/b84/progress-02 - copy (4).jpg', 'images/projects/b84', 'progress-02 - copy (4).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
+  ('images/projects/b84/progress-02 - copy (5).jpg', '/images/projects/b84/progress-02 - copy (5).jpg', 'images/projects/b84', 'progress-02 - copy (5).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
+  ('images/projects/b84/progress-02 - copy (6).jpg', '/images/projects/b84/progress-02 - copy (6).jpg', 'images/projects/b84', 'progress-02 - copy (6).jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
+  ('images/projects/b84/progress-02 - copy.jpg', '/images/projects/b84/progress-02 - copy.jpg', 'images/projects/b84', 'progress-02 - copy.jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
   ('images/projects/b84/progress-02.jpg', '/images/projects/b84/progress-02.jpg', 'images/projects/b84', 'progress-02.jpg', 'jpg', 'image/jpeg', 258993, '4a507843895e45c8a466bd76ded05badc1ff33ae1798a774ea7c3418e436fdad'),
-  ('images/projects/b84/progress-03 - Copy (2).jpg', '/images/projects/b84/progress-03 - Copy (2).jpg', 'images/projects/b84', 'progress-03 - Copy (2).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
-  ('images/projects/b84/progress-03 - Copy (3).jpg', '/images/projects/b84/progress-03 - Copy (3).jpg', 'images/projects/b84', 'progress-03 - Copy (3).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
-  ('images/projects/b84/progress-03 - Copy (4).jpg', '/images/projects/b84/progress-03 - Copy (4).jpg', 'images/projects/b84', 'progress-03 - Copy (4).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
-  ('images/projects/b84/progress-03 - Copy (5).jpg', '/images/projects/b84/progress-03 - Copy (5).jpg', 'images/projects/b84', 'progress-03 - Copy (5).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
-  ('images/projects/b84/progress-03 - Copy (6).jpg', '/images/projects/b84/progress-03 - Copy (6).jpg', 'images/projects/b84', 'progress-03 - Copy (6).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
-  ('images/projects/b84/progress-03 - Copy.jpg', '/images/projects/b84/progress-03 - Copy.jpg', 'images/projects/b84', 'progress-03 - Copy.jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
+  ('images/projects/b84/progress-03 - copy (2).jpg', '/images/projects/b84/progress-03 - copy (2).jpg', 'images/projects/b84', 'progress-03 - copy (2).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
+  ('images/projects/b84/progress-03 - copy (3).jpg', '/images/projects/b84/progress-03 - copy (3).jpg', 'images/projects/b84', 'progress-03 - copy (3).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
+  ('images/projects/b84/progress-03 - copy (4).jpg', '/images/projects/b84/progress-03 - copy (4).jpg', 'images/projects/b84', 'progress-03 - copy (4).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
+  ('images/projects/b84/progress-03 - copy (5).jpg', '/images/projects/b84/progress-03 - copy (5).jpg', 'images/projects/b84', 'progress-03 - copy (5).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
+  ('images/projects/b84/progress-03 - copy (6).jpg', '/images/projects/b84/progress-03 - copy (6).jpg', 'images/projects/b84', 'progress-03 - copy (6).jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
+  ('images/projects/b84/progress-03 - copy.jpg', '/images/projects/b84/progress-03 - copy.jpg', 'images/projects/b84', 'progress-03 - copy.jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
   ('images/projects/b84/progress-03.jpg', '/images/projects/b84/progress-03.jpg', 'images/projects/b84', 'progress-03.jpg', 'jpg', 'image/jpeg', 262155, '5f6a38ece60f0a9d507d36e4a1f1658032140cb3da573cfc73e5c61c743592a8'),
-  ('images/projects/b84/progress-04 - Copy (2).jpg', '/images/projects/b84/progress-04 - Copy (2).jpg', 'images/projects/b84', 'progress-04 - Copy (2).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
-  ('images/projects/b84/progress-04 - Copy (3).jpg', '/images/projects/b84/progress-04 - Copy (3).jpg', 'images/projects/b84', 'progress-04 - Copy (3).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
-  ('images/projects/b84/progress-04 - Copy (4).jpg', '/images/projects/b84/progress-04 - Copy (4).jpg', 'images/projects/b84', 'progress-04 - Copy (4).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
-  ('images/projects/b84/progress-04 - Copy (5).jpg', '/images/projects/b84/progress-04 - Copy (5).jpg', 'images/projects/b84', 'progress-04 - Copy (5).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
-  ('images/projects/b84/progress-04 - Copy (6).jpg', '/images/projects/b84/progress-04 - Copy (6).jpg', 'images/projects/b84', 'progress-04 - Copy (6).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
-  ('images/projects/b84/progress-04 - Copy.jpg', '/images/projects/b84/progress-04 - Copy.jpg', 'images/projects/b84', 'progress-04 - Copy.jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
+  ('images/projects/b84/progress-04 - copy (2).jpg', '/images/projects/b84/progress-04 - copy (2).jpg', 'images/projects/b84', 'progress-04 - copy (2).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
+  ('images/projects/b84/progress-04 - copy (3).jpg', '/images/projects/b84/progress-04 - copy (3).jpg', 'images/projects/b84', 'progress-04 - copy (3).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
+  ('images/projects/b84/progress-04 - copy (4).jpg', '/images/projects/b84/progress-04 - copy (4).jpg', 'images/projects/b84', 'progress-04 - copy (4).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
+  ('images/projects/b84/progress-04 - copy (5).jpg', '/images/projects/b84/progress-04 - copy (5).jpg', 'images/projects/b84', 'progress-04 - copy (5).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
+  ('images/projects/b84/progress-04 - copy (6).jpg', '/images/projects/b84/progress-04 - copy (6).jpg', 'images/projects/b84', 'progress-04 - copy (6).jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
+  ('images/projects/b84/progress-04 - copy.jpg', '/images/projects/b84/progress-04 - copy.jpg', 'images/projects/b84', 'progress-04 - copy.jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
   ('images/projects/b84/progress-04.jpg', '/images/projects/b84/progress-04.jpg', 'images/projects/b84', 'progress-04.jpg', 'jpg', 'image/jpeg', 258993, '18220e13ba346b3aa1ef511ac7565d29de11243c12524315ec7f1d1f40448051'),
-  ('images/projects/b84/progress-05 - Copy (2).jpg', '/images/projects/b84/progress-05 - Copy (2).jpg', 'images/projects/b84', 'progress-05 - Copy (2).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
-  ('images/projects/b84/progress-05 - Copy (3).jpg', '/images/projects/b84/progress-05 - Copy (3).jpg', 'images/projects/b84', 'progress-05 - Copy (3).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
-  ('images/projects/b84/progress-05 - Copy (4).jpg', '/images/projects/b84/progress-05 - Copy (4).jpg', 'images/projects/b84', 'progress-05 - Copy (4).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
-  ('images/projects/b84/progress-05 - Copy (5).jpg', '/images/projects/b84/progress-05 - Copy (5).jpg', 'images/projects/b84', 'progress-05 - Copy (5).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
-  ('images/projects/b84/progress-05 - Copy (6).jpg', '/images/projects/b84/progress-05 - Copy (6).jpg', 'images/projects/b84', 'progress-05 - Copy (6).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
-  ('images/projects/b84/progress-05 - Copy.jpg', '/images/projects/b84/progress-05 - Copy.jpg', 'images/projects/b84', 'progress-05 - Copy.jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
+  ('images/projects/b84/progress-05 - copy (2).jpg', '/images/projects/b84/progress-05 - copy (2).jpg', 'images/projects/b84', 'progress-05 - copy (2).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
+  ('images/projects/b84/progress-05 - copy (3).jpg', '/images/projects/b84/progress-05 - copy (3).jpg', 'images/projects/b84', 'progress-05 - copy (3).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
+  ('images/projects/b84/progress-05 - copy (4).jpg', '/images/projects/b84/progress-05 - copy (4).jpg', 'images/projects/b84', 'progress-05 - copy (4).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
+  ('images/projects/b84/progress-05 - copy (5).jpg', '/images/projects/b84/progress-05 - copy (5).jpg', 'images/projects/b84', 'progress-05 - copy (5).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
+  ('images/projects/b84/progress-05 - copy (6).jpg', '/images/projects/b84/progress-05 - copy (6).jpg', 'images/projects/b84', 'progress-05 - copy (6).jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
+  ('images/projects/b84/progress-05 - copy.jpg', '/images/projects/b84/progress-05 - copy.jpg', 'images/projects/b84', 'progress-05 - copy.jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
   ('images/projects/b84/progress-05.jpg', '/images/projects/b84/progress-05.jpg', 'images/projects/b84', 'progress-05.jpg', 'jpg', 'image/jpeg', 258993, 'cd55ba3f4d6129dc1f252e4a7382fc708ab4cdf4bbb9334665df3d86c8744592'),
   ('images/projects/b84/specs-01.jpg', '/images/projects/b84/specs-01.jpg', 'images/projects/b84', 'specs-01.jpg', 'jpg', 'image/jpeg', 575014, 'a4150326c86bf59985a95c7b566f5075a5bf1c06a169614c5bc3da5a2857e247'),
   ('images/projects/b84/specs-02.jpg', '/images/projects/b84/specs-02.jpg', 'images/projects/b84', 'specs-02.jpg', 'jpg', 'image/jpeg', 537101, '466cc83f70009a632bf507582c5062aaac61b847aa824428f9342a96a0540041'),
@@ -330,10 +330,10 @@ begin
   if exists (
     select 1
     from legacy_project_media_seed
-    where folder_path ~* '^images/projects/'
-      and folder_path <> lower(folder_path)
+    where object_key ~* '^images/projects/'
+      and object_key <> lower(object_key)
   ) then
-    raise exception 'legacy project media folders must use lowercase canonical paths';
+    raise exception 'legacy project media must use lowercase canonical paths';
   end if;
 end;
 $$;
@@ -519,11 +519,11 @@ alter table public.media_assets
   check (
     (
       object_key !~* '^images/projects/'
-      or regexp_replace(object_key, '/[^/]+$', '') = lower(regexp_replace(object_key, '/[^/]+$', ''))
+      or object_key = lower(object_key)
     )
     and (
       public_url !~* '/images/projects/'
-      or regexp_replace(substring(public_url from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(public_url from '(?i)/images/projects/.*'), '/[^/]+$', ''))
+      or substring(public_url from '(?i)/images/projects/.*') = lower(substring(public_url from '(?i)/images/projects/.*'))
     )
     and (
       folder_path !~* '^images/projects/'
@@ -534,18 +534,18 @@ alter table public.media_assets
 alter table public.projects
   add constraint projects_media_path_lowercase_check
   check (
-    (image !~* '/images/projects/' or regexp_replace(substring(image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(image from '(?i)/images/projects/.*'), '/[^/]+$', '')))
-    and (hero_image !~* '/images/projects/' or regexp_replace(substring(hero_image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(hero_image from '(?i)/images/projects/.*'), '/[^/]+$', '')))
-    and (small_box_image !~* '/images/projects/' or regexp_replace(substring(small_box_image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(small_box_image from '(?i)/images/projects/.*'), '/[^/]+$', '')))
-    and (overview_main_image !~* '/images/projects/' or regexp_replace(substring(overview_main_image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(overview_main_image from '(?i)/images/projects/.*'), '/[^/]+$', '')))
-    and (og_image !~* '/images/projects/' or regexp_replace(substring(og_image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(og_image from '(?i)/images/projects/.*'), '/[^/]+$', '')))
+    (image !~* '/images/projects/' or substring(image from '(?i)/images/projects/.*') = lower(substring(image from '(?i)/images/projects/.*')))
+    and (hero_image !~* '/images/projects/' or substring(hero_image from '(?i)/images/projects/.*') = lower(substring(hero_image from '(?i)/images/projects/.*')))
+    and (small_box_image !~* '/images/projects/' or substring(small_box_image from '(?i)/images/projects/.*') = lower(substring(small_box_image from '(?i)/images/projects/.*')))
+    and (overview_main_image !~* '/images/projects/' or substring(overview_main_image from '(?i)/images/projects/.*') = lower(substring(overview_main_image from '(?i)/images/projects/.*')))
+    and (og_image !~* '/images/projects/' or substring(og_image from '(?i)/images/projects/.*') = lower(substring(og_image from '(?i)/images/projects/.*')))
   );
 
 alter table public.project_media
   add constraint project_media_path_lowercase_check
   check (
     image !~* '/images/projects/'
-    or regexp_replace(substring(image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(image from '(?i)/images/projects/.*'), '/[^/]+$', ''))
+    or substring(image from '(?i)/images/projects/.*') = lower(substring(image from '(?i)/images/projects/.*'))
   );
 
 alter table public.project_floor_plans
@@ -553,11 +553,11 @@ alter table public.project_floor_plans
   check (
     (
       architectural_image !~* '/images/projects/'
-      or regexp_replace(substring(architectural_image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(architectural_image from '(?i)/images/projects/.*'), '/[^/]+$', ''))
+      or substring(architectural_image from '(?i)/images/projects/.*') = lower(substring(architectural_image from '(?i)/images/projects/.*'))
     )
     and (
       furnishing_image !~* '/images/projects/'
-      or regexp_replace(substring(furnishing_image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(furnishing_image from '(?i)/images/projects/.*'), '/[^/]+$', ''))
+      or substring(furnishing_image from '(?i)/images/projects/.*') = lower(substring(furnishing_image from '(?i)/images/projects/.*'))
     )
   );
 
@@ -565,7 +565,7 @@ alter table public.project_videos
   add constraint project_videos_media_path_lowercase_check
   check (
     poster_image !~* '/images/projects/'
-    or regexp_replace(substring(poster_image from '(?i)/images/projects/.*'), '/[^/]+$', '') = lower(regexp_replace(substring(poster_image from '(?i)/images/projects/.*'), '/[^/]+$', ''))
+    or substring(poster_image from '(?i)/images/projects/.*') = lower(substring(poster_image from '(?i)/images/projects/.*'))
   );
 
 with project_references as (

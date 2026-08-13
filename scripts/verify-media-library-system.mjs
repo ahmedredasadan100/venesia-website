@@ -97,11 +97,11 @@ assert.throws(
   () => identityModule.createCanonicalMediaIdentity({
     provider: "filesystem",
     bucket: "public",
-    objectKey: "images/projects/c35/nested/Hero/hero.jpg",
+    objectKey: "images/projects/c35/Hero Copy.jpg",
   }),
   (error) => error?.code === "invalid_project_media_path_case",
 );
-check("legacy public Project identities require lowercase folder paths without fallback normalization", true);
+check("legacy public Project identities require lowercase paths without fallback normalization", true);
 
 const usageSupabase = {
   from(table) {
