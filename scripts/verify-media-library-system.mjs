@@ -79,20 +79,29 @@ check("typed provider registry is unique and covers the 16 live declared domains
 const legacyDocument = "/files/projects/document-1782017403551.pdf";
 assert.equal(providerModule.extractMediaCandidateValues(`download ${legacyDocument} now`).includes(legacyDocument), true);
 check("reference candidate extraction includes embedded legacy /images and /files paths", true);
-assert.deepEqual(identityModule.parseLegacyPublicMediaAsset("/images/projects/C35/hero.jpg?preview=1"), {
+assert.deepEqual(identityModule.parseLegacyPublicMediaAsset("/images/projects/c35/hero.jpg?preview=1"), {
   provider: "filesystem",
   bucket: "public",
-  objectKey: "images/projects/C35/hero.jpg",
+  objectKey: "images/projects/c35/hero.jpg",
 });
 assert.equal(
   identityModule.getCanonicalMediaIdentityKey({
     provider: "filesystem",
     bucket: "public",
-    objectKey: "images/projects/C35/hero.jpg",
+    objectKey: "images/projects/c35/hero.jpg",
   }),
-  "filesystem:public:images/projects/C35/hero.jpg",
+  "filesystem:public:images/projects/c35/hero.jpg",
 );
-check("legacy public Project assets preserve their exact-case canonical identity", true);
+assert.equal(identityModule.parseLegacyPublicMediaAsset("/images/projects/C35/hero.jpg"), null);
+assert.throws(
+  () => identityModule.createCanonicalMediaIdentity({
+    provider: "filesystem",
+    bucket: "public",
+    objectKey: "images/projects/c35/nested/Hero/hero.jpg",
+  }),
+  (error) => error?.code === "invalid_project_media_path_case",
+);
+check("legacy public Project identities require lowercase folder paths without fallback normalization", true);
 
 const usageSupabase = {
   from(table) {
@@ -334,11 +343,11 @@ const canonicalLegacyProjectAsset = {
   id: "legacy-project-c35-hero",
   provider: "filesystem",
   bucket: "public",
-  objectKey: "images/projects/C35/hero.jpg",
-  publicUrl: "/images/projects/C35/hero.jpg",
+  objectKey: "images/projects/c35/hero.jpg",
+  publicUrl: "/images/projects/c35/hero.jpg",
   displayName: "hero.jpg",
   originalFilename: "hero.jpg",
-  folderPath: "images/projects/C35",
+  folderPath: "images/projects/c35",
   sizeBytes: 1024,
   checksum: "legacy-project-checksum",
   source: "catalog",
@@ -350,7 +359,7 @@ const productionPickerPage = catalogModule.buildMediaLibraryReadModel(
   { smartView: "all", folder: "images/projects", context: runtimeContext },
 );
 assert.equal(productionPickerPage.assets.length, 1);
-assert.equal(productionPickerPage.assets[0].publicUrl, "/images/projects/C35/hero.jpg");
+assert.equal(productionPickerPage.assets[0].publicUrl, "/images/projects/c35/hero.jpg");
 assert.equal(productionPickerPage.assets[0].provider, "filesystem");
 assert.equal(productionPickerPage.assets[0].catalogRegistered, true);
 assert.equal(productionPickerPage.assets[0].missingObject, false);

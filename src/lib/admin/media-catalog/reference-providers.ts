@@ -508,7 +508,7 @@ const PROVIDER_CONFIGS = [
 ] satisfies ProviderConfig[];
 
 export const MEDIA_REFERENCE_PROVIDER_REGISTRY = PROVIDER_CONFIGS.map(createProvider);
-export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v3-legacy-project-canonical";
+export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v4-lowercase-project-media";
 
 export function getMediaReferenceProvider(domainKey: string) {
   return MEDIA_REFERENCE_PROVIDER_REGISTRY.find((provider) => provider.domainKey === domainKey) ?? null;

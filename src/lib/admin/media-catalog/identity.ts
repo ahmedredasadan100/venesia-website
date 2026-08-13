@@ -29,10 +29,19 @@ export function createCanonicalMediaIdentity(input: CanonicalMediaIdentity): Can
   if (input.provider === "filesystem" && bucket !== LEGACY_PUBLIC_MEDIA_BUCKET) {
     throw new MediaStorageError("invalid_media_bucket", "حاوية ملف الوسائط غير صالحة.", 400);
   }
+  const objectKey = normalizeManagedObjectKey(input.objectKey);
+  const objectDirectory = path.posix.dirname(objectKey);
+  if (/^images\/projects\//i.test(objectKey) && objectDirectory !== objectDirectory.toLowerCase()) {
+    throw new MediaStorageError(
+      "invalid_project_media_path_case",
+      "Project media paths require a lowercase project folder.",
+      400,
+    );
+  }
   return {
     provider: input.provider,
     bucket,
-    objectKey: normalizeManagedObjectKey(input.objectKey),
+    objectKey,
   };
 }
 

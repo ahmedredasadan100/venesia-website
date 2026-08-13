@@ -143,7 +143,10 @@ const manifestProviders = manifest.providerRegistry ?? [];
 const synchronizationSource = read("src/lib/admin/media-catalog/synchronization.ts");
 const domainCoordinationSource = read("src/lib/admin/media-catalog/domain-write-coordination.ts");
 
-if (manifest.schemaVersion !== 1) failures.push("Manifest schemaVersion must be 1.");
+if (manifest.schemaVersion !== 2) failures.push("Manifest schemaVersion must be 2.");
+if (manifest.projectMediaPathConvention !== "lowercase-folders") {
+  failures.push("Project Media path convention must be the canonical lowercase-folders contract.");
+}
 if (manifest.globalClosure !== true) {
   failures.push("Global Media write-coordination closure must be true after the complete writer inventory is closed.");
 }

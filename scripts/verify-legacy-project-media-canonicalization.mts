@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,13 +31,19 @@ const seedRows = [...migration.matchAll(
   checksum: match[8],
 }));
 
-check("migration owns exactly 270 canonical legacy Project identities", seedRows.length === 270);
+check("migration owns exactly 278 canonical legacy Project identities", seedRows.length === 278);
 check(
   "canonical identity seed has no case-insensitive path collisions",
   new Set(seedRows.map((row) => row.publicUrl.toLowerCase())).size === seedRows.length,
 );
 check(
-  "every canonical Project identity maps to the exact tracked public asset",
+  "every canonical Project identity uses lowercase directory segments",
+  seedRows
+    .filter((row) => row.objectKey.startsWith("images/projects/"))
+    .every((row) => dirname(row.objectKey) === dirname(row.objectKey).toLowerCase()),
+);
+check(
+  "every canonical Project identity maps to the exact physical public asset",
   seedRows.every((row) => {
     const absolutePath = join(ROOT, "public", ...row.objectKey.split("/"));
     if (!existsSync(absolutePath)) return false;
@@ -50,8 +56,24 @@ check(
   }),
 );
 
+const projectAssetsRoot = join(ROOT, "public", "images", "projects");
+const projectDirectories: string[] = [];
+function collectProjectDirectories(absolutePath: string, relativePath = "") {
+  for (const entry of readdirSync(absolutePath, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const nextRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+    projectDirectories.push(nextRelativePath);
+    collectProjectDirectories(join(absolutePath, entry.name), nextRelativePath);
+  }
+}
+collectProjectDirectories(projectAssetsRoot);
+check(
+  "all physical Project media directories use the lowercase convention",
+  projectDirectories.every((directory) => directory === directory.toLowerCase()),
+);
+
 const trackedProjectAssets = seedRows.filter((row) => row.objectKey.startsWith("images/projects/"));
-check("all 268 tracked Project-folder images are cataloged", trackedProjectAssets.length === 268);
+check("all 276 canonical Project-folder images are cataloged", trackedProjectAssets.length === 276);
 
 const db = await PGlite.create({ extensions: { pgcrypto } });
 await db.exec(`
@@ -199,7 +221,7 @@ await db.exec(migration);
 const assetCount = await db.query<{ count: number }>(
   "select count(*)::integer as count from public.media_assets where provider = 'filesystem' and bucket = 'public'",
 );
-check("migration registers all legacy Project assets in the existing Media Catalog", assetCount.rows[0]?.count === 270);
+check("migration registers all legacy Project assets in the existing Media Catalog", assetCount.rows[0]?.count === 278);
 
 const project = await db.query<{
   image: string;
@@ -209,12 +231,12 @@ const project = await db.query<{
   og_image: string;
 }>("select image, hero_image, small_box_image, overview_main_image, og_image from public.projects where id = 101");
 check(
-  "Project root URLs adopt exact static-asset casing",
-  project.rows[0]?.image === "/images/projects/C35/cover.jpg"
-    && project.rows[0]?.hero_image === "/images/projects/C35/hero.jpg"
-    && project.rows[0]?.small_box_image === "/images/projects/C35/cover.jpg"
-    && project.rows[0]?.overview_main_image === "/images/projects/C35/hero.jpg"
-    && project.rows[0]?.og_image === "/images/projects/C35/hero.jpg",
+  "Project root URLs adopt the lowercase Project-folder contract",
+  project.rows[0]?.image === "/images/projects/c35/cover.jpg"
+    && project.rows[0]?.hero_image === "/images/projects/c35/hero.jpg"
+    && project.rows[0]?.small_box_image === "/images/projects/c35/cover.jpg"
+    && project.rows[0]?.overview_main_image === "/images/projects/c35/hero.jpg"
+    && project.rows[0]?.og_image === "/images/projects/c35/hero.jpg",
 );
 
 const children = await db.query<{
@@ -234,12 +256,66 @@ const children = await db.query<{
   where media.id = 201 and plan.id = 301 and video.id = 401
 `);
 check(
-  "Project child URLs adopt the same exact-case contract",
-  children.rows[0]?.media_image === "/images/projects/B137/progress-01.jpg"
-    && children.rows[0]?.architectural_image === "/images/projects/F222/floorplan-01.jpg"
-    && children.rows[0]?.furnishing_image === "/images/projects/F222/floorplan-02.jpg"
-    && children.rows[0]?.poster_image === "/images/projects/F92/hero.jpg",
+  "Project child URLs adopt the same lowercase Project-folder contract",
+  children.rows[0]?.media_image === "/images/projects/b137/progress-01.jpg"
+    && children.rows[0]?.architectural_image === "/images/projects/f222/floorplan-01.jpg"
+    && children.rows[0]?.furnishing_image === "/images/projects/f222/floorplan-02.jpg"
+    && children.rows[0]?.poster_image === "/images/projects/f92/hero.jpg",
 );
+
+await assert.rejects(
+  db.exec("insert into public.projects (id, image) values (102, '/images/projects/C35/new.jpg')"),
+  /projects_media_path_lowercase_check/,
+);
+await assert.rejects(
+  db.exec("insert into public.project_media values (202, 101, '/images/projects/C35/new.jpg')"),
+  /project_media_path_lowercase_check/,
+);
+await assert.rejects(
+  db.exec("insert into public.project_media values (204, 101, 'https://demo.supabase.co/storage/v1/object/public/cms-images/images/projects/C35/new.jpg')"),
+  /project_media_path_lowercase_check/,
+);
+await assert.rejects(
+  db.exec("insert into public.project_floor_plans values (302, 101, '/images/projects/C35/new.jpg', null)"),
+  /project_floor_plans_media_path_lowercase_check/,
+);
+await assert.rejects(
+  db.exec("insert into public.project_videos values (402, 101, '/images/projects/C35/new.jpg')"),
+  /project_videos_media_path_lowercase_check/,
+);
+await assert.rejects(
+  db.exec("insert into public.media_folders (normalized_path, parent_path, display_name) values ('images/projects/C35', 'images/projects', 'C35')"),
+  /media_folders_project_path_lowercase_check/,
+);
+await assert.rejects(
+  db.exec(`
+    insert into public.media_assets (
+      provider,
+      bucket,
+      object_key,
+      public_url,
+      original_filename,
+      display_name,
+      media_kind,
+      extension,
+      folder_path
+    ) values (
+      'filesystem',
+      'public',
+      'images/about/not-a-project-asset.jpg',
+      '/images/projects/C35/not-a-project-asset.jpg',
+      'not-a-project-asset.jpg',
+      'not-a-project-asset.jpg',
+      'image',
+      'jpg',
+      'images'
+    )
+  `),
+  /media_assets_project_path_lowercase_check/,
+);
+await db.exec("insert into public.project_media values (203, 101, '/images/projects/c35/Hero Copy.jpg')");
+await db.exec("delete from public.project_media where id = 203");
+check("database guards reject uppercase Project folders without rewriting valid filename casing", true);
 
 const referenceCount = await db.query<{ count: number }>(
   "select count(*)::integer as count from public.media_references reference join public.media_assets asset on asset.id = reference.asset_id where reference.domain_key in ('projects', 'project_media', 'project_floor_plans', 'project_videos') and asset.provider = 'filesystem'",

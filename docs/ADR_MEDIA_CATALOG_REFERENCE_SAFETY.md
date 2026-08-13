@@ -19,7 +19,7 @@ Runtime uploads already have one durable provider boundary, but a storage listin
 - Replacement uploads a new unique object, then rebinds every supported reference with compensation on partial failure. It never overwrites the existing object path and never deletes the old asset automatically.
 - Folder paths are normalized catalog records backed by Storage prefixes. Empty folders may exist only in the catalog; Storage has no physical empty-directory object.
 - Legacy `/images/**` and `/files/**` values remain unmanaged and undeletable through the managed Storage endpoint.
-- Legacy Project images shipped in `public` are registered in the same Media Catalog with canonical `(filesystem, public, object_key)` identity. Their exact-cased Catalog URL is the reference contract consumed by Projects and the shared picker; the binary remains a read-only deployment asset.
+- Legacy Project images shipped in `public` are registered in the same Media Catalog with canonical `(filesystem, public, object_key)` identity. Every directory segment under `public/images/projects` is lowercase; that Catalog URL is the reference contract consumed by Projects and the shared picker, while the binary remains a read-only deployment asset.
 - `MediaLibraryCore` owns both Manage and Select presentation modes. Selection changes a consumer field only after explicit confirmation.
 
 ## Consequences
@@ -29,6 +29,7 @@ Runtime uploads already have one durable provider boundary, but a storage listin
 - A canceled replacement leaves the newly uploaded asset unused by design.
 - Project aggregate writes and Media reference synchronization remain under their current guarded owners; environment-specific destructive readiness must not be inferred from repository closure.
 - Project aggregate reference providers discover and synchronize both managed Storage identities and canonical read-only legacy identities through the same provider registry while retaining their specialized no-rebind mutation boundary. No consumer owns a legacy lookup or case-repair path.
+- Project media paths fail closed when any directory segment is not lowercase. Repository and database guards enforce the convention; no runtime performs uppercase/lowercase fallback resolution.
 - Single managed-asset physical rename/move is coordinated through Storage move, catalog identity update, provider rebind, and compensation. Physical folder rename/move and multi-asset move are not claimed by this foundation.
 
 ## Required proof

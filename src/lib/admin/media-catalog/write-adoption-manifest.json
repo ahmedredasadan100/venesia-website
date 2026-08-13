@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "capability": "media_reference_write_coordination",
+  "projectMediaPathConvention": "lowercase-folders",
   "globalClosure": true,
   "classifications": [
     "adopted",
