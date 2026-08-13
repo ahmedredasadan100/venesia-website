@@ -317,7 +317,7 @@ export default function TopicsWithoutImageReportClient({
     <AdminEntityListSurface consumer="topics-without-image">
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
-          controller.isFetching ? "true" : "false"
+          controller.queryPending ? "true" : "false"
         }
       >
         <AdminEntityList<
@@ -334,7 +334,6 @@ export default function TopicsWithoutImageReportClient({
               placeholder: "بحث بالعنوان أو slug",
               value: controller.query.search,
               minLength: topicsWithoutImageQueryContract.searchMinLength,
-              pending: controller.isFetching,
             },
             filters: REPORT_FILTERS,
             values: {
@@ -426,7 +425,6 @@ export default function TopicsWithoutImageReportClient({
           emptySummaryText="لا توجد موضوعات بلا صورة"
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.isFetching}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

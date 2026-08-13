@@ -1,9 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import AdminPageHeader from "../../../../../../components/admin/AdminPageHeader";
-import AdminStatusBadge from "../../../../../../components/admin/AdminStatusBadge";
 import AdminCategoryBadge from "../../../../../../components/admin/content/AdminCategoryBadge";
+import {
+  AdminPageHeader,
+  AdminStatusPill,
+} from "../../../../../../components/admin/ui";
 import RichTextContent from "../../../../../../components/content/RichTextContent";
 import {
   resolveYouTubeEmbedUrl,
@@ -11,6 +13,7 @@ import {
 } from "../../../../../../lib/admin/media-topic-payload";
 import { requireAdminSession } from "../../../../../../lib/admin/auth/require-admin-session";
 import { getContentTypeLabel, isContentType } from "../../../../../../lib/admin/content/content-types";
+import { getContentStatusMetadata } from "../../../../../../lib/admin/content/content-status-metadata";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +36,7 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
 
   if (!topic || !isContentType(topic.content_type)) notFound();
   const payload = (topic.media_payload ?? null) as MediaTopicPayload | null;
+  const publication = getContentStatusMetadata(topic.status);
 
   return (
     <main className="space-y-7">
@@ -42,7 +46,9 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
         description="معاينة إدارية موحدة لا تسجل مشاهدة عامة ولا تغيّر حالة المحتوى."
         actions={
           <>
-            <AdminStatusBadge status={topic.status === "published" ? "published" : "unpublished"} />
+            <AdminStatusPill tone={publication.tone}>
+              {publication.label}
+            </AdminStatusPill>
             <Link
               href={`/admin/content/topics/${topic.id}`}
               className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/65 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"

@@ -41,6 +41,7 @@ import type {
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
+import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list/feedback-codes";
 import {
   legacyPageSortFields,
@@ -80,8 +81,7 @@ function statusMeta(status: string) {
 }
 
 type PageRowActionHandlers = {
-  rowPendingAction: (id: number) => string | null;
-  mutationBusy: boolean;
+  rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onCopyPublicLink: (row: AdminPageListRow) => Promise<AdminActionResult>;
   onDelete: (row: AdminPageListRow) => Promise<AdminActionResult>;
   onDuplicate: (row: AdminPageListRow) => Promise<AdminActionResult>;
@@ -116,7 +116,8 @@ function PageRowActions({
   onMutationResult?: (result: AdminActionResult) => void;
   display?: "menu" | "visibility";
 }) {
-  const pendingAction = handlers.rowPendingAction(row.id);
+  const interaction = handlers.rowInteraction(row.id);
+  const pendingAction = interaction.pendingAction;
   const status = statusMeta(row.status);
   const blocked = getPageDeleteBlockReason({ slug: row.slug, path: row.path });
   const publicPath = resolvePagePublicPath(row);
@@ -125,11 +126,6 @@ function PageRowActions({
     disabledReason: MUTATION_PENDING_REASON,
     pending: true,
   };
-  const busyState = {
-    access: "disabled" as const,
-    disabledReason: MUTATION_PENDING_REASON,
-  };
-
   async function run(handler: (page: AdminPageListRow) => Promise<AdminActionResult>) {
     const result = await handler(row);
     onMutationResult?.(result);
@@ -173,40 +169,34 @@ function PageRowActions({
       visibility:
         pendingAction === "visibility"
           ? { ...pendingState, isVisible: row.status === "published" }
-          : handlers.mutationBusy
-            ? { ...busyState, isVisible: row.status === "published" }
-            : {
-                access: "allowed",
-                isVisible: row.status === "published",
-                onSelect: () => run(handlers.onToggle),
-              },
+          : {
+              access: "allowed",
+              isVisible: row.status === "published",
+              onSelect: () => run(handlers.onToggle),
+            },
       featured: { access: "hidden" },
       duplicate:
         pendingAction === "duplicate"
           ? pendingState
-          : handlers.mutationBusy
-            ? busyState
-            : {
-                access: "allowed",
-                onSelect: () => run(handlers.onDuplicate),
-              },
+          : {
+              access: "allowed",
+              onSelect: () => run(handlers.onDuplicate),
+            },
       archive: { access: "hidden" },
       delete: blocked
         ? { access: "disabled", disabledReason: blocked }
         : pendingAction === "delete"
           ? pendingState
-          : handlers.mutationBusy
-            ? busyState
-            : {
-                access: "allowed",
-                onSelect: () => run(handlers.onDelete),
-                confirmation: {
-                  mode: "shared",
-                  title: `حذف الصفحة «${row.title}»؟`,
-                  description: PAGE_DELETE_CONFIRM,
-                  confirmLabel: "تأكيد الحذف",
-                },
+          : {
+              access: "allowed",
+              onSelect: () => run(handlers.onDelete),
+              confirmation: {
+                mode: "shared",
+                title: `حذف الصفحة «${row.title}»؟`,
+                description: PAGE_DELETE_CONFIRM,
+                confirmLabel: "تأكيد الحذف",
               },
+            },
     },
   };
 
@@ -346,6 +336,7 @@ function createPageColumns(
       minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.statusCompact, 10),
       width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.statusCompact, 10),
       align: "center",
+      sticky: "end-adjacent",
       renderCell: ({ row, onMutationResult }) => (
         <PageRowActions
           row={row}
@@ -569,10 +560,7 @@ export default function PagesTableClient({
     () =>
       createPageColumns(
         {
-          rowPendingAction: (id) =>
-            instant.rowPending?.rowId === id ? instant.rowPending.action : null,
-          mutationBusy:
-            instant.rowPending !== null || instant.bulkPending !== null,
+          rowInteraction: instant.getRowInteraction,
           onCopyPublicLink: copyPublicLink,
           onDelete: deletePage,
           onDuplicate: duplicate,
@@ -582,7 +570,7 @@ export default function PagesTableClient({
       ),
     // The handlers intentionally close over the current normalized-list mutation owner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [instant.bulkPending, instant.rowPending, supportedSortFields],
+    [instant.getRowInteraction, supportedSortFields],
   );
   const initialFeedback = useMemo(
     () => {
@@ -612,7 +600,7 @@ export default function PagesTableClient({
       <AdminEntityListSurface consumer="pages">
         <AdminEntityListTableRegion
           data-admin-entity-list-pending={
-            controller.isFetching ? "true" : "false"
+            controller.queryPending ? "true" : "false"
           }
         >
           <AdminEntityList<
@@ -628,7 +616,6 @@ export default function PagesTableClient({
                 placeholder: "ابحث في الصفحات",
                 value: controller.query.search,
                 minLength: pagesQueryContract.searchMinLength,
-                pending: controller.isFetching,
               },
               filters: [],
               values: {},
@@ -646,8 +633,6 @@ export default function PagesTableClient({
             getRowLabel={(row) => row.title}
             initialVisibleColumns={initialVisibleColumns}
             defaultVisibleColumns={[...getPagesDefaultColumnKeys()]}
-            implicitFlexibleColumn={false}
-            fillAvailableWidth
             onPersistColumns={savePagesTablePreferences}
             onRestoreColumns={restorePagesTablePreferences}
             enableColumnManagement
@@ -732,7 +717,6 @@ export default function PagesTableClient({
             emptySummaryText="لا توجد صفحات"
             onPageChange={controller.setPage}
             onPageSizeChange={controller.setPageSize}
-            pending={controller.isFetching}
           />
         </AdminEntityListTableRegion>
       </AdminEntityListSurface>

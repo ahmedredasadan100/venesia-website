@@ -21,9 +21,19 @@ export async function reorderMenuItems(
   }
   try {
     await revalidateNavigation();
-    return { ok: true as const, code: "menu_reordered" };
+    return {
+      ok: true as const,
+      code: "menu_reordered",
+      message: "تم حفظ ترتيب عناصر القائمة.",
+      feedbackStatus: "success" as const,
+    };
   } catch (error) {
     console.error("Menu reorder committed but cache revalidation failed.", error);
-    return { ok: true as const, code: "saved_with_cache_warning", warning: "تم حفظ الترتيب، لكن تعذرت إعادة التحقق من الذاكرة المؤقتة." };
+    return {
+      ok: true as const,
+      code: "saved_with_cache_warning",
+      message: "تم حفظ الترتيب، لكن تعذرت إعادة التحقق من الذاكرة المؤقتة.",
+      feedbackStatus: "warning" as const,
+    };
   }
 }

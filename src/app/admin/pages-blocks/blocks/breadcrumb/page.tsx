@@ -9,7 +9,6 @@ import {
   createBreadcrumbBlock,
   deleteBreadcrumbBlock,
   duplicateBreadcrumbBlock,
-  getBreadcrumbBlockRows,
   toggleBreadcrumbBlockStatus,
 } from "./actions";
 
@@ -40,7 +39,6 @@ export default async function BreadcrumbBlocksPage({ searchParams }: PageProps) 
       duplicateAction={duplicateBreadcrumbBlock}
       toggleAction={toggleBreadcrumbBlockStatus}
       bulkAction={bulkBreadcrumbBlocks}
-      reloadRowsAction={getBreadcrumbBlockRows}
       defaultVariant="hero-inline"
       variantOptions={[["hero-inline", "مدمج مع الهيرو"], ["standalone", "مستقل"]]}
       loadError={error ? `حدث خطأ أثناء قراءة بلوكات Breadcrumb: ${error.message}` : null}

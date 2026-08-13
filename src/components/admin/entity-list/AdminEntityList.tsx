@@ -2,10 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import {
-  AdminFeedbackChannelViewport,
-  useAdminFeedback,
-} from "../AdminFeedbackProvider";
+import { useAdminFeedback } from "../AdminFeedbackProvider";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import {
@@ -194,7 +191,7 @@ function AdminEntityListInner<
     if (initialFeedback) {
       publishFeedback(initialFeedback, {
         channel: feedbackChannel,
-        placement: "inline",
+        placement: "global",
         reveal: isAttentionFeedback(initialFeedback),
       });
     }
@@ -215,7 +212,7 @@ function AdminEntityListInner<
     const shouldFocus = isAttentionFeedback(nextFeedback);
     publishFeedback(nextFeedback, {
       channel: feedbackChannel,
-      placement: "inline",
+      placement: "global",
       critical: shouldFocus,
       reveal: shouldFocus || options.bulk === true || result.code === "deleted",
     });
@@ -376,11 +373,6 @@ function AdminEntityListInner<
       ) : null}
 
       {!toolbar ? bulkBar : null}
-
-      <AdminFeedbackChannelViewport
-        channel={feedbackChannel}
-        label={`إشعارات ${listId}`}
-      />
 
       <AdminEntityListPrimarySection>
         <AdminEntityListTable

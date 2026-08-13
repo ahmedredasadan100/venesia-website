@@ -211,10 +211,12 @@ export function AdminFeedbackRegion({
   channel,
   label,
   feedback,
+  placement = "inline",
 }: {
   channel: string;
   label: string;
   feedback?: AdminActionFeedback | null;
+  placement?: "global" | "inline";
 }) {
   const { publishFeedback, clearFeedback } = useAdminFeedback();
 
@@ -223,15 +225,17 @@ export function AdminFeedbackRegion({
     if (feedback) {
       publishFeedback(feedback, {
         channel,
-        placement: "inline",
+        placement,
         reveal: feedback.variant === "danger",
       });
     }
 
     return () => clearFeedback(channel);
-  }, [channel, clearFeedback, feedback, publishFeedback]);
+  }, [channel, clearFeedback, feedback, placement, publishFeedback]);
 
-  return <AdminFeedbackChannelViewport channel={channel} label={label} />;
+  return placement === "inline" ? (
+    <AdminFeedbackChannelViewport channel={channel} label={label} />
+  ) : null;
 }
 
 export default function AdminFeedbackProvider({

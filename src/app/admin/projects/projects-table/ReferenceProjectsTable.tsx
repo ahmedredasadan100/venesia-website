@@ -13,6 +13,7 @@ import {
 } from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
+import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import type { ProjectSortField } from "../../../../lib/admin/projects/entity-list-contract";
 import type { ProjectColumnKey } from "../../../../lib/admin/projects/projects-list-config";
 import {
@@ -29,8 +30,7 @@ export {
 } from "../../../../components/admin/ui/AdminDataGrid";
 
 export type ProjectRowActionHandlers = {
-  rowPendingAction: (id: number) => string | null;
-  mutationBusy: boolean;
+  rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onCopyPublicLink: (row: ProjectGridRow) => Promise<AdminActionResult>;
   onDelete: (row: ProjectGridRow) => Promise<AdminActionResult>;
   onDuplicate: (row: ProjectGridRow) => Promise<AdminActionResult>;
@@ -72,15 +72,12 @@ function ProjectRowActions({
   onMutationResult?: (result: AdminActionResult) => void;
   display?: "menu" | "visibility" | "featured";
 }) {
-  const pendingAction = handlers.rowPendingAction(row.id);
+  const interaction = handlers.rowInteraction(row.id);
+  const pendingAction = interaction.pendingAction;
   const pendingState = {
     access: "disabled" as const,
     disabledReason: "انتظر انتهاء الإجراء الحالي.",
     pending: true,
-  };
-  const busyState = {
-    access: "disabled" as const,
-    disabledReason: "انتظر انتهاء الإجراء الحالي.",
   };
 
   async function run(
@@ -152,59 +149,51 @@ function ProjectRowActions({
       visibility:
         pendingAction === "visibility"
           ? { ...pendingState, isVisible }
-          : handlers.mutationBusy
-            ? { ...busyState, isVisible }
-            : {
-                access: "allowed",
-                isVisible,
-                onSelect: () => run((project) => handlers.onVisibility(project, !isVisible)),
-                ...(
-                  isVisible
-                    ? {
-                        confirmation: {
-                          mode: "shared" as const,
-                          title: "إخفاء المشروع عن العرض العام؟",
-                          description: `سيُزال «${row.arabic_name}» من صفحات وبطاقات المشاريع العامة مع الاحتفاظ بتاريخ أول نشر.`,
-                          confirmLabel: "تأكيد الإخفاء",
-                        },
-                      }
-                    : {}
-                ),
-              },
+          : {
+              access: "allowed",
+              isVisible,
+              onSelect: () => run((project) => handlers.onVisibility(project, !isVisible)),
+              ...(
+                isVisible
+                  ? {
+                      confirmation: {
+                        mode: "shared" as const,
+                        title: "إخفاء المشروع عن العرض العام؟",
+                        description: `سيُزال «${row.arabic_name}» من صفحات وبطاقات المشاريع العامة مع الاحتفاظ بتاريخ أول نشر.`,
+                        confirmLabel: "تأكيد الإخفاء",
+                      },
+                    }
+                  : {}
+              ),
+            },
       featured:
         pendingAction === "featured"
           ? { ...pendingState, isFeatured: row.featured }
-          : handlers.mutationBusy
-            ? { ...busyState, isFeatured: row.featured }
-            : {
-                access: "allowed",
-                isFeatured: row.featured,
-                onSelect: () => run(handlers.onToggleFeatured),
-              },
+          : {
+              access: "allowed",
+              isFeatured: row.featured,
+              onSelect: () => run(handlers.onToggleFeatured),
+            },
       duplicate:
         pendingAction === "duplicate"
           ? pendingState
-          : handlers.mutationBusy
-            ? busyState
-            : {
-                access: "allowed",
-                onSelect: () => run(handlers.onDuplicate),
-              },
+          : {
+              access: "allowed",
+              onSelect: () => run(handlers.onDuplicate),
+            },
       archive: { access: "hidden" },
       delete: pendingAction === "delete"
         ? pendingState
-        : handlers.mutationBusy
-          ? busyState
-          : {
-              access: "allowed",
-              onSelect: () => run(handlers.onDelete),
-              confirmation: {
-                mode: "shared",
-                title: "حذف نهائي للمشروع",
-                description: `سيُحذف «${row.arabic_name}» وكل بياناته التابعة من المخطط النظيف. لا يمكن التراجع عن هذا الإجراء.`,
-                confirmLabel: "تأكيد الحذف النهائي",
-              },
+        : {
+            access: "allowed",
+            onSelect: () => run(handlers.onDelete),
+            confirmation: {
+              mode: "shared",
+              title: "حذف نهائي للمشروع",
+              description: `سيُحذف «${row.arabic_name}» وكل بياناته التابعة من المخطط النظيف. لا يمكن التراجع عن هذا الإجراء.`,
+              confirmLabel: "تأكيد الحذف النهائي",
             },
+          },
     },
   };
 

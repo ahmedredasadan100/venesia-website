@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
-import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
+import {
+  AdminFeedbackRegion,
+  useAdminFeedback,
+} from "../../../../components/admin/AdminFeedbackProvider";
 import AdminEntityListFilters from "../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
@@ -37,6 +40,11 @@ import {
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
+import {
+  useAdminBoundedClientInstantMutation,
+  type AdminEntityMutationRequest,
+  type AdminEntityMutationSuccess,
+} from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -107,7 +115,13 @@ export default function MenusTableClient({
   preferenceError = null,
 }: MenusTableClientProps) {
   const searchParams = useSearchParams();
-  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
+  const router = useRouter();
+  const { publishFeedback, clearFeedback } = useAdminFeedback();
+  const feedbackChannel = "menu-builder:list";
+  const instant = useAdminBoundedClientInstantMutation<MenuListRow>({
+    entity: "menus",
+    initialRows: menus,
+  });
   const columnConfig = getPageCompositionColumnPreferenceConfig("menus");
   const defaultColumns = getPageCompositionDefaultColumnKeys("menus");
   const [visibleColumns, setVisibleColumns] = useState(() =>
@@ -142,10 +156,15 @@ export default function MenusTableClient({
   );
 
   const table = useAdminTable<MenuListRow, MenuSortKey>({
-    initialRows: menus,
+    initialRows: instant.rows,
     getRowId: (item) => item.id,
     sortAccessors,
   });
+  const { setRows } = table;
+
+  useEffect(() => {
+    setRows(instant.rows);
+  }, [instant.rows, setRows]);
   const search = searchParams.get("q") ?? "";
   const status = searchParams.get("status") ?? "all";
   const location = searchParams.get("location") ?? "all";
@@ -169,12 +188,12 @@ export default function MenusTableClient({
       type: "single_select",
       allValue: "all",
       placeholder: "الموقع",
-      options: [...new Set(menus.map((menu) => menu.location))].map((value) => ({
+      options: [...new Set(instant.rows.map((menu) => menu.location))].map((value) => ({
         value,
         label: locationLabel(value),
       })),
     },
-  ], [menus]);
+  ], [instant.rows]);
   const filteredRows = useMemo(
     () => table.rows.filter((menu) => {
       if (
@@ -197,13 +216,79 @@ export default function MenusTableClient({
   const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
   const selection = useAdminGridSelection<number>(visibleIds);
 
-  async function runMenuMutation(rowId: number, action: () => Promise<void>) {
-    setPendingRowId(rowId);
+  async function runMenuMutation(
+    request: AdminEntityMutationRequest<MenuListRow>,
+    options: {
+      refresh?: boolean;
+      onSuccess?: (
+        result: AdminEntityMutationSuccess<Record<string, unknown>>,
+      ) => void;
+    } = {},
+  ) {
+    clearFeedback(feedbackChannel);
     try {
-      await action();
-    } finally {
-      setPendingRowId(null);
+      const result = await instant.mutateAsync(request);
+      publishFeedback(
+        {
+          variant:
+            result.feedbackStatus === "warning" ? "warning" : "success",
+          title:
+            result.feedbackStatus === "warning"
+              ? "تم الحفظ مع تنبيه"
+              : "تم تنفيذ الإجراء",
+          message: result.message,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline" },
+      );
+      options.onSuccess?.(result);
+      if (options.refresh !== false) router.refresh();
+    } catch (error) {
+      publishFeedback(
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        {
+          channel: feedbackChannel,
+          placement: "inline",
+          reveal: true,
+        },
+      );
     }
+  }
+
+  async function runBulkMenuMutation(action: string, ids: number[]) {
+    const idSet = new Set(ids);
+    const formData = mutationFormData({ bulk_action: action });
+    ids.forEach((id) => formData.append("menu_ids", String(id)));
+    await runMenuMutation({
+      action: `bulk-${action}`,
+      bulk: true,
+      optimistic: (cache) => {
+        if (action === "delete") {
+          cache.removeRows(idSet);
+          return;
+        }
+        cache.patchRows((row) =>
+          idSet.has(row.id)
+            ? { ...row, is_active: action === "show" }
+            : row,
+        );
+      },
+      execute: () => bulkMenuAction(formData),
+    }, {
+      onSuccess: () => selection.clearSelection(),
+    });
   }
 
   function sortProps(key: MenuSortKey) {
@@ -220,13 +305,14 @@ export default function MenusTableClient({
         eyebrow="Admin Panel"
         title="إدارة القوائم"
         description="هنا بتدير كل قوائم الموقع: القائمة الرئيسية، الموبايل، الفوتر، أو أي قائمة جديدة. الدخول على اسم القائمة يفتح Builder الشجرة الخاصة بها."
-        meta={`${menus.length} قائمة`}
+        meta={`${instant.rows.length} قائمة`}
         actions={loadError ? undefined : <AddMenuPanelClient />}
       />
 
       <AdminFeedbackRegion
-        channel="menu-builder:list"
+        channel={feedbackChannel}
         label="نتائج إجراءات القوائم"
+        placement="global"
         feedback={
           loadError
             ? {
@@ -293,7 +379,6 @@ export default function MenusTableClient({
             <AdminBulkActionBar
               selectedIds={selection.selectedIds}
               entityLabel="قائمة"
-              action={bulkMenuAction}
               options={[
                 {
                   value: "show",
@@ -310,6 +395,8 @@ export default function MenusTableClient({
               ]}
               idsFieldName="menu_ids"
               onClearSelection={selection.clearSelection}
+              isBusy={instant.bulkInteraction.isBlocked}
+              onExecute={runBulkMenuMutation}
             />
           }
           onQueryPatch={(patch, behavior = "push") => {
@@ -364,14 +451,18 @@ export default function MenusTableClient({
 
           {paginatedRows.length ? (
             paginatedRows.map((menu) => {
-              const rowPending = pendingRowId === menu.id;
+              const interaction = instant.getRowInteraction(menu.id);
+              const pendingAction = interaction.pendingAction;
               const hidden = { access: "hidden" as const };
               const capability: AdminRowActionsCapability = {
                 entityType: "menu",
                 entityId: menu.id,
                 entityLabel: menu.name,
                 actions: {
-                  edit: { access: "allowed", href: `/admin/pages-blocks/menus/${menu.id}` },
+                  edit: {
+                    access: "allowed",
+                    href: `/admin/pages-blocks/menus/${menu.id}`,
+                  },
                   preview: {
                     access: "disabled",
                     disabledReason: "القائمة لا تملك مسار معاينة عامًا خاصًا بها.",
@@ -390,32 +481,69 @@ export default function MenusTableClient({
                   visibility: {
                     access: "allowed",
                     isVisible: menu.is_active,
-                    pending: rowPending,
+                    pending: pendingAction === "visibility",
                     onSelect: () =>
-                      runMenuMutation(
-                        menu.id,
-                        () => toggleMenuVisibility(mutationFormData({ id: menu.id, is_active: !menu.is_active })),
-                      ),
+                      runMenuMutation({
+                        rowId: menu.id,
+                        action: "visibility",
+                        optimistic: (cache) =>
+                          cache.patchRows((row) =>
+                            row.id === menu.id
+                              ? { ...row, is_active: !menu.is_active }
+                              : row,
+                          ),
+                        execute: () =>
+                          toggleMenuVisibility(
+                            mutationFormData({
+                              id: menu.id,
+                              is_active: !menu.is_active,
+                            }),
+                          ),
+                      }),
                   },
                   featured: hidden,
                   duplicate: {
                     access: "allowed",
-                    pending: rowPending,
+                    pending: pendingAction === "duplicate",
                     onSelect: () =>
                       runMenuMutation(
-                        menu.id,
-                        () => duplicateMenu(mutationFormData({ id: menu.id })),
+                        {
+                          rowId: menu.id,
+                          action: "duplicate",
+                          optimistic: () => undefined,
+                          execute: () =>
+                            duplicateMenu(
+                              mutationFormData({ id: menu.id }),
+                            ),
+                        },
+                        {
+                          refresh: false,
+                          onSuccess: (result) => {
+                            const duplicatedMenuId = Number(result.menuId);
+                            if (Number.isSafeInteger(duplicatedMenuId)) {
+                              router.push(
+                                `/admin/pages-blocks/menus/${duplicatedMenuId}`,
+                              );
+                            }
+                          },
+                        },
                       ),
                   },
                   archive: hidden,
                   delete: {
                     access: "allowed",
-                    pending: rowPending,
+                    pending: pendingAction === "delete",
                     onSelect: () =>
-                      runMenuMutation(
-                        menu.id,
-                        () => deleteMenu(mutationFormData({ id: menu.id })),
-                      ),
+                      runMenuMutation({
+                        rowId: menu.id,
+                        action: "delete",
+                        optimistic: (cache) =>
+                          cache.removeRows(new Set([menu.id])),
+                        execute: () =>
+                          deleteMenu(
+                            mutationFormData({ id: menu.id }),
+                          ),
+                      }),
                     confirmation: {
                       mode: "shared",
                       title: "تأكيد حذف القائمة",
@@ -481,7 +609,6 @@ export default function MenusTableClient({
           pageSize={String(pagination.pageSize)}
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
-          pending={pendingRowId !== null}
         />
       </div>
     </AdminPageExperience>

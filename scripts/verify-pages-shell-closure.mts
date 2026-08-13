@@ -512,7 +512,10 @@ assert.match(
   updatedAtColumn,
   /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("updatedAt"\)[\s\S]*sortKey:\s*"updatedAt"[\s\S]*minWidth:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*row\.updatedAt \? formatAdminDateTime\(row\.updatedAt\) : "غير متاح"/u,
 );
-assert.match(statusColumn, /sortable:\s*supportedSortFields\.has\("status"\)[\s\S]*sortKey:\s*"status"/u);
+assert.match(
+  statusColumn,
+  /sortable:\s*supportedSortFields\.has\("status"\)[\s\S]*sortKey:\s*"status"[\s\S]*minWidth:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*width:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*align:\s*"center"[\s\S]*sticky:\s*"end-adjacent"/u,
+);
 assert.match(
   actionsColumn,
   /sortable:\s*false[\s\S]*minWidth:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH/u,
@@ -529,8 +532,8 @@ assert.match(
 assert.match(client, /PAGE_PATH_COLUMN_WIDTH\s*=\s*200/u);
 assert.match(client, /PAGE_SEO_COLUMN_WIDTH\s*=\s*96/u);
 assert.match(client, /PAGE_UPDATED_AT_COLUMN_WIDTH\s*=\s*176/u);
-assert.match(client, /implicitFlexibleColumn=\{false\}/u);
-assert.match(client, /fillAvailableWidth/u);
+assert.doesNotMatch(client, /implicitFlexibleColumn=\{false\}/u);
+assert.doesNotMatch(client, /fillAvailableWidth/u);
 assert.match(entityList, /implicitFlexibleColumn=\{implicitFlexibleColumn\}/u);
 assert.match(entityList, /fillAvailableWidth\?: boolean/u);
 assert.match(entityList, /fillAvailableWidth=\{fillAvailableWidth\}/u);
@@ -538,6 +541,12 @@ assert.match(entityListTable, /implicitFlexibleColumn\?: boolean/u);
 assert.match(entityListTable, /implicitFlexibleColumn = true/u);
 assert.match(entityListTable, /fillAvailableWidth\?: boolean/u);
 assert.match(entityListTable, /fillAvailableWidth = false/u);
+assert.match(entityListTable, /column\.sticky === "end-adjacent"/u);
+assert.match(entityListTable, /insetInlineEnd:\s*actionsColumnWidth/u);
+assert.match(
+  entityListTable,
+  /data-admin-grid-sticky="inline-end-adjacent"/u,
+);
 assert.match(
   entityListTable,
   /explicitFlexibleColumnKey \?\?[\s\S]*\(implicitFlexibleColumn[\s\S]*!column\.primary[\s\S]*: undefined\)/u,
@@ -624,7 +633,36 @@ assert.match(assignmentRow, /AdminDataGridRowActions[\s\S]*display="visibility"/
 assert.equal((assignmentRow.match(/const capability: AdminRowActionsCapability/gu) ?? []).length, 1);
 assert.match(
   assignmentRow,
-  /delete:\s*manageable[\s\S]*label:\s*"إزالة من الصفحة"[\s\S]*onSelect:\s*onDetach[\s\S]*confirmLabel:\s*"إزالة من الصفحة"/u,
+  /delete:\s*!manageable[\s\S]*label:\s*"إزالة من الصفحة"[\s\S]*onSelect:\s*onDetach[\s\S]*confirmLabel:\s*"إزالة من الصفحة"/u,
+);
+assert.match(
+  compositionClient,
+  /useAdminBoundedClientInstantMutation<PageBlockAssignmentRow>[\s\S]*entity:\s*"page-block-assignments"[\s\S]*rowId:\s*assignmentRowId\(row\)[\s\S]*action:\s*"visibility"/u,
+);
+assert.match(
+  assignmentGrid,
+  /rowInteraction:\s*\(rowId:\s*string\)[\s\S]*const interaction = rowInteraction\(rowId\)[\s\S]*interaction=\{interaction\}/u,
+);
+assert.match(
+  assignmentRow,
+  /const pendingAction = interaction\.pendingAction[\s\S]*const pendingState = \{[\s\S]*pending:\s*true[\s\S]*visibility:[\s\S]*pendingAction === "visibility"[\s\S]*onSelect:\s*onToggleVisibility/u,
+);
+assert.doesNotMatch(assignmentRow, /interaction\.isBlocked|rowBusy/u);
+assert.doesNotMatch(
+  assignmentRow,
+  /disabled=\{!canMove(?:Up|Down)\s*\|\|/u,
+);
+assert.match(
+  compositionClient,
+  /rowInteraction=\{instant\.getRowInteraction\}/u,
+);
+assert.doesNotMatch(
+  compositionClient,
+  /mutationBusy=|instant\.rowPending|instant\.bulkPending/u,
+);
+assert.doesNotMatch(
+  compositionClient,
+  /search=\{\{[\s\S]*?pending:\s*collectionPending[\s\S]*?\}\}/u,
 );
 assert.match(
   compositionClient,

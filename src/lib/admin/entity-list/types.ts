@@ -5,7 +5,7 @@ import type { AdminFeedbackVariant } from "../admin-action-feedback";
 import type { AdminActionFeedbackKind } from "../admin-action-feedback";
 
 /** Portable column contract — no entity or project names. */
-export type AdminEntityColumnSticky = "start" | "end";
+export type AdminEntityColumnSticky = "start" | "end-adjacent" | "end";
 export type AdminEntityColumnAlignment = "start" | "center" | "end";
 
 export type AdminEntityColumnDef<
@@ -155,7 +155,6 @@ export type AdminEntitySearchConfig = {
   debounceMs?: number;
   className?: string;
   disabled?: boolean;
-  pending?: boolean;
   suggestions?: AdminEntitySearchSuggestionsConfig;
 };
 

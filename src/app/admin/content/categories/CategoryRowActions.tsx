@@ -7,6 +7,7 @@ import {
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import { buildAdminCategoryCollectionPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
+import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { resolveAdminEntityPreviewActions } from "../../../../lib/admin/interaction-system/entity-preview-capability";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type {
@@ -18,8 +19,7 @@ type CategoryRowActionsProps = {
   category: CategoryListRow;
   view: "active" | "trash";
   onMutationResult?: (result: AdminActionResult) => void;
-  pendingAction?: string | null;
-  mutationBusy: boolean;
+  interaction: AdminInstantMutationRowInteraction;
   onToggle: (
     category: CategoryListRow,
   ) => Promise<CategoryStatusMutationResult>;
@@ -36,8 +36,7 @@ export default function CategoryRowActions({
   category,
   view,
   onMutationResult,
-  pendingAction = null,
-  mutationBusy,
+  interaction,
   onToggle,
   onDuplicate,
   onDelete,
@@ -45,6 +44,7 @@ export default function CategoryRowActions({
   onPermanentDelete,
   display = "menu",
 }: CategoryRowActionsProps) {
+  const pendingAction = interaction.pendingAction;
   const isTrashView = view === "trash";
   const isActive = category.status === "published";
   const previewCapability = buildAdminCategoryCollectionPreviewCapability({
@@ -144,19 +144,13 @@ export default function CategoryRowActions({
               pending: true,
               isVisible: isActive,
             }
-          : mutationBusy
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                isVisible: isActive,
-              }
-            : {
-                access: "allowed",
-                isVisible: isActive,
-                onSelect: async () => {
-                  await publishResult(() => onToggle(category));
-                },
+          : {
+              access: "allowed",
+              isVisible: isActive,
+              onSelect: async () => {
+                await publishResult(() => onToggle(category));
               },
+            },
       featured: { access: "hidden" },
       duplicate: isTrashView
         ? { access: "hidden" }
@@ -166,14 +160,12 @@ export default function CategoryRowActions({
               disabledReason: pendingReason,
               pending: true,
             }
-          : mutationBusy
-            ? { access: "disabled", disabledReason: pendingReason }
-            : {
-                access: "allowed",
-                onSelect: async () => {
-                  await publishResult(() => onDuplicate(category));
-                },
+          : {
+              access: "allowed",
+              onSelect: async () => {
+                await publishResult(() => onDuplicate(category));
               },
+            },
       archive: !isTrashView
         ? { access: "hidden" }
         : pendingAction === "restore"
@@ -184,29 +176,22 @@ export default function CategoryRowActions({
               isArchived: true,
               label: "استعادة",
             }
-          : mutationBusy
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                isArchived: true,
-                label: "استعادة",
-              }
-            : {
-                access: "allowed",
-                isArchived: true,
-                label: "استعادة",
-                confirmation: {
-                  mode: "shared",
-                  title: "استعادة التصنيف؟",
-                  description:
-                    "سيعود التصنيف إلى القائمة النشطة كغير منشور بعد التحقق من الـSlug والتصنيف الأب.",
-                  confirmLabel: "استعادة",
-                },
-                onSelect: async () => {
-                  const result = await publishResult(() => onRestore(category));
-                  if (!result.ok) throw new Error(result.message);
-                },
+          : {
+              access: "allowed",
+              isArchived: true,
+              label: "استعادة",
+              confirmation: {
+                mode: "shared",
+                title: "استعادة التصنيف؟",
+                description:
+                  "سيعود التصنيف إلى القائمة النشطة كغير منشور بعد التحقق من الـSlug والتصنيف الأب.",
+                confirmLabel: "استعادة",
               },
+              onSelect: async () => {
+                const result = await publishResult(() => onRestore(category));
+                if (!result.ok) throw new Error(result.message);
+              },
+            },
       delete:
         pendingAction === (isTrashView ? "permanent_delete" : "delete")
           ? {
@@ -215,39 +200,33 @@ export default function CategoryRowActions({
               pending: true,
               label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
             }
-          : mutationBusy
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
-              }
-            : {
-                access: "allowed",
-                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
-                confirmation: isTrashView
-                  ? {
-                      mode: "shared",
-                      title: "حذف التصنيف نهائيًا؟",
-                      description:
-                        "سيُحذف التصنيف نهائيًا ويصبح الـSlug متاحًا. أي علاقة قائمة ستمنع العملية، ولا يمكن التراجع عنها.",
-                      confirmLabel: "حذف نهائي",
-                    }
-                  : {
-                      mode: "shared",
-                      title: "نقل التصنيف إلى المحذوفات؟",
-                      description:
-                        "سيختفي التصنيف من القوائم والاختيارات النشطة ويمكن استعادته لاحقًا. أي علاقة قائمة ستمنع العملية وسيبقى الـSlug محجوزًا.",
-                      confirmLabel: "نقل إلى المحذوفات",
-                    },
-                onSelect: async () => {
-                  const result = await publishResult(() =>
-                    isTrashView
-                      ? onPermanentDelete(category)
-                      : onDelete(category),
-                  );
-                  if (!result.ok) throw new Error(result.message);
-                },
+          : {
+              access: "allowed",
+              label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+              confirmation: isTrashView
+                ? {
+                    mode: "shared",
+                    title: "حذف التصنيف نهائيًا؟",
+                    description:
+                      "سيُحذف التصنيف نهائيًا ويصبح الـSlug متاحًا. أي علاقة قائمة ستمنع العملية، ولا يمكن التراجع عنها.",
+                    confirmLabel: "حذف نهائي",
+                  }
+                : {
+                    mode: "shared",
+                    title: "نقل التصنيف إلى المحذوفات؟",
+                    description:
+                      "سيختفي التصنيف من القوائم والاختيارات النشطة ويمكن استعادته لاحقًا. أي علاقة قائمة ستمنع العملية وسيبقى الـSlug محجوزًا.",
+                    confirmLabel: "نقل إلى المحذوفات",
+                  },
+              onSelect: async () => {
+                const result = await publishResult(() =>
+                  isTrashView
+                    ? onPermanentDelete(category)
+                    : onDelete(category),
+                );
+                if (!result.ok) throw new Error(result.message);
               },
+            },
     },
   };
 

@@ -1,7 +1,7 @@
 # Admin Legacy Compatibility
 
-This folder still contains a few legacy component entry points because some
-existing admin pages import them directly.
+This folder still contains a legacy component entry point because some existing
+admin pages import it directly.
 
 ## Active rule
 
@@ -13,8 +13,6 @@ The visual source of truth is now:
 
 These files are wrappers or legacy shims only:
 
-- `components/admin/AdminPageHeader.tsx` wraps `components/admin/ui/AdminPageHeader`.
-- `components/admin/AdminStatusBadge.tsx` wraps `components/admin/ui/AdminStatusPill`.
 - `components/admin/AdminRowActions.tsx` keeps old page imports working, but its action buttons now use the unified 44x44 cursor-pointer action button sizing.
 
 ## Migration rule

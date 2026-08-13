@@ -473,16 +473,16 @@ check(
 );
 check(
   "feedback",
-  "entity lists publish through the shared runtime into its inline channel viewport",
-  feedbackProvider.includes("AdminFeedbackChannelViewport") &&
-    feedbackProvider.includes("data-admin-entity-feedback-slot") &&
+  "entity lists publish through the shared global viewport without reserving page space",
+  feedbackProvider.includes("AdminFeedbackViewport") &&
+    feedbackProvider.includes("data-admin-feedback-viewport") &&
+    feedbackProvider.includes('entry.placement === "global"') &&
+    !feedbackProvider.includes("stabilizeLayout") &&
+    !feedbackProvider.includes('h-[72px]') &&
     entityList.includes("useAdminFeedback") &&
     entityList.includes("publishFeedback(nextFeedback") &&
-    entityList.includes("AdminFeedbackChannelViewport") &&
-    entityList.indexOf("<AdminFeedbackChannelViewport") >
-      entityList.lastIndexOf("<AdminBulkActionBar") &&
-    entityList.indexOf("<AdminFeedbackChannelViewport") <
-      entityList.indexOf("<AdminEntityListTable"),
+    entityList.includes('placement: "global"') &&
+    !entityList.includes("AdminFeedbackChannelViewport"),
 );
 check(
   "feedback",
@@ -674,14 +674,12 @@ check(
 );
 check(
   "collection-interaction",
-  "pending presentation identifies rowId plus action and applies the shared global mutation lock",
+  "pending presentation identifies rowId plus action without a shared global mutation lock",
   [categoryClient, seriesClient].every(
     (source) =>
-      source.includes("rowPendingAction:") &&
-      source.includes("instant.rowPending?.rowId ===") &&
-      source.includes(
-        "instant.rowPending !== null || instant.bulkPending !== null",
-      ),
+      source.includes("rowInteraction: instant.getRowInteraction") &&
+      !source.includes("instant.rowPending") &&
+      !source.includes("instant.bulkPending"),
   ) &&
     [categoryRowActions, seriesColumns].every(
       (source) =>
@@ -690,7 +688,8 @@ check(
         source.includes(
           'pendingAction === (isTrashView ? "permanent_delete" : "delete")',
         ) &&
-        source.includes("mutationBusy") &&
+        source.includes("interaction.pendingAction") &&
+        !source.includes("interaction.isBlocked") &&
         !source.includes("localPending"),
     ),
 );
@@ -724,7 +723,7 @@ check(
     feedbackProvider.includes("entry.channel === channel") &&
     feedbackProvider.includes("entry.placement === placement") &&
     entityList.includes("publishFeedback(nextFeedback") &&
-    entityList.includes('placement: "inline"') &&
+    entityList.includes('placement: "global"') &&
     [categoryRowActions, seriesColumns].every(
       (source) => !source.includes("AdminNotice"),
     ),

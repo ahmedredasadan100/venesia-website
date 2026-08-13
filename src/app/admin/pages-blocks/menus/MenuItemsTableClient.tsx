@@ -4,10 +4,14 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import VenesiaModal from "../../../../components/admin/VenesiaModal";
-import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
+import {
+  AdminFeedbackRegion,
+  useAdminFeedback,
+} from "../../../../components/admin/AdminFeedbackProvider";
 import AdminEntityListFilters from "../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
+  ADMIN_DATA_GRID_COLUMNS,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
   AdminColumnVisibilityMenu,
   AdminDataGrid,
@@ -26,6 +30,10 @@ import {
   useAdminBoundedClientPagination,
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
+import {
+  useAdminBoundedClientInstantMutation,
+  type AdminEntityMutationRequest,
+} from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { resolvePublicPreviewHref } from "../../../../lib/admin/links/validate";
 import {
   getPageCompositionColumnPreferenceConfig,
@@ -41,7 +49,11 @@ import {
 } from "./actions";
 import MenuItemForm from "./MenuItemForm";
 import type { Menu, MenuItem } from "./menu-builder-shared";
-import { flattenMenuItemsForTable, getMenuItemTypeLabel } from "./menu-builder-shared";
+import {
+  collectMenuItemDescendantIds,
+  flattenMenuItemsForTable,
+  getMenuItemTypeLabel,
+} from "./menu-builder-shared";
 import {
   restorePageCompositionColumnPreferences,
   savePageCompositionColumnPreferences,
@@ -193,9 +205,19 @@ export default function MenuItemsTableClient({
 }: MenuItemsTableClientProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const rows = useMemo(() => flattenMenuItemsForTable(items), [items]);
+  const { publishFeedback, clearFeedback } = useAdminFeedback();
+  const feedbackChannel = `menu-builder:${menu.id}`;
+  const instant = useAdminBoundedClientInstantMutation<MenuItem>({
+    entity: "menu-items",
+    initialRows: items,
+    datasetKey: String(menu.id),
+  });
+  const activeItems = instant.rows;
+  const rows = useMemo(
+    () => flattenMenuItemsForTable(activeItems),
+    [activeItems],
+  );
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const columnConfig = getPageCompositionColumnPreferenceConfig("menuItems");
   const defaultColumns = getPageCompositionDefaultColumnKeys("menuItems");
   const [visibleColumns, setVisibleColumns] = useState(() =>
@@ -213,7 +235,7 @@ export default function MenuItemsTableClient({
       [
         visibleColumnSet.has("order") ? "72px" : null,
         "minmax(0,1fr)",
-        visibleColumnSet.has("status") ? "88px" : null,
+        visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusCompact : null,
         ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
       ]
         .filter((column): column is string => Boolean(column))
@@ -243,12 +265,12 @@ export default function MenuItemsTableClient({
       type: "single_select",
       allValue: "all",
       placeholder: "نوع العنصر",
-      options: [...new Set(items.map((item) => item.item_type))].map((value) => ({
+      options: [...new Set(activeItems.map((item) => item.item_type))].map((value) => ({
         value,
         label: getMenuItemTypeLabel(value),
       })),
     },
-  ], [items]);
+  ], [activeItems]);
   const filteredRows = useMemo(
     () => rows.filter(({ item, parentLabel }) => {
       if (
@@ -270,17 +292,52 @@ export default function MenuItemsTableClient({
   });
   const paginatedRows = pagination.rows;
 
-  async function runMenuItemMutation(itemId: number, action: () => Promise<void>) {
-    setPendingRowId(itemId);
+  async function runMenuItemMutation(
+    request: AdminEntityMutationRequest<MenuItem>,
+  ) {
+    clearFeedback(feedbackChannel);
     try {
-      await action();
-    } finally {
-      setPendingRowId(null);
+      const result = await instant.mutateAsync(request);
+      publishFeedback(
+        {
+          variant:
+            result.feedbackStatus === "warning" ? "warning" : "success",
+          title:
+            result.feedbackStatus === "warning"
+              ? "تم الحفظ مع تنبيه"
+              : "تم تنفيذ الإجراء",
+          message: result.message,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline" },
+      );
+      router.refresh();
+    } catch (error) {
+      publishFeedback(
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        {
+          channel: feedbackChannel,
+          placement: "inline",
+          reveal: true,
+        },
+      );
     }
   }
 
   async function moveSibling(item: MenuItem, direction: -1 | 1) {
-    const siblings = items
+    const siblings = activeItems
       .filter((candidate) => candidate.parent_id === item.parent_id)
       .sort((left, right) => left.sort_order - right.sort_order || left.id - right.id);
     const index = siblings.findIndex((candidate) => candidate.id === item.id);
@@ -288,19 +345,32 @@ export default function MenuItemsTableClient({
     if (index < 0 || target < 0 || target >= siblings.length) return;
     const ordered = [...siblings];
     [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    setPendingRowId(item.id);
-    try {
-      const result = await reorderMenuItems(
-        menu.id,
-        item.parent_id,
-        ordered.map(({ id, updated_at }) => ({ id, updated_at })),
-      );
-      if (!result.ok) throw new Error(result.message);
-      if (result.warning) console.warn(result.warning);
-      router.refresh();
-    } finally {
-      setPendingRowId(null);
-    }
+    const sortOrderById = new Map(
+      ordered.map((candidate, position) => [
+        candidate.id,
+        siblings[position].sort_order,
+      ]),
+    );
+    await runMenuItemMutation({
+      rowId: item.id,
+      action: direction < 0 ? "reorder-up" : "reorder-down",
+      optimistic: (cache) =>
+        cache.patchRows((candidate) =>
+          sortOrderById.has(candidate.id)
+            ? {
+                ...candidate,
+                sort_order:
+                  sortOrderById.get(candidate.id) ?? candidate.sort_order,
+              }
+            : candidate,
+        ),
+      execute: () =>
+        reorderMenuItems(
+          menu.id,
+          item.parent_id,
+          ordered.map(({ id, updated_at }) => ({ id, updated_at })),
+        ),
+    });
   }
 
   return (
@@ -309,11 +379,11 @@ export default function MenuItemsTableClient({
         <div>
           <h3 className="text-lg font-semibold text-white">القائمة الرئيسية</h3>
           <p className="mt-1 text-sm text-white/45">
-            الهرمية والرابط داخل اسم العنصر. إعادة الترتيب متوقفة حتى يتوفر عقد حفظ ذري.
+            الهرمية والرابط داخل اسم العنصر، وإعادة الترتيب تُحفظ عبر عقد القائمة الذري.
           </p>
         </div>
         <span className="rounded-full border border-[#D8B87A]/20 px-4 py-2 text-xs text-[#D8B87A]">
-          {items.length} عنصر
+          {activeItems.length} عنصر
         </span>
       </div>
 
@@ -378,10 +448,13 @@ export default function MenuItemsTableClient({
 
         {paginatedRows.length ? (
           paginatedRows.map(({ item, level, isLastSibling, ancestorLines }) => {
-            const hasChildren = items.some((row) => row.parent_id === item.id);
+            const hasChildren = activeItems.some(
+              (row) => row.parent_id === item.id,
+            );
             const previewHref = resolvePublicPreviewHref(item.href);
             const hidden = { access: "hidden" as const };
-            const rowPending = pendingRowId === item.id;
+            const interaction = instant.getRowInteraction(item.id);
+            const pendingAction = interaction.pendingAction;
             const capability: AdminRowActionsCapability = {
               entityType: "menu_item",
               entityId: item.id,
@@ -389,7 +462,6 @@ export default function MenuItemsTableClient({
               actions: {
                 edit: {
                   access: "allowed",
-                  pending: rowPending,
                   onSelect: () => setEditingItem(item),
                 },
                 preview: previewHref
@@ -408,11 +480,21 @@ export default function MenuItemsTableClient({
                 visibility: {
                   access: "allowed",
                   isVisible: item.is_visible,
-                  pending: rowPending,
+                  pending: pendingAction === "visibility",
                   onSelect: () =>
-                    runMenuItemMutation(
-                      item.id,
-                      () =>
+                    runMenuItemMutation({
+                      rowId: item.id,
+                      action: "visibility",
+                      optimistic: (cache) =>
+                        cache.patchRows((candidate) =>
+                          candidate.id === item.id
+                            ? {
+                                ...candidate,
+                                is_visible: !item.is_visible,
+                              }
+                            : candidate,
+                        ),
+                      execute: () =>
                         toggleMenuItemVisibility(
                           mutationFormData({
                             id: item.id,
@@ -420,19 +502,35 @@ export default function MenuItemsTableClient({
                             is_visible: !item.is_visible,
                           }),
                         ),
-                    ),
+                    }),
                 },
                 featured: hidden,
                 duplicate: hidden,
                 archive: hidden,
                 delete: {
                   access: "allowed",
-                  pending: rowPending,
-                  onSelect: () =>
-                    runMenuItemMutation(
-                      item.id,
-                      () => deleteMenuItem(mutationFormData({ id: item.id, menu_id: menu.id })),
-                    ),
+                  pending: pendingAction === "delete",
+                  onSelect: () => {
+                    const affectedIds = new Set(
+                      collectMenuItemDescendantIds(
+                        item.id,
+                        activeItems,
+                      ),
+                    );
+                    return runMenuItemMutation({
+                      rowId: item.id,
+                      action: "delete",
+                      optimistic: (cache) =>
+                        cache.removeRows(affectedIds),
+                      execute: () =>
+                        deleteMenuItem(
+                          mutationFormData({
+                            id: item.id,
+                            menu_id: menu.id,
+                          }),
+                        ),
+                    });
+                  },
                   confirmation: {
                     mode: "shared",
                     title: "تأكيد حذف عنصر القائمة",
@@ -450,14 +548,27 @@ export default function MenuItemsTableClient({
                     <AdminDataGridActionButton
                       size="compact"
                       title="تحريك لأعلى"
-                      disabled={rowPending || !items.some((candidate) => candidate.parent_id === item.parent_id && candidate.sort_order < item.sort_order)}
-                      pending={rowPending}
+                      disabled={
+                        !activeItems.some(
+                          (candidate) =>
+                            candidate.parent_id === item.parent_id &&
+                            candidate.sort_order < item.sort_order,
+                        )
+                      }
+                      pending={pendingAction === "reorder-up"}
                       onClick={() => void moveSibling(item, -1)}
                     >↑</AdminDataGridActionButton>
                     <AdminDataGridActionButton
                       size="compact"
                       title="تحريك لأسفل"
-                      disabled={rowPending || !items.some((candidate) => candidate.parent_id === item.parent_id && candidate.sort_order > item.sort_order)}
+                      disabled={
+                        !activeItems.some(
+                          (candidate) =>
+                            candidate.parent_id === item.parent_id &&
+                            candidate.sort_order > item.sort_order,
+                        )
+                      }
+                      pending={pendingAction === "reorder-down"}
                       onClick={() => void moveSibling(item, 1)}
                     >↓</AdminDataGridActionButton>
                   </span>
@@ -497,7 +608,6 @@ export default function MenuItemsTableClient({
         pageSize={String(pagination.pageSize)}
         onPageChange={pagination.setPage}
         onPageSizeChange={pagination.setPageSize}
-        pending={pendingRowId !== null}
       />
 
       <VenesiaModal
@@ -511,7 +621,7 @@ export default function MenuItemsTableClient({
           <MenuItemForm
             key={editingItem.id}
             menu={menu}
-            parentItems={items}
+            parentItems={activeItems}
             item={editingItem}
             action={updateMenuItem}
             submitLabel="حفظ"

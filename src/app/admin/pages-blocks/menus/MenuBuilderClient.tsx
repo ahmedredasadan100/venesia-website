@@ -114,6 +114,7 @@ export default function MenuBuilderClient({
           <AdminFeedbackRegion
             channel={`menu-builder:${menu.id}`}
             label="نتائج محرر القائمة"
+            placement="global"
             feedback={
               loadError
                 ? {

@@ -329,7 +329,7 @@ export default function ActivityLogClient({
 
       <AdminEntityListSurface consumer="activity-log">
         <AdminEntityListTableRegion
-          data-admin-entity-list-pending={controller.isFetching ? "true" : "false"}
+          data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}
         >
           <AdminEntityList<
             AuditLogRecord,
@@ -344,7 +344,6 @@ export default function ActivityLogClient({
                 value: controller.query.search,
                 placeholder: "بحث في المستخدم أو الكيان...",
                 debounceMs: 350,
-                pending: controller.isFetching,
               },
               filters: filterDefinitions,
               values: {
@@ -424,7 +423,6 @@ export default function ActivityLogClient({
             emptySummaryText="لا توجد أحداث"
             onPageChange={controller.setPage}
             onPageSizeChange={controller.setPageSize}
-            pending={controller.isFetching}
           />
         </AdminEntityListTableRegion>
       </AdminEntityListSurface>

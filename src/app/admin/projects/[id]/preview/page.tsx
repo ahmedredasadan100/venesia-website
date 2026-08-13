@@ -2,11 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import AdminPageHeader from "../../../../../components/admin/AdminPageHeader";
-import AdminStatusBadge from "../../../../../components/admin/AdminStatusBadge";
+import {
+  AdminPageHeader,
+  AdminStatusPill,
+} from "../../../../../components/admin/ui";
 import CommercialProjectDetails from "../../../../../components/projects/details/CommercialProjectDetails";
 import ResidentialProjectDetails from "../../../../../components/projects/details/ResidentialProjectDetails";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { getProjectPublicationMetadata } from "../../../../../lib/admin/projects/project-publishing-capability";
 import { loadProjectForAdminPreviewResult } from "../../../../../lib/projects/load-published-projects";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +33,7 @@ export default async function ProjectAdminPreviewPage({
   if (!result.project) notFound();
 
   const { project, publicationStatus } = result;
+  const publication = getProjectPublicationMetadata(publicationStatus);
 
   return (
     <div className="space-y-7">
@@ -39,9 +43,9 @@ export default async function ProjectAdminPreviewPage({
         description="معاينة إدارية تستخدم مكوّن العرض العام نفسه دون تجاوز سياسة النشر على المسار العام."
         actions={
           <>
-            <AdminStatusBadge
-              status={publicationStatus === "unpublished" ? "hidden" : publicationStatus}
-            />
+            <AdminStatusPill tone={publication.tone}>
+              {publication.label}
+            </AdminStatusPill>
             <Link
               href={`/admin/projects/${projectId}`}
               className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/65 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"

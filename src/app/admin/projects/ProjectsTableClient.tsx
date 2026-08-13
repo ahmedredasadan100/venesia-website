@@ -362,12 +362,7 @@ export default function ProjectsTableClient({
   const columns = useMemo(
     () =>
       createProjectColumns({
-        rowPendingAction: (id) =>
-          instant.rowPending?.rowId === id
-            ? instant.rowPending.action
-            : null,
-        mutationBusy:
-          instant.rowPending !== null || instant.bulkPending !== null,
+        rowInteraction: instant.getRowInteraction,
         onCopyPublicLink: copyProjectPublicLink,
         onDelete: deleteProject,
         onDuplicate: duplicateProject,
@@ -378,8 +373,7 @@ export default function ProjectsTableClient({
       copyProjectPublicLink,
       deleteProject,
       duplicateProject,
-      instant.bulkPending,
-      instant.rowPending,
+      instant.getRowInteraction,
       toggleProjectFeatured,
       setProjectVisibility,
     ],
@@ -413,7 +407,7 @@ export default function ProjectsTableClient({
 
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
-          controller.isFetching ? "true" : "false"
+          controller.queryPending ? "true" : "false"
         }
       >
         <AdminEntityList<
@@ -429,7 +423,6 @@ export default function ProjectsTableClient({
               placeholder: "ابحث بالاسم أو الرابط المختصر أو كود المشروع",
               value: controller.query.search,
               className: "max-w-[360px]",
-              pending: controller.isFetching,
             },
             filters: PROJECT_FILTERS,
             values: {
@@ -530,7 +523,6 @@ export default function ProjectsTableClient({
           emptySummaryText="لا توجد مشروعات"
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.isFetching}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

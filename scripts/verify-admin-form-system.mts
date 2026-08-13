@@ -107,11 +107,9 @@ check(
     ADMIN_INTERACTION_SYSTEM.ownsRuntime === false,
 );
 check(
-  "Admin Interaction System remains explicitly open only for final Browser acceptance",
-  ADMIN_INTERACTION_SYSTEM.globalClosed === false &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length === 1 &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers[0] ===
-      "Authenticated Browser acceptance on the final working tree is still required.",
+  "Admin Interaction System phase-one adoption is closed after final Browser acceptance",
+  ADMIN_INTERACTION_SYSTEM.globalClosed === true &&
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length === 0,
 );
 
 const expectedInteractionModuleIds = [
@@ -407,6 +405,18 @@ const topicTabs = read(
 const topicBasicPanel = read(
   "src/components/admin/content/editors/ContentBasicDataPanel.tsx",
 );
+const topicContentTypeControl = read(
+  "src/components/admin/content/editors/TopicContentTypeControl.tsx",
+);
+const topicPreview = read(
+  "src/app/admin/content/topics/[id]/preview/page.tsx",
+);
+const projectPreview = read(
+  "src/app/admin/projects/[id]/preview/page.tsx",
+);
+const menuBuilderPage = read(
+  "src/app/admin/pages-blocks/menus/[id]/page.tsx",
+);
 const topicSeoPanel = read("src/components/admin/SeoPanel.tsx");
 const sharedEntitySeoPanel = read(
   "src/components/admin/seo/AdminEntitySeoPanel.tsx",
@@ -494,6 +504,23 @@ check(
         source.includes('presentation="integrated"') ||
         source.includes('presentation="embedded"'),
     ),
+);
+check(
+  "Topic content type uses one shared listbox contract without a retired native branch",
+  topicContentTypeControl.includes("AdminListboxSelect") &&
+    !topicContentTypeControl.includes("<select") &&
+    !topicContentTypeControl.includes("presentation") &&
+    !topicBasicPanel.includes('presentation="compact"'),
+);
+check(
+  "scoped preview and builder routes adopt shared header and domain status owners directly",
+  [topicPreview, projectPreview, menuBuilderPage].every((source) =>
+    source.includes("components/admin/ui"),
+  ) &&
+    topicPreview.includes("getContentStatusMetadata") &&
+    projectPreview.includes("getProjectPublicationMetadata") &&
+    !existsSync(absolutePath("src/components/admin/AdminPageHeader.tsx")) &&
+    !existsSync(absolutePath("src/components/admin/AdminStatusBadge.tsx")),
 );
 check(
   "Topic mode identity, Preview, and media-signal differences remain declarative and unique",
@@ -1050,18 +1077,19 @@ check(
   "Category and Series collections consume action-scoped pending and shared feedback",
   [categoryListClient, seriesTableClient].every(
     (source) =>
-      source.includes("rowPendingAction:") &&
-      source.includes("instant.rowPending?.rowId ===") &&
-      source.includes(
-        "instant.rowPending !== null || instant.bulkPending !== null",
-      ) &&
+      source.includes("rowInteraction: instant.getRowInteraction") &&
+      !source.includes("instant.rowPending") &&
+      !source.includes("instant.bulkPending") &&
       !source.includes("router.refresh"),
   ) &&
-    read("src/components/admin/entity-list/AdminEntityList.tsx").includes(
+    !read("src/components/admin/entity-list/AdminEntityList.tsx").includes(
       "AdminFeedbackChannelViewport",
     ) &&
     read("src/components/admin/entity-list/AdminEntityList.tsx").includes(
       "publishFeedback(nextFeedback",
+    ) &&
+    read("src/components/admin/entity-list/AdminEntityList.tsx").includes(
+      'placement: "global"',
     ),
 );
 

@@ -35,13 +35,11 @@ export function createRedirectsCollectionToolbar({
   search,
   status,
   redirectType,
-  pending,
   onQueryPatch,
 }: {
   search: string;
   status: RedirectStatusFilter;
   redirectType: RedirectTypeFilter;
-  pending: boolean;
   onQueryPatch: AdminEntityListFiltersProps["onQueryPatch"];
 }): AdminEntityListFiltersProps {
   return {
@@ -51,7 +49,6 @@ export function createRedirectsCollectionToolbar({
       value: search,
       placeholder: "ابحث بالمصدر أو الوجهة أو الملاحظة...",
       minLength: redirectsQueryContract.searchMinLength,
-      pending,
     },
     filters: REDIRECT_FILTERS,
     values: { status, type: redirectType },

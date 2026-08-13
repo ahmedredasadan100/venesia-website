@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AdminFeedbackRegion,
 } from "../../../../../components/admin/AdminFeedbackProvider";
@@ -22,6 +22,7 @@ import {
   useAdminBoundedClientPagination,
   type AdminEntityFilterDef,
 } from "../../../../../lib/admin/entity-list";
+import { useAdminBoundedClientInstantMutation } from "../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -119,7 +120,11 @@ export default function PageBlocksClient({
     message: string;
     ok: boolean;
   } | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const instant = useAdminBoundedClientInstantMutation<PageBlockAssignmentRow>({
+    entity: "page-block-assignments",
+    initialRows: assignments,
+    datasetKey: String(page.id),
+  });
   const columnConfig = getPageCompositionColumnPreferenceConfig("pageAssignments");
   const defaultColumns = getPageCompositionDefaultColumnKeys("pageAssignments");
   const [visibleColumns, setVisibleColumns] = useState(() =>
@@ -178,7 +183,7 @@ export default function PageBlocksClient({
   );
 
   const table = useAdminTable<PageBlockAssignmentRow, SortKey>({
-    initialRows: assignments,
+    initialRows: instant.rows,
     getRowId: (row) => assignmentRowId(row),
     sortAccessors,
   });
@@ -271,10 +276,10 @@ export default function PageBlocksClient({
   const { setRows } = table;
 
   useEffect(() => {
-    setRows(assignments);
-  }, [assignments, setRows]);
+    setRows(instant.rows);
+  }, [instant.rows, setRows]);
 
-  function handleToggleVisibility(row: PageBlockAssignmentRow) {
+  async function handleToggleVisibility(row: PageBlockAssignmentRow) {
     if (!isManageableAssignment(row)) return;
     const isVisible = normalizeBoolean(row.is_visible, true);
     const formData = new FormData();
@@ -283,18 +288,43 @@ export default function PageBlocksClient({
     formData.set("block_type", row.module_kind);
     formData.set("next_visible", isVisible ? "false" : "true");
 
-    startTransition(async () => {
-      const result = await togglePageBlockAssignment(formData);
-      if (!result.ok) {
-        setActionFeedback({ message: result.message ?? "تعذر تحديث حالة الموديول.", ok: false });
-        return;
-      }
-      setActionFeedback({ message: result.message ?? "تم تحديث حالة الموديول.", ok: true });
-      router.refresh();
-    });
+    try {
+      const result = await instant.mutateAsync({
+        rowId: assignmentRowId(row),
+        action: "visibility",
+        optimistic: (cache) =>
+          cache.patchRows((candidate) =>
+            assignmentRowId(candidate) === assignmentRowId(row)
+              ? { ...candidate, is_visible: !isVisible }
+              : candidate,
+          ),
+        execute: async () => {
+          const response = await togglePageBlockAssignment(formData);
+          return response.ok
+            ? {
+                ok: true as const,
+                message: response.message ?? "تم تحديث حالة الموديول.",
+              }
+            : {
+                ok: false as const,
+                code: "assignment_visibility_failed",
+                message: response.message ?? "تعذر تحديث حالة الموديول.",
+              };
+        },
+      });
+      setActionFeedback({ message: result.message, ok: true });
+    } catch (error) {
+      setActionFeedback({
+        message:
+          error instanceof Error
+            ? error.message
+            : "تعذر تحديث حالة الموديول.",
+        ok: false,
+      });
+    }
   }
 
-  function handleDuplicateAssignment(row: PageBlockAssignmentRow) {
+  async function handleDuplicateAssignment(row: PageBlockAssignmentRow) {
     if (!isManageableAssignment(row) && row.module_kind !== "hero") return;
 
     const formData = new FormData();
@@ -303,19 +333,39 @@ export default function PageBlocksClient({
     formData.set("template_id", String(row.template_id));
     formData.set("module_kind", row.module_kind);
 
-    startTransition(async () => {
-      const result = await duplicateAssignedPageModule(formData);
-      if (!result.ok) {
-        setActionFeedback({ message: result.message ?? "تعذر تكرار الموديول.", ok: false });
+    try {
+      let redirectTo: string | null = null;
+      const result = await instant.mutateAsync({
+        rowId: assignmentRowId(row),
+        action: "duplicate",
+        optimistic: () => undefined,
+        execute: async () => {
+          const response = await duplicateAssignedPageModule(formData);
+          if (!response.ok) {
+            return {
+              ok: false as const,
+              code: "assignment_duplicate_failed",
+              message: response.message ?? "تعذر تكرار الموديول.",
+            };
+          }
+          redirectTo = response.redirectTo ?? null;
+          return {
+            ok: true as const,
+            message: response.message ?? "تم تكرار الموديول.",
+          };
+        },
+      });
+      setActionFeedback({ message: result.message, ok: true });
+      if (redirectTo) {
+        router.push(redirectTo);
         return;
       }
-      setActionFeedback({ message: result.message ?? "تم تكرار الموديول.", ok: true });
-      if (result.redirectTo) {
-        router.push(result.redirectTo);
-        return;
-      }
-      router.refresh();
-    });
+    } catch (error) {
+      setActionFeedback({
+        message: error instanceof Error ? error.message : "تعذر تكرار الموديول.",
+        ok: false,
+      });
+    }
   }
 
   async function handleDetachAssignment(row: PageBlockAssignmentRow) {
@@ -324,27 +374,39 @@ export default function PageBlocksClient({
     formData.set("assignment_id", String(row.id));
     formData.set("block_type", row.module_kind);
 
-    const result = await detachPageBlockAssignment(formData);
-    if (!result.ok) {
-      setActionFeedback({ message: result.message ?? "تعذرت إزالة الموديول من الصفحة.", ok: false });
-      return;
+    try {
+      const result = await instant.mutateAsync({
+        rowId: assignmentRowId(row),
+        action: "delete",
+        optimistic: (cache) => cache.removeRows(new Set([assignmentRowId(row)])),
+        execute: async () => {
+          const response = await detachPageBlockAssignment(formData);
+          return response.ok
+            ? { ok: true as const, message: response.message ?? "تمت إزالة الموديول من الصفحة." }
+            : { ok: false as const, code: "assignment_detach_failed", message: response.message ?? "تعذرت إزالة الموديول من الصفحة." };
+        },
+      });
+      setActionFeedback({ message: result.message, ok: true });
+    } catch (error) {
+      setActionFeedback({
+        message: error instanceof Error ? error.message : "تعذرت إزالة الموديول من الصفحة.",
+        ok: false,
+      });
     }
-    setActionFeedback({ message: result.message ?? "تمت إزالة الموديول من الصفحة.", ok: true });
-    router.refresh();
   }
 
   function canMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
     if (table.sort.key !== null) return false;
-    const siblings = assignments
+    const siblings = instant.rows
       .filter((candidate) => candidate.slot === row.slot)
       .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
     const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
     return index >= 0 && index + direction >= 0 && index + direction < siblings.length;
   }
 
-  function handleMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
+  async function handleMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
     if (table.sort.key !== null) return;
-    const siblings = assignments
+    const siblings = instant.rows
       .filter((candidate) => candidate.slot === row.slot)
       .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
     const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
@@ -352,22 +414,45 @@ export default function PageBlocksClient({
     if (index < 0 || target < 0 || target >= siblings.length) return;
     const ordered = [...siblings];
     [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    startTransition(async () => {
-      const result = await reorderPageComposition(
-        page.id,
-        row.slot,
-        ordered.map((item) => ({ kind: item.module_kind, id: item.id, updated_at: item.updated_at })),
-      );
-      if (!result.ok) {
-        setActionFeedback({ message: result.message, ok: false });
-        return;
-      }
-      setActionFeedback({ message: result.warning ?? "تم حفظ ترتيب الموديولات ذريًا.", ok: true });
-      router.refresh();
-    });
+    const sortOrderByRowId = new Map(
+      ordered.map((item, orderedIndex) => [
+        assignmentRowId(item),
+        siblings[orderedIndex].sort_order,
+      ]),
+    );
+    try {
+      let warning: string | null = null;
+      const result = await instant.mutateAsync({
+        rowId: assignmentRowId(row),
+        action: direction === -1 ? "reorder-up" : "reorder-down",
+        optimistic: (cache) =>
+          cache.patchRows((candidate) => {
+            const sortOrder = sortOrderByRowId.get(assignmentRowId(candidate));
+            return sortOrder == null ? candidate : { ...candidate, sort_order: sortOrder };
+          }),
+        execute: async () => {
+          const response = await reorderPageComposition(
+            page.id,
+            row.slot,
+            ordered.map((item) => ({ kind: item.module_kind, id: item.id, updated_at: item.updated_at })),
+          );
+          if (!response.ok) {
+            return { ok: false as const, code: response.code, message: response.message };
+          }
+          warning = response.warning ?? null;
+          return { ok: true as const, message: response.warning ?? "تم حفظ ترتيب الموديولات ذريًا." };
+        },
+      });
+      setActionFeedback({ message: warning ?? result.message, ok: true });
+    } catch (error) {
+      setActionFeedback({
+        message: error instanceof Error ? error.message : "تعذر حفظ ترتيب الموديولات.",
+        ok: false,
+      });
+    }
   }
 
-  function handleBulkExecute(action: string, ids: string[]) {
+  async function handleBulkExecute(action: string, ids: string[]) {
     const formData = new FormData();
     formData.set("page_id", String(page.id));
     formData.set("bulk_action", action);
@@ -375,33 +460,42 @@ export default function PageBlocksClient({
       formData.append("ids", id);
     }
 
-    return new Promise<void>((resolve, reject) => {
-      startTransition(async () => {
-        try {
-          await bulkPageBlockAssignments(formData);
-          selection.clearSelection();
-          setActionFeedback({
-            message:
-              action === "detach"
-                ? "تمت إزالة الروابط المحددة من الصفحة."
-                : "تم تحديث الروابط المحددة.",
-            ok: true,
-          });
-          router.refresh();
-          resolve();
-        } catch (error) {
-          setActionFeedback({
-            message: "تعذر تنفيذ الإجراء الجماعي. لم يكتمل التغيير ويمكنك المحاولة مرة أخرى.",
-            ok: false,
-          });
+    try {
+      const idSet = new Set(ids);
+      await instant.mutateAsync({
+        action: `bulk-${action}`,
+        bulk: true,
+        optimistic: (cache) => {
           if (action === "detach") {
-            reject(error);
+            cache.removeRows(idSet);
             return;
           }
-          resolve();
-        }
+          cache.patchRows((candidate) =>
+            idSet.has(assignmentRowId(candidate))
+              ? { ...candidate, is_visible: action === "show" }
+              : candidate,
+          );
+        },
+        execute: async () => {
+          await bulkPageBlockAssignments(formData);
+          return {
+            ok: true as const,
+            message: action === "detach" ? "تمت إزالة الروابط المحددة من الصفحة." : "تم تحديث الروابط المحددة.",
+          };
+        },
       });
-    });
+      selection.clearSelection();
+      setActionFeedback({
+        message: action === "detach" ? "تمت إزالة الروابط المحددة من الصفحة." : "تم تحديث الروابط المحددة.",
+        ok: true,
+      });
+    } catch (error) {
+      setActionFeedback({
+        message: error instanceof Error ? error.message : "تعذر تنفيذ الإجراء الجماعي. لم يكتمل التغيير ويمكنك المحاولة مرة أخرى.",
+        ok: false,
+      });
+      if (action === "detach") throw error;
+    }
   }
 
   return (
@@ -419,6 +513,7 @@ export default function PageBlocksClient({
           <AdminFeedbackRegion
             channel={`page-composition:${page.id}`}
             label="نتائج إجراءات تكوين الصفحة"
+            placement="global"
             feedback={
               actionFeedback
                 ? {
@@ -506,7 +601,6 @@ export default function PageBlocksClient({
                       value: search,
                       placeholder: "ابحث باسم الموديول أو نوعه أو المعرّف…",
                       minLength: 1,
-                      pending: isPending,
                     }}
                     filters={assignmentFilters}
                     values={{ module_type: moduleType, slot, visibility }}
@@ -551,7 +645,7 @@ export default function PageBlocksClient({
                         ]}
                         onExecute={handleBulkExecute}
                         onClearSelection={selection.clearSelection}
-                        isBusy={isPending}
+                        isBusy={instant.bulkInteraction.isBlocked}
                       />
                     }
                     onQueryPatch={(patch, behavior = "push") => {
@@ -584,7 +678,7 @@ export default function PageBlocksClient({
                     selectAllRef={selection.selectAllRef}
                     onToggleAll={(checked) => selection.toggleAll(checked)}
                     onToggleSelect={(rowId, checked) => selection.toggleOne(rowId, checked)}
-                    isPending={isPending}
+                    rowInteraction={instant.getRowInteraction}
                     onToggleVisibility={handleToggleVisibility}
                     onDuplicate={handleDuplicateAssignment}
                     onDetach={handleDetachAssignment}
@@ -603,7 +697,6 @@ export default function PageBlocksClient({
                   pageSize={String(pagination.pageSize)}
                   onPageChange={pagination.setPage}
                   onPageSizeChange={pagination.setPageSize}
-                  pending={isPending}
                   />
                 }
               />

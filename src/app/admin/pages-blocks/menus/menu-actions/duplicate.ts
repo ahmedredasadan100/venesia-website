@@ -7,9 +7,10 @@ import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../.
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   backToMenu,
-  backToMenus,
   getMenuIdFromItem,
   getNumber,
+  menuInteractionFailure,
+  menuInteractionSuccess,
   mediaWriteMutationErrorMessage,
   mutateMenuTree,
   navigationMutationMessage,
@@ -20,14 +21,21 @@ import {
 export async function duplicateMenu(formData: FormData) {
   const actor = await requireAdminSession();
   const id = getNumber(formData, "id");
-  if (!id) backToMenus("القائمة غير موجودة.");
+  if (!id) return menuInteractionFailure("menu_not_found", "القائمة غير موجودة.");
 
   const [{ data: menu, error: menuError }, { data: items, error: itemsError }] = await Promise.all([
     getSupabaseAdmin().from("menus").select("name").eq("id", id).maybeSingle(),
     getSupabaseAdmin().from("menu_items").select("id,parent_id,href").eq("menu_id", id).order("sort_order"),
   ]);
-  if (menuError || !menu) backToMenus(menuError?.message ?? "القائمة غير موجودة.");
-  if (itemsError) backToMenus(itemsError.message);
+  if (menuError || !menu) {
+    return menuInteractionFailure(
+      "menu_not_found",
+      menuError?.message ?? "القائمة غير موجودة.",
+    );
+  }
+  if (itemsError) {
+    return menuInteractionFailure("menu_items_read_failed", itemsError.message);
+  }
 
   const requestIdentity = `menu:duplicate:${id}:${crypto.randomUUID()}`;
   const planned = sortParentsBeforeChildren(items ?? []).map((item, index) => ({
@@ -35,9 +43,8 @@ export async function duplicateMenu(formData: FormData) {
     leaseEntityIdentity: `${requestIdentity}:item:${index}:${item.id}`,
   }));
 
-  const coordinated = await (async () => {
-    try {
-      return await coordinateMediaReferenceDomainMutation({
+  try {
+    const coordinated = await coordinateMediaReferenceDomainMutation({
         scopes: planned.map(({ item, leaseEntityIdentity }) =>
           buildMediaReferenceWriteScope("menu_items", leaseEntityIdentity, { href: item.href }),
         ),
@@ -60,16 +67,19 @@ export async function duplicateMenu(formData: FormData) {
             leaseToken,
           ),
       });
-    } catch (error) {
-      backToMenus(mediaWriteMutationErrorMessage(error, "تعذر نسخ القائمة."));
-    }
-  })();
 
-  await revalidateNavigation(coordinated.mediaSynchronization);
-  backToMenu(
-    coordinated.value.menuId,
-    navigationMutationMessage(coordinated.mediaSynchronization, "تم نسخ القائمة كمسودة مخفية."),
-  );
+    await revalidateNavigation(coordinated.mediaSynchronization);
+    return menuInteractionSuccess(
+      coordinated.mediaSynchronization,
+      "تم نسخ القائمة كمسودة مخفية.",
+      { menuId: coordinated.value.menuId },
+    );
+  } catch (error) {
+    return menuInteractionFailure(
+      "menu_duplicate_failed",
+      mediaWriteMutationErrorMessage(error, "تعذر نسخ القائمة."),
+    );
+  }
 }
 
 export async function duplicateMenuItem(formData: FormData) {

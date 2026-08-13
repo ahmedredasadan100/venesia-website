@@ -45,7 +45,6 @@ export type AdminTablePaginationProps = {
   limitParamName?: string;
   onPageChange?: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
-  pending?: boolean;
   className?: string;
 };
 
@@ -108,7 +107,6 @@ export default function AdminTablePagination({
   limitParamName = "limit",
   onPageChange,
   onPageSizeChange,
-  pending = false,
   className = "",
 }: AdminTablePaginationProps) {
   const router = useRouter();
@@ -186,7 +184,7 @@ export default function AdminTablePagination({
   }, [isLimitOpen, layerId, floating]);
 
   function applyLimit(nextLimit: string) {
-    if (pending || nextLimit === pageSize) {
+    if (nextLimit === pageSize) {
       setIsLimitOpen(false);
       window.requestAnimationFrame(() => triggerRef.current?.focus());
       return;
@@ -277,7 +275,6 @@ export default function AdminTablePagination({
               type="button"
               role="option"
               aria-selected={selected}
-              disabled={pending}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyLimit(option)}
               className={`flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
@@ -316,8 +313,7 @@ export default function AdminTablePagination({
     <div
       className={`rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES} ${className}`.trim()}
       data-admin-table-pagination=""
-      data-admin-table-pagination-pending={pending ? "true" : "false"}
-      aria-busy={pending}
+      data-admin-table-pagination-busy="false"
     >
       <div
         dir="ltr"
@@ -334,7 +330,6 @@ export default function AdminTablePagination({
                 aria-haspopup="listbox"
                 aria-expanded={isLimitOpen}
                 aria-controls={`${limitTriggerId}-menu`}
-                disabled={pending}
                 onClick={() => {
                   setActiveLimit(pageSize);
                   setIsLimitOpen(!isLimitOpen);
@@ -363,18 +358,16 @@ export default function AdminTablePagination({
             data-admin-pagination-nav=""
             className={`flex max-w-full flex-nowrap items-center justify-center gap-1.5 overflow-x-auto overscroll-x-contain md:justify-self-center ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
             aria-label="ترقيم الصفحات"
-            aria-busy={pending}
           >
             {currentPage > 1 && onPageChange ? (
               <button
                 type="button"
                 onClick={() => onPageChange(currentPage - 1)}
-                disabled={pending}
                 className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 السابق
               </button>
-            ) : prevHref && !pending ? (
+            ) : prevHref ? (
               <Link
                 href={prevHref}
                 scroll={false}
@@ -413,7 +406,7 @@ export default function AdminTablePagination({
                   type="button"
                   onClick={() => onPageChange(item)}
                   aria-current={isActive ? "page" : undefined}
-                  disabled={pending || isActive}
+                  disabled={isActive}
                   data-admin-pagination-slot="page"
                   className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-default disabled:opacity-70 ${
                     isActive
@@ -423,7 +416,7 @@ export default function AdminTablePagination({
                 >
                   {item}
                 </button>
-              ) : isActive || pending ? (
+              ) : isActive ? (
                 <span
                   key={item}
                   aria-current={isActive ? "page" : undefined}
@@ -459,12 +452,11 @@ export default function AdminTablePagination({
               <button
                 type="button"
                 onClick={() => onPageChange(currentPage + 1)}
-                disabled={pending}
                 className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 التالي
               </button>
-            ) : nextHref && !pending ? (
+            ) : nextHref ? (
               <Link
                 href={nextHref}
                 scroll={false}

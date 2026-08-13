@@ -42,13 +42,11 @@ export function useUnifiedContentToolbar({
   values,
   categories,
   series,
-  pending,
   onNavigate,
 }: {
   values: UnifiedContentFilterState;
   categories: AdminContentCategoryNode[];
   series: SeriesOption[];
-  pending?: boolean;
   onNavigate: (
     state: UnifiedContentFilterState,
     behavior: "push" | "replace",
@@ -171,7 +169,6 @@ export function useUnifiedContentToolbar({
       value: values.q,
       minLength: 2,
       debounceMs: 350,
-      pending,
       suggestions,
     },
     filters,

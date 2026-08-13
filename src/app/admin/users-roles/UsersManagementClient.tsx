@@ -32,7 +32,10 @@ import type {
   AdminEntityListResult,
 } from "../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
-import { useAdminEntityInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
+import {
+  useAdminEntityInstantMutation,
+  type AdminInstantMutationRowInteraction,
+} from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { formatAdminDateTime } from "../../../lib/content-dates";
 import {
   ADMIN_USERS_LIST_PAGE_SIZES,
@@ -90,8 +93,7 @@ function roleLabel(role: string) {
 
 function createAdminUserColumns(input: {
   currentUserId: number;
-  rowPendingAction: (id: number) => string | null;
-  mutationBusy: boolean;
+  rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onEdit: (row: AdminUserEntityListRow) => void;
   onToggle: (row: AdminUserEntityListRow) => Promise<AdminActionResult>;
   onDelete: (row: AdminUserEntityListRow) => Promise<AdminActionResult>;
@@ -178,20 +180,15 @@ function createAdminUserColumns(input: {
       sticky: "end",
       renderCell: ({ row, onMutationResult }) => {
         const isSelf = row.id === input.currentUserId;
-        const pendingAction = input.rowPendingAction(row.id);
+        const interaction = input.rowInteraction(row.id);
+        const pendingAction = interaction.pendingAction;
         const blockedReason = "انتظر انتهاء الإجراء الحالي.";
         const capability: AdminRowActionsCapability = {
           entityType: "admin_user",
           entityId: row.id,
           entityLabel: row.username,
           actions: {
-            edit: input.mutationBusy
-              ? {
-                  access: "disabled",
-                  disabledReason: blockedReason,
-                  pending: Boolean(pendingAction),
-                }
-              : { access: "allowed", onSelect: () => input.onEdit(row) },
+            edit: { access: "allowed", onSelect: () => input.onEdit(row) },
             preview: { access: "hidden" },
             information: {
               access: "allowed",
@@ -208,11 +205,11 @@ function createAdminUserColumns(input: {
               ],
             },
             copyPublicLink: { access: "hidden" },
-            visibility: input.mutationBusy
+            visibility: pendingAction === "visibility"
               ? {
                   access: "disabled",
                   disabledReason: blockedReason,
-                  pending: pendingAction === "visibility",
+                  pending: true,
                   isVisible: row.is_active,
                 }
               : isSelf && row.is_active
@@ -244,11 +241,11 @@ function createAdminUserColumns(input: {
             featured: { access: "hidden" },
             duplicate: { access: "hidden" },
             archive: { access: "hidden" },
-            delete: input.mutationBusy
+            delete: pendingAction === "delete"
               ? {
                   access: "disabled",
                   disabledReason: blockedReason,
-                  pending: pendingAction === "delete",
+                  pending: true,
                 }
               : isSelf
                 ? {
@@ -400,12 +397,7 @@ export default function UsersManagementClient({
     () =>
       createAdminUserColumns({
         currentUserId,
-        rowPendingAction: (id) =>
-          instant.rowPending?.rowId === id
-            ? instant.rowPending.action
-            : null,
-        mutationBusy:
-          instant.rowPending !== null || instant.bulkPending !== null,
+        rowInteraction: instant.getRowInteraction,
         onEdit: setEditingUser,
         onToggle: toggleUserActive,
         onDelete: deleteUser,
@@ -413,8 +405,7 @@ export default function UsersManagementClient({
     [
       currentUserId,
       deleteUser,
-      instant.bulkPending,
-      instant.rowPending,
+      instant.getRowInteraction,
       toggleUserActive,
     ],
   );
@@ -478,7 +469,7 @@ export default function UsersManagementClient({
         <AdminEntityListSurface consumer="admin-users">
           <AdminEntityListTableRegion
             data-admin-entity-list-pending={
-              controller.isFetching ? "true" : "false"
+              controller.queryPending ? "true" : "false"
             }
           >
             <AdminEntityList<
@@ -496,7 +487,6 @@ export default function UsersManagementClient({
                   placeholder:
                     "بحث باسم المستخدم أو البريد أو الاسم الكامل...",
                   minLength: adminUsersQueryContract.searchMinLength,
-                  pending: controller.isFetching,
                 },
                 filters,
                 values: {
@@ -572,7 +562,6 @@ export default function UsersManagementClient({
               pageSize={String(pagination.pageSize)}
               pageSizeOptions={PAGE_SIZE_OPTIONS}
               emptySummaryText="لا يوجد مستخدمون مطابقون"
-              pending={controller.isFetching}
               onPageChange={controller.setPage}
               onPageSizeChange={controller.setPageSize}
             />
