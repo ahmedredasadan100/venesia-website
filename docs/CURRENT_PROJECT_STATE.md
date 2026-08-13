@@ -78,7 +78,7 @@ The 2026-08-12 read-only reconciliation established the following live facts aga
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 75 |
+| Repository migration files | 76 |
 | Production registry versions | 75 |
 | Registry SQL provenance | Exact repository SQL for all 75 deployed repository versions |
 | Public tables | 51 |

@@ -81,7 +81,7 @@
         "src/app/admin/projects/project-actions/save-entry.ts",
         "src/lib/admin/projects/project-entry-media-coordination.ts"
       ],
-      "rationale": "The unified Project Create/Edit aggregate action coordinates root, plan, image and video-poster scopes before the atomic domain RPC and synchronizes the persisted stable identities under the same lease."
+      "rationale": "The unified Project Create/Edit aggregate action coordinates root, plan, image and video-poster scopes before the atomic domain RPC and synchronizes managed and canonical legacy identities under the same lease while retaining the Project aggregate mutation boundary."
     },
     {
       "id": "project-removal-command",

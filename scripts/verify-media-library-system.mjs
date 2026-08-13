@@ -34,6 +34,17 @@ function loadTypeScriptModule(relativePath, dependencies) {
 
 const contentTypesModule = loadTypeScriptModule("src/lib/admin/content/content-types.ts", {});
 const publicContentPathModule = loadTypeScriptModule("src/lib/content/public-content-path.ts", {});
+class TestMediaStorageError extends Error {
+  constructor(code, message, status) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
+const identityModule = loadTypeScriptModule("src/lib/admin/media-catalog/identity.ts", {
+  path: { default: nodePath },
+  "../media-storage-adapter": { MediaStorageError: TestMediaStorageError },
+});
 
 const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/reference-providers.ts", {
   "server-only": {},
@@ -52,9 +63,7 @@ const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/referen
   "../../supabase-admin": { getSupabaseAdmin: () => ({}) },
   "../content/content-types": contentTypesModule,
   "../../content/public-content-path": publicContentPathModule,
-  "./identity": {
-    getCanonicalMediaIdentityKey: (identity) => `${identity.provider}:${identity.bucket}:${identity.objectKey}`,
-  },
+  "./identity": identityModule,
 });
 
 const managedUrl = "https://demo.supabase.co/storage/v1/object/public/cms-images/images/topics/a.png";
@@ -70,6 +79,20 @@ check("typed provider registry is unique and covers the 16 live declared domains
 const legacyDocument = "/files/projects/document-1782017403551.pdf";
 assert.equal(providerModule.extractMediaCandidateValues(`download ${legacyDocument} now`).includes(legacyDocument), true);
 check("reference candidate extraction includes embedded legacy /images and /files paths", true);
+assert.deepEqual(identityModule.parseLegacyPublicMediaAsset("/images/projects/C35/hero.jpg?preview=1"), {
+  provider: "filesystem",
+  bucket: "public",
+  objectKey: "images/projects/C35/hero.jpg",
+});
+assert.equal(
+  identityModule.getCanonicalMediaIdentityKey({
+    provider: "filesystem",
+    bucket: "public",
+    objectKey: "images/projects/C35/hero.jpg",
+  }),
+  "filesystem:public:images/projects/C35/hero.jpg",
+);
+check("legacy public Project assets preserve their exact-case canonical identity", true);
 
 const usageSupabase = {
   from(table) {
@@ -96,9 +119,7 @@ const usageProviderModule = loadTypeScriptModule("src/lib/admin/media-catalog/re
   "../../supabase-admin": { getSupabaseAdmin: () => usageSupabase },
   "../content/content-types": contentTypesModule,
   "../../content/public-content-path": publicContentPathModule,
-  "./identity": {
-    getCanonicalMediaIdentityKey: (identity) => `${identity.provider}:${identity.bucket}:${identity.objectKey}`,
-  },
+  "./identity": identityModule,
 });
 const liveLegacyUsage = await usageProviderModule.scanMediaUsageByPublicValue(legacyDocument);
 assert.equal(liveLegacyUsage.uncertainties.length, 0);
@@ -124,11 +145,7 @@ const catalogModule = loadTypeScriptModule("src/lib/admin/media-catalog/catalog.
   "../entity-list/search-normalization": searchNormalizationModule,
   "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
   "../../supabase-admin": { getSupabaseAdmin: () => ({}) },
-  "./identity": {
-    getFolderPathFromObjectKey: (objectKey) => nodePath.posix.dirname(objectKey),
-    isMediaCatalogMissingError: () => false,
-    getCanonicalMediaIdentityKey: (identity) => `${identity.provider}:${identity.bucket}:${identity.objectKey}`,
-  },
+  "./identity": identityModule,
   "./binary-metadata": { readUploadBinaryMetadata: async () => ({}) },
   "./reference-providers": { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "test-registry" },
   "./readiness": readinessModule,
@@ -311,6 +328,34 @@ assert.equal(deduplicatedPage.assets.length, 1);
 assert.equal(deduplicatedPage.assets[0].id, "catalog-asset");
 assert.equal(deduplicatedPage.assets[0].source, "catalog_storage");
 check("read-through deduplicates by canonical provider bucket and object key", true);
+
+const canonicalLegacyProjectAsset = {
+  ...catalogAsset,
+  id: "legacy-project-c35-hero",
+  provider: "filesystem",
+  bucket: "public",
+  objectKey: "images/projects/C35/hero.jpg",
+  publicUrl: "/images/projects/C35/hero.jpg",
+  displayName: "hero.jpg",
+  originalFilename: "hero.jpg",
+  folderPath: "images/projects/C35",
+  sizeBytes: 1024,
+  checksum: "legacy-project-checksum",
+  source: "catalog",
+  referenceCount: 5,
+};
+const productionPickerPage = catalogModule.buildMediaLibraryReadModel(
+  { ...emptyCatalogSnapshot, assets: [canonicalLegacyProjectAsset] },
+  managedInventory,
+  { smartView: "all", folder: "images/projects", context: runtimeContext },
+);
+assert.equal(productionPickerPage.assets.length, 1);
+assert.equal(productionPickerPage.assets[0].publicUrl, "/images/projects/C35/hero.jpg");
+assert.equal(productionPickerPage.assets[0].provider, "filesystem");
+assert.equal(productionPickerPage.assets[0].catalogRegistered, true);
+assert.equal(productionPickerPage.assets[0].missingObject, false);
+assert.equal(productionPickerPage.summary.readOnlyAssetCount, 1);
+check("production picker read model includes canonical read-only legacy Project assets without a parallel inventory", true);
 
 const incompleteUsedPage = catalogModule.buildMediaLibraryReadModel(
   {
@@ -775,10 +820,11 @@ check("rebind proves live registry parity, retains the old asset and compensates
 const projectEntryCoordination = source("src/lib/admin/projects/project-entry-media-coordination.ts");
 const projectEntrySave = source("src/app/admin/projects/project-actions/save-entry.ts");
 check("projects synchronize parent and child media domains", ["project_media", "project_floor_plans", "project_videos"].every((domain) => projectEntryCoordination.includes(`"${domain}"`)) && projectEntrySave.includes("coordinateProjectEntrySave") && projectEntryCoordination.includes("synchronizeMediaReferenceWriteScopesAfterDomainMutation"));
-check("Project aggregate providers remain explicit discovery-only boundaries", ["projects", "project_media", "project_floor_plans", "project_videos"].every((domain) => {
+check("Project aggregate providers retain their specialized no-rebind mutation boundary", ["projects", "project_media", "project_floor_plans", "project_videos"].every((domain) => {
   const provider = providerModule.MEDIA_REFERENCE_PROVIDER_REGISTRY.find((item) => item.domainKey === domain);
   return provider && provider.supportsRebind === false;
 }));
+check("Project reference discovery includes canonical legacy identities without widening other domains", (source("src/lib/admin/media-catalog/reference-providers.ts").match(/adoptsCanonicalLegacyPublic: true/g) ?? []).length === 4);
 
 const route = source("src/app/api/admin/media-library/route.ts");
 check("Media API is private no-store and authenticates every verb", route.includes('"Cache-Control": "private, no-store, max-age=0"') && (route.match(/await requireAdminApi\(\)/g) ?? []).length === 4);

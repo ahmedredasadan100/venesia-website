@@ -3,6 +3,8 @@ import path from "path";
 import { MediaStorageError } from "../media-storage-adapter";
 import type { CanonicalMediaIdentity } from "./types";
 
+export const LEGACY_PUBLIC_MEDIA_BUCKET = "public";
+
 export function normalizeManagedObjectKey(value: string) {
   const normalized = value.replace(/\\/g, "/").replace(/^\/+/, "").trim();
   const segments = normalized.split("/");
@@ -21,11 +23,53 @@ export function createCanonicalMediaIdentity(input: CanonicalMediaIdentity): Can
   if (!bucket || bucket.includes("/") || bucket.includes("\\")) {
     throw new MediaStorageError("invalid_media_bucket", "حاوية ملف الوسائط غير صالحة.", 400);
   }
+  if (input.provider !== "supabase" && input.provider !== "filesystem") {
+    throw new MediaStorageError("invalid_media_provider", "مزود ملف الوسائط غير صالح.", 400);
+  }
+  if (input.provider === "filesystem" && bucket !== LEGACY_PUBLIC_MEDIA_BUCKET) {
+    throw new MediaStorageError("invalid_media_bucket", "حاوية ملف الوسائط غير صالحة.", 400);
+  }
   return {
-    provider: "supabase",
+    provider: input.provider,
     bucket,
     objectKey: normalizeManagedObjectKey(input.objectKey),
   };
+}
+
+export function parseLegacyPublicMediaAsset(value: string): CanonicalMediaIdentity | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  let pathname: string;
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      pathname = new URL(trimmed).pathname;
+    } catch {
+      return null;
+    }
+  } else {
+    pathname = trimmed.split(/[?#]/, 1)[0];
+  }
+
+  const match = pathname.match(/^\/(images|files)\/(.+)$/i);
+  if (!match) return null;
+
+  let decodedPath = `${match[1].toLowerCase()}/${match[2]}`;
+  try {
+    decodedPath = decodeURIComponent(decodedPath);
+  } catch {
+    // Keep the original path when it contains a literal percent character.
+  }
+
+  try {
+    return createCanonicalMediaIdentity({
+      provider: "filesystem",
+      bucket: LEGACY_PUBLIC_MEDIA_BUCKET,
+      objectKey: decodedPath,
+    });
+  } catch {
+    return null;
+  }
 }
 
 export function getCanonicalMediaIdentityKey(identity: CanonicalMediaIdentity) {

@@ -6,7 +6,7 @@ import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { isContentType } from "../content/content-types";
 import { resolvePublicContentPath } from "../../content/public-content-path";
-import { getCanonicalMediaIdentityKey } from "./identity";
+import { getCanonicalMediaIdentityKey, parseLegacyPublicMediaAsset } from "./identity";
 import type { CanonicalMediaIdentity, MediaReferenceState } from "./types";
 
 const PROVIDER_PAGE_SIZE = 200;
@@ -61,6 +61,7 @@ type ProviderConfig = {
   extraFields?: readonly string[];
   stateFields?: readonly string[];
   supportsRebind?: boolean;
+  adoptsCanonicalLegacyPublic?: boolean;
   editHref: (row: Record<string, unknown>) => string | null;
   publicHref?: (row: Record<string, unknown>) => string | null;
   state?: (row: Record<string, unknown>) => { state: MediaReferenceState; restorable: boolean };
@@ -109,35 +110,24 @@ export function extractMediaCandidateValues(value: unknown): string[] {
 
 function mediaPublicValuesMatch(left: string, right: string) {
   if (left.trim() === right.trim()) return true;
-  const leftManaged = parseManagedStorageAsset(left);
-  const rightManaged = parseManagedStorageAsset(right);
-  if (leftManaged && rightManaged) {
-    return leftManaged.bucket === rightManaged.bucket && leftManaged.objectPath === rightManaged.objectPath;
-  }
-
-  const normalizeLegacyPath = (value: string) => {
-    const trimmed = value.trim();
-    let pathname = trimmed;
-    if (/^https?:\/\//i.test(trimmed)) {
-      try {
-        pathname = new URL(trimmed).pathname;
-      } catch {
-        return null;
-      }
-    } else {
-      pathname = trimmed.split(/[?#]/, 1)[0];
+  const resolveIdentity = (value: string): CanonicalMediaIdentity | null => {
+    const managed = parseManagedStorageAsset(value);
+    if (managed) {
+      return {
+        provider: "supabase",
+        bucket: managed.bucket,
+        objectKey: managed.objectPath,
+      };
     }
-    if (!/^\/(?:images|files)\//i.test(pathname)) return null;
-    try {
-      return decodeURIComponent(pathname);
-    } catch {
-      return pathname;
-    }
+    return parseLegacyPublicMediaAsset(value);
   };
-
-  const leftLegacy = normalizeLegacyPath(left);
-  const rightLegacy = normalizeLegacyPath(right);
-  return leftLegacy !== null && rightLegacy !== null && leftLegacy === rightLegacy;
+  const leftIdentity = resolveIdentity(left);
+  const rightIdentity = resolveIdentity(right);
+  return Boolean(
+    leftIdentity &&
+      rightIdentity &&
+      getCanonicalMediaIdentityKey(leftIdentity) === getCanonicalMediaIdentityKey(rightIdentity),
+  );
 }
 
 function discoverRowUsage(config: ProviderConfig, row: Record<string, unknown>, requestedPublicValue: string) {
@@ -194,12 +184,16 @@ function discoverRowReferences(config: ProviderConfig, row: Record<string, unkno
   for (const fieldKey of config.fields) {
     for (const publicValue of extractMediaCandidateValues(row[fieldKey])) {
       const managed = parseManagedStorageAsset(publicValue);
-      if (!managed) continue;
-      const identity: CanonicalMediaIdentity = {
-        provider: "supabase",
-        bucket: managed.bucket,
-        objectKey: managed.objectPath,
-      };
+      const identity: CanonicalMediaIdentity | null = managed
+        ? {
+            provider: "supabase",
+            bucket: managed.bucket,
+            objectKey: managed.objectPath,
+          }
+        : config.adoptsCanonicalLegacyPublic
+          ? parseLegacyPublicMediaAsset(publicValue)
+          : null;
+      if (!identity) continue;
       const key = `${getCanonicalMediaIdentityKey(identity)}:${fieldKey}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -374,6 +368,7 @@ const PROVIDER_CONFIGS = [
     entityType: "project",
     labelField: "arabic_name",
     fields: ["image", "hero_image", "small_box_image", "overview_main_image", "og_image"],
+    adoptsCanonicalLegacyPublic: true,
     editHref: (row) => `/admin/projects/${row.id}`,
     supportsRebind: false,
   },
@@ -383,6 +378,7 @@ const PROVIDER_CONFIGS = [
     entityType: "project_media",
     fields: ["image"],
     extraFields: ["project_id"],
+    adoptsCanonicalLegacyPublic: true,
     editHref: (row) => `/admin/projects/${row.project_id}`,
     supportsRebind: false,
   },
@@ -392,6 +388,7 @@ const PROVIDER_CONFIGS = [
     entityType: "project_floor_plan",
     fields: ["architectural_image", "furnishing_image"],
     extraFields: ["project_id"],
+    adoptsCanonicalLegacyPublic: true,
     editHref: (row) => `/admin/projects/${row.project_id}`,
     supportsRebind: false,
   },
@@ -401,6 +398,7 @@ const PROVIDER_CONFIGS = [
     entityType: "project_video",
     fields: ["poster_image"],
     extraFields: ["project_id"],
+    adoptsCanonicalLegacyPublic: true,
     editHref: (row) => `/admin/projects/${row.project_id}`,
     supportsRebind: false,
   },
@@ -510,7 +508,7 @@ const PROVIDER_CONFIGS = [
 ] satisfies ProviderConfig[];
 
 export const MEDIA_REFERENCE_PROVIDER_REGISTRY = PROVIDER_CONFIGS.map(createProvider);
-export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v2-project-entry";
+export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v3-legacy-project-canonical";
 
 export function getMediaReferenceProvider(domainKey: string) {
   return MEDIA_REFERENCE_PROVIDER_REGISTRY.find((provider) => provider.domainKey === domainKey) ?? null;

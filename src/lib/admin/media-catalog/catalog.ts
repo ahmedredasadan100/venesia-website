@@ -19,6 +19,7 @@ import {
   getCanonicalMediaIdentityKey,
   getFolderPathFromObjectKey,
   isMediaCatalogMissingError,
+  parseLegacyPublicMediaAsset,
 } from "./identity";
 import type {
   CanonicalMediaIdentity,
@@ -363,8 +364,7 @@ function fallbackAsset(item: MediaAssetItem): MediaCatalogAsset {
 }
 
 function identityKey(identity: CanonicalMediaIdentity) {
-  if (identity.provider === "supabase") return getCanonicalMediaIdentityKey(identity);
-  return `${identity.provider}:${identity.bucket}:${identity.objectKey.replace(/^\/+/, "")}`;
+  return getCanonicalMediaIdentityKey(identity);
 }
 
 function storageFolder(folderPath: string): MediaCatalogFolder {
@@ -513,7 +513,7 @@ function buildMediaLibrarySummary(
     managedStorageAssetCount: inventory.items.filter(
       (item) => item.managed && item.provider === inventory.provider,
     ).length,
-    readOnlyAssetCount: inventory.items.filter((item) => !item.managed).length,
+    readOnlyAssetCount: assets.filter((asset) => asset.provider !== inventory.provider).length,
     catalogRegisteredCount: assets.filter(
       (asset) => asset.catalogRegistered && asset.provider === inventory.provider,
     ).length,
@@ -827,8 +827,10 @@ export async function getCatalogAssetById(assetId: string) {
 
 export async function getCatalogAssetByPublicValue(value: string) {
   const managed = parseManagedStorageAsset(value);
-  if (!managed) return null;
-  return getCatalogAssetByIdentity({ provider: "supabase", bucket: managed.bucket, objectKey: managed.objectPath });
+  const identity = managed
+    ? { provider: "supabase" as const, bucket: managed.bucket, objectKey: managed.objectPath }
+    : parseLegacyPublicMediaAsset(value);
+  return identity ? getCatalogAssetByIdentity(identity) : null;
 }
 
 export async function listCatalogReferences(assetId: string) {
