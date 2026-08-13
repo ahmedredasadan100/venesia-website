@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import AdminEntityListFilters from "../entity-list/AdminEntityListFilters";
 import {
@@ -45,8 +44,8 @@ import type { AdminFormAction } from "../../../lib/admin/form-runtime";
 import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
 import {
   adminCollectionSearchIncludes,
-  applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
+  type AdminBoundedClientQueryContract,
 } from "../../../lib/admin/entity-list";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../lib/admin/entity-list/bulk-action-labels";
 import { useAdminBoundedClientInstantMutation } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
@@ -125,7 +124,6 @@ export default function BlockModuleManagerClient({
   initialVisibleColumns = null,
   preferenceError = null,
 }: BlockModuleManagerClientProps) {
-  const searchParams = useSearchParams();
   const feedbackChannel = `block-manager:${moduleKey}`;
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -166,22 +164,26 @@ export default function BlockModuleManagerClient({
         .join(" "),
     [visibleColumnSet],
   );
-  const search = searchParams.get("q") ?? "";
-  const filteredRows = useMemo(
-    () =>
-      instant.rows.filter((row) =>
+  const queryContract = useMemo<AdminBoundedClientQueryContract<BlockModuleRow>>(
+    () => ({
+      mode: "bounded-client",
+      search: { minLength: 1 },
+      matchesRow: (row, query) =>
         adminCollectionSearchIncludes(
           `${row.name} ${row.slug} ${row.description ?? ""} ${row.variant} ${variantLabelByValue.get(row.variant) ?? ""}`,
-          search,
+          query.search,
         ),
-      ),
-    [instant.rows, search, variantLabelByValue],
+      getRowId: (row) => row.id,
+    }),
+    [variantLabelByValue],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: filteredRows,
-    datasetKey: `${moduleKey}|${search}|${filteredRows.map((row) => row.id).sort().join("|")}`,
+    rows: instant.rows,
+    datasetKey: moduleKey,
+    queryContract,
     defaultPageSize: PAGE_SIZE,
   });
+  const search = pagination.search;
   const paginatedRows = pagination.rows;
   const visibleIds = useMemo(
     () => paginatedRows.map((row) => row.id),
@@ -416,20 +418,7 @@ export default function BlockModuleManagerClient({
             }}
           />
         }
-        onQueryPatch={(patch, behavior = "push") => {
-          const next = applyAdminEntityUrlPatch(
-            new URLSearchParams(window.location.search),
-            patch,
-          );
-          const query = next.toString();
-          window.history[
-            behavior === "replace" ? "replaceState" : "pushState"
-          ](
-            window.history.state,
-            "",
-            `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-          );
-        }}
+        onQueryPatch={pagination.applyQueryPatch}
       />
 
       <AdminDataGrid className="!rounded-t-none !border-t-0">
@@ -589,7 +578,7 @@ export default function BlockModuleManagerClient({
           );
         })}
 
-        {!filteredRows.length ? <AdminDataGridEmpty>لا توجد بلوكات مطابقة.</AdminDataGridEmpty> : null}
+        {!pagination.totalCount ? <AdminDataGridEmpty>لا توجد بلوكات مطابقة.</AdminDataGridEmpty> : null}
       </AdminDataGrid>
 
       <AdminTablePagination

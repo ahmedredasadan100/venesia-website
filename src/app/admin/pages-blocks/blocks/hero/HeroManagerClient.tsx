@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
@@ -44,8 +43,8 @@ import type { AdminFormRuntimeHandle } from "../../../../../components/admin/ui/
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
 import {
   adminCollectionSearchIncludes,
-  applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
+  type AdminBoundedClientQueryContract,
   type AdminEntityFilterDef,
 } from "../../../../../lib/admin/entity-list";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../../../lib/admin/entity-list/bulk-action-labels";
@@ -125,7 +124,6 @@ export default function HeroManagerClient({
   initialVisibleColumns = null,
   preferenceError = null,
 }: HeroManagerClientProps) {
-  const searchParams = useSearchParams();
   const feedbackChannel = "block-manager:hero";
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -159,26 +157,33 @@ export default function HeroManagerClient({
     entity: "hero-templates",
     initialRows: heroes,
   });
-  const search = searchParams.get("q") ?? "";
-  const status = searchParams.get("status") ?? "all";
-  const filteredHeroes = useMemo(
-    () => instant.rows.filter((hero) => {
+  const queryContract = useMemo<AdminBoundedClientQueryContract<HeroTemplateRow>>(
+    () => ({
+      mode: "bounded-client",
+      search: { minLength: 1 },
+      filters: HERO_FILTERS,
+      matchesRow: (hero, query) => {
       if (
-        search &&
+        query.search &&
         !adminCollectionSearchIncludes(
           `${hero.name} ${hero.slug} ${hero.description ?? ""}`,
-          search,
+          query.search,
         )
       ) return false;
-      return status === "all" || hero.status === status;
+      return query.filters.status === "all" || hero.status === query.filters.status;
+      },
+      getRowId: (hero) => hero.id,
     }),
-    [instant.rows, search, status],
+    [],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: filteredHeroes,
-    datasetKey: `${search}|${status}|${filteredHeroes.map((hero) => hero.id).sort().join("|")}`,
+    rows: instant.rows,
+    datasetKey: "hero-templates",
+    queryContract,
     defaultPageSize: PAGE_SIZE,
   });
+  const search = pagination.search;
+  const status = pagination.filterValues.status;
   const paginatedHeroes = pagination.rows;
   const visibleIds = useMemo(() => paginatedHeroes.map((hero) => hero.id), [paginatedHeroes]);
   const selection = useAdminGridSelection<number>(visibleIds);
@@ -407,15 +412,7 @@ export default function HeroManagerClient({
               }}
             />
           }
-          onQueryPatch={(patch, behavior = "push") => {
-            const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
-            const query = next.toString();
-            window.history[behavior === "replace" ? "replaceState" : "pushState"](
-              window.history.state,
-              "",
-              `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-            );
-          }}
+          onQueryPatch={pagination.applyQueryPatch}
         />
 
         <AdminDataGrid className="!rounded-t-none !border-t-0">
@@ -566,7 +563,7 @@ export default function HeroManagerClient({
             );
           })}
 
-          {!filteredHeroes.length ? <AdminDataGridEmpty>لا توجد هيروهات مطابقة.</AdminDataGridEmpty> : null}
+          {!pagination.totalCount ? <AdminDataGridEmpty>لا توجد هيروهات مطابقة.</AdminDataGridEmpty> : null}
         </AdminDataGrid>
 
         <AdminTablePagination

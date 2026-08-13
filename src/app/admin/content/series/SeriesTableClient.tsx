@@ -460,36 +460,7 @@ export default function SeriesTableClient({
                 ? String(controller.query.filters.categoryId)
                 : "all",
             },
-            onQueryPatch: (patch, behavior = "push") => {
-              const search =
-                "q" in patch ? (patch.q ?? "").trim() : controller.query.search;
-              const statusValue =
-                "status" in patch ? patch.status : controller.query.filters.status;
-              const categoryValue =
-                "category" in patch
-                  ? patch.category
-                  : controller.query.filters.categoryId
-                    ? String(controller.query.filters.categoryId)
-                    : "all";
-              const status =
-                statusValue === "published" ||
-                statusValue === "unpublished"
-                  ? statusValue
-                  : "all";
-              const categoryId = Number(categoryValue);
-              controller.setSearchAndFilters(
-                search,
-                {
-                  view: controller.query.filters.view,
-                  status,
-                  categoryId:
-                    Number.isInteger(categoryId) && categoryId > 0
-                      ? categoryId
-                      : null,
-                },
-                behavior,
-              );
-            },
+            onQueryPatch: controller.applyQueryPatch,
           }}
           rows={controller.result.rows}
           columns={columns}

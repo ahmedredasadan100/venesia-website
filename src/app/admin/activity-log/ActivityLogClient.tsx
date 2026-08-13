@@ -294,30 +294,6 @@ export default function ActivityLogClient({
     [controller.error],
   );
 
-  function applyQueryPatch(
-    patch: Record<string, string | null>,
-    behavior: "push" | "replace" = "push",
-  ) {
-    const current = controller.query;
-    const nextFilters = { ...current.filters };
-    const nextSearch =
-      "q" in patch ? (patch.q ?? "") : current.search;
-
-    if ("actor" in patch) nextFilters.actorUsername = patch.actor ?? "";
-    if ("action" in patch) nextFilters.action = patch.action ?? "";
-    if ("entityType" in patch) {
-      nextFilters.entityType = patch.entityType ?? "";
-    }
-    if ("dateFrom" in patch) nextFilters.dateFrom = patch.dateFrom ?? "";
-    if ("dateTo" in patch) nextFilters.dateTo = patch.dateTo ?? "";
-
-    controller.setSearchAndFilters(
-      nextSearch,
-      nextFilters,
-      behavior,
-    );
-  }
-
   return (
     <AdminEntityListPageLayout className="pb-10" dir="rtl">
       <AdminPageHeader
@@ -360,7 +336,7 @@ export default function ActivityLogClient({
                 "dateFrom",
                 "dateTo",
               ],
-              onQueryPatch: applyQueryPatch,
+              onQueryPatch: controller.applyQueryPatch,
             }}
             rows={controller.result.rows}
             columns={ACTIVITY_LOG_COLUMNS}

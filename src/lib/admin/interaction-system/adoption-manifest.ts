@@ -829,7 +829,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
     layout:
       "src/components/admin/entity-list/AdminEntityListSurface.tsx",
     pagination: "src/components/admin/ui/AdminTablePagination.tsx",
-    query: "src/lib/admin/entity-list/data-engine/client-controller.ts",
+    query: [
+      "src/lib/admin/entity-list/data-engine/client-controller.ts",
+      "src/lib/admin/entity-list/bounded-client-pagination.ts",
+    ],
   },
   surfaces: [
     {
@@ -1217,7 +1220,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       rowActionsOwner: "not_applicable",
       columnVisibility: "not_applicable",
       summaryCards: true,
-      filtersOrToolbar: true,
+      filtersOrToolbar: false,
       paginationState: "not_required",
       paginationOwner: "not_applicable",
       queryMode: "specialized",
@@ -1277,7 +1280,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "All eight template libraries share bounded-client interaction and Collection presentation while their loaders and domain mutations remain owned by Page Composition.",
+        "All eight template libraries declare one bounded-client query contract; the shared Collection owner controls query normalization, filtering, membership, pagination, and URL history while loaders and domain mutations remain owned by Page Composition.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1360,7 +1363,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "The menu records adopt the shared bounded-client interaction runtime and collection presentation while domain writes remain with the Menu owner.",
+        "The menu records declare one bounded-client query contract owned by the shared Collection runtime while domain writes remain with the Menu owner.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1420,7 +1423,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Nested items share the bounded-client interaction runtime, grid, actions, pagination, feedback, and confirmation; the Menu domain owns one hierarchy-aware atomic reorder mutation.",
+        "Nested items delegate query normalization, filtering, membership, URL history, and pagination to the shared bounded-client Collection owner; the Menu domain owns one hierarchy-aware atomic reorder mutation.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1480,7 +1483,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "The complete assignment dataset is paginated by the shared bounded-client URL/history owner; Page Composition owns one cross-table atomic reorder mutation.",
+        "The complete assignment dataset declares one shared bounded-client query lifecycle through the Collection owner; Page Composition owns one cross-table atomic reorder mutation.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1624,7 +1627,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       rowActionsOwner: "not_applicable",
       columnVisibility: "not_applicable",
       summaryCards: true,
-      filtersOrToolbar: true,
+      filtersOrToolbar: false,
       paginationState: "not_required",
       paginationOwner: "not_applicable",
       queryMode: "specialized",
@@ -1739,6 +1742,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/settings/general/CompanyIdentityPanel.tsx",
         "src/app/admin/settings/general/MaintenanceModePanel.tsx",
         "src/app/admin/settings/media/MediaSettingsPanel.tsx",
+        "src/components/admin/integrations/AdminIntegrationsPlatform.tsx",
         "src/components/admin/AdminPlaceholderPage.tsx",
       ],
       sourceOwner: "Settings domain panels and actions",
@@ -1749,15 +1753,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       rowActionsOwner: "not_applicable",
       columnVisibility: "not_applicable",
       summaryCards: false,
-      filtersOrToolbar: false,
+      filtersOrToolbar: true,
       paginationState: "not_required",
       paginationOwner: "not_applicable",
       queryMode: "specialized",
       layoutOwner: "AdminShell + AdminPageExperience",
       requiredAdoption: [],
-      exceptionRationale: null,
+      genuineExceptions: [
+        "The Integrations platform is a fixed nine-provider catalog with local non-URL search/filter state; it is not a growing entity collection.",
+      ],
+      exceptionRationale:
+        "The Integrations catalog retains its fixed specialized interaction state; the remaining Settings routes are form or placeholder surfaces.",
       rationale:
-        "Settings forms and placeholders share Page, Feedback, and Confirmation owners without forced Collection semantics.",
+        "Settings forms and placeholders share Page, Feedback, and Confirmation owners without forced Collection semantics; the fixed Integrations catalog is explicitly inventoried as a specialized exception.",
     },
     {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
@@ -1824,7 +1832,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       rowActionsOwner: "not_applicable",
       columnVisibility: "not_applicable",
       summaryCards: false,
-      filtersOrToolbar: true,
+      filtersOrToolbar: false,
       paginationState: "not_required",
       paginationOwner: "not_applicable",
       queryMode: "specialized",
@@ -1908,9 +1916,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   canonicalTableFooterGap: "gap-4";
   ownerSourceFiles: Readonly<
     Record<
-      "header" | "rowActions" | "columns" | "layout" | "pagination" | "query",
+      "header" | "rowActions" | "columns" | "layout" | "pagination",
       string
-    >
+    > & { query: readonly string[] }
   >;
   surfaces: readonly AdminCollectionSurfaceInventoryEntry[];
 };

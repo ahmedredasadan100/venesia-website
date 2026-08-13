@@ -61,7 +61,6 @@ const coreFiles = [
   "src/components/admin/entity-list/AdminEntityListSurface.tsx",
   "src/components/admin/entity-list/AdminFloatingLayerContext.tsx",
   "src/components/admin/ui/AdminListboxSelect.tsx",
-  "src/components/admin/ui/AdminFilterListbox.tsx",
   "src/components/admin/ui/admin-floating-position.ts",
   "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
   "src/components/admin/ui/admin-scrollbar-styles.ts",
@@ -79,7 +78,6 @@ const prefsCore = read("src/lib/admin/entity-list/column-preferences.ts");
 const paginationCore = read("src/lib/admin/entity-list/pagination.ts");
 const prefsAdapter = read("src/lib/admin/preferences/admin-column-preferences.ts");
 const listbox = read("src/components/admin/ui/AdminListboxSelect.tsx");
-const filterListbox = read("src/components/admin/ui/AdminFilterListbox.tsx");
 const bulkBar = read("src/components/admin/ui/AdminBulkActionBar.tsx");
 const feedbackCodes = read("src/lib/admin/entity-list/feedback-codes.ts");
 const feedbackPolicy = read("src/lib/admin/admin-action-feedback.ts");
@@ -272,7 +270,6 @@ const coreSources = [
   prefsCore,
   paginationCore,
   listbox,
-  filterListbox,
   feedbackCodes,
   floatingPosition,
   floatingHook,
@@ -301,12 +298,6 @@ check(
 );
 
 check(
-  "Filter listbox dedupes allValue options",
-  filterListbox.includes("withoutAllValue") &&
-    filterListbox.includes("option.value !== allValue"),
-);
-
-check(
   "Preferences adapter is project infra and accepts viewKey",
   prefsAdapter.includes("view_key: input.viewKey") &&
     prefsAdapter.includes("allowedColumns") &&
@@ -330,7 +321,7 @@ check(
 
 check(
   "Floating consumers apply one complete shared style contract",
-  [listbox, filterListbox, columnMenu, pagination, activity].every(
+  [listbox, columnMenu, pagination, activity].every(
     (source) =>
       source.includes("useAdminFloatingMenuPosition") &&
       /style=\{\w+\.style\}/.test(source),

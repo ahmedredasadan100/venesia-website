@@ -340,29 +340,7 @@ export default function TopicsWithoutImageReportClient({
               status: controller.query.filters.status,
               type: controller.query.filters.contentType,
             },
-            onQueryPatch: (patch, behavior = "push") => {
-              const search =
-                "q" in patch ? (patch.q ?? "").trim() : controller.query.search;
-              const status =
-                "status" in patch &&
-                topicsWithoutImageStatuses.includes(
-                  (patch.status ?? "all") as TopicsWithoutImageFilters["status"],
-                )
-                  ? ((patch.status ?? "all") as TopicsWithoutImageFilters["status"])
-                  : controller.query.filters.status;
-              const contentType =
-                "type" in patch &&
-                topicsWithoutImageContentTypes.includes(
-                  (patch.type ?? "all") as TopicsWithoutImageFilters["contentType"],
-                )
-                  ? ((patch.type ?? "all") as TopicsWithoutImageFilters["contentType"])
-                  : controller.query.filters.contentType;
-              controller.setSearchAndFilters(
-                search,
-                { status, contentType },
-                behavior,
-              );
-            },
+            onQueryPatch: controller.applyQueryPatch,
           }}
           rows={controller.result.rows}
           columns={columns}

@@ -1196,13 +1196,23 @@ check(
   collectionSurfaces.find((surface) => surface.id === "page-block-assignments")
     ?.queryMode === "bounded-client" &&
     pageAssignmentsSource.includes("useAdminBoundedClientPagination") &&
+    pageAssignmentsSource.includes('mode: "bounded-client"') &&
+    pageAssignmentsSource.includes("queryContract") &&
+    pageAssignmentsSource.includes(
+      "onQueryPatch={pagination.applyQueryPatch}",
+    ) &&
     pageAssignmentsSource.includes("pagination.resetPage()") &&
     !pageAssignmentsGridSource.includes("summary={`${totalCount}") &&
-    pageAssignmentsSource.includes("totalCount={filteredRows.length}") &&
+    pageAssignmentsSource.includes("totalCount={pagination.totalCount}") &&
+    !pageAssignmentsSource.includes("useSearchParams") &&
+    !pageAssignmentsSource.includes("applyAdminEntityUrlPatch") &&
+    !pageAssignmentsSource.includes("window.history") &&
     !pageAssignmentsSource.includes("const [currentPage") &&
     !pageAssignmentsSource.includes("Math.ceil(table.rows.length") &&
     !pageAssignmentsSource.includes("table.rows.slice(") &&
     read(paths.boundedPagination).includes("useSearchParams") &&
+    read(paths.boundedPagination).includes("queryContract.matchesRow") &&
+    read(paths.boundedPagination).includes("const applyQueryPatch = useCallback") &&
     read(paths.boundedPagination).includes('behavior === "replace" ? "replaceState" : "pushState"') &&
     read(paths.boundedPagination).includes("previousDatasetKey"),
 );

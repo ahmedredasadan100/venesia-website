@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
 import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
@@ -45,8 +44,8 @@ import type { AdminFormRuntimeHandle } from "../../../../../components/admin/ui/
 import { useAdminTable } from "../../../../../components/admin/table-engine";
 import {
   adminCollectionSearchIncludes,
-  applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
+  type AdminBoundedClientQueryContract,
   type AdminEntityFilterDef,
 } from "../../../../../lib/admin/entity-list";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../../../lib/admin/entity-list/bulk-action-labels";
@@ -106,7 +105,6 @@ export default function ContentBlocksTableClient({
   preferenceError = null,
 }: ContentBlocksTableClientProps) {
   const feedbackChannel = "block-manager:content";
-  const searchParams = useSearchParams();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const createRuntimeRef = useRef<AdminFormRuntimeHandle>(null);
@@ -162,9 +160,6 @@ export default function ContentBlocksTableClient({
   useEffect(() => {
     setTableRows(instant.rows);
   }, [instant.rows, setTableRows]);
-  const search = searchParams.get("q") ?? "";
-  const status = searchParams.get("status") ?? "all";
-  const variant = searchParams.get("variant") ?? "all";
   const filters = useMemo<readonly AdminEntityFilterDef[]>(() => [
     {
       id: "content-blocks-status",
@@ -188,25 +183,37 @@ export default function ContentBlocksTableClient({
       options: VARIANT_OPTIONS.map(([value, label]) => ({ value, label })),
     },
   ], [rows]);
-  const filteredRows = useMemo(
-    () => table.rows.filter((row) => {
+  const queryContract = useMemo<AdminBoundedClientQueryContract<ContentBlockRow>>(
+    () => ({
+      mode: "bounded-client",
+      search: { minLength: 1 },
+      filters,
+      matchesRow: (row, query) => {
+      const status = query.filters.status;
+      const variant = query.filters.variant;
       if (
-        search &&
+        query.search &&
         !adminCollectionSearchIncludes(
           `${row.name} ${row.slug} ${row.description ?? ""}`,
-          search,
+          query.search,
         )
       ) return false;
       if (status !== "all" && row.status !== status) return false;
       return variant === "all" || row.variant === variant;
+      },
+      getRowId: (row) => row.id,
     }),
-    [search, status, table.rows, variant],
+    [filters],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: filteredRows,
-    datasetKey: `${search}|${status}|${variant}|${filteredRows.map((row) => row.id).sort().join("|")}`,
+    rows: table.rows,
+    datasetKey: "content-block-templates",
+    queryContract,
     defaultPageSize: PAGE_SIZE,
   });
+  const search = pagination.search;
+  const status = pagination.filterValues.status;
+  const variant = pagination.filterValues.variant;
   const paginatedRows = pagination.rows;
   const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
   const selection = useAdminGridSelection<number>(visibleIds);
@@ -456,15 +463,7 @@ export default function ContentBlocksTableClient({
               }}
             />
           }
-          onQueryPatch={(patch, behavior = "push") => {
-            const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
-            const query = next.toString();
-            window.history[behavior === "replace" ? "replaceState" : "pushState"](
-              window.history.state,
-              "",
-              `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-            );
-          }}
+          onQueryPatch={pagination.applyQueryPatch}
         />
 
         <AdminDataGrid className="!rounded-t-none !border-t-0">

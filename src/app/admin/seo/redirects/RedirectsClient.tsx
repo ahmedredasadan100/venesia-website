@@ -413,29 +413,7 @@ export default function RedirectsClient({
                 search: controller.query.search,
                 status: controller.query.filters.status,
                 redirectType: controller.query.filters.redirectType,
-                onQueryPatch: (patch, behavior = "push") => {
-                  const search =
-                    "q" in patch
-                      ? (patch.q ?? "").trim()
-                      : controller.query.search;
-                  const status =
-                    "status" in patch
-                      ? patch.status === "active" || patch.status === "inactive"
-                        ? patch.status
-                        : "all"
-                      : controller.query.filters.status;
-                  const redirectType =
-                    "type" in patch
-                      ? patch.type === "301" || patch.type === "302"
-                        ? patch.type
-                        : "all"
-                      : controller.query.filters.redirectType;
-                  controller.setSearchAndFilters(
-                    search,
-                    { status, redirectType },
-                    behavior,
-                  );
-                },
+                onQueryPatch: controller.applyQueryPatch,
               })}
               rows={controller.result.rows}
               columns={columns}
