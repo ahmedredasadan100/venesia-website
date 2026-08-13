@@ -494,30 +494,7 @@ export default function UsersManagementClient({
                   role: controller.query.filters.role,
                 },
                 clearableFilterKeys: ["status", "role"],
-                onQueryPatch: (patch, behavior = "push") => {
-                  const search =
-                    "q" in patch
-                      ? (patch.q ?? "").trim()
-                      : controller.query.search;
-                  const status: AdminUserStatusFilter =
-                    "status" in patch
-                      ? patch.status === "active" ||
-                        patch.status === "inactive"
-                        ? patch.status
-                        : "all"
-                      : controller.query.filters.status;
-                  const role =
-                    "role" in patch
-                      ? typeof patch.role === "string" && patch.role
-                        ? patch.role
-                        : "all"
-                      : controller.query.filters.role;
-                  controller.setSearchAndFilters(
-                    search,
-                    { status, role },
-                    behavior,
-                  );
-                },
+                onQueryPatch: controller.applyQueryPatch,
               }}
               rows={controller.result.rows}
               columns={columns}

@@ -56,4 +56,6 @@ export {
 export {
   useAdminBoundedClientPagination,
   type AdminBoundedClientPaginationOptions,
+  type AdminBoundedClientQueryContract,
+  type AdminBoundedClientQueryState,
 } from "./bounded-client-pagination";

@@ -105,47 +105,6 @@ function topicActionFormData(
   return formData;
 }
 
-function positiveId(value: string) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
-function toFilters(state: {
-  q: string;
-  view: "active" | "trash";
-  contentType: string;
-  category: string;
-  series: string;
-  status: string;
-  featured: string;
-  image: string;
-}): TopicFilters {
-  return {
-    view: state.view,
-    contentType:
-      state.contentType === "article" ||
-      state.contentType === "news" ||
-      state.contentType === "press" ||
-      state.contentType === "site_update" ||
-      state.contentType === "video" ||
-      state.contentType === "gallery"
-        ? state.contentType
-        : "all",
-    categoryId: positiveId(state.category),
-    seriesId: state.series === "any" ? "any" : positiveId(state.series),
-    status:
-      state.status === "published" ||
-      state.status === "unpublished"
-        ? state.status
-        : "all",
-    featured:
-      state.featured === "yes" || state.featured === "no"
-        ? state.featured
-        : "all",
-    image: state.image === "without" ? "without" : "all",
-  };
-}
-
 export default function TopicsListClient({
   categories,
   series,
@@ -532,14 +491,7 @@ export default function TopicsListClient({
     },
     categories,
     series,
-    onNavigate: (state, behavior) => {
-      const trimmed = state.q.trim();
-      controller.setSearchAndFilters(
-        trimmed.length >= 2 ? trimmed : "",
-        toFilters(state),
-        behavior,
-      );
-    },
+    onQueryPatch: controller.applyQueryPatch,
   });
   const resetToView = useCallback(
     (view: "active" | "trash") =>

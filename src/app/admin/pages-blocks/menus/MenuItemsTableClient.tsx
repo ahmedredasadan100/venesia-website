@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import VenesiaModal from "../../../../components/admin/VenesiaModal";
 import {
@@ -26,8 +26,8 @@ import {
 } from "../../../../components/admin/ui";
 import {
   adminCollectionSearchIncludes,
-  applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
+  type AdminBoundedClientQueryContract,
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
 import {
@@ -203,7 +203,6 @@ export default function MenuItemsTableClient({
   initialVisibleColumns = null,
   preferenceError = null,
 }: MenuItemsTableClientProps) {
-  const searchParams = useSearchParams();
   const router = useRouter();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const feedbackChannel = `menu-builder:${menu.id}`;
@@ -242,9 +241,6 @@ export default function MenuItemsTableClient({
         .join(" "),
     [visibleColumnSet],
   );
-  const search = searchParams.get("q") ?? "";
-  const visibility = searchParams.get("visibility") ?? "all";
-  const itemType = searchParams.get("item_type") ?? "all";
   const filters = useMemo<readonly AdminEntityFilterDef[]>(() => [
     {
       id: "menu-items-visibility",
@@ -271,25 +267,39 @@ export default function MenuItemsTableClient({
       })),
     },
   ], [activeItems]);
-  const filteredRows = useMemo(
-    () => rows.filter(({ item, parentLabel }) => {
+  const queryContract = useMemo<
+    AdminBoundedClientQueryContract<(typeof rows)[number]>
+  >(
+    () => ({
+      mode: "bounded-client",
+      search: { minLength: 1 },
+      filters,
+      matchesRow: ({ item, parentLabel }, query) => {
       if (
-        search &&
+        query.search &&
         !adminCollectionSearchIncludes(
           `${item.label} ${item.href ?? ""} ${parentLabel ?? ""} ${item.linked_type ?? ""} ${item.linked_id ?? ""}`,
-          search,
+          query.search,
         )
       ) return false;
+      const visibility = query.filters.visibility;
+      const itemType = query.filters.item_type;
       if (visibility !== "all" && (item.is_visible ? "visible" : "hidden") !== visibility) return false;
       return itemType === "all" || item.item_type === itemType;
+      },
+      getRowId: ({ item }) => item.id,
     }),
-    [itemType, rows, search, visibility],
+    [filters],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: filteredRows,
-    datasetKey: `${menu.id}|${search}|${visibility}|${itemType}|${filteredRows.map(({ item }) => item.id).sort().join("|")}`,
+    rows,
+    datasetKey: String(menu.id),
+    queryContract,
     defaultPageSize: PAGE_SIZE,
   });
+  const search = pagination.search;
+  const visibility = pagination.filterValues.visibility;
+  const itemType = pagination.filterValues.item_type;
   const paginatedRows = pagination.rows;
 
   async function runMenuItemMutation(
@@ -423,15 +433,7 @@ export default function MenuItemsTableClient({
             }
           />
         }
-        onQueryPatch={(patch, behavior = "push") => {
-          const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
-          const query = next.toString();
-          window.history[behavior === "replace" ? "replaceState" : "pushState"](
-            window.history.state,
-            "",
-            `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-          );
-        }}
+        onQueryPatch={pagination.applyQueryPatch}
       />
 
       <AdminDataGrid className="!rounded-t-none !border-t-0">

@@ -429,28 +429,7 @@ export default function ProjectsTableClient({
               featured: controller.query.filters.featured,
               publication_status: controller.query.filters.publicationStatus,
             },
-            onQueryPatch: (patch, behavior = "push") => {
-              const search =
-                "q" in patch ? (patch.q ?? "").trim() : controller.query.search;
-              const featured =
-                "featured" in patch
-                  ? patch.featured === "yes" || patch.featured === "no"
-                    ? patch.featured
-                    : "all"
-                  : controller.query.filters.featured;
-              const publicationStatus =
-                "publication_status" in patch
-                  ? patch.publication_status === "published" ||
-                    patch.publication_status === "unpublished"
-                    ? patch.publication_status
-                    : "all"
-                  : controller.query.filters.publicationStatus;
-              controller.setSearchAndFilters(
-                search,
-                { projectType: type, featured, publicationStatus },
-                behavior,
-              );
-            },
+            onQueryPatch: controller.applyQueryPatch,
           }}
           rows={projects}
           columns={columns}

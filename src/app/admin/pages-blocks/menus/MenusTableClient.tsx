@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -35,8 +35,8 @@ import {
 import { useAdminTable } from "../../../../components/admin/table-engine";
 import {
   adminCollectionSearchIncludes,
-  applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
+  type AdminBoundedClientQueryContract,
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
@@ -114,7 +114,6 @@ export default function MenusTableClient({
   initialVisibleColumns = null,
   preferenceError = null,
 }: MenusTableClientProps) {
-  const searchParams = useSearchParams();
   const router = useRouter();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const feedbackChannel = "menu-builder:list";
@@ -165,9 +164,6 @@ export default function MenusTableClient({
   useEffect(() => {
     setRows(instant.rows);
   }, [instant.rows, setRows]);
-  const search = searchParams.get("q") ?? "";
-  const status = searchParams.get("status") ?? "all";
-  const location = searchParams.get("location") ?? "all";
   const filters = useMemo<readonly AdminEntityFilterDef[]>(() => [
     {
       id: "menus-status",
@@ -194,24 +190,36 @@ export default function MenusTableClient({
       })),
     },
   ], [instant.rows]);
-  const filteredRows = useMemo(
-    () => table.rows.filter((menu) => {
+  const queryContract = useMemo<AdminBoundedClientQueryContract<MenuListRow>>(
+    () => ({
+      mode: "bounded-client",
+      search: { minLength: 1 },
+      filters,
+      matchesRow: (menu, query) => {
       if (
-        search &&
+        query.search &&
         !adminCollectionSearchIncludes(
           `${menu.name} ${menu.slug} ${menu.location} ${locationLabel(menu.location)}`,
-          search,
+          query.search,
         )
       ) return false;
+      const status = query.filters.status;
+      const location = query.filters.location;
       if (status !== "all" && (menu.is_active ? "active" : "inactive") !== status) return false;
       return location === "all" || menu.location === location;
+      },
+      getRowId: (menu) => menu.id,
     }),
-    [location, search, status, table.rows],
+    [filters],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: filteredRows,
-    datasetKey: `${search}|${status}|${location}|${filteredRows.map((row) => row.id).sort().join("|")}`,
+    rows: table.rows,
+    datasetKey: "menus",
+    queryContract,
   });
+  const search = pagination.search;
+  const status = pagination.filterValues.status;
+  const location = pagination.filterValues.location;
   const paginatedRows = pagination.rows;
   const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
   const selection = useAdminGridSelection<number>(visibleIds);
@@ -399,18 +407,10 @@ export default function MenusTableClient({
               onExecute={runBulkMenuMutation}
             />
           }
-          onQueryPatch={(patch, behavior = "push") => {
-            const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
-            const query = next.toString();
-            window.history[behavior === "replace" ? "replaceState" : "pushState"](
-              window.history.state,
-              "",
-              `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-            );
-          }}
+          onQueryPatch={pagination.applyQueryPatch}
         />
 
-        <AdminDataGrid className="!rounded-t-none !border-t-0" summary={`${filteredRows.length} قائمة`}>
+        <AdminDataGrid className="!rounded-t-none !border-t-0" summary={`${pagination.totalCount} قائمة`}>
           <AdminDataGridHeader columns={columns}>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox

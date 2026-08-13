@@ -491,23 +491,7 @@ export default function CategoriesListClient({
             },
             filters,
             values: { status: controller.query.filters.status },
-            onQueryPatch: (patch, behavior = "push") => {
-              const search =
-                "q" in patch
-                  ? (patch.q ?? "").trim()
-                  : controller.query.search;
-              const status =
-                "status" in patch
-                  ? patch.status === "published" || patch.status === "unpublished"
-                    ? patch.status
-                    : "all"
-                  : controller.query.filters.status;
-              controller.setSearchAndFilters(
-                search,
-                { view: controller.query.filters.view, status },
-                behavior,
-              );
-            },
+            onQueryPatch: controller.applyQueryPatch,
           }}
           rows={pageRows}
           columns={columns}

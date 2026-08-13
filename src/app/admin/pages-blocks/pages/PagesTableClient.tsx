@@ -619,13 +619,7 @@ export default function PagesTableClient({
               },
               filters: [],
               values: {},
-              onQueryPatch: (patch, behavior = "push") => {
-                const search =
-                  "q" in patch
-                    ? (patch.q ?? "").trim()
-                    : controller.query.search;
-                controller.setSearchAndFilters(search, {}, behavior);
-              },
+              onQueryPatch: controller.applyQueryPatch,
             }}
             rows={pages}
             columns={columns}

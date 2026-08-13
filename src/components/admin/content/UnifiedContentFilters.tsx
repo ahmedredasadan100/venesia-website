@@ -42,15 +42,12 @@ export function useUnifiedContentToolbar({
   values,
   categories,
   series,
-  onNavigate,
+  onQueryPatch,
 }: {
   values: UnifiedContentFilterState;
   categories: AdminContentCategoryNode[];
   series: SeriesOption[];
-  onNavigate: (
-    state: UnifiedContentFilterState,
-    behavior: "push" | "replace",
-  ) => void;
+  onQueryPatch: NonNullable<AdminEntityListFiltersProps["onQueryPatch"]>;
 }): AdminEntityListFiltersProps {
   const categoryOptions = useMemo(
     () => toAdminCategoryFilterOptions(categories),
@@ -188,27 +185,6 @@ export function useUnifiedContentToolbar({
       "featured",
       "image",
     ],
-    onQueryPatch(patch, behavior = "push") {
-      onNavigate(
-        {
-          q: "q" in patch ? (patch.q ?? "") : values.q,
-          view: values.view,
-          contentType:
-            "content_type" in patch
-              ? (patch.content_type ?? "all")
-              : values.contentType,
-          category:
-            "category" in patch ? (patch.category ?? "all") : values.category,
-          series:
-            "series" in patch ? (patch.series ?? "all") : values.series,
-          status:
-            "status" in patch ? (patch.status ?? "all") : values.status,
-          featured:
-            "featured" in patch ? (patch.featured ?? "all") : values.featured,
-          image: "image" in patch ? (patch.image ?? "all") : values.image,
-        },
-        behavior,
-      );
-    },
+    onQueryPatch,
   };
 }

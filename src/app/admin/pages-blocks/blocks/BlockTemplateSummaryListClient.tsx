@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import {
@@ -30,8 +29,8 @@ import {
 } from "../../../../components/admin/ui";
 import {
   adminCollectionSearchIncludes,
-  applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
+  type AdminBoundedClientQueryContract,
 } from "../../../../lib/admin/entity-list";
 import { useAdminBoundedClientInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
@@ -91,7 +90,6 @@ export default function BlockTemplateSummaryListClient({
   initialVisibleColumns = null,
   preferenceError = null,
 }: BlockTemplateSummaryListClientProps) {
-  const searchParams = useSearchParams();
   const feedbackChannel = `block-manager:${moduleKey}`;
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const instant = useAdminBoundedClientInstantMutation<BlockTemplateSummaryRow>({
@@ -125,22 +123,28 @@ export default function BlockTemplateSummaryListClient({
         .join(" "),
     [visibleColumnSet],
   );
-  const search = searchParams.get("q") ?? "";
-  const filteredRows = useMemo(
-    () =>
-      instant.rows.filter((row) =>
+  const queryContract = useMemo<
+    AdminBoundedClientQueryContract<BlockTemplateSummaryRow>
+  >(
+    () => ({
+      mode: "bounded-client",
+      search: { minLength: 1 },
+      matchesRow: (row, query) =>
         adminCollectionSearchIncludes(
           `${row.name} ${row.slug} ${row.detail} ${row.status}`,
-          search,
+          query.search,
         ),
-      ),
-    [instant.rows, search],
+      getRowId: (row) => row.id,
+    }),
+    [],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: filteredRows,
-    datasetKey: `${moduleKey}|${search}|${filteredRows.map((row) => row.id).sort().join("|")}`,
+    rows: instant.rows,
+    datasetKey: moduleKey,
+    queryContract,
     defaultPageSize: PAGE_SIZE,
   });
+  const search = pagination.search;
   const paginatedRows = pagination.rows;
   const basePath = `/admin/pages-blocks/blocks/${moduleKey}`;
 
@@ -263,20 +267,7 @@ export default function BlockTemplateSummaryListClient({
             }
           />
         }
-        onQueryPatch={(patch, behavior = "push") => {
-          const next = applyAdminEntityUrlPatch(
-            new URLSearchParams(window.location.search),
-            patch,
-          );
-          const query = next.toString();
-          window.history[
-            behavior === "replace" ? "replaceState" : "pushState"
-          ](
-            window.history.state,
-            "",
-            `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-          );
-        }}
+        onQueryPatch={pagination.applyQueryPatch}
       />
 
       <AdminDataGrid className="!rounded-t-none !border-t-0">

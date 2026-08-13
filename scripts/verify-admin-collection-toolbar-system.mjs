@@ -2,7 +2,7 @@
  * Static and pure-behavior guardrails for the shared Admin Collection
  * Toolbar/Search/Filter System. Live interaction remains Browser QA owned.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -38,6 +38,13 @@ const toolbar = read(
 const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
 const searchInput = read("src/components/admin/ui/AdminSearchInput.tsx");
 const urlState = read("src/lib/admin/entity-list/url-state.ts");
+const serverPageController = read(
+  "src/lib/admin/entity-list/data-engine/client-controller.ts",
+);
+const boundedClientController = read(
+  "src/lib/admin/entity-list/bounded-client-pagination.ts",
+);
+const uiBarrel = read("src/components/admin/ui/index.ts");
 const topicsAdapter = read(
   "src/components/admin/content/UnifiedContentFilters.tsx",
 );
@@ -93,6 +100,13 @@ check(
     toolbar.includes('router[behavior](href, { scroll: false })'),
 );
 check(
+  "Server-page controller owns contract-normalized toolbar query patches",
+  serverPageController.includes("const applyQueryPatch = useCallback") &&
+    serverPageController.includes("applyAdminEntityUrlPatch(currentParams, patch") &&
+    serverPageController.includes("normalizeAdminEntityListQuery(contract, nextParams)") &&
+    serverPageController.includes("applyQueryPatch,"),
+);
+check(
   "AdminEntityList composes one toolbar owner with columns and bulk context",
   entityList.includes("<AdminEntityListFilters") &&
     entityList.includes("columnsControl={columnsControl}") &&
@@ -133,6 +147,26 @@ check(
   "Every server-page Entity List adopter delegates layout to toolbar props",
   entityListAdopters.every((path) => read(path).includes("toolbar=")),
 );
+const serverPageQueryAdopters = [
+  "src/components/admin/content/TopicsListClient.tsx",
+  "src/app/admin/content/categories/CategoriesListClient.tsx",
+  "src/app/admin/content/series/SeriesTableClient.tsx",
+  "src/app/admin/projects/ProjectsTableClient.tsx",
+  "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
+  "src/app/admin/seo/redirects/RedirectsClient.tsx",
+  "src/app/admin/activity-log/ActivityLogClient.tsx",
+  "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+  "src/app/admin/users-roles/UsersManagementClient.tsx",
+];
+check(
+  "Every server-page toolbar delegates query patches to the Collection controller",
+  serverPageQueryAdopters.every((path) =>
+    read(path).includes("onQueryPatch: controller.applyQueryPatch"),
+  ) &&
+    serverPageQueryAdopters.every(
+      (path) => !read(path).includes("onQueryPatch: (patch"),
+    ),
+);
 check(
   "Topics declares suggestions in its domain adapter without local UI runtime",
   topicsAdapter.includes("suggestions") &&
@@ -163,9 +197,7 @@ check(
   "Eligible bounded adopters do not rebuild local search inputs",
   boundedAdopters.every((path) => !read(path).includes('<input type="search"')),
 );
-check(
-  "Bounded adopters filter before the shared pagination slice",
-  [
+const eligibleBoundedAdopters = [
     "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
     "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
     "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
@@ -173,11 +205,37 @@ check(
     "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
     "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
     "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
-  ].every((path) => {
+];
+check(
+  "Bounded Collection controller owns query, filtering, membership, pagination, and URL history",
+  boundedClientController.includes('mode: "bounded-client"') &&
+    boundedClientController.includes("queryContract.matchesRow") &&
+    boundedClientController.includes("const resolvedDatasetKey") &&
+    boundedClientController.includes("const applyQueryPatch = useCallback") &&
+    boundedClientController.includes("filterValues") &&
+    boundedClientController.includes("rows: paginatedRows"),
+);
+check(
+  "Eligible bounded adopters declare one contract and no local URL/query lifecycle",
+  eligibleBoundedAdopters.every((path) => {
     const source = read(path);
     return source.includes("useAdminBoundedClientPagination") &&
-      /rows:\s*filtered(?:Rows|Users|Heroes)/.test(source);
+      source.includes('mode: "bounded-client"') &&
+      source.includes("queryContract") &&
+      source.includes("onQueryPatch={pagination.applyQueryPatch}") &&
+      !source.includes("useSearchParams") &&
+      !source.includes("applyAdminEntityUrlPatch") &&
+      !source.includes("window.history");
   }),
+);
+check(
+  "Retired parallel filter, shell, and toolbar implementations stay absent",
+  !uiBarrel.includes("AdminFilterListbox") &&
+    !uiBarrel.includes("AdminFiltersShell") &&
+    !uiBarrel.includes("AdminToolbar") &&
+    !existsSync(resolve(ROOT, "src/components/admin/ui/AdminFilterListbox.tsx")) &&
+    !existsSync(resolve(ROOT, "src/components/admin/ui/AdminFiltersShell.tsx")) &&
+    !existsSync(resolve(ROOT, "src/components/admin/ui/AdminToolbar.tsx")),
 );
 check(
   "Media keeps Folder and Smart Views outside its one kind filter",

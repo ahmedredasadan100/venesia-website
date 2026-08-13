@@ -14,6 +14,10 @@ import {
   type AdminEntityListQueryContract,
   type AdminEntityListResult,
 } from "./contracts";
+import {
+  applyAdminEntityUrlPatch,
+  type AdminEntityUrlPatch,
+} from "../url-state";
 import { cacheNormalizedAdminEntityListResult } from "./normalized-result-cache";
 import { adminEntityListQueryKeys } from "./query-keys";
 import { resolveAdminEntityListInteractionState } from "./interaction-state";
@@ -258,6 +262,26 @@ export function useAdminEntityListController<
       ),
     [commitQuery],
   );
+  const applyQueryPatch = useCallback(
+    (
+      patch: AdminEntityUrlPatch,
+      behavior: HistoryBehavior = "push",
+    ) => {
+      const currentParams = writeAdminEntityListQuery(
+        contract,
+        queryRef.current,
+        new URLSearchParams(window.location.search),
+      );
+      const nextParams = applyAdminEntityUrlPatch(currentParams, patch, {
+        defaultPageSize: String(contract.defaultPageSize),
+      });
+      commitQuery(
+        normalizeAdminEntityListQuery(contract, nextParams),
+        behavior,
+      );
+    },
+    [commitQuery, contract],
+  );
   const setFilter = useCallback(
     <Key extends keyof Filters>(key: Key, value: Filters[Key]) =>
       commitQuery(
@@ -336,6 +360,7 @@ export function useAdminEntityListController<
     ...interactionState,
     setSearch,
     setSearchAndFilters,
+    applyQueryPatch,
     setFilter,
     setSort,
     setPage,

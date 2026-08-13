@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   AdminFeedbackRegion,
@@ -18,8 +18,8 @@ import {
 import { useAdminTable } from "../../../../../components/admin/table-engine";
 import {
   adminCollectionSearchIncludes,
-  applyAdminEntityUrlPatch,
   useAdminBoundedClientPagination,
+  type AdminBoundedClientQueryContract,
   type AdminEntityFilterDef,
 } from "../../../../../lib/admin/entity-list";
 import { useAdminBoundedClientInstantMutation } from "../../../../../lib/admin/entity-list/data-engine/instant-mutation";
@@ -115,7 +115,6 @@ export default function PageBlocksClient({
   preferenceError = null,
 }: PageBlocksClientProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [actionFeedback, setActionFeedback] = useState<{
     message: string;
     ok: boolean;
@@ -187,10 +186,6 @@ export default function PageBlocksClient({
     getRowId: (row) => assignmentRowId(row),
     sortAccessors,
   });
-  const search = searchParams.get("q") ?? "";
-  const moduleType = searchParams.get("module_type") ?? "all";
-  const slot = searchParams.get("slot") ?? "all";
-  const visibility = searchParams.get("visibility") ?? "all";
   const assignmentFilters = useMemo<readonly AdminEntityFilterDef[]>(() => {
     const kinds = [...new Set(assignments.map((row) => row.module_kind))];
     return [
@@ -229,31 +224,42 @@ export default function PageBlocksClient({
       },
     ];
   }, [assignments]);
-  const filteredRows = useMemo(
-    () =>
-      table.rows.filter((row) => {
+  const queryContract = useMemo<
+    AdminBoundedClientQueryContract<PageBlockAssignmentRow>
+  >(
+    () => ({
+      mode: "bounded-client",
+      search: { minLength: 1 },
+      filters: assignmentFilters,
+      matchesRow: (row, query) => {
         if (
-          search &&
+          query.search &&
           !adminCollectionSearchIncludes(
             `${row.template_name} ${moduleKindLabel(row.module_kind)} ${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]} ${row.template_id}`,
-            search,
+            query.search,
           )
         ) return false;
+        const moduleType = query.filters.module_type;
+        const slot = query.filters.slot;
+        const visibility = query.filters.visibility;
         if (moduleType !== "all" && row.module_kind !== moduleType) return false;
         if (slot !== "all" && normalizeLayoutSlot(row.slot) !== slot) return false;
         const rowVisibility = normalizeBoolean(row.is_visible, true) ? "visible" : "hidden";
         return visibility === "all" || rowVisibility === visibility;
-      }),
-    [moduleType, search, slot, table.rows, visibility],
-  );
-  const assignmentDatasetKey = useMemo(
-    () => `${search}|${moduleType}|${slot}|${visibility}|${filteredRows.map(assignmentRowId).sort().join("|")}`,
-    [filteredRows, moduleType, search, slot, visibility],
+      },
+      getRowId: assignmentRowId,
+    }),
+    [assignmentFilters],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: filteredRows,
-    datasetKey: assignmentDatasetKey,
+    rows: table.rows,
+    datasetKey: String(page.id),
+    queryContract,
   });
+  const search = pagination.search;
+  const moduleType = pagination.filterValues.module_type;
+  const slot = pagination.filterValues.slot;
+  const visibility = pagination.filterValues.visibility;
   const paginatedRows = pagination.rows;
   const manageableRows = useMemo(
     () => paginatedRows.filter(isManageableAssignment),
@@ -648,20 +654,7 @@ export default function PageBlocksClient({
                         isBusy={instant.bulkInteraction.isBlocked}
                       />
                     }
-                    onQueryPatch={(patch, behavior = "push") => {
-                      const next = applyAdminEntityUrlPatch(
-                        new URLSearchParams(window.location.search),
-                        patch,
-                      );
-                      const query = next.toString();
-                      window.history[
-                        behavior === "replace" ? "replaceState" : "pushState"
-                      ](
-                        window.history.state,
-                        "",
-                        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-                      );
-                    }}
+                    onQueryPatch={pagination.applyQueryPatch}
                   />
                 }
                 table={
@@ -693,7 +686,7 @@ export default function PageBlocksClient({
                   basePath={`/admin/pages-blocks/pages/${page.id}`}
                   currentPage={pagination.page}
                   totalPages={pagination.totalPages}
-                  totalCount={filteredRows.length}
+                  totalCount={pagination.totalCount}
                   pageSize={String(pagination.pageSize)}
                   onPageChange={pagination.setPage}
                   onPageSizeChange={pagination.setPageSize}

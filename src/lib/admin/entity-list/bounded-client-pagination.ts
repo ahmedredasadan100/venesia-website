@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
+import type { AdminEntityFilterDef, AdminEntityFilterValues } from "./types";
 import {
   ADMIN_ENTITY_LIST_DEFAULT_PAGE_SIZE,
   ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS,
@@ -10,14 +11,35 @@ import {
   resolveClientPagination,
   slicePageRows,
 } from "./pagination";
-import { writeAdminBoundedClientPaginationParams } from "./url-state";
+import {
+  applyAdminEntityUrlPatch,
+  writeAdminBoundedClientPaginationParams,
+  type AdminEntityUrlPatch,
+} from "./url-state";
 
 type HistoryBehavior = "push" | "replace";
 
+export type AdminBoundedClientQueryState = {
+  search: string;
+  filters: AdminEntityFilterValues;
+};
+
+export type AdminBoundedClientQueryContract<Row> = {
+  mode: "bounded-client";
+  search?: {
+    paramKey?: string;
+    minLength?: number;
+  };
+  filters?: readonly AdminEntityFilterDef[];
+  matchesRow: (row: Row, query: AdminBoundedClientQueryState) => boolean;
+  getRowId: (row: Row) => string | number;
+};
+
 export type AdminBoundedClientPaginationOptions<Row> = {
   rows: readonly Row[];
-  /** Stable identity of the active collection scope, excluding sort order. */
+  /** Stable identity of the complete collection scope, excluding query and sort. */
   datasetKey: string;
+  queryContract: AdminBoundedClientQueryContract<Row>;
   pageParamName?: string;
   limitParamName?: string;
   pageSizeOptions?: readonly number[];
@@ -36,22 +58,82 @@ function currentLocationHref(params: URLSearchParams) {
 export function useAdminBoundedClientPagination<Row>({
   rows,
   datasetKey,
+  queryContract,
   pageParamName = "page",
   limitParamName = "limit",
   pageSizeOptions = ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS,
   defaultPageSize = ADMIN_ENTITY_LIST_DEFAULT_PAGE_SIZE,
 }: AdminBoundedClientPaginationOptions<Row>) {
   const searchParams = useSearchParams();
+  const searchParamName = queryContract.search?.paramKey ?? "q";
+  const searchMinLength = queryContract.search?.minLength ?? 0;
+  const rawSearch = (searchParams.get(searchParamName) ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const search = rawSearch.length >= searchMinLength ? rawSearch : "";
+  const filterValues = useMemo(
+    () =>
+      Object.fromEntries(
+        (queryContract.filters ?? []).map((filter) => [
+          filter.paramKey,
+          searchParams.get(filter.paramKey) ??
+            filter.defaultValue ??
+            filter.allValue ??
+            "all",
+        ]),
+      ),
+    [queryContract.filters, searchParams],
+  );
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) =>
+        queryContract.matchesRow(row, { search, filters: filterValues }),
+      ),
+    [filterValues, queryContract, rows, search],
+  );
+  const resolvedDatasetKey = useMemo(
+    () =>
+      [
+        datasetKey,
+        search,
+        ...Object.entries(filterValues)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, value]) => `${key}:${value}`),
+        ...filteredRows
+          .map((row) => String(queryContract.getRowId(row)))
+          .sort(),
+      ].join("|"),
+    [datasetKey, filterValues, filteredRows, queryContract, search],
+  );
   const pagination = resolveClientPagination(
-    rows.length,
+    filteredRows.length,
     searchParams.get(pageParamName),
     searchParams.get(limitParamName),
     pageSizeOptions,
     defaultPageSize,
   );
   const paginatedRows = useMemo(
-    () => slicePageRows(rows, pagination.page, pagination.pageSize),
-    [pagination.page, pagination.pageSize, rows],
+    () => slicePageRows(filteredRows, pagination.page, pagination.pageSize),
+    [filteredRows, pagination.page, pagination.pageSize],
+  );
+
+  const applyQueryPatch = useCallback(
+    (
+      patch: AdminEntityUrlPatch,
+      behavior: HistoryBehavior = "push",
+    ) => {
+      const current = new URLSearchParams(window.location.search);
+      const next = applyAdminEntityUrlPatch(current, patch, {
+        resetPageParam: pageParamName,
+        limitParam: limitParamName,
+        defaultPageSize: String(defaultPageSize),
+      });
+      if (current.toString() === next.toString()) return;
+      window.history[
+        behavior === "replace" ? "replaceState" : "pushState"
+      ](window.history.state, "", currentLocationHref(next));
+    },
+    [defaultPageSize, limitParamName, pageParamName],
   );
 
   const commit = useCallback(
@@ -71,10 +153,10 @@ export function useAdminBoundedClientPagination<Row>({
     [defaultPageSize, limitParamName, pageParamName],
   );
 
-  const previousDatasetKey = useRef(datasetKey);
+  const previousDatasetKey = useRef(resolvedDatasetKey);
   useEffect(() => {
-    const datasetChanged = previousDatasetKey.current !== datasetKey;
-    previousDatasetKey.current = datasetKey;
+    const datasetChanged = previousDatasetKey.current !== resolvedDatasetKey;
+    previousDatasetKey.current = resolvedDatasetKey;
 
     const current = new URLSearchParams(window.location.search);
     const next = writeAdminBoundedClientPaginationParams(
@@ -93,7 +175,7 @@ export function useAdminBoundedClientPagination<Row>({
       currentLocationHref(next),
     );
   }, [
-    datasetKey,
+    resolvedDatasetKey,
     defaultPageSize,
     limitParamName,
     pageParamName,
@@ -121,7 +203,10 @@ export function useAdminBoundedClientPagination<Row>({
 
   return {
     ...pagination,
+    search,
+    filterValues,
     rows: paginatedRows,
+    applyQueryPatch,
     setPage,
     setPageSize,
     resetPage,
