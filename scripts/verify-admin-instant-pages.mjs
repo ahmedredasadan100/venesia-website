@@ -53,7 +53,12 @@ assert.doesNotMatch(client, /pending:\s*controller\.isFetching/);
 assert.match(controller, /resolveAdminEntityListInteractionState/);
 assert.match(
   client,
-  /onQueryPatch:\s*\(patch,\s*behavior\s*=\s*"push"\)\s*=>\s*\{[\s\S]*?"q"\s+in\s+patch[\s\S]*?controller\.setSearchAndFilters\(search,\s*\{\},\s*behavior\)/,
+  /onQueryPatch:\s*controller\.applyQueryPatch/,
+);
+assert.doesNotMatch(client, /onQueryPatch:\s*\(patch/);
+assert.match(
+  controller,
+  /const applyQueryPatch = useCallback\([\s\S]*?applyAdminEntityUrlPatch\(currentParams, patch[\s\S]*?normalizeAdminEntityListQuery\(contract, nextParams\)/,
 );
 assert.match(
   client,
