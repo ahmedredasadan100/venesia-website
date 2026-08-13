@@ -29,7 +29,10 @@ import type {
   AdminEntityListResult,
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
-import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
+import {
+  useAdminEntityInstantMutation,
+  type AdminInstantMutationRowInteraction,
+} from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import type { RedirectEntityListRow } from "../../../../lib/admin/redirects/entity-list-adapter";
 import {
   REDIRECTS_LIST_PAGE_SIZES,
@@ -65,8 +68,7 @@ type RedirectsClientProps = {
 const PAGE_SIZE_OPTIONS = REDIRECTS_LIST_PAGE_SIZES.map(String);
 
 function createRedirectColumns(input: {
-  rowPendingAction: (id: number) => string | null;
-  mutationBusy: boolean;
+  rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onEdit: (row: RedirectEntityListRow) => void;
   onToggle: (row: RedirectEntityListRow) => Promise<AdminActionResult>;
   onDelete: (row: RedirectEntityListRow) => Promise<AdminActionResult>;
@@ -152,8 +154,9 @@ function createRedirectColumns(input: {
       width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
       renderCell: ({ row, onMutationResult }) => {
-        const pendingAction = input.rowPendingAction(row.id);
-        const disabled = input.mutationBusy;
+        const interaction = input.rowInteraction(row.id);
+        const pendingAction = interaction.pendingAction;
+        const disabled = interaction.isBlocked;
         const capability: AdminRowActionsCapability = {
           entityType: "redirect",
           entityId: row.id,
@@ -349,20 +352,14 @@ export default function RedirectsClient({
   const columns = useMemo(
     () =>
       createRedirectColumns({
-        rowPendingAction: (id) =>
-          instant.rowPending?.rowId === id
-            ? instant.rowPending.action
-            : null,
-        mutationBusy:
-          instant.rowPending !== null || instant.bulkPending !== null,
+        rowInteraction: instant.getRowInteraction,
         onEdit: setEditingRedirect,
         onToggle: toggleRedirect,
         onDelete: deleteRedirect,
       }),
     [
       deleteRedirect,
-      instant.bulkPending,
-      instant.rowPending,
+      instant.getRowInteraction,
       toggleRedirect,
     ],
   );
@@ -408,7 +405,7 @@ export default function RedirectsClient({
         <AdminEntityListSurface consumer="redirects">
           <AdminEntityListTableRegion
             data-admin-entity-list-pending={
-              controller.isFetching ? "true" : "false"
+              controller.queryPending ? "true" : "false"
             }
           >
             <AdminEntityList<
@@ -422,7 +419,7 @@ export default function RedirectsClient({
                 search: controller.query.search,
                 status: controller.query.filters.status,
                 redirectType: controller.query.filters.redirectType,
-                pending: controller.isFetching,
+                pending: controller.queryPending,
                 onQueryPatch: (patch, behavior = "push") => {
                   const search =
                     "q" in patch
@@ -500,7 +497,7 @@ export default function RedirectsClient({
               currentPage={controller.result.pagination.page}
               totalPages={controller.result.pagination.totalPages}
               emptySummaryText="لا توجد تحويلات"
-              pending={controller.isFetching}
+              pending={controller.queryPending}
               onPageChange={controller.setPage}
               onPageSizeChange={controller.setPageSize}
             />

@@ -674,14 +674,12 @@ check(
 );
 check(
   "collection-interaction",
-  "pending presentation identifies rowId plus action and applies the shared global mutation lock",
+  "pending presentation identifies rowId plus action without a shared global mutation lock",
   [categoryClient, seriesClient].every(
     (source) =>
-      source.includes("rowPendingAction:") &&
-      source.includes("instant.rowPending?.rowId ===") &&
-      source.includes(
-        "instant.rowPending !== null || instant.bulkPending !== null",
-      ),
+      source.includes("rowInteraction: instant.getRowInteraction") &&
+      !source.includes("instant.rowPending") &&
+      !source.includes("instant.bulkPending"),
   ) &&
     [categoryRowActions, seriesColumns].every(
       (source) =>
@@ -690,7 +688,8 @@ check(
         source.includes(
           'pendingAction === (isTrashView ? "permanent_delete" : "delete")',
         ) &&
-        source.includes("mutationBusy") &&
+        source.includes("interaction.isBlocked") &&
+        source.includes("interaction.pendingAction") &&
         !source.includes("localPending"),
     ),
 );

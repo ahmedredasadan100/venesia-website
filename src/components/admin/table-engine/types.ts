@@ -5,9 +5,3 @@ export type AdminTableSortState<TKey extends string = string> = {
   key: TKey | null;
   direction: AdminTableSortDirection;
 };
-
-export type AdminTableActionResult<TRow> = {
-  ok: boolean;
-  message?: string;
-  rows?: TRow[];
-};

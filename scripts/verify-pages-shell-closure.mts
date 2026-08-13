@@ -624,7 +624,31 @@ assert.match(assignmentRow, /AdminDataGridRowActions[\s\S]*display="visibility"/
 assert.equal((assignmentRow.match(/const capability: AdminRowActionsCapability/gu) ?? []).length, 1);
 assert.match(
   assignmentRow,
-  /delete:\s*manageable[\s\S]*label:\s*"إزالة من الصفحة"[\s\S]*onSelect:\s*onDetach[\s\S]*confirmLabel:\s*"إزالة من الصفحة"/u,
+  /delete:\s*!manageable[\s\S]*label:\s*"إزالة من الصفحة"[\s\S]*onSelect:\s*onDetach[\s\S]*confirmLabel:\s*"إزالة من الصفحة"/u,
+);
+assert.match(
+  compositionClient,
+  /useAdminBoundedClientInstantMutation<PageBlockAssignmentRow>[\s\S]*entity:\s*"page-block-assignments"[\s\S]*rowId:\s*assignmentRowId\(row\)[\s\S]*action:\s*"visibility"/u,
+);
+assert.match(
+  assignmentGrid,
+  /rowInteraction:\s*\(rowId:\s*string\)[\s\S]*const interaction = rowInteraction\(rowId\)[\s\S]*interaction=\{interaction\}/u,
+);
+assert.match(
+  assignmentRow,
+  /const pendingAction = interaction\.pendingAction[\s\S]*const pendingState = \{[\s\S]*pending:\s*true[\s\S]*const rowBusy = interaction\.isBlocked[\s\S]*visibility:[\s\S]*pendingAction === "visibility"[\s\S]*rowBusy[\s\S]*onSelect:\s*onToggleVisibility/u,
+);
+assert.match(
+  compositionClient,
+  /rowInteraction=\{instant\.getRowInteraction\}/u,
+);
+assert.doesNotMatch(
+  compositionClient,
+  /mutationBusy=|instant\.rowPending|instant\.bulkPending/u,
+);
+assert.doesNotMatch(
+  compositionClient,
+  /search=\{\{[\s\S]*?pending:\s*collectionPending[\s\S]*?\}\}/u,
 );
 assert.match(
   compositionClient,

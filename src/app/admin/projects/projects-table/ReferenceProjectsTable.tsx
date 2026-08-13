@@ -13,6 +13,7 @@ import {
 } from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
+import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import type { ProjectSortField } from "../../../../lib/admin/projects/entity-list-contract";
 import type { ProjectColumnKey } from "../../../../lib/admin/projects/projects-list-config";
 import {
@@ -29,8 +30,7 @@ export {
 } from "../../../../components/admin/ui/AdminDataGrid";
 
 export type ProjectRowActionHandlers = {
-  rowPendingAction: (id: number) => string | null;
-  mutationBusy: boolean;
+  rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onCopyPublicLink: (row: ProjectGridRow) => Promise<AdminActionResult>;
   onDelete: (row: ProjectGridRow) => Promise<AdminActionResult>;
   onDuplicate: (row: ProjectGridRow) => Promise<AdminActionResult>;
@@ -72,7 +72,8 @@ function ProjectRowActions({
   onMutationResult?: (result: AdminActionResult) => void;
   display?: "menu" | "visibility" | "featured";
 }) {
-  const pendingAction = handlers.rowPendingAction(row.id);
+  const interaction = handlers.rowInteraction(row.id);
+  const pendingAction = interaction.pendingAction;
   const pendingState = {
     access: "disabled" as const,
     disabledReason: "انتظر انتهاء الإجراء الحالي.",
@@ -152,7 +153,7 @@ function ProjectRowActions({
       visibility:
         pendingAction === "visibility"
           ? { ...pendingState, isVisible }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? { ...busyState, isVisible }
             : {
                 access: "allowed",
@@ -174,7 +175,7 @@ function ProjectRowActions({
       featured:
         pendingAction === "featured"
           ? { ...pendingState, isFeatured: row.featured }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? { ...busyState, isFeatured: row.featured }
             : {
                 access: "allowed",
@@ -184,7 +185,7 @@ function ProjectRowActions({
       duplicate:
         pendingAction === "duplicate"
           ? pendingState
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? busyState
             : {
                 access: "allowed",
@@ -193,7 +194,7 @@ function ProjectRowActions({
       archive: { access: "hidden" },
       delete: pendingAction === "delete"
         ? pendingState
-        : handlers.mutationBusy
+        : interaction.isBlocked
           ? busyState
           : {
               access: "allowed",

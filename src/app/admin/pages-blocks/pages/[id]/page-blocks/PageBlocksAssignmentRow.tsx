@@ -14,6 +14,7 @@ import {
 import { moduleEditHref, moduleKindLabel } from "../../../../../../lib/page-blocks/admin-utils";
 import { LAYOUT_SLOT_LABELS_AR, normalizeLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
+import type { AdminInstantMutationRowInteraction } from "../../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 
 type PageBlocksAssignmentRowProps = {
   row: PageBlockAssignmentRow;
@@ -24,7 +25,7 @@ type PageBlocksAssignmentRowProps = {
   manageable: boolean;
   isVisible: boolean;
   isSelected: boolean;
-  isPending: boolean;
+  interaction: AdminInstantMutationRowInteraction;
   onToggleSelect: (checked: boolean) => void;
   onToggleVisibility: () => void;
   onDuplicate: () => void;
@@ -47,7 +48,7 @@ export default function PageBlocksAssignmentRow({
   manageable,
   isVisible,
   isSelected,
-  isPending,
+  interaction,
   onToggleSelect,
   onToggleVisibility,
   onDuplicate,
@@ -60,9 +61,20 @@ export default function PageBlocksAssignmentRow({
   showModule,
   showStatus,
 }: PageBlocksAssignmentRowProps) {
+  const pendingAction = interaction.pendingAction;
   const hidden = { access: "hidden" as const };
   const reorderDisabledTitle =
     "أعد فرز العرض إلى الترتيب الافتراضي لاستخدام الترتيب اليدوي.";
+  const pendingState = {
+    access: "disabled" as const,
+    disabledReason: "انتظر انتهاء الإجراء الحالي.",
+    pending: true,
+  };
+  const busyState = {
+    access: "disabled" as const,
+    disabledReason: "انتظر انتهاء الإجراء الحالي.",
+  };
+  const rowBusy = interaction.isBlocked;
   const capability: AdminRowActionsCapability = {
     entityType: "page_module_assignment",
     entityId: rowId,
@@ -94,37 +106,46 @@ export default function PageBlocksAssignmentRow({
         ],
       },
       copyPublicLink: hidden,
-      visibility: manageable
-        ? {
-            access: "allowed",
-            isVisible,
-            pending: isPending,
-            onSelect: onToggleVisibility,
-          }
-        : hidden,
+      visibility: !manageable
+        ? hidden
+        : pendingAction === "visibility"
+          ? { ...pendingState, isVisible }
+          : rowBusy
+            ? { ...busyState, isVisible }
+            : {
+                access: "allowed",
+                isVisible,
+                onSelect: onToggleVisibility,
+              },
       featured: hidden,
-      duplicate: manageable
-        ? {
-            access: "allowed",
-            pending: isPending,
-            onSelect: onDuplicate,
-          }
-        : hidden,
-      archive: hidden,
-      delete: manageable
-        ? {
-            access: "allowed",
-            label: "إزالة من الصفحة",
-            pending: isPending,
-            onSelect: onDetach,
-            confirmation: {
-              mode: "shared",
-              title: "تأكيد الإزالة من الصفحة",
-              description: `إزالة ${moduleKindLabel(row.module_kind)} «${row.template_name}» من الصفحة؟ سيبقى القالب في المكتبة.`,
-              confirmLabel: "إزالة من الصفحة",
+      duplicate: !manageable
+        ? hidden
+        : pendingAction === "duplicate"
+          ? pendingState
+          : rowBusy
+          ? busyState
+          : {
+              access: "allowed",
+              onSelect: onDuplicate,
             },
-          }
-        : hidden,
+      archive: hidden,
+      delete: !manageable
+        ? hidden
+        : pendingAction === "delete"
+          ? { ...pendingState, label: "إزالة من الصفحة" }
+          : rowBusy
+          ? { ...busyState, label: "إزالة من الصفحة" }
+          : {
+              access: "allowed",
+              label: "إزالة من الصفحة",
+              onSelect: onDetach,
+              confirmation: {
+                mode: "shared",
+                title: "تأكيد الإزالة من الصفحة",
+                description: `إزالة ${moduleKindLabel(row.module_kind)} «${row.template_name}» من الصفحة؟ سيبقى القالب في المكتبة.`,
+                confirmLabel: "إزالة من الصفحة",
+              },
+            },
     },
   };
 
@@ -147,8 +168,8 @@ export default function PageBlocksAssignmentRow({
 
       <AdminDataGridPrimaryCell className="flex items-center gap-2">
         <span className="flex shrink-0 gap-1">
-          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأعلى" : reorderDisabledTitle} disabled={!canMoveUp || isPending} pending={isPending} onClick={onMoveUp}>↑</AdminDataGridActionButton>
-          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأسفل" : reorderDisabledTitle} disabled={!canMoveDown || isPending} pending={isPending} onClick={onMoveDown}>↓</AdminDataGridActionButton>
+          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأعلى" : reorderDisabledTitle} disabled={!canMoveUp || rowBusy} pending={pendingAction === "reorder-up"} onClick={onMoveUp}>↑</AdminDataGridActionButton>
+          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأسفل" : reorderDisabledTitle} disabled={!canMoveDown || rowBusy} pending={pendingAction === "reorder-down"} onClick={onMoveDown}>↓</AdminDataGridActionButton>
         </span>
         <Link
           href={moduleEditHref(row.module_kind, row.template_id)}

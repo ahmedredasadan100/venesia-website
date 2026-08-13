@@ -300,12 +300,7 @@ export default function SeriesTableClient({
   const rowHandlers = useMemo<SeriesRowActionHandlers>(
     () => ({
       view: controller.query.filters.view,
-      rowPendingAction: (seriesId) =>
-        instant.rowPending?.rowId === seriesId
-          ? instant.rowPending.action
-          : null,
-      mutationBusy:
-        instant.rowPending !== null || instant.bulkPending !== null,
+      rowInteraction: instant.getRowInteraction,
       onToggle: toggleSeries,
       onDuplicate: duplicateSeries,
       onDelete: deleteSeries,
@@ -315,8 +310,7 @@ export default function SeriesTableClient({
     [
       deleteSeries,
       duplicateSeries,
-      instant.bulkPending,
-      instant.rowPending,
+      instant.getRowInteraction,
       permanentlyDeleteSeries,
       restoreSeries,
       toggleSeries,
@@ -447,7 +441,7 @@ export default function SeriesTableClient({
 
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
-          controller.isFetching ? "true" : "false"
+          controller.queryPending ? "true" : "false"
         }
       >
         <AdminEntityList<SeriesListRow, SeriesColumnKey, SeriesSortKey, number>
@@ -458,7 +452,7 @@ export default function SeriesTableClient({
               placeholder: "ابحث في السلاسل",
               value: controller.query.search,
               className: "max-w-[330px]",
-              pending: controller.isFetching,
+              pending: controller.queryPending,
             },
             filters,
             values: {
@@ -608,7 +602,7 @@ export default function SeriesTableClient({
           emptySummaryText="لا توجد سلاسل"
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.isFetching}
+          pending={controller.queryPending}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

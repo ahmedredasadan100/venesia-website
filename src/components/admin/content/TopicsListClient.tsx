@@ -456,12 +456,7 @@ export default function TopicsListClient({
 
   const rowActionHandlers = useMemo<UnifiedContentRowActionHandlers>(
     () => ({
-      rowPendingAction: (rowId) =>
-        instant.rowPending?.rowId === rowId
-          ? instant.rowPending.action
-          : null,
-      mutationBusy:
-        instant.rowPending !== null || instant.bulkPending !== null,
+      rowInteraction: instant.getRowInteraction,
       onVisibility: toggleVisibility,
       onFeatured: toggleFeatured,
       onDuplicate: duplicateTopic,
@@ -474,8 +469,7 @@ export default function TopicsListClient({
       controller.query.filters.view,
       deleteTopic,
       duplicateTopic,
-      instant.bulkPending,
-      instant.rowPending,
+      instant.getRowInteraction,
       permanentlyDeleteTopic,
       restoreTopic,
       toggleFeatured,
@@ -538,7 +532,7 @@ export default function TopicsListClient({
     },
     categories,
     series,
-    pending: controller.isFetching,
+    pending: controller.queryPending,
     onNavigate: (state, behavior) => {
       const trimmed = state.q.trim();
       controller.setSearchAndFilters(
@@ -619,9 +613,9 @@ export default function TopicsListClient({
           action that owns the in-flight mutation. */}
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
-          controller.isFetching ? "true" : "false"
+          controller.queryPending ? "true" : "false"
         }
-        className={controller.isFetching ? "opacity-[0.96]" : undefined}
+        className={controller.queryPending ? "opacity-[0.96]" : undefined}
       >
         <UnifiedContentList
           rows={controller.result.rows}
@@ -664,7 +658,7 @@ export default function TopicsListClient({
           }
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.isFetching}
+          pending={controller.queryPending}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

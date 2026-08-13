@@ -16,6 +16,7 @@ import type { AdminTableSortDirection } from "../../../../../../components/admin
 import { normalizeBoolean } from "../../../../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
 import type { PageCompositionColumnKey } from "../../../../../../lib/page-blocks/admin-collection-columns";
+import type { AdminInstantMutationRowInteraction } from "../../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import PageBlocksAssignmentRow from "./PageBlocksAssignmentRow";
 import { assignmentRowId, isManageableAssignment } from "./page-blocks-utils";
 
@@ -32,8 +33,8 @@ type PageBlocksAssignmentsGridProps = {
   selectAllRef: RefObject<HTMLInputElement | null>;
   onToggleAll: (checked: boolean) => void;
   onToggleSelect: (rowId: string, checked: boolean) => void;
-  isPending: boolean;
-  onToggleVisibility: (row: PageBlockAssignmentRow) => void;
+  rowInteraction: (rowId: string) => AdminInstantMutationRowInteraction;
+  onToggleVisibility: (row: PageBlockAssignmentRow) => Promise<void>;
   onDuplicate: (row: PageBlockAssignmentRow) => void;
   onDetach: (row: PageBlockAssignmentRow) => void;
   canMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => boolean;
@@ -52,7 +53,7 @@ export default function PageBlocksAssignmentsGrid({
   selectAllRef,
   onToggleAll,
   onToggleSelect,
-  isPending,
+  rowInteraction,
   onToggleVisibility,
   onDuplicate,
   onDetach,
@@ -114,6 +115,7 @@ export default function PageBlocksAssignmentsGrid({
         const rowId = assignmentRowId(row);
         const isVisible = normalizeBoolean(row.is_visible, true);
         const manageable = isManageableAssignment(row);
+        const interaction = rowInteraction(rowId);
         return (
           <PageBlocksAssignmentRow
             key={rowId}
@@ -125,7 +127,7 @@ export default function PageBlocksAssignmentsGrid({
             manageable={manageable}
             isVisible={isVisible}
             isSelected={selectedSet.has(rowId)}
-            isPending={isPending}
+            interaction={interaction}
             onToggleSelect={(checked) => onToggleSelect(rowId, checked)}
             onToggleVisibility={() => onToggleVisibility(row)}
             onDuplicate={() => onDuplicate(row)}

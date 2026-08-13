@@ -10,13 +10,13 @@ import {
 } from "../../../lib/admin/content-routes";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
+import type { AdminInstantMutationRowInteraction } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { formatAdminDateTime } from "../../../lib/content-dates";
 import { getContentPublicVisibilityState } from "../../../lib/content-public-visibility";
 
 export type UnifiedContentRowActionHandlers = {
   view: "active" | "trash";
-  rowPendingAction: (rowId: number) => string | null;
-  mutationBusy: boolean;
+  rowInteraction: (rowId: number) => AdminInstantMutationRowInteraction;
   onVisibility: (
     row: UnifiedContentRow,
     nextStatus: "published" | "unpublished",
@@ -46,7 +46,8 @@ export default function UnifiedContentRowActions({
     deletedAt: row.deleted_at,
   });
   const nextStatus = visibility.nextStatus;
-  const pendingAction = handlers.rowPendingAction(row.id);
+  const interaction = handlers.rowInteraction(row.id);
+  const pendingAction = interaction.pendingAction;
   const isTrashView = handlers.view === "trash";
 
   async function publishResult(result: Promise<AdminActionResult>) {
@@ -129,7 +130,7 @@ export default function UnifiedContentRowActions({
               pending: true,
               isVisible: visibility.isPubliclyVisible,
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,
@@ -163,7 +164,7 @@ export default function UnifiedContentRowActions({
               pending: true,
               isFeatured: Boolean(row.is_featured),
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,
@@ -185,7 +186,7 @@ export default function UnifiedContentRowActions({
               disabledReason: pendingReason,
               pending: true,
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? { access: "disabled", disabledReason: pendingReason }
             : {
                 access: "allowed",
@@ -203,7 +204,7 @@ export default function UnifiedContentRowActions({
               isArchived: true,
               label: "استعادة",
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,
@@ -234,7 +235,7 @@ export default function UnifiedContentRowActions({
               pending: true,
               label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,

@@ -9,7 +9,6 @@ import {
   createCtaBlock,
   deleteCtaBlock,
   duplicateCtaBlock,
-  getCtaBlockRows,
   toggleCtaBlockStatus,
 } from "./actions";
 
@@ -40,7 +39,6 @@ export default async function CtaBlocksPage({ searchParams }: PageProps) {
       duplicateAction={duplicateCtaBlock}
       toggleAction={toggleCtaBlockStatus}
       bulkAction={bulkCtaBlocks}
-      reloadRowsAction={getCtaBlockRows}
       defaultVariant="band"
       variantOptions={[["band", "شريط"], ["split-image", "صورة منقسمة"], ["minimal", "مبسّط"]]}
       loadError={error ? `حدث خطأ أثناء قراءة بلوكات CTA: ${error.message}` : null}

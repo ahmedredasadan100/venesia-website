@@ -46,6 +46,9 @@ assert.match(registry, /pages:\s*pagesEntityListAdapter/);
 assert.match(client, /useAdminEntityListController/);
 assert.match(client, /useAdminEntityInstantMutation/);
 assert.match(client, /controller\.query/);
+assert.match(client, /pending:\s*controller\.queryPending/);
+assert.doesNotMatch(client, /pending:\s*controller\.isFetching/);
+assert.match(controller, /resolveAdminEntityListInteractionState/);
 assert.match(
   client,
   /onQueryPatch:\s*\(patch,\s*behavior\s*=\s*"push"\)\s*=>\s*\{[\s\S]*?"q"\s+in\s+patch[\s\S]*?controller\.setSearchAndFilters\(search,\s*\{\},\s*behavior\)/,
@@ -88,6 +91,11 @@ assert.match(mutationCache, /matchesAdminEntityListScope/);
 assert.doesNotMatch(mutationCache, /rows:\s*\[\.\.\.inserted/);
 assert.match(controller, /cacheNormalizedAdminEntityListResult/);
 assert.match(normalizedCache, /setQueryData\(normalizedKey, result\)/);
+assert.match(
+  client,
+  /rowInteraction:\s*instant\.getRowInteraction/u,
+);
+assert.doesNotMatch(client, /mutationBusy:|instant\.rowPending|instant\.bulkPending/u);
 assert.match(adapter, /\.rpc\("admin_list_pages"/);
 assert.match(adapter, /p_search:\s*query\.search/);
 assert.equal((adapter.match(/\.rpc\(/g) ?? []).length, 1);
@@ -113,4 +121,4 @@ assert.match(company, /ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.match(company, /revalidateTag\(ADMIN_COMPANY_CONFIG_CACHE_TAG/);
 assert.equal((settings.match(/revalidatePath\("\/admin"/g) ?? []).length, 1);
 assert.match(page, /loadPagesEntityListResult/);
-console.log("verify:admin-instant-pages passed (71 structural assertions)");
+console.log("verify:admin-instant-pages passed (76 structural assertions)");

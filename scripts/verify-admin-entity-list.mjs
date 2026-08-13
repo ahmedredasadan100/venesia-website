@@ -411,7 +411,7 @@ check(
     [topicsClient, categoriesClient, seriesClient].every(
       (source) =>
         source.includes("AdminEntityListTableRegion") &&
-        source.includes("pending={controller.isFetching}"),
+        source.includes("pending={controller.queryPending}"),
     ),
 );
 

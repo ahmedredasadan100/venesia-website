@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import AdminCategoryBadge from "../../../../components/admin/content/AdminCategoryBadge";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
+import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
@@ -109,8 +110,7 @@ export function createCategoryColumns(
     view: "active" | "trash";
     isExpanded: (categoryId: number) => boolean;
     onToggle: (categoryId: number) => void;
-    rowPendingAction: (categoryId: number) => string | null;
-    mutationBusy: boolean;
+    rowInteraction: (categoryId: number) => AdminInstantMutationRowInteraction;
     onToggleStatus: (
       category: CategoryListRow,
     ) => Promise<CategoryStatusMutationResult>;
@@ -219,8 +219,7 @@ export function createCategoryColumns(
           category={row}
           view={tree.view}
           onMutationResult={onMutationResult}
-          pendingAction={tree.rowPendingAction(row.id)}
-          mutationBusy={tree.mutationBusy}
+          interaction={tree.rowInteraction(row.id)}
           onToggle={tree.onToggleStatus}
           onDuplicate={tree.onDuplicate}
           onDelete={tree.onDelete}
@@ -345,8 +344,7 @@ export function createCategoryColumns(
           category={row}
           view={tree.view}
           onMutationResult={onMutationResult}
-          pendingAction={tree.rowPendingAction(row.id)}
-          mutationBusy={tree.mutationBusy}
+          interaction={tree.rowInteraction(row.id)}
           onToggle={tree.onToggleStatus}
           onDuplicate={tree.onDuplicate}
           onDelete={tree.onDelete}

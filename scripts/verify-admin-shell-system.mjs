@@ -121,14 +121,18 @@ check(
 );
 check(
   "Page Composition bulk detach uses semantic confirmation and one atomic mutation",
-  pageCompositionClient.includes("return new Promise<void>") &&
+  pageCompositionClient.includes("await instant.mutateAsync({") &&
+    pageCompositionClient.includes("bulk: true") &&
+    pageCompositionClient.includes("cache.removeRows(idSet)") &&
     pageCompositionClient.includes("await bulkPageBlockAssignments(formData)") &&
     pageCompositionClient.includes('value: "detach"') &&
     pageCompositionClient.includes('label: "إزالة المحدد من الصفحة"') &&
     pageCompositionClient.includes('if (action === "detach")') &&
-    pageCompositionClient.includes("reject(error)") &&
+    pageCompositionClient.includes("throw error") &&
+    !pageCompositionClient.includes("startTransition") &&
+    !pageCompositionClient.includes("return new Promise<void>") &&
     pageCompositionClient.indexOf("selection.clearSelection()") >
-      pageCompositionClient.indexOf("await bulkPageBlockAssignments(formData)") &&
+      pageCompositionClient.indexOf("await instant.mutateAsync({") &&
     pageCompositionBulkAction.includes('await mutatePageComposition(pageId, "bulk"') &&
     !pageCompositionBulkAction.includes("Promise.all") &&
     !pageCompositionBulkAction.includes("mutationResults") &&

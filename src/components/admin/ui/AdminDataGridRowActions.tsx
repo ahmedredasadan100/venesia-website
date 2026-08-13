@@ -435,7 +435,6 @@ export default function AdminDataGridRowActions({
   const isMounted = useClientMounted();
   const menuItems = resolveMenuItems(capability);
   const information = capability.actions.information;
-  const morePending = menuItems.some((item) => Boolean(item.target.pending));
 
   const setIsOpen = useCallback(
     (next: boolean) => {
@@ -1008,7 +1007,7 @@ export default function AdminDataGridRowActions({
           data-admin-entity-type={capability.entityType}
           data-admin-entity-id={String(capability.entityId)}
           data-admin-row-action-state={
-            morePending ? "pending" : menuItems.length ? "enabled" : "disabled"
+            menuItems.length ? "enabled" : "disabled"
           }
         >
           <AdminDataGridActionButton
@@ -1021,7 +1020,6 @@ export default function AdminDataGridRowActions({
             ariaExpanded={isOpen}
             ariaControls={menuId}
             disabled={!menuItems.length}
-            pending={morePending}
             onClick={() => {
               if (isOpen) {
                 panelFocusIntentRef.current = null;

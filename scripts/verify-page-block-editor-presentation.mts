@@ -47,6 +47,12 @@ const blocksHub = read("src/app/admin/pages-blocks/blocks/page.tsx");
 const blockManager = read("src/components/admin/page-blocks/BlockModuleManagerClient.tsx");
 const contentManager = read("src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx");
 const summaryManager = read("src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx");
+const moduleListManagers = [
+  blockManager,
+  contentManager,
+  summaryManager,
+  read("src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx"),
+];
 const pageCompositionRoute = read("src/app/admin/pages-blocks/pages/[id]/page.tsx");
 const assignmentColumns = read("src/lib/page-blocks/admin-collection-columns.ts");
 const assignmentGrid = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx");
@@ -54,10 +60,31 @@ const assignmentRow = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/Pa
 const adminQueries = read("src/lib/page-blocks/admin-queries.ts");
 const assignmentContextQuery = read("src/lib/page-blocks/module-assignments-query.ts");
 const heroDetailRoute = read("src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx");
-const breadcrumbListActions = read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts");
-const feedListActions = read("src/app/admin/pages-blocks/blocks/feed/actions.ts");
-const heroListActions = read("src/app/admin/pages-blocks/blocks/hero/actions.ts");
 const adoptionManifest = read("src/lib/admin/interaction-system/adoption-manifest.ts");
+
+check(
+  "all shared module managers scope visibility pending to the active row",
+  moduleListManagers.every(
+    (source) =>
+      source.includes("instant.getRowInteraction") &&
+      source.includes('pendingAction === "visibility"') &&
+      !source.includes("instant.rowPending?.rowId") &&
+      !source.includes("instant.rowPending !== null"),
+  ),
+);
+check(
+  "module manager search and pagination exclude row mutation pending",
+  !blockManager.includes("pending: collectionBusy") &&
+    !blockManager.includes("pending={collectionBusy}") &&
+    !contentManager.includes("pending: table.isPending") &&
+    !contentManager.includes("pending={table.isPending}") &&
+    !summaryManager.includes("pending={instant.bulkInteraction") &&
+    moduleListManagers.every(
+      (source) =>
+        !source.includes("pending: isBusy") &&
+        !source.includes("pending={isBusy}"),
+    ),
+);
 
 check(
   "Page Modules summary is owned by the shared Section Hero",
@@ -425,16 +452,16 @@ check(
 );
 
 check(
-  "module collection mutations hydrate authoritative rows without a full RSC refresh",
-  blockManager.includes("reloadRowsAction") &&
-    blockManager.includes("instant.hydrateRows(nextRows)") &&
+  "module collection mutations use the Server Action revalidation roundtrip without a parallel reload lifecycle",
+  !blockManager.includes("reloadRowsAction") &&
+    !blockManager.includes("hydrateRows") &&
     !blockManager.includes("router.refresh") &&
-    heroManager.includes("getHeroTemplateRows") &&
-    heroManager.includes("instant.hydrateRows(nextRows)") &&
+    !heroManager.includes("getHeroTemplateRows") &&
+    !heroManager.includes("hydrateRows") &&
     !heroManager.includes("router.refresh") &&
-    breadcrumbListActions.includes("getBreadcrumbBlockRows") &&
-    feedListActions.includes("getFeedModuleRows") &&
-    heroListActions.includes("getHeroTemplateRows"),
+    !contentManager.includes("getContentBlockRows") &&
+    !contentManager.includes("hydrateRows") &&
+    !contentManager.includes("router.refresh"),
 );
 
 check(

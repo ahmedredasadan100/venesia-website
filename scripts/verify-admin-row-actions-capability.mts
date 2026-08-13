@@ -13,6 +13,10 @@ import {
 } from "../src/lib/admin/entity-list/pagination.ts";
 import { writeAdminBoundedClientPaginationParams } from "../src/lib/admin/entity-list/url-state.ts";
 import {
+  resolveAdminEntityListInteractionState,
+  resolveAdminInstantMutationInteraction,
+} from "../src/lib/admin/entity-list/data-engine/interaction-state.ts";
+import {
   ADMIN_INTERACTION_MODULES,
   ADMIN_INTERACTION_SYSTEM,
   ADMIN_COLLECTION_SURFACE_ADOPTION,
@@ -389,6 +393,12 @@ check(
     rendererSource.includes('data-admin-row-action-state') &&
     rendererSource.includes("disabled={!enabled}"),
 );
+check(
+  "More remains a menu trigger while pending stays scoped to its target command",
+  rendererSource.includes("const menuItems = resolveMenuItems(capability)") &&
+    !rendererSource.includes("const morePending") &&
+    !/action="more"[\s\S]{0,500}pending=\{/u.test(rendererSource),
+);
 
 const expectedConsumerFiles = new Map<string, string>([
   ["topics", paths.topics],
@@ -485,8 +495,9 @@ for (const entry of manifestEntries) {
     check(
       `${entry.entity} keeps pending and duplicate-click protection with its declared Data owner`,
       relevantSource.includes("useAdminEntityInstantMutation") &&
-        relevantSource.includes("instant.rowPending") &&
-        consumer.includes("mutationBusy"),
+        relevantSource.includes("instant.getRowInteraction") &&
+        consumer.includes("interaction.isBlocked") &&
+        consumer.includes("interaction.pendingAction"),
     );
   }
   if (supportedDangerousActions.length > 0) {
@@ -567,9 +578,10 @@ check(
 
 const instantMutationSource = read(paths.instantMutation);
 check(
-  "existing Data Runtime owns optimism, duplicate-click protection, rollback, and targeted invalidation",
+  "existing Data Runtime owns optimism, row-scoped duplicate-click protection, safe sequencing, rollback, and targeted invalidation",
   instantMutationSource.includes("request.optimistic(helpers)") &&
-    instantMutationSource.includes("inFlightRef.current") &&
+    instantMutationSource.includes("pendingRowsRef.current.has(rowId)") &&
+    instantMutationSource.includes("queueRef.current.then") &&
     instantMutationSource.includes("restoreSnapshot(context.snapshot)") &&
     instantMutationSource.includes("invalidateQueries({") &&
     instantMutationSource.includes("adminEntityListQueryKeys.entity(entity)"),
@@ -1605,6 +1617,117 @@ check(
       .filter(([, state]) => String(state) === "specialized_adapter")
       .map(([action]) => `${entry.entity}:${action}`),
   ).length === 0,
+);
+
+const instantInteraction =
+  ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.instantMutationInteraction;
+const directInstantConsumers = instantInteraction.directConsumers;
+const domainOwnedRowLifecycleConsumers =
+  instantInteraction.domainOwnedRowLifecycleConsumers;
+const rowAScope = resolveAdminInstantMutationInteraction({
+  rowId: 11,
+  rowPendingActions: [{ rowId: 11, action: "visibility" }],
+  bulkPendingAction: null,
+});
+const rowBScope = resolveAdminInstantMutationInteraction({
+  rowId: 12,
+  rowPendingActions: [{ rowId: 11, action: "visibility" }],
+  bulkPendingAction: null,
+});
+const bulkScope = resolveAdminInstantMutationInteraction({
+  rowId: 12,
+  rowPendingActions: [],
+  bulkPendingAction: "bulk-delete",
+});
+check(
+  "Instant Mutation scopes pending to the active row while unrelated rows stay interactive",
+  rowAScope.row.pendingAction === "visibility" &&
+    rowAScope.row.isPending &&
+    rowAScope.row.isBlocked &&
+    !rowBScope.row.isPending &&
+    !rowBScope.row.isBlocked &&
+    rowBScope.bulk.isBlocked,
+);
+check(
+  "only Bulk Mutation blocks every row",
+  bulkScope.bulk.isPending &&
+    bulkScope.bulk.isBlocked &&
+    bulkScope.row.isBlocked &&
+    !bulkScope.row.isPending,
+);
+check(
+  "same-query post-success reconciliation remains separate from Query pending",
+  resolveAdminEntityListInteractionState({
+    isPending: false,
+    isPlaceholderData: false,
+    isFetching: true,
+  }).revalidating &&
+    !resolveAdminEntityListInteractionState({
+      isPending: false,
+      isPlaceholderData: false,
+      isFetching: true,
+    }).queryPending &&
+    resolveAdminEntityListInteractionState({
+      isPending: false,
+      isPlaceholderData: true,
+      isFetching: true,
+    }).queryPending,
+);
+check(
+  "Instant Mutation inventory is unique, complete, and adopts the scoped owner contract",
+  new Set(directInstantConsumers).size === directInstantConsumers.length &&
+    directInstantConsumers.length === 12 &&
+    directInstantConsumers.every((sourceFile) => {
+      const source = read(sourceFile);
+      return (
+        source.includes("useAdminEntityInstantMutation") ||
+        source.includes("useAdminBoundedClientInstantMutation")
+      ) && source.includes("getRowInteraction");
+    }),
+);
+check(
+  "Collection controls never bind raw fetching or row mutation pending",
+  [
+    ...directInstantConsumers,
+    ...domainOwnedRowLifecycleConsumers,
+    "src/app/admin/activity-log/ActivityLogClient.tsx",
+    "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+  ].every((sourceFile) => {
+    const source = read(sourceFile);
+    return (
+      !source.includes("controller.isFetching") &&
+      !/AdminTablePagination[\s\S]{0,500}pending=\{pendingRowId !== null\}/u.test(
+        source,
+      )
+    );
+  }),
+);
+check(
+  "legacy ambiguous mutation and query state contracts are removed",
+  !instantMutationSource.includes("rowPending:") &&
+    !instantMutationSource.includes("getRowPendingAction") &&
+    !/return\s*\{[\s\S]{0,240}\browPendingActions\s*,/u.test(
+      instantMutationSource,
+    ) &&
+    read(paths.dataController).includes("...interactionState") &&
+    !/return\s*\{[\s\S]{0,300}\bisFetching:\s*request\.isFetching/u.test(
+      read(paths.dataController),
+    ) &&
+    !/return\s*\{[\s\S]{0,300}\bisPlaceholderData:\s*request\.isPlaceholderData/u.test(
+      read(paths.dataController),
+    ),
+);
+check(
+  "Admin table state owner no longer exposes a parallel mutation lifecycle",
+  !read("src/components/admin/table-engine/useAdminTable.ts").includes(
+    "useTransition",
+  ) &&
+    !read("src/components/admin/table-engine/useAdminTable.ts").includes(
+      "runAction",
+    ) &&
+    !read("src/components/admin/table-engine/useAdminTable.ts").includes(
+      "refreshRows",
+    ),
 );
 
 console.log(`Admin Row Actions capability verification passed (${passed} checks).`);

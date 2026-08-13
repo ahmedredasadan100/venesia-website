@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { useAdminGridSelection } from "../ui";
-import type { AdminTableActionResult, AdminTableId, AdminTableSortDirection, AdminTableSortState } from "./types";
+import type { AdminTableId, AdminTableSortDirection, AdminTableSortState } from "./types";
 
 type SortAccessor<TRow> = (row: TRow) => string | number | null | undefined;
 
@@ -11,7 +11,6 @@ type UseAdminTableOptions<TRow, TSortKey extends string> = {
   getRowId: (row: TRow) => AdminTableId;
   sortAccessors?: Partial<Record<TSortKey, SortAccessor<TRow>>>;
   defaultSort?: AdminTableSortState<TSortKey>;
-  refresh?: () => Promise<TRow[]>;
 };
 
 function compareValues(a: unknown, b: unknown) {
@@ -24,11 +23,9 @@ export function useAdminTable<TRow, TSortKey extends string = string>({
   getRowId,
   sortAccessors,
   defaultSort = { key: null, direction: "asc" as AdminTableSortDirection },
-  refresh,
 }: UseAdminTableOptions<TRow, TSortKey>) {
   const [rows, setRows] = useState<TRow[]>(initialRows);
   const [sort, setSort] = useState<AdminTableSortState<TSortKey>>(defaultSort);
-  const [isPending, startTransition] = useTransition();
 
   const visibleIds = useMemo(() => rows.map(getRowId), [rows, getRowId]);
   const selection = useAdminGridSelection(visibleIds);
@@ -52,44 +49,6 @@ export function useAdminTable<TRow, TSortKey extends string = string>({
     });
   }
 
-  async function refreshRows() {
-    if (!refresh) return;
-    const nextRows = await refresh();
-    setRows(nextRows);
-    selection.clearSelection();
-  }
-
-  function runAction(action: () => Promise<AdminTableActionResult<TRow>>) {
-    return new Promise<AdminTableActionResult<TRow>>((resolve) => {
-      startTransition(async () => {
-        try {
-          const result = await action();
-          if (!result.ok) {
-            resolve(result);
-            return;
-          }
-
-          if (result.rows) {
-            setRows(result.rows);
-          } else {
-            await refreshRows();
-          }
-
-          selection.clearSelection();
-          resolve(result);
-        } catch (error) {
-          resolve({
-            ok: false,
-            message:
-              error instanceof Error
-                ? error.message
-                : "تعذر تنفيذ العملية.",
-          });
-        }
-      });
-    });
-  }
-
   return {
     rows: sortedRows,
     rawRows: rows,
@@ -97,8 +56,5 @@ export function useAdminTable<TRow, TSortKey extends string = string>({
     sort,
     toggleSort,
     selection,
-    isPending,
-    refreshRows,
-    runAction,
   };
 }

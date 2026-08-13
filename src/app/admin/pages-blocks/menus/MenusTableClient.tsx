@@ -481,7 +481,6 @@ export default function MenusTableClient({
           pageSize={String(pagination.pageSize)}
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
-          pending={pendingRowId !== null}
         />
       </div>
     </AdminPageExperience>

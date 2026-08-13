@@ -9,7 +9,6 @@ import {
   createCardsBlock,
   deleteCardsBlock,
   duplicateCardsBlock,
-  getCardsBlockRows,
   toggleCardsBlockStatus,
 } from "./actions";
 
@@ -40,7 +39,6 @@ export default async function CardsBlocksPage({ searchParams }: PageProps) {
       duplicateAction={duplicateCardsBlock}
       toggleAction={toggleCardsBlockStatus}
       bulkAction={bulkCardsBlocks}
-      reloadRowsAction={getCardsBlockRows}
       defaultVariant="glass"
       variantOptions={[["glass", "زجاجي"], ["bordered", "بإطار"], ["compact", "مدمج"]]}
       loadError={error ? `حدث خطأ أثناء قراءة بلوكات الكروت: ${error.message}` : null}

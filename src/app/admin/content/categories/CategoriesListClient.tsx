@@ -410,12 +410,7 @@ export default function CategoriesListClient({
           view: controller.query.filters.view,
           isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
           onToggle: toggleCategory,
-          rowPendingAction: (categoryId) =>
-            instant.rowPending?.rowId === categoryId
-              ? instant.rowPending.action
-              : null,
-          mutationBusy:
-            instant.rowPending !== null || instant.bulkPending !== null,
+          rowInteraction: instant.getRowInteraction,
           onToggleStatus: toggleStatus,
           onDuplicate: duplicate,
           onDelete: removeCategory,
@@ -427,8 +422,7 @@ export default function CategoriesListClient({
     [
       collapsedCategoryIds,
       duplicate,
-      instant.rowPending,
-      instant.bulkPending,
+      instant.getRowInteraction,
       controller.query.filters.view,
       maxVisibleDepth,
       removeCategory,
@@ -478,7 +472,7 @@ export default function CategoriesListClient({
 
       <AdminEntityListTableRegion
         data-admin-entity-list-pending={
-          controller.isFetching ? "true" : "false"
+          controller.queryPending ? "true" : "false"
         }
       >
         <AdminEntityList<
@@ -494,7 +488,7 @@ export default function CategoriesListClient({
               placeholder: "ابحث في التصنيفات",
               value: controller.query.search,
               className: "max-w-[330px]",
-              pending: controller.isFetching,
+              pending: controller.queryPending,
             },
             filters,
             values: { status: controller.query.filters.status },
@@ -608,7 +602,7 @@ export default function CategoriesListClient({
           emptySummaryText="لا توجد تصنيفات"
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.isFetching}
+          pending={controller.queryPending}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

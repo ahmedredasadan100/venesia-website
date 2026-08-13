@@ -1050,11 +1050,9 @@ check(
   "Category and Series collections consume action-scoped pending and shared feedback",
   [categoryListClient, seriesTableClient].every(
     (source) =>
-      source.includes("rowPendingAction:") &&
-      source.includes("instant.rowPending?.rowId ===") &&
-      source.includes(
-        "instant.rowPending !== null || instant.bulkPending !== null",
-      ) &&
+      source.includes("rowInteraction: instant.getRowInteraction") &&
+      !source.includes("instant.rowPending") &&
+      !source.includes("instant.bulkPending") &&
       !source.includes("router.refresh"),
   ) &&
     read("src/components/admin/entity-list/AdminEntityList.tsx").includes(

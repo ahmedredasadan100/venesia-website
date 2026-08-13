@@ -296,9 +296,9 @@ export default function BlockTemplateSummaryListClient({
         {paginatedRows.map((row) => {
           const status = statusMeta(row.status);
           const hidden = { access: "hidden" as const };
-          const visibilityPending =
-            instant.rowPending?.rowId === row.id &&
-            instant.rowPending.action === "visibility";
+          const interaction = instant.getRowInteraction(row.id);
+          const pendingAction = interaction.pendingAction;
+          const visibilityPending = pendingAction === "visibility";
           const capability: AdminRowActionsCapability = {
             entityType: `${moduleKey}_block_template`,
             entityId: row.id,
@@ -326,7 +326,7 @@ export default function BlockTemplateSummaryListClient({
                     pending: true,
                     isVisible: row.status === "published",
                   }
-                : instant.rowPending !== null || instant.bulkPending !== null
+                : interaction.isBlocked
                   ? {
                       access: "disabled",
                       disabledReason: "انتظر انتهاء الإجراء الحالي.",
@@ -397,9 +397,6 @@ export default function BlockTemplateSummaryListClient({
         pageSize={String(pagination.pageSize)}
         onPageChange={pagination.setPage}
         onPageSizeChange={pagination.setPageSize}
-        pending={
-          instant.rowPending !== null || instant.bulkPending !== null
-        }
       />
     </AdminPageExperience>
   );

@@ -16,6 +16,7 @@ import {
 } from "./contracts";
 import { cacheNormalizedAdminEntityListResult } from "./normalized-result-cache";
 import { adminEntityListQueryKeys } from "./query-keys";
+import { resolveAdminEntityListInteractionState } from "./interaction-state";
 
 export class AdminEntityListRequestError extends Error {
   status: number;
@@ -320,13 +321,19 @@ export function useAdminEntityListController<
     [entity, queryClient],
   );
 
+  const interactionState = resolveAdminEntityListInteractionState({
+    isPending: request.isPending,
+    isPlaceholderData: request.isPlaceholderData,
+    isFetching: request.isFetching,
+  });
+
   return {
     query,
     result: request.data ?? initialResult,
     error: request.error,
-    isPending: request.isPending,
-    isFetching: request.isFetching,
-    isPlaceholderData: request.isPlaceholderData,
+    // Query intent is pending only while a query-key change is waiting for its
+    // own result. Mutation reconciliation of the current key remains usable.
+    ...interactionState,
     setSearch,
     setSearchAndFilters,
     setFilter,

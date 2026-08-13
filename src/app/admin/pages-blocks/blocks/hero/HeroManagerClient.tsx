@@ -64,7 +64,6 @@ import {
   createHeroTemplate,
   deleteHeroTemplate,
   duplicateHeroTemplate,
-  getHeroTemplateRows,
   toggleHeroTemplate,
   type HeroTemplateRow,
 } from "./actions";
@@ -156,7 +155,6 @@ export default function HeroManagerClient({
         .join(" "),
     [visibleColumnSet],
   );
-  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const instant = useAdminBoundedClientInstantMutation<HeroTemplateRow>({
     entity: "hero-templates",
     initialRows: heroes,
@@ -184,10 +182,6 @@ export default function HeroManagerClient({
   const paginatedHeroes = pagination.rows;
   const visibleIds = useMemo(() => paginatedHeroes.map((hero) => hero.id), [paginatedHeroes]);
   const selection = useAdminGridSelection<number>(visibleIds);
-  const isBusy =
-    pendingRowId !== null ||
-    instant.rowPending !== null ||
-    instant.bulkPending !== null;
   const loadFeedback = useMemo(
     () =>
       loadError
@@ -209,15 +203,26 @@ export default function HeroManagerClient({
 
   async function runMutation(
     rowId: number | null,
+    mutationAction: "duplicate" | "delete" | "bulk",
     action: () => Promise<void>,
     successMessage: string,
   ): Promise<boolean> {
     clearFeedback(feedbackChannel);
-    setPendingRowId(rowId ?? -1);
     try {
-      await action();
-      const nextRows = await getHeroTemplateRows();
-      instant.hydrateRows(nextRows);
+      await instant.mutateAsync({
+        rowId: rowId ?? undefined,
+        action: mutationAction,
+        bulk: rowId === null,
+        optimistic: (cache) => {
+          if (mutationAction === "delete" && rowId !== null) {
+            cache.removeRows(new Set([rowId]));
+          }
+        },
+        execute: async () => {
+          await action();
+          return { ok: true as const, message: successMessage };
+        },
+      });
       publishFeedback(
         {
           variant: "success",
@@ -243,8 +248,6 @@ export default function HeroManagerClient({
         { channel: feedbackChannel, placement: "inline", reveal: true },
       );
       return false;
-    } finally {
-      setPendingRowId(null);
     }
   }
 
@@ -352,7 +355,7 @@ export default function HeroManagerClient({
       <div className="space-y-4">
         <AdminEntityListFilters
           basePath="/admin/pages-blocks/blocks/hero"
-          search={{ value: search, placeholder: "ابحث باسم الهيرو أو المعرّف الداخلي…", minLength: 1, pending: isBusy }}
+          search={{ value: search, placeholder: "ابحث باسم الهيرو أو المعرّف الداخلي…", minLength: 1 }}
           filters={HERO_FILTERS}
           values={{ status }}
           columnsControl={
@@ -389,12 +392,12 @@ export default function HeroManagerClient({
                 },
               ]}
               onClearSelection={selection.clearSelection}
-              isBusy={isBusy}
+              isBusy={instant.bulkInteraction.isBlocked}
               onExecute={async (action, ids) => {
                 const formData = new FormData();
                 formData.set("bulk_action", action);
                 ids.forEach((id) => formData.append("ids", String(id)));
-                const succeeded = await runMutation(null, () => bulkHeroTemplates(formData), "تم تنفيذ الإجراء الجماعي على الهيروهات المحددة.");
+                const succeeded = await runMutation(null, "bulk", () => bulkHeroTemplates(formData), "تم تنفيذ الإجراء الجماعي على الهيروهات المحددة.");
                 if (!succeeded) {
                   if (action === "delete") throw new Error("bulk hero delete failed");
                   return;
@@ -437,10 +440,9 @@ export default function HeroManagerClient({
           {paginatedHeroes.map((hero) => {
             const previewPath = resolveHeroPreviewPath(hero);
             const hidden = { access: "hidden" as const };
-            const rowPending = pendingRowId === hero.id;
-            const visibilityPending =
-              instant.rowPending?.rowId === hero.id &&
-              instant.rowPending.action === "visibility";
+            const interaction = instant.getRowInteraction(hero.id);
+            const pendingAction = interaction.pendingAction;
+            const visibilityPending = pendingAction === "visibility";
             const capability: AdminRowActionsCapability = {
               entityType: "hero_template",
               entityId: hero.id,
@@ -470,7 +472,7 @@ export default function HeroManagerClient({
                       pending: true,
                       isVisible: hero.status === "published",
                     }
-                  : isBusy
+                  : interaction.isBlocked
                     ? {
                         access: "disabled",
                         disabledReason: "انتظر انتهاء الإجراء الحالي.",
@@ -489,17 +491,18 @@ export default function HeroManagerClient({
                       },
                 featured: hidden,
                 duplicate:
-                  isBusy && !rowPending
+                  interaction.isBlocked && pendingAction !== "duplicate"
                     ? {
                         access: "disabled",
                         disabledReason: "انتظر انتهاء الإجراء الحالي.",
                       }
                     : {
                         access: "allowed",
-                        pending: rowPending,
+                        pending: pendingAction === "duplicate",
                         onSelect: async () => {
                           await runMutation(
                             hero.id,
+                            "duplicate",
                             () =>
                               duplicateHeroTemplate(
                                 mutationFormData({ id: hero.id }),
@@ -510,17 +513,18 @@ export default function HeroManagerClient({
                       },
                 archive: hidden,
                 delete:
-                  isBusy && !rowPending
+                  interaction.isBlocked && pendingAction !== "delete"
                     ? {
                         access: "disabled",
                         disabledReason: "انتظر انتهاء الإجراء الحالي.",
                       }
                     : {
                         access: "allowed",
-                        pending: rowPending,
+                        pending: pendingAction === "delete",
                         onSelect: async () => {
                           const succeeded = await runMutation(
                             hero.id,
+                            "delete",
                             () =>
                               deleteHeroTemplate(
                                 mutationFormData({ id: hero.id }),
@@ -590,7 +594,6 @@ export default function HeroManagerClient({
           pageSize={String(pagination.pageSize)}
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
-          pending={isBusy}
         />
       </div>
 

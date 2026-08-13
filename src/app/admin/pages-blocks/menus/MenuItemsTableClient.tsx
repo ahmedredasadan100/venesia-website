@@ -497,7 +497,6 @@ export default function MenuItemsTableClient({
         pageSize={String(pagination.pageSize)}
         onPageChange={pagination.setPage}
         onPageSizeChange={pagination.setPageSize}
-        pending={pendingRowId !== null}
       />
 
       <VenesiaModal

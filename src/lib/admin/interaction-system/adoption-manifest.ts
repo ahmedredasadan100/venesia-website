@@ -273,6 +273,40 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       "delete",
     ],
   },
+  instantMutationInteraction: {
+    owner: "data_runtime",
+    queryPending:
+      "query-key change only; may mark Search, Filters, Sort, and Pagination pending",
+    revalidating:
+      "same-query post-success synchronization; never disables collection controls",
+    rowPending:
+      "the active row and target command only; unrelated rows remain interactive",
+    bulkPending:
+      "the only mutation scope allowed to block all row commands and bulk controls",
+    layout:
+      "pending presentation preserves the canonical DataGrid column and action geometry",
+    directConsumers: [
+      "src/components/admin/content/TopicsListClient.tsx",
+      "src/app/admin/content/categories/CategoriesListClient.tsx",
+      "src/app/admin/content/series/SeriesTableClient.tsx",
+      "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
+      "src/app/admin/projects/ProjectsTableClient.tsx",
+      "src/app/admin/seo/redirects/RedirectsClient.tsx",
+      "src/app/admin/users-roles/UsersManagementClient.tsx",
+      "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+      "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+      "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+      "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+      "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+    ],
+    domainOwnedRowLifecycleConsumers: [
+      "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+      "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+    ],
+    genuineExceptions: [
+      "Footer manual-link ordering is bounded form-session state persisted with the full Footer aggregate.",
+    ],
+  },
   inlineStatusExtension: {
     scope: "all_binary_publication_collections",
     owner: "shared_capabilities",
@@ -369,7 +403,10 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       "src/components/admin/ui/AdminDataGridRowActions.tsx",
       "src/components/admin/ui/AdminDataGrid.tsx",
     ],
-    data: ["src/lib/admin/entity-list/data-engine/instant-mutation.ts"],
+    data: [
+      "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
+      "src/lib/admin/entity-list/data-engine/interaction-state.ts",
+    ],
     feedback: ["src/components/admin/AdminFeedbackProvider.tsx"],
     confirmation: ["src/components/admin/ui/AdminConfirmDialog.tsx"],
     audit: [
@@ -621,6 +658,17 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
   canonicalOrders: {
     primary: readonly AdminRowActionPrimaryKind[];
     more: readonly AdminRowActionMoreKind[];
+  };
+  instantMutationInteraction: {
+    owner: "data_runtime";
+    queryPending: string;
+    revalidating: string;
+    rowPending: string;
+    bulkPending: string;
+    layout: string;
+    directConsumers: readonly string[];
+    domainOwnedRowLifecycleConsumers: readonly string[];
+    genuineExceptions: readonly string[];
   };
   inlineStatusExtension: {
     scope: "all_binary_publication_collections";

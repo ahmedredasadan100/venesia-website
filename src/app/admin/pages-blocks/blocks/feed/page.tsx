@@ -13,7 +13,6 @@ import {
   createFeedModule,
   deleteFeedModule,
   duplicateFeedModule,
-  getFeedModuleRows,
   toggleFeedModuleStatus,
 } from "./actions";
 
@@ -51,7 +50,6 @@ export default async function FeedModulesPage({ searchParams }: PageProps) {
       duplicateAction={duplicateFeedModule}
       toggleAction={toggleFeedModuleStatus}
       bulkAction={bulkFeedModules}
-      reloadRowsAction={getFeedModuleRows}
       defaultVariant="latest"
       variantOptions={TOPICS_FEED_TYPES.map(
         (feedType): [string, string] => [feedType, TOPICS_FEED_TYPE_LABELS_AR[feedType]],

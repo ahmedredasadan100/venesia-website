@@ -15,6 +15,7 @@ import {
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { SeriesListRow } from "../../../../lib/admin/content/load-series-list";
 import { buildAdminSeriesCollectionPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
@@ -84,7 +85,8 @@ function SeriesRowActions({
   handlers: SeriesRowActionHandlers;
   display?: "menu" | "visibility";
 }) {
-  const pendingAction = handlers.rowPendingAction(row.id);
+  const interaction = handlers.rowInteraction(row.id);
+  const pendingAction = interaction.pendingAction;
   const isTrashView = handlers.view === "trash";
   const isHidden = row.status !== "published";
   const previewCapability = buildAdminSeriesCollectionPreviewCapability({
@@ -185,7 +187,7 @@ function SeriesRowActions({
               pending: true,
               isVisible: !isHidden,
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,
@@ -207,7 +209,7 @@ function SeriesRowActions({
               disabledReason: pendingReason,
               pending: true,
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? { access: "disabled", disabledReason: pendingReason }
             : {
                 access: "allowed",
@@ -225,7 +227,7 @@ function SeriesRowActions({
               isArchived: true,
               label: "استعادة",
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,
@@ -256,7 +258,7 @@ function SeriesRowActions({
               pending: true,
               label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
             }
-          : handlers.mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,
@@ -303,8 +305,7 @@ function SeriesRowActions({
 
 export type SeriesRowActionHandlers = {
   view: "active" | "trash";
-  rowPendingAction: (id: number) => string | null;
-  mutationBusy: boolean;
+  rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onToggle: (row: SeriesListRow) => Promise<AdminActionResult>;
   onDuplicate: (row: SeriesListRow) => Promise<AdminActionResult>;
   onDelete: (row: SeriesListRow) => Promise<AdminActionResult>;

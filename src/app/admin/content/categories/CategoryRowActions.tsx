@@ -7,6 +7,7 @@ import {
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import { buildAdminCategoryCollectionPreviewCapability } from "../../../../lib/admin/content/entity-preview-capabilities";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
+import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { resolveAdminEntityPreviewActions } from "../../../../lib/admin/interaction-system/entity-preview-capability";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type {
@@ -18,8 +19,7 @@ type CategoryRowActionsProps = {
   category: CategoryListRow;
   view: "active" | "trash";
   onMutationResult?: (result: AdminActionResult) => void;
-  pendingAction?: string | null;
-  mutationBusy: boolean;
+  interaction: AdminInstantMutationRowInteraction;
   onToggle: (
     category: CategoryListRow,
   ) => Promise<CategoryStatusMutationResult>;
@@ -36,8 +36,7 @@ export default function CategoryRowActions({
   category,
   view,
   onMutationResult,
-  pendingAction = null,
-  mutationBusy,
+  interaction,
   onToggle,
   onDuplicate,
   onDelete,
@@ -45,6 +44,7 @@ export default function CategoryRowActions({
   onPermanentDelete,
   display = "menu",
 }: CategoryRowActionsProps) {
+  const pendingAction = interaction.pendingAction;
   const isTrashView = view === "trash";
   const isActive = category.status === "published";
   const previewCapability = buildAdminCategoryCollectionPreviewCapability({
@@ -144,7 +144,7 @@ export default function CategoryRowActions({
               pending: true,
               isVisible: isActive,
             }
-          : mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,
@@ -166,7 +166,7 @@ export default function CategoryRowActions({
               disabledReason: pendingReason,
               pending: true,
             }
-          : mutationBusy
+          : interaction.isBlocked
             ? { access: "disabled", disabledReason: pendingReason }
             : {
                 access: "allowed",
@@ -184,7 +184,7 @@ export default function CategoryRowActions({
               isArchived: true,
               label: "استعادة",
             }
-          : mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,
@@ -215,7 +215,7 @@ export default function CategoryRowActions({
               pending: true,
               label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
             }
-          : mutationBusy
+          : interaction.isBlocked
             ? {
                 access: "disabled",
                 disabledReason: pendingReason,

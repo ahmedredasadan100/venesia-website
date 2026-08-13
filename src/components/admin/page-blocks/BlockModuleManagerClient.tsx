@@ -81,7 +81,6 @@ type BlockModuleManagerClientProps = {
   duplicateAction: (formData: FormData) => Promise<void>;
   toggleAction: (formData: FormData) => Promise<void>;
   bulkAction: (formData: FormData) => Promise<void>;
-  reloadRowsAction: () => Promise<BlockModuleRow[]>;
   defaultVariant: string;
   variantOptions: Array<[string, string]>;
   loadError?: string | null;
@@ -119,7 +118,6 @@ export default function BlockModuleManagerClient({
   duplicateAction,
   toggleAction,
   bulkAction,
-  reloadRowsAction,
   defaultVariant,
   variantOptions,
   loadError = null,
@@ -132,7 +130,6 @@ export default function BlockModuleManagerClient({
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const createRuntimeRef = useRef<AdminFormRuntimeHandle>(null);
-  const [pendingRowId, setPendingRowId] = useState<number | null>(null);
   const instant = useAdminBoundedClientInstantMutation<BlockModuleRow>({
     entity: `${moduleKey}-block-templates`,
     initialRows: rows,
@@ -191,10 +188,6 @@ export default function BlockModuleManagerClient({
     [paginatedRows],
   );
   const selection = useAdminGridSelection<number>(visibleIds);
-  const isBusy =
-    pendingRowId !== null ||
-    instant.rowPending !== null ||
-    instant.bulkPending !== null;
   const loadFeedback = useMemo(
     () =>
       loadError
@@ -216,15 +209,26 @@ export default function BlockModuleManagerClient({
 
   async function runMutation(
     rowId: number | null,
+    mutationAction: "duplicate" | "delete" | "bulk",
     action: () => Promise<void>,
     successMessage: string,
   ): Promise<boolean> {
     clearFeedback(feedbackChannel);
-    setPendingRowId(rowId ?? -1);
     try {
-      await action();
-      const nextRows = await reloadRowsAction();
-      instant.hydrateRows(nextRows);
+      await instant.mutateAsync({
+        rowId: rowId ?? undefined,
+        action: mutationAction,
+        bulk: rowId === null,
+        optimistic: (cache) => {
+          if (mutationAction === "delete" && rowId !== null) {
+            cache.removeRows(new Set([rowId]));
+          }
+        },
+        execute: async () => {
+          await action();
+          return { ok: true as const, message: successMessage };
+        },
+      });
       publishFeedback(
         {
           variant: "success",
@@ -250,8 +254,6 @@ export default function BlockModuleManagerClient({
         { channel: feedbackChannel, placement: "inline", reveal: true },
       );
       return false;
-    } finally {
-      setPendingRowId(null);
     }
   }
 
@@ -362,7 +364,6 @@ export default function BlockModuleManagerClient({
           value: search,
           placeholder: "ابحث باسم البلوك أو المعرّف أو النمط…",
           minLength: 1,
-          pending: isBusy,
         }}
         filters={[]}
         values={{}}
@@ -400,12 +401,12 @@ export default function BlockModuleManagerClient({
               },
             ]}
             onClearSelection={selection.clearSelection}
-            isBusy={isBusy}
+            isBusy={instant.bulkInteraction.isBlocked}
             onExecute={async (action, ids) => {
               const formData = new FormData();
               formData.set("bulk_action", action);
               ids.forEach((id) => formData.append("ids", String(id)));
-              const succeeded = await runMutation(null, () => bulkAction(formData), "تم تنفيذ الإجراء الجماعي على البلوكات المحددة.");
+              const succeeded = await runMutation(null, "bulk", () => bulkAction(formData), "تم تنفيذ الإجراء الجماعي على البلوكات المحددة.");
               if (!succeeded) {
                 if (action === "delete") throw new Error("bulk block delete failed");
                 return;
@@ -457,10 +458,9 @@ export default function BlockModuleManagerClient({
           const status = statusMeta(row.status);
           const nextStatus = row.status === "published" ? "unpublished" : "published";
           const hidden = { access: "hidden" as const };
-          const rowPending = pendingRowId === row.id;
-          const visibilityPending =
-            instant.rowPending?.rowId === row.id &&
-            instant.rowPending.action === "visibility";
+          const interaction = instant.getRowInteraction(row.id);
+          const pendingAction = interaction.pendingAction;
+          const visibilityPending = pendingAction === "visibility";
           const capability: AdminRowActionsCapability = {
             entityType: `${moduleKey}_block_template`,
             entityId: row.id,
@@ -491,7 +491,7 @@ export default function BlockModuleManagerClient({
                     pending: true,
                     isVisible: row.status === "published",
                   }
-                : isBusy
+                : interaction.isBlocked
                   ? {
                       access: "disabled",
                       disabledReason: "انتظر انتهاء الإجراء الحالي.",
@@ -504,17 +504,18 @@ export default function BlockModuleManagerClient({
                     },
               featured: hidden,
               duplicate:
-                isBusy && !rowPending
+                interaction.isBlocked && pendingAction !== "duplicate"
                   ? {
                       access: "disabled",
                       disabledReason: "انتظر انتهاء الإجراء الحالي.",
                     }
                   : {
                       access: "allowed",
-                      pending: rowPending,
+                      pending: pendingAction === "duplicate",
                       onSelect: async () => {
                         await runMutation(
                           row.id,
+                          "duplicate",
                           () =>
                             duplicateAction(
                               mutationFormData({ id: row.id }),
@@ -525,17 +526,18 @@ export default function BlockModuleManagerClient({
                     },
               archive: hidden,
               delete:
-                isBusy && !rowPending
+                interaction.isBlocked && pendingAction !== "delete"
                   ? {
                       access: "disabled",
                       disabledReason: "انتظر انتهاء الإجراء الحالي.",
                     }
                   : {
                       access: "allowed",
-                      pending: rowPending,
+                      pending: pendingAction === "delete",
                       onSelect: async () => {
                         const succeeded = await runMutation(
                           row.id,
+                          "delete",
                           () =>
                             deleteAction(mutationFormData({ id: row.id })),
                           "تم حذف البلوك.",
@@ -615,7 +617,6 @@ export default function BlockModuleManagerClient({
         pageSize={String(pagination.pageSize)}
         onPageChange={pagination.setPage}
         onPageSizeChange={pagination.setPageSize}
-        pending={isBusy}
       />
 
       <VenesiaModal

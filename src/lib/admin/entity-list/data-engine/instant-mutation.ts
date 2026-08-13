@@ -19,6 +19,17 @@ import {
   setAdminEntityListCachesInScope,
 } from "./instant-mutation-cache";
 import { adminEntityListQueryKeys } from "./query-keys";
+import {
+  resolveAdminInstantMutationInteraction,
+  type AdminInstantMutationBulkInteraction,
+  type AdminInstantMutationPendingAction,
+  type AdminInstantMutationRowInteraction,
+} from "./interaction-state";
+
+export type {
+  AdminInstantMutationBulkInteraction,
+  AdminInstantMutationRowInteraction,
+} from "./interaction-state";
 
 export type AdminEntityMutationError = {
   ok: false;
@@ -31,7 +42,6 @@ export type AdminEntityMutationSuccess<Payload = Record<string, never>> = Payloa
   feedbackStatus?: "success" | "warning";
 };
 
-type PendingAction = { rowId: number | string; action: string } | null;
 type CacheSnapshot<Row, Metrics> = Array<[
   QueryKey,
   AdminEntityListResult<Row, Metrics> | undefined,
@@ -69,8 +79,10 @@ export function useAdminEntityInstantMutation<
   scopeQuery: AdminEntityListQuery<Record<string, unknown>, string>,
 ) {
   const queryClient = useQueryClient();
-  const inFlightRef = useRef(false);
-  const [rowPending, setRowPending] = useState<PendingAction>(null);
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const pendingRowsRef = useRef(new Map<number | string, string>());
+  const bulkPendingRef = useRef<string | null>(null);
+  const [rowPendingActions, setRowPendingActions] = useState<AdminInstantMutationPendingAction[]>([]);
   const [bulkPending, setBulkPending] = useState<string | null>(null);
 
   const helpers: AdminInstantMutationPatch<Row> = {
@@ -108,8 +120,6 @@ export function useAdminEntityInstantMutation<
       return result;
     },
     onMutate: async (request) => {
-      if (request.bulk) setBulkPending(request.action);
-      else if (request.rowId != null) setRowPending({ rowId: request.rowId, action: request.action });
       await queryClient.cancelQueries({ queryKey: adminEntityListQueryKeys.entity(entity) });
       const snapshot = queryClient.getQueriesData<AdminEntityListResult<Row, Metrics>>({
         queryKey: adminEntityListQueryKeys.queries(entity),
@@ -133,26 +143,83 @@ export function useAdminEntityInstantMutation<
         refetchType: "active",
       });
     },
-    onSettled: () => { setRowPending(null); setBulkPending(null); },
   });
 
   async function mutateAsync(request: AdminEntityMutationRequest<Row>) {
-    if (inFlightRef.current) {
+    const isRowRequest = !request.bulk && request.rowId != null;
+    const rowId = request.rowId as number | string;
+    const conflictsWithPending = isRowRequest
+      ? bulkPendingRef.current !== null || pendingRowsRef.current.has(rowId)
+      : bulkPendingRef.current !== null || pendingRowsRef.current.size > 0;
+
+    if (conflictsWithPending) {
       throw Object.assign(
         new Error("انتظر انتهاء العملية الحالية ثم حاول مرة أخرى."),
         { ok: false as const, code: "mutation_in_flight" },
       );
     }
 
-    inFlightRef.current = true;
+    if (isRowRequest) {
+      pendingRowsRef.current.set(rowId, request.action);
+      setRowPendingActions(
+        Array.from(pendingRowsRef.current, ([pendingRowId, action]) => ({
+          rowId: pendingRowId,
+          action,
+        })),
+      );
+    } else {
+      bulkPendingRef.current = request.action;
+      setBulkPending(request.action);
+    }
+
+    const queuedMutation = queueRef.current.then(() =>
+      mutation.mutateAsync(request),
+    );
+    queueRef.current = queuedMutation.catch(() => undefined);
+
     try {
-      return await mutation.mutateAsync(request);
+      return await queuedMutation;
     } finally {
-      inFlightRef.current = false;
+      if (isRowRequest) {
+        pendingRowsRef.current.delete(rowId);
+        setRowPendingActions(
+          Array.from(pendingRowsRef.current, ([pendingRowId, action]) => ({
+            rowId: pendingRowId,
+            action,
+          })),
+        );
+      } else {
+        bulkPendingRef.current = null;
+        setBulkPending(null);
+      }
     }
   }
 
-  return { mutateAsync, rowPending, bulkPending, error: mutation.error };
+  const getRowInteraction = useCallback(
+    (rowId: number | string): AdminInstantMutationRowInteraction =>
+      resolveAdminInstantMutationInteraction({
+        rowId,
+        rowPendingActions,
+        bulkPendingAction: bulkPending,
+      }).row,
+    [bulkPending, rowPendingActions],
+  );
+  const bulkInteraction = useMemo<AdminInstantMutationBulkInteraction>(
+    () =>
+      resolveAdminInstantMutationInteraction({
+        rowId: "__bulk_scope__",
+        rowPendingActions,
+        bulkPendingAction: bulkPending,
+      }).bulk,
+    [bulkPending, rowPendingActions],
+  );
+
+  return {
+    mutateAsync,
+    getRowInteraction,
+    bulkInteraction,
+    error: mutation.error,
+  };
 }
 
 /**
@@ -221,34 +288,9 @@ export function useAdminBoundedClientInstantMutation<
     entity,
     scopeQuery,
   );
-  const hydrateRows = useCallback(
-    (nextRows: Row[]) => {
-      queryClient.setQueryData<AdminEntityListResult<Row, Metrics>>(
-        queryKey,
-        (current) => ({
-          ...(current ?? initialResult),
-          rows: nextRows,
-          pagination: {
-            ...(current?.pagination ?? initialResult.pagination),
-            page: 1,
-            pageSize: Math.max(nextRows.length, 1),
-            totalRows: nextRows.length,
-            totalPages: 1,
-          },
-          meta: {
-            generatedAt: new Date().toISOString(),
-            mode: "bounded-client",
-          },
-        }),
-      );
-    },
-    [initialResult, queryClient, queryKey],
-  );
-
   return {
     ...instant,
     rows: request.data?.rows ?? initialRows,
     scopeQuery,
-    hydrateRows,
   };
 }
