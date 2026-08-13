@@ -36,6 +36,10 @@ const globalTruthAtomicMigration = readFileSync(
   new URL("../sql/migrations/20260805180000_global_truth_atomic_operations_closure.sql", import.meta.url),
   "utf8",
 ).replace(/\r\n?/gu, "\n");
+const projectDomainHardeningMigration = readFileSync(
+  new URL("../sql/migrations/20260813233530_projects_domain_hardening.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
 const dashboardTruthMigration = readFileSync(
   new URL("../sql/migrations/20260805210000_dashboard_truth_closure.sql", import.meta.url),
   "utf8",
@@ -327,7 +331,8 @@ const expectedColumnDefaults = new Map([
   ["project_videos.updated_at", "now()"],
 ]);
 const expectedColumnComments = new Map([
-  ["projects.code", "Stable Project code. Database-owned and distinct from the presentation name."],
+  ["projects.id", "Canonical and sole Project identity. All Project Domain relationships use project_id."],
+  ["projects.code", "Required user-visible Project label; not an identity, relationship, or uniqueness key."],
   ["projects.show_on_homepage", "Database-owned Home Projects membership."],
   ["projects.homepage_order", "Database-owned Home Projects order; unique for included Projects."],
 ]);
@@ -794,7 +799,7 @@ const report = {
       tables: 9,
       columns: 122,
       constraints: 104,
-      indexes: 54,
+      indexes: 53,
       rls_policies: 0,
       user_triggers: 4,
       functions: 8,
@@ -804,6 +809,7 @@ const report = {
     row_actions_migration_sha256: sha256(rowActionsMigration),
     project_publishing_migration_sha256: sha256(projectPublishingMigration),
     global_truth_atomic_migration_sha256: sha256(globalTruthAtomicMigration),
+    project_domain_hardening_migration_sha256: sha256(projectDomainHardeningMigration),
     dashboard_truth_migration_sha256: sha256(dashboardTruthMigration),
     reports_analytics_migration_sha256: sha256(reportsAnalyticsMigration),
     expected_function_source_sha256: expectedFunctionSourceHashes,
@@ -1665,7 +1671,7 @@ function buildParitySummary(fullReport) {
         ),
       column_defaults_and_not_null_match_final_rebuild: columnDrift.length === 0,
       index_inventory_valid_ready:
-        fullReport.indexes.length === 54 &&
+        fullReport.indexes.length === 53 &&
         fullReport.indexes.every(
           (index) => index.is_valid && index.is_ready && index.is_live,
         ),
