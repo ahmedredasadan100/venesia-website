@@ -74,6 +74,16 @@ check(
 const trackedProjectAssets = seedRows.filter((row) => row.objectKey.startsWith("images/projects/"));
 check("all 276 canonical Project-folder images are cataloged", trackedProjectAssets.length === 276);
 
+const deferredForeignKeyFlush = migration.indexOf(`set constraints
+  media_folders_parent_fkey,
+  media_assets_folder_fkey
+  immediate;`);
+check(
+  "deferred Media Catalog foreign keys are checked after canonical DML and before schema guards",
+  deferredForeignKeyFlush > migration.indexOf("update public.project_videos target")
+    && deferredForeignKeyFlush < migration.indexOf("alter table public.media_folders\n  add constraint media_folders_project_path_lowercase_check"),
+);
+
 const db = await PGlite.create({ extensions: { pgcrypto } });
 await db.exec(`
   create table public.media_folders (
@@ -83,7 +93,10 @@ await db.exec(`
     display_name text not null,
     reconciliation_state text not null default 'synced',
     created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
+    updated_at timestamptz not null default now(),
+    constraint media_folders_parent_fkey foreign key (parent_path)
+      references public.media_folders(normalized_path)
+      deferrable initially deferred
   );
 
   create table public.media_assets (
@@ -101,7 +114,7 @@ await db.exec(`
     width integer,
     height integer,
     checksum text,
-    folder_path text not null references public.media_folders(normalized_path),
+    folder_path text not null,
     status text not null default 'active',
     uploaded_by bigint,
     default_alt_text text,
@@ -112,7 +125,10 @@ await db.exec(`
     metadata jsonb not null default '{}'::jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    constraint media_assets_canonical_identity_unique unique (provider, bucket, object_key)
+    constraint media_assets_canonical_identity_unique unique (provider, bucket, object_key),
+    constraint media_assets_folder_fkey foreign key (folder_path)
+      references public.media_folders(normalized_path)
+      deferrable initially deferred
   );
 
   create table public.media_references (

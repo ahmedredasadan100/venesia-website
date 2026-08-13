@@ -507,6 +507,11 @@ where target.poster_image ~* '^/images/'
   and lower(target.poster_image) = lower(seed.public_url)
   and target.poster_image <> seed.public_url;
 
+set constraints
+  media_folders_parent_fkey,
+  media_assets_folder_fkey
+  immediate;
+
 alter table public.media_folders
   add constraint media_folders_project_path_lowercase_check
   check (
