@@ -334,7 +334,6 @@ export default function TopicsWithoutImageReportClient({
               placeholder: "بحث بالعنوان أو slug",
               value: controller.query.search,
               minLength: topicsWithoutImageQueryContract.searchMinLength,
-              pending: controller.queryPending,
             },
             filters: REPORT_FILTERS,
             values: {
@@ -426,7 +425,6 @@ export default function TopicsWithoutImageReportClient({
           emptySummaryText="لا توجد موضوعات بلا صورة"
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.queryPending}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

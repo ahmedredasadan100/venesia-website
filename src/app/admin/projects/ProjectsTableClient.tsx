@@ -423,7 +423,6 @@ export default function ProjectsTableClient({
               placeholder: "ابحث بالاسم أو الرابط المختصر أو كود المشروع",
               value: controller.query.search,
               className: "max-w-[360px]",
-              pending: controller.queryPending,
             },
             filters: PROJECT_FILTERS,
             values: {
@@ -524,7 +523,6 @@ export default function ProjectsTableClient({
           emptySummaryText="لا توجد مشروعات"
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.queryPending}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

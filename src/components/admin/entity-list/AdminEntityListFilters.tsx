@@ -516,7 +516,6 @@ export default function AdminEntityListFilters({
               value={draftSearch}
               placeholder={search.placeholder}
               disabled={search.disabled}
-              pending={search.pending}
               expanded={suggestionConfig ? suggestionsOpen : undefined}
               controls={suggestionConfig ? suggestionsListId : undefined}
               activeDescendant={activeSuggestion >= 0 ? `${suggestionsListId}-${activeSuggestion}` : undefined}

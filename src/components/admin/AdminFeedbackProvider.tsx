@@ -132,9 +132,11 @@ export function AdminFeedbackViewport() {
 export function AdminFeedbackChannelViewport({
   channel,
   label,
+  stabilizeLayout = false,
 }: {
   channel: string;
   label: string;
+  stabilizeLayout?: boolean;
 }) {
   const { entries, dismissFeedback } = useAdminFeedback();
   const rootRef = useRef<HTMLElement>(null);
@@ -175,7 +177,7 @@ export function AdminFeedbackChannelViewport({
     return () => window.clearTimeout(focusTimer);
   }, [latestEntry?.critical, latestEntry?.id, latestEntry?.reveal]);
 
-  if (!inlineEntries.length) return null;
+  if (!inlineEntries.length && !stabilizeLayout) return null;
 
   return (
     <section
@@ -185,10 +187,15 @@ export function AdminFeedbackChannelViewport({
       data-admin-feedback-channel-viewport=""
       data-admin-feedback-channel={channel}
       data-admin-entity-feedback-slot=""
+      data-admin-feedback-layout-stable={stabilizeLayout ? "true" : "false"}
       data-admin-entity-feedback-reveal={
         latestEntry?.reveal ? "true" : "false"
       }
-      className="scroll-mt-6 space-y-3 focus:outline-none"
+      className={
+        stabilizeLayout
+          ? "h-[72px] scroll-mt-6 space-y-3 overflow-y-auto overscroll-contain focus:outline-none [scrollbar-gutter:stable]"
+          : "scroll-mt-6 space-y-3 focus:outline-none"
+      }
     >
       {inlineEntries.map((entry) => (
         <AdminFeedbackViewportEntry
@@ -211,10 +218,12 @@ export function AdminFeedbackRegion({
   channel,
   label,
   feedback,
+  stabilizeLayout = false,
 }: {
   channel: string;
   label: string;
   feedback?: AdminActionFeedback | null;
+  stabilizeLayout?: boolean;
 }) {
   const { publishFeedback, clearFeedback } = useAdminFeedback();
 
@@ -231,7 +240,13 @@ export function AdminFeedbackRegion({
     return () => clearFeedback(channel);
   }, [channel, clearFeedback, feedback, publishFeedback]);
 
-  return <AdminFeedbackChannelViewport channel={channel} label={label} />;
+  return (
+    <AdminFeedbackChannelViewport
+      channel={channel}
+      label={label}
+      stabilizeLayout={stabilizeLayout}
+    />
+  );
 }
 
 export default function AdminFeedbackProvider({

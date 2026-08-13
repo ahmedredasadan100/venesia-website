@@ -357,6 +357,12 @@ function AdminEntityListInner<
       className={`scroll-mt-6 flex flex-col ${toolbar ? "gap-0" : "gap-7"}`}
       data-admin-entity-list=""
     >
+      <AdminFeedbackChannelViewport
+        channel={feedbackChannel}
+        label={`إشعارات ${listId}`}
+        stabilizeLayout
+      />
+
       {toolbar ? (
         <AdminEntityListFilters
           {...toolbar}
@@ -376,11 +382,6 @@ function AdminEntityListInner<
       ) : null}
 
       {!toolbar ? bulkBar : null}
-
-      <AdminFeedbackChannelViewport
-        channel={feedbackChannel}
-        label={`إشعارات ${listId}`}
-      />
 
       <AdminEntityListPrimarySection>
         <AdminEntityListTable

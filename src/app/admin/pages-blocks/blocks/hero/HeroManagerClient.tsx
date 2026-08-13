@@ -332,6 +332,7 @@ export default function HeroManagerClient({
       <AdminFeedbackRegion
         channel={feedbackChannel}
         label="نتائج إجراءات مكتبة الهيرو"
+        stabilizeLayout
         feedback={loadFeedback}
       />
 

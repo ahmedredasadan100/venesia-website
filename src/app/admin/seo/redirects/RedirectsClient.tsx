@@ -419,7 +419,6 @@ export default function RedirectsClient({
                 search: controller.query.search,
                 status: controller.query.filters.status,
                 redirectType: controller.query.filters.redirectType,
-                pending: controller.queryPending,
                 onQueryPatch: (patch, behavior = "push") => {
                   const search =
                     "q" in patch
@@ -497,7 +496,6 @@ export default function RedirectsClient({
               currentPage={controller.result.pagination.page}
               totalPages={controller.result.pagination.totalPages}
               emptySummaryText="لا توجد تحويلات"
-              pending={controller.queryPending}
               onPageChange={controller.setPage}
               onPageSizeChange={controller.setPageSize}
             />

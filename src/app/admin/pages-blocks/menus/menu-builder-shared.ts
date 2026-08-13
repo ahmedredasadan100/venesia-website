@@ -149,3 +149,27 @@ export function flattenMenuItemsForTable(items: MenuItem[]): FlatMenuItemRow[] {
   const tree = buildMenuTree(items);
   return flattenMenuTree(tree);
 }
+
+export function collectMenuItemDescendantIds(
+  rootId: number,
+  items: readonly Pick<MenuItem, "id" | "parent_id">[],
+) {
+  const children = new Map<number, number[]>();
+  for (const item of items) {
+    if (!item.parent_id) continue;
+    children.set(item.parent_id, [
+      ...(children.get(item.parent_id) ?? []),
+      item.id,
+    ]);
+  }
+
+  const affected = new Set<number>();
+  const pending = [rootId];
+  while (pending.length) {
+    const itemId = pending.pop();
+    if (!itemId || affected.has(itemId)) continue;
+    affected.add(itemId);
+    pending.push(...(children.get(itemId) ?? []));
+  }
+  return [...affected];
+}

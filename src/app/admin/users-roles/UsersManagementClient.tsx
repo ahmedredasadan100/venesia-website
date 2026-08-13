@@ -493,7 +493,6 @@ export default function UsersManagementClient({
                   placeholder:
                     "بحث باسم المستخدم أو البريد أو الاسم الكامل...",
                   minLength: adminUsersQueryContract.searchMinLength,
-                  pending: controller.queryPending,
                 },
                 filters,
                 values: {
@@ -569,7 +568,6 @@ export default function UsersManagementClient({
               pageSize={String(pagination.pageSize)}
               pageSizeOptions={PAGE_SIZE_OPTIONS}
               emptySummaryText="لا يوجد مستخدمون مطابقون"
-              pending={controller.queryPending}
               onPageChange={controller.setPage}
               onPageSizeChange={controller.setPageSize}
             />

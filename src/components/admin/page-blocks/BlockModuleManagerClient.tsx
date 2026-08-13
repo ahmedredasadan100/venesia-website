@@ -336,6 +336,7 @@ export default function BlockModuleManagerClient({
       <AdminFeedbackRegion
         channel={feedbackChannel}
         label={`نتائج إجراءات ${moduleTitle}`}
+        stabilizeLayout
         feedback={loadFeedback}
       />
 

@@ -532,7 +532,6 @@ export default function TopicsListClient({
     },
     categories,
     series,
-    pending: controller.queryPending,
     onNavigate: (state, behavior) => {
       const trimmed = state.q.trim();
       controller.setSearchAndFilters(
@@ -615,7 +614,6 @@ export default function TopicsListClient({
         data-admin-entity-list-pending={
           controller.queryPending ? "true" : "false"
         }
-        className={controller.queryPending ? "opacity-[0.96]" : undefined}
       >
         <UnifiedContentList
           rows={controller.result.rows}
@@ -658,7 +656,6 @@ export default function TopicsListClient({
           }
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.queryPending}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

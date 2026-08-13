@@ -7,6 +7,8 @@ import {
   backToMenus,
   getNumber,
   getString,
+  menuInteractionFailure,
+  menuInteractionSuccess,
   navigationMutationMessage,
   mutateMenuTree,
   revalidateNavigation,
@@ -21,7 +23,12 @@ export async function bulkMenuAction(formData: FormData) {
     .map((value) => Number(value))
     .filter((value) => Number.isFinite(value));
 
-  if (!ids.length) backToMenus("اختر قائمة واحدة على الأقل.");
+  if (!ids.length) {
+    return menuInteractionFailure(
+      "menu_bulk_empty",
+      "اختر قائمة واحدة على الأقل.",
+    );
+  }
 
   if (action === "show" || action === "hide") {
     const { error } = await getSupabaseAdmin()
@@ -29,16 +36,14 @@ export async function bulkMenuAction(formData: FormData) {
       .update({ is_active: action === "show", updated_at: new Date().toISOString() })
       .in("id", ids);
 
-    if (error) backToMenus(error.message);
+    if (error) return menuInteractionFailure("menu_bulk_update_failed", error.message);
     await auditMenuAction("menu", "update", {
       metadata: { bulk_action: action, menu_ids: ids, is_active: action === "show" },
     });
     const mediaSynchronization = await revalidateNavigation();
-    backToMenus(
-      navigationMutationMessage(
-        mediaSynchronization,
-        action === "show" ? "تم إظهار القوائم المحددة." : "تم إخفاء القوائم المحددة.",
-      ),
+    return menuInteractionSuccess(
+      mediaSynchronization,
+      action === "show" ? "تم إظهار القوائم المحددة." : "تم إخفاء القوائم المحددة.",
     );
   }
 
@@ -47,13 +52,18 @@ export async function bulkMenuAction(formData: FormData) {
       .from("menu_items")
       .select("id")
       .in("menu_id", ids);
-    if (itemsReadError) backToMenus(itemsReadError.message);
+    if (itemsReadError) {
+      return menuInteractionFailure("menu_items_read_failed", itemsReadError.message);
+    }
 
     for (const menuId of ids) {
       try {
         await mutateMenuTree(menuId, "delete_menu", {}, actor);
       } catch (error) {
-        backToMenus(error instanceof Error ? error.message : "تعذر حذف القوائم.");
+        return menuInteractionFailure(
+          "menu_bulk_delete_failed",
+          error instanceof Error ? error.message : "تعذر حذف القوائم.",
+        );
       }
     }
 
@@ -67,12 +77,16 @@ export async function bulkMenuAction(formData: FormData) {
       },
     });
     await revalidateNavigation(mediaSynchronization);
-    backToMenus(
-      navigationMutationMessage(mediaSynchronization, "تم حذف القوائم المحددة."),
+    return menuInteractionSuccess(
+      mediaSynchronization,
+      "تم حذف القوائم المحددة.",
     );
   }
 
-  backToMenus("الإجراء الجماعي غير معروف.");
+  return menuInteractionFailure(
+    "menu_bulk_unknown_action",
+    "الإجراء الجماعي غير معروف.",
+  );
 }
 
 export async function clearMenuItems(formData: FormData) {

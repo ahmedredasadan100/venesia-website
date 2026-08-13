@@ -672,7 +672,6 @@ export default function MediaLibraryCore({
               value: query,
               placeholder: "ابحث بالاسم أو المسار أو الوصف البديل…",
               debounceMs: 350,
-              pending: loading,
             }}
             filters={MEDIA_LIBRARY_FILTERS}
             values={{ kind }}
@@ -803,7 +802,6 @@ export default function MediaLibraryCore({
               pageSize={String(pageSize)}
               pageSizeOptions={PAGE_SIZES.map(String)}
               emptySummaryText="لا توجد أصول مطابقة"
-              pending={loading}
               className="mt-5"
               onPageChange={(nextPage) => {
                 setPageNumber(nextPage);

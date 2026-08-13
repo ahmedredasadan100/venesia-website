@@ -512,7 +512,10 @@ assert.match(
   updatedAtColumn,
   /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("updatedAt"\)[\s\S]*sortKey:\s*"updatedAt"[\s\S]*minWidth:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*row\.updatedAt \? formatAdminDateTime\(row\.updatedAt\) : "غير متاح"/u,
 );
-assert.match(statusColumn, /sortable:\s*supportedSortFields\.has\("status"\)[\s\S]*sortKey:\s*"status"/u);
+assert.match(
+  statusColumn,
+  /sortable:\s*supportedSortFields\.has\("status"\)[\s\S]*sortKey:\s*"status"[\s\S]*minWidth:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*width:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*align:\s*"center"/u,
+);
 assert.match(
   actionsColumn,
   /sortable:\s*false[\s\S]*minWidth:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*width:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH/u,
@@ -529,8 +532,8 @@ assert.match(
 assert.match(client, /PAGE_PATH_COLUMN_WIDTH\s*=\s*200/u);
 assert.match(client, /PAGE_SEO_COLUMN_WIDTH\s*=\s*96/u);
 assert.match(client, /PAGE_UPDATED_AT_COLUMN_WIDTH\s*=\s*176/u);
-assert.match(client, /implicitFlexibleColumn=\{false\}/u);
-assert.match(client, /fillAvailableWidth/u);
+assert.doesNotMatch(client, /implicitFlexibleColumn=\{false\}/u);
+assert.doesNotMatch(client, /fillAvailableWidth/u);
 assert.match(entityList, /implicitFlexibleColumn=\{implicitFlexibleColumn\}/u);
 assert.match(entityList, /fillAvailableWidth\?: boolean/u);
 assert.match(entityList, /fillAvailableWidth=\{fillAvailableWidth\}/u);

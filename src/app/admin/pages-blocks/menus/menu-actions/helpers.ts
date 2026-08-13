@@ -22,6 +22,8 @@ import {
 import { redirect } from "next/navigation";
 import type { ImportedMenuItem } from "./types";
 
+export { collectMenuItemDescendantIds } from "../menu-builder-shared";
+
 export function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
@@ -116,29 +118,6 @@ export function sortParentsBeforeChildren<T extends { parent_id?: unknown }>(ite
   return [...items].sort((a, b) => (a.parent_id ? 1 : 0) - (b.parent_id ? 1 : 0));
 }
 
-export function collectMenuItemDescendantIds(
-  rootId: number,
-  items: readonly { id: number | string; parent_id?: number | string | null }[],
-) {
-  const children = new Map<number, number[]>();
-  for (const item of items) {
-    const itemId = Number(item.id);
-    const parentId = item.parent_id == null ? null : Number(item.parent_id);
-    if (!Number.isInteger(itemId) || itemId <= 0 || !parentId) continue;
-    children.set(parentId, [...(children.get(parentId) ?? []), itemId]);
-  }
-
-  const affected = new Set<number>();
-  const pending = [rootId];
-  while (pending.length) {
-    const itemId = pending.pop();
-    if (!itemId || affected.has(itemId)) continue;
-    affected.add(itemId);
-    pending.push(...(children.get(itemId) ?? []));
-  }
-  return [...affected];
-}
-
 export async function synchronizeDeletedMenuItemReferences(
   entityIds: readonly (number | string)[],
 ) {
@@ -223,6 +202,31 @@ export function navigationMutationMessage(
         mediaWarning: true as const,
       }
     : successMessage;
+}
+
+export function menuInteractionFailure(code: string, message: string) {
+  return { ok: false as const, code, message };
+}
+
+export function menuInteractionSuccess<
+  Payload extends Record<string, unknown> = Record<string, never>,
+>(
+  mediaSynchronization: MediaReferenceSynchronizationResult | undefined,
+  successMessage: string,
+  payload?: Payload,
+) {
+  const resolved = navigationMutationMessage(
+    mediaSynchronization,
+    successMessage,
+  );
+  const warning = typeof resolved !== "string";
+  return {
+    ...(payload ?? ({} as Payload)),
+    ok: true as const,
+    code: warning ? "saved_with_media_sync_warning" : "saved",
+    message: warning ? resolved.message : resolved,
+    feedbackStatus: warning ? ("warning" as const) : ("success" as const),
+  };
 }
 
 export function mediaWriteMutationErrorMessage(error: unknown, fallback: string) {

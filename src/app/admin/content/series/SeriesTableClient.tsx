@@ -452,7 +452,6 @@ export default function SeriesTableClient({
               placeholder: "ابحث في السلاسل",
               value: controller.query.search,
               className: "max-w-[330px]",
-              pending: controller.queryPending,
             },
             filters,
             values: {
@@ -602,7 +601,6 @@ export default function SeriesTableClient({
           emptySummaryText="لا توجد سلاسل"
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.queryPending}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

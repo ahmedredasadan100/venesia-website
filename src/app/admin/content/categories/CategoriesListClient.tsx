@@ -488,7 +488,6 @@ export default function CategoriesListClient({
               placeholder: "ابحث في التصنيفات",
               value: controller.query.search,
               className: "max-w-[330px]",
-              pending: controller.queryPending,
             },
             filters,
             values: { status: controller.query.filters.status },
@@ -602,7 +601,6 @@ export default function CategoriesListClient({
           emptySummaryText="لا توجد تصنيفات"
           onPageChange={controller.setPage}
           onPageSizeChange={controller.setPageSize}
-          pending={controller.queryPending}
         />
       </AdminEntityListTableRegion>
     </AdminEntityListSurface>

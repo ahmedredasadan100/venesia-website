@@ -155,7 +155,6 @@ export type AdminEntitySearchConfig = {
   debounceMs?: number;
   className?: string;
   disabled?: boolean;
-  pending?: boolean;
   suggestions?: AdminEntitySearchSuggestionsConfig;
 };
 

@@ -627,7 +627,6 @@ export default function PagesTableClient({
                 placeholder: "ابحث في الصفحات",
                 value: controller.query.search,
                 minLength: pagesQueryContract.searchMinLength,
-                pending: controller.queryPending,
               },
               filters: [],
               values: {},
@@ -645,8 +644,6 @@ export default function PagesTableClient({
             getRowLabel={(row) => row.title}
             initialVisibleColumns={initialVisibleColumns}
             defaultVisibleColumns={[...getPagesDefaultColumnKeys()]}
-            implicitFlexibleColumn={false}
-            fillAvailableWidth
             onPersistColumns={savePagesTablePreferences}
             onRestoreColumns={restorePagesTablePreferences}
             enableColumnManagement
@@ -731,7 +728,6 @@ export default function PagesTableClient({
             emptySummaryText="لا توجد صفحات"
             onPageChange={controller.setPage}
             onPageSizeChange={controller.setPageSize}
-            pending={controller.queryPending}
           />
         </AdminEntityListTableRegion>
       </AdminEntityListSurface>

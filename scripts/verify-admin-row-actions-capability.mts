@@ -237,23 +237,9 @@ check(
   ),
 );
 check(
-  "Admin Interaction System records truthful Collection adoption blockers",
-  ADMIN_INTERACTION_SYSTEM.globalClosed === false &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length === 1 &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.includes(
-      "Authenticated Browser acceptance on the final working tree is still required.",
-    ) &&
-    !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
-      blocker.toLowerCase().includes("atomic reorder"),
-    ) &&
-    !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some(
-      (blocker) =>
-        String(blocker) ===
-        "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
-    ) &&
-    !ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.some((blocker) =>
-      blocker.startsWith("PROJECT_"),
-    ),
+  "Admin Interaction System is globally closed with no residual adoption blocker",
+  ADMIN_INTERACTION_SYSTEM.globalClosed === true &&
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length === 0,
 );
 
 check(
@@ -272,14 +258,9 @@ check(
   new Set(manifestEntities).size === manifestEntities.length,
 );
 check(
-  "generic adoption remains open only for authenticated final Browser QA",
-  ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosed === false &&
-    sameOrderedValues(
-      ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosureBlockers,
-      [
-        "Authenticated Browser QA for the final working tree is still required before global closure.",
-      ],
-    ),
+  "generic Row Actions adoption is globally closed after authenticated Browser QA",
+  ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosed === true &&
+    ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosureBlockers.length === 0,
 );
 check(
   "none of the generic collections claims Manual Order support",
@@ -1048,23 +1029,9 @@ check(
       ?.rowActionsState === "not_applicable",
 );
 check(
-  "Collection global closure remains truthful with Browser as its only remaining gap",
-  ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed === false &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.length === 1 &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
-      blocker.includes("Authenticated Browser QA"),
-    ) &&
-    !ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
-      blocker.toLowerCase().includes("atomic reorder"),
-    ) &&
-    !ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some(
-      (blocker) =>
-        String(blocker) ===
-        "SPECIALIZED_ADMIN_DATA_GRID_CONSUMERS_REQUIRE_TYPED_COLUMN_PREFERENCES_ADAPTERS",
-    ) &&
-    !ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.some((blocker) =>
-      blocker.startsWith("PROJECT_"),
-    ),
+  "Collection surface adoption is globally closed with no residual blocker",
+  ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed === true &&
+    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.length === 0,
 );
 check(
   "Project Residential and Commercial routes share one consumer and action declaration",
@@ -1339,14 +1306,13 @@ check(
     resizedAssignmentParams.get("seo_notice") === "saved",
 );
 check(
-  "shared Pagination delegates range and URL math and exposes pending safety",
+  "shared Pagination delegates range and URL math without owning Busy state",
   read(paths.pagination).includes("computePageRange") &&
     read(paths.pagination).includes("buildAdminEntityListHref") &&
-    read(paths.pagination).includes("pending = false") &&
-    read(paths.pagination).includes("disabled={pending || isActive}") &&
-    read(paths.pagination).includes(
-      'data-admin-table-pagination-pending={pending ? "true" : "false"}',
-    ),
+    read(paths.pagination).includes('data-admin-table-pagination-busy="false"') &&
+    !read(paths.pagination).includes("pending?: boolean") &&
+    !read(paths.pagination).includes("disabled={pending") &&
+    !read(paths.pagination).includes("aria-busy={pending}"),
 );
 check(
   "AdminDataGrid owns one compact full-height divided cell surface for every Block Library family",
@@ -1676,17 +1642,44 @@ check(
 check(
   "Instant Mutation inventory is unique, complete, and adopts the scoped owner contract",
   new Set(directInstantConsumers).size === directInstantConsumers.length &&
-    directInstantConsumers.length === 12 &&
+    directInstantConsumers.length === 14 &&
     directInstantConsumers.every((sourceFile) => {
       const source = read(sourceFile);
       return (
         source.includes("useAdminEntityInstantMutation") ||
         source.includes("useAdminBoundedClientInstantMutation")
-      ) && source.includes("getRowInteraction");
+      ) &&
+        source.includes("getRowInteraction") &&
+        !source.includes("pendingRowId") &&
+        !source.includes("setPendingRowId");
     }),
 );
 check(
-  "Collection controls never bind raw fetching or row mutation pending",
+  "Menu tables keep atomic domain writes while adopting shared Busy, feedback, and fixed-column contracts",
+  [
+    "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+    "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+  ].every((sourceFile) => {
+    const source = read(sourceFile);
+    return (
+      source.includes("useAdminBoundedClientInstantMutation") &&
+      source.includes("useAdminFeedback") &&
+      source.includes("getRowInteraction") &&
+      !source.includes("pendingRowId")
+    );
+  }) &&
+    read("src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx").includes(
+      "ADMIN_DATA_GRID_COLUMNS.statusCompact",
+    ) &&
+    !read("src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx").includes(
+      "إعادة الترتيب متوقفة",
+    ) &&
+    read("src/app/admin/pages-blocks/menus/menu-actions/reorder.ts").includes(
+      'mutateMenuTree(menuId, "reorder"',
+    ),
+);
+check(
+  "Collection controls never bind raw fetching, Query pending, or row mutation pending",
   [
     ...directInstantConsumers,
     ...domainOwnedRowLifecycleConsumers,
@@ -1696,11 +1689,17 @@ check(
     const source = read(sourceFile);
     return (
       !source.includes("controller.isFetching") &&
+      !source.includes("pending: controller.queryPending") &&
+      !source.includes("pending={controller.queryPending}") &&
       !/AdminTablePagination[\s\S]{0,500}pending=\{pendingRowId !== null\}/u.test(
         source,
       )
     );
-  }),
+  }) &&
+    !read("src/lib/admin/entity-list/types.ts").includes("pending?: boolean") &&
+    !read("src/components/admin/entity-list/AdminEntityListFilters.tsx").includes(
+      "pending={search.pending}",
+    ),
 );
 check(
   "legacy ambiguous mutation and query state contracts are removed",

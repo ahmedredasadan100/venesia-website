@@ -46,7 +46,9 @@ assert.match(registry, /pages:\s*pagesEntityListAdapter/);
 assert.match(client, /useAdminEntityListController/);
 assert.match(client, /useAdminEntityInstantMutation/);
 assert.match(client, /controller\.query/);
-assert.match(client, /pending:\s*controller\.queryPending/);
+assert.match(client, /data-admin-entity-list-pending/);
+assert.doesNotMatch(client, /pending:\s*controller\.queryPending/);
+assert.doesNotMatch(client, /pending=\{controller\.queryPending\}/);
 assert.doesNotMatch(client, /pending:\s*controller\.isFetching/);
 assert.match(controller, /resolveAdminEntityListInteractionState/);
 assert.match(

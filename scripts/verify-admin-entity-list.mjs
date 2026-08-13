@@ -400,18 +400,20 @@ check(
     pagination.includes("buildAdminEntityListHref"),
 );
 check(
-  "Collection owner groups table and pagination with shared range and pending contracts",
+  "Collection owner groups table and pagination while controls remain outside Busy state",
   entitySurface.includes("AdminEntityListTableRegion") &&
     entitySurface.includes('TABLE_REGION_LAYOUT_CLASSES = "flex flex-col gap-4"') &&
     pagination.includes("computePageRange") &&
     pagination.includes("buildAdminEntityListHref") &&
-    pagination.includes("pending?: boolean") &&
-    pagination.includes("disabled={pending || isActive}") &&
+    !pagination.includes("pending?: boolean") &&
+    !pagination.includes("disabled={pending") &&
+    pagination.includes('data-admin-table-pagination-busy="false"') &&
     pagination.includes('data-admin-table-pagination=""') &&
     [topicsClient, categoriesClient, seriesClient].every(
       (source) =>
         source.includes("AdminEntityListTableRegion") &&
-        source.includes("pending={controller.queryPending}"),
+        !source.includes("pending={controller.queryPending}") &&
+        !source.includes("pending: controller.queryPending"),
     ),
 );
 
@@ -451,19 +453,23 @@ check(
 );
 
 check(
-  "Entity-list feedback publishes through the shared runtime into one inline channel slot",
+  "Entity-list feedback publishes through one stable shared slot before collection controls",
   feedbackProvider.includes("AdminFeedbackViewport") &&
     feedbackProvider.includes("AdminFeedbackChannelViewport") &&
     feedbackProvider.includes("data-admin-feedback-viewport") &&
     feedbackProvider.includes("data-admin-entity-feedback-slot") &&
+    feedbackProvider.includes("data-admin-feedback-layout-stable") &&
+    feedbackProvider.includes('stabilizeLayout = false') &&
+    feedbackProvider.includes('h-[72px]') &&
     feedbackProvider.includes("fixed") &&
     entityList.includes("useAdminFeedback") &&
     entityList.includes("publishFeedback(nextFeedback") &&
     entityList.includes("AdminFeedbackChannelViewport") &&
-    entityList.indexOf("<AdminFeedbackChannelViewport") >
-      entityList.lastIndexOf("<AdminBulkActionBar") &&
+    entityList.indexOf("<AdminFeedbackChannelViewport") <
+      entityList.indexOf("{toolbar ? (") &&
     entityList.indexOf("<AdminFeedbackChannelViewport") <
       entityList.indexOf("<AdminEntityListTable") &&
+    entityList.includes("stabilizeLayout") &&
     categoriesClient.includes("initialFeedback={initialFeedback}") &&
     seriesClient.includes("initialFeedback={initialFeedback}") &&
     topicsList.includes("initialFeedback={initialFeedback}") &&
@@ -788,7 +794,7 @@ check(
     ].every((id) => pageCompositionColumnConfig.includes(`${id}:`)) &&
     pageCompositionColumnActions.includes("saveAdminColumnPreferences") &&
     pageCompositionColumnActions.includes("allowedColumns:") &&
-    collectionAdoptionManifest.includes("globalClosed: false"),
+    collectionAdoptionManifest.includes("globalClosed: true"),
 );
 
 check(

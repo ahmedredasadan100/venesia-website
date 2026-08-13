@@ -349,6 +349,7 @@ export default function ContentBlocksTableClient({
         <AdminFeedbackRegion
           channel={feedbackChannel}
           label="نتائج إجراءات بلوكات المحتوى"
+          stabilizeLayout
           feedback={loadFeedback}
         />
 

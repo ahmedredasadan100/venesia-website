@@ -206,6 +206,7 @@ export default function BlockTemplateSummaryListClient({
       <AdminFeedbackRegion
         channel={`block-manager:${moduleKey}`}
         label={`نتائج قراءة ${title}`}
+        stabilizeLayout
         feedback={
           errorMessage
             ? {

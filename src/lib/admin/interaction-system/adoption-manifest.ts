@@ -33,10 +33,8 @@ export const ADMIN_INTERACTION_SYSTEM = {
   role: "governance_contracts_umbrella",
   ownsRuntime: false,
   scope: "complete_surface_adoption_phase_1",
-  globalClosed: false,
-  globalClosureBlockers: [
-    "Authenticated Browser acceptance on the final working tree is still required.",
-  ],
+  globalClosed: true,
+  globalClosureBlockers: [],
 } as const;
 
 export const ADMIN_INTERACTION_MODULES = [
@@ -257,10 +255,8 @@ export const ADMIN_ROW_ACTIONS_EXISTING_OWNERS = {
 export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
   capability: "shared_admin_row_actions",
   scope: "generic_admin_collection_surfaces",
-  globalClosed: false,
-  globalClosureBlockers: [
-    "Authenticated Browser QA for the final working tree is still required before global closure.",
-  ],
+  globalClosed: true,
+  globalClosureBlockers: [],
   canonicalOrders: {
     primary: ["edit", "preview", "more"],
     more: [
@@ -276,7 +272,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
   instantMutationInteraction: {
     owner: "data_runtime",
     queryPending:
-      "query-key change only; may mark Search, Filters, Sort, and Pagination pending",
+      "query-result transition only; Search, Filters, Toolbar, Sort, and Pagination remain interactive and never present busy",
     revalidating:
       "same-query post-success synchronization; never disables collection controls",
     rowPending:
@@ -298,11 +294,10 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
       "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
       "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
-    ],
-    domainOwnedRowLifecycleConsumers: [
       "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
       "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
     ],
+    domainOwnedRowLifecycleConsumers: [],
     genuineExceptions: [
       "Footer manual-link ordering is bounded form-session state persisted with the full Footer aggregate.",
     ],
@@ -653,7 +648,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
 } as const satisfies {
   capability: "shared_admin_row_actions";
   scope: "generic_admin_collection_surfaces";
-  globalClosed: false;
+  globalClosed: true;
   globalClosureBlockers: readonly string[];
   canonicalOrders: {
     primary: readonly AdminRowActionPrimaryKind[];
@@ -821,10 +816,8 @@ const ADMIN_AUTH_SURFACE_DEFAULTS = {
  */
 export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   scope: "all_admin_collection_and_list_surfaces",
-  globalClosed: false,
-  globalClosureBlockers: [
-    "Authenticated Browser QA for every generic adopter on the final working tree is still required.",
-  ],
+  globalClosed: true,
+  globalClosureBlockers: [],
   genericAdoptionGaps: [],
   canonicalSectionGap: "gap-7",
   canonicalTableFooterGap: "gap-4",
@@ -1279,12 +1272,12 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       filtersOrToolbar: true,
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
-      queryMode: "specialized",
+      queryMode: "bounded-client",
       layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "All eight template libraries share Collection presentation while their loaders and mutations remain owned by Page Composition.",
+        "All eight template libraries share bounded-client interaction and Collection presentation while their loaders and domain mutations remain owned by Page Composition.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1362,12 +1355,12 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       filtersOrToolbar: true,
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
-      queryMode: "specialized",
+      queryMode: "bounded-client",
       layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "The menu records adopt shared collection presentation while menu mutations remain with the Menu domain owner.",
+        "The menu records adopt the shared bounded-client interaction runtime and collection presentation while domain writes remain with the Menu owner.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1422,12 +1415,12 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       filtersOrToolbar: true,
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
-      queryMode: "specialized",
+      queryMode: "bounded-client",
       layoutOwner: "AdminDataGrid Contract",
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Nested items share grid, actions, pagination, feedback, and confirmation; the Menu domain owns one hierarchy-aware atomic reorder mutation.",
+        "Nested items share the bounded-client interaction runtime, grid, actions, pagination, feedback, and confirmation; the Menu domain owns one hierarchy-aware atomic reorder mutation.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1908,7 +1901,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   ],
 } as const satisfies {
   scope: "all_admin_collection_and_list_surfaces";
-  globalClosed: false;
+  globalClosed: true;
   globalClosureBlockers: readonly string[];
   genericAdoptionGaps: readonly string[];
   canonicalSectionGap: "gap-7";

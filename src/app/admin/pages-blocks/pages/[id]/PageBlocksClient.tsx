@@ -513,6 +513,7 @@ export default function PageBlocksClient({
           <AdminFeedbackRegion
             channel={`page-composition:${page.id}`}
             label="نتائج إجراءات تكوين الصفحة"
+            stabilizeLayout
             feedback={
               actionFeedback
                 ? {

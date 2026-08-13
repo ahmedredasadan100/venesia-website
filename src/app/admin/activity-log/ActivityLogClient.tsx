@@ -344,7 +344,6 @@ export default function ActivityLogClient({
                 value: controller.query.search,
                 placeholder: "بحث في المستخدم أو الكيان...",
                 debounceMs: 350,
-                pending: controller.queryPending,
               },
               filters: filterDefinitions,
               values: {
@@ -424,7 +423,6 @@ export default function ActivityLogClient({
             emptySummaryText="لا توجد أحداث"
             onPageChange={controller.setPage}
             onPageSizeChange={controller.setPageSize}
-            pending={controller.queryPending}
           />
         </AdminEntityListTableRegion>
       </AdminEntityListSurface>
