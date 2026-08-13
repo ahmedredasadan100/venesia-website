@@ -115,8 +115,7 @@ export default function AdminEntityListTable<
       ? columns.find(
           (column) =>
             !column.primary &&
-            column.sticky !== "start" &&
-            column.sticky !== "end",
+            !column.sticky,
         )?.key
       : undefined);
   const fillSpacerBeforeColumnKey = columns.find(
@@ -274,6 +273,25 @@ export default function AdminEntityListTable<
                 );
               }
 
+              if (column.sticky === "end-adjacent") {
+                return (
+                  <Fragment key={column.key}>
+                    {fillSpacer}
+                    <th
+                      data-admin-grid-sticky="inline-end-adjacent"
+                      data-admin-column-key={column.key}
+                      style={{
+                        ...getColumnTrackStyle(column),
+                        insetInlineEnd: actionsColumnWidth,
+                      }}
+                      className="sticky z-30 whitespace-nowrap bg-[#10151C] text-center"
+                    >
+                      {content}
+                    </th>
+                  </Fragment>
+                );
+              }
+
               const stickyPrimary =
                 column.primary || column.sticky === "start"
                   ? showSelection
@@ -361,6 +379,26 @@ export default function AdminEntityListTable<
                         >
                           {content}
                         </AdminDataGridStickyActionsCell>
+                      </Fragment>
+                    );
+                  }
+
+
+                  if (column.sticky === "end-adjacent") {
+                    return (
+                      <Fragment key={column.key}>
+                        {fillSpacer}
+                        <td
+                          data-admin-grid-sticky="inline-end-adjacent"
+                          data-admin-column-key={column.key}
+                          style={{
+                            ...getColumnTrackStyle(column),
+                            insetInlineEnd: actionsColumnWidth,
+                          }}
+                          className="sticky z-20 min-w-0 overflow-hidden border-b border-white/8 bg-[#080B10] text-center text-sm text-white/68 transition group-last:border-b-0 group-hover:bg-[#0D1117]"
+                        >
+                          {content}
+                        </td>
                       </Fragment>
                     );
                   }

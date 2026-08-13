@@ -15,6 +15,7 @@ function check(label: string, condition: unknown) {
 }
 
 const tabsOwner = read("src/components/admin/ui/AdminModuleTabs.tsx");
+const feedbackOwner = read("src/components/admin/AdminFeedbackProvider.tsx");
 const pagesClient = read("src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx");
 const pagesHeader = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksHeader.tsx");
 const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
@@ -68,6 +69,7 @@ check(
     (source) =>
       source.includes("instant.getRowInteraction") &&
       source.includes('pendingAction === "visibility"') &&
+      !source.includes("interaction.isBlocked") &&
       !source.includes("instant.rowPending?.rowId") &&
       !source.includes("instant.rowPending !== null"),
   ),
@@ -84,6 +86,15 @@ check(
         !source.includes("pending: isBusy") &&
         !source.includes("pending={isBusy}"),
     ),
+);
+
+check(
+  "Page Composition feedback uses the global shared location without a reserved feedback viewport",
+  pagesClient.includes('<AdminFeedbackRegion') &&
+    pagesClient.includes('placement="global"') &&
+    feedbackOwner.includes('return placement === "inline" ? (') &&
+    !feedbackOwner.includes("stabilizeLayout") &&
+    !feedbackOwner.includes('h-[72px]'),
 );
 
 check(

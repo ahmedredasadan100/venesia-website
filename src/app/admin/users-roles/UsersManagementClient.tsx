@@ -188,13 +188,7 @@ function createAdminUserColumns(input: {
           entityId: row.id,
           entityLabel: row.username,
           actions: {
-            edit: interaction.isBlocked
-              ? {
-                  access: "disabled",
-                  disabledReason: blockedReason,
-                  pending: Boolean(pendingAction),
-                }
-              : { access: "allowed", onSelect: () => input.onEdit(row) },
+            edit: { access: "allowed", onSelect: () => input.onEdit(row) },
             preview: { access: "hidden" },
             information: {
               access: "allowed",
@@ -211,11 +205,11 @@ function createAdminUserColumns(input: {
               ],
             },
             copyPublicLink: { access: "hidden" },
-            visibility: interaction.isBlocked
+            visibility: pendingAction === "visibility"
               ? {
                   access: "disabled",
                   disabledReason: blockedReason,
-                  pending: pendingAction === "visibility",
+                  pending: true,
                   isVisible: row.is_active,
                 }
               : isSelf && row.is_active
@@ -247,11 +241,11 @@ function createAdminUserColumns(input: {
             featured: { access: "hidden" },
             duplicate: { access: "hidden" },
             archive: { access: "hidden" },
-            delete: interaction.isBlocked
+            delete: pendingAction === "delete"
               ? {
                   access: "disabled",
                   disabledReason: blockedReason,
-                  pending: pendingAction === "delete",
+                  pending: true,
                 }
               : isSelf
                 ? {

@@ -156,18 +156,12 @@ function createRedirectColumns(input: {
       renderCell: ({ row, onMutationResult }) => {
         const interaction = input.rowInteraction(row.id);
         const pendingAction = interaction.pendingAction;
-        const disabled = interaction.isBlocked;
         const capability: AdminRowActionsCapability = {
           entityType: "redirect",
           entityId: row.id,
           entityLabel: row.source_path,
           actions: {
-            edit: disabled
-              ? {
-                  access: "disabled",
-                  disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                }
-              : { access: "allowed", onSelect: () => input.onEdit(row) },
+            edit: { access: "allowed", onSelect: () => input.onEdit(row) },
             preview: { access: "hidden" },
             information: {
               access: "allowed",
@@ -184,11 +178,11 @@ function createRedirectColumns(input: {
               ],
             },
             copyPublicLink: { access: "hidden" },
-            visibility: disabled
+            visibility: pendingAction === "visibility"
               ? {
                   access: "disabled",
                   disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                  pending: pendingAction === "visibility",
+                  pending: true,
                   isVisible: row.status === "active",
                 }
               : {
@@ -202,11 +196,11 @@ function createRedirectColumns(input: {
             featured: { access: "hidden" },
             duplicate: { access: "hidden" },
             archive: { access: "hidden" },
-            delete: disabled
+            delete: pendingAction === "delete"
               ? {
                   access: "disabled",
                   disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                  pending: pendingAction === "delete",
+                  pending: true,
                 }
               : {
                   access: "allowed",

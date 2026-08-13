@@ -126,12 +126,6 @@ function PageRowActions({
     disabledReason: MUTATION_PENDING_REASON,
     pending: true,
   };
-  const busyState = {
-    access: "disabled" as const,
-    disabledReason: MUTATION_PENDING_REASON,
-  };
-  const rowBusy = interaction.isBlocked;
-
   async function run(handler: (page: AdminPageListRow) => Promise<AdminActionResult>) {
     const result = await handler(row);
     onMutationResult?.(result);
@@ -175,40 +169,34 @@ function PageRowActions({
       visibility:
         pendingAction === "visibility"
           ? { ...pendingState, isVisible: row.status === "published" }
-          : rowBusy
-            ? { ...busyState, isVisible: row.status === "published" }
-            : {
-                access: "allowed",
-                isVisible: row.status === "published",
-                onSelect: () => run(handlers.onToggle),
-              },
+          : {
+              access: "allowed",
+              isVisible: row.status === "published",
+              onSelect: () => run(handlers.onToggle),
+            },
       featured: { access: "hidden" },
       duplicate:
         pendingAction === "duplicate"
           ? pendingState
-          : rowBusy
-            ? busyState
-            : {
-                access: "allowed",
-                onSelect: () => run(handlers.onDuplicate),
-              },
+          : {
+              access: "allowed",
+              onSelect: () => run(handlers.onDuplicate),
+            },
       archive: { access: "hidden" },
       delete: blocked
         ? { access: "disabled", disabledReason: blocked }
         : pendingAction === "delete"
           ? pendingState
-          : rowBusy
-            ? busyState
-            : {
-                access: "allowed",
-                onSelect: () => run(handlers.onDelete),
-                confirmation: {
-                  mode: "shared",
-                  title: `حذف الصفحة «${row.title}»؟`,
-                  description: PAGE_DELETE_CONFIRM,
-                  confirmLabel: "تأكيد الحذف",
-                },
+          : {
+              access: "allowed",
+              onSelect: () => run(handlers.onDelete),
+              confirmation: {
+                mode: "shared",
+                title: `حذف الصفحة «${row.title}»؟`,
+                description: PAGE_DELETE_CONFIRM,
+                confirmLabel: "تأكيد الحذف",
               },
+            },
     },
   };
 
@@ -348,6 +336,7 @@ function createPageColumns(
       minWidth: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.statusCompact, 10),
       width: Number.parseInt(ADMIN_DATA_GRID_COLUMNS.statusCompact, 10),
       align: "center",
+      sticky: "end-adjacent",
       renderCell: ({ row, onMutationResult }) => (
         <PageRowActions
           row={row}

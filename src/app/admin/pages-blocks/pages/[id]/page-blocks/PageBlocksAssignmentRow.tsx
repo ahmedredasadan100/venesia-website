@@ -70,11 +70,6 @@ export default function PageBlocksAssignmentRow({
     disabledReason: "انتظر انتهاء الإجراء الحالي.",
     pending: true,
   };
-  const busyState = {
-    access: "disabled" as const,
-    disabledReason: "انتظر انتهاء الإجراء الحالي.",
-  };
-  const rowBusy = interaction.isBlocked;
   const capability: AdminRowActionsCapability = {
     entityType: "page_module_assignment",
     entityId: rowId,
@@ -110,20 +105,16 @@ export default function PageBlocksAssignmentRow({
         ? hidden
         : pendingAction === "visibility"
           ? { ...pendingState, isVisible }
-          : rowBusy
-            ? { ...busyState, isVisible }
-            : {
-                access: "allowed",
-                isVisible,
-                onSelect: onToggleVisibility,
-              },
+          : {
+              access: "allowed",
+              isVisible,
+              onSelect: onToggleVisibility,
+            },
       featured: hidden,
       duplicate: !manageable
         ? hidden
         : pendingAction === "duplicate"
           ? pendingState
-          : rowBusy
-          ? busyState
           : {
               access: "allowed",
               onSelect: onDuplicate,
@@ -133,8 +124,6 @@ export default function PageBlocksAssignmentRow({
         ? hidden
         : pendingAction === "delete"
           ? { ...pendingState, label: "إزالة من الصفحة" }
-          : rowBusy
-          ? { ...busyState, label: "إزالة من الصفحة" }
           : {
               access: "allowed",
               label: "إزالة من الصفحة",
@@ -168,8 +157,8 @@ export default function PageBlocksAssignmentRow({
 
       <AdminDataGridPrimaryCell className="flex items-center gap-2">
         <span className="flex shrink-0 gap-1">
-          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأعلى" : reorderDisabledTitle} disabled={!canMoveUp || rowBusy} pending={pendingAction === "reorder-up"} onClick={onMoveUp}>↑</AdminDataGridActionButton>
-          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأسفل" : reorderDisabledTitle} disabled={!canMoveDown || rowBusy} pending={pendingAction === "reorder-down"} onClick={onMoveDown}>↓</AdminDataGridActionButton>
+          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأعلى" : reorderDisabledTitle} disabled={!canMoveUp} pending={pendingAction === "reorder-up"} onClick={onMoveUp}>↑</AdminDataGridActionButton>
+          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأسفل" : reorderDisabledTitle} disabled={!canMoveDown} pending={pendingAction === "reorder-down"} onClick={onMoveDown}>↓</AdminDataGridActionButton>
         </span>
         <Link
           href={moduleEditHref(row.module_kind, row.template_id)}

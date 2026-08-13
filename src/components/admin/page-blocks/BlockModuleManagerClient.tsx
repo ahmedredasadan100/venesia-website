@@ -336,7 +336,7 @@ export default function BlockModuleManagerClient({
       <AdminFeedbackRegion
         channel={feedbackChannel}
         label={`نتائج إجراءات ${moduleTitle}`}
-        stabilizeLayout
+        placement="global"
         feedback={loadFeedback}
       />
 
@@ -492,66 +492,48 @@ export default function BlockModuleManagerClient({
                     pending: true,
                     isVisible: row.status === "published",
                   }
-                : interaction.isBlocked
-                  ? {
-                      access: "disabled",
-                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                      isVisible: row.status === "published",
-                    }
-                  : {
-                      access: "allowed",
-                      isVisible: row.status === "published",
-                      onSelect: () => runVisibilityMutation(row, nextStatus),
-                    },
+                : {
+                    access: "allowed",
+                    isVisible: row.status === "published",
+                    onSelect: () => runVisibilityMutation(row, nextStatus),
+                  },
               featured: hidden,
-              duplicate:
-                interaction.isBlocked && pendingAction !== "duplicate"
-                  ? {
-                      access: "disabled",
-                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                    }
-                  : {
-                      access: "allowed",
-                      pending: pendingAction === "duplicate",
-                      onSelect: async () => {
-                        await runMutation(
-                          row.id,
-                          "duplicate",
-                          () =>
-                            duplicateAction(
-                              mutationFormData({ id: row.id }),
-                            ),
-                          "تم إنشاء نسخة من البلوك.",
-                        );
-                      },
-                    },
+              duplicate: {
+                access: "allowed",
+                pending: pendingAction === "duplicate",
+                onSelect: async () => {
+                  await runMutation(
+                    row.id,
+                    "duplicate",
+                    () =>
+                      duplicateAction(
+                        mutationFormData({ id: row.id }),
+                      ),
+                    "تم إنشاء نسخة من البلوك.",
+                  );
+                },
+              },
               archive: hidden,
-              delete:
-                interaction.isBlocked && pendingAction !== "delete"
-                  ? {
-                      access: "disabled",
-                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                    }
-                  : {
-                      access: "allowed",
-                      pending: pendingAction === "delete",
-                      onSelect: async () => {
-                        const succeeded = await runMutation(
-                          row.id,
-                          "delete",
-                          () =>
-                            deleteAction(mutationFormData({ id: row.id })),
-                          "تم حذف البلوك.",
-                        );
-                        if (!succeeded) throw new Error("block delete failed");
-                      },
-                      confirmation: {
-                        mode: "shared",
-                        title: "تأكيد حذف البلوك",
-                        description: `حذف البلوك «${row.name}» نهائيًا؟`,
-                        confirmLabel: "حذف البلوك",
-                      },
-                    },
+              delete: {
+                access: "allowed",
+                pending: pendingAction === "delete",
+                onSelect: async () => {
+                  const succeeded = await runMutation(
+                    row.id,
+                    "delete",
+                    () =>
+                      deleteAction(mutationFormData({ id: row.id })),
+                    "تم حذف البلوك.",
+                  );
+                  if (!succeeded) throw new Error("block delete failed");
+                },
+                confirmation: {
+                  mode: "shared",
+                  title: "تأكيد حذف البلوك",
+                  description: `حذف البلوك «${row.name}» نهائيًا؟`,
+                  confirmLabel: "حذف البلوك",
+                },
+              },
             },
           };
 

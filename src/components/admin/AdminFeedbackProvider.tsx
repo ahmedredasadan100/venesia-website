@@ -132,11 +132,9 @@ export function AdminFeedbackViewport() {
 export function AdminFeedbackChannelViewport({
   channel,
   label,
-  stabilizeLayout = false,
 }: {
   channel: string;
   label: string;
-  stabilizeLayout?: boolean;
 }) {
   const { entries, dismissFeedback } = useAdminFeedback();
   const rootRef = useRef<HTMLElement>(null);
@@ -177,7 +175,7 @@ export function AdminFeedbackChannelViewport({
     return () => window.clearTimeout(focusTimer);
   }, [latestEntry?.critical, latestEntry?.id, latestEntry?.reveal]);
 
-  if (!inlineEntries.length && !stabilizeLayout) return null;
+  if (!inlineEntries.length) return null;
 
   return (
     <section
@@ -187,15 +185,10 @@ export function AdminFeedbackChannelViewport({
       data-admin-feedback-channel-viewport=""
       data-admin-feedback-channel={channel}
       data-admin-entity-feedback-slot=""
-      data-admin-feedback-layout-stable={stabilizeLayout ? "true" : "false"}
       data-admin-entity-feedback-reveal={
         latestEntry?.reveal ? "true" : "false"
       }
-      className={
-        stabilizeLayout
-          ? "h-[72px] scroll-mt-6 space-y-3 overflow-y-auto overscroll-contain focus:outline-none [scrollbar-gutter:stable]"
-          : "scroll-mt-6 space-y-3 focus:outline-none"
-      }
+      className="scroll-mt-6 space-y-3 focus:outline-none"
     >
       {inlineEntries.map((entry) => (
         <AdminFeedbackViewportEntry
@@ -218,12 +211,12 @@ export function AdminFeedbackRegion({
   channel,
   label,
   feedback,
-  stabilizeLayout = false,
+  placement = "inline",
 }: {
   channel: string;
   label: string;
   feedback?: AdminActionFeedback | null;
-  stabilizeLayout?: boolean;
+  placement?: "global" | "inline";
 }) {
   const { publishFeedback, clearFeedback } = useAdminFeedback();
 
@@ -232,21 +225,17 @@ export function AdminFeedbackRegion({
     if (feedback) {
       publishFeedback(feedback, {
         channel,
-        placement: "inline",
+        placement,
         reveal: feedback.variant === "danger",
       });
     }
 
     return () => clearFeedback(channel);
-  }, [channel, clearFeedback, feedback, publishFeedback]);
+  }, [channel, clearFeedback, feedback, placement, publishFeedback]);
 
-  return (
-    <AdminFeedbackChannelViewport
-      channel={channel}
-      label={label}
-      stabilizeLayout={stabilizeLayout}
-    />
-  );
+  return placement === "inline" ? (
+    <AdminFeedbackChannelViewport channel={channel} label={label} />
+  ) : null;
 }
 
 export default function AdminFeedbackProvider({

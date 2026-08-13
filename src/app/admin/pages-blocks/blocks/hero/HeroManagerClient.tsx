@@ -332,7 +332,7 @@ export default function HeroManagerClient({
       <AdminFeedbackRegion
         channel={feedbackChannel}
         label="نتائج إجراءات مكتبة الهيرو"
-        stabilizeLayout
+        placement="global"
         feedback={loadFeedback}
       />
 
@@ -473,74 +473,56 @@ export default function HeroManagerClient({
                       pending: true,
                       isVisible: hero.status === "published",
                     }
-                  : interaction.isBlocked
-                    ? {
-                        access: "disabled",
-                        disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                        isVisible: hero.status === "published",
-                      }
-                    : {
-                        access: "allowed",
-                        isVisible: hero.status === "published",
-                        onSelect: () =>
-                          runVisibilityMutation(
-                            hero,
-                            hero.status === "published"
-                              ? "unpublished"
-                              : "published",
-                          ),
-                      },
+                  : {
+                      access: "allowed",
+                      isVisible: hero.status === "published",
+                      onSelect: () =>
+                        runVisibilityMutation(
+                          hero,
+                          hero.status === "published"
+                            ? "unpublished"
+                            : "published",
+                        ),
+                    },
                 featured: hidden,
-                duplicate:
-                  interaction.isBlocked && pendingAction !== "duplicate"
-                    ? {
-                        access: "disabled",
-                        disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                      }
-                    : {
-                        access: "allowed",
-                        pending: pendingAction === "duplicate",
-                        onSelect: async () => {
-                          await runMutation(
-                            hero.id,
-                            "duplicate",
-                            () =>
-                              duplicateHeroTemplate(
-                                mutationFormData({ id: hero.id }),
-                              ),
-                            "تم إنشاء نسخة من الهيرو.",
-                          );
-                        },
-                      },
+                duplicate: {
+                  access: "allowed",
+                  pending: pendingAction === "duplicate",
+                  onSelect: async () => {
+                    await runMutation(
+                      hero.id,
+                      "duplicate",
+                      () =>
+                        duplicateHeroTemplate(
+                          mutationFormData({ id: hero.id }),
+                        ),
+                      "تم إنشاء نسخة من الهيرو.",
+                    );
+                  },
+                },
                 archive: hidden,
-                delete:
-                  interaction.isBlocked && pendingAction !== "delete"
-                    ? {
-                        access: "disabled",
-                        disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                      }
-                    : {
-                        access: "allowed",
-                        pending: pendingAction === "delete",
-                        onSelect: async () => {
-                          const succeeded = await runMutation(
-                            hero.id,
-                            "delete",
-                            () =>
-                              deleteHeroTemplate(
-                                mutationFormData({ id: hero.id }),
-                              ),
-                            "تم حذف الهيرو.",
-                          );
-                          if (!succeeded) throw new Error("hero delete failed");
-                        },
-                        confirmation: {
-                          mode: "shared",
-                          title: "تأكيد حذف الهيرو",
-                          description: `حذف الهيرو «${hero.name}» نهائيًا؟`,
-                          confirmLabel: "حذف الهيرو",
-                        },
-                      },
+                delete: {
+                  access: "allowed",
+                  pending: pendingAction === "delete",
+                  onSelect: async () => {
+                    const succeeded = await runMutation(
+                      hero.id,
+                      "delete",
+                      () =>
+                        deleteHeroTemplate(
+                          mutationFormData({ id: hero.id }),
+                        ),
+                      "تم حذف الهيرو.",
+                    );
+                    if (!succeeded) throw new Error("hero delete failed");
+                  },
+                  confirmation: {
+                    mode: "shared",
+                    title: "تأكيد حذف الهيرو",
+                    description: `حذف الهيرو «${hero.name}» نهائيًا؟`,
+                    confirmLabel: "حذف الهيرو",
+                  },
+                },
               },
             };
 

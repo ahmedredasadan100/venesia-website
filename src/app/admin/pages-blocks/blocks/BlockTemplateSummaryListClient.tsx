@@ -206,7 +206,7 @@ export default function BlockTemplateSummaryListClient({
       <AdminFeedbackRegion
         channel={`block-manager:${moduleKey}`}
         label={`نتائج قراءة ${title}`}
-        stabilizeLayout
+        placement="global"
         feedback={
           errorMessage
             ? {
@@ -327,23 +327,17 @@ export default function BlockTemplateSummaryListClient({
                     pending: true,
                     isVisible: row.status === "published",
                   }
-                : interaction.isBlocked
-                  ? {
-                      access: "disabled",
-                      disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                      isVisible: row.status === "published",
-                    }
-                  : {
-                      access: "allowed",
-                      isVisible: row.status === "published",
-                      onSelect: () =>
-                        runVisibilityMutation(
-                          row,
-                          row.status === "published"
-                            ? "unpublished"
-                            : "published",
-                        ),
-                    },
+                : {
+                    access: "allowed",
+                    isVisible: row.status === "published",
+                    onSelect: () =>
+                      runVisibilityMutation(
+                        row,
+                        row.status === "published"
+                          ? "unpublished"
+                          : "published",
+                      ),
+                  },
               featured: hidden,
               duplicate: hidden,
               archive: hidden,

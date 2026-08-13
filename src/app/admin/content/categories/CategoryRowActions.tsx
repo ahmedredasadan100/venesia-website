@@ -144,19 +144,13 @@ export default function CategoryRowActions({
               pending: true,
               isVisible: isActive,
             }
-          : interaction.isBlocked
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                isVisible: isActive,
-              }
-            : {
-                access: "allowed",
-                isVisible: isActive,
-                onSelect: async () => {
-                  await publishResult(() => onToggle(category));
-                },
+          : {
+              access: "allowed",
+              isVisible: isActive,
+              onSelect: async () => {
+                await publishResult(() => onToggle(category));
               },
+            },
       featured: { access: "hidden" },
       duplicate: isTrashView
         ? { access: "hidden" }
@@ -166,14 +160,12 @@ export default function CategoryRowActions({
               disabledReason: pendingReason,
               pending: true,
             }
-          : interaction.isBlocked
-            ? { access: "disabled", disabledReason: pendingReason }
-            : {
-                access: "allowed",
-                onSelect: async () => {
-                  await publishResult(() => onDuplicate(category));
-                },
+          : {
+              access: "allowed",
+              onSelect: async () => {
+                await publishResult(() => onDuplicate(category));
               },
+            },
       archive: !isTrashView
         ? { access: "hidden" }
         : pendingAction === "restore"
@@ -184,29 +176,22 @@ export default function CategoryRowActions({
               isArchived: true,
               label: "استعادة",
             }
-          : interaction.isBlocked
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                isArchived: true,
-                label: "استعادة",
-              }
-            : {
-                access: "allowed",
-                isArchived: true,
-                label: "استعادة",
-                confirmation: {
-                  mode: "shared",
-                  title: "استعادة التصنيف؟",
-                  description:
-                    "سيعود التصنيف إلى القائمة النشطة كغير منشور بعد التحقق من الـSlug والتصنيف الأب.",
-                  confirmLabel: "استعادة",
-                },
-                onSelect: async () => {
-                  const result = await publishResult(() => onRestore(category));
-                  if (!result.ok) throw new Error(result.message);
-                },
+          : {
+              access: "allowed",
+              isArchived: true,
+              label: "استعادة",
+              confirmation: {
+                mode: "shared",
+                title: "استعادة التصنيف؟",
+                description:
+                  "سيعود التصنيف إلى القائمة النشطة كغير منشور بعد التحقق من الـSlug والتصنيف الأب.",
+                confirmLabel: "استعادة",
               },
+              onSelect: async () => {
+                const result = await publishResult(() => onRestore(category));
+                if (!result.ok) throw new Error(result.message);
+              },
+            },
       delete:
         pendingAction === (isTrashView ? "permanent_delete" : "delete")
           ? {
@@ -215,39 +200,33 @@ export default function CategoryRowActions({
               pending: true,
               label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
             }
-          : interaction.isBlocked
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
-              }
-            : {
-                access: "allowed",
-                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
-                confirmation: isTrashView
-                  ? {
-                      mode: "shared",
-                      title: "حذف التصنيف نهائيًا؟",
-                      description:
-                        "سيُحذف التصنيف نهائيًا ويصبح الـSlug متاحًا. أي علاقة قائمة ستمنع العملية، ولا يمكن التراجع عنها.",
-                      confirmLabel: "حذف نهائي",
-                    }
-                  : {
-                      mode: "shared",
-                      title: "نقل التصنيف إلى المحذوفات؟",
-                      description:
-                        "سيختفي التصنيف من القوائم والاختيارات النشطة ويمكن استعادته لاحقًا. أي علاقة قائمة ستمنع العملية وسيبقى الـSlug محجوزًا.",
-                      confirmLabel: "نقل إلى المحذوفات",
-                    },
-                onSelect: async () => {
-                  const result = await publishResult(() =>
-                    isTrashView
-                      ? onPermanentDelete(category)
-                      : onDelete(category),
-                  );
-                  if (!result.ok) throw new Error(result.message);
-                },
+          : {
+              access: "allowed",
+              label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+              confirmation: isTrashView
+                ? {
+                    mode: "shared",
+                    title: "حذف التصنيف نهائيًا؟",
+                    description:
+                      "سيُحذف التصنيف نهائيًا ويصبح الـSlug متاحًا. أي علاقة قائمة ستمنع العملية، ولا يمكن التراجع عنها.",
+                    confirmLabel: "حذف نهائي",
+                  }
+                : {
+                    mode: "shared",
+                    title: "نقل التصنيف إلى المحذوفات؟",
+                    description:
+                      "سيختفي التصنيف من القوائم والاختيارات النشطة ويمكن استعادته لاحقًا. أي علاقة قائمة ستمنع العملية وسيبقى الـSlug محجوزًا.",
+                    confirmLabel: "نقل إلى المحذوفات",
+                  },
+              onSelect: async () => {
+                const result = await publishResult(() =>
+                  isTrashView
+                    ? onPermanentDelete(category)
+                    : onDelete(category),
+                );
+                if (!result.ok) throw new Error(result.message);
               },
+            },
     },
   };
 

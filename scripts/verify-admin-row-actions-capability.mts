@@ -474,11 +474,11 @@ for (const entry of manifestEntries) {
       retainsServerAuditIntegration,
     );
     check(
-      `${entry.entity} keeps pending and duplicate-click protection with its declared Data owner`,
+      `${entry.entity} keeps action-targeted pending with its declared Data owner`,
       relevantSource.includes("useAdminEntityInstantMutation") &&
         relevantSource.includes("instant.getRowInteraction") &&
-        consumer.includes("interaction.isBlocked") &&
-        consumer.includes("interaction.pendingAction"),
+        consumer.includes("interaction.pendingAction") &&
+        !consumer.includes("interaction.isBlocked"),
     );
   }
   if (supportedDangerousActions.length > 0) {
@@ -678,7 +678,13 @@ check(
   "Pages delegates padded sticky action placement to AdminEntityListTable",
   pagesSource.includes("<AdminEntityList<") &&
     pagesSource.includes('sticky: "end"') &&
+    pagesSource.includes('sticky: "end-adjacent"') &&
     pagesSource.includes("ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH") &&
+    entityListTableSource.includes('column.sticky === "end-adjacent"') &&
+    entityListTableSource.includes("insetInlineEnd: actionsColumnWidth") &&
+    entityListTableSource.includes(
+      'data-admin-grid-sticky="inline-end-adjacent"',
+    ) &&
     !pagesSource.includes("AdminDataGridActionsHeaderCell") &&
     !pagesSource.includes("flushInlineEnd"),
 );
@@ -1609,17 +1615,15 @@ check(
   "Instant Mutation scopes pending to the active row while unrelated rows stay interactive",
   rowAScope.row.pendingAction === "visibility" &&
     rowAScope.row.isPending &&
-    rowAScope.row.isBlocked &&
     !rowBScope.row.isPending &&
-    !rowBScope.row.isBlocked &&
     rowBScope.bulk.isBlocked,
 );
 check(
-  "only Bulk Mutation blocks every row",
+  "Bulk Mutation keeps busy state inside the Bulk interaction contract",
   bulkScope.bulk.isPending &&
     bulkScope.bulk.isBlocked &&
-    bulkScope.row.isBlocked &&
-    !bulkScope.row.isPending,
+    !bulkScope.row.isPending &&
+    bulkScope.row.pendingAction === null,
 );
 check(
   "same-query post-success reconciliation remains separate from Query pending",

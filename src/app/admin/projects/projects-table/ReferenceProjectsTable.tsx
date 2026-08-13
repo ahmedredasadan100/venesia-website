@@ -79,10 +79,6 @@ function ProjectRowActions({
     disabledReason: "انتظر انتهاء الإجراء الحالي.",
     pending: true,
   };
-  const busyState = {
-    access: "disabled" as const,
-    disabledReason: "انتظر انتهاء الإجراء الحالي.",
-  };
 
   async function run(
     handler: (project: ProjectGridRow) => Promise<AdminActionResult>,
@@ -153,59 +149,51 @@ function ProjectRowActions({
       visibility:
         pendingAction === "visibility"
           ? { ...pendingState, isVisible }
-          : interaction.isBlocked
-            ? { ...busyState, isVisible }
-            : {
-                access: "allowed",
-                isVisible,
-                onSelect: () => run((project) => handlers.onVisibility(project, !isVisible)),
-                ...(
-                  isVisible
-                    ? {
-                        confirmation: {
-                          mode: "shared" as const,
-                          title: "إخفاء المشروع عن العرض العام؟",
-                          description: `سيُزال «${row.arabic_name}» من صفحات وبطاقات المشاريع العامة مع الاحتفاظ بتاريخ أول نشر.`,
-                          confirmLabel: "تأكيد الإخفاء",
-                        },
-                      }
-                    : {}
-                ),
-              },
+          : {
+              access: "allowed",
+              isVisible,
+              onSelect: () => run((project) => handlers.onVisibility(project, !isVisible)),
+              ...(
+                isVisible
+                  ? {
+                      confirmation: {
+                        mode: "shared" as const,
+                        title: "إخفاء المشروع عن العرض العام؟",
+                        description: `سيُزال «${row.arabic_name}» من صفحات وبطاقات المشاريع العامة مع الاحتفاظ بتاريخ أول نشر.`,
+                        confirmLabel: "تأكيد الإخفاء",
+                      },
+                    }
+                  : {}
+              ),
+            },
       featured:
         pendingAction === "featured"
           ? { ...pendingState, isFeatured: row.featured }
-          : interaction.isBlocked
-            ? { ...busyState, isFeatured: row.featured }
-            : {
-                access: "allowed",
-                isFeatured: row.featured,
-                onSelect: () => run(handlers.onToggleFeatured),
-              },
+          : {
+              access: "allowed",
+              isFeatured: row.featured,
+              onSelect: () => run(handlers.onToggleFeatured),
+            },
       duplicate:
         pendingAction === "duplicate"
           ? pendingState
-          : interaction.isBlocked
-            ? busyState
-            : {
-                access: "allowed",
-                onSelect: () => run(handlers.onDuplicate),
-              },
+          : {
+              access: "allowed",
+              onSelect: () => run(handlers.onDuplicate),
+            },
       archive: { access: "hidden" },
       delete: pendingAction === "delete"
         ? pendingState
-        : interaction.isBlocked
-          ? busyState
-          : {
-              access: "allowed",
-              onSelect: () => run(handlers.onDelete),
-              confirmation: {
-                mode: "shared",
-                title: "حذف نهائي للمشروع",
-                description: `سيُحذف «${row.arabic_name}» وكل بياناته التابعة من المخطط النظيف. لا يمكن التراجع عن هذا الإجراء.`,
-                confirmLabel: "تأكيد الحذف النهائي",
-              },
+        : {
+            access: "allowed",
+            onSelect: () => run(handlers.onDelete),
+            confirmation: {
+              mode: "shared",
+              title: "حذف نهائي للمشروع",
+              description: `سيُحذف «${row.arabic_name}» وكل بياناته التابعة من المخطط النظيف. لا يمكن التراجع عن هذا الإجراء.`,
+              confirmLabel: "تأكيد الحذف النهائي",
             },
+          },
     },
   };
 

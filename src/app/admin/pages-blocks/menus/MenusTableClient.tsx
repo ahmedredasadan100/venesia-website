@@ -312,7 +312,7 @@ export default function MenusTableClient({
       <AdminFeedbackRegion
         channel={feedbackChannel}
         label="نتائج إجراءات القوائم"
-        stabilizeLayout
+        placement="global"
         feedback={
           loadError
             ? {
@@ -459,15 +459,10 @@ export default function MenusTableClient({
                 entityId: menu.id,
                 entityLabel: menu.name,
                 actions: {
-                  edit: interaction.isBlocked
-                    ? {
-                        access: "disabled",
-                        disabledReason: "انتظر انتهاء الإجراء الجارى على القائمة.",
-                      }
-                    : {
-                        access: "allowed",
-                        href: `/admin/pages-blocks/menus/${menu.id}`,
-                      },
+                  edit: {
+                    access: "allowed",
+                    href: `/admin/pages-blocks/menus/${menu.id}`,
+                  },
                   preview: {
                     access: "disabled",
                     disabledReason: "القائمة لا تملك مسار معاينة عامًا خاصًا بها.",
@@ -483,98 +478,79 @@ export default function MenusTableClient({
                     ],
                   },
                   copyPublicLink: hidden,
-                  visibility:
-                    interaction.isBlocked && pendingAction !== "visibility"
-                      ? {
-                          access: "disabled",
-                          disabledReason: "انتظر انتهاء الإجراء الجارى على القائمة.",
-                          isVisible: menu.is_active,
-                        }
-                      : {
-                          access: "allowed",
-                          isVisible: menu.is_active,
-                          pending: pendingAction === "visibility",
-                          onSelect: () =>
-                            runMenuMutation({
-                              rowId: menu.id,
-                              action: "visibility",
-                              optimistic: (cache) =>
-                                cache.patchRows((row) =>
-                                  row.id === menu.id
-                                    ? { ...row, is_active: !menu.is_active }
-                                    : row,
-                                ),
-                              execute: () =>
-                                toggleMenuVisibility(
-                                  mutationFormData({
-                                    id: menu.id,
-                                    is_active: !menu.is_active,
-                                  }),
-                                ),
+                  visibility: {
+                    access: "allowed",
+                    isVisible: menu.is_active,
+                    pending: pendingAction === "visibility",
+                    onSelect: () =>
+                      runMenuMutation({
+                        rowId: menu.id,
+                        action: "visibility",
+                        optimistic: (cache) =>
+                          cache.patchRows((row) =>
+                            row.id === menu.id
+                              ? { ...row, is_active: !menu.is_active }
+                              : row,
+                          ),
+                        execute: () =>
+                          toggleMenuVisibility(
+                            mutationFormData({
+                              id: menu.id,
+                              is_active: !menu.is_active,
                             }),
-                        },
+                          ),
+                      }),
+                  },
                   featured: hidden,
-                  duplicate:
-                    interaction.isBlocked && pendingAction !== "duplicate"
-                      ? {
-                          access: "disabled",
-                          disabledReason: "انتظر انتهاء الإجراء الجارى على القائمة.",
-                        }
-                      : {
-                          access: "allowed",
-                          pending: pendingAction === "duplicate",
-                          onSelect: () =>
-                            runMenuMutation(
-                              {
-                                rowId: menu.id,
-                                action: "duplicate",
-                                optimistic: () => undefined,
-                                execute: () =>
-                                  duplicateMenu(
-                                    mutationFormData({ id: menu.id }),
-                                  ),
-                              },
-                              {
-                                refresh: false,
-                                onSuccess: (result) => {
-                                  const duplicatedMenuId = Number(result.menuId);
-                                  if (Number.isSafeInteger(duplicatedMenuId)) {
-                                    router.push(
-                                      `/admin/pages-blocks/menus/${duplicatedMenuId}`,
-                                    );
-                                  }
-                                },
-                              },
+                  duplicate: {
+                    access: "allowed",
+                    pending: pendingAction === "duplicate",
+                    onSelect: () =>
+                      runMenuMutation(
+                        {
+                          rowId: menu.id,
+                          action: "duplicate",
+                          optimistic: () => undefined,
+                          execute: () =>
+                            duplicateMenu(
+                              mutationFormData({ id: menu.id }),
                             ),
                         },
-                  archive: hidden,
-                  delete:
-                    interaction.isBlocked && pendingAction !== "delete"
-                      ? {
-                          access: "disabled",
-                          disabledReason: "انتظر انتهاء الإجراء الجارى على القائمة.",
-                        }
-                      : {
-                          access: "allowed",
-                          pending: pendingAction === "delete",
-                          onSelect: () =>
-                            runMenuMutation({
-                              rowId: menu.id,
-                              action: "delete",
-                              optimistic: (cache) =>
-                                cache.removeRows(new Set([menu.id])),
-                              execute: () =>
-                                deleteMenu(
-                                  mutationFormData({ id: menu.id }),
-                                ),
-                            }),
-                          confirmation: {
-                            mode: "shared",
-                            title: "تأكيد حذف القائمة",
-                            description: `حذف القائمة «${menu.name}» نهائيًا مع عناصرها؟`,
-                            confirmLabel: "حذف القائمة",
+                        {
+                          refresh: false,
+                          onSuccess: (result) => {
+                            const duplicatedMenuId = Number(result.menuId);
+                            if (Number.isSafeInteger(duplicatedMenuId)) {
+                              router.push(
+                                `/admin/pages-blocks/menus/${duplicatedMenuId}`,
+                              );
+                            }
                           },
                         },
+                      ),
+                  },
+                  archive: hidden,
+                  delete: {
+                    access: "allowed",
+                    pending: pendingAction === "delete",
+                    onSelect: () =>
+                      runMenuMutation({
+                        rowId: menu.id,
+                        action: "delete",
+                        optimistic: (cache) =>
+                          cache.removeRows(new Set([menu.id])),
+                        execute: () =>
+                          deleteMenu(
+                            mutationFormData({ id: menu.id }),
+                          ),
+                      }),
+                    confirmation: {
+                      mode: "shared",
+                      title: "تأكيد حذف القائمة",
+                      description: `حذف القائمة «${menu.name}» نهائيًا مع عناصرها؟`,
+                      confirmLabel: "حذف القائمة",
+                    },
+                  },
                 },
               };
 

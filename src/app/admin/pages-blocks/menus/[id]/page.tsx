@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 
-import AdminPageHeader from "../../../../../components/admin/AdminPageHeader";
 import {
   AdminActionButton,
+  AdminPageHeader,
   AdminPageExperience,
   AdminStatusPill,
 } from "../../../../../components/admin/ui";

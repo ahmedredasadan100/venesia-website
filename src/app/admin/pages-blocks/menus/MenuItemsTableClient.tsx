@@ -460,15 +460,10 @@ export default function MenuItemsTableClient({
               entityId: item.id,
               entityLabel: item.label,
               actions: {
-                edit: interaction.isBlocked
-                  ? {
-                      access: "disabled",
-                      disabledReason: "انتظر انتهاء الإجراء الجارى على العنصر.",
-                    }
-                  : {
-                      access: "allowed",
-                      onSelect: () => setEditingItem(item),
-                    },
+                edit: {
+                  access: "allowed",
+                  onSelect: () => setEditingItem(item),
+                },
                 preview: previewHref
                   ? { access: "allowed", href: previewHref, target: "_blank", rel: "noreferrer" }
                   : { access: "disabled", disabledReason: "لا يملك العنصر مسارًا عامًا مستقلاً يمكن معاينته من هنا." },
@@ -482,80 +477,67 @@ export default function MenuItemsTableClient({
                   ],
                 },
                 copyPublicLink: hidden,
-                visibility:
-                  interaction.isBlocked && pendingAction !== "visibility"
-                    ? {
-                        access: "disabled",
-                        disabledReason: "انتظر انتهاء الإجراء الجارى على العنصر.",
-                        isVisible: item.is_visible,
-                      }
-                    : {
-                        access: "allowed",
-                        isVisible: item.is_visible,
-                        pending: pendingAction === "visibility",
-                        onSelect: () =>
-                          runMenuItemMutation({
-                            rowId: item.id,
-                            action: "visibility",
-                            optimistic: (cache) =>
-                              cache.patchRows((candidate) =>
-                                candidate.id === item.id
-                                  ? {
-                                      ...candidate,
-                                      is_visible: !item.is_visible,
-                                    }
-                                  : candidate,
-                              ),
-                            execute: () =>
-                              toggleMenuItemVisibility(
-                                mutationFormData({
-                                  id: item.id,
-                                  menu_id: menu.id,
-                                  is_visible: !item.is_visible,
-                                }),
-                              ),
+                visibility: {
+                  access: "allowed",
+                  isVisible: item.is_visible,
+                  pending: pendingAction === "visibility",
+                  onSelect: () =>
+                    runMenuItemMutation({
+                      rowId: item.id,
+                      action: "visibility",
+                      optimistic: (cache) =>
+                        cache.patchRows((candidate) =>
+                          candidate.id === item.id
+                            ? {
+                                ...candidate,
+                                is_visible: !item.is_visible,
+                              }
+                            : candidate,
+                        ),
+                      execute: () =>
+                        toggleMenuItemVisibility(
+                          mutationFormData({
+                            id: item.id,
+                            menu_id: menu.id,
+                            is_visible: !item.is_visible,
                           }),
-                      },
+                        ),
+                    }),
+                },
                 featured: hidden,
                 duplicate: hidden,
                 archive: hidden,
-                delete:
-                  interaction.isBlocked && pendingAction !== "delete"
-                    ? {
-                        access: "disabled",
-                        disabledReason: "انتظر انتهاء الإجراء الجارى على العنصر.",
-                      }
-                    : {
-                        access: "allowed",
-                        pending: pendingAction === "delete",
-                        onSelect: () => {
-                          const affectedIds = new Set(
-                            collectMenuItemDescendantIds(
-                              item.id,
-                              activeItems,
-                            ),
-                          );
-                          return runMenuItemMutation({
-                            rowId: item.id,
-                            action: "delete",
-                            optimistic: (cache) =>
-                              cache.removeRows(affectedIds),
-                            execute: () =>
-                              deleteMenuItem(
-                                mutationFormData({
-                                  id: item.id,
-                                  menu_id: menu.id,
-                                }),
-                              ),
-                          });
-                        },
-                        confirmation: {
-                          mode: "shared",
-                          title: "تأكيد حذف عنصر القائمة",
-                          description: `حذف العنصر «${item.label}» من ${menu.name}؟`,
-                          confirmLabel: "حذف العنصر",
-                        },
-                      },
+                delete: {
+                  access: "allowed",
+                  pending: pendingAction === "delete",
+                  onSelect: () => {
+                    const affectedIds = new Set(
+                      collectMenuItemDescendantIds(
+                        item.id,
+                        activeItems,
+                      ),
+                    );
+                    return runMenuItemMutation({
+                      rowId: item.id,
+                      action: "delete",
+                      optimistic: (cache) =>
+                        cache.removeRows(affectedIds),
+                      execute: () =>
+                        deleteMenuItem(
+                          mutationFormData({
+                            id: item.id,
+                            menu_id: menu.id,
+                          }),
+                        ),
+                    });
+                  },
+                  confirmation: {
+                    mode: "shared",
+                    title: "تأكيد حذف عنصر القائمة",
+                    description: `حذف العنصر «${item.label}» من ${menu.name}؟`,
+                    confirmLabel: "حذف العنصر",
+                  },
+                },
               },
             };
 
@@ -567,7 +549,6 @@ export default function MenuItemsTableClient({
                       size="compact"
                       title="تحريك لأعلى"
                       disabled={
-                        interaction.isBlocked ||
                         !activeItems.some(
                           (candidate) =>
                             candidate.parent_id === item.parent_id &&
@@ -581,7 +562,6 @@ export default function MenuItemsTableClient({
                       size="compact"
                       title="تحريك لأسفل"
                       disabled={
-                        interaction.isBlocked ||
                         !activeItems.some(
                           (candidate) =>
                             candidate.parent_id === item.parent_id &&

@@ -74,6 +74,7 @@ const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
 const entityTable = read("src/components/admin/entity-list/AdminEntityListTable.tsx");
 const entityFilters = read("src/components/admin/entity-list/AdminEntityListFilters.tsx");
 const entitySurface = read("src/components/admin/entity-list/AdminEntityListSurface.tsx");
+const metricCardsGrid = read("src/components/admin/ui/AdminMetricCardsGrid.tsx");
 const prefsCore = read("src/lib/admin/entity-list/column-preferences.ts");
 const paginationCore = read("src/lib/admin/entity-list/pagination.ts");
 const prefsAdapter = read("src/lib/admin/preferences/admin-column-preferences.ts");
@@ -201,6 +202,17 @@ check(
     entitySurface.includes("AdminFloatingLayerProvider") &&
     entityList.includes("<AdminEntityListFilters") &&
     entityFilters.includes("<VenesiaModal"),
+);
+
+check(
+  "Shared metric cards viewport owns horizontal scrolling and compensated hover-glow bleed",
+  metricCardsGrid.includes('data-admin-metric-cards-viewport=""') &&
+    metricCardsGrid.includes('"-mt-8 overflow-x-auto pt-8"') &&
+    !metricCardsGrid.includes("z-") &&
+    topicsClient.includes('className="min-w-[1146px]"') &&
+    !topicsClient.includes(
+      '<AdminEntityListPrimarySection className="overflow-x-auto',
+    ),
 );
 
 check(
@@ -453,23 +465,22 @@ check(
 );
 
 check(
-  "Entity-list feedback publishes through one stable shared slot before collection controls",
+  "Entity-list feedback uses the shared global viewport without a reserved collection slot",
   feedbackProvider.includes("AdminFeedbackViewport") &&
     feedbackProvider.includes("AdminFeedbackChannelViewport") &&
     feedbackProvider.includes("data-admin-feedback-viewport") &&
     feedbackProvider.includes("data-admin-entity-feedback-slot") &&
-    feedbackProvider.includes("data-admin-feedback-layout-stable") &&
-    feedbackProvider.includes('stabilizeLayout = false') &&
-    feedbackProvider.includes('h-[72px]') &&
     feedbackProvider.includes("fixed") &&
+    feedbackProvider.includes('entry.placement === "global"') &&
+    feedbackProvider.includes('placement?: "global" | "inline"') &&
+    feedbackProvider.includes('return placement === "inline" ? (') &&
+    !feedbackProvider.includes("data-admin-feedback-layout-stable") &&
+    !feedbackProvider.includes("stabilizeLayout") &&
+    !feedbackProvider.includes('h-[72px]') &&
     entityList.includes("useAdminFeedback") &&
     entityList.includes("publishFeedback(nextFeedback") &&
-    entityList.includes("AdminFeedbackChannelViewport") &&
-    entityList.indexOf("<AdminFeedbackChannelViewport") <
-      entityList.indexOf("{toolbar ? (") &&
-    entityList.indexOf("<AdminFeedbackChannelViewport") <
-      entityList.indexOf("<AdminEntityListTable") &&
-    entityList.includes("stabilizeLayout") &&
+    entityList.includes('placement: "global"') &&
+    !entityList.includes("AdminFeedbackChannelViewport") &&
     categoriesClient.includes("initialFeedback={initialFeedback}") &&
     seriesClient.includes("initialFeedback={initialFeedback}") &&
     topicsList.includes("initialFeedback={initialFeedback}") &&

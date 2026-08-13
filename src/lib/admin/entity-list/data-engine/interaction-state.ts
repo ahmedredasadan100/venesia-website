@@ -6,7 +6,6 @@ export type AdminInstantMutationPendingAction = {
 export type AdminInstantMutationRowInteraction = {
   pendingAction: string | null;
   isPending: boolean;
-  isBlocked: boolean;
 };
 
 export type AdminInstantMutationBulkInteraction = {
@@ -34,7 +33,6 @@ export function resolveAdminInstantMutationInteraction({
     row: {
       pendingAction,
       isPending: pendingAction !== null,
-      isBlocked: bulkPendingAction !== null || pendingAction !== null,
     },
     bulk: {
       pendingAction: bulkPendingAction,

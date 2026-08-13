@@ -349,7 +349,7 @@ export default function ContentBlocksTableClient({
         <AdminFeedbackRegion
           channel={feedbackChannel}
           label="نتائج إجراءات بلوكات المحتوى"
-          stabilizeLayout
+          placement="global"
           feedback={loadFeedback}
         />
 
@@ -550,58 +550,40 @@ export default function ContentBlocksTableClient({
                         pending: true,
                         isVisible: isPublished,
                       }
-                    : interaction.isBlocked
-                      ? {
-                          access: "disabled",
-                          disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                          isVisible: isPublished,
-                        }
-                      : {
-                          access: "allowed",
-                          isVisible: isPublished,
-                          onSelect: () =>
-                            runVisibilityMutation(row, nextStatus),
-                        },
+                    : {
+                        access: "allowed",
+                        isVisible: isPublished,
+                        onSelect: () =>
+                          runVisibilityMutation(row, nextStatus),
+                      },
                   featured: hidden,
-                  duplicate:
-                    interaction.isBlocked && pendingAction !== "duplicate"
-                      ? {
-                          access: "disabled",
-                          disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                        }
-                      : {
-                          access: "allowed",
-                          pending: pendingAction === "duplicate",
-                          onSelect: () =>
-                            runRowMutation(row, "duplicate", async () => {
-                              const formData = new FormData();
-                              formData.set("id", String(row.id));
-                              await duplicateContentBlock(formData);
-                            }, "تم إنشاء نسخة من البلوك."),
-                        },
+                  duplicate: {
+                    access: "allowed",
+                    pending: pendingAction === "duplicate",
+                    onSelect: () =>
+                      runRowMutation(row, "duplicate", async () => {
+                        const formData = new FormData();
+                        formData.set("id", String(row.id));
+                        await duplicateContentBlock(formData);
+                      }, "تم إنشاء نسخة من البلوك."),
+                  },
                   archive: hidden,
-                  delete:
-                    interaction.isBlocked && pendingAction !== "delete"
-                      ? {
-                          access: "disabled",
-                          disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                        }
-                      : {
-                          access: "allowed",
-                          pending: pendingAction === "delete",
-                          onSelect: () =>
-                            runRowMutation(row, "delete", async () => {
-                              const formData = new FormData();
-                              formData.set("id", String(row.id));
-                              await deleteContentBlock(formData);
-                            }, "تم حذف البلوك."),
-                          confirmation: {
-                            mode: "shared",
-                            title: "تأكيد حذف البلوك",
-                            description: `حذف البلوك «${row.name}» نهائيًا؟`,
-                            confirmLabel: "حذف البلوك",
-                          },
-                        },
+                  delete: {
+                    access: "allowed",
+                    pending: pendingAction === "delete",
+                    onSelect: () =>
+                      runRowMutation(row, "delete", async () => {
+                        const formData = new FormData();
+                        formData.set("id", String(row.id));
+                        await deleteContentBlock(formData);
+                      }, "تم حذف البلوك."),
+                    confirmation: {
+                      mode: "shared",
+                      title: "تأكيد حذف البلوك",
+                      description: `حذف البلوك «${row.name}» نهائيًا؟`,
+                      confirmLabel: "حذف البلوك",
+                    },
+                  },
                 },
               };
 

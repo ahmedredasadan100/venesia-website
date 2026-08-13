@@ -187,19 +187,13 @@ function SeriesRowActions({
               pending: true,
               isVisible: !isHidden,
             }
-          : interaction.isBlocked
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                isVisible: !isHidden,
-              }
-            : {
-                access: "allowed",
-                isVisible: !isHidden,
-                onSelect: async () => {
-                  await run(() => handlers.onToggle(row));
-                },
+          : {
+              access: "allowed",
+              isVisible: !isHidden,
+              onSelect: async () => {
+                await run(() => handlers.onToggle(row));
               },
+            },
       featured: { access: "hidden" },
       duplicate: isTrashView
         ? { access: "hidden" }
@@ -209,14 +203,12 @@ function SeriesRowActions({
               disabledReason: pendingReason,
               pending: true,
             }
-          : interaction.isBlocked
-            ? { access: "disabled", disabledReason: pendingReason }
-            : {
-                access: "allowed",
-                onSelect: async () => {
-                  await run(() => handlers.onDuplicate(row));
-                },
+          : {
+              access: "allowed",
+              onSelect: async () => {
+                await run(() => handlers.onDuplicate(row));
               },
+            },
       archive: !isTrashView
         ? { access: "hidden" }
         : pendingAction === "restore"
@@ -227,29 +219,22 @@ function SeriesRowActions({
               isArchived: true,
               label: "استعادة",
             }
-          : interaction.isBlocked
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                isArchived: true,
-                label: "استعادة",
-              }
-            : {
-                access: "allowed",
-                isArchived: true,
-                label: "استعادة",
-                confirmation: {
-                  mode: "shared",
-                  title: "استعادة السلسلة؟",
-                  description:
-                    "ستعود السلسلة إلى القائمة النشطة كغير منشورة بعد التحقق من الـSlug والتصنيف المرتبط.",
-                  confirmLabel: "استعادة",
-                },
-                onSelect: async () => {
-                  const result = await run(() => handlers.onRestore(row));
-                  if (!result.ok) throw new Error(result.message);
-                },
+          : {
+              access: "allowed",
+              isArchived: true,
+              label: "استعادة",
+              confirmation: {
+                mode: "shared",
+                title: "استعادة السلسلة؟",
+                description:
+                  "ستعود السلسلة إلى القائمة النشطة كغير منشورة بعد التحقق من الـSlug والتصنيف المرتبط.",
+                confirmLabel: "استعادة",
               },
+              onSelect: async () => {
+                const result = await run(() => handlers.onRestore(row));
+                if (!result.ok) throw new Error(result.message);
+              },
+            },
       delete:
         pendingAction === (isTrashView ? "permanent_delete" : "delete")
           ? {
@@ -258,39 +243,33 @@ function SeriesRowActions({
               pending: true,
               label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
             }
-          : interaction.isBlocked
-            ? {
-                access: "disabled",
-                disabledReason: pendingReason,
-                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
-              }
-            : {
-                access: "allowed",
-                label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
-                confirmation: isTrashView
-                  ? {
-                      mode: "shared",
-                      title: "حذف السلسلة نهائيًا؟",
-                      description:
-                        "ستُحذف السلسلة نهائيًا ويصبح الـSlug متاحًا. أي Topic مرتبط سيمنع العملية، ولا يمكن التراجع عنها.",
-                      confirmLabel: "حذف نهائي",
-                    }
-                  : {
-                      mode: "shared",
-                      title: "نقل السلسلة إلى المحذوفات؟",
-                      description:
-                        "ستختفي السلسلة من القوائم والاختيارات النشطة ويمكن استعادتها لاحقًا. أي Topic مرتبط سيمنع العملية وسيبقى الـSlug محجوزًا.",
-                      confirmLabel: "نقل إلى المحذوفات",
-                    },
-                onSelect: async () => {
-                  const result = await run(() =>
-                    isTrashView
-                      ? handlers.onPermanentDelete(row)
-                      : handlers.onDelete(row),
-                  );
-                  if (!result.ok) throw new Error(result.message);
-                },
+          : {
+              access: "allowed",
+              label: isTrashView ? "حذف نهائي" : "نقل إلى المحذوفات",
+              confirmation: isTrashView
+                ? {
+                    mode: "shared",
+                    title: "حذف السلسلة نهائيًا؟",
+                    description:
+                      "ستُحذف السلسلة نهائيًا ويصبح الـSlug متاحًا. أي Topic مرتبط سيمنع العملية، ولا يمكن التراجع عنها.",
+                    confirmLabel: "حذف نهائي",
+                  }
+                : {
+                    mode: "shared",
+                    title: "نقل السلسلة إلى المحذوفات؟",
+                    description:
+                      "ستختفي السلسلة من القوائم والاختيارات النشطة ويمكن استعادتها لاحقًا. أي Topic مرتبط سيمنع العملية وسيبقى الـSlug محجوزًا.",
+                    confirmLabel: "نقل إلى المحذوفات",
+                  },
+              onSelect: async () => {
+                const result = await run(() =>
+                  isTrashView
+                    ? handlers.onPermanentDelete(row)
+                    : handlers.onDelete(row),
+                );
+                if (!result.ok) throw new Error(result.message);
               },
+            },
     },
   };
 

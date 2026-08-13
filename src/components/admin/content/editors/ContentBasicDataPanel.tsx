@@ -101,7 +101,6 @@ export default function ContentBasicDataPanel({
               <TopicContentTypeControl
                 value={contentType}
                 mode={mode}
-                presentation="compact"
               />
               <label className="inline-grid min-w-0 max-w-full shrink-0 space-y-1.5">
                 <span className="text-xs font-medium text-white/58">

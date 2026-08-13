@@ -742,11 +742,12 @@ check(
     pagination.includes("ADMIN_SCROLLBAR_VISUAL_CLASSES"),
 );
 check(
-  "Publish failures must use inline shared entity-list feedback with an editor action",
-  entityList.includes("AdminFeedbackChannelViewport") &&
+  "Publish failures must use shared global entity-list feedback with an editor action",
+  !entityList.includes("AdminFeedbackChannelViewport") &&
     entityList.includes("publishFeedback(nextFeedback") &&
-    feedbackProvider.includes("data-admin-entity-feedback-slot") &&
-    feedbackProvider.includes('placement === "inline"') &&
+    entityList.includes('placement: "global"') &&
+    feedbackProvider.includes("data-admin-feedback-viewport") &&
+    feedbackProvider.includes('entry.placement === "global"') &&
     feedbackProvider.includes("<AdminNotice") &&
     feedbackProvider.includes("data-admin-feedback-viewport") &&
     list.includes("mapTopicsActionResultToFeedback") &&

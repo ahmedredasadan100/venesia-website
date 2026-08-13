@@ -514,7 +514,7 @@ assert.match(
 );
 assert.match(
   statusColumn,
-  /sortable:\s*supportedSortFields\.has\("status"\)[\s\S]*sortKey:\s*"status"[\s\S]*minWidth:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*width:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*align:\s*"center"/u,
+  /sortable:\s*supportedSortFields\.has\("status"\)[\s\S]*sortKey:\s*"status"[\s\S]*minWidth:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*width:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*align:\s*"center"[\s\S]*sticky:\s*"end-adjacent"/u,
 );
 assert.match(
   actionsColumn,
@@ -541,6 +541,12 @@ assert.match(entityListTable, /implicitFlexibleColumn\?: boolean/u);
 assert.match(entityListTable, /implicitFlexibleColumn = true/u);
 assert.match(entityListTable, /fillAvailableWidth\?: boolean/u);
 assert.match(entityListTable, /fillAvailableWidth = false/u);
+assert.match(entityListTable, /column\.sticky === "end-adjacent"/u);
+assert.match(entityListTable, /insetInlineEnd:\s*actionsColumnWidth/u);
+assert.match(
+  entityListTable,
+  /data-admin-grid-sticky="inline-end-adjacent"/u,
+);
 assert.match(
   entityListTable,
   /explicitFlexibleColumnKey \?\?[\s\S]*\(implicitFlexibleColumn[\s\S]*!column\.primary[\s\S]*: undefined\)/u,
@@ -639,7 +645,12 @@ assert.match(
 );
 assert.match(
   assignmentRow,
-  /const pendingAction = interaction\.pendingAction[\s\S]*const pendingState = \{[\s\S]*pending:\s*true[\s\S]*const rowBusy = interaction\.isBlocked[\s\S]*visibility:[\s\S]*pendingAction === "visibility"[\s\S]*rowBusy[\s\S]*onSelect:\s*onToggleVisibility/u,
+  /const pendingAction = interaction\.pendingAction[\s\S]*const pendingState = \{[\s\S]*pending:\s*true[\s\S]*visibility:[\s\S]*pendingAction === "visibility"[\s\S]*onSelect:\s*onToggleVisibility/u,
+);
+assert.doesNotMatch(assignmentRow, /interaction\.isBlocked|rowBusy/u);
+assert.doesNotMatch(
+  assignmentRow,
+  /disabled=\{!canMove(?:Up|Down)\s*\|\|/u,
 );
 assert.match(
   compositionClient,

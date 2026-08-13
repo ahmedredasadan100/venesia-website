@@ -21,7 +21,6 @@ const selection = read("src/components/admin/ui/useAdminGridSelection.ts");
 const pageHeader = read("src/components/admin/ui/AdminPageContextHeader.tsx");
 const pageExperience = read("src/components/admin/ui/AdminPageExperience.tsx");
 const pageHeaderWrapper = read("src/components/admin/ui/AdminPageHeader.tsx");
-const legacyPageHeaderWrapper = read("src/components/admin/AdminPageHeader.tsx");
 const feedbackOwner = read("src/components/admin/AdminFeedbackProvider.tsx");
 const confirmOwner = read("src/components/admin/ui/AdminConfirmDialog.tsx");
 const bulkActionOwner = read("src/components/admin/ui/AdminBulkActionBar.tsx");
@@ -63,14 +62,13 @@ check(
     !shell.includes("data-admin-fallback-header className=\"order-first mb-7\""),
 );
 check(
-  "Shared page header exposes three logical levels with no fourth context slot",
+  "Shared page header exposes three logical levels with no legacy compatibility entry point",
   !pageHeader.includes("contextLine") &&
     !pageHeaderWrapper.includes("contextLine") &&
-    !legacyPageHeaderWrapper.includes("contextLine") &&
     !pageHeaderWrapper.includes('variant?: "default" | "context"') &&
-    !legacyPageHeaderWrapper.includes('variant?: "default" | "context"') &&
     pageHeaderWrapper.includes('eyebrow = "ADMIN PANEL"') &&
-    legacyPageHeaderWrapper.includes('eyebrow = "ADMIN PANEL"'),
+    !existsSync(resolve(root, "src/components/admin/AdminPageHeader.tsx")) &&
+    !existsSync(resolve(root, "src/components/admin/AdminStatusBadge.tsx")),
 );
 check(
   "Shell owns the canonical 28px transition without a local header margin",

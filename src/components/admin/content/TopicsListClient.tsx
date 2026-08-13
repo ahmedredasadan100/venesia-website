@@ -595,7 +595,7 @@ export default function TopicsListClient({
           onSuccess={controller.invalidate}
         />
       ) : null}
-      <AdminEntityListPrimarySection className="overflow-x-auto pb-1">
+      <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid items={metricItems} className="min-w-[1146px]" />
       </AdminEntityListPrimarySection>
 
