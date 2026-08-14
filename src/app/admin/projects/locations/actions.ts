@@ -14,7 +14,6 @@ import type { AdminFormActionState } from "../../../../lib/admin/form-runtime";
 import {
   PROJECT_LOCATION_LEVEL_CONFIG,
   PROJECT_LOCATION_LEVELS,
-  projectLocationManagementPath,
   type ProjectLocationLevel,
   type ProjectLocationManagementRow,
 } from "../../../../lib/admin/projects/location-management-contract";
@@ -330,8 +329,4 @@ export async function deleteProjectLocationAction(
         : databaseError.message ?? "تعذر حذف الموقع.";
     return adminActionFailure("تعذر حذف الموقع", message, { entityId: id });
   }
-}
-
-export function projectLocationLevelPath(level: ProjectLocationLevel) {
-  return projectLocationManagementPath(level);
 }
