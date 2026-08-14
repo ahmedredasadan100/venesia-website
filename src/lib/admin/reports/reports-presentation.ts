@@ -303,7 +303,7 @@ function analyticsPresentation(model: AdminReportsModel, businessOnly = false) {
     state: analyticsState(domainState),
     message: businessOnly
       ? model.analytics.reports.business.message
-      : "كل Analytics تمر عبر العقد والـAdapter Registry الواحد؛ غياب المزود لا يتحول إلى Charts أوأصفار.",
+      : "كل Analytics تمر عبر العقد والـAdapter Registry الواحد؛ غياب المزود لا يتحول إلى Charts أو أصفار.",
     groups,
     records,
     actions: [
@@ -557,7 +557,7 @@ function systemPresentation(model: AdminReportsModel) {
   });
   return {
     state: model.state,
-    message: "التشخيص يجمع حالات الملاك الحالية دون إنشاء Health store أوCache owner جديد.",
+    message: "التشخيص يجمع حالات الملاك الحالية دون إنشاء Health store أو Cache owner جديد.",
     groups,
     records,
     actions: [

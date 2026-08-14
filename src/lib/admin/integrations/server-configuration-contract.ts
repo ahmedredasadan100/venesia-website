@@ -91,7 +91,7 @@ export const INTEGRATION_APP_CONFIGURATION_DEFINITIONS = [
         key: "google_client_secret",
         label: "OAuth Client Secret",
         secret: true,
-        placeholder: "أدخل قيمة جديدة للحفظ أوالاستبدال",
+        placeholder: "أدخل قيمة جديدة للحفظ أو الاستبدال",
         help: "يُحفظ داخل Supabase Vault ولا يُعاد عرضه.",
         requiredBy: ["google_analytics", "google_search_console", "google_ads"],
         environmentBootstrapKey: "GOOGLE_INTEGRATIONS_CLIENT_SECRET",

@@ -67,7 +67,7 @@ function ReportFilters({ reportId, context }: { reportId: AdminReportId; context
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-sm font-semibold text-white/78">Global Filters</h2>
-          <p className="mt-1 text-xs leading-6 text-white/40">الفلتر جزء من URL؛ فتح الرابط أوتصديره يحافظ على السياق نفسه.</p>
+          <p className="mt-1 text-xs leading-6 text-white/40">الفلتر جزء من URL؛ فتح الرابط أو تصديره يحافظ على السياق نفسه.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {definition.filters.map((filter) => (
@@ -249,11 +249,11 @@ export default function AdminReportDetailView({
       ) : (
         <section className="rounded-[28px] border border-amber-400/18 bg-amber-400/[0.055] p-6 text-amber-100">
           <h2 className="text-base font-semibold">لا توجد بيانات قابلة للعرض في هذا السياق</h2>
-          <p className="mt-2 text-sm leading-7 opacity-70">المصدر غير مفعّل أوالفلتر لا يملك Rows حقيقية. لم تُعرض Charts أوأصفار بديلة.</p>
+          <p className="mt-2 text-sm leading-7 opacity-70">المصدر غير مفعّل أو الفلتر لا يملك Rows حقيقية. لم تُعرض Charts أو أصفار بديلة.</p>
         </section>
       )}
 
-      <Panel title="Action Center" description="روابط إلى المالك التشغيلي أوالتقرير المتخصص؛ لا توجد mutations موازية داخل التقارير.">
+      <Panel title="Action Center" description="روابط إلى المالك التشغيلي أو التقرير المتخصص؛ لا توجد mutations موازية داخل التقارير.">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {presentation.actions.map((action) => (
             <Link key={action.id} href={action.href} className="rounded-[20px] border border-[#D8B87A]/16 bg-[#D8B87A]/[0.045] p-4 transition hover:border-[#D8B87A]/34 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">

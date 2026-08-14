@@ -118,7 +118,7 @@ export const INTEGRATION_DEFINITIONS = [
     key: "microsoft_clarity",
     label: "Microsoft Clarity",
     category: "analytics",
-    description: "خارج نطاق التفعيل الحالي؛ لا توجد حالة اتصال أوبيانات مفترضة.",
+    description: "خارج نطاق التفعيل الحالي؛ لا توجد حالة اتصال أو بيانات مفترضة.",
     analyticsProvider: "microsoft_clarity",
     reportsHref: "/admin/reports/analytics?filter=providers",
     liveConnectionSupported: false,
