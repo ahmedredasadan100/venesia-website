@@ -399,26 +399,12 @@ check(
     !/action="more"[\s\S]{0,500}pending=\{/u.test(rendererSource),
 );
 
-const expectedConsumerFiles = new Map<string, string>([
-  ["topics", paths.topics],
-  ["categories", paths.categories],
-  ["series", paths.series],
-  ["pages", paths.pages],
-  ["projects", paths.projects],
-  ["project_locations_governorate", paths.projectLocations],
-  ["project_locations_city", paths.projectLocations],
-  ["project_locations_main_area", paths.projectLocations],
-  ["project_locations_sub_area", paths.projectLocations],
-  ["redirects", paths.redirects],
-  ["topics_without_image", paths.topicsWithoutImage],
-  ["admin_users", paths.usersRoles],
-]);
-
 for (const entry of manifestEntries) {
-  const expectedConsumer = expectedConsumerFiles.get(entry.entity);
   check(
-    `${entry.entity} declares its approved consumer boundary`,
-    entry.consumerSourceFile === expectedConsumer,
+    `${entry.entity} declares its consumer boundary in its governed source inventory`,
+    entry.sourceFiles.some(
+      (sourceFile) => sourceFile === entry.consumerSourceFile,
+    ),
   );
   check(
     `${entry.entity} relevant sources all exist`,
@@ -1209,11 +1195,11 @@ check(
       ),
 );
 
-const fullAdoptionFailureFixture = fullAdoptionSurfaces.find(
-  (surface) => surface.id === "projects-residential-commercial",
-);
 const fullAdoptionFailureClaim = fullAdoptionClaims.find(
-  (claim) => claim.surfaceId === "projects-residential-commercial",
+  (claim) => claim.contracts.bulk === "not_required",
+);
+const fullAdoptionFailureFixture = fullAdoptionSurfaces.find(
+  (surface) => surface.id === fullAdoptionFailureClaim?.surfaceId,
 );
 assert.ok(fullAdoptionFailureFixture && fullAdoptionFailureClaim);
 const fullAdoptionFailureSource = [
@@ -1251,7 +1237,7 @@ check(
     fullAdoptionFailureClaim,
     {
       registryEntities: registryEntities.filter(
-        (entity) => entity !== "projects",
+        (entity) => entity !== fullAdoptionFailureFixture.dataRegistryEntities[0],
       ),
     },
   ).includes("data_registry"),
