@@ -132,6 +132,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
       id={formId}
       action={action}
       onSubmit={handleSubmit}
+      aria-busy={isBusy || undefined}
       data-admin-bulk-action-bar=""
       className="flex flex-col gap-4 rounded-[18px] border border-[#D8B87A]/14 bg-[#080B10]/92 px-4 py-4 shadow-[0_18px_70px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.035)] md:flex-row md:items-center md:justify-between"
     >
@@ -166,7 +167,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
           ref={submitRef}
           type="submit"
           disabled={isBusy}
-          className="h-11 cursor-pointer rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e4c88d] disabled:cursor-not-allowed disabled:opacity-55"
+          className="h-11 cursor-pointer rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e4c88d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-55"
         >
           {isBusy ? "جار التنفيذ..." : "تنفيذ"}
         </button>
@@ -175,7 +176,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
           type="button"
           onClick={onClearSelection}
           disabled={isBusy}
-          className="h-11 cursor-pointer rounded-2xl border border-transparent px-4 text-sm font-semibold text-white/50 transition hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-55"
+          className="h-11 cursor-pointer rounded-2xl border border-transparent px-4 text-sm font-semibold text-white/50 transition hover:text-white/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-55"
         >
           إلغاء التحديد
         </button>

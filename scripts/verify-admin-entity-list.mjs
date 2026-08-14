@@ -60,6 +60,9 @@ const coreFiles = [
   "src/components/admin/entity-list/AdminEntityListFilters.tsx",
   "src/components/admin/entity-list/AdminEntityListSurface.tsx",
   "src/components/admin/entity-list/AdminFloatingLayerContext.tsx",
+  "src/components/admin/ui/AdminBulkActionBar.tsx",
+  "src/components/admin/ui/AdminDataGrid.tsx",
+  "src/components/admin/ui/AdminListEmptyState.tsx",
   "src/components/admin/ui/AdminListboxSelect.tsx",
   "src/components/admin/ui/admin-floating-position.ts",
   "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
@@ -90,6 +93,7 @@ const columnMenu = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx")
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const activity = read("src/components/admin/ui/AdminActivityPopover.tsx");
 const emptyStateCore = read("src/lib/admin/entity-list/empty-state.ts");
+const listEmptyState = read("src/components/admin/ui/AdminListEmptyState.tsx");
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const rowActions = read(
   "src/components/admin/ui/AdminDataGridRowActions.tsx",
@@ -802,6 +806,35 @@ check(
     collectionAdoptionManifest.includes(
       "ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS",
     ),
+);
+
+check(
+  "Shared sort controls expose one keyboard-focus and accessible state contract",
+  dataGrid.includes("announceState?: boolean") &&
+    dataGrid.includes("aria-pressed={announceState ? active : undefined}") &&
+    dataGrid.includes('aria-hidden="true"') &&
+    dataGrid.includes('return "غير مرتب"') &&
+    dataGrid.includes('"مرتب تصاعديًا"') &&
+    dataGrid.includes('"مرتب تنازليًا"') &&
+    (dataGrid.match(/focus-visible:outline/g) ?? []).length >= 2,
+);
+
+check(
+  "Semantic entity tables expose native column and sort state without duplicate announcements",
+  (entityTable.match(/scope="col"/g) ?? []).length >= 3 &&
+    (entityTable.match(/aria-sort=\{ariaSort\}/g) ?? []).length === 2 &&
+    (entityTable.match(/announceState=\{false\}/g) ?? []).length === 2 &&
+    entityTable.includes('"ascending"') &&
+    entityTable.includes('"descending"') &&
+    entityTable.includes('"none"'),
+);
+
+check(
+  "Shared bulk and empty-state interactions expose Busy and keyboard-focus presentation",
+  bulkBar.includes("aria-busy={isBusy || undefined}") &&
+    (bulkBar.match(/focus-visible:outline/g) ?? []).length >= 2 &&
+    listEmptyState.includes("focus-visible:outline") &&
+    listEmptyState.includes("focus-visible:outline-offset-2"),
 );
 
 check(
