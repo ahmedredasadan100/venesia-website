@@ -275,6 +275,7 @@ const expectedConsumers = [
   "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
   "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx",
   "src/app/admin/pages-blocks/pages/CreatePageModal.tsx",
+  "src/app/admin/projects/locations/ProjectLocationFormModal.tsx",
   "src/app/admin/seo/redirects/RedirectFormModal.tsx",
   "src/app/admin/users-roles/AdminUserFormModal.tsx",
   "src/components/admin/entity-list/AdminEntityListFilters.tsx",
