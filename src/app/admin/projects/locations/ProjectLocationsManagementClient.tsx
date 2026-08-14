@@ -13,7 +13,6 @@ import {
   AdminActionButton,
   AdminDataGridRowActions,
   AdminPageContextHeader,
-  AdminStatusPill,
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
@@ -39,6 +38,7 @@ import {
 import {
   PROJECT_LOCATION_LEVEL_CONFIG,
   PROJECT_LOCATION_ENTITY_KEYS,
+  PROJECT_LOCATION_LEVELS,
   PROJECT_LOCATION_LIST_PAGE_SIZES,
   projectLocationManagementPath,
   projectLocationsQueryContract,
@@ -48,7 +48,6 @@ import {
   type ProjectLocationManagementRow,
   type ProjectLocationSortField,
 } from "../../../../lib/admin/projects/location-management-contract";
-import { formatAdminDateTime } from "../../../../lib/content-dates";
 import ProjectLocationFormModal from "./ProjectLocationFormModal";
 import {
   deleteProjectLocationAction,
@@ -61,7 +60,6 @@ type LocationColumnKey =
   | "order"
   | "relations"
   | "status"
-  | "updated"
   | "actions";
 
 type ProjectLocationsManagementClientProps = {
@@ -77,6 +75,12 @@ type ProjectLocationsManagementClientProps = {
 };
 
 const PAGE_SIZE_OPTIONS = PROJECT_LOCATION_LIST_PAGE_SIZES.map(String);
+const PROJECT_LOCATION_NAV_LABELS: Record<ProjectLocationLevel, string> = {
+  governorate: "المحافظات",
+  city: "المدن",
+  main_area: "الأحياء",
+  sub_area: "المناطق الفرعية",
+};
 
 const STATUS_FILTER: AdminEntityFilterDef = {
   id: "project-location-status",
@@ -94,6 +98,96 @@ function displayName(nameAr: string, nameEn: string | null) {
   return nameEn ? `${nameAr} — ${nameEn}` : nameAr;
 }
 
+function createLocationRowActionsCapability(input: {
+  row: ProjectLocationManagementRow;
+  singularLabel: string;
+  rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
+  onEdit: (row: ProjectLocationManagementRow) => void;
+  onToggle: (row: ProjectLocationManagementRow) => Promise<AdminActionResult>;
+  onDelete: (row: ProjectLocationManagementRow) => Promise<AdminActionResult>;
+  onMutationResult?: (result: AdminActionResult) => void;
+}): AdminRowActionsCapability {
+  const { row } = input;
+  const interaction = input.rowInteraction(row.id);
+  const pending = interaction.pendingAction;
+  const relationReason = row.project_count > 0
+    ? "لا يمكن الحذف لأن الموقع مرتبط بمشروعات."
+    : row.child_count > 0
+      ? "لا يمكن الحذف لأن الموقع يحتوي عناصر فرعية."
+      : null;
+
+  return {
+    entityType: "project_location",
+    entityId: row.id,
+    entityLabel: row.name_ar,
+    actions: {
+      edit: { access: "allowed", onSelect: () => input.onEdit(row) },
+      preview: { access: "hidden" },
+      information: {
+        access: "allowed",
+        title: `معلومات ${input.singularLabel}`,
+        items: [
+          { label: "المعرّف", value: String(row.id) },
+          { label: "الاسم", value: displayName(row.name_ar, row.name_en) },
+          { label: "الترتيب", value: String(row.sort_order) },
+          { label: "المشروعات المرتبطة", value: String(row.project_count) },
+          { label: "العناصر الفرعية", value: String(row.child_count) },
+        ],
+      },
+      copyPublicLink: { access: "hidden" },
+      visibility: pending === "visibility"
+        ? {
+            access: "disabled",
+            disabledReason: "انتظر انتهاء الإجراء الحالي.",
+            pending: true,
+            isVisible: row.is_active,
+          }
+        : {
+            access: "allowed",
+            isVisible: row.is_active,
+            onSelect: async () => {
+              const result = await input.onToggle(row);
+              input.onMutationResult?.(result);
+              if (!result.ok) throw new Error(result.message);
+            },
+            confirmation: {
+              mode: "shared",
+              title: row.is_active ? "تعطيل الموقع؟" : "تفعيل الموقع؟",
+              description: row.is_active
+                ? "لن يظهر الموقع في الاختيارات الجديدة، وستبقى العلاقات الحالية محفوظة."
+                : "سيصبح الموقع متاحًا للاختيار وفق التسلسل الحالي.",
+              confirmLabel: row.is_active ? "تأكيد التعطيل" : "تأكيد التفعيل",
+            },
+          },
+      featured: { access: "hidden" },
+      duplicate: { access: "hidden" },
+      archive: { access: "hidden" },
+      delete: pending === "delete"
+        ? {
+            access: "disabled",
+            disabledReason: "انتظر انتهاء الإجراء الحالي.",
+            pending: true,
+          }
+        : relationReason
+          ? { access: "disabled", disabledReason: relationReason }
+          : {
+              access: "allowed",
+              onSelect: async () => {
+                const result = await input.onDelete(row);
+                input.onMutationResult?.(result);
+                if (!result.ok) throw new Error(result.message);
+              },
+              confirmation: {
+                mode: "shared",
+                title: "حذف الموقع؟",
+                description: `سيتم حذف «${row.name_ar}» نهائيًا من تسلسل مواقع المشاريع.`,
+                confirmLabel: "تأكيد الحذف",
+              },
+            },
+    },
+  };
+}
+
 function createColumns(input: {
   level: ProjectLocationLevel;
   rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
@@ -106,7 +200,11 @@ function createColumns(input: {
   ProjectLocationSortField
 >[] {
   const config = PROJECT_LOCATION_LEVEL_CONFIG[input.level];
-  return [
+  const columns: AdminEntityColumnDef<
+    ProjectLocationManagementRow,
+    LocationColumnKey,
+    ProjectLocationSortField
+  >[] = [
     {
       key: "name",
       label: "الاسم",
@@ -170,23 +268,20 @@ function createColumns(input: {
       hideable: false,
       minWidth: 112,
       width: 120,
-      renderCell: ({ row }) => (
-        <AdminStatusPill tone={row.is_active ? "green" : "muted"}>
-          {row.is_active ? "نشط" : "غير نشط"}
-        </AdminStatusPill>
-      ),
-    },
-    {
-      key: "updated",
-      label: "آخر تحديث",
-      defaultVisible: true,
-      hideable: false,
-      sortable: true,
-      sortKey: "updated_at",
-      minWidth: 170,
-      width: 184,
-      renderCell: ({ row }) => (
-        <span className="text-sm text-white/55">{formatAdminDateTime(row.updated_at)}</span>
+      renderCell: ({ row, onMutationResult }) => (
+        <AdminDataGridRowActions
+          capability={createLocationRowActionsCapability({
+            row,
+            singularLabel: config.singularLabel,
+            rowInteraction: input.rowInteraction,
+            onEdit: input.onEdit,
+            onToggle: input.onToggle,
+            onDelete: input.onDelete,
+            onMutationResult,
+          })}
+          display="visibility"
+          size="compact"
+        />
       ),
     },
     {
@@ -197,88 +292,28 @@ function createColumns(input: {
       minWidth: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       width: ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
       sticky: "end",
-      renderCell: ({ row, onMutationResult }) => {
-        const interaction = input.rowInteraction(row.id);
-        const pending = interaction.pendingAction;
-        const relationReason = row.project_count > 0
-          ? "لا يمكن الحذف لأن الموقع مرتبط بمشروعات."
-          : row.child_count > 0
-            ? "لا يمكن الحذف لأن الموقع يحتوي عناصر فرعية."
-            : null;
-        const capability: AdminRowActionsCapability = {
-          entityType: "project_location",
-          entityId: row.id,
-          entityLabel: row.name_ar,
-          actions: {
-            edit: { access: "allowed", onSelect: () => input.onEdit(row) },
-            preview: { access: "hidden" },
-            information: {
-              access: "allowed",
-              title: `معلومات ${config.singularLabel}`,
-              items: [
-                { label: "المعرّف", value: String(row.id) },
-                { label: "الاسم", value: displayName(row.name_ar, row.name_en) },
-                { label: "الترتيب", value: String(row.sort_order) },
-                { label: "المشروعات المرتبطة", value: String(row.project_count) },
-                { label: "العناصر الفرعية", value: String(row.child_count) },
-              ],
-            },
-            copyPublicLink: { access: "hidden" },
-            visibility: pending === "visibility"
-              ? {
-                  access: "disabled",
-                  disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                  pending: true,
-                  isVisible: row.is_active,
-                }
-              : {
-                  access: "allowed",
-                  isVisible: row.is_active,
-                  onSelect: async () => {
-                    const result = await input.onToggle(row);
-                    onMutationResult?.(result);
-                    if (!result.ok) throw new Error(result.message);
-                  },
-                  confirmation: {
-                    mode: "shared",
-                    title: row.is_active ? "تعطيل الموقع؟" : "تفعيل الموقع؟",
-                    description: row.is_active
-                      ? "لن يظهر الموقع في الاختيارات الجديدة، وستبقى العلاقات الحالية محفوظة."
-                      : "سيصبح الموقع متاحًا للاختيار وفق التسلسل الحالي.",
-                    confirmLabel: row.is_active ? "تأكيد التعطيل" : "تأكيد التفعيل",
-                  },
-                },
-            featured: { access: "hidden" },
-            duplicate: { access: "hidden" },
-            archive: { access: "hidden" },
-            delete: pending === "delete"
-              ? {
-                  access: "disabled",
-                  disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                  pending: true,
-                }
-              : relationReason
-                ? { access: "disabled", disabledReason: relationReason }
-                : {
-                    access: "allowed",
-                    onSelect: async () => {
-                      const result = await input.onDelete(row);
-                      onMutationResult?.(result);
-                      if (!result.ok) throw new Error(result.message);
-                    },
-                    confirmation: {
-                      mode: "shared",
-                      title: "حذف الموقع؟",
-                      description: `سيتم حذف «${row.name_ar}» نهائيًا من تسلسل مواقع المشاريع.`,
-                      confirmLabel: "تأكيد الحذف",
-                    },
-                  },
-          },
-        };
-        return <AdminDataGridRowActions capability={capability} size="compact" />;
-      },
+      renderCell: ({ row, onMutationResult }) => (
+        <AdminDataGridRowActions
+          capability={createLocationRowActionsCapability({
+            row,
+            singularLabel: config.singularLabel,
+            rowInteraction: input.rowInteraction,
+            onEdit: input.onEdit,
+            onToggle: input.onToggle,
+            onDelete: input.onDelete,
+            onMutationResult,
+          })}
+          size="compact"
+        />
+      ),
     },
   ];
+
+  return columns.filter(
+    (column) =>
+      input.level !== "governorate" ||
+      (column.key !== "parent" && column.key !== "order"),
+  );
 }
 
 export default function ProjectLocationsManagementClient({
@@ -417,9 +452,15 @@ export default function ProjectLocationsManagementClient({
           description={`إدارة ${config.label} والعلاقات والحالة والترتيب من مصدر مواقع المشاريع المعتمد.`}
           actions={
             <div className="flex flex-wrap gap-2">
-              <AdminActionButton href="/admin/projects/locations" variant="dark">
-                مستويات المواقع
-              </AdminActionButton>
+              {PROJECT_LOCATION_LEVELS.map((targetLevel) => (
+                <AdminActionButton
+                  key={targetLevel}
+                  href={projectLocationManagementPath(targetLevel)}
+                  variant={targetLevel === level ? "gold" : "dark"}
+                >
+                  {PROJECT_LOCATION_NAV_LABELS[targetLevel]}
+                </AdminActionButton>
+              ))}
               <AdminActionButton variant="primary" onClick={() => setCreateOpen(true)}>
                 إضافة {config.singularLabel}
               </AdminActionButton>

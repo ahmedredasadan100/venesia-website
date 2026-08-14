@@ -71,6 +71,28 @@ check(
     adapter.includes("createProjectLocationManagementAdapter"),
 );
 check(
+  "Location status and row actions share one capability declaration and renderer",
+  managementClient.includes("createLocationRowActionsCapability") &&
+    managementClient.includes('display="visibility"') &&
+    managementClient.includes("<AdminDataGridRowActions") &&
+    managementClient.includes('delete: pending === "delete"') &&
+    managementClient.includes('duplicate: { access: "hidden" }') &&
+    managementClient.includes("enableSelection={false}"),
+);
+check(
+  "Location header links every hierarchy level through the canonical route contract",
+  managementClient.includes("PROJECT_LOCATION_LEVELS.map") &&
+    managementClient.includes("projectLocationManagementPath(targetLevel)") &&
+    managementClient.includes("PROJECT_LOCATION_NAV_LABELS[targetLevel]"),
+);
+check(
+  "Location tables omit update timestamps and governorates omit parent and order presentation",
+  !managementClient.includes('key: "updated"') &&
+    managementClient.includes('input.level !== "governorate"') &&
+    managementClient.includes('column.key !== "parent"') &&
+    managementClient.includes('column.key !== "order"'),
+);
+check(
   "mutation owner is one service-only guarded RPC",
   migration.includes("create or replace function public.mutate_project_location") &&
     migration.includes("grant execute on function public.mutate_project_location") &&
