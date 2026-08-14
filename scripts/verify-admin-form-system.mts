@@ -282,6 +282,7 @@ const expectedClassifications: Record<
   shared_adopter: [
     "redirects-create-edit",
     "projects-create-edit",
+    "project-locations-create-edit",
     "topic-media-create-edit",
     "pages-quick-create",
     "block-template-create-modals",

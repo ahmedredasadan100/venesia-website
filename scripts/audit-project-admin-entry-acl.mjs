@@ -50,6 +50,7 @@ const aggregateFunctionNames = [
   "prevent_project_type_change",
   "validate_project_location_selection",
   "prevent_project_location_reparent",
+  "mutate_project_location",
 ];
 
 const connectionString = process.env.SUPABASE_DB_URL;

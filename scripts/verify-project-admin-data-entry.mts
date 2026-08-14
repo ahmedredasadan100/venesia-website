@@ -418,6 +418,7 @@ check(
   schemaParityAudit.includes("20260731100000_project_row_actions_capability.sql") &&
     schemaParityAudit.includes("20260805180000_global_truth_atomic_operations_closure.sql") &&
     schemaParityAudit.includes("20260813233530_projects_domain_hardening.sql") &&
+    schemaParityAudit.includes("20260814002948_location_management_foundation.sql") &&
     schemaParityAudit.includes('"set_project_featured_admin_entry"') &&
     schemaParityAudit.includes('"duplicate_project_admin_entry"') &&
     schemaParityAudit.includes("columns: 122") &&
@@ -425,7 +426,9 @@ check(
     schemaParityAudit.includes("project_domain_hardening_migration_sha256") &&
     schemaParityAudit.includes("dashboard_truth_migration_sha256") &&
     schemaParityAudit.includes("reports_analytics_migration_sha256") &&
-    schemaParityAudit.includes("functions: 8") &&
+    schemaParityAudit.includes("functions: 9") &&
+    schemaParityAudit.includes('"mutate_project_location"') &&
+    schemaParityAudit.includes("location_management_migration_sha256") &&
     schemaParityAudit.includes('["projects.featured", "false"]'),
 );
 check(

@@ -20,7 +20,8 @@ export const ADMIN_NAVIGATION_REGISTRY: AdminNavigationItem[] = [
     id: "projects", href: "/admin/projects", label: "المشروعات", icon: "▣", order: 30, enabled: true, moduleKey: "projects", permission: currentAdminAccess,
     children: [
       { id: "projects-all", href: "/admin/projects", label: "كل المشروعات", icon: "•", order: 10, enabled: true, moduleKey: "projects", permission: currentAdminAccess },
-      { id: "construction-updates", href: "/admin/projects/construction-updates", label: "تحديثات التنفيذ", icon: "•", order: 20, enabled: true, moduleKey: "construction-updates", permission: currentAdminAccess },
+      { id: "project-locations", href: "/admin/projects/locations", label: "إدارة المواقع", icon: "•", order: 20, enabled: true, moduleKey: "project-locations", permission: currentAdminAccess },
+      { id: "construction-updates", href: "/admin/projects/construction-updates", label: "تحديثات التنفيذ", icon: "•", order: 30, enabled: true, moduleKey: "construction-updates", permission: currentAdminAccess },
     ],
   },
   {

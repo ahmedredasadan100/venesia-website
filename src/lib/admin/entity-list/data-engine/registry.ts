@@ -5,6 +5,12 @@ import { seriesEntityListAdapter } from "../../content/entity-list-adapters/seri
 import { topicsEntityListAdapter } from "../../content/entity-list-adapters/topics";
 import { pagesEntityListAdapter } from "../../pages/entity-list-adapter";
 import { projectsEntityListAdapter } from "../../projects/entity-list-adapter";
+import {
+  projectLocationCitiesEntityListAdapter,
+  projectLocationDistrictsEntityListAdapter,
+  projectLocationGovernoratesEntityListAdapter,
+  projectLocationSubDistrictsEntityListAdapter,
+} from "../../projects/location-management-adapter";
 import { redirectsEntityListAdapter } from "../../redirects/entity-list-adapter";
 import { activityLogEntityListAdapter } from "../../audit/entity-list-adapter";
 import { topicsWithoutImageEntityListAdapter } from "../../media-catalog/topics-without-image-entity-list-adapter";
@@ -22,6 +28,10 @@ export const adminEntityListAdapterRegistry = {
   series: seriesEntityListAdapter,
   pages: pagesEntityListAdapter,
   projects: projectsEntityListAdapter,
+  project_locations_governorate: projectLocationGovernoratesEntityListAdapter,
+  project_locations_city: projectLocationCitiesEntityListAdapter,
+  project_locations_main_area: projectLocationDistrictsEntityListAdapter,
+  project_locations_sub_area: projectLocationSubDistrictsEntityListAdapter,
   redirects: redirectsEntityListAdapter,
   activity_log: activityLogEntityListAdapter,
   topics_without_image: topicsWithoutImageEntityListAdapter,
