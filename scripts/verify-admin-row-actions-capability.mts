@@ -76,6 +76,53 @@ function sameValueSet(actual: readonly string[], expected: readonly string[]) {
   );
 }
 
+function formatConsistencyContractLabel(contract: string) {
+  return contract
+    .split("_")
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+}
+
+function printManagementCollectionsConsistencyMatrix(input: {
+  surfaceCount: number;
+  fullAdoptionClaimCount: number;
+  partialAdoptionCount: number;
+  exactClaimCoverage: boolean;
+  surfaceFailures: readonly string[];
+  contractFailures: readonly string[];
+  globalClosed: boolean;
+}) {
+  const rows = ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS.map(
+    (contract) => ({
+      label: formatConsistencyContractLabel(contract),
+      status: input.contractFailures.some((failure) =>
+        failure.endsWith(`:${contract}`),
+      )
+        ? "FAIL"
+        : "PASS",
+    }),
+  );
+  const verificationPassed =
+    input.exactClaimCoverage &&
+    input.surfaceFailures.length === 0 &&
+    input.contractFailures.length === 0;
+  const labelWidth = Math.max(
+    ...rows.map((row) => row.label.length),
+    "Verification".length,
+    "Adoption Closure".length,
+  );
+  const printRow = (label: string, status: string) =>
+    console.log(`${label.padEnd(labelWidth + 2, ".")} ${status}`);
+
+  console.log("\nManagement Collections Consistency\n");
+  rows.forEach((row) => printRow(row.label, row.status));
+  printRow("Verification", verificationPassed ? "PASS" : "FAIL");
+  printRow("Adoption Closure", input.globalClosed ? "CLOSED" : "OPEN");
+  console.log(
+    `\nEvidence: ${input.surfaceCount} surfaces; Full Adoption claims: ${input.fullAdoptionClaimCount}; Partial Adoption entries: ${input.partialAdoptionCount}.`,
+  );
+}
+
 function collectTsxFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const target = join(directory, entry.name);
@@ -2342,5 +2389,18 @@ check(
       "refreshRows",
     ),
 );
+
+printManagementCollectionsConsistencyMatrix({
+  surfaceCount: collectionSurfaces.length,
+  fullAdoptionClaimCount: fullAdoptionClaims.length,
+  partialAdoptionCount: partialAdoptionSurfaces.length,
+  exactClaimCoverage: hasExactFullAdoptionClaimCoverage(
+    fullAdoptionSurfaces,
+    fullAdoptionClaims,
+  ),
+  surfaceFailures: collectionSurfaceComplianceFailures,
+  contractFailures: fullAdoptionContractFailures,
+  globalClosed: ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed,
+});
 
 console.log(`Admin Row Actions capability verification passed (${passed} checks).`);
