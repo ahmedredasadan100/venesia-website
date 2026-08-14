@@ -560,6 +560,7 @@ export default function SeriesTableClient({
             ),
           }}
           onBulkExecute={executeBulkMutation}
+          bulkInteraction={instant.bulkInteraction}
           initialFeedback={initialFeedback}
         />
         <AdminTablePagination

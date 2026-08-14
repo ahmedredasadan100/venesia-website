@@ -1,8 +1,8 @@
 # Roadmap and Debt Register
 
 **Status:** Controlled work ledger
-**Updated:** 2026-08-12
-**Current baseline:** `5948620314083008a73c668835f1ec789e36dab2`
+**Updated:** 2026-08-14
+**Current baseline:** `3b548f5b4bfd1122c4c0a35b1966cfe132b72363`
 
 This ledger contains only evidence-backed open work and explicit boundaries. Closed historical stages remain available in Git history and must not be kept as active debt.
 
@@ -23,6 +23,7 @@ This ledger contains only evidence-backed open work and explicit boundaries. Clo
 | CLOSED-DELTA-82-01 | All remaining valid PR #82 behavior was reimplemented on current `main`; old owners/contracts/runtimes were excluded and PR #82 was closed superseded | `verify:pr-82-delta-recovery`, PR #84, and closed PR #82 |
 | CLOSED-CI-PG17-01 | GitHub CI Media Coordination, Dashboard Truth, and Reports Analytics service jobs align with Production PostgreSQL 17 | `.github/workflows/quality-gate.yml`, exact-head checks, and PR #85 |
 | CLOSED-DOC-DRIFT-01 | The stale Medium Hardening baseline and 74-version Production registry snapshot were replaced with the verified 2026-08-12 current state | Constitution Refresh review and read-only database inventory |
+| CLOSED-ADMIN-COLLECTION-GOVERNANCE-01 | Full Management Collection claims fail closed against canonical Collection, Data Runtime, preferences, primary-column, Row Actions, Bulk, and registry evidence; Bulk execution has one lifecycle owner | Adoption manifest, `verify:admin-row-actions`, and `verify:platform` |
 
 ## 2. Open Product/Auth decisions
 
@@ -46,7 +47,7 @@ These are not Legacy or drift. They require authority beyond cleanup and must no
 
 ## 4. Outstanding architecture debt
 
-No unresolved item is currently proven to be architecture debt under the constitutional definition. The executable Form and Interaction ledgers retain truthful `globalClosed: false` states because broader ledgers and authenticated Browser acceptance remain separate proof; they do not report an unregistered generic Form owner.
+No unresolved item is currently proven to be architecture debt under the constitutional definition. Authenticated Admin route proof remains an explicit environment-dependent QA boundary and is never converted into a silent PASS when storage state is unavailable.
 
 The sections below remain open as Product/Auth decisions, QA/environment gaps, measured risks, or compatibility boundaries. They must not be relabeled as debt merely to create a roadmap item.
 
@@ -69,11 +70,11 @@ The measured Topics image-transfer bottleneck is closed by adopting the existing
 
 The roadmap is decision- and evidence-driven; no speculative Runtime or Capability build is scheduled.
 
-1. Keep the architecture constitution, current-state record, ownership map, manifests, guards, and PR checklist aligned through the Contract Drift policy.
+1. Keep the architecture constitution, current-state record, ownership map, manifests, guards, `verify:platform`, and PR checklist aligned through the Contract Drift policy.
 2. Address the Product/Auth decisions in Section 2 only after the named authority and security evidence exist.
 3. Establish an isolated disposable authenticated Admin QA target before claiming mutable save/pending/rollback Browser closure.
 4. Re-evaluate optimization items only when their required measurements exist; do not open implementation phases from suspicion alone.
-5. Review the old Draft PR #1 only as a current-main delta. Never merge its old environment baseline or instructions without current architecture, migration, and security review.
+5. Review any closed unmerged branch only as a current-main delta before deletion. Never merge an old baseline or historical instructions without current architecture, migration, and security evidence.
 
 ## 7. Explicit compatibility boundaries
 

@@ -154,6 +154,7 @@ export const ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH = 160;
 export const ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT = {
   textBudgetPx: 200,
   cellInlinePaddingPx: ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx,
+  textOnlyCellInlinePaddingPx: 20,
   itemGapPx: 12,
   hierarchyDepthStepPx: 28,
   hierarchyRootIconPx: 36,
@@ -228,7 +229,9 @@ export function getAdminDataGridHierarchyPrimaryColumnWidth(
 }
 
 export const ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS = {
-  textOnly: ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx,
+  textOnly:
+    ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx +
+    ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textOnlyCellInlinePaddingPx * 2,
   compactIcon: getAdminDataGridPrimaryColumnWidth({ iconPx: 28 }),
   standardIcon: getAdminDataGridPrimaryColumnWidth({ iconPx: 40 }),
 } as const;

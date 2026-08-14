@@ -9,6 +9,7 @@ import {
   AdminEntityListTableRegion,
 } from "../../../../components/admin/entity-list";
 import {
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   AdminActionButton,
   AdminDataGridRowActions,
@@ -40,10 +41,14 @@ import {
   PROJECT_LOCATION_ENTITY_KEYS,
   PROJECT_LOCATION_LEVELS,
   PROJECT_LOCATION_LIST_PAGE_SIZES,
+  getProjectLocationManagementColumnKeys,
+  getProjectLocationManagementDefaultColumnKeys,
+  getProjectLocationManagementPreferenceColumnKeys,
   projectLocationManagementPath,
   projectLocationsQueryContract,
   type ProjectLocationFilters,
   type ProjectLocationLevel,
+  type ProjectLocationManagementColumnKey,
   type ProjectLocationManagementMetrics,
   type ProjectLocationManagementRow,
   type ProjectLocationSortField,
@@ -53,14 +58,10 @@ import {
   deleteProjectLocationAction,
   setProjectLocationActiveAction,
 } from "./actions";
-
-type LocationColumnKey =
-  | "name"
-  | "parent"
-  | "order"
-  | "relations"
-  | "status"
-  | "actions";
+import {
+  restoreProjectLocationTablePreferences,
+  saveProjectLocationTablePreferences,
+} from "./column-preferences";
 
 type ProjectLocationsManagementClientProps = {
   level: ProjectLocationLevel;
@@ -72,6 +73,8 @@ type ProjectLocationsManagementClientProps = {
     ProjectLocationManagementRow,
     ProjectLocationManagementMetrics
   >;
+  initialVisibleColumns: readonly string[];
+  initialPreferenceError: string | null;
 };
 
 const PAGE_SIZE_OPTIONS = PROJECT_LOCATION_LIST_PAGE_SIZES.map(String);
@@ -110,11 +113,8 @@ function createLocationRowActionsCapability(input: {
   const { row } = input;
   const interaction = input.rowInteraction(row.id);
   const pending = interaction.pendingAction;
-  const relationReason = row.project_count > 0
-    ? "لا يمكن الحذف لأن الموقع مرتبط بمشروعات."
-    : row.child_count > 0
-      ? "لا يمكن الحذف لأن الموقع يحتوي عناصر فرعية."
-      : null;
+  const deleteEligibility = row.delete_eligibility;
+  const visibilityEligibility = row.visibility_eligibility;
 
   return {
     entityType: "project_location",
@@ -142,7 +142,13 @@ function createLocationRowActionsCapability(input: {
             pending: true,
             isVisible: row.is_active,
           }
-        : {
+        : row.is_active && !visibilityEligibility.canDeactivate
+          ? {
+              access: "disabled",
+              disabledReason: visibilityEligibility.disabledReason ?? undefined,
+              isVisible: row.is_active,
+            }
+          : {
             access: "allowed",
             isVisible: row.is_active,
             onSelect: async () => {
@@ -158,7 +164,7 @@ function createLocationRowActionsCapability(input: {
                 : "سيصبح الموقع متاحًا للاختيار وفق التسلسل الحالي.",
               confirmLabel: row.is_active ? "تأكيد التعطيل" : "تأكيد التفعيل",
             },
-          },
+            },
       featured: { access: "hidden" },
       duplicate: { access: "hidden" },
       archive: { access: "hidden" },
@@ -168,8 +174,11 @@ function createLocationRowActionsCapability(input: {
             disabledReason: "انتظر انتهاء الإجراء الحالي.",
             pending: true,
           }
-        : relationReason
-          ? { access: "disabled", disabledReason: relationReason }
+        : !deleteEligibility.canDelete
+          ? {
+              access: "disabled",
+              disabledReason: deleteEligibility.disabledReason ?? undefined,
+            }
           : {
               access: "allowed",
               onSelect: async () => {
@@ -196,13 +205,19 @@ function createColumns(input: {
   onDelete: (row: ProjectLocationManagementRow) => Promise<AdminActionResult>;
 }): AdminEntityColumnDef<
   ProjectLocationManagementRow,
-  LocationColumnKey,
+  ProjectLocationManagementColumnKey,
   ProjectLocationSortField
 >[] {
   const config = PROJECT_LOCATION_LEVEL_CONFIG[input.level];
+  const availableColumns = new Set(
+    getProjectLocationManagementColumnKeys(input.level),
+  );
+  const optionalColumns = new Set(
+    getProjectLocationManagementPreferenceColumnKeys(input.level),
+  );
   const columns: AdminEntityColumnDef<
     ProjectLocationManagementRow,
-    LocationColumnKey,
+    ProjectLocationManagementColumnKey,
     ProjectLocationSortField
   >[] = [
     {
@@ -212,8 +227,8 @@ function createColumns(input: {
       hideable: false,
       sortable: true,
       sortKey: "name_ar",
-      minWidth: 260,
-      width: 300,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+      width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (
@@ -226,7 +241,7 @@ function createColumns(input: {
       key: "parent",
       label: config.parentLabel ?? "المستوى",
       defaultVisible: true,
-      hideable: false,
+      hideable: optionalColumns.has("parent"),
       minWidth: 210,
       width: 230,
       renderCell: ({ row }) => (
@@ -241,7 +256,7 @@ function createColumns(input: {
       key: "order",
       label: "الترتيب",
       defaultVisible: true,
-      hideable: false,
+      hideable: optionalColumns.has("order"),
       sortable: true,
       sortKey: "sort_order",
       minWidth: 100,
@@ -252,7 +267,7 @@ function createColumns(input: {
       key: "relations",
       label: "العلاقات",
       defaultVisible: true,
-      hideable: false,
+      hideable: optionalColumns.has("relations"),
       minWidth: 170,
       width: 180,
       renderCell: ({ row }) => (
@@ -265,7 +280,7 @@ function createColumns(input: {
       key: "status",
       label: "الحالة",
       defaultVisible: true,
-      hideable: false,
+      hideable: optionalColumns.has("status"),
       minWidth: 112,
       width: 120,
       renderCell: ({ row, onMutationResult }) => (
@@ -309,17 +324,15 @@ function createColumns(input: {
     },
   ];
 
-  return columns.filter(
-    (column) =>
-      input.level !== "governorate" ||
-      (column.key !== "parent" && column.key !== "order"),
-  );
+  return columns.filter((column) => availableColumns.has(column.key));
 }
 
 export default function ProjectLocationsManagementClient({
   level,
   initialQuery,
   initialResult,
+  initialVisibleColumns,
+  initialPreferenceError,
 }: ProjectLocationsManagementClientProps) {
   const config = PROJECT_LOCATION_LEVEL_CONFIG[level];
   const entityKey = PROJECT_LOCATION_ENTITY_KEYS[level];
@@ -436,12 +449,16 @@ export default function ProjectLocationsManagementClient({
   }), [deleteLocation, instant.getRowInteraction, level, toggleActive]);
   const hasFilters = Boolean(controller.query.search) || controller.query.filters.status !== "all";
   const basePath = projectLocationManagementPath(level);
-  const initialFeedback = useMemo(() => controller.error
-    ? mapAdminActionResultToFeedback(adminActionFailure(
-        "تعذر تحميل المواقع",
-        controller.error.message,
-      ))
-    : null, [controller.error]);
+  const initialFeedback = useMemo(() => {
+    const errorMessage = controller.error?.message ?? initialPreferenceError;
+    if (!errorMessage) return null;
+    return mapAdminActionResultToFeedback(adminActionFailure(
+      controller.error
+        ? "تعذر تحميل المواقع"
+        : "تعذر تحميل تفضيلات الأعمدة",
+      errorMessage,
+    ));
+  }, [controller.error, initialPreferenceError]);
 
   return (
     <>
@@ -470,7 +487,7 @@ export default function ProjectLocationsManagementClient({
 
         <AdminEntityListSurface consumer={entityKey}>
           <AdminEntityListTableRegion data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}>
-            <AdminEntityList<ProjectLocationManagementRow, LocationColumnKey, ProjectLocationSortField, number>
+            <AdminEntityList<ProjectLocationManagementRow, ProjectLocationManagementColumnKey, ProjectLocationSortField, number>
               listId={`${entityKey}-table`}
               toolbar={{
                 basePath,
@@ -489,6 +506,17 @@ export default function ProjectLocationsManagementClient({
               columns={columns}
               getRowId={(row) => row.id}
               getRowLabel={(row) => row.name_ar}
+              initialVisibleColumns={initialVisibleColumns}
+              defaultVisibleColumns={[
+                ...getProjectLocationManagementDefaultColumnKeys(level),
+              ]}
+              onPersistColumns={(visibleColumns) =>
+                saveProjectLocationTablePreferences(level, visibleColumns)
+              }
+              onRestoreColumns={() =>
+                restoreProjectLocationTablePreferences(level)
+              }
+              enableColumnManagement
               enableSelection={false}
               scrollLabel={`جدول ${config.label}`}
               mapResultToFeedback={mapAdminActionResultToFeedback}
@@ -503,6 +531,9 @@ export default function ProjectLocationsManagementClient({
                       : "asc",
                 }),
               }}
+              onSortColumnHidden={() =>
+                controller.setSort({ ...projectLocationsQueryContract.defaultSort })
+              }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               initialFeedback={initialFeedback}
               emptyState={{

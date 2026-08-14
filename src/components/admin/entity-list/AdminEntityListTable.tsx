@@ -13,6 +13,8 @@ import {
   ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES,
   ADMIN_DATA_GRID_HEADER_CLASSES,
   ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES,
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   getAdminDataGridFixedColumnStyle,
 } from "../ui/AdminDataGrid";
 import type { AdminGridId } from "../ui/useAdminGridSelection";
@@ -157,6 +159,26 @@ export default function AdminEntityListTable<
     return column.key === flexibleColumnKey
       ? undefined
       : getAdminDataGridFixedColumnStyle(getColumnBaseWidth(column));
+  }
+
+  function getColumnPresentationStyle(
+    column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
+  ) {
+    const trackStyle = getColumnTrackStyle(column);
+    const usesTextOnlyPrimaryPreset =
+      column.primary === true &&
+      column.minWidth === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly &&
+      column.width === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly;
+
+    return usesTextOnlyPrimaryPreset
+      ? {
+          ...(trackStyle ?? {}),
+          paddingInlineStart:
+            ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textOnlyCellInlinePaddingPx,
+          paddingInlineEnd:
+            ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textOnlyCellInlinePaddingPx,
+        }
+      : trackStyle;
   }
 
   function renderHeaderLabel(column: AdminEntityColumnDef<TRow, TKey, TSortKey>) {
@@ -333,7 +355,7 @@ export default function AdminEntityListTable<
                     scope="col"
                     aria-sort={ariaSort}
                     data-admin-column-key={column.key}
-                    style={getColumnTrackStyle(column)}
+                    style={getColumnPresentationStyle(column)}
                     className={`whitespace-nowrap ${alignmentClass} ${stickyPrimary}`}
                   >
                     {content}
@@ -445,7 +467,7 @@ export default function AdminEntityListTable<
                       <td
                         data-admin-column-key={column.key}
                         style={{
-                          ...(getColumnTrackStyle(column) ?? {}),
+                          ...(getColumnPresentationStyle(column) ?? {}),
                           ...(column.primary && depth > 0
                             ? { paddingInlineStart: undefined }
                             : {}),

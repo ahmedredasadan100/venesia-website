@@ -19,6 +19,8 @@ import {
   projectLocationManagementRowSchema,
   projectLocationParentOptionSchema,
   projectLocationsQueryContract,
+  resolveProjectLocationDeleteEligibility,
+  resolveProjectLocationVisibilityEligibility,
   type ProjectLocationFilters,
   type ProjectLocationLevel,
   type ProjectLocationSortField,
@@ -122,7 +124,7 @@ async function loadProjectLocationPage(
       ? supabase.from("project_locations").select("id,name_ar,name_en").in("id", parentIds)
       : Promise.resolve({ data: [], error: null }),
     ids.length
-      ? supabase.from("project_locations").select("id,parent_id").in("parent_id", ids)
+      ? supabase.from("project_locations").select("id,parent_id,is_active").in("parent_id", ids)
       : Promise.resolve({ data: [], error: null }),
     ids.length
       ? supabase.from("projects").select(`id,${projectReferenceFilter(level)}`).in(projectReferenceFilter(level), ids)
@@ -136,9 +138,13 @@ async function loadProjectLocationPage(
     (parentsResult.data ?? []).map((parent) => [Number(parent.id), parent]),
   );
   const childCounts = new Map<number, number>();
+  const activeChildCounts = new Map<number, number>();
   for (const child of childrenResult.data ?? []) {
     const parentId = Number(child.parent_id);
     childCounts.set(parentId, (childCounts.get(parentId) ?? 0) + 1);
+    if (child.is_active) {
+      activeChildCounts.set(parentId, (activeChildCounts.get(parentId) ?? 0) + 1);
+    }
   }
   const projectCounts = new Map<number, number>();
   for (const project of (projectsResult.data ?? []) as unknown as Record<string, unknown>[]) {
@@ -149,12 +155,22 @@ async function loadProjectLocationPage(
   return {
     rows: rows.map((row) => {
       const parent = row.parent_id ? parents.get(row.parent_id) : null;
+      const projectCount = projectCounts.get(row.id) ?? 0;
+      const childCount = childCounts.get(row.id) ?? 0;
       return projectLocationManagementRowSchema.parse({
         ...row,
         parent_name_ar: parent?.name_ar ?? null,
         parent_name_en: parent?.name_en ?? null,
-        project_count: projectCounts.get(row.id) ?? 0,
-        child_count: childCounts.get(row.id) ?? 0,
+        project_count: projectCount,
+        child_count: childCount,
+        delete_eligibility: resolveProjectLocationDeleteEligibility({
+          projectCount,
+          childCount,
+        }),
+        visibility_eligibility: resolveProjectLocationVisibilityEligibility({
+          projectCount,
+          activeChildCount: activeChildCounts.get(row.id) ?? 0,
+        }),
       });
     }),
     totalRows: count ?? 0,
@@ -220,15 +236,19 @@ export async function loadProjectLocationManagementRow(
 
   const parentId = location.parent_id;
   const referenceColumn = projectReferenceFilter(level);
-  const [parentResult, childrenResult, projectsResult] = await Promise.all([
+  const [parentResult, childrenResult, activeChildrenResult, projectsResult] = await Promise.all([
     parentId
       ? supabase.from("project_locations").select("name_ar,name_en").eq("id", parentId).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     supabase.from("project_locations").select("id", { count: "exact", head: true }).eq("parent_id", id),
+    supabase.from("project_locations").select("id", { count: "exact", head: true }).eq("parent_id", id).eq("is_active", true),
     supabase.from("projects").select("id", { count: "exact", head: true }).eq(referenceColumn, id),
   ]);
   const relatedError =
-    parentResult.error ?? childrenResult.error ?? projectsResult.error;
+    parentResult.error ??
+    childrenResult.error ??
+    activeChildrenResult.error ??
+    projectsResult.error;
   if (relatedError) throw new ProjectLocationManagementDatabaseError(relatedError);
 
   return projectLocationManagementRowSchema.parse({
@@ -237,6 +257,14 @@ export async function loadProjectLocationManagementRow(
     parent_name_en: parentResult.data?.name_en ?? null,
     project_count: projectsResult.count ?? 0,
     child_count: childrenResult.count ?? 0,
+    delete_eligibility: resolveProjectLocationDeleteEligibility({
+      projectCount: projectsResult.count ?? 0,
+      childCount: childrenResult.count ?? 0,
+    }),
+    visibility_eligibility: resolveProjectLocationVisibilityEligibility({
+      projectCount: projectsResult.count ?? 0,
+      activeChildCount: activeChildrenResult.count ?? 0,
+    }),
   });
 }
 

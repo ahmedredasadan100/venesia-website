@@ -9,6 +9,7 @@ import {
   AdminEntityListTableRegion,
 } from "../../../components/admin/entity-list";
 import {
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   AdminActionButton,
   AdminDataGridRowActions,
@@ -105,8 +106,8 @@ function createAdminUserColumns(input: {
   return [
     {
       ...ADMIN_USERS_LIST_COLUMN_META.username,
-      minWidth: 160,
-      width: 180,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+      width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
       primary: true,
       sticky: "start",
       renderCell: ({ row }) => (

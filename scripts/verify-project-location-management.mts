@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import * as ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATION =
@@ -30,6 +31,64 @@ const projectEditor = read(
 const projectData = read("src/lib/admin/projects/project-entry-data.ts");
 const managementClient = read(
   "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
+);
+const managementPage = read(
+  "src/app/admin/projects/locations/ProjectLocationManagementPage.tsx",
+);
+const managementActions = read(
+  "src/app/admin/projects/locations/actions.ts",
+);
+const columnPreferences = read(
+  "src/app/admin/projects/locations/column-preferences.ts",
+);
+const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const entityTable = read(
+  "src/components/admin/entity-list/AdminEntityListTable.tsx",
+);
+const adoptionManifest = read(
+  "src/lib/admin/interaction-system/adoption-manifest.ts",
+);
+
+function loadEligibilityResolver<T>(source: string, functionName: string) {
+  const parsed = ts.createSourceFile(
+    "location-management-contract.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const declaration = parsed.statements.find(
+    (statement): statement is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === functionName,
+  );
+  assert.ok(declaration);
+  const executableSource = ts.transpileModule(
+    `${declaration.getText(parsed).replace(/^export\s+/u, "")}\nexports.${functionName} = ${functionName};`,
+    { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+  ).outputText;
+  const moduleExports: Record<string, unknown> = {};
+  Function("exports", executableSource)(moduleExports);
+  return moduleExports[functionName] as T;
+}
+
+const resolveProjectLocationDeleteEligibility = loadEligibilityResolver<(
+  input: {
+    projectCount: number;
+    childCount: number;
+  },
+) => { canDelete: boolean; disabledReason: string | null }>(
+  contract,
+  "resolveProjectLocationDeleteEligibility",
+);
+const resolveProjectLocationVisibilityEligibility = loadEligibilityResolver<(
+  input: {
+    projectCount: number;
+    activeChildCount: number;
+  },
+) => { canDeactivate: boolean; disabledReason: string | null }>(
+  contract,
+  "resolveProjectLocationVisibilityEligibility",
 );
 
 check(
@@ -75,9 +134,112 @@ check(
   managementClient.includes("createLocationRowActionsCapability") &&
     managementClient.includes('display="visibility"') &&
     managementClient.includes("<AdminDataGridRowActions") &&
-    managementClient.includes('delete: pending === "delete"') &&
+    /delete:\s*pending === "delete"/u.test(managementClient) &&
     managementClient.includes('duplicate: { access: "hidden" }') &&
     managementClient.includes("enableSelection={false}"),
+);
+const projectLinkedEligibility = resolveProjectLocationDeleteEligibility({
+  projectCount: 1,
+  childCount: 0,
+});
+const parentEligibility = resolveProjectLocationDeleteEligibility({
+  projectCount: 0,
+  childCount: 1,
+});
+const leafEligibility = resolveProjectLocationDeleteEligibility({
+  projectCount: 0,
+  childCount: 0,
+});
+check(
+  "Location Domain contract projects delete eligibility and the Consumer only renders it",
+  !projectLinkedEligibility.canDelete &&
+    projectLinkedEligibility.disabledReason !== null &&
+    !parentEligibility.canDelete &&
+    parentEligibility.disabledReason !== null &&
+    leafEligibility.canDelete &&
+    leafEligibility.disabledReason === null &&
+    adapter.includes("resolveProjectLocationDeleteEligibility") &&
+    adapter.includes("delete_eligibility:") &&
+    managementClient.includes("row.delete_eligibility") &&
+    !managementClient.includes("row.project_count >") &&
+    !managementClient.includes("row.child_count >"),
+);
+const projectLinkedVisibility = resolveProjectLocationVisibilityEligibility({
+  projectCount: 1,
+  activeChildCount: 0,
+});
+const activeParentVisibility = resolveProjectLocationVisibilityEligibility({
+  projectCount: 0,
+  activeChildCount: 1,
+});
+const leafVisibility = resolveProjectLocationVisibilityEligibility({
+  projectCount: 0,
+  activeChildCount: 0,
+});
+const visibilityActionSource = managementActions.slice(
+  managementActions.indexOf("export async function setProjectLocationActiveAction"),
+  managementActions.indexOf("export async function deleteProjectLocationAction"),
+);
+check(
+  "Location visibility eligibility blocks the Consumer and Server Action before the RPC",
+  !projectLinkedVisibility.canDeactivate &&
+    projectLinkedVisibility.disabledReason !== null &&
+    !activeParentVisibility.canDeactivate &&
+    activeParentVisibility.disabledReason !== null &&
+    leafVisibility.canDeactivate &&
+    leafVisibility.disabledReason === null &&
+    adapter.includes("resolveProjectLocationVisibilityEligibility") &&
+    adapter.includes("visibility_eligibility:") &&
+    managementClient.includes("row.visibility_eligibility") &&
+    managementClient.includes("!visibilityEligibility.canDeactivate") &&
+    !managementClient.includes("row.project_count >") &&
+    !managementClient.includes("row.child_count >") &&
+    visibilityActionSource.includes("existing.visibility_eligibility.canDeactivate") &&
+    visibilityActionSource.indexOf("existing.visibility_eligibility.canDeactivate") <
+      visibilityActionSource.indexOf('mutateLocation("update"'),
+);
+check(
+  "all four levels adopt one shared optional-column persistence contract",
+  contract.includes("PROJECT_LOCATION_MANAGEMENT_COLUMN_CONTRACT_VERSION") &&
+    contract.includes("getProjectLocationManagementListViewKey") &&
+    contract.includes("getProjectLocationManagementPreferenceColumnKeys") &&
+    managementPage.includes("readAdminColumnPreferences") &&
+    managementClient.includes("initialVisibleColumns=") &&
+    managementClient.includes("defaultVisibleColumns=") &&
+    managementClient.includes("onPersistColumns=") &&
+    managementClient.includes("onRestoreColumns=") &&
+    managementClient.includes("enableColumnManagement") &&
+    columnPreferences.includes("saveAdminColumnPreferences") &&
+    columnPreferences.includes(
+      "getProjectLocationManagementPreferenceColumnKeys(level)",
+    ),
+);
+check(
+  "Location primary Name column adopts the shared text-only geometry preset",
+  dataGrid.includes("ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS") &&
+    dataGrid.includes("textOnlyCellInlinePaddingPx: 20") &&
+    entityTable.includes("usesTextOnlyPrimaryPreset") &&
+    entityTable.includes("paddingInlineStart:") &&
+    entityTable.includes("paddingInlineEnd:") &&
+    managementClient.includes(
+      "minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly",
+    ) &&
+    managementClient.includes(
+      "width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly",
+    ) &&
+    !managementClient.includes("minWidth: 260") &&
+    !managementClient.includes("width: 300"),
+);
+check(
+  "Location sorting stays in the shared Collection contract while Bulk is explicitly not required",
+  managementClient.includes("sortMode=") &&
+    managementClient.includes("onSortColumnHidden=") &&
+    managementClient.includes("enableSelection={false}") &&
+    !managementClient.includes("bulkOptions=") &&
+    !managementClient.includes("onBulkExecute=") &&
+    adoptionManifest.includes('surfaceId: "project-locations"') &&
+    adoptionManifest.includes('id: "project-locations"') &&
+    adoptionManifest.includes('workflowClassification: "full_collection_adoption"'),
 );
 check(
   "Location header links every hierarchy level through the canonical route contract",
@@ -88,9 +250,9 @@ check(
 check(
   "Location tables omit update timestamps and governorates omit parent and order presentation",
   !managementClient.includes('key: "updated"') &&
-    managementClient.includes('input.level !== "governorate"') &&
-    managementClient.includes('column.key !== "parent"') &&
-    managementClient.includes('column.key !== "order"'),
+    contract.includes('level !== "governorate"') &&
+    contract.includes('key !== "parent"') &&
+    contract.includes('key !== "order"'),
 );
 check(
   "mutation owner is one service-only guarded RPC",
@@ -276,6 +438,16 @@ try {
     ) values ($1, $2, $3, $4)`,
     [governorateId, cityId, districtId, subDistrictId],
   );
+  await assert.rejects(
+    db.query(
+      "select public.mutate_project_location('update', $1, jsonb_build_object('is_active', false))",
+      [subDistrictId],
+    ),
+    /Project reference prevents deactivation/i,
+  );
+  passed += 1;
+  console.log("PASS a Project-linked location cannot be deactivated");
+
   await assert.rejects(
     db.query(
       "select public.mutate_project_location('delete', $1, '{}'::jsonb)",

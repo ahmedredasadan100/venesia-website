@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as ts from "typescript";
 
 import {
   ADMIN_ROW_ACTION_MORE_ORDER,
@@ -141,6 +142,300 @@ function readCollectionSurfaceEvidence(
   return [...new Set([...surface.pageSourceFiles, ...surface.presentationSourceFiles])]
     .map(read)
     .join("\n");
+}
+
+type CollectionSourceOverrides = ReadonlyMap<string, string>;
+
+const CANONICAL_COLLECTION_OWNER =
+  "src/components/admin/entity-list/AdminEntityList.tsx";
+const CANONICAL_DATA_RUNTIME_OWNER =
+  "src/lib/admin/entity-list/data-engine/instant-mutation.ts";
+const CANONICAL_QUERY_RUNTIME_OWNER =
+  "src/lib/admin/entity-list/data-engine/client-controller.ts";
+const CANONICAL_COLUMN_PREFERENCES_OWNER =
+  "src/lib/admin/preferences/admin-column-preferences.ts";
+const CANONICAL_PRIMARY_COLUMN_OWNER =
+  "src/components/admin/ui/AdminDataGrid.tsx";
+
+function normalizeSourcePath(sourceFile: string) {
+  return sourceFile.replaceAll("\\", "/");
+}
+
+function sourceTextForEvidence(
+  sourceFile: string,
+  sourceOverrides?: CollectionSourceOverrides,
+) {
+  return sourceOverrides?.get(sourceFile) ?? read(sourceFile);
+}
+
+function resolveEvidenceModule(
+  importer: string,
+  moduleSpecifier: string,
+  sourceOverrides?: CollectionSourceOverrides,
+) {
+  if (!moduleSpecifier.startsWith(".")) return null;
+  const absoluteBase = resolve(ROOT, dirname(importer), moduleSpecifier);
+  const candidates = extname(absoluteBase)
+    ? [absoluteBase]
+    : [
+        `${absoluteBase}.ts`,
+        `${absoluteBase}.tsx`,
+        `${absoluteBase}.js`,
+        `${absoluteBase}.mjs`,
+        join(absoluteBase, "index.ts"),
+        join(absoluteBase, "index.tsx"),
+        join(absoluteBase, "index.js"),
+      ];
+  for (const candidate of candidates) {
+    const relativeCandidate = normalizeSourcePath(relative(ROOT, candidate));
+    if (sourceOverrides?.has(relativeCandidate) || existsSync(candidate)) {
+      return relativeCandidate;
+    }
+  }
+  return null;
+}
+
+function parseEvidenceSource(sourceFile: string, source: string) {
+  return ts.createSourceFile(
+    sourceFile,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    sourceFile.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+}
+
+function collectSourceGraph(
+  entrySourceFiles: readonly string[],
+  sourceOverrides?: CollectionSourceOverrides,
+) {
+  const graph = new Map<string, string>();
+  const queue = [...new Set(entrySourceFiles)];
+  while (queue.length > 0) {
+    const sourceFile = normalizeSourcePath(queue.shift()!);
+    if (graph.has(sourceFile)) continue;
+    const absoluteSourceFile = join(ROOT, sourceFile);
+    if (!sourceOverrides?.has(sourceFile) && !existsSync(absoluteSourceFile)) {
+      continue;
+    }
+    const source = sourceTextForEvidence(sourceFile, sourceOverrides);
+    graph.set(sourceFile, source);
+    const parsed = parseEvidenceSource(sourceFile, source);
+    parsed.forEachChild((node) => {
+      if (
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier)
+      ) {
+        const dependency = resolveEvidenceModule(
+          sourceFile,
+          node.moduleSpecifier.text,
+          sourceOverrides,
+        );
+        if (dependency && !graph.has(dependency)) queue.push(dependency);
+      }
+    });
+  }
+  return graph;
+}
+
+function collectCollectionSourceGraph(
+  surface: AdminCollectionSurfaceInventoryEntry,
+  sourceOverrides?: CollectionSourceOverrides,
+) {
+  return collectSourceGraph(
+    [...surface.pageSourceFiles, ...surface.presentationSourceFiles],
+    sourceOverrides,
+  );
+}
+
+function evidenceGraphHasJsxAttribute(
+  graph: ReadonlyMap<string, string>,
+  elementName: string,
+  attributeName: string,
+) {
+  return [...graph].some(([sourceFile, source]) => {
+    const parsed = parseEvidenceSource(sourceFile, source);
+    let found = false;
+    const visit = (node: ts.Node) => {
+      if (found) return;
+      if (
+        (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        node.tagName.getText(parsed) === elementName &&
+        node.attributes.properties.some(
+          (attribute) =>
+            ts.isJsxAttribute(attribute) &&
+            attribute.name.getText(parsed) === attributeName,
+        )
+      ) {
+        found = true;
+        return;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    return found;
+  });
+}
+
+function evidenceGraphCallsCanonicalImport(
+  graph: ReadonlyMap<string, string>,
+  importedName: string,
+  canonicalOwner: string,
+) {
+  return [...graph].some(([sourceFile, source]) => {
+    if (sourceFile === canonicalOwner) return false;
+    const parsed = parseEvidenceSource(sourceFile, source);
+    const localNames = new Set<string>();
+    parsed.forEachChild((node) => {
+      if (
+        !ts.isImportDeclaration(node) ||
+        !ts.isStringLiteral(node.moduleSpecifier) ||
+        resolveEvidenceModule(sourceFile, node.moduleSpecifier.text) !==
+          canonicalOwner
+      ) {
+        return;
+      }
+      const bindings = node.importClause?.namedBindings;
+      if (!bindings || !ts.isNamedImports(bindings)) return;
+      bindings.elements.forEach((binding) => {
+        if ((binding.propertyName ?? binding.name).text === importedName) {
+          localNames.add(binding.name.text);
+        }
+      });
+    });
+    if (localNames.size === 0) return false;
+    let called = false;
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        localNames.has(node.expression.text)
+      ) {
+        called = true;
+        return;
+      }
+      if (!called) ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    return called;
+  });
+}
+
+function evidenceGraphUsesPrimaryColumnPreset(
+  graph: ReadonlyMap<string, string>,
+) {
+  return [...graph].some(([sourceFile, source]) => {
+    if (sourceFile === CANONICAL_PRIMARY_COLUMN_OWNER) return false;
+    const parsed = parseEvidenceSource(sourceFile, source);
+    let used = false;
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS"
+      ) {
+        used = true;
+        return;
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        [
+          "getAdminDataGridPrimaryColumnWidth",
+          "getAdminDataGridHierarchyPrimaryColumnWidth",
+        ].includes(node.expression.text)
+      ) {
+        used = true;
+        return;
+      }
+      if (!used) ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    return used;
+  });
+}
+
+function evidenceGraphUsesBulkMutationLifecycle(
+  graph: ReadonlyMap<string, string>,
+) {
+  return [...graph].some(([sourceFile, source]) => {
+    if (sourceFile === CANONICAL_DATA_RUNTIME_OWNER) return false;
+    const parsed = parseEvidenceSource(sourceFile, source);
+    let used = false;
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "mutateAsync" &&
+        node.arguments.some(
+          (argument) =>
+            ts.isObjectLiteralExpression(argument) &&
+            argument.properties.some(
+              (property) =>
+                ts.isPropertyAssignment(property) &&
+                property.name.getText(parsed) === "bulk" &&
+                property.initializer.kind === ts.SyntaxKind.TrueKeyword,
+            ),
+        )
+      ) {
+        used = true;
+        return;
+      }
+      if (!used) ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    return used;
+  });
+}
+
+function evidenceGraphDeclaresBulkMutationScope(
+  graph: ReadonlyMap<string, string>,
+) {
+  return [...graph].some(([sourceFile, source]) => {
+    if (sourceFile === CANONICAL_DATA_RUNTIME_OWNER) return false;
+    const parsed = parseEvidenceSource(sourceFile, source);
+    let declared = false;
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isPropertyAssignment(node) &&
+        node.name.getText(parsed) === "bulk" &&
+        node.initializer.kind !== ts.SyntaxKind.FalseKeyword
+      ) {
+        declared = true;
+        return;
+      }
+      if (!declared) ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    return declared;
+  });
+}
+
+function evidenceGraphHasLocalBulkLifecycleOwner(
+  graph: ReadonlyMap<string, string>,
+) {
+  return [...graph].some(([sourceFile, source]) => {
+    if (sourceFile === CANONICAL_DATA_RUNTIME_OWNER) return false;
+    const parsed = parseEvidenceSource(sourceFile, source);
+    let found = false;
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        node.initializer &&
+        ts.isCallExpression(node.initializer) &&
+        ts.isIdentifier(node.initializer.expression) &&
+        ["useState", "useRef"].includes(node.initializer.expression.text) &&
+        /bulk.*pending|pending.*bulk/iu.test(node.name.getText(parsed))
+      ) {
+        found = true;
+        return;
+      }
+      if (!found) ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    return found;
+  });
 }
 
 function collectCollectionSurfaceComplianceFailures(
@@ -363,7 +658,8 @@ function extractRegistryEntities(source: string) {
   );
 }
 
-const collectionSurfaces = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces;
+const collectionSurfaces: readonly AdminCollectionSurfaceInventoryEntry[] =
+  ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces;
 const declaredDataRegistryEntities = collectionSurfaces
   .filter((surface) => surface.generic)
   .flatMap((surface) => surface.dataRegistryEntities);
@@ -1271,9 +1567,14 @@ function collectFullAdoptionContractFailures(
   options: {
     source?: string;
     registryEntities?: readonly string[];
+    sourceOverrides?: CollectionSourceOverrides;
   } = {},
 ) {
   const failures: string[] = [];
+  const sourceGraph = collectCollectionSourceGraph(
+    surface,
+    options.sourceOverrides,
+  );
   const source =
     options.source ??
     [...surface.pageSourceFiles, ...surface.presentationSourceFiles]
@@ -1281,6 +1582,13 @@ function collectFullAdoptionContractFailures(
       .join("\n");
   const registeredEntities = options.registryEntities ?? registryEntities;
   const contractIds = Object.keys(claim.contracts);
+
+  if (
+    claim.surfaceId !== surface.id ||
+    surface.workflowClassification !== "full_collection_adoption"
+  ) {
+    failures.push("false_full_adoption");
+  }
 
   if (
     !sameValueSet(
@@ -1340,7 +1648,13 @@ function collectFullAdoptionContractFailures(
     surface.columnVisibility !== "shared_optional_columns" ||
     !source.includes("columns=") ||
     !source.includes("enableColumnManagement") ||
-    !source.includes("onPersistColumns=")
+    !source.includes("onPersistColumns=") ||
+    !evidenceGraphCallsCanonicalImport(
+      sourceGraph,
+      "saveAdminColumnPreferences",
+      CANONICAL_COLUMN_PREFERENCES_OWNER,
+    ) ||
+    !evidenceGraphUsesPrimaryColumnPreset(sourceGraph)
   ) {
     failures.push("columns");
   }
@@ -1383,7 +1697,19 @@ function collectFullAdoptionContractFailures(
       !source.includes("bulkOptions=") ||
       !source.includes("onBulkExecute=") ||
       !source.includes("getBulkConfirmation=") ||
-      source.includes("enableSelection={false}")
+      source.includes("enableSelection={false}") ||
+      !evidenceGraphHasJsxAttribute(
+        sourceGraph,
+        "AdminEntityList",
+        "bulkInteraction",
+      ) ||
+      !evidenceGraphCallsCanonicalImport(
+        sourceGraph,
+        "useAdminEntityInstantMutation",
+        CANONICAL_DATA_RUNTIME_OWNER,
+      ) ||
+      !evidenceGraphUsesBulkMutationLifecycle(sourceGraph) ||
+      evidenceGraphHasLocalBulkLifecycleOwner(sourceGraph)
     ) {
       failures.push("bulk");
     }
@@ -1392,14 +1718,23 @@ function collectFullAdoptionContractFailures(
     !source.includes("enableSelection={false}") ||
     source.includes("bulkOptions=") ||
     source.includes("onBulkExecute=") ||
-    source.includes("getBulkConfirmation=")
+    source.includes("getBulkConfirmation=") ||
+    evidenceGraphHasJsxAttribute(
+      sourceGraph,
+      "AdminEntityList",
+      "bulkInteraction",
+    )
   ) {
     failures.push("bulk");
   }
 
   if (
     surface.queryMode !== "server-page" ||
-    !source.includes("useAdminEntityListController") ||
+    !evidenceGraphCallsCanonicalImport(
+      sourceGraph,
+      "useAdminEntityListController",
+      CANONICAL_QUERY_RUNTIME_OWNER,
+    ) ||
     surface.paginationState !== "adopted" ||
     surface.paginationOwner !== "AdminTablePagination"
   ) {
@@ -1444,6 +1779,50 @@ const fullAdoptionContractFailures = fullAdoptionClaims.flatMap((claim) => {
     (contract) => `${claim.surfaceId}:${contract}`,
   );
 });
+
+const collectionRuntimeOwnerGraph = new Map([
+  [CANONICAL_COLLECTION_OWNER, read(CANONICAL_COLLECTION_OWNER)],
+]);
+check(
+  "Collection Runtime owns Bulk selection and presentation but delegates the execution lifecycle to Data Runtime",
+  !evidenceGraphHasLocalBulkLifecycleOwner(collectionRuntimeOwnerGraph) &&
+    read(CANONICAL_COLLECTION_OWNER).includes(
+      "AdminEntityListBulkExecutionProps",
+    ) &&
+    read(CANONICAL_COLLECTION_OWNER).includes(
+      "bulkInteraction: AdminInstantMutationBulkInteraction",
+    ) &&
+    read(CANONICAL_COLLECTION_OWNER).includes(
+      "bulkInteraction.isBlocked",
+    ),
+);
+const specializedBulkConsumerSources = collectTsxFiles(join(ROOT, "src"))
+  .map(relativeSourceFile)
+  .filter(
+    (sourceFile) =>
+      sourceFile !== CANONICAL_COLLECTION_OWNER &&
+      read(sourceFile).includes("<AdminBulkActionBar"),
+  );
+const specializedBulkConsumerFailures = specializedBulkConsumerSources.filter(
+  (sourceFile) => {
+    const sourceGraph = collectSourceGraph([sourceFile]);
+    return (
+      !read(sourceFile).includes("instant.bulkInteraction.isBlocked") ||
+      !evidenceGraphCallsCanonicalImport(
+        sourceGraph,
+        "useAdminBoundedClientInstantMutation",
+        CANONICAL_DATA_RUNTIME_OWNER,
+      ) ||
+      !evidenceGraphDeclaresBulkMutationScope(sourceGraph) ||
+      evidenceGraphHasLocalBulkLifecycleOwner(sourceGraph)
+    );
+  },
+);
+check(
+  "every specialized Bulk presentation delegates pending, blocking, snapshot, rollback, reconciliation, and invalidation to Data Runtime",
+  specializedBulkConsumerSources.length > 0 &&
+    specializedBulkConsumerFailures.length === 0,
+);
 
 check(
   "every Full Adoption claim proves Collection, Table, Toolbar, Header, Columns, Sort, Row Actions, Bulk, Runtime, and Data Registry contracts",
@@ -1533,6 +1912,96 @@ check(
       (claim) => claim.surfaceId !== fullAdoptionFailureClaim.surfaceId,
     ),
   ),
+);
+
+const bulkAdoptionFailureClaim = fullAdoptionClaims.find(
+  (claim) => claim.contracts.bulk === "adopted",
+);
+const bulkAdoptionFailureFixture = fullAdoptionSurfaces.find(
+  (surface) => surface.id === bulkAdoptionFailureClaim?.surfaceId,
+);
+assert.ok(bulkAdoptionFailureFixture && bulkAdoptionFailureClaim);
+const bulkAdoptionSourceGraph = collectCollectionSourceGraph(
+  bulkAdoptionFailureFixture,
+);
+const localBulkOwnerSourceFile =
+  bulkAdoptionFailureFixture.presentationSourceFiles[0];
+const localBulkOwnerOverrides = new Map<string, string>([
+  ...bulkAdoptionSourceGraph,
+]);
+localBulkOwnerOverrides.set(
+  localBulkOwnerSourceFile,
+  `${localBulkOwnerOverrides.get(localBulkOwnerSourceFile)}\nfunction LocalBulkOwnerFixture() { const [bulkPending] = useState(false); return bulkPending; }`,
+);
+check(
+  "failure path rejects a local Bulk lifecycle owner",
+  collectFullAdoptionContractFailures(
+    bulkAdoptionFailureFixture,
+    bulkAdoptionFailureClaim,
+    { sourceOverrides: localBulkOwnerOverrides },
+  ).includes("bulk"),
+);
+
+const directBulkBypassOverrides = new Map(
+  [...bulkAdoptionSourceGraph].map(([sourceFile, source]) => [
+    sourceFile,
+    source.replaceAll("bulk: true", "bulk: false"),
+  ]),
+);
+check(
+  "failure path rejects a direct Bulk lifecycle bypass",
+  collectFullAdoptionContractFailures(
+    bulkAdoptionFailureFixture,
+    bulkAdoptionFailureClaim,
+    { sourceOverrides: directBulkBypassOverrides },
+  ).includes("bulk"),
+);
+
+const columnPreferenceSourceGraph = collectCollectionSourceGraph(
+  fullAdoptionFailureFixture,
+);
+const localColumnPreferenceOverrides = new Map(
+  [...columnPreferenceSourceGraph].map(([sourceFile, source]) => [
+    sourceFile,
+    source.replaceAll(
+      "saveAdminColumnPreferences",
+      "saveLocalColumnPreferences",
+    ),
+  ]),
+);
+check(
+  "failure path rejects a local Column Preferences owner",
+  collectFullAdoptionContractFailures(
+    fullAdoptionFailureFixture,
+    fullAdoptionFailureClaim,
+    { sourceOverrides: localColumnPreferenceOverrides },
+  ).includes("columns"),
+);
+
+const localRuntimeOverrides = new Map(
+  [...columnPreferenceSourceGraph].map(([sourceFile, source]) => [
+    sourceFile,
+    source.replaceAll(
+      "useAdminEntityListController",
+      "useLocalEntityListController",
+    ),
+  ]),
+);
+check(
+  "failure path rejects a local Collection query Runtime owner",
+  collectFullAdoptionContractFailures(
+    fullAdoptionFailureFixture,
+    fullAdoptionFailureClaim,
+    { sourceOverrides: localRuntimeOverrides },
+  ).includes("runtime"),
+);
+
+check(
+  "failure path rejects a false Full Adoption claim for another surface",
+  collectFullAdoptionContractFailures(fullAdoptionFailureFixture, {
+    ...fullAdoptionFailureClaim,
+    surfaceId: "false-full-adoption-fixture",
+  }).includes("false_full_adoption"),
 );
 const genericClassificationFailureFixture = fullAdoptionSurfaces[0];
 assert.ok(genericClassificationFailureFixture);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAdminFeedback } from "../AdminFeedbackProvider";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
+import type { AdminInstantMutationBulkInteraction } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getDefaultVisibleColumnKeys,
   resolveAdminEntityListEmptyState,
@@ -40,6 +41,19 @@ export type AdminEntityListBulkConfirmation = Pick<
   "title" | "description" | "confirmLabel" | "cancelLabel"
 >;
 
+type AdminEntityListBulkExecutionProps<TId extends AdminGridId> =
+  | {
+      onBulkExecute: (
+        action: string,
+        ids: TId[],
+      ) => Promise<AdminActionResult>;
+      bulkInteraction: AdminInstantMutationBulkInteraction;
+    }
+  | {
+      onBulkExecute?: undefined;
+      bulkInteraction?: never;
+    };
+
 export type AdminEntityListProps<
   TRow,
   TKey extends string,
@@ -66,7 +80,6 @@ export type AdminEntityListProps<
   fillAvailableWidth?: boolean;
   bulkOptions?: readonly AdminEntityBulkOption[];
   bulkEntityLabel?: string;
-  onBulkExecute?: (action: string, ids: TId[]) => Promise<AdminActionResult>;
   getBulkConfirmation?: (
     action: string,
     ids: TId[],
@@ -100,7 +113,7 @@ export type AdminEntityListProps<
   /** @deprecated Use toolbar. Kept only for classified legacy consumers. */
   toolbarStart?: ReactNode;
   initialFeedback?: AdminActionFeedback | null;
-};
+} & AdminEntityListBulkExecutionProps<TId>;
 
 function isAttentionFeedback(feedback: AdminActionFeedback | null) {
   return Boolean(
@@ -135,6 +148,7 @@ function AdminEntityListInner<
     bulkOptions = [],
     bulkEntityLabel = "عنصر",
     onBulkExecute,
+    bulkInteraction,
     getBulkConfirmation,
     bulkAdditionalControls,
     onSuccessfulMutation,
@@ -154,7 +168,6 @@ function AdminEntityListInner<
   const router = useRouter();
   const floating = useAdminFloatingLayer();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
-  const bulkPendingRef = useRef(false);
   const sortCorrectionRef = useRef(false);
   const feedbackChannel = `entity-list:${listId}`;
   const selection = useAdminGridSelection(rows.map(getRowId));
@@ -169,7 +182,6 @@ function AdminEntityListInner<
     ),
   );
   const [bulkAction, setBulkAction] = useState(bulkOptions[0]?.value ?? "");
-  const [bulkPending, setBulkPending] = useState(false);
   const initialFeedbackSignature = useMemo(
     () =>
       initialFeedback
@@ -243,16 +255,12 @@ function AdminEntityListInner<
   }
 
   async function executeBulk(action: string, ids: TId[]) {
-    if (!onBulkExecute || bulkPendingRef.current) return;
-    bulkPendingRef.current = true;
-    setBulkPending(true);
+    if (!onBulkExecute || bulkInteraction?.isBlocked) return;
     try {
       const result = await onBulkExecute(action, ids);
       showFeedback(result, { bulk: true });
       if (result.ok) {
         selection.clearSelection();
-        if (onSuccessfulMutation) await onSuccessfulMutation(result);
-        else router.refresh();
       }
     } catch {
       showFeedback(
@@ -263,9 +271,6 @@ function AdminEntityListInner<
         },
         { bulk: true },
       );
-    } finally {
-      bulkPendingRef.current = false;
-      setBulkPending(false);
     }
   }
 
@@ -319,7 +324,7 @@ function AdminEntityListInner<
         options={[...bulkOptions]}
         onClearSelection={selection.clearSelection}
         onExecute={requestBulkExecution}
-        isBusy={bulkPending}
+        isBusy={bulkInteraction.isBlocked}
         actionValue={bulkAction}
         actionControl={
           <AdminListboxSelect
@@ -329,7 +334,7 @@ function AdminEntityListInner<
             onOpenLayer={setOpenLayerId}
             value={bulkAction}
             onChange={setBulkAction}
-            disabled={bulkPending}
+            disabled={bulkInteraction.isBlocked}
             options={bulkOptions}
             className="w-[180px]"
           />
@@ -337,7 +342,7 @@ function AdminEntityListInner<
         additionalControls={bulkAdditionalControls?.({
           bulkAction,
           setBulkAction,
-          pending: bulkPending,
+          pending: bulkInteraction.isBlocked,
           openLayerId,
           setOpenLayerId,
         })}

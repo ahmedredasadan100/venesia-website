@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  bulkUpdateUnifiedContent,
   saveContentTablePreferences,
 } from "../../../app/admin/content/topics/actions";
 import {
@@ -13,6 +12,7 @@ import {
 import { mapTopicsActionResultToFeedback } from "../../../lib/admin/content/topics-action-feedback";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
+import type { AdminInstantMutationBulkInteraction } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import type {
   ContentSortValue,
   UnifiedContentRow,
@@ -88,6 +88,8 @@ export default function UnifiedContentList({
   initialVisibleColumns,
   initialFeedback,
   rowActionHandlers,
+  bulkInteraction,
+  onBulkExecute,
   onSortChange,
   onSuccessfulMutation,
   toolbar,
@@ -100,6 +102,12 @@ export default function UnifiedContentList({
   initialVisibleColumns: string[];
   initialFeedback?: AdminActionFeedback | null;
   rowActionHandlers: UnifiedContentRowActionHandlers;
+  bulkInteraction: AdminInstantMutationBulkInteraction;
+  onBulkExecute: (
+    action: string,
+    ids: number[],
+    categoryId: string,
+  ) => Promise<AdminActionResult>;
   onSortChange?: (
     sort: {
       key: UnifiedContentSortKey;
@@ -193,18 +201,10 @@ export default function UnifiedContentList({
           ? "لا توجد موضوعات محذوفة مطابقة للفلاتر الحالية."
           : "لا توجد موضوعات مطابقة للفلاتر الحالية.",
       }}
-      onBulkExecute={async (action, ids) => {
-        const formData = new FormData();
-        formData.set("bulk_action", action);
-        if (action === "permanent_delete") {
-          formData.set("confirm_permanent", "true");
-        }
-        if (action === "move_category" && bulkCategoryId) {
-          formData.set("category_id", bulkCategoryId);
-        }
-        ids.forEach((id) => formData.append("topic_ids", String(id)));
-        return bulkUpdateUnifiedContent(formData);
-      }}
+      onBulkExecute={(action, ids) =>
+        onBulkExecute(action, ids, bulkCategoryId)
+      }
+      bulkInteraction={bulkInteraction}
       getBulkConfirmation={(action, ids) =>
         action === "permanent_delete"
           ? {

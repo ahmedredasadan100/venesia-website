@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 
 import {
+  bulkUpdateUnifiedContent,
   duplicateUnifiedContent,
   emptyUnifiedContentTrash,
   permanentlyDeleteUnifiedContent,
@@ -436,6 +437,57 @@ export default function TopicsListClient({
     ],
   );
 
+  const executeBulkMutation = useCallback(
+    async (
+      action: string,
+      ids: number[],
+      categoryId: string,
+    ): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
+      try {
+        await instant.mutateAsync({
+          action: `bulk-${action}`,
+          bulk: true,
+          optimistic: () => undefined,
+          execute: async () => {
+            const formData = new FormData();
+            formData.set("bulk_action", action);
+            if (action === "permanent_delete") {
+              formData.set("confirm_permanent", "true");
+            }
+            if (action === "move_category" && categoryId) {
+              formData.set("category_id", categoryId);
+            }
+            ids.forEach((id) => formData.append("topic_ids", String(id)));
+            actionResult = await bulkUpdateUnifiedContent(formData);
+            return toInstantMutationResult(
+              actionResult,
+              "topic_bulk_failed",
+            );
+          },
+        });
+        if (actionResult) return actionResult;
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return {
+          ok: false,
+          title: "تعذر تنفيذ العملية",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية على الموضوعات المحددة.",
+        };
+      }
+
+      return {
+        ok: false,
+        title: "تعذر تنفيذ العملية",
+        message: "تعذر إثبات نتيجة العملية على الموضوعات المحددة.",
+      };
+    },
+    [instant],
+  );
+
   const sort =
     `${controller.query.sort.field}_${controller.query.sort.direction}` as ContentSortValue;
   const currentListPath = useMemo(() => {
@@ -577,6 +629,8 @@ export default function TopicsListClient({
           toolbar={toolbar}
           trashView={isTrashView}
           rowActionHandlers={rowActionHandlers}
+          bulkInteraction={instant.bulkInteraction}
+          onBulkExecute={executeBulkMutation}
           onSortChange={(next, options) =>
             controller.setSort(
               {
@@ -587,8 +641,8 @@ export default function TopicsListClient({
             )
           }
           onSuccessfulMutation={(result) => {
-            // Row actions already reconcile through Instant Mutation. Bulk
-            // actions and column preferences still require list invalidation.
+            // Row and Bulk actions reconcile through Instant Mutation. Column
+            // preferences still require list invalidation.
             if (!result || result.entityId == null) {
               return controller.invalidate();
             }

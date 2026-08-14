@@ -646,6 +646,7 @@ export default function PagesTableClient({
                     adminActionFailure("إجراء غير مدعوم", "إجراء الصفحات غير معروف."),
                   )
             }
+            bulkInteraction={instant.bulkInteraction}
             getBulkConfirmation={(action) =>
               action === "delete"
                 ? {
