@@ -12,6 +12,13 @@ for (const dimension of ["identity", "metadata", "crawl", "adoption", "infrastru
 }
 assert.ok(runner.includes("check.weight * 0.5") && runner.includes("earned / total"), "health score must derive from weighted check outcomes");
 assert.ok(runner.includes("loadCanonicalDrift") && runner.includes("productDecision: drift.length > 0"));
+assert.ok(
+  runner.includes("const contractPromise = loadGlobalSeoEffectiveContractForAdmin()") &&
+    runner.includes("const canonicalDriftPromise = contractPromise.then") &&
+    runner.includes("Promise.allSettled([canonicalDriftPromise])") &&
+    !runner.includes("const drift = await loadCanonicalDrift(settings"),
+  "canonical drift must wait only for its settings dependency, not the other SEO diagnostics",
+);
 assert.ok(!migration.includes("projects.canonical_url =") && !migration.match(/update\s+public\.projects/i), "migration must not mutate live project canonical values");
 assert.ok(runner.includes("global_seo_infrastructure_health") && runner.includes("validateRedirectInput") && runner.includes("runSitemapDiagnostics"));
 assert.ok(dashboard.includes("Effective Source Contract") && dashboard.includes("Product Decision"));

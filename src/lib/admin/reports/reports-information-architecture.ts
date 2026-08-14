@@ -174,7 +174,7 @@ export const ADMIN_REPORT_DEFINITIONS = [
     icon: "◈",
     filters: [
       { id: "all", label: "الكل", description: "كل مؤشرات الأعمال المتاحة." },
-      { id: "leads", label: "Leads", description: "العملاء المحتملون عند توفر CRM أوAdapter صالح." },
+      { id: "leads", label: "Leads", description: "العملاء المحتملون عند توفر CRM أو Adapter صالح." },
       { id: "conversion", label: "Conversion", description: "معدل ومسار التحويل عند توفر المصدر." },
       { id: "campaigns", label: "Campaigns", description: "أداء الحملات عند توفر المزود." },
       { id: "roi", label: "ROI", description: "العائد عند توفر تكاليف وإيرادات موثوقة." },
@@ -310,8 +310,8 @@ export const REPORT_EXPERIENCE_CAPABILITIES = [
   { key: "saved_reports", label: "Saved Reports", state: "unavailable", owner: "Unassigned persistence dependency", message: "لا يوجد مالك persistence معتمد لحفظ تعريفات التقارير؛ لم يُنشأ جدول محلي بديل." },
   { key: "favorites", label: "Favorites", state: "unavailable", owner: "Unassigned preference dependency", message: "يتطلب توسيع مالك تفضيلات المستخدم بقرار نطاق مستقل؛ لا توجد حالة Client وهمية." },
   { key: "compare_periods", label: "Compare Periods", state: "contextual", owner: "Analytics Contract", message: "العقد يقبل سياق المقارنة، والنتيجة تبقى غير متاحة حتى يعيد Adapter فترات قابلة للمقارنة." },
-  { key: "schedule_reports", label: "Schedule Reports", state: "unavailable", owner: "Unassigned scheduling dependency", message: "يتطلب Job/Scheduling owner معتمدًا؛ لم يُنشأ مؤقت أوCron موازٍ." },
+  { key: "schedule_reports", label: "Schedule Reports", state: "unavailable", owner: "Unassigned scheduling dependency", message: "يتطلب Job/Scheduling owner معتمدًا؛ لم يُنشأ مؤقت أو Cron موازٍ." },
   { key: "executive_pdf", label: "Executive PDF", state: "unavailable", owner: "Unassigned document-generation dependency", message: "يتطلب عقد توليد وتسليم ملفات معتمدًا؛ Print متاح ولا يُسمى PDF تنفيذيًا." },
-  { key: "action_center", label: "Action Center", state: "ready", owner: "Reports Drill-down Contract", message: "المشكلات الحقيقية ترتبط بالتقرير أوشاشة المالك المناسبة دون mutation موازية." },
-  { key: "ai_insights", label: "AI Insights", state: "unavailable", owner: "Unassigned AI provider dependency", message: "لا يوجد AI provider أوInsight contract معتمد؛ لا تُنتج توصيات مولدة أوثابتة." },
+  { key: "action_center", label: "Action Center", state: "ready", owner: "Reports Drill-down Contract", message: "المشكلات الحقيقية ترتبط بالتقرير أو شاشة المالك المناسبة دون mutation موازية." },
+  { key: "ai_insights", label: "AI Insights", state: "unavailable", owner: "Unassigned AI provider dependency", message: "لا يوجد AI provider أو Insight contract معتمد؛ لا تُنتج توصيات مولدة أو ثابتة." },
 ] as const satisfies readonly ReportExperienceCapability[];

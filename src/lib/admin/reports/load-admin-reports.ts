@@ -80,7 +80,7 @@ async function readReportsTruth(): Promise<ReportsSource<ReportsReadModel>> {
     checkedAt,
     message: provenanceReady
       ? "القراءة التجميعية مثبتة بالـmigration والـregistry والـACL والـRLS والفهارس."
-      : "البيانات متاحة، لكن إثبات قاعدة البيانات أوالحماية أوالفهارس يحتاج مراجعة.",
+      : "البيانات متاحة، لكن إثبات قاعدة البيانات أو الحماية أو الفهارس يحتاج مراجعة.",
     data: model,
   };
 }
@@ -128,7 +128,7 @@ async function readSeoHealth(): Promise<ReportsSource<Awaited<ReturnType<typeof 
     checkedAt: data.checkedAt,
     message: data.status === "healthy"
       ? "SEO وSitemap اجتازا تشخيص المالك الحالي."
-      : "تشخيص SEO الحقيقي متاح ويحتوي تحذيرات أوأخطاء تحتاج معالجة.",
+      : "تشخيص SEO الحقيقي متاح ويحتوي تحذيرات أو أخطاء تحتاج معالجة.",
     data,
     href: "/admin/seo/sitemap",
   };
@@ -140,15 +140,18 @@ export async function loadAdminReports(options?: {
   await requireAdminSession();
 
   const checkedAt = new Date().toISOString();
-  const analytics = await loadAnalyticsSnapshot(options?.analytics);
-  const [dashboardResult, reportsResult, reviewResult, auditResult, seoResult] =
-    await Promise.allSettled([
+  const [analytics, sourceResults] = await Promise.all([
+    loadAnalyticsSnapshot(options?.analytics),
+    Promise.allSettled([
       loadAdminDashboardSources(),
       readReportsTruth(),
       readContentReview(),
       readAuditReport(),
       readSeoHealth(),
-    ]);
+    ]),
+  ]);
+  const [dashboardResult, reportsResult, reviewResult, auditResult, seoResult] =
+    sourceResults;
 
   const failures = [
     ["Reports Dashboard source unavailable", dashboardResult, "loadAdminDashboardSources"],
@@ -242,7 +245,7 @@ export async function loadAdminReports(options?: {
       status: "ready",
       source: "Next.js force-dynamic request-time rendering",
       checkedAt,
-      message: "كل طلب Reports يعيد قراءة الملاك الحالية؛ لا توجد نسخة Cache موازية أوRevalidation مستقلة.",
+      message: "كل طلب Reports يعيد قراءة الملاك الحالية؛ لا توجد نسخة Cache موازية أو Revalidation مستقلة.",
     },
   };
 }

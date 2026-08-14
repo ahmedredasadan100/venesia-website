@@ -73,12 +73,12 @@ function DashboardStateBanner({ model }: { model: AdminDashboardModel }) {
     },
     partial: {
       title: "Dashboard جزئية",
-      body: "بعض المصادر غير مكتملة. القيم المتاحة مميزة بوضوح ولا توجد أصفار أوحالات نجاح بديلة.",
+      body: "بعض المصادر غير مكتملة. القيم المتاحة مميزة بوضوح ولا توجد أصفار أو حالات نجاح بديلة.",
       classes: "border-amber-400/24 bg-amber-400/[0.07] text-amber-100",
     },
     unavailable: {
       title: "Dashboard غير متاحة",
-      body: "تعذر تكوين Dashboard موثوقة. لم تُعرض بيانات ثابتة أوفارغة بدلًا من أخطاء المصادر.",
+      body: "تعذر تكوين Dashboard موثوقة. لم تُعرض بيانات ثابتة أو فارغة بدلًا من أخطاء المصادر.",
       classes: "border-rose-400/24 bg-rose-400/[0.07] text-rose-100",
     },
   }[model.state];

@@ -201,7 +201,7 @@ function SurfaceCard({
         <div>
           {sharedOnly ? (
             <div className="rounded-2xl border border-sky-300/16 bg-sky-300/[.05] p-4 text-xs leading-6 text-sky-100/65">
-              WhatsApp لا يملك نسخة مستقلة من App ID أوApp Secret. عدّل القيم مرة واحدة من <a href="#meta" className="font-semibold text-sky-200 underline underline-offset-4">Meta App owner</a>.
+              WhatsApp لا يملك نسخة مستقلة من App ID أو App Secret. عدّل القيم مرة واحدة من <a href="#meta" className="font-semibold text-sky-200 underline underline-offset-4">Meta App owner</a>.
             </div>
           ) : (
             <form onSubmit={submit} className="space-y-4" autoComplete="off">
@@ -347,7 +347,7 @@ export default function IntegrationsServerConfiguration({
       <AdminPageContextHeader
         eyebrow="INTEGRATIONS OWNER"
         title="إعدادات الربط على السيرفر"
-        description="إدارة App-Level Credentials داخل CMS Vault. هذه الإعدادات تفتح OAuth فقط، ولا تملك Connection Tokens أوحالة الاتصال أوبيانات Analytics."
+        description="إدارة App-Level Credentials داخل CMS Vault. هذه الإعدادات تفتح OAuth فقط، ولا تملك Connection Tokens أو حالة الاتصال أو بيانات Analytics."
         meta={`${configuredOwners}/4 owners داخل CMS`}
         actions={(
           <Link href="/admin/settings/integrations" className="inline-flex min-h-11 items-center rounded-xl border border-white/12 px-4 text-xs font-semibold text-white/62 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]">
@@ -362,7 +362,7 @@ export default function IntegrationsServerConfiguration({
           <div className="grid size-12 shrink-0 place-items-center rounded-[18px] border border-[#D8B87A]/22 bg-[#D8B87A]/[.07] text-[#D8B87A]"><ShieldIcon /></div>
           <div>
             <h2 id="configuration-proof-heading" className="text-lg font-semibold text-white">Security وRuntime Proof</h2>
-            <p className="mt-2 max-w-3xl text-xs leading-6 text-white/42">Secrets تُكتب وتُستبدل وتُحذف على السيرفر فقط. المتصفح يرى وجود القيمة وحالتها، ولا يستقبل القيمة المحفوظة أوVault UUID.</p>
+            <p className="mt-2 max-w-3xl text-xs leading-6 text-white/42">Secrets تُكتب وتُستبدل وتُحذف على السيرفر فقط. المتصفح يرى وجود القيمة وحالتها، ولا يستقبل القيمة المحفوظة أو Vault UUID.</p>
           </div>
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-3">
