@@ -9,6 +9,7 @@ import {
   AdminEntityListTableRegion,
 } from "../../../components/admin/entity-list";
 import {
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   AdminPageHeader,
   AdminTablePagination,
 } from "../../../components/admin/ui";
@@ -90,8 +91,8 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     sortable: true,
     sortKey: "created_at",
     align: "start",
-    minWidth: 164,
-    width: 164,
+    minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+    width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
     primary: true,
     sticky: "start",
     renderCell: ({ row }) => (

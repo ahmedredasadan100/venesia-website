@@ -368,6 +368,23 @@ check(
 );
 
 check(
+  "Shared text-only primary preset owns its balanced logical inset once",
+  dataGrid.includes("textOnlyCellInlinePaddingPx: 20") &&
+    dataGrid.includes(
+      "ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textOnlyCellInlinePaddingPx * 2",
+    ) &&
+    entityTable.includes("usesTextOnlyPrimaryPreset") &&
+    entityTable.includes(
+      "column.minWidth === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly",
+    ) &&
+    entityTable.includes(
+      "column.width === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly",
+    ) &&
+    entityTable.includes("paddingInlineStart:") &&
+    entityTable.includes("paddingInlineEnd:"),
+);
+
+check(
   "Columns control is official whenever persistence is declared",
   entityList.includes("onPersistColumns ? (") &&
     !entityList.includes("enableColumnManagement && onPersistColumns") &&

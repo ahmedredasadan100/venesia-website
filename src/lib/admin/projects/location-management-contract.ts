@@ -61,6 +61,48 @@ export const PROJECT_LOCATION_LEVEL_CONFIG = {
   }
 >;
 
+export const PROJECT_LOCATION_MANAGEMENT_COLUMN_CONTRACT_VERSION = 1;
+
+export const PROJECT_LOCATION_MANAGEMENT_COLUMN_KEYS = [
+  "name",
+  "parent",
+  "order",
+  "relations",
+  "status",
+  "actions",
+] as const;
+export type ProjectLocationManagementColumnKey =
+  (typeof PROJECT_LOCATION_MANAGEMENT_COLUMN_KEYS)[number];
+
+export function getProjectLocationManagementListViewKey(
+  level: ProjectLocationLevel,
+) {
+  return `project-locations-${PROJECT_LOCATION_LEVEL_CONFIG[level].slug}`;
+}
+
+export function getProjectLocationManagementColumnKeys(
+  level: ProjectLocationLevel,
+): readonly ProjectLocationManagementColumnKey[] {
+  return PROJECT_LOCATION_MANAGEMENT_COLUMN_KEYS.filter(
+    (key) =>
+      level !== "governorate" || (key !== "parent" && key !== "order"),
+  );
+}
+
+export function getProjectLocationManagementDefaultColumnKeys(
+  level: ProjectLocationLevel,
+): readonly ProjectLocationManagementColumnKey[] {
+  return getProjectLocationManagementColumnKeys(level);
+}
+
+export function getProjectLocationManagementPreferenceColumnKeys(
+  level: ProjectLocationLevel,
+): readonly ProjectLocationManagementColumnKey[] {
+  return getProjectLocationManagementColumnKeys(level).filter(
+    (key) => key !== "name" && key !== "actions",
+  );
+}
+
 export function projectLocationManagementPath(level: ProjectLocationLevel) {
   return `/admin/projects/locations/${PROJECT_LOCATION_LEVEL_CONFIG[level].slug}`;
 }
@@ -118,6 +160,58 @@ export const projectLocationsQueryContract: AdminEntityListQueryContract<
   },
 };
 
+export const projectLocationDeleteEligibilitySchema = z.object({
+  canDelete: z.boolean(),
+  disabledReason: z.string().min(1).nullable(),
+});
+
+export const projectLocationVisibilityEligibilitySchema = z.object({
+  canDeactivate: z.boolean(),
+  disabledReason: z.string().min(1).nullable(),
+});
+
+export function resolveProjectLocationDeleteEligibility(input: {
+  projectCount: number;
+  childCount: number;
+}) {
+  if (input.projectCount > 0) {
+    return {
+      canDelete: false,
+      disabledReason:
+        "لا يمكن الحذف لأن الموقع مرتبط بمشروعات.",
+    } as const;
+  }
+  if (input.childCount > 0) {
+    return {
+      canDelete: false,
+      disabledReason:
+        "لا يمكن الحذف لأن الموقع يحتوي عناصر فرعية.",
+    } as const;
+  }
+  return { canDelete: true, disabledReason: null } as const;
+}
+
+export function resolveProjectLocationVisibilityEligibility(input: {
+  projectCount: number;
+  activeChildCount: number;
+}) {
+  if (input.activeChildCount > 0) {
+    return {
+      canDeactivate: false,
+      disabledReason:
+        "لا يمكن إخفاء الموقع لأنه يحتوي مواقع فرعية نشطة.",
+    } as const;
+  }
+  if (input.projectCount > 0) {
+    return {
+      canDeactivate: false,
+      disabledReason:
+        "لا يمكن إخفاء الموقع لأنه مرتبط بمشروعات.",
+    } as const;
+  }
+  return { canDeactivate: true, disabledReason: null } as const;
+}
+
 export const projectLocationManagementRowSchema = z.object({
   id: z.coerce.number().int().positive(),
   client_key: z.string().uuid(),
@@ -133,6 +227,8 @@ export const projectLocationManagementRowSchema = z.object({
   parent_name_en: z.string().nullable(),
   project_count: z.coerce.number().int().nonnegative(),
   child_count: z.coerce.number().int().nonnegative(),
+  delete_eligibility: projectLocationDeleteEligibilitySchema,
+  visibility_eligibility: projectLocationVisibilityEligibilitySchema,
 });
 export type ProjectLocationManagementRow = z.infer<
   typeof projectLocationManagementRowSchema

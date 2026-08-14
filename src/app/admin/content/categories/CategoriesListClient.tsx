@@ -364,6 +364,58 @@ export default function CategoriesListClient({
     [instant],
   );
 
+  const executeBulkMutation = useCallback(
+    async (action: string, ids: number[]): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
+      try {
+        await instant.mutateAsync({
+          action: `bulk-${action}`,
+          bulk: true,
+          optimistic: () => undefined,
+          execute: async () => {
+            actionResult = await bulkCategoriesLifecycleAjax(
+              action,
+              ids,
+              action === "permanent_delete",
+            );
+            return actionResult.ok
+              ? {
+                  ok: true as const,
+                  message: actionResult.message,
+                  feedbackStatus:
+                    actionResult.feedbackStatus === "warning"
+                      ? "warning" as const
+                      : "success" as const,
+                }
+              : {
+                  ok: false as const,
+                  code: "category_bulk_failed",
+                  message: actionResult.message,
+                };
+          },
+        });
+        if (actionResult) return actionResult;
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return {
+          ok: false,
+          title: "تعذر تنفيذ العملية",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية على التصنيفات المحددة.",
+        };
+      }
+
+      return {
+        ok: false,
+        title: "تعذر تنفيذ العملية",
+        message: "تعذر إثبات نتيجة العملية على التصنيفات المحددة.",
+      };
+    },
+    [instant],
+  );
+
   const removeCategory = useCallback(
     (category: CategoryListRow) =>
       runLifecycleMutation(category, "delete", () =>
@@ -512,13 +564,8 @@ export default function CategoriesListClient({
           selectionLabel="تحديد كل التصنيفات في الصفحة"
           bulkOptions={isTrashView ? TRASH_BULK_OPTIONS : []}
           bulkEntityLabel="تصنيف"
-          onBulkExecute={(action, ids) =>
-            bulkCategoriesLifecycleAjax(
-              action,
-              ids,
-              action === "permanent_delete",
-            )
-          }
+          onBulkExecute={executeBulkMutation}
+          bulkInteraction={instant.bulkInteraction}
           getBulkConfirmation={(action, ids) =>
             action === "permanent_delete"
               ? {

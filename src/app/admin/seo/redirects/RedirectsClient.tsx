@@ -9,6 +9,7 @@ import {
   AdminEntityListTableRegion,
 } from "../../../../components/admin/entity-list";
 import {
+  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
   AdminActionButton,
   AdminDataGridRowActions,
@@ -80,8 +81,8 @@ function createRedirectColumns(input: {
   return [
     {
       ...REDIRECTS_LIST_COLUMN_META.source,
-      minWidth: 210,
-      width: 210,
+      minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+      width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
       sticky: "start",
       primary: true,
       renderCell: ({ row }) => (

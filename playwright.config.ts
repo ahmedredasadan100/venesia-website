@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "playwright/test";
 
-const localBaseUrl = "http://127.0.0.1:3100";
+const localBaseUrl = "http://127.0.0.1:3000";
 const baseURL = process.env.E2E_BASE_URL?.replace(/\/$/u, "") || localBaseUrl;
 const usesExternalServer = Boolean(process.env.E2E_BASE_URL);
 
@@ -28,7 +28,7 @@ export default defineConfig({
   webServer: usesExternalServer
     ? undefined
     : {
-        command: "npm run start -- --hostname 127.0.0.1 --port 3100",
+        command: "npm run start -- --hostname 127.0.0.1 --port 3000",
         url: localBaseUrl,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

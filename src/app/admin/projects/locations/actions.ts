@@ -250,6 +250,24 @@ export async function setProjectLocationActiveAction(
     return adminActionFailure("تعذر تحديث الحالة", "معرّف الموقع غير صالح.");
   }
   try {
+    if (!isActive) {
+      const existing = await loadProjectLocationManagementRow(id, level);
+      if (!existing) {
+        return adminActionFailure(
+          "تعذر تحديث حالة الموقع",
+          "الموقع غير موجود.",
+          { entityId: id },
+        );
+      }
+      if (!existing.visibility_eligibility.canDeactivate) {
+        return adminActionFailure(
+          "تعذر تحديث حالة الموقع",
+          existing.visibility_eligibility.disabledReason ??
+            "لا يمكن إخفاء الموقع وفق علاقاته الحالية.",
+          { entityId: id },
+        );
+      }
+    }
     await mutateLocation("update", id, { level, is_active: isActive });
     const saved = await loadProjectLocationManagementRow(id, level);
     if (!saved) throw new Error("الموقع غير موجود.");

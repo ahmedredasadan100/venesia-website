@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-12
+**Updated:** 2026-08-14
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -10,37 +10,30 @@ This file records the minimum current facts needed to begin work safely. Archite
 ## Current official baseline
 
 ```text
-5948620314083008a73c668835f1ec789e36dab2
+3b548f5b4bfd1122c4c0a35b1966cfe132b72363
 ```
 
-Verified on 2026-08-12:
+Verified as the current delivery baseline for the local 2026-08-14 architecture pass:
 
 | Surface | SHA / state |
 |---|---|
-| Local `main` | `5948620314083008a73c668835f1ec789e36dab2` |
-| `origin/main` | `5948620314083008a73c668835f1ec789e36dab2` |
-| GitHub `main` | `5948620314083008a73c668835f1ec789e36dab2` |
-| Vercel Production deployment | `success` on `5948620314083008a73c668835f1ec789e36dab2` |
-| GitHub exact-head checks | Application Quality Gate plus Media Coordination, Dashboard Truth, and Reports Analytics on PostgreSQL 17 passed |
+| Local phase branch base HEAD | `756734128d0b32cf0dd2766328f26da94ccd2d4b` before the uncommitted pass |
+| Local `main` / `origin/main` / GitHub `main` | `3b548f5b4bfd1122c4c0a35b1966cfe132b72363` |
+| GitHub / Vercel | Quality Gate and automatic Vercel deployment passed on `3b548f5b4bfd1122c4c0a35b1966cfe132b72363` |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
-## Current open PRs
+## Current delivery state
 
-| PR | State | Architecture status |
-|---|---|---|
-| #86 — `AI Architecture Constitution Refresh (Version 3)` | Draft; opened 2026-08-12 | Documentation-only Version 3.1.0 proposal from current baseline; Architecture PASS with zero blocking issues. Not Ready, merged, deployed, or Production-authoritative. |
-| #1 — `chore: set up Cursor Cloud dev environment` | Draft; last updated 2026-07-17 | Historical environment proposal on an old head. It is not current architecture or current-main evidence and requires a fresh delta/architecture review before use. |
-
-This inventory records GitHub state at the Constitution Refresh delivery gate. Closed and merged history belongs in GitHub and the durable phase summary below.
+The active Platform Governance & Architecture Closure pass is pending delivery from its dedicated phase branch. GitHub remains the authority for its eventual PR, merge, checks, and deployment state; authenticated Admin Browser proof remains environment-dependent.
 
 ## Active phase
 
-- **Title:** AI Architecture Constitution Refresh (Version 3)
-- **Baseline:** `5948620314083008a73c668835f1ec789e36dab2`
-- **Branch:** `codex/ai-architecture-constitution-v3-refresh`
-- **Scope:** canonical documentation only; no application, database, Supabase, GitHub-setting, Vercel, deployment, or Production mutation.
-- **PR:** Draft #86; the PR body and GitHub are the delivery-state authority.
+- **Title:** Platform Governance & Architecture Closure
+- **Baseline:** `756734128d0b32cf0dd2766328f26da94ccd2d4b`
+- **Branch:** `codex/locations-shared-collection-adoption`
+- **Scope:** existing Admin Collection/Data/Domain owners, fail-closed adoption evidence, Location eligibility projection, and local route/page health verification.
+- **Delivery:** pending dedicated PR at the time of this state snapshot; live GitHub evidence supersedes this line after delivery.
 
 ## Current architecture truth
 
@@ -54,11 +47,14 @@ This inventory records GitHub state at the Constitution Refresh delivery gate. C
 - The official Pages Collection read model is the only Pages list path and exposes its existing assignment aggregate as `moduleCount` through the shared output contract.
 - Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
+- Generic Bulk selection, presentation, intent, and confirmation requests remain with the Collection owner. Bulk pending, blocking, optimistic state, snapshot, rollback, reconciliation, and invalidation are owned only by the existing Data Runtime; domain actions retain business operation, eligibility, atomicity, and persistence.
+- Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. The current matrix has 10 Full Adoption claims and 0 Partial Adoption entries; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
+- Governorates, Cities, Districts, and Sub-districts share the Location Collection/Data contracts. Their optional columns, preferences, primary Name preset, sorting, pagination, and Row Actions are shared; Bulk is explicitly `not_required`, and delete eligibility is projected by the Location contract/adapter while the guarded RPC remains final enforcement.
 - Existing `/images/**` and `/files/**` values are an explicit read-compatibility boundary for live content, not a write owner and not permission for filesystem uploads in Production.
 - Public navigation API/layout consumers share the current public navigation owner, which applies active-menu and published linked-target truth. Redirect resolution uses the current exact capped lookup; neither path may restore the superseded PR #82 read owners.
 - The existing Sitemap capability preserves valid entries when one source fails, reports the source failure through the current logging owner, and exposes one route output contract.
 - Public Topic pages have one page-level `h1`; Article Markdown headings are rendered under that page heading without changing stored Markdown or approved visual typography.
-- Browser verification uses the existing Playwright dependency through one formal configuration. Public and unauthenticated checks run in CI; authenticated state is supplied externally and mutable Admin proof requires an isolated disposable environment.
+- Browser verification uses the existing Playwright dependency through one formal configuration on port 3000. `verify:platform` derives route/page health from Next build manifests plus the existing public-route and Admin-navigation registries; authenticated state is supplied externally and absent state is reported as `SKIPPED / UNPROVEN`.
 - Operational failures use the existing structured logger with context redaction, the Next.js server `onRequestError` hook, and public/Admin error boundaries. Vercel remains the current server-log sink; no external monitoring vendor has been selected.
 - GitHub CI uses PostgreSQL 17 for the Media Coordination, Dashboard Truth, and Reports Analytics service jobs. This alignment changes CI infrastructure only and does not change application behavior, schema, Supabase, or Vercel.
 

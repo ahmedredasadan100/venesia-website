@@ -32,11 +32,9 @@ export const ADMIN_INTERACTION_SYSTEM = {
   name: "Admin Interaction System",
   role: "governance_contracts_umbrella",
   ownsRuntime: false,
-  scope: "platform_governance_with_explicit_adoption_gaps",
-  globalClosed: false,
-  globalClosureBlockers: [
-    "Project Locations cannot claim full Collection adoption until its committed presentation source adopts the shared optional-column contract.",
-  ],
+  scope: "platform_governance",
+  globalClosed: true,
+  globalClosureBlockers: [],
 } as const;
 
 export const ADMIN_INTERACTION_MODULES = [
@@ -58,7 +56,7 @@ export const ADMIN_INTERACTION_MODULES = [
       "src/components/admin/entity-list/AdminEntityListSurface.tsx",
     ],
     responsibility:
-      "Entity collection query state, filters, selection, row presentation, pagination, and collection interaction ownership.",
+      "Entity collection query state, filters, selection, row and Bulk presentation, Bulk intent and confirmation requests, pagination, and collection interaction ownership; it never owns mutation execution lifecycle.",
   },
   {
     id: "data_runtime",
@@ -69,7 +67,7 @@ export const ADMIN_INTERACTION_MODULES = [
       "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
     ],
     responsibility:
-      "Normalized entity data, request ownership, optimistic mutation, reconciliation, invalidation, and instrumentation.",
+      "Normalized entity data, request ownership, row and Bulk pending/blocking, optimistic mutation, snapshot, rollback, reconciliation, invalidation, and instrumentation.",
   },
   {
     id: "feedback_runtime",
@@ -860,13 +858,9 @@ const ADMIN_AUTH_SURFACE_DEFAULTS = {
  */
 export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   scope: "all_admin_collection_and_list_surfaces",
-  globalClosed: false,
-  globalClosureBlockers: [
-    "Project Locations is a partial Collection adopter because the committed consumer does not expose the shared optional-column persistence contract.",
-  ],
-  genericAdoptionGaps: [
-    "project-locations:shared_optional_columns",
-  ],
+  globalClosed: true,
+  globalClosureBlockers: [],
+  genericAdoptionGaps: [],
   canonicalSectionGap: "gap-7",
   canonicalTableFooterGap: "gap-4",
   ownerSourceFiles: {
@@ -1044,7 +1038,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "project-locations",
-      workflowClassification: "partial_collection_adoption",
+      workflowClassification: "full_collection_adoption",
       generic: true,
       routes: [
         "/admin/projects/locations/governorates",
@@ -1069,7 +1063,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "fixed_no_optional_columns",
+      columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
@@ -1082,11 +1076,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "project_locations_sub_area",
       ],
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
-      requiredAdoption: ["shared_optional_columns"],
-      exceptionRationale:
-        "The committed consumer uses the shared typed table contract but does not expose the shared optional-column persistence controls, so it cannot claim Full Adoption.",
+      requiredAdoption: [],
+      exceptionRationale: null,
       rationale:
-        "Governorates, cities, districts, and sub-districts share the existing Collection/Data owners and Row Actions, but the committed presentation remains a partial adopter until the optional-column contract is adopted.",
+        "Governorates, cities, districts, and sub-districts share one Location consumer that adopts the existing Collection/Data owners, optional-column persistence, shared sorting, Row Actions, and explicit no-bulk contract.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
@@ -2043,7 +2036,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   ],
 } as const satisfies {
   scope: "all_admin_collection_and_list_surfaces";
-  globalClosed: false;
+  globalClosed: true;
   globalClosureBlockers: readonly string[];
   genericAdoptionGaps: readonly string[];
   canonicalSectionGap: "gap-7";
@@ -2142,6 +2135,10 @@ export const ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS = [
   },
   {
     surfaceId: "projects-residential-commercial",
+    contracts: ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+  },
+  {
+    surfaceId: "project-locations",
     contracts: ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
   },
   {
