@@ -295,7 +295,7 @@ export default function AdminIntegrationsPlatform({ snapshot }: { snapshot: Inte
 
       {snapshot.state !== "ready" ? (
         <div role="status" className="rounded-[20px] border border-amber-300/16 bg-amber-300/[0.055] px-5 py-4 text-xs leading-6 text-amber-100/70">
-          حالة المنصة جزئية لأن Connection Aggregate أوVault أوMigration proof غير متاح بالكامل. لا تُستنتج حالة اتصال من Analytics.
+          حالة المنصة جزئية لأن Connection Aggregate أو Vault أو Migration proof غير متاح بالكامل. لا تُستنتج حالة اتصال من Analytics.
         </div>
       ) : null}
 

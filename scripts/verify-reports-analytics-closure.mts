@@ -301,6 +301,16 @@ assert.match(loader, /loadAdminAuditReport\(\)/, "Reports must use the Audit own
 assert.match(loader, /runGlobalSeoHealth\(\)/, "Reports must use the SEO owner");
 assert.match(loader, /loadContentReviewReport\(\)/, "Reports must use the current validation owner");
 assert.match(loader, /loadAnalyticsSnapshot\(options\?\.analytics\)/, "Reports must use one Analytics composition root");
+assert.match(
+  loader,
+  /const \[analytics, sourceResults\] = await Promise\.all\(\[/,
+  "Analytics and the independent Reports owners must start in the same parallel wave",
+);
+assert.ok(
+  loader.indexOf("loadAnalyticsSnapshot(options?.analytics)") <
+    loader.indexOf("Promise.allSettled(["),
+  "Analytics must not block the independent fail-soft source group",
+);
 assert.doesNotMatch(loader, /\.from\("admin_audit_logs"\)|\.from\("media_assets"\)/);
 assert.doesNotMatch(loader, /return\s+0|\?\?\s*0|return\s+\[\]|\?\?\s*\[\]/);
 assert.match(reviewLoader, /REVIEW_PAGE_SIZE = 500/);
@@ -324,6 +334,16 @@ assert.match(view, /buildAdminReportsOverview/);
 assert.match(view, /نظرة عامة على التقارير/);
 assert.match(view, /أهم التنبيهات/);
 assert.match(view, /Analytics Providers/);
+assert.match(
+  view,
+  /function RecordColumn[\s\S]*?<section className="min-w-0 rounded-\[28px\]/,
+  "Reusable Reports record columns must allow their grid tracks to shrink on mobile",
+);
+assert.match(
+  view,
+  /<section className="grid gap-5 xl:grid-cols-\[1\.35fr_\.65fr\]">[\s\S]*?<div className="min-w-0 rounded-\[28px\][\s\S]*?<div className="min-w-0 rounded-\[28px\]/,
+  "Both overview diagnostic cards must allow their grid tracks to shrink on mobile",
+);
 assert.match(view, /أهم المشاريع/);
 assert.match(view, /أهم المحتوى/);
 assert.match(view, /أهم النشاط/);

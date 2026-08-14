@@ -311,12 +311,26 @@ async function buildPublicMediaDataChecks(): Promise<GlobalSeoHealthCheck[]> {
 
 export async function runGlobalSeoHealth(): Promise<GlobalSeoHealthSnapshot> {
   const checkedAt = new Date().toISOString();
-  const [contract, sitemap, redirectChecks, infrastructureChecks, publicMediaChecks] = await Promise.all([
-    loadGlobalSeoEffectiveContractForAdmin(),
+  const contractPromise = loadGlobalSeoEffectiveContractForAdmin();
+  const canonicalDriftPromise = contractPromise.then((contract) =>
+    loadCanonicalDrift(
+      contract.settings.canonicalBaseUrl || contract.settings.siteUrl,
+    ),
+  );
+  const [
+    contract,
+    sitemap,
+    redirectChecks,
+    infrastructureChecks,
+    publicMediaChecks,
+    [canonicalDriftResult],
+  ] = await Promise.all([
+    contractPromise,
     runSitemapDiagnostics(),
     buildRedirectChecks(),
     buildInfrastructureChecks(),
     buildPublicMediaDataChecks(),
+    Promise.allSettled([canonicalDriftPromise]),
   ]);
   const checks: GlobalSeoHealthCheck[] = [];
   const settings = contract.settings;
@@ -383,8 +397,8 @@ export async function runGlobalSeoHealth(): Promise<GlobalSeoHealthSnapshot> {
     samples: codeFallbackFields.slice(0, 8).map((field) => field.key),
   });
 
-  try {
-    const drift = await loadCanonicalDrift(settings.canonicalBaseUrl || settings.siteUrl);
+  if (canonicalDriftResult.status === "fulfilled") {
+    const drift = canonicalDriftResult.value;
     checks.push({
       id: "canonical_drift_product_decision",
       dimension: "metadata",
@@ -397,7 +411,8 @@ export async function runGlobalSeoHealth(): Promise<GlobalSeoHealthSnapshot> {
       samples: drift.slice(0, 5).map((item) => `${item.path} → ${item.canonical}`),
       productDecision: drift.length > 0,
     });
-  } catch (error) {
+  } else {
+    const error = canonicalDriftResult.reason;
     checks.push({ id: "canonical_drift_query", dimension: "metadata", status: "fail", weight: 5, title: "Canonical drift query", detail: error instanceof Error ? error.message : "Unknown failure" });
   }
 

@@ -80,7 +80,7 @@ export async function loadIntegrationsServerConfigurationSnapshot(): Promise<Int
       owner: surface.owner,
       label: surface.label,
       description: surface.key === "whatsapp"
-        ? "يستخدم Meta App owner نفسه دون تخزين App ID أوApp Secret مرة ثانية."
+        ? "يستخدم Meta App owner نفسه دون تخزين App ID أو App Secret مرة ثانية."
         : definition.description,
       sharedOwnerLabel: surface.key === "whatsapp" ? "Meta" : null,
       source,

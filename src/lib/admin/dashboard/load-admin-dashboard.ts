@@ -79,7 +79,7 @@ async function readDashboardTruth(): Promise<DashboardSource<DashboardReadModel>
     checkedAt,
     message: provenanceReady
       ? "قراءة ذرية ومثبتة بالـmigration والـACL والـRLS والفهارس."
-      : "البيانات مقروءة، لكن فحص provenance أوالحماية أوالفهارس يحتاج مراجعة.",
+      : "البيانات مقروءة، لكن فحص provenance أو الحماية أو الفهارس يحتاج مراجعة.",
     data: model,
   };
 }
@@ -208,7 +208,7 @@ export async function loadAdminDashboardSources(): Promise<AdminDashboardModel> 
             "read_model",
             "قاعدة البيانات وRead Model",
             "public.admin_dashboard_truth_v1()",
-            "تعذر تكوين أرقام أوبيانات Dashboard موثوقة. لم تُستبدل القيم بأصفار أوبيانات فارغة.",
+            "تعذر تكوين أرقام أو بيانات Dashboard موثوقة. لم تُستبدل القيم بأصفار أو بيانات فارغة.",
           ),
     audit:
       auditResult.status === "fulfilled"
@@ -217,7 +217,7 @@ export async function loadAdminDashboardSources(): Promise<AdminDashboardModel> 
             "audit",
             "سجل النشاط",
             "admin_audit_logs via listAdminAuditLogs",
-            "تعذر تحميل سجل النشاط الحقيقي. لم تُعرض أحداث مشتقة أوثابتة بدلًا منه.",
+            "تعذر تحميل سجل النشاط الحقيقي. لم تُعرض أحداث مشتقة أو ثابتة بدلًا منه.",
             "/admin/activity-log",
           ),
     media:
