@@ -88,6 +88,222 @@ function relativeSourceFile(sourceFile: string) {
   return relative(ROOT, sourceFile).replaceAll("\\", "/");
 }
 
+function readCollectionSurfaceEvidence(
+  surface: AdminCollectionSurfaceInventoryEntry,
+) {
+  return [...new Set([...surface.pageSourceFiles, ...surface.presentationSourceFiles])]
+    .map(read)
+    .join("\n");
+}
+
+function collectCollectionSurfaceComplianceFailures(
+  surface: AdminCollectionSurfaceInventoryEntry,
+  source = readCollectionSurfaceEvidence(surface),
+) {
+  const failures: string[] = [];
+  const usesEntityList = /<AdminEntityList(?:\s|<)/u.test(source);
+  const usesDataGrid = /<AdminDataGrid(?:\s|>)/u.test(source);
+  const usesNativeTable = /<table(?:\s|>)/u.test(source);
+  const usesSharedToolbar = source.includes("AdminEntityListFilters");
+  const usesSharedRowActions = source.includes("AdminDataGridRowActions");
+  const usesSharedPagination = source.includes("AdminTablePagination");
+  const usesBoundedClientRuntime = source.includes(
+    "useAdminBoundedClientPagination",
+  );
+  const usesSharedColumnControls =
+    source.includes("AdminColumnVisibilityMenu") &&
+    source.includes("visibleColumns=") &&
+    source.includes("defaultColumns=") &&
+    source.includes("onChange=") &&
+    source.includes("onPersist=") &&
+    source.includes("onRestore=");
+
+  if (!surface.rationale.trim() || !surface.sourceOwner.trim()) {
+    failures.push("ownership_rationale");
+  }
+
+  if (surface.workflowClassification === "auth_out_of_scope") {
+    if (
+      surface.generic ||
+      surface.pageChromeAdoption !== "auth_out_of_scope" ||
+      surface.collectionAdoption !== "not_applicable" ||
+      surface.headerOwner !== "not_applicable" ||
+      surface.headerState !== "auth_out_of_scope" ||
+      surface.gridOwner !== "not_applicable" ||
+      surface.dataRegistryEntities.length > 0 ||
+      surface.paginationState !== "not_required" ||
+      surface.paginationOwner !== "not_applicable" ||
+      surface.requiredAdoption.length > 0 ||
+      !surface.exceptionRationale ||
+      surface.genuineExceptions.length === 0 ||
+      usesEntityList ||
+      usesDataGrid
+    ) {
+      failures.push("auth_exception_contract");
+    }
+    return [...new Set(failures)];
+  }
+
+  if (
+    surface.pageChromeAdoption !== "adopted" ||
+    surface.headerOwner !== "AdminPageContextHeader" ||
+    surface.headerState !== "adopted"
+  ) {
+    failures.push("shared_page_contract");
+  }
+
+  if (
+    surface.workflowClassification === "full_collection_adoption" ||
+    surface.workflowClassification === "partial_collection_adoption"
+  ) {
+    if (
+      !surface.generic ||
+      surface.collectionAdoption !== "adopted" ||
+      surface.gridOwner !== "AdminEntityList" ||
+      !usesEntityList ||
+      surface.queryMode !== "server-page" ||
+      surface.paginationState !== "adopted" ||
+      surface.paginationOwner !== "AdminTablePagination" ||
+      surface.dataRegistryEntities.length === 0
+    ) {
+      failures.push("generic_collection_contract");
+    }
+
+    if (
+      surface.workflowClassification === "full_collection_adoption" &&
+      (surface.requiredAdoption.length > 0 ||
+        surface.exceptionRationale !== null)
+    ) {
+      failures.push("false_full_adoption");
+    }
+
+    if (
+      surface.workflowClassification === "partial_collection_adoption" &&
+      (surface.requiredAdoption.length === 0 ||
+        surface.exceptionRationale === null)
+    ) {
+      failures.push("unproven_partial_adoption");
+    }
+
+    return [...new Set(failures)];
+  }
+
+  if (usesEntityList) {
+    failures.push("generic_collection_misclassified_as_exception");
+  }
+
+  if (
+    surface.workflowClassification ===
+    "specialized_data_owner_shared_collection_presentation"
+  ) {
+    if (
+      surface.generic ||
+      surface.collectionAdoption !== "adopted" ||
+      !["AdminDataGrid", "MediaCatalog"].includes(surface.gridOwner) ||
+      surface.dataRegistryEntities.length > 0 ||
+      surface.requiredAdoption.length > 0
+    ) {
+      failures.push("specialized_collection_contract");
+    }
+
+    if (
+      (surface.gridOwner === "AdminDataGrid" && !usesDataGrid) ||
+      (surface.gridOwner === "MediaCatalog" &&
+        !source.includes("MediaCatalog"))
+    ) {
+      failures.push("specialized_grid_evidence");
+    }
+
+    if (
+      !["bounded-client", "specialized"].includes(surface.queryMode) ||
+      (surface.queryMode === "bounded-client" && !usesBoundedClientRuntime)
+    ) {
+      failures.push("specialized_query_contract");
+    }
+
+    if (surface.filtersOrToolbar && !usesSharedToolbar) {
+      failures.push("specialized_toolbar_contract");
+    }
+
+    if (
+      (surface.paginationState === "adopted" &&
+        (surface.paginationOwner !== "AdminTablePagination" ||
+          !usesSharedPagination)) ||
+      (surface.paginationState === "not_required" &&
+        (surface.paginationOwner !== "not_applicable" ||
+          usesSharedPagination))
+    ) {
+      failures.push("specialized_pagination_contract");
+    }
+
+    if (
+      (surface.rowActionsState === "adopted" &&
+        (surface.rowActionsOwner !== "shared_admin_row_actions" ||
+          !usesSharedRowActions)) ||
+      (surface.rowActionsState !== "adopted" &&
+        surface.rowActionsOwner === "shared_admin_row_actions")
+    ) {
+      failures.push("specialized_row_actions_contract");
+    }
+
+    if (
+      surface.columnVisibility === "shared_optional_columns" &&
+      !usesSharedColumnControls
+    ) {
+      failures.push("specialized_columns_contract");
+    }
+
+    return [...new Set(failures)];
+  }
+
+  if (surface.workflowClassification === "fixed_structure_not_paginated") {
+    if (
+      surface.generic ||
+      surface.collectionAdoption !== "not_applicable" ||
+      surface.gridOwner !== "not_applicable" ||
+      surface.dataRegistryEntities.length > 0 ||
+      surface.paginationState !== "not_required" ||
+      surface.paginationOwner !== "not_applicable" ||
+      surface.requiredAdoption.length > 0 ||
+      !surface.exceptionRationale ||
+      surface.genuineExceptions.length === 0
+    ) {
+      failures.push("fixed_structure_exception_contract");
+    }
+
+    if (
+      usesDataGrid &&
+      (usesSharedRowActions || usesSharedPagination || usesBoundedClientRuntime)
+    ) {
+      failures.push("collection_misclassified_as_fixed_structure");
+    }
+
+    return [...new Set(failures)];
+  }
+
+  if (surface.workflowClassification === "page_system_only") {
+    if (
+      surface.generic ||
+      surface.collectionAdoption !== "not_applicable" ||
+      surface.gridOwner !== "not_applicable" ||
+      surface.dataRegistryEntities.length > 0 ||
+      surface.paginationState !== "not_required" ||
+      surface.paginationOwner !== "not_applicable" ||
+      surface.queryMode !== "specialized" ||
+      surface.requiredAdoption.length > 0 ||
+      usesDataGrid ||
+      (usesNativeTable &&
+        (surface.rowActionsState !== "read_only_no_row_commands" ||
+          surface.rowActionsOwner !== "not_applicable" ||
+          !surface.exceptionRationale))
+    ) {
+      failures.push("page_system_exception_contract");
+    }
+  }
+
+  return [...new Set(failures)];
+}
+
 function extractRegistryEntities(source: string) {
   const registry = source.match(
     /adminEntityListAdapterRegistry\s*=\s*\{([\s\S]*?)\}\s*as const/,
@@ -936,6 +1152,16 @@ check(
     return surface.collectionAdoption === "not_applicable";
   }),
 );
+const collectionSurfaceComplianceFailures = collectionSurfaces.flatMap(
+  (surface) =>
+    collectCollectionSurfaceComplianceFailures(surface).map(
+      (failure) => `${surface.id}:${failure}`,
+    ),
+);
+check(
+  "every Collection, specialized adopter, and explicit exception proves its classification from the existing contracts",
+  collectionSurfaceComplianceFailures.length === 0,
+);
 check(
   "every generic list primitive, top-level card catalog, and mapped command queue is classified exactly once",
   scannedCollectionPresentationSources.every(
@@ -1260,6 +1486,115 @@ check(
       (claim) => claim.surfaceId !== fullAdoptionFailureClaim.surfaceId,
     ),
   ),
+);
+const genericClassificationFailureFixture = fullAdoptionSurfaces[0];
+assert.ok(genericClassificationFailureFixture);
+const genericClassificationFailureSource = readCollectionSurfaceEvidence(
+  genericClassificationFailureFixture,
+);
+check(
+  "failure path rejects an AdminEntityList consumer disguised as an explicit exception",
+  collectCollectionSurfaceComplianceFailures(
+    {
+      ...genericClassificationFailureFixture,
+      workflowClassification: "page_system_only",
+      generic: false,
+      collectionAdoption: "not_applicable",
+      gridOwner: "not_applicable",
+      dataRegistryEntities: [],
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+    },
+    genericClassificationFailureSource,
+  ).includes("generic_collection_misclassified_as_exception"),
+);
+
+const specializedClassificationFailureFixture = collectionSurfaces.find(
+  (surface) =>
+    surface.workflowClassification ===
+      "specialized_data_owner_shared_collection_presentation" &&
+    surface.gridOwner === "AdminDataGrid" &&
+    surface.queryMode === "bounded-client" &&
+    surface.columnVisibility === "shared_optional_columns" &&
+    surface.rowActionsState === "adopted",
+);
+assert.ok(specializedClassificationFailureFixture);
+const specializedClassificationFailureSource =
+  readCollectionSurfaceEvidence(specializedClassificationFailureFixture);
+check(
+  "failure path rejects Specialized Adoption without shared Grid evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "<AdminDataGrid",
+      "<MissingAdminDataGrid",
+    ),
+  ).includes("specialized_grid_evidence"),
+);
+check(
+  "failure path rejects Specialized Adoption without bounded-client Runtime evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "useAdminBoundedClientPagination",
+      "missingBoundedClientPagination",
+    ),
+  ).includes("specialized_query_contract"),
+);
+check(
+  "failure path rejects Specialized Adoption without shared Toolbar evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "AdminEntityListFilters",
+      "MissingEntityListFilters",
+    ),
+  ).includes("specialized_toolbar_contract"),
+);
+check(
+  "failure path rejects Specialized Adoption without shared Columns evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "AdminColumnVisibilityMenu",
+      "MissingColumnVisibilityMenu",
+    ),
+  ).includes("specialized_columns_contract"),
+);
+check(
+  "failure path rejects Specialized Adoption without shared Row Actions evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "AdminDataGridRowActions",
+      "MissingDataGridRowActions",
+    ),
+  ).includes("specialized_row_actions_contract"),
+);
+check(
+  "failure path rejects Specialized Adoption without shared Pagination evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "AdminTablePagination",
+      "MissingTablePagination",
+    ),
+  ).includes("specialized_pagination_contract"),
+);
+
+const explicitExceptionFailureFixture = collectionSurfaces.find(
+  (surface) =>
+    surface.workflowClassification === "fixed_structure_not_paginated",
+);
+assert.ok(explicitExceptionFailureFixture);
+check(
+  "failure path rejects an explicit fixed-structure exception without architectural evidence",
+  collectCollectionSurfaceComplianceFailures({
+    ...explicitExceptionFailureFixture,
+    genuineExceptions: [],
+    exceptionRationale: null,
+  }).includes("fixed_structure_exception_contract"),
 );
 check(
   "dashboard, card catalog, report, and recovery inventory states match their concrete commands",

@@ -1563,7 +1563,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       routes: ["/admin/pages-blocks/pages/[id]"],
       pageSourceFiles: ["src/app/admin/pages-blocks/pages/[id]/page.tsx"],
       presentationSourceFiles: [
-        "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+        "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksHeader.tsx",
       ],
       sourceOwner: "Page Composition aggregate",
       headerOwner: "AdminPageContextHeader",
@@ -1595,7 +1595,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       routes: ["/admin/pages-blocks/pages/[id]"],
       pageSourceFiles: ["src/app/admin/pages-blocks/pages/[id]/page.tsx"],
       presentationSourceFiles: [
+        "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
         "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx",
+        "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
       ],
       sourceOwner: "Page composition assignment loader and actions",
       headerOwner: "AdminPageContextHeader",
