@@ -181,6 +181,7 @@ export default function AdminEntityListTable<
           href={sortMode.hrefFor(column.key, sortKey)}
           active={active}
           direction={direction}
+          announceState={false}
           className={justifyClass}
         >
           {column.label}
@@ -192,6 +193,7 @@ export default function AdminEntityListTable<
       <AdminDataGridSortLabel
         active={active}
         direction={direction}
+        announceState={false}
         onClick={() => sortMode.onToggle(sortKey)}
         className={justifyClass}
       >
@@ -238,7 +240,10 @@ export default function AdminEntityListTable<
             className={`${ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES} ${ADMIN_DATA_GRID_HEADER_CLASSES}`}
           >
             {showSelection && selection ? (
-              <th className="sticky start-0 z-40 w-[46px] min-w-[46px] bg-[#10151C] text-center">
+              <th
+                scope="col"
+                className="sticky start-0 z-40 w-[46px] min-w-[46px] bg-[#10151C] text-center"
+              >
                 <AdminDataGridCheckbox
                   inputRef={selection.selectAllRef}
                   checked={selection.allSelected}
@@ -251,6 +256,18 @@ export default function AdminEntityListTable<
             ) : null}
             {columns.map((column) => {
               const content = renderHeaderLabel(column);
+              const ariaSort:
+                | "ascending"
+                | "descending"
+                | "none"
+                | undefined =
+                column.sortable && column.sortKey && sortMode
+                  ? sort?.key === column.sortKey
+                    ? sort.direction === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                  : undefined;
               const fillSpacer =
                 showFillSpacer && column.key === fillSpacerBeforeColumnKey ? (
                   <th
@@ -278,6 +295,8 @@ export default function AdminEntityListTable<
                   <Fragment key={column.key}>
                     {fillSpacer}
                     <th
+                      scope="col"
+                      aria-sort={ariaSort}
                       data-admin-grid-sticky="inline-end-adjacent"
                       data-admin-column-key={column.key}
                       style={{
@@ -311,6 +330,8 @@ export default function AdminEntityListTable<
                 <Fragment key={column.key}>
                   {fillSpacer}
                   <th
+                    scope="col"
+                    aria-sort={ariaSort}
                     data-admin-column-key={column.key}
                     style={getColumnTrackStyle(column)}
                     className={`whitespace-nowrap ${alignmentClass} ${stickyPrimary}`}

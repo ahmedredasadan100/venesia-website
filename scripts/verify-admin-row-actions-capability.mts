@@ -19,9 +19,13 @@ import {
 import {
   ADMIN_INTERACTION_MODULES,
   ADMIN_INTERACTION_SYSTEM,
+  ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS,
+  ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS,
   ADMIN_COLLECTION_SURFACE_ADOPTION,
   ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,
   ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
+  type AdminCollectionFullAdoptionClaim,
+  type AdminCollectionSurfaceInventoryEntry,
   type AdminRowActionsGovernedAction,
 } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 
@@ -35,6 +39,23 @@ function check(label: string, condition: unknown) {
   assert.ok(condition, label);
   passed += 1;
   console.log(`PASS ${label}`);
+}
+
+function closureStateIsConsistent(
+  globalClosed: boolean,
+  blockers: readonly string[],
+) {
+  return globalClosed ? blockers.length === 0 : blockers.length > 0;
+}
+
+function adoptionGapStateIsConsistent(
+  globalClosed: boolean,
+  gaps: readonly string[],
+  partialSurfaceCount: number,
+) {
+  return globalClosed
+    ? gaps.length === 0
+    : gaps.length === partialSurfaceCount;
 }
 
 function sameOrderedValues(
@@ -55,6 +76,53 @@ function sameValueSet(actual: readonly string[], expected: readonly string[]) {
   );
 }
 
+function formatConsistencyContractLabel(contract: string) {
+  return contract
+    .split("_")
+    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+}
+
+function printManagementCollectionsConsistencyMatrix(input: {
+  surfaceCount: number;
+  fullAdoptionClaimCount: number;
+  partialAdoptionCount: number;
+  exactClaimCoverage: boolean;
+  surfaceFailures: readonly string[];
+  contractFailures: readonly string[];
+  globalClosed: boolean;
+}) {
+  const rows = ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS.map(
+    (contract) => ({
+      label: formatConsistencyContractLabel(contract),
+      status: input.contractFailures.some((failure) =>
+        failure.endsWith(`:${contract}`),
+      )
+        ? "FAIL"
+        : "PASS",
+    }),
+  );
+  const verificationPassed =
+    input.exactClaimCoverage &&
+    input.surfaceFailures.length === 0 &&
+    input.contractFailures.length === 0;
+  const labelWidth = Math.max(
+    ...rows.map((row) => row.label.length),
+    "Verification".length,
+    "Adoption Closure".length,
+  );
+  const printRow = (label: string, status: string) =>
+    console.log(`${label.padEnd(labelWidth + 2, ".")} ${status}`);
+
+  console.log("\nManagement Collections Consistency\n");
+  rows.forEach((row) => printRow(row.label, row.status));
+  printRow("Verification", verificationPassed ? "PASS" : "FAIL");
+  printRow("Adoption Closure", input.globalClosed ? "CLOSED" : "OPEN");
+  console.log(
+    `\nEvidence: ${input.surfaceCount} surfaces; Full Adoption claims: ${input.fullAdoptionClaimCount}; Partial Adoption entries: ${input.partialAdoptionCount}.`,
+  );
+}
+
 function collectTsxFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const target = join(directory, entry.name);
@@ -65,6 +133,222 @@ function collectTsxFiles(directory: string): string[] {
 
 function relativeSourceFile(sourceFile: string) {
   return relative(ROOT, sourceFile).replaceAll("\\", "/");
+}
+
+function readCollectionSurfaceEvidence(
+  surface: AdminCollectionSurfaceInventoryEntry,
+) {
+  return [...new Set([...surface.pageSourceFiles, ...surface.presentationSourceFiles])]
+    .map(read)
+    .join("\n");
+}
+
+function collectCollectionSurfaceComplianceFailures(
+  surface: AdminCollectionSurfaceInventoryEntry,
+  source = readCollectionSurfaceEvidence(surface),
+) {
+  const failures: string[] = [];
+  const usesEntityList = /<AdminEntityList(?:\s|<)/u.test(source);
+  const usesDataGrid = /<AdminDataGrid(?:\s|>)/u.test(source);
+  const usesNativeTable = /<table(?:\s|>)/u.test(source);
+  const usesSharedToolbar = source.includes("AdminEntityListFilters");
+  const usesSharedRowActions = source.includes("AdminDataGridRowActions");
+  const usesSharedPagination = source.includes("AdminTablePagination");
+  const usesBoundedClientRuntime = source.includes(
+    "useAdminBoundedClientPagination",
+  );
+  const usesSharedColumnControls =
+    source.includes("AdminColumnVisibilityMenu") &&
+    source.includes("visibleColumns=") &&
+    source.includes("defaultColumns=") &&
+    source.includes("onChange=") &&
+    source.includes("onPersist=") &&
+    source.includes("onRestore=");
+
+  if (!surface.rationale.trim() || !surface.sourceOwner.trim()) {
+    failures.push("ownership_rationale");
+  }
+
+  if (surface.workflowClassification === "auth_out_of_scope") {
+    if (
+      surface.generic ||
+      surface.pageChromeAdoption !== "auth_out_of_scope" ||
+      surface.collectionAdoption !== "not_applicable" ||
+      surface.headerOwner !== "not_applicable" ||
+      surface.headerState !== "auth_out_of_scope" ||
+      surface.gridOwner !== "not_applicable" ||
+      surface.dataRegistryEntities.length > 0 ||
+      surface.paginationState !== "not_required" ||
+      surface.paginationOwner !== "not_applicable" ||
+      surface.requiredAdoption.length > 0 ||
+      !surface.exceptionRationale ||
+      surface.genuineExceptions.length === 0 ||
+      usesEntityList ||
+      usesDataGrid
+    ) {
+      failures.push("auth_exception_contract");
+    }
+    return [...new Set(failures)];
+  }
+
+  if (
+    surface.pageChromeAdoption !== "adopted" ||
+    surface.headerOwner !== "AdminPageContextHeader" ||
+    surface.headerState !== "adopted"
+  ) {
+    failures.push("shared_page_contract");
+  }
+
+  if (
+    surface.workflowClassification === "full_collection_adoption" ||
+    surface.workflowClassification === "partial_collection_adoption"
+  ) {
+    if (
+      !surface.generic ||
+      surface.collectionAdoption !== "adopted" ||
+      surface.gridOwner !== "AdminEntityList" ||
+      !usesEntityList ||
+      surface.queryMode !== "server-page" ||
+      surface.paginationState !== "adopted" ||
+      surface.paginationOwner !== "AdminTablePagination" ||
+      surface.dataRegistryEntities.length === 0
+    ) {
+      failures.push("generic_collection_contract");
+    }
+
+    if (
+      surface.workflowClassification === "full_collection_adoption" &&
+      (surface.requiredAdoption.length > 0 ||
+        surface.exceptionRationale !== null)
+    ) {
+      failures.push("false_full_adoption");
+    }
+
+    if (
+      surface.workflowClassification === "partial_collection_adoption" &&
+      (surface.requiredAdoption.length === 0 ||
+        surface.exceptionRationale === null)
+    ) {
+      failures.push("unproven_partial_adoption");
+    }
+
+    return [...new Set(failures)];
+  }
+
+  if (usesEntityList) {
+    failures.push("generic_collection_misclassified_as_exception");
+  }
+
+  if (
+    surface.workflowClassification ===
+    "specialized_data_owner_shared_collection_presentation"
+  ) {
+    if (
+      surface.generic ||
+      surface.collectionAdoption !== "adopted" ||
+      !["AdminDataGrid", "MediaCatalog"].includes(surface.gridOwner) ||
+      surface.dataRegistryEntities.length > 0 ||
+      surface.requiredAdoption.length > 0
+    ) {
+      failures.push("specialized_collection_contract");
+    }
+
+    if (
+      (surface.gridOwner === "AdminDataGrid" && !usesDataGrid) ||
+      (surface.gridOwner === "MediaCatalog" &&
+        !source.includes("MediaCatalog"))
+    ) {
+      failures.push("specialized_grid_evidence");
+    }
+
+    if (
+      !["bounded-client", "specialized"].includes(surface.queryMode) ||
+      (surface.queryMode === "bounded-client" && !usesBoundedClientRuntime)
+    ) {
+      failures.push("specialized_query_contract");
+    }
+
+    if (surface.filtersOrToolbar && !usesSharedToolbar) {
+      failures.push("specialized_toolbar_contract");
+    }
+
+    if (
+      (surface.paginationState === "adopted" &&
+        (surface.paginationOwner !== "AdminTablePagination" ||
+          !usesSharedPagination)) ||
+      (surface.paginationState === "not_required" &&
+        (surface.paginationOwner !== "not_applicable" ||
+          usesSharedPagination))
+    ) {
+      failures.push("specialized_pagination_contract");
+    }
+
+    if (
+      (surface.rowActionsState === "adopted" &&
+        (surface.rowActionsOwner !== "shared_admin_row_actions" ||
+          !usesSharedRowActions)) ||
+      (surface.rowActionsState !== "adopted" &&
+        surface.rowActionsOwner === "shared_admin_row_actions")
+    ) {
+      failures.push("specialized_row_actions_contract");
+    }
+
+    if (
+      surface.columnVisibility === "shared_optional_columns" &&
+      !usesSharedColumnControls
+    ) {
+      failures.push("specialized_columns_contract");
+    }
+
+    return [...new Set(failures)];
+  }
+
+  if (surface.workflowClassification === "fixed_structure_not_paginated") {
+    if (
+      surface.generic ||
+      surface.collectionAdoption !== "not_applicable" ||
+      surface.gridOwner !== "not_applicable" ||
+      surface.dataRegistryEntities.length > 0 ||
+      surface.paginationState !== "not_required" ||
+      surface.paginationOwner !== "not_applicable" ||
+      surface.requiredAdoption.length > 0 ||
+      !surface.exceptionRationale ||
+      surface.genuineExceptions.length === 0
+    ) {
+      failures.push("fixed_structure_exception_contract");
+    }
+
+    if (
+      usesDataGrid &&
+      (usesSharedRowActions || usesSharedPagination || usesBoundedClientRuntime)
+    ) {
+      failures.push("collection_misclassified_as_fixed_structure");
+    }
+
+    return [...new Set(failures)];
+  }
+
+  if (surface.workflowClassification === "page_system_only") {
+    if (
+      surface.generic ||
+      surface.collectionAdoption !== "not_applicable" ||
+      surface.gridOwner !== "not_applicable" ||
+      surface.dataRegistryEntities.length > 0 ||
+      surface.paginationState !== "not_required" ||
+      surface.paginationOwner !== "not_applicable" ||
+      surface.queryMode !== "specialized" ||
+      surface.requiredAdoption.length > 0 ||
+      usesDataGrid ||
+      (usesNativeTable &&
+        (surface.rowActionsState !== "read_only_no_row_commands" ||
+          surface.rowActionsOwner !== "not_applicable" ||
+          !surface.exceptionRationale))
+    ) {
+      failures.push("page_system_exception_contract");
+    }
+  }
+
+  return [...new Set(failures)];
 }
 
 function extractRegistryEntities(source: string) {
@@ -79,35 +363,15 @@ function extractRegistryEntities(source: string) {
   );
 }
 
-const expectedDataEntities = [
-  "topics",
-  "categories",
-  "series",
-  "pages",
-  "projects",
-  "project_locations_governorate",
-  "project_locations_city",
-  "project_locations_main_area",
-  "project_locations_sub_area",
-  "redirects",
-  "activity_log",
-  "topics_without_image",
-  "admin_users",
-] as const;
-const expectedRowActionEntities = [
-  "topics",
-  "categories",
-  "series",
-  "pages",
-  "projects",
-  "project_locations_governorate",
-  "project_locations_city",
-  "project_locations_main_area",
-  "project_locations_sub_area",
-  "redirects",
-  "topics_without_image",
-  "admin_users",
-] as const;
+const collectionSurfaces = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces;
+const declaredDataRegistryEntities = collectionSurfaces
+  .filter((surface) => surface.generic)
+  .flatMap((surface) => surface.dataRegistryEntities);
+const expectedRowActionEntities = collectionSurfaces
+  .filter(
+    (surface) => surface.generic && surface.rowActionsState === "adopted",
+  )
+  .flatMap((surface) => surface.dataRegistryEntities);
 const expectedPrimaryOrder = ["edit", "preview", "more"] as const;
 const expectedMoreOrder = [
   "information",
@@ -236,6 +500,7 @@ for (const [id, sourceFile] of Object.entries(paths)) {
 const registryEntities = extractRegistryEntities(read(paths.registry));
 const manifestEntries = ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.entities;
 const manifestEntities = manifestEntries.map((entry) => entry.entity);
+const manifestEntitySet = new Set<string>(manifestEntities);
 const sharedCapabilitiesModule = ADMIN_INTERACTION_MODULES.find(
   (module) => module.id === "shared_capabilities",
 );
@@ -247,14 +512,20 @@ check(
   ),
 );
 check(
-  "Admin Interaction System is globally closed with no residual adoption blocker",
-  ADMIN_INTERACTION_SYSTEM.globalClosed === true &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length === 0,
+  "Admin Interaction System publishes a fail-closed adoption state",
+  ADMIN_INTERACTION_SYSTEM.globalClosed ===
+    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed &&
+    closureStateIsConsistent(
+      ADMIN_INTERACTION_SYSTEM.globalClosed,
+      ADMIN_INTERACTION_SYSTEM.globalClosureBlockers,
+    ),
 );
 
 check(
-  "Entity List registry contains every declared generic Data Runtime adopter",
-  sameValueSet(registryEntities, expectedDataEntities),
+  "Entity List registry and manifest contain the same generic Data Runtime adopters",
+  sameValueSet(registryEntities, declaredDataRegistryEntities) &&
+    new Set(declaredDataRegistryEntities).size ===
+      declaredDataRegistryEntities.length,
 );
 check(
   "Row Actions adoption ledger covers only generic collections with row commands",
@@ -391,26 +662,12 @@ check(
     !/action="more"[\s\S]{0,500}pending=\{/u.test(rendererSource),
 );
 
-const expectedConsumerFiles = new Map<string, string>([
-  ["topics", paths.topics],
-  ["categories", paths.categories],
-  ["series", paths.series],
-  ["pages", paths.pages],
-  ["projects", paths.projects],
-  ["project_locations_governorate", paths.projectLocations],
-  ["project_locations_city", paths.projectLocations],
-  ["project_locations_main_area", paths.projectLocations],
-  ["project_locations_sub_area", paths.projectLocations],
-  ["redirects", paths.redirects],
-  ["topics_without_image", paths.topicsWithoutImage],
-  ["admin_users", paths.usersRoles],
-]);
-
 for (const entry of manifestEntries) {
-  const expectedConsumer = expectedConsumerFiles.get(entry.entity);
   check(
-    `${entry.entity} declares its approved consumer boundary`,
-    entry.consumerSourceFile === expectedConsumer,
+    `${entry.entity} declares its consumer boundary in its governed source inventory`,
+    entry.sourceFiles.some(
+      (sourceFile) => sourceFile === entry.consumerSourceFile,
+    ),
   );
   check(
     `${entry.entity} relevant sources all exist`,
@@ -805,7 +1062,6 @@ check(
     !pagesSource.includes("ADMIN_LIST_PAGE.wrapper"),
 );
 
-const collectionSurfaces = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces;
 const collectionIds = collectionSurfaces.map((surface) => surface.id);
 const classifiedPresentationSources = collectionSurfaces.flatMap((surface) =>
   surface.presentationSourceFiles.map((sourceFile) => ({
@@ -906,10 +1162,11 @@ check(
   ),
 );
 check(
-  "surface workflow classifications use only the approved five-value contract",
+  "surface workflow classifications use only the approved six-value contract",
   collectionSurfaces.every((surface) =>
     [
       "full_collection_adoption",
+      "partial_collection_adoption",
       "specialized_data_owner_shared_collection_presentation",
       "page_system_only",
       "fixed_structure_not_paginated",
@@ -921,7 +1178,10 @@ check(
 check(
   "Collection classifications resolve to a concrete shared grid owner",
   collectionSurfaces.every((surface) => {
-    if (surface.workflowClassification === "full_collection_adoption") {
+    if (
+      surface.workflowClassification === "full_collection_adoption" ||
+      surface.workflowClassification === "partial_collection_adoption"
+    ) {
       return (
         surface.collectionAdoption === "adopted" &&
         surface.gridOwner === "AdminEntityList"
@@ -939,38 +1199,28 @@ check(
     return surface.collectionAdoption === "not_applicable";
   }),
 );
+const collectionSurfaceComplianceFailures = collectionSurfaces.flatMap(
+  (surface) =>
+    collectCollectionSurfaceComplianceFailures(surface).map(
+      (failure) => `${surface.id}:${failure}`,
+    ),
+);
+check(
+  "every Collection, specialized adopter, and explicit exception proves its classification from the existing contracts",
+  collectionSurfaceComplianceFailures.length === 0,
+);
 check(
   "every generic list primitive, top-level card catalog, and mapped command queue is classified exactly once",
   scannedCollectionPresentationSources.every(
     (sourceFile) => presentationSourceCounts.get(sourceFile) === 1,
   ),
 );
-const genericDataEntityByCollectionId = new Map<string, string | readonly string[]>([
-  ["content-topics", "topics"],
-  ["content-categories", "categories"],
-  ["content-series", "series"],
-  ["pages", "pages"],
-  ["projects-residential-commercial", "projects"],
-  ["project-locations", [
-    "project_locations_governorate",
-    "project_locations_city",
-    "project_locations_main_area",
-    "project_locations_sub_area",
-  ]],
-  ["seo-redirects", "redirects"],
-  ["activity-log", "activity_log"],
-  ["topics-without-image-report", "topics_without_image"],
-  ["users-and-roles", "admin_users"],
-]);
 check(
   "generic inventory and Data Runtime registry cover the same consumers",
   sameValueSet(
     collectionSurfaces
       .filter((surface) => surface.generic)
-      .flatMap((surface) => {
-        const entities = genericDataEntityByCollectionId.get(surface.id) ?? "";
-        return Array.isArray(entities) ? entities : [entities];
-      }),
+      .flatMap((surface) => surface.dataRegistryEntities),
     registryEntities,
   ),
 );
@@ -993,41 +1243,405 @@ check(
     ) &&
     !read(paths.shell).includes("admin-premium-card mb-5"),
 );
+
+const fullAdoptionSurfaces = collectionSurfaces.filter(
+  (surface) => surface.workflowClassification === "full_collection_adoption",
+);
+const partialAdoptionSurfaces = collectionSurfaces.filter(
+  (surface) => surface.workflowClassification === "partial_collection_adoption",
+);
+const fullAdoptionClaims: readonly AdminCollectionFullAdoptionClaim[] =
+  ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS;
+
+function hasExactFullAdoptionClaimCoverage(
+  surfaces: readonly AdminCollectionSurfaceInventoryEntry[],
+  claims: readonly AdminCollectionFullAdoptionClaim[],
+) {
+  const surfaceIds = surfaces.map((surface) => surface.id);
+  const claimIds = claims.map((claim) => claim.surfaceId);
+  return (
+    sameValueSet(surfaceIds, claimIds) &&
+    new Set(claimIds).size === claimIds.length
+  );
+}
+
+function collectFullAdoptionContractFailures(
+  surface: AdminCollectionSurfaceInventoryEntry,
+  claim: AdminCollectionFullAdoptionClaim,
+  options: {
+    source?: string;
+    registryEntities?: readonly string[];
+  } = {},
+) {
+  const failures: string[] = [];
+  const source =
+    options.source ??
+    [...surface.pageSourceFiles, ...surface.presentationSourceFiles]
+      .map(read)
+      .join("\n");
+  const registeredEntities = options.registryEntities ?? registryEntities;
+  const contractIds = Object.keys(claim.contracts);
+
+  if (
+    !sameValueSet(
+      contractIds,
+      ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS,
+    )
+  ) {
+    failures.push("manifest_contract_axes");
+  }
+
+  for (const requiredContract of [
+    "collection",
+    "table",
+    "toolbar",
+    "header",
+    "columns",
+    "runtime",
+    "data_registry",
+  ] as const) {
+    if (claim.contracts[requiredContract] !== "adopted") {
+      failures.push(requiredContract);
+    }
+  }
+
+  if (
+    surface.collectionAdoption !== "adopted" ||
+    !source.includes("AdminEntityListSurface") ||
+    !source.includes("AdminEntityListTableRegion")
+  ) {
+    failures.push("collection");
+  }
+
+  if (
+    surface.gridOwner !== "AdminEntityList" ||
+    !/<AdminEntityList(?:\s|<)/u.test(source)
+  ) {
+    failures.push("table");
+  }
+
+  if (!surface.filtersOrToolbar || !source.includes("toolbar=")) {
+    failures.push("toolbar");
+  }
+
+  if (
+    surface.pageChromeAdoption !== "adopted" ||
+    surface.headerOwner !== "AdminPageContextHeader" ||
+    surface.headerState !== "adopted" ||
+    typeof surface.engineLabel !== "string" ||
+    (!source.includes("AdminPageContextHeader") &&
+      !source.includes("AdminPageHeader")) ||
+    !source.includes(`eyebrow="${surface.engineLabel}"`)
+  ) {
+    failures.push("header");
+  }
+
+  if (
+    surface.columnVisibility !== "shared_optional_columns" ||
+    !source.includes("columns=") ||
+    !source.includes("enableColumnManagement") ||
+    !source.includes("onPersistColumns=")
+  ) {
+    failures.push("columns");
+  }
+
+  if (claim.contracts.sort === "adopted") {
+    if (!source.includes("sortMode=") || source.includes("sort={null}")) {
+      failures.push("sort");
+    }
+  } else if (
+    claim.contracts.sort !== "not_required" ||
+    !source.includes("sort={null}") ||
+    source.includes("sortable: true")
+  ) {
+    failures.push("sort");
+  }
+
+  if (claim.contracts.row_actions === "adopted") {
+    if (
+      surface.rowActionsState !== "adopted" ||
+      surface.rowActionsOwner !== "shared_admin_row_actions" ||
+      !surface.dataRegistryEntities.every((entity) =>
+        manifestEntitySet.has(entity),
+      )
+    ) {
+      failures.push("row_actions");
+    }
+  } else if (
+    claim.contracts.row_actions !== "not_required" ||
+    surface.rowActionsState !== "read_only_no_row_commands" ||
+    surface.rowActionsOwner !== "not_applicable" ||
+    surface.dataRegistryEntities.some((entity) =>
+      manifestEntitySet.has(entity),
+    )
+  ) {
+    failures.push("row_actions");
+  }
+
+  if (claim.contracts.bulk === "adopted") {
+    if (
+      !source.includes("bulkOptions=") ||
+      !source.includes("onBulkExecute=") ||
+      !source.includes("getBulkConfirmation=") ||
+      source.includes("enableSelection={false}")
+    ) {
+      failures.push("bulk");
+    }
+  } else if (
+    claim.contracts.bulk !== "not_required" ||
+    !source.includes("enableSelection={false}") ||
+    source.includes("bulkOptions=") ||
+    source.includes("onBulkExecute=") ||
+    source.includes("getBulkConfirmation=")
+  ) {
+    failures.push("bulk");
+  }
+
+  if (
+    surface.queryMode !== "server-page" ||
+    !source.includes("useAdminEntityListController") ||
+    surface.paginationState !== "adopted" ||
+    surface.paginationOwner !== "AdminTablePagination"
+  ) {
+    failures.push("runtime");
+  }
+
+  if (
+    surface.dataRegistryEntities.length === 0 ||
+    new Set(surface.dataRegistryEntities).size !==
+      surface.dataRegistryEntities.length ||
+    !surface.dataRegistryEntities.every((entity) =>
+      registeredEntities.includes(entity),
+    )
+  ) {
+    failures.push("data_registry");
+  }
+
+  if (
+    surface.requiredAdoption.length > 0 ||
+    surface.exceptionRationale !== null
+  ) {
+    failures.push("unresolved_adoption");
+  }
+
+  return [...new Set(failures)];
+}
+
 check(
-  "all generic Collection routes adopt shared Header, Data, and Pagination owners",
-  collectionSurfaces
-    .filter((surface) => surface.generic)
-    .every(
-      (surface) =>
-        surface.workflowClassification === "full_collection_adoption" &&
-        surface.pageChromeAdoption === "adopted" &&
-        surface.collectionAdoption === "adopted" &&
-        surface.headerOwner === "AdminPageContextHeader" &&
-        surface.headerState === "adopted" &&
-        typeof surface.engineLabel === "string" &&
-        surface.engineLabel === surface.engineLabel.toUpperCase() &&
-        surface.queryMode === "server-page" &&
-        surface.paginationState === "adopted" &&
-        surface.paginationOwner === "AdminTablePagination" &&
-        (surface.rowActionsState === "adopted"
-          ? surface.rowActionsOwner === "shared_admin_row_actions"
-          : surface.rowActionsState === "read_only_no_row_commands" &&
-            surface.rowActionsOwner === "not_applicable") &&
-        surface.layoutOwner.includes("AdminEntityList") &&
-        surface.requiredAdoption.length === 0 &&
-        surface.exceptionRationale === null &&
-        surface.routes.length > 0,
-    ) &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.genericAdoptionGaps.length === 0,
+  "Full Adoption classifications and executable claims have exact one-to-one coverage",
+  hasExactFullAdoptionClaimCoverage(fullAdoptionSurfaces, fullAdoptionClaims) &&
+    fullAdoptionClaims.every((claim) =>
+      fullAdoptionSurfaces.some((surface) => surface.id === claim.surfaceId),
+    ),
+);
+
+const fullAdoptionContractFailures = fullAdoptionClaims.flatMap((claim) => {
+  const surface = fullAdoptionSurfaces.find(
+    (candidate) => candidate.id === claim.surfaceId,
+  );
+  if (!surface) return [`${claim.surfaceId}:missing_surface`];
+  return collectFullAdoptionContractFailures(surface, claim).map(
+    (contract) => `${claim.surfaceId}:${contract}`,
+  );
+});
+
+check(
+  "every Full Adoption claim proves Collection, Table, Toolbar, Header, Columns, Sort, Row Actions, Bulk, Runtime, and Data Registry contracts",
+  fullAdoptionContractFailures.length === 0,
 );
 check(
-  "generic collections declare shared column ownership truthfully",
-  collectionSurfaces
-    .filter((surface) => surface.generic)
-    .every(
+  "partial generic adopters cannot publish a Full Adoption claim",
+  partialAdoptionSurfaces.every(
       (surface) =>
-        surface.columnVisibility === "shared_optional_columns",
+        surface.generic &&
+        surface.collectionAdoption === "adopted" &&
+        surface.requiredAdoption.length > 0 &&
+        surface.exceptionRationale !== null &&
+        !fullAdoptionClaims.some((claim) => claim.surfaceId === surface.id),
+    ) &&
+    collectionSurfaces
+      .filter((surface) => surface.generic)
+      .every((surface) =>
+        ["full_collection_adoption", "partial_collection_adoption"].includes(
+          surface.workflowClassification,
+        ),
+      ),
+);
+
+const fullAdoptionFailureClaim = fullAdoptionClaims.find(
+  (claim) => claim.contracts.bulk === "not_required",
+);
+const fullAdoptionFailureFixture = fullAdoptionSurfaces.find(
+  (surface) => surface.id === fullAdoptionFailureClaim?.surfaceId,
+);
+assert.ok(fullAdoptionFailureFixture && fullAdoptionFailureClaim);
+const fullAdoptionFailureSource = [
+  ...fullAdoptionFailureFixture.pageSourceFiles,
+  ...fullAdoptionFailureFixture.presentationSourceFiles,
+]
+  .map(read)
+  .join("\n");
+
+check(
+  "failure path rejects a Full Adoption claim with missing Toolbar evidence",
+  collectFullAdoptionContractFailures(
+    fullAdoptionFailureFixture,
+    fullAdoptionFailureClaim,
+    { source: fullAdoptionFailureSource.replaceAll("toolbar=", "toolbarGap=") },
+  ).includes("toolbar"),
+);
+check(
+  "failure path rejects a Full Adoption claim with missing Column evidence",
+  collectFullAdoptionContractFailures(
+    fullAdoptionFailureFixture,
+    fullAdoptionFailureClaim,
+    {
+      source: fullAdoptionFailureSource.replaceAll(
+        "enableColumnManagement",
+        "columnManagementGap",
+      ),
+    },
+  ).includes("columns"),
+);
+check(
+  "failure path rejects a Full Adoption claim with Data Registry drift",
+  collectFullAdoptionContractFailures(
+    fullAdoptionFailureFixture,
+    fullAdoptionFailureClaim,
+    {
+      registryEntities: registryEntities.filter(
+        (entity) => entity !== fullAdoptionFailureFixture.dataRegistryEntities[0],
+      ),
+    },
+  ).includes("data_registry"),
+);
+check(
+  "failure path rejects a false shared Bulk contract claim",
+  collectFullAdoptionContractFailures(fullAdoptionFailureFixture, {
+    ...fullAdoptionFailureClaim,
+    contracts: {
+      ...fullAdoptionFailureClaim.contracts,
+      bulk: "adopted",
+    },
+  }).includes("bulk"),
+);
+check(
+  "failure path rejects Manifest drift when a Full Adoption claim is missing",
+  !hasExactFullAdoptionClaimCoverage(
+    fullAdoptionSurfaces,
+    fullAdoptionClaims.filter(
+      (claim) => claim.surfaceId !== fullAdoptionFailureClaim.surfaceId,
     ),
+  ),
+);
+const genericClassificationFailureFixture = fullAdoptionSurfaces[0];
+assert.ok(genericClassificationFailureFixture);
+const genericClassificationFailureSource = readCollectionSurfaceEvidence(
+  genericClassificationFailureFixture,
+);
+check(
+  "failure path rejects an AdminEntityList consumer disguised as an explicit exception",
+  collectCollectionSurfaceComplianceFailures(
+    {
+      ...genericClassificationFailureFixture,
+      workflowClassification: "page_system_only",
+      generic: false,
+      collectionAdoption: "not_applicable",
+      gridOwner: "not_applicable",
+      dataRegistryEntities: [],
+      paginationState: "not_required",
+      paginationOwner: "not_applicable",
+      queryMode: "specialized",
+    },
+    genericClassificationFailureSource,
+  ).includes("generic_collection_misclassified_as_exception"),
+);
+
+const specializedClassificationFailureFixture = collectionSurfaces.find(
+  (surface) =>
+    surface.workflowClassification ===
+      "specialized_data_owner_shared_collection_presentation" &&
+    surface.gridOwner === "AdminDataGrid" &&
+    surface.queryMode === "bounded-client" &&
+    surface.columnVisibility === "shared_optional_columns" &&
+    surface.rowActionsState === "adopted",
+);
+assert.ok(specializedClassificationFailureFixture);
+const specializedClassificationFailureSource =
+  readCollectionSurfaceEvidence(specializedClassificationFailureFixture);
+check(
+  "failure path rejects Specialized Adoption without shared Grid evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "<AdminDataGrid",
+      "<MissingAdminDataGrid",
+    ),
+  ).includes("specialized_grid_evidence"),
+);
+check(
+  "failure path rejects Specialized Adoption without bounded-client Runtime evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "useAdminBoundedClientPagination",
+      "missingBoundedClientPagination",
+    ),
+  ).includes("specialized_query_contract"),
+);
+check(
+  "failure path rejects Specialized Adoption without shared Toolbar evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "AdminEntityListFilters",
+      "MissingEntityListFilters",
+    ),
+  ).includes("specialized_toolbar_contract"),
+);
+check(
+  "failure path rejects Specialized Adoption without shared Columns evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "AdminColumnVisibilityMenu",
+      "MissingColumnVisibilityMenu",
+    ),
+  ).includes("specialized_columns_contract"),
+);
+check(
+  "failure path rejects Specialized Adoption without shared Row Actions evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "AdminDataGridRowActions",
+      "MissingDataGridRowActions",
+    ),
+  ).includes("specialized_row_actions_contract"),
+);
+check(
+  "failure path rejects Specialized Adoption without shared Pagination evidence",
+  collectCollectionSurfaceComplianceFailures(
+    specializedClassificationFailureFixture,
+    specializedClassificationFailureSource.replaceAll(
+      "AdminTablePagination",
+      "MissingTablePagination",
+    ),
+  ).includes("specialized_pagination_contract"),
+);
+
+const explicitExceptionFailureFixture = collectionSurfaces.find(
+  (surface) =>
+    surface.workflowClassification === "fixed_structure_not_paginated",
+);
+assert.ok(explicitExceptionFailureFixture);
+check(
+  "failure path rejects an explicit fixed-structure exception without architectural evidence",
+  collectCollectionSurfaceComplianceFailures({
+    ...explicitExceptionFailureFixture,
+    genuineExceptions: [],
+    exceptionRationale: null,
+  }).includes("fixed_structure_exception_contract"),
 );
 check(
   "dashboard, card catalog, report, and recovery inventory states match their concrete commands",
@@ -1058,9 +1672,19 @@ check(
       ?.rowActionsState === "not_applicable",
 );
 check(
-  "Collection surface adoption is globally closed with no residual blocker",
-  ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed === true &&
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers.length === 0,
+  "Collection global closure claim matches executable Full Adoption coverage",
+  ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed ===
+    (partialAdoptionSurfaces.length === 0 &&
+      fullAdoptionContractFailures.length === 0) &&
+    closureStateIsConsistent(
+      ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed,
+      ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers,
+    ) &&
+    adoptionGapStateIsConsistent(
+      ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed,
+      ADMIN_COLLECTION_SURFACE_ADOPTION.genericAdoptionGaps,
+      partialAdoptionSurfaces.length,
+    ),
 );
 check(
   "Project Residential and Commercial routes share one consumer and action declaration",
@@ -1765,5 +2389,18 @@ check(
       "refreshRows",
     ),
 );
+
+printManagementCollectionsConsistencyMatrix({
+  surfaceCount: collectionSurfaces.length,
+  fullAdoptionClaimCount: fullAdoptionClaims.length,
+  partialAdoptionCount: partialAdoptionSurfaces.length,
+  exactClaimCoverage: hasExactFullAdoptionClaimCoverage(
+    fullAdoptionSurfaces,
+    fullAdoptionClaims,
+  ),
+  surfaceFailures: collectionSurfaceComplianceFailures,
+  contractFailures: fullAdoptionContractFailures,
+  globalClosed: ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed,
+});
 
 console.log(`Admin Row Actions capability verification passed (${passed} checks).`);

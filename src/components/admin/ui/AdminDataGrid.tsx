@@ -19,6 +19,7 @@ type SortLabelProps = BaseProps & {
   onClick?: MouseEventHandler<HTMLButtonElement>;
   active?: boolean;
   direction?: "asc" | "desc";
+  announceState?: boolean;
 };
 
 type GridProps = BaseProps & {
@@ -604,17 +605,43 @@ export function AdminDataGridStatusCell({ children, className = "" }: BaseProps)
   return <div className={`flex items-center justify-center ${className}`}>{children}</div>;
 }
 
-export function AdminDataGridSortLabel({ children, onClick, active = false, direction = "asc", className = "" }: SortLabelProps) {
+function resolveAdminDataGridSortState(
+  active: boolean,
+  direction: "asc" | "desc",
+) {
+  if (!active) return "غير مرتب";
+  return direction === "asc" ? "مرتب تصاعديًا" : "مرتب تنازليًا";
+}
+
+export function AdminDataGridSortLabel({
+  children,
+  onClick,
+  active = false,
+  direction = "asc",
+  announceState = true,
+  className = "",
+}: SortLabelProps) {
   const indicator = active ? (direction === "asc" ? "↑" : "↓") : "↕";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-2 py-1 transition hover:bg-white/[0.055] hover:text-[#D8B87A] ${active ? "text-[#D8B87A]" : ""} ${className}`}
+      aria-pressed={announceState ? active : undefined}
+      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-2 py-1 transition hover:bg-white/[0.055] hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${active ? "text-[#D8B87A]" : ""} ${className}`}
     >
       <span>{children}</span>
-      <span className={`font-en text-[11px] ${active ? "text-[#D8B87A]" : "text-white/25"}`}>{indicator}</span>
+      {announceState ? (
+        <span className="sr-only">
+          {resolveAdminDataGridSortState(active, direction)}
+        </span>
+      ) : null}
+      <span
+        aria-hidden="true"
+        className={`font-en text-[11px] ${active ? "text-[#D8B87A]" : "text-white/25"}`}
+      >
+        {indicator}
+      </span>
     </button>
   );
 }
@@ -623,10 +650,18 @@ type SortLinkProps = BaseProps & {
   href: string;
   active?: boolean;
   direction?: "asc" | "desc";
+  announceState?: boolean;
 };
 
 /** Server-rendered sort header link — URL params drive sort state (no client onClick). */
-export function AdminDataGridSortLink({ children, href, active = false, direction = "asc", className = "" }: SortLinkProps) {
+export function AdminDataGridSortLink({
+  children,
+  href,
+  active = false,
+  direction = "asc",
+  announceState = true,
+  className = "",
+}: SortLinkProps) {
   const indicator = active ? (direction === "asc" ? "↑" : "↓") : "↕";
 
   return (
@@ -639,7 +674,17 @@ export function AdminDataGridSortLink({ children, href, active = false, directio
       className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-2 py-1 transition hover:bg-white/[0.055] hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${active ? "text-[#D8B87A]" : ""} ${className}`}
     >
       <span>{children}</span>
-      <span className={`font-en text-[11px] ${active ? "text-[#D8B87A]" : "text-white/25"}`}>{indicator}</span>
+      {announceState ? (
+        <span className="sr-only">
+          {resolveAdminDataGridSortState(active, direction)}
+        </span>
+      ) : null}
+      <span
+        aria-hidden="true"
+        className={`font-en text-[11px] ${active ? "text-[#D8B87A]" : "text-white/25"}`}
+      >
+        {indicator}
+      </span>
     </Link>
   );
 }
