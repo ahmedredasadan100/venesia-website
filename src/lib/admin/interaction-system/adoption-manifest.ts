@@ -32,9 +32,11 @@ export const ADMIN_INTERACTION_SYSTEM = {
   name: "Admin Interaction System",
   role: "governance_contracts_umbrella",
   ownsRuntime: false,
-  scope: "complete_surface_adoption_phase_1",
-  globalClosed: true,
-  globalClosureBlockers: [],
+  scope: "platform_governance_with_explicit_adoption_gaps",
+  globalClosed: false,
+  globalClosureBlockers: [
+    "Project Locations cannot claim full Collection adoption until its committed presentation source adopts the shared optional-column contract.",
+  ],
 } as const;
 
 export const ADMIN_INTERACTION_MODULES = [
@@ -725,6 +727,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
 
 export type AdminCollectionSurfaceWorkflowClassification =
   | "full_collection_adoption"
+  | "partial_collection_adoption"
   | "specialized_data_owner_shared_collection_presentation"
   | "page_system_only"
   | "fixed_structure_not_paginated"
@@ -785,6 +788,8 @@ export type AdminCollectionSurfaceInventoryEntry = {
     | "specialized_surface"
     | "not_applicable";
   queryMode: AdminCollectionQueryMode;
+  /** Exact Data Runtime registry keys represented by this surface. */
+  dataRegistryEntities: readonly AdminEntityListEntityKey[];
   gridOwner:
     | "AdminEntityList"
     | "AdminDataGrid"
@@ -806,6 +811,7 @@ const ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS = {
   feedbackOwner: "AdminFeedbackProvider",
   confirmationOwner: "AdminConfirmDialog",
   gridOwner: "AdminEntityList",
+  dataRegistryEntities: [],
   reorderOwner: "not_applicable",
   genuineExceptions: [],
 } as const;
@@ -816,6 +822,7 @@ const ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS = {
   feedbackOwner: "AdminFeedbackProvider",
   confirmationOwner: "AdminConfirmDialog",
   gridOwner: "not_applicable",
+  dataRegistryEntities: [],
   reorderOwner: "not_applicable",
   genuineExceptions: [],
 } as const;
@@ -826,6 +833,7 @@ const ADMIN_FIXED_SURFACE_DEFAULTS = {
   feedbackOwner: "AdminFeedbackProvider",
   confirmationOwner: "not_applicable",
   gridOwner: "not_applicable",
+  dataRegistryEntities: [],
   reorderOwner: "not_applicable",
   genuineExceptions: [
     "The surface is a bounded structural or navigation composition, not a growing record collection.",
@@ -838,6 +846,7 @@ const ADMIN_AUTH_SURFACE_DEFAULTS = {
   feedbackOwner: "not_applicable",
   confirmationOwner: "not_applicable",
   gridOwner: "not_applicable",
+  dataRegistryEntities: [],
   reorderOwner: "not_applicable",
   genuineExceptions: [
     "Authentication routes intentionally render outside authenticated Admin Chrome.",
@@ -851,9 +860,13 @@ const ADMIN_AUTH_SURFACE_DEFAULTS = {
  */
 export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   scope: "all_admin_collection_and_list_surfaces",
-  globalClosed: true,
-  globalClosureBlockers: [],
-  genericAdoptionGaps: [],
+  globalClosed: false,
+  globalClosureBlockers: [
+    "Project Locations is a partial Collection adopter because the committed consumer does not expose the shared optional-column persistence contract.",
+  ],
+  genericAdoptionGaps: [
+    "project-locations:shared_optional_columns",
+  ],
   canonicalSectionGap: "gap-7",
   canonicalTableFooterGap: "gap-4",
   ownerSourceFiles: {
@@ -894,6 +907,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["topics"],
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -923,6 +937,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["categories"],
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -952,6 +967,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["series"],
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -981,6 +997,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["pages"],
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -1017,6 +1034,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["projects"],
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -1026,7 +1044,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "project-locations",
-      workflowClassification: "full_collection_adoption",
+      workflowClassification: "partial_collection_adoption",
       generic: true,
       routes: [
         "/admin/projects/locations/governorates",
@@ -1051,17 +1069,24 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
-      columnVisibility: "shared_optional_columns",
+      columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: [
+        "project_locations_governorate",
+        "project_locations_city",
+        "project_locations_main_area",
+        "project_locations_sub_area",
+      ],
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
-      requiredAdoption: [],
-      exceptionRationale: null,
+      requiredAdoption: ["shared_optional_columns"],
+      exceptionRationale:
+        "The committed consumer uses the shared typed table contract but does not expose the shared optional-column persistence controls, so it cannot claim Full Adoption.",
       rationale:
-        "Governorates, cities, districts, and sub-districts are four declarative adapters over the same Project Location owner and shared Collection/Data runtimes.",
+        "Governorates, cities, districts, and sub-districts share the existing Collection/Data owners and Row Actions, but the committed presentation remains a partial adopter until the optional-column contract is adopted.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
@@ -1086,6 +1111,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["redirects"],
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -1231,6 +1257,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["activity_log"],
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -1706,6 +1733,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["admin_users"],
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2003,6 +2031,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
+      dataRegistryEntities: ["topics_without_image"],
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2012,7 +2041,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   ],
 } as const satisfies {
   scope: "all_admin_collection_and_list_surfaces";
-  globalClosed: true;
+  globalClosed: false;
   globalClosureBlockers: readonly string[];
   genericAdoptionGaps: readonly string[];
   canonicalSectionGap: "gap-7";
@@ -2025,6 +2054,120 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   >;
   surfaces: readonly AdminCollectionSurfaceInventoryEntry[];
 };
+
+/**
+ * A Full Adoption claim is a Quality Gate input, not descriptive prose.
+ * Every required contract must be declared here and proven from the concrete
+ * surface sources, shared owners, and Data Runtime registry by the governance
+ * guard. A missing claim, missing axis, or unproven axis fails closed.
+ */
+export const ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS = [
+  "collection",
+  "table",
+  "toolbar",
+  "header",
+  "columns",
+  "sort",
+  "row_actions",
+  "bulk",
+  "runtime",
+  "data_registry",
+] as const;
+
+export type AdminCollectionFullAdoptionContract =
+  (typeof ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS)[number];
+
+export type AdminCollectionFullAdoptionContractState =
+  | "adopted"
+  | "not_required";
+
+export type AdminCollectionFullAdoptionClaim = {
+  surfaceId: string;
+  contracts: Readonly<
+    Record<
+      AdminCollectionFullAdoptionContract,
+      AdminCollectionFullAdoptionContractState
+    >
+  >;
+};
+
+const ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS = {
+  collection: "adopted",
+  table: "adopted",
+  toolbar: "adopted",
+  header: "adopted",
+  columns: "adopted",
+  sort: "adopted",
+  row_actions: "adopted",
+  bulk: "not_required",
+  runtime: "adopted",
+  data_registry: "adopted",
+} as const satisfies Readonly<
+  Record<
+    AdminCollectionFullAdoptionContract,
+    AdminCollectionFullAdoptionContractState
+  >
+>;
+
+export const ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS = [
+  {
+    surfaceId: "content-topics",
+    contracts: {
+      ...ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+      bulk: "adopted",
+    },
+  },
+  {
+    surfaceId: "content-categories",
+    contracts: {
+      ...ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+      bulk: "adopted",
+    },
+  },
+  {
+    surfaceId: "content-series",
+    contracts: {
+      ...ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+      bulk: "adopted",
+    },
+  },
+  {
+    surfaceId: "pages",
+    contracts: {
+      ...ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+      bulk: "adopted",
+    },
+  },
+  {
+    surfaceId: "projects-residential-commercial",
+    contracts: ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+  },
+  {
+    surfaceId: "seo-redirects",
+    contracts: {
+      ...ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+      sort: "not_required",
+    },
+  },
+  {
+    surfaceId: "activity-log",
+    contracts: {
+      ...ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+      row_actions: "not_required",
+    },
+  },
+  {
+    surfaceId: "users-and-roles",
+    contracts: {
+      ...ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+      sort: "not_required",
+    },
+  },
+  {
+    surfaceId: "topics-without-image-report",
+    contracts: ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+  },
+] as const satisfies readonly AdminCollectionFullAdoptionClaim[];
 
 export type AdminInteractionCollectionRuntimeGap = {
   id: string;

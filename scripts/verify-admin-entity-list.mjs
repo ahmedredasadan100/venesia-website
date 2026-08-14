@@ -796,7 +796,12 @@ check(
     ].every((id) => pageCompositionColumnConfig.includes(`${id}:`)) &&
     pageCompositionColumnActions.includes("saveAdminColumnPreferences") &&
     pageCompositionColumnActions.includes("allowedColumns:") &&
-    collectionAdoptionManifest.includes("globalClosed: true"),
+    collectionAdoptionManifest.includes(
+      "ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS",
+    ) &&
+    collectionAdoptionManifest.includes(
+      "ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS",
+    ),
 );
 
 check(

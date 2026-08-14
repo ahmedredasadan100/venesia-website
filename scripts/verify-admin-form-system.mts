@@ -73,6 +73,13 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
+function closureStateIsConsistent(
+  globalClosed: boolean,
+  blockers: readonly string[],
+) {
+  return globalClosed ? blockers.length === 0 : blockers.length > 0;
+}
+
 function occurrenceCount(source: string, pattern: RegExp) {
   return source.match(pattern)?.length ?? 0;
 }
@@ -107,9 +114,11 @@ check(
     ADMIN_INTERACTION_SYSTEM.ownsRuntime === false,
 );
 check(
-  "Admin Interaction System phase-one adoption is closed after final Browser acceptance",
-  ADMIN_INTERACTION_SYSTEM.globalClosed === true &&
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers.length === 0,
+  "Admin Interaction System closure state fails closed when adoption blockers exist",
+  closureStateIsConsistent(
+    ADMIN_INTERACTION_SYSTEM.globalClosed,
+    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers,
+  ),
 );
 
 const expectedInteractionModuleIds = [
