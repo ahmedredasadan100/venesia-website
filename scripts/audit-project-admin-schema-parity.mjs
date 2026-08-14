@@ -36,6 +36,14 @@ const globalTruthAtomicMigration = readFileSync(
   new URL("../sql/migrations/20260805180000_global_truth_atomic_operations_closure.sql", import.meta.url),
   "utf8",
 ).replace(/\r\n?/gu, "\n");
+const projectDomainHardeningMigration = readFileSync(
+  new URL("../sql/migrations/20260813233530_projects_domain_hardening.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
+const locationManagementMigration = readFileSync(
+  new URL("../sql/migrations/20260814002948_location_management_foundation.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
 const dashboardTruthMigration = readFileSync(
   new URL("../sql/migrations/20260805210000_dashboard_truth_closure.sql", import.meta.url),
   "utf8",
@@ -55,9 +63,11 @@ function md5(value) {
 
 function extractExpectedFunctionSource(functionName) {
   const startMarker = `create or replace function public.${functionName}(`;
-  const ownerMigration = globalTruthAtomicMigration.includes(startMarker)
-    ? globalTruthAtomicMigration
-    : projectPublishingMigration.includes(startMarker)
+  const ownerMigration = locationManagementMigration.includes(startMarker)
+    ? locationManagementMigration
+    : globalTruthAtomicMigration.includes(startMarker)
+      ? globalTruthAtomicMigration
+      : projectPublishingMigration.includes(startMarker)
       ? projectPublishingMigration
       : rowActionsMigration.includes(startMarker)
         ? rowActionsMigration
@@ -103,6 +113,7 @@ const aggregateFunctionNames = [
   "prevent_project_type_change",
   "validate_project_location_selection",
   "prevent_project_location_reparent",
+  "mutate_project_location",
 ];
 const expectedFunctionSourceHashes = Object.fromEntries(
   aggregateFunctionNames.map((functionName) => [
@@ -125,12 +136,14 @@ const expectedFunctionSignatures = [
   "public.prevent_project_type_change()",
   "public.validate_project_location_selection()",
   "public.prevent_project_location_reparent()",
+  "public.mutate_project_location(text,bigint,jsonb)",
 ];
 const aggregateRpcSignatures = [
   "public.save_project_admin_entry(bigint,jsonb)",
   "public.delete_project_admin_entry(bigint)",
   "public.set_project_featured_admin_entry(bigint,boolean)",
   "public.duplicate_project_admin_entry(bigint)",
+  "public.mutate_project_location(text,bigint,jsonb)",
 ];
 const forbiddenLegacyFunctionSignatures = [
   "public.sync_project_children(bigint,jsonb,jsonb,jsonb,jsonb,jsonb)",
@@ -327,7 +340,8 @@ const expectedColumnDefaults = new Map([
   ["project_videos.updated_at", "now()"],
 ]);
 const expectedColumnComments = new Map([
-  ["projects.code", "Stable Project code. Database-owned and distinct from the presentation name."],
+  ["projects.id", "Canonical and sole Project identity. All Project Domain relationships use project_id."],
+  ["projects.code", "Required user-visible Project label; not an identity, relationship, or uniqueness key."],
   ["projects.show_on_homepage", "Database-owned Home Projects membership."],
   ["projects.homepage_order", "Database-owned Home Projects order; unique for included Projects."],
 ]);
@@ -794,16 +808,18 @@ const report = {
       tables: 9,
       columns: 122,
       constraints: 104,
-      indexes: 54,
+      indexes: 53,
       rls_policies: 0,
       user_triggers: 4,
-      functions: 8,
+      functions: 9,
       sequences: 9,
     },
     final_rebuild_sha256: sha256(finalRebuildMigration),
     row_actions_migration_sha256: sha256(rowActionsMigration),
     project_publishing_migration_sha256: sha256(projectPublishingMigration),
     global_truth_atomic_migration_sha256: sha256(globalTruthAtomicMigration),
+    project_domain_hardening_migration_sha256: sha256(projectDomainHardeningMigration),
+    location_management_migration_sha256: sha256(locationManagementMigration),
     dashboard_truth_migration_sha256: sha256(dashboardTruthMigration),
     reports_analytics_migration_sha256: sha256(reportsAnalyticsMigration),
     expected_function_source_sha256: expectedFunctionSourceHashes,
@@ -1446,6 +1462,7 @@ function buildParitySummary(fullReport) {
     ["prevent_project_type_change()", { securityDefiner: false, returnType: "trigger", returnsSet: false, defaultArguments: 0 }],
     ["validate_project_location_selection()", { securityDefiner: false, returnType: "trigger", returnsSet: false, defaultArguments: 0 }],
     ["prevent_project_location_reparent()", { securityDefiner: false, returnType: "trigger", returnsSet: false, defaultArguments: 0 }],
+    ["mutate_project_location(text,bigint,jsonb)", { securityDefiner: true, returnType: "project_locations", returnsSet: false, defaultArguments: 2 }],
   ]);
   const columnByName = new Map(
     fullReport.columns.map((column) => [
@@ -1665,7 +1682,7 @@ function buildParitySummary(fullReport) {
         ),
       column_defaults_and_not_null_match_final_rebuild: columnDrift.length === 0,
       index_inventory_valid_ready:
-        fullReport.indexes.length === 54 &&
+        fullReport.indexes.length === 53 &&
         fullReport.indexes.every(
           (index) => index.is_valid && index.is_ready && index.is_live,
         ),
@@ -1741,6 +1758,7 @@ function buildParitySummary(fullReport) {
         JSON.stringify([
           "service_role:delete_project_admin_entry(bigint)",
           "service_role:duplicate_project_admin_entry(bigint)",
+          "service_role:mutate_project_location(text,bigint,jsonb)",
           "service_role:save_project_admin_entry(bigint,jsonb)",
           "service_role:set_project_featured_admin_entry(bigint,boolean)",
         ]),

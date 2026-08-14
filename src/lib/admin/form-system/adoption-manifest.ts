@@ -113,6 +113,26 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "One Project form delegates create and edit lifecycle ownership, dirty protection, feedback, validation focus, Create-to-Edit handoff, and live review snapshots to AdminFormRuntime.",
   },
   {
+    id: "project-locations-create-edit",
+    label: "Project Location create and edit",
+    classification: "shared_adopter",
+    sourceFiles: [
+      "src/app/admin/projects/locations/ProjectLocationFormModal.tsx",
+    ],
+    surfaces: [
+      "governorate:create",
+      "governorate:edit",
+      "city:create",
+      "city:edit",
+      "district:create",
+      "district:edit",
+      "sub-district:create",
+      "sub-district:edit",
+    ],
+    rationale:
+      "All four Project Location levels delegate modal form lifecycle, pending state, validation focus, dirty confirmation, feedback, and close behavior to AdminFormRuntime while hierarchy validation remains owned by the Location Domain.",
+  },
+  {
     id: "pages-quick-create",
     label: "Page quick create",
     classification: "shared_adopter",

@@ -8,13 +8,10 @@ import {
   isProjectPublicationStatus,
   type ProjectPublicationStatus,
 } from "./project-publishing-capability";
+import type { ProjectLocationLevel } from "./location-management-contract";
 
 export type ProjectType = "residential" | "commercial";
-export type ProjectLocationLevel =
-  | "governorate"
-  | "city"
-  | "main_area"
-  | "sub_area";
+export type { ProjectLocationLevel } from "./location-management-contract";
 export type ProjectLocationPointKind = "transport" | "road" | "landmark";
 export type ProjectMediaSection = "overview" | "delivery" | "gallery";
 export type ProjectVideoSection = "overview" | "gallery";

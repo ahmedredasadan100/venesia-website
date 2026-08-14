@@ -85,6 +85,10 @@ const expectedDataEntities = [
   "series",
   "pages",
   "projects",
+  "project_locations_governorate",
+  "project_locations_city",
+  "project_locations_main_area",
+  "project_locations_sub_area",
   "redirects",
   "activity_log",
   "topics_without_image",
@@ -96,6 +100,10 @@ const expectedRowActionEntities = [
   "series",
   "pages",
   "projects",
+  "project_locations_governorate",
+  "project_locations_city",
+  "project_locations_main_area",
+  "project_locations_sub_area",
   "redirects",
   "topics_without_image",
   "admin_users",
@@ -167,6 +175,8 @@ const paths = {
   projectsAdapter: "src/lib/admin/projects/entity-list-adapter.ts",
   projectPublishing:
     "sql/migrations/20260803120000_project_publishing_visibility_capability.sql",
+  projectLocations:
+    "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
   redirects: "src/app/admin/seo/redirects/RedirectsClient.tsx",
   pagesConfig: "src/lib/admin/pages/pages-list-config.ts",
   pagesPreferences:
@@ -387,6 +397,10 @@ const expectedConsumerFiles = new Map<string, string>([
   ["series", paths.series],
   ["pages", paths.pages],
   ["projects", paths.projects],
+  ["project_locations_governorate", paths.projectLocations],
+  ["project_locations_city", paths.projectLocations],
+  ["project_locations_main_area", paths.projectLocations],
+  ["project_locations_sub_area", paths.projectLocations],
   ["redirects", paths.redirects],
   ["topics_without_image", paths.topicsWithoutImage],
   ["admin_users", paths.usersRoles],
@@ -931,12 +945,18 @@ check(
     (sourceFile) => presentationSourceCounts.get(sourceFile) === 1,
   ),
 );
-const genericDataEntityByCollectionId = new Map([
+const genericDataEntityByCollectionId = new Map<string, string | readonly string[]>([
   ["content-topics", "topics"],
   ["content-categories", "categories"],
   ["content-series", "series"],
   ["pages", "pages"],
   ["projects-residential-commercial", "projects"],
+  ["project-locations", [
+    "project_locations_governorate",
+    "project_locations_city",
+    "project_locations_main_area",
+    "project_locations_sub_area",
+  ]],
   ["seo-redirects", "redirects"],
   ["activity-log", "activity_log"],
   ["topics-without-image-report", "topics_without_image"],
@@ -947,7 +967,10 @@ check(
   sameValueSet(
     collectionSurfaces
       .filter((surface) => surface.generic)
-      .map((surface) => genericDataEntityByCollectionId.get(surface.id) ?? ""),
+      .flatMap((surface) => {
+        const entities = genericDataEntityByCollectionId.get(surface.id) ?? "";
+        return Array.isArray(entities) ? entities : [entities];
+      }),
     registryEntities,
   ),
 );
@@ -1656,7 +1679,7 @@ check(
 check(
   "Instant Mutation inventory is unique, complete, and adopts the scoped owner contract",
   new Set(directInstantConsumers).size === directInstantConsumers.length &&
-    directInstantConsumers.length === 14 &&
+    directInstantConsumers.length === 15 &&
     directInstantConsumers.every((sourceFile) => {
       const source = read(sourceFile);
       return (

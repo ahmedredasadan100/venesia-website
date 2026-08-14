@@ -55,15 +55,14 @@ try {
 
   const catalog = (await client.query(`
     select count(*)::integer as total,
-           count(distinct code)::integer as unique_codes,
            count(distinct slug)::integer as unique_slugs,
            count(*) filter (where nullif(btrim(code),'') is null)::integer as missing_codes,
            count(*) filter (where image is null or hero_image is null)::integer as missing_root_media
     from public.projects
   `)).rows[0];
   check(Number(catalog.total) === 13, "Database Project catalog must contain exactly 13 transferred Projects.");
-  check(Number(catalog.unique_codes) === 13 && Number(catalog.unique_slugs) === 13, "Project codes and slugs must be unique.");
-  check(Number(catalog.missing_codes) === 0 && Number(catalog.missing_root_media) === 0, "Transferred Project identity/media is incomplete.");
+  check(Number(catalog.unique_slugs) === 13, "Project slugs must be unique.");
+  check(Number(catalog.missing_codes) === 0 && Number(catalog.missing_root_media) === 0, "Transferred Project labels/media are incomplete.");
 
   const preservedRoot = (await client.query(`
     select md5(coalesce(string_agg(
@@ -98,7 +97,6 @@ try {
   }
 
   const requiredIndexes = [
-    "projects_code_unique_idx",
     "projects_homepage_order_unique_idx",
     "projects_public_homepage_idx",
     "menu_items_menu_parent_order_unique_idx",
@@ -110,6 +108,16 @@ try {
     [requiredIndexes],
   );
   check(indexes.rows.length === requiredIndexes.length, "Required Project/Menu/Page indexes are missing.");
+  const obsoleteProjectCodeIdentity = await client.query(
+    `select indexname from pg_indexes
+      where schemaname='public'
+        and tablename='projects'
+        and indexname='projects_code_unique_idx'`,
+  );
+  check(
+    obsoleteProjectCodeIdentity.rows.length === 0,
+    "Project code must not remain a unique identity index.",
+  );
 
   const functionAcl = await client.query(`
     select p.oid::regprocedure::text as function_name,

@@ -206,7 +206,7 @@ function verifyStructuralContract(migrations: Migration[]) {
   assert.doesNotMatch(sourceCorpus, /\bsync_project_children\b/u, "Removed Project child-write owner is referenced by active source.");
 
   const projectAudit = readFileSync(join(ROOT, "scripts", "audit-project-admin-schema-parity.mjs"), "utf8");
-  assert.match(projectAudit, /indexes:\s*54/u, "Project parity guard must include Dashboard and Reports indexes.");
+  assert.match(projectAudit, /indexes:\s*53/u, "Project parity guard must include Dashboard and Reports indexes after removing Project Code uniqueness.");
   assert.match(projectAudit, /dashboard_truth_closure\.sql/u, "Project parity guard must include the Dashboard migration owner.");
   assert.match(projectAudit, /reports_analytics_capability_closure\.sql/u, "Project parity guard must include the Reports migration owner.");
 

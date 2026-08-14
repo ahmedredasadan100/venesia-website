@@ -22,6 +22,7 @@ export type CmsEntityType =
   | "topic_series"
   | "media_content"
   | "project"
+  | "project_location"
   | "project_children"
   | "menu"
   | "menu_item"
@@ -60,6 +61,7 @@ const ENTITY_LABELS: Record<CmsEntityType, string> = {
   topic_series: "سلسلة",
   media_content: "محتوى إعلامي",
   project: "مشروع",
+  project_location: "موقع مشروع",
   project_children: "بيانات فرعية للمشروع",
   menu: "قائمة",
   menu_item: "عنصر قائمة",

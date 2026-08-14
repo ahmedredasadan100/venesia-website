@@ -24,6 +24,8 @@ const saveRpcConflictArbiterFixPath =
   "sql/migrations/20260730100000_project_admin_save_rpc_conflict_arbiter_fix.sql";
 const projectRowActionsMigrationPath =
   "sql/migrations/20260731100000_project_row_actions_capability.sql";
+const projectDomainHardeningMigrationPath =
+  "sql/migrations/20260813233530_projects_domain_hardening.sql";
 const fixturePath = "scripts/fixtures/project-admin-entry-postgres-tests.sql";
 const projectRowActionsFixturePath =
   "scripts/fixtures/project-row-actions-postgres-tests.sql";
@@ -57,6 +59,7 @@ for (const path of [
   schemaParityForwardFixPath,
   saveRpcConflictArbiterFixPath,
   projectRowActionsMigrationPath,
+  projectDomainHardeningMigrationPath,
   fixturePath,
   projectRowActionsFixturePath,
   aclAuditPath,
@@ -89,6 +92,7 @@ const aclCorrection = read(aclCorrectionPath);
 const schemaParityForwardFix = read(schemaParityForwardFixPath);
 const saveRpcConflictArbiterFix = read(saveRpcConflictArbiterFixPath);
 const projectRowActionsMigration = read(projectRowActionsMigrationPath);
+const projectDomainHardeningMigration = read(projectDomainHardeningMigrationPath);
 const fixture = read(fixturePath);
 const projectRowActionsFixture = read(projectRowActionsFixturePath);
 const aclAudit = read(aclAuditPath);
@@ -413,13 +417,18 @@ check(
   "schema parity final contract includes Project Row Actions and Global Truth owners",
   schemaParityAudit.includes("20260731100000_project_row_actions_capability.sql") &&
     schemaParityAudit.includes("20260805180000_global_truth_atomic_operations_closure.sql") &&
+    schemaParityAudit.includes("20260813233530_projects_domain_hardening.sql") &&
+    schemaParityAudit.includes("20260814002948_location_management_foundation.sql") &&
     schemaParityAudit.includes('"set_project_featured_admin_entry"') &&
     schemaParityAudit.includes('"duplicate_project_admin_entry"') &&
     schemaParityAudit.includes("columns: 122") &&
-    schemaParityAudit.includes("indexes: 54") &&
+    schemaParityAudit.includes("indexes: 53") &&
+    schemaParityAudit.includes("project_domain_hardening_migration_sha256") &&
     schemaParityAudit.includes("dashboard_truth_migration_sha256") &&
     schemaParityAudit.includes("reports_analytics_migration_sha256") &&
-    schemaParityAudit.includes("functions: 8") &&
+    schemaParityAudit.includes("functions: 9") &&
+    schemaParityAudit.includes('"mutate_project_location"') &&
+    schemaParityAudit.includes("location_management_migration_sha256") &&
     schemaParityAudit.includes('["projects.featured", "false"]'),
 );
 check(
@@ -1040,6 +1049,17 @@ check(
     action.includes("assessProjectEntryPayload") &&
     action.includes('"save_project_admin_entry"') &&
     action.includes("editHref"),
+);
+check(
+  "Project Domain uses project_id as its sole identity and keeps code as a non-unique label",
+  projectDomainHardeningMigration.includes(
+    "public.projects.id is not the sole primary key",
+  ) &&
+    projectDomainHardeningMigration.includes(
+      "drop index if exists public.projects_code_unique_idx",
+    ) &&
+    projectDomainHardeningMigration.includes("Required user-visible Project label") &&
+    !action.includes("projects_code_unique_idx"),
 );
 check(
   "Project save adopts shared Media write coordination for all Project media domains",

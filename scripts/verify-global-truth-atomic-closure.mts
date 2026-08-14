@@ -128,8 +128,7 @@ if (catalogMatch) {
   const catalog = JSON.parse(catalogMatch[1]) as Array<Record<string, unknown>>;
   check(catalog.length === 13, "Project transfer catalog must contain exactly 13 projects.");
   check(new Set(catalog.map((project) => project.slug)).size === 13, "Project transfer slugs must be unique.");
-  check(new Set(catalog.map((project) => project.code)).size === 13, "Project transfer codes must be unique.");
-  check(catalog.every((project) => project.code && project.slug && project.image && project.heroImage), "Every transferred Project must preserve root identity and media.");
+  check(catalog.every((project) => project.code && project.slug && project.image && project.heroImage), "Every transferred Project must preserve its route identity, label, and media.");
   check(
     catalog.filter((project) => project.category === "residential").every((project) => {
       const details = project.residentialDetails as Record<string, unknown> | undefined;
