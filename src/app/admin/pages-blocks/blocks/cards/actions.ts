@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import {
@@ -13,8 +15,11 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  PAGE_BLOCK_BULK_ACTIONS,
   parseFormStatus,
   parseNumber,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
@@ -180,6 +185,13 @@ export async function createCardsBlock(
     createdId = data.id;
     mediaWarning = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
 
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("content_block_template", "create"),
+      entityType: "content_block_template",
+      entityId: data.id,
+      entityLabel: name,
+      metadata: { blockType: "cards", slug },
+    }, actor);
     await revalidateBlockModulePaths("cards");
     return createCardsBlockSuccess(revision, data.id, mediaWarning);
   } catch (error) {
@@ -239,12 +251,19 @@ export async function updateCardsBlock(formData: FormData) {
   });
 
   await syncBlockModulePageAssignments("cards", id, parsePageIdsFromForm(formData), actor);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "update"),
+    entityType: "content_block_template",
+    entityId: id,
+    entityLabel: name,
+    metadata: { blockType: "cards", slug },
+  }, actor);
   await revalidateBlockModulePaths("cards");
   redirect(`/admin/pages-blocks/blocks/cards/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function toggleCardsBlockStatus(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "unpublished");
   if (!id) throw new Error("معرّف البلوك مفقود.");
@@ -255,11 +274,20 @@ export async function toggleCardsBlockStatus(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      nextStatus === "published" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityId: id,
+    metadata: { blockType: "cards", status: nextStatus },
+  }, actor);
   await revalidateBlockModulePaths("cards");
 }
 
 export async function deleteCardsBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -277,6 +305,12 @@ export async function deleteCardsBlock(formData: FormData) {
     .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "delete"),
+    entityType: "content_block_template",
+    entityId: cleanupIdentity,
+    metadata: { blockType: "cards" },
+  }, actor);
   const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     [],
     null,
@@ -329,6 +363,13 @@ export async function duplicateCardsBlock(formData: FormData) {
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "duplicate"),
+    entityType: "content_block_template",
+    entityId: coordinated.value.id,
+    entityLabel: nextRow.name,
+    metadata: { blockType: "cards", sourceId: id },
+  }, actor);
   await revalidateBlockModulePaths("cards");
   if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
     redirect("/admin/pages-blocks/blocks/cards?notice=saved_with_media_sync_warning");
@@ -336,15 +377,12 @@ export async function duplicateCardsBlock(formData: FormData) {
 }
 
 export async function bulkCardsBlocks(formData: FormData) {
-  await requireAdminSession();
-  const action = cleanText(formData.get("bulk_action"));
-  const ids = formData
-    .getAll("ids")
-    .flatMap((value) => String(value).split(","))
-    .map((value) => Number(value))
-    .filter(Boolean);
-
-  if (!ids.length) return;
+  const actor = await requireAdminSession();
+  const action = parsePageBlockBulkAction(
+    formData.get("bulk_action"),
+    PAGE_BLOCK_BULK_ACTIONS,
+  );
+  const ids = parsePageBlockBulkIds(formData.getAll("ids"));
 
   const now = new Date().toISOString();
 
@@ -380,6 +418,15 @@ export async function bulkCardsBlocks(formData: FormData) {
     );
   }
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      action === "delete" ? "delete" : action === "publish" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityLabel: "cards_block_templates",
+    metadata: { blockType: "cards", action, ids, count: ids.length },
+  }, actor);
   if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
     try {
       await revalidateBlockModulePaths("cards");

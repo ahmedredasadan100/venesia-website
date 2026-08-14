@@ -8,7 +8,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MIGRATION = "sql/migrations/20260813150000_legacy_project_media_canonicalization.sql";
+const MIGRATION = "sql/migrations/20260813220634_legacy_project_media_canonicalization.sql";
 const migration = readFileSync(join(ROOT, MIGRATION), "utf8").replace(/\r\n?/g, "\n");
 
 let passed = 0;

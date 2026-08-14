@@ -13,7 +13,3 @@ export function getAdminLinkProvider(type: LinkedResourceType) {
 export function listAdminLinkProviders() {
   return Array.from(providers.values());
 }
-
-export function getRegisteredProviderTypes() {
-  return Array.from(providers.keys());
-}

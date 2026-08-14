@@ -19,13 +19,23 @@ export type AdminFormControlSnapshot =
     };
 
 export function serializeAdminForm(form: HTMLFormElement) {
+  const serverOwnedNames = new Set(
+    Array.from(form.elements).flatMap((element) => {
+      if (!element.hasAttribute("data-admin-form-server-owned")) return [];
+      const name = element.getAttribute("name");
+      return name ? [name] : [];
+    }),
+  );
+
   return JSON.stringify(
-    Array.from(new FormData(form).entries()).map(([name, value]) => [
-      name,
-      typeof value === "string"
-        ? value
-        : `${value.name}:${value.size}:${value.type}:${value.lastModified}`,
-    ]),
+    Array.from(new FormData(form).entries())
+      .filter(([name]) => !serverOwnedNames.has(name))
+      .map(([name, value]) => [
+        name,
+        typeof value === "string"
+          ? value
+          : `${value.name}:${value.size}:${value.type}:${value.lastModified}`,
+      ]),
   );
 }
 
@@ -74,9 +84,16 @@ export function captureAdminFormControls(
 export function restoreAdminFormControls(
   form: HTMLFormElement,
   snapshot: readonly AdminFormControlSnapshot[],
+  options: { preserveServerOwned?: boolean } = {},
 ) {
   for (const entry of snapshot) {
     if (entry.element.form !== form) continue;
+    if (
+      options.preserveServerOwned &&
+      entry.element.hasAttribute("data-admin-form-server-owned")
+    ) {
+      continue;
+    }
 
     if (entry.kind === "input") {
       if (entry.element.type === "file") {

@@ -11,7 +11,7 @@ type StoredAdminColumnPreferences = {
 };
 
 /**
- * Project infrastructure adapter for column preferences.
+ * Entity-neutral Admin infrastructure adapter for column preferences.
  * UI core must not import this module — pages/actions call it with a view key.
  */
 export async function readAdminColumnPreferences(

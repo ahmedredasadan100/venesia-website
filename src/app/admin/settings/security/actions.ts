@@ -8,8 +8,8 @@ import { recordAdminAuditEvent } from "../../../../lib/admin/audit/record-admin-
 import { resolveServerActionAuditContext } from "../../../../lib/admin/audit/resolve-server-action-audit-context";
 import {
   revokeAllAdminUserSessions,
+  updateAdminUserIdentity,
   updateAdminUserEmail,
-  updateAdminUserFullName,
   updateAdminUserPassword,
   verifyAdminUserPassword,
 } from "../../../../lib/admin/auth/admin-users";
@@ -102,13 +102,13 @@ export async function updateAdminSelfAccountAction(input: {
       }
     }
 
-    if (fullNameChanged) {
-      await updateAdminUserFullName(user.id, normalizedFullName);
-    }
+    await updateAdminUserIdentity(user.id, {
+      fullName: normalizedFullName,
+      email: normalizedEmail,
+    });
 
     if (emailChanged) {
       const previousEmail = user.email;
-      await updateAdminUserEmail(user.id, normalizedEmail);
 
       await recordAdminAuditEvent({
         actorAdminUserId: user.id,
@@ -117,7 +117,12 @@ export async function updateAdminSelfAccountAction(input: {
         entityType: "admin_user",
         entityId: user.id,
         entityLabel: user.username,
-        metadata: { email: { from: previousEmail, to: normalizedEmail } },
+        metadata: {
+          email: { from: previousEmail, to: normalizedEmail },
+          ...(fullNameChanged
+            ? { full_name: { from: user.full_name, to: normalizedFullName } }
+            : {}),
+        },
         ipAddress: auditContext.ipAddress,
         userAgent: auditContext.userAgent,
       });

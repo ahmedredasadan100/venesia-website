@@ -10,11 +10,13 @@ import {
   flattenAdminCategoryTree,
   type AdminContentCategory,
 } from "../../../../../lib/admin/content/category-hierarchy";
-import { isContentType } from "../../../../../lib/admin/content/content-types";
+import {
+  isContentType,
+  isMediaEditableContentType,
+} from "../../../../../lib/admin/content/content-types";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
-import { isMediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 
 export const dynamic = "force-dynamic";
 

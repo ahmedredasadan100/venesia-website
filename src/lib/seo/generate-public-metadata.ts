@@ -19,12 +19,17 @@ export type GeneratePublicMetadataInput = ResolveSeoMetadataInput & {
 export async function generatePublicMetadata(
   input: GeneratePublicMetadataInput,
 ): Promise<Metadata> {
-  const globalSeo = await loadGlobalSeoSettings().catch(() => getGlobalSeoDefaults());
-
-  const pageSeo =
+  const globalSeoPromise = loadGlobalSeoSettings().catch(() =>
+    getGlobalSeoDefaults(),
+  );
+  const pageSeoPromise =
     input.includePageSeo === false
-      ? null
-      : await loadPageSeoByPath(input.path).catch(() => null);
+      ? Promise.resolve(null)
+      : loadPageSeoByPath(input.path).catch(() => null);
+  const [globalSeo, pageSeo] = await Promise.all([
+    globalSeoPromise,
+    pageSeoPromise,
+  ]);
 
   const resolved = resolveSeoMetadata({
     ...input,

@@ -17,7 +17,7 @@ import {
   isMediaEditableContentType,
   MEDIA_CONTENT_TYPE_ERROR,
   MEDIA_EDITABLE_CONTENT_TYPES,
-} from "../../../../../components/admin/content/editors/media/media-content-config";
+} from "../../../../../lib/admin/content/content-types";
 import {
   buildMediaWritePayload,
   getDraftValidationChecks,
@@ -36,6 +36,13 @@ import { revalidateUnifiedContentPaths } from "../editor-actions/revalidate";
 import {
   getAdminContentSeriesCategoryError,
 } from "../../../../../lib/admin/content/category-hierarchy";
+import {
+  parseTopicRevisionToken,
+  TOPIC_REVISION_CONFLICT_CODE,
+  TOPIC_REVISION_CONFLICT_MESSAGE,
+  topicRevisionMatches,
+  TopicRevisionConflictError,
+} from "../../../../../lib/admin/content/topic-revision";
 
 type FieldErrors = Record<string, string[]>;
 
@@ -52,6 +59,7 @@ function buildFormFailure(
   revision: number,
   message: string,
   fieldErrors?: FieldErrors,
+  code?: string,
 ): AdminFormActionState {
   const focusTarget = fieldErrors ? Object.keys(fieldErrors)[0] : undefined;
   return {
@@ -60,6 +68,7 @@ function buildFormFailure(
     revision,
     title: "تعذر حفظ المحتوى",
     message,
+    ...(code ? { code } : {}),
     ...(fieldErrors ? { fieldErrors } : {}),
     ...(focusTarget ? { focusTarget } : {}),
   };
@@ -87,6 +96,14 @@ export async function saveMediaContentAdapter(
   const revision = previousState.revision + 1;
   const failure = (message: string, fieldErrors?: FieldErrors) =>
     buildFormFailure(mode, revision, message, fieldErrors);
+  const revisionConflict = () =>
+    buildFormFailure(
+      mode,
+      revision,
+      TOPIC_REVISION_CONFLICT_MESSAGE,
+      undefined,
+      TOPIC_REVISION_CONFLICT_CODE,
+    );
 
   if (mode === "edit" && !validateId(id)) {
     return failure("معرّف المحتوى غير صالح.");
@@ -96,6 +113,17 @@ export async function saveMediaContentAdapter(
     mode === "edit" ? await getEditableMediaTopicById(id) : null;
   if (mode === "edit" && !currentTopic) {
     return failure("المحتوى غير موجود أو تعذر تحميله.");
+  }
+
+  const expectedRevision = parseTopicRevisionToken(
+    formData.get("expected_updated_at"),
+  );
+  if (
+    mode === "edit" &&
+    (!expectedRevision.provided ||
+      !topicRevisionMatches(expectedRevision.value, currentTopic?.updated_at))
+  ) {
+    return revisionConflict();
   }
 
   const payload = getPayload(formData);
@@ -256,7 +284,10 @@ export async function saveMediaContentAdapter(
           }
           return data;
         } else {
-          const { data, error } = await getSupabaseAdmin()
+          if (!expectedRevision.provided) {
+            throw new TopicRevisionConflictError();
+          }
+          const updateQuery = getSupabaseAdmin()
             .from("topics")
             .update({
               ...domainPayload,
@@ -265,18 +296,24 @@ export async function saveMediaContentAdapter(
             })
             .eq("id", id)
             .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
-            .is("deleted_at", null)
+            .is("deleted_at", null);
+          const guardedQuery = expectedRevision.value === null
+            ? updateQuery.is("updated_at", null)
+            : updateQuery.eq("updated_at", expectedRevision.value);
+          const { data, error } = await guardedQuery
             .select("id,slug")
             .maybeSingle<{ id: number; slug: string }>();
-          if (error || !data) {
-            throw new Error(error?.message ?? "تعذر تحديث المحتوى.");
-          }
+          if (error) throw new Error(error.message);
+          if (!data) throw new TopicRevisionConflictError();
           return data;
         }
       },
       resolveEntityIdentity: (value) => String(value.id),
     });
   } catch (error) {
+    if (error instanceof TopicRevisionConflictError) {
+      return revisionConflict();
+    }
     return failure(
       error instanceof MediaReferenceWriteLeaseError
         ? getMediaReferenceWriteLeaseUserMessage(error.code)

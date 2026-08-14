@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import {
@@ -13,8 +15,11 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  PAGE_BLOCK_BULK_ACTIONS,
   parseFormStatus,
   parseNumber,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
@@ -168,6 +173,13 @@ export async function createFeedModule(
       throw new Error("تم إنشاء الموديول، لكن قراءة الإعدادات المحفوظة لم تطابق الطلب.");
     }
 
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("content_block_template", "create"),
+      entityType: "content_block_template",
+      entityId: data.id,
+      entityLabel: name,
+      metadata: { blockType: "feed", slug },
+    }, actor);
     await revalidateBlockModulePaths("feed");
     return createFeedModuleSuccess(revision, data.id, mediaWarning);
   } catch (error) {
@@ -234,13 +246,20 @@ export async function updateFeedModule(formData: FormData) {
   }
 
   await syncBlockModulePageAssignments("feed", id, parsePageIdsFromForm(formData), actor);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "update"),
+    entityType: "content_block_template",
+    entityId: id,
+    entityLabel: name,
+    metadata: { blockType: "feed", slug },
+  }, actor);
   await revalidateBlockModulePaths("feed");
   revalidatePath(`/admin/pages-blocks/blocks/feed/${id}`, "page");
   redirect(`/admin/pages-blocks/blocks/feed/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function toggleFeedModuleStatus(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "unpublished");
   if (!id) throw new Error("معرّف الموديول مفقود.");
@@ -251,11 +270,20 @@ export async function toggleFeedModuleStatus(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      nextStatus === "published" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityId: id,
+    metadata: { blockType: "feed", status: nextStatus },
+  }, actor);
   await revalidateBlockModulePaths("feed");
 }
 
 export async function deleteFeedModule(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف الموديول مفقود.");
 
@@ -273,6 +301,12 @@ export async function deleteFeedModule(formData: FormData) {
     .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "delete"),
+    entityType: "content_block_template",
+    entityId: cleanupIdentity,
+    metadata: { blockType: "feed" },
+  }, actor);
   const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     [],
     null,
@@ -329,6 +363,13 @@ export async function duplicateFeedModule(formData: FormData) {
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "duplicate"),
+    entityType: "content_block_template",
+    entityId: coordinated.value.id,
+    entityLabel: nextRow.name,
+    metadata: { blockType: "feed", sourceId: id },
+  }, actor);
   await revalidateBlockModulePaths("feed");
   if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
     redirect("/admin/pages-blocks/blocks/feed?notice=saved_with_media_sync_warning");
@@ -336,15 +377,12 @@ export async function duplicateFeedModule(formData: FormData) {
 }
 
 export async function bulkFeedModules(formData: FormData) {
-  await requireAdminSession();
-  const action = cleanText(formData.get("bulk_action"));
-  const ids = formData
-    .getAll("ids")
-    .flatMap((value) => String(value).split(","))
-    .map((value) => Number(value))
-    .filter(Boolean);
-
-  if (!ids.length) return;
+  const actor = await requireAdminSession();
+  const action = parsePageBlockBulkAction(
+    formData.get("bulk_action"),
+    PAGE_BLOCK_BULK_ACTIONS,
+  );
+  const ids = parsePageBlockBulkIds(formData.getAll("ids"));
 
   const now = new Date().toISOString();
 
@@ -383,6 +421,15 @@ export async function bulkFeedModules(formData: FormData) {
     );
   }
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      action === "delete" ? "delete" : action === "publish" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityLabel: "feed_module_templates",
+    metadata: { blockType: "feed", action, ids, count: ids.length },
+  }, actor);
   if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
     try {
       await revalidateBlockModulePaths("feed");

@@ -8,7 +8,9 @@ import {
   type ContentReviewInput,
 } from "./content-review-capability";
 
-export type MediaEditableContentType = "news" | "video" | "gallery" | "press" | "site_update";
+import type { MediaEditableContentType } from "../content/content-types";
+
+export type { MediaEditableContentType } from "../content/content-types";
 
 export type MediaPublishInput = {
   title: string;

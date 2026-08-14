@@ -49,7 +49,7 @@ function loadValidationModule(relativePath) {
         throw privilegedReadReached;
       },
     },
-    "../../../../../components/admin/content/editors/media/media-content-config": {
+    "../../../../../lib/admin/content/content-types": {
       isMediaEditableContentType: () => true,
       MEDIA_EDITABLE_CONTENT_TYPES: ["news", "press", "site_update", "video", "gallery"],
     },

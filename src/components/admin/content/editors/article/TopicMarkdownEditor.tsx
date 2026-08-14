@@ -9,10 +9,18 @@ import {
   normalizeArticleMarkdown,
   stripHtml,
 } from "../../../../../lib/rich-text/html-utils";
+import {
+  createTopicDraft,
+  parseTopicDraft,
+  topicRevisionMatches,
+  type TopicDraftCandidate,
+} from "../../../../../lib/admin/content/topic-revision";
 
 export type AdminPublicRichContentEditorProps = {
   defaultValue?: string;
   variant?: "default" | "compact";
+  draftIdentity: string;
+  baselineRevision: string | null;
 };
 
 type EditorStats = {
@@ -54,9 +62,8 @@ function getTextStats(value: string): EditorStats {
   };
 }
 
-function getDraftKey() {
-  if (typeof window === "undefined") return `${STORAGE_PREFIX}:default`;
-  return `${STORAGE_PREFIX}:${window.location.pathname}`;
+function getDraftKey(draftIdentity: string) {
+  return `${STORAGE_PREFIX}:${draftIdentity}`;
 }
 
 function MiniCounter({
@@ -90,6 +97,8 @@ function MiniCounter({
 export function AdminPublicRichContentEditor({
   defaultValue = "",
   variant = "default",
+  draftIdentity,
+  baselineRevision,
 }: AdminPublicRichContentEditorProps) {
   const storedDefaultValue = useMemo(
     () => isHtmlContent(defaultValue) ? normalizeArticleMarkdown(defaultValue) : defaultValue,
@@ -98,49 +107,144 @@ export function AdminPublicRichContentEditor({
   const [initialEditorValue, setInitialEditorValue] = useState(storedDefaultValue);
   const [content, setContent] = useState(storedDefaultValue);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<TopicDraftCandidate | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const draftKeyRef = useRef("");
+  const pendingDraftRef = useRef<TopicDraftCandidate | null>(null);
+  const skipNextDraftPersistRef = useRef(false);
   const compact = variant === "compact";
 
   useEffect(() => {
-    draftKeyRef.current = getDraftKey();
-    const savedDraft = window.localStorage.getItem(draftKeyRef.current);
-    const normalizedSavedDraft = savedDraft ? normalizeArticleMarkdown(savedDraft) : "";
+    skipNextDraftPersistRef.current = true;
+    draftKeyRef.current = getDraftKey(draftIdentity);
+    const parsedDraft = parseTopicDraft(
+      window.localStorage.getItem(draftKeyRef.current),
+    );
+    const savedDraft = parsedDraft
+      ? { ...parsedDraft, content: normalizeArticleMarkdown(parsedDraft.content) }
+      : null;
     const normalizedStoredDefault = normalizeArticleMarkdown(storedDefaultValue);
-    const nextValue = normalizedSavedDraft && normalizedSavedDraft !== normalizedStoredDefault
-      ? normalizedSavedDraft
-      : storedDefaultValue;
 
-    setInitialEditorValue(nextValue);
-    setContent(nextValue);
-    setDraftRestored(nextValue !== storedDefaultValue);
+    if (!savedDraft || savedDraft.content === normalizedStoredDefault) {
+      window.localStorage.removeItem(draftKeyRef.current);
+      setInitialEditorValue(storedDefaultValue);
+      setContent(storedDefaultValue);
+      setDraftRestored(false);
+      pendingDraftRef.current = null;
+      setPendingDraft(null);
+      setDraftReady(true);
+      return;
+    }
+
+    if (
+      !savedDraft.legacy &&
+      topicRevisionMatches(savedDraft.baselineRevision, baselineRevision)
+    ) {
+      setInitialEditorValue(savedDraft.content);
+      setContent(savedDraft.content);
+      setDraftRestored(true);
+      pendingDraftRef.current = null;
+      setPendingDraft(null);
+      setDraftReady(true);
+      return;
+    }
+
+    setInitialEditorValue(storedDefaultValue);
+    setContent(storedDefaultValue);
+    setDraftRestored(false);
+    pendingDraftRef.current = savedDraft;
+    setPendingDraft(savedDraft);
     setDraftReady(true);
-  }, [storedDefaultValue]);
+  }, [baselineRevision, draftIdentity, storedDefaultValue]);
 
   useEffect(() => {
-    if (!draftReady || !draftKeyRef.current) return;
-    window.localStorage.setItem(draftKeyRef.current, content);
-  }, [content, draftReady]);
+    if (!draftReady || pendingDraft || !draftKeyRef.current) return;
+    if (skipNextDraftPersistRef.current) {
+      skipNextDraftPersistRef.current = false;
+      return;
+    }
+    if (normalizeArticleMarkdown(content) === normalizeArticleMarkdown(storedDefaultValue)) {
+      window.localStorage.removeItem(draftKeyRef.current);
+      return;
+    }
+    window.localStorage.setItem(
+      draftKeyRef.current,
+      JSON.stringify(
+        createTopicDraft(normalizeArticleMarkdown(content), baselineRevision),
+      ),
+    );
+  }, [baselineRevision, content, draftReady, pendingDraft, storedDefaultValue]);
 
   useEffect(() => {
     const form = sectionRef.current?.closest("form");
     if (!form) return;
 
     function clearSavedDraft() {
+      if (pendingDraftRef.current) return;
       if (draftKeyRef.current) {
         window.localStorage.removeItem(draftKeyRef.current);
       }
       setDraftRestored(false);
+      pendingDraftRef.current = null;
+      setPendingDraft(null);
     }
 
     form.addEventListener("admin-form-saved", clearSavedDraft);
     return () => form.removeEventListener("admin-form-saved", clearSavedDraft);
   }, []);
 
+  useEffect(() => {
+    const form = sectionRef.current?.closest("form");
+    if (!form) return;
+
+    function blockUnresolvedDraftSubmit(event: SubmitEvent) {
+      if (!pendingDraftRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      const prompt = sectionRef.current?.querySelector<HTMLElement>(
+        "[data-topic-draft-conflict]",
+      );
+      prompt?.scrollIntoView({ block: "center", behavior: "smooth" });
+      prompt
+        ?.querySelector<HTMLButtonElement>("[data-topic-draft-restore]")
+        ?.focus({ preventScroll: true });
+    }
+
+    form.addEventListener("submit", blockUnresolvedDraftSubmit, true);
+    return () =>
+      form.removeEventListener("submit", blockUnresolvedDraftSubmit, true);
+  }, []);
+
   const handleValueChange = useCallback((value: string) => {
     setContent(value.replace(/\r\n/g, "\n"));
   }, []);
+  const restorePendingDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    const restoredContent = normalizeArticleMarkdown(pendingDraft.content);
+    if (draftKeyRef.current) {
+      window.localStorage.setItem(
+        draftKeyRef.current,
+        JSON.stringify(createTopicDraft(restoredContent, baselineRevision)),
+      );
+    }
+    setInitialEditorValue(restoredContent);
+    setContent(restoredContent);
+    setDraftRestored(true);
+    pendingDraftRef.current = null;
+    setPendingDraft(null);
+  }, [baselineRevision, pendingDraft]);
+  const discardPendingDraft = useCallback(() => {
+    if (draftKeyRef.current) {
+      window.localStorage.removeItem(draftKeyRef.current);
+    }
+    setInitialEditorValue(storedDefaultValue);
+    setContent(storedDefaultValue);
+    setDraftRestored(false);
+    pendingDraftRef.current = null;
+    setPendingDraft(null);
+  }, [storedDefaultValue]);
   const stats = useMemo(() => getTextStats(content), [content]);
 
   return (
@@ -180,6 +284,36 @@ export function AdminPublicRichContentEditor({
         </div>
       ) : null}
 
+      {pendingDraft ? (
+        <div
+          className={`${compact ? "mt-3 rounded-xl px-4 py-3" : "mt-5 rounded-[20px] px-5 py-4"} border border-amber-400/30 bg-amber-400/10 text-sm leading-7 text-amber-100`}
+          data-topic-draft-conflict
+          role="status"
+        >
+          <p>
+            توجد مسودة محلية من نسخة سابقة أو غير معروفة. لم يتم استبدال المحتوى الحالي بها.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-amber-300/35 bg-amber-300/15 px-3 py-1.5 font-semibold text-amber-50 transition hover:bg-amber-300/25"
+              onClick={restorePendingDraft}
+              data-topic-draft-restore
+            >
+              استرجاع المسودة
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 font-semibold text-white/75 transition hover:bg-white/10"
+              onClick={discardPendingDraft}
+              data-topic-draft-discard
+            >
+              تجاهل المسودة
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className={compact ? "mt-3" : "mt-6"}>
         <AdminRichTextEditor
           name="content"
@@ -192,6 +326,7 @@ export function AdminPublicRichContentEditor({
           storageFormat="markdown"
           enableArticleStructure
           enableTextAlign
+          readOnly={Boolean(pendingDraft)}
           helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
           onValueChange={handleValueChange}
         />

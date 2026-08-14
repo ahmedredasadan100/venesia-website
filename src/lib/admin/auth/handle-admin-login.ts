@@ -3,9 +3,34 @@ import { NextResponse } from "next/server";
 import { AUDIT_ACTIONS } from "../audit/audit-actions";
 import { recordAdminAuditEvent } from "../audit/record-admin-audit-event";
 import { resolveRequestAuditContext } from "../audit/resolve-request-audit-context";
-import { authenticateAdminUser, hasAnyAdminUser } from "./admin-users";
+import { logError } from "../../logging";
+import {
+  AdminAuthDependencyError,
+  authenticateAdminUser,
+  getAdminUsersDependencyState,
+} from "./admin-users";
 import { createAdminSessionCookie } from "./require-admin-api";
 import { getAdminAuthConfig } from "./session";
+
+function adminAuthErrorResponse(
+  code: string,
+  error: string,
+  status: 500 | 503,
+) {
+  return NextResponse.json({ code, error }, { status });
+}
+
+export function handleUnexpectedAdminLoginError(
+  error: unknown,
+  route: string,
+) {
+  logError("Admin login request failed", error, { route });
+  return adminAuthErrorResponse(
+    "admin_auth_internal_error",
+    "Admin login failed.",
+    500,
+  );
+}
 
 export async function handleAdminLoginRequest(request: Request) {
   const body = (await request.json()) as { username?: string; password?: string; rememberMe?: boolean };
@@ -20,26 +45,52 @@ export async function handleAdminLoginRequest(request: Request) {
 
   const config = getAdminAuthConfig();
   if (!config.configured) {
-    return NextResponse.json(
-      {
-        error:
-          "Admin auth is not configured on the server. Set ADMIN_SESSION_SECRET (16+ chars), then redeploy/restart.",
-      },
-      { status: 503 },
+    logError(
+      "Admin login rejected because auth configuration is unavailable",
+      new Error("ADMIN_SESSION_SECRET is missing or invalid."),
+    );
+    return adminAuthErrorResponse(
+      "admin_auth_not_configured",
+      "Admin authentication is unavailable.",
+      503,
     );
   }
 
-  if (!(await hasAnyAdminUser())) {
-    return NextResponse.json(
-      {
-        error:
-          "No admin users exist. Apply the admin_users migration/seed on Supabase before logging in.",
-      },
-      { status: 503 },
+  const dependencyState = await getAdminUsersDependencyState();
+  if (dependencyState.status === "unavailable") {
+    logError(
+      "Admin login dependency is unavailable",
+      dependencyState.error,
+      { operation: dependencyState.error.operation },
+    );
+    return adminAuthErrorResponse(
+      dependencyState.error.code,
+      "Admin authentication is temporarily unavailable.",
+      503,
+    );
+  }
+  if (dependencyState.status === "empty") {
+    return adminAuthErrorResponse(
+      "admin_auth_not_initialized",
+      "Admin access has not been initialized.",
+      503,
     );
   }
 
-  const user = await authenticateAdminUser(username, password);
+  let user;
+  try {
+    user = await authenticateAdminUser(username, password);
+  } catch (error) {
+    if (!(error instanceof AdminAuthDependencyError)) throw error;
+    logError("Admin login dependency is unavailable", error, {
+      operation: error.operation,
+    });
+    return adminAuthErrorResponse(
+      error.code,
+      "Admin authentication is temporarily unavailable.",
+      503,
+    );
+  }
   if (!user) {
     await recordAdminAuditEvent({
       actorUsername: username,

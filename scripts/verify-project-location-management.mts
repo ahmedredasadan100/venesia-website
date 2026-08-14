@@ -9,7 +9,7 @@ import * as ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATION =
-  "sql/migrations/20260814002948_location_management_foundation.sql";
+  "sql/migrations/20260814020750_location_management_foundation.sql";
 const read = (path: string) =>
   readFileSync(join(ROOT, path), "utf8").replace(/\r\n?/g, "\n");
 

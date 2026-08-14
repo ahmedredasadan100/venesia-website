@@ -7,7 +7,7 @@ import { PGlite } from "@electric-sql/pglite";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATION =
-  "sql/migrations/20260813233530_projects_domain_hardening.sql";
+  "sql/migrations/20260814020742_projects_domain_hardening.sql";
 const MIGRATION_NAME = MIGRATION.split("/").at(-1)!;
 
 const read = (path: string) =>

@@ -61,10 +61,6 @@ export function useAdminFeedback() {
   return context;
 }
 
-export function useOptionalAdminFeedback() {
-  return useContext(AdminFeedbackContext);
-}
-
 function AdminFeedbackViewportEntry({
   entry,
   onDismiss,

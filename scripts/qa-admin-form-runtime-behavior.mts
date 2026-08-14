@@ -35,6 +35,7 @@ try {
       <input type="checkbox" name="is_published">
       <input type="date" name="published_at" value="2026-07-01">
       <input type="hidden" name="date_label" value="legacy-label">
+      <input type="hidden" name="expected_updated_at" value="revision-1" data-admin-form-server-owned>
       <select name="category_slug">
         <option value="news" selected>News</option>
         <option value="guides">Guides</option>
@@ -57,6 +58,7 @@ try {
       const restore = (0, eval)(`(${restoreSource})`) as (
         form: HTMLFormElement,
         snapshot: unknown[],
+        options?: { preserveServerOwned?: boolean },
       ) => void;
       const serialize = (0, eval)(`(${serializeSource})`) as (
         form: HTMLFormElement,
@@ -113,22 +115,73 @@ try {
         fileInput.files?.length === 0;
 
       restore(form, snapshot);
+      const restoredBaseline = serialize(form);
+      const restoredTitle = control<HTMLInputElement>("title").value;
+      const restoredExcerpt = control<HTMLTextAreaElement>("excerpt").value;
+      const restoredFeatured = control<HTMLInputElement>("is_featured").checked;
+      const restoredPublished = publishSwitch.checked;
+      const restoredPublishIndeterminate = publishSwitch.indeterminate;
+      const restoredPublishedAt = control<HTMLInputElement>("published_at").value;
+      const restoredDateLabel = control<HTMLInputElement>("date_label").value;
+      const restoredCategory = control<HTMLSelectElement>("category_slug").value;
+      const restoredSelectedTags = Array.from(
+        tags.selectedOptions,
+        (option) => option.value,
+      );
+      const restoredDisabledNote =
+        control<HTMLInputElement>("disabled_note").value;
+      const restoredFileName = fileInput.files?.item(0)?.name ?? null;
+
+      const expectedRevision =
+        control<HTMLInputElement>("expected_updated_at");
+      const firstSuccessSnapshot = capture(form);
+      form.reset();
+      expectedRevision.defaultValue = "revision-2";
+      expectedRevision.value = "revision-2";
+      restore(form, firstSuccessSnapshot, { preserveServerOwned: true });
+      const firstSuccessRevision = new FormData(form).get(
+        "expected_updated_at",
+      );
+      const firstSuccessSerialized = serialize(form);
+
+      control<HTMLInputElement>("title").value = "Second submitted title";
+      const secondSubmittedRevision = new FormData(form).get(
+        "expected_updated_at",
+      );
+      const secondSubmittedBaseline = serialize(form);
+      const secondSuccessSnapshot = capture(form);
+      form.reset();
+      expectedRevision.defaultValue = "revision-3";
+      expectedRevision.value = "revision-3";
+      restore(form, secondSuccessSnapshot, { preserveServerOwned: true });
+      const secondSuccessRevision = new FormData(form).get(
+        "expected_updated_at",
+      );
+      const secondSuccessSerialized = serialize(form);
+
       return {
         resetWasObserved,
         initialBaseline,
         submittedBaseline,
-        restoredBaseline: serialize(form),
-        title: control<HTMLInputElement>("title").value,
-        excerpt: control<HTMLTextAreaElement>("excerpt").value,
-        featured: control<HTMLInputElement>("is_featured").checked,
-        published: publishSwitch.checked,
-        publishIndeterminate: publishSwitch.indeterminate,
-        publishedAt: control<HTMLInputElement>("published_at").value,
-        dateLabel: control<HTMLInputElement>("date_label").value,
-        category: control<HTMLSelectElement>("category_slug").value,
-        selectedTags: Array.from(tags.selectedOptions, (option) => option.value),
-        disabledNote: control<HTMLInputElement>("disabled_note").value,
-        fileName: fileInput.files?.item(0)?.name ?? null,
+        restoredBaseline,
+        title: restoredTitle,
+        excerpt: restoredExcerpt,
+        featured: restoredFeatured,
+        published: restoredPublished,
+        publishIndeterminate: restoredPublishIndeterminate,
+        publishedAt: restoredPublishedAt,
+        dateLabel: restoredDateLabel,
+        category: restoredCategory,
+        selectedTags: restoredSelectedTags,
+        disabledNote: restoredDisabledNote,
+        fileName: restoredFileName,
+        firstSuccessRevision,
+        firstSuccessSerialized,
+        secondSubmittedRevision,
+        secondSubmittedBaseline,
+        secondSuccessRevision,
+        secondSuccessSerialized,
+        secondRestoredTitle: control<HTMLInputElement>("title").value,
       };
     },
     {
@@ -151,6 +204,16 @@ try {
       behavior.selectedTags.join(",") === "two,three" &&
       behavior.disabledNote === "Submitted disabled" &&
       behavior.fileName === "topic-cover.png",
+  );
+  check(
+    "two consecutive saves in one mounted form keep each server-owned revision baseline current",
+    behavior.firstSuccessRevision === "revision-2" &&
+      behavior.firstSuccessSerialized === behavior.submittedBaseline &&
+      behavior.secondSubmittedRevision === "revision-2" &&
+      behavior.secondSuccessRevision === "revision-3" &&
+      behavior.secondSuccessSerialized === behavior.secondSubmittedBaseline &&
+      !behavior.secondSuccessSerialized.includes("expected_updated_at") &&
+      behavior.secondRestoredTitle === "Second submitted title",
   );
 
   const publicationForm = new FormData();
@@ -190,7 +253,7 @@ try {
       }) === null,
   );
 
-  const restoredErrorIsDirty =
+      const restoredErrorIsDirty =
     behavior.restoredBaseline !== behavior.initialBaseline;
   check(
     "error restore keeps dirty state while the submitted success baseline is clean",

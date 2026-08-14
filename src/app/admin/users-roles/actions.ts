@@ -8,6 +8,7 @@ import { resolveServerActionAuditContext } from "../../../lib/admin/audit/resolv
 import { getAdminUserById } from "../../../lib/admin/auth/admin-users";
 import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
 import {
+  ADMIN_SELF_PASSWORD_SETTINGS_MESSAGE,
   adminResetUserPassword,
   createAdminUser,
   deleteAdminUser,
@@ -253,6 +254,9 @@ export async function updateAdminUserAction(input: {
   if (input.id === actor.id && !input.is_active) {
     throw new Error("لا يمكنك تعطيل حسابك الحالي.");
   }
+  if (input.id === actor.id && input.password?.trim()) {
+    throw new Error(ADMIN_SELF_PASSWORD_SETTINGS_MESSAGE);
+  }
 
   const before = await getAdminUserById(input.id);
   if (!before) throw new Error("المستخدم غير موجود.");
@@ -262,6 +266,12 @@ export async function updateAdminUserAction(input: {
     email: input.email,
     full_name: input.full_name,
     is_active: input.is_active,
+    ...(input.password?.trim()
+      ? {
+          password: input.password,
+          confirmPassword: input.confirmPassword ?? "",
+        }
+      : {}),
   });
 
   const profileChanged =
@@ -299,8 +309,6 @@ export async function updateAdminUserAction(input: {
   }
 
   if (input.password?.trim()) {
-    await adminResetUserPassword(input.id, actor.id, input.password, input.confirmPassword ?? "");
-
     await recordAdminAuditEvent({
       actorAdminUserId: actor.id,
       actorUsername: actor.username,

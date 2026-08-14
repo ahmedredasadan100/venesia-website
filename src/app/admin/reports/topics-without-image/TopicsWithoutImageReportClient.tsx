@@ -43,9 +43,7 @@ import type {
 import { resolveAdminEntityPreviewActions } from "../../../../lib/admin/interaction-system/entity-preview-capability";
 import type { TopicWithoutImageRow } from "../../../../lib/admin/media-catalog/reports";
 import {
-  topicsWithoutImageContentTypes,
   topicsWithoutImageQueryContract,
-  topicsWithoutImageStatuses,
   type TopicsWithoutImageFilters,
   type TopicsWithoutImageSortField,
 } from "../../../../lib/admin/media-catalog/topics-without-image-entity-list-contract";

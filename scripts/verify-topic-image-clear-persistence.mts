@@ -42,6 +42,7 @@ const currentTopic: TopicRow = {
   category_slug: "topics",
   status: "draft",
   published_at: null,
+  updated_at: null,
   seo_title: null,
   seo_description: null,
   focus_keyword: null,

@@ -12,12 +12,14 @@ import { ADMIN_FORM_STACK_CLASS_NAME } from "../../ui";
 import { CONTENT_EDITOR_NAVIGATION_EVENT } from "./content-editor-navigation";
 import { CONTENT_FORM_NAVIGATION } from "./content-form-definition";
 import { ADMIN_ENTITY_REVIEW_TAB_LABEL } from "../../../../lib/admin/review/entity-review-presentation";
+import { encodeTopicRevision } from "../../../../lib/admin/content/topic-revision";
 
 type ContentEditorShellProps = {
   action: AdminFormAction;
   contentType: ContentType;
   mode: AdminFormMode;
   entityId?: number;
+  baselineRevision?: string | null;
   closeHref: string;
   formId: string;
   tabs: AdminModuleTab[];
@@ -37,11 +39,16 @@ export default function ContentEditorShell({
   contentType,
   mode,
   entityId,
+  baselineRevision,
   closeHref,
   formId,
   tabs,
   initialState,
 }: ContentEditorShellProps) {
+  if (mode === "edit" && baselineRevision === undefined) {
+    throw new Error("Content edit forms require a baseline revision.");
+  }
+
   const presentedTabs: AdminModuleTab[] = tabs.map((tab) =>
     tab.id === "publish"
       ? {
@@ -66,6 +73,14 @@ export default function ContentEditorShell({
       className={ADMIN_FORM_STACK_CLASS_NAME}
     >
       {entityId ? <input type="hidden" name="id" value={entityId} /> : null}
+      {mode === "edit" ? (
+        <input
+          type="hidden"
+          name="expected_updated_at"
+          value={encodeTopicRevision(baselineRevision ?? null)}
+          data-admin-form-server-owned=""
+        />
+      ) : null}
       <input type="hidden" name="content_type" value={contentType} />
       <AdminModuleTabs
         tabs={presentedTabs}

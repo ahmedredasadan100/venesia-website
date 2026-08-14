@@ -2,6 +2,8 @@ import { createAdminFormErrorState } from "../../../../../lib/admin/form-runtime
 import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
 import {
   getContentEditorAdapter,
+  getContentTypeLabel,
+  type MediaEditableContentType,
 } from "../../../../../lib/admin/content/content-types";
 import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import { mediaRowToPublishInput } from "../../../../../lib/admin/content-workflow/media-publish-validation";
@@ -17,7 +19,6 @@ import TopicMarkdownEditor from "../article/TopicMarkdownEditor";
 import MediaEntitySeoPanel from "./MediaEntitySeoPanel";
 import MediaGalleryFields from "./MediaGalleryFields";
 import MediaVideoFields from "./MediaVideoFields";
-import { getContentTypeLabel, type MediaEditableContentType } from "./media-content-config";
 
 export type MediaContentFormValues = {
   id?: number;
@@ -178,7 +179,12 @@ export default function MediaContentForm({
         <input type="hidden" name="content" value="" />
       </div>
     ) : (
-      <TopicMarkdownEditor defaultValue={content} variant="compact" />
+      <TopicMarkdownEditor
+        defaultValue={content}
+        variant="compact"
+        draftIdentity={`topic:${contentType}:${values?.id ?? "create"}`}
+        baselineRevision={values?.updated_at ?? null}
+      />
     );
   const bodyEditor = (
     <div className="space-y-5">
@@ -210,6 +216,7 @@ export default function MediaContentForm({
         contentType={contentType}
         mode={mode}
         entityId={values?.id}
+        baselineRevision={mode === "edit" ? values?.updated_at ?? null : undefined}
         closeHref={returnPath}
         formId={formId}
         initialState={

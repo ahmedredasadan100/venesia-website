@@ -1,8 +1,8 @@
 import { AdminActionButton, AdminPageHeader } from "../../../../components/admin/ui";
 import { AdminEntityListPageLayout } from "../../../../components/admin/entity-list";
 import AdminNotice from "../../../../components/admin/AdminNotice";
-import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
+import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { loadProjectsEntityListResult } from "../../../../lib/admin/projects/entity-list-adapter";
 import {
   projectsQueryContract,
@@ -12,7 +12,6 @@ import {
   getProjectsDefaultColumnKeys,
   PROJECTS_COMMERCIAL_LIST_VIEW_KEY,
 } from "../../../../lib/admin/projects/projects-list-config";
-import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import AddProjectPanelClient from "../AddProjectPanelClient";
 import ProjectsTableClient from "../ProjectsTableClient";
 
@@ -37,7 +36,6 @@ export default async function CommercialProjectsPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const actor = await requireAdminSession();
   const resolved = searchParams ? await searchParams : {};
   const notice = getNoticeText(
     typeof resolved.notice === "string" ? resolved.notice : undefined,
@@ -58,24 +56,18 @@ export default async function CommercialProjectsPage({
     filters: withLockedProjectType(normalized.filters, "commercial"),
   };
 
-  const [{ data: preference, error: preferenceError }, listResult] =
-    await Promise.all([
-      getSupabaseAdmin()
-        .from("admin_user_preferences")
-        .select("preferences")
-        .eq("admin_user_id", actor.id)
-        .eq("view_key", PROJECTS_COMMERCIAL_LIST_VIEW_KEY)
-        .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
-      loadProjectsEntityListResult(initialQuery)
-        .then((data) => ({ data, error: null as Error | null }))
-        .catch((error: unknown) => ({
-          data: null,
-          error:
-            error instanceof Error
-              ? error
-              : new Error("تعذر تحميل قائمة المشاريع التجارية."),
-        })),
-    ]);
+  const [preference, listResult] = await Promise.all([
+    readAdminColumnPreferences(PROJECTS_COMMERCIAL_LIST_VIEW_KEY),
+    loadProjectsEntityListResult(initialQuery)
+      .then((data) => ({ data, error: null as Error | null }))
+      .catch((error: unknown) => ({
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("تعذر تحميل قائمة المشاريع التجارية."),
+      })),
+  ]);
 
   if (listResult.error) {
     return (
@@ -90,9 +82,8 @@ export default async function CommercialProjectsPage({
     );
   }
 
-  const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
-    ? preference.preferences.visibleColumns
-    : [...getProjectsDefaultColumnKeys()];
+  const visibleColumns =
+    preference.visibleColumns ?? [...getProjectsDefaultColumnKeys()];
 
   return (
     <AdminEntityListPageLayout>
@@ -110,11 +101,11 @@ export default async function CommercialProjectsPage({
         }
       />
 
-      {preferenceError ? (
+      {preference.error ? (
         <AdminNotice
           variant="danger"
           title="تعذر تحميل تفضيلات الأعمدة"
-          message={preferenceError.message}
+          message={preference.error}
         />
       ) : null}
 

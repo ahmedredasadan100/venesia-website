@@ -5,7 +5,6 @@ import {
   AdminPageExperience,
 } from "../../../../components/admin/ui";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
-import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
 import {
   CATEGORIES_DEFAULT_COLUMN_KEYS,
@@ -15,7 +14,7 @@ import {
 import { categoriesEntityListAdapter } from "../../../../lib/admin/content/entity-list-adapters/categories";
 import { categoriesQueryContract } from "../../../../lib/admin/content/entity-list-contracts/categories";
 import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
-import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import CategoriesListClient from "./CategoriesListClient";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +35,6 @@ export default async function TopicCategoriesPage({
 }: {
   searchParams?: Promise<CategoriesSearchParams>;
 }) {
-  const actor = await requireAdminSession();
   const queryParams = await searchParams;
   const noticeFeedback = resolveAdminNoticeFeedback(
     CATEGORIES_NOTICE_CODE_MAP,
@@ -59,25 +57,19 @@ export default async function TopicCategoriesPage({
     ),
   );
 
-  const [{ data: preference, error: preferenceError }, listResult] =
-    await Promise.all([
-      getSupabaseAdmin()
-        .from("admin_user_preferences")
-        .select("preferences")
-        .eq("admin_user_id", actor.id)
-        .eq("view_key", CATEGORIES_LIST_VIEW_KEY)
-        .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
-      categoriesEntityListAdapter
-        .load(query)
-        .then((data) => ({ data, error: null as Error | null }))
-        .catch((error: unknown) => ({
-          data: null,
-          error:
-            error instanceof Error
-              ? error
-              : new Error("Unable to load categories."),
-        })),
-    ]);
+  const [preference, listResult] = await Promise.all([
+    readAdminColumnPreferences(CATEGORIES_LIST_VIEW_KEY),
+    categoriesEntityListAdapter
+      .load(query)
+      .then((data) => ({ data, error: null as Error | null }))
+      .catch((error: unknown) => ({
+        data: null,
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Unable to load categories."),
+      })),
+  ]);
 
   if (listResult.error) {
     return (
@@ -96,9 +88,8 @@ export default async function TopicCategoriesPage({
     );
   }
 
-  const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
-    ? preference.preferences.visibleColumns
-    : [...CATEGORIES_DEFAULT_COLUMN_KEYS];
+  const visibleColumns =
+    preference.visibleColumns ?? [...CATEGORIES_DEFAULT_COLUMN_KEYS];
 
   return (
     <AdminPageExperience>
@@ -128,11 +119,11 @@ export default async function TopicCategoriesPage({
         }
       />
 
-      {preferenceError ? (
+      {preference.error ? (
         <AdminNotice
           variant="danger"
           title="تعذر تحميل تفضيلات الأعمدة"
-          message={preferenceError.message}
+          message={preference.error}
         />
       ) : null}
 

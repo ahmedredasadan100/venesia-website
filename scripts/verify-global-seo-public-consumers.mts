@@ -4,6 +4,16 @@ import { readFileSync } from "node:fs";
 import { GLOBAL_SEO_PUBLIC_CONSUMERS } from "../src/lib/admin/seo/global-seo-adoption-manifest.ts";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const metadataOwner = read("src/lib/seo/generate-public-metadata.ts");
+
+assert.ok(metadataOwner.includes("const globalSeoPromise = loadGlobalSeoSettings()"));
+assert.ok(metadataOwner.includes("const pageSeoPromise ="));
+assert.ok(
+  metadataOwner.includes("await Promise.all([") &&
+    metadataOwner.includes("globalSeoPromise") &&
+    metadataOwner.includes("pageSeoPromise"),
+  "global and page SEO reads must remain parallel",
+);
 for (const path of GLOBAL_SEO_PUBLIC_CONSUMERS) {
   const source = read(path);
   assert.equal(source.includes("buildMetadata("), false, `${path} uses removed legacy metadata builder`);

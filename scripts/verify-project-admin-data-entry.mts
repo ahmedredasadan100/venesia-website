@@ -25,7 +25,7 @@ const saveRpcConflictArbiterFixPath =
 const projectRowActionsMigrationPath =
   "sql/migrations/20260731100000_project_row_actions_capability.sql";
 const projectDomainHardeningMigrationPath =
-  "sql/migrations/20260813233530_projects_domain_hardening.sql";
+  "sql/migrations/20260814020742_projects_domain_hardening.sql";
 const fixturePath = "scripts/fixtures/project-admin-entry-postgres-tests.sql";
 const projectRowActionsFixturePath =
   "scripts/fixtures/project-row-actions-postgres-tests.sql";
@@ -417,8 +417,8 @@ check(
   "schema parity final contract includes Project Row Actions and Global Truth owners",
   schemaParityAudit.includes("20260731100000_project_row_actions_capability.sql") &&
     schemaParityAudit.includes("20260805180000_global_truth_atomic_operations_closure.sql") &&
-    schemaParityAudit.includes("20260813233530_projects_domain_hardening.sql") &&
-    schemaParityAudit.includes("20260814002948_location_management_foundation.sql") &&
+    schemaParityAudit.includes("20260814020742_projects_domain_hardening.sql") &&
+    schemaParityAudit.includes("20260814020750_location_management_foundation.sql") &&
     schemaParityAudit.includes('"set_project_featured_admin_entry"') &&
     schemaParityAudit.includes('"duplicate_project_admin_entry"') &&
     schemaParityAudit.includes("columns: 122") &&

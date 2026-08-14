@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import {
   synchronizeMediaReferenceWriteScopesAfterDomainMutation,
@@ -15,7 +17,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { revalidateHeroCache } from "../../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { parseFormStatus } from "../../../../../lib/page-blocks/admin-utils";
+import {
+  HERO_BULK_ACTIONS,
+  parseFormStatus,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
+} from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import {
   normalizeHeroElementOrder,
@@ -268,6 +275,13 @@ export async function createHeroTemplate(
     });
     createdId = coordinated.value.id;
     mediaWarning = Boolean(mediaSynchronizationNotice(coordinated.mediaSynchronization));
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("content_block_template", "create"),
+      entityType: "content_block_template",
+      entityId: coordinated.value.id,
+      entityLabel: name,
+      metadata: { blockType: "hero", slug },
+    }, actor);
     await revalidateHeroAdmin();
     return createHeroTemplateSuccess(
       revision,
@@ -293,7 +307,7 @@ export async function createHeroTemplate(
 }
 
 export async function toggleHeroTemplate(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
   const nextStatus = formData.get("next_status") === "published" ? "published" : "unpublished";
 
@@ -305,11 +319,20 @@ export async function toggleHeroTemplate(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      nextStatus === "published" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityId: id,
+    metadata: { blockType: "hero", status: nextStatus },
+  }, actor);
   await revalidateHeroAdmin();
 }
 
 export async function deleteHeroTemplate(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"), 0);
   if (!id) throw new Error("Hero id is missing.");
 
@@ -327,6 +350,12 @@ export async function deleteHeroTemplate(formData: FormData) {
     .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "delete"),
+    entityType: "content_block_template",
+    entityId: cleanupIdentity,
+    metadata: { blockType: "hero" },
+  }, actor);
   const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     [],
     null,
@@ -392,6 +421,13 @@ export async function duplicateHeroTemplate(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "duplicate"),
+    entityType: "content_block_template",
+    entityId: coordinated.value.id,
+    entityLabel: nextRow.name,
+    metadata: { blockType: "hero", sourceId: id },
+  }, actor);
   await revalidateHeroAdmin();
   const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);
   if (notice) redirect(`/admin/pages-blocks/blocks/hero?notice=${notice}`);
@@ -399,13 +435,11 @@ export async function duplicateHeroTemplate(formData: FormData) {
 
 export async function bulkHeroTemplates(formData: FormData) {
   const actor = await requireAdminSession();
-  const action = cleanText(formData.get("bulk_action"));
-  const rawIds = formData.getAll("ids");
-  const ids = (rawIds.length > 1 ? rawIds : String(formData.get("ids") ?? "").split(","))
-    .map((item) => Number(item))
-    .filter(Boolean);
-
-  if (!ids.length) return;
+  const action = parsePageBlockBulkAction(
+    formData.get("bulk_action"),
+    HERO_BULK_ACTIONS,
+  );
+  const ids = parsePageBlockBulkIds(formData.getAll("ids"));
 
   if (action === "show" || action === "hide") {
     const { error } = await getSupabaseAdmin()
@@ -441,6 +475,15 @@ export async function bulkHeroTemplates(formData: FormData) {
     );
   }
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      action === "delete" ? "delete" : action === "show" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityLabel: "hero_templates",
+    metadata: { blockType: "hero", action, ids, count: ids.length },
+  }, actor);
   if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
     try {
       await revalidateHeroAdmin();
@@ -509,6 +552,13 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "update"),
+    entityType: "content_block_template",
+    entityId: id,
+    entityLabel: name,
+    metadata: { blockType: "hero", slug },
+  }, actor);
   await revalidateHeroAdmin();
   revalidatePath(`/admin/pages-blocks/blocks/hero/${id}`);
   const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);

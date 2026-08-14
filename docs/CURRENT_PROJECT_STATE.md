@@ -9,31 +9,34 @@ This file records the minimum current facts needed to begin work safely. Archite
 
 ## Current official baseline
 
+The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified entering baseline for this Platform Health closure is:
+
 ```text
-3b548f5b4bfd1122c4c0a35b1966cfe132b72363
+0743f5cff13e3359746abbe6d1760a26a90b4dc7
 ```
 
-Verified as the current delivery baseline for the local 2026-08-14 architecture pass:
+Verified at phase entry on 2026-08-14:
 
 | Surface | SHA / state |
 |---|---|
-| Local phase branch base HEAD | `756734128d0b32cf0dd2766328f26da94ccd2d4b` before the uncommitted pass |
-| Local `main` / `origin/main` / GitHub `main` | `3b548f5b4bfd1122c4c0a35b1966cfe132b72363` |
-| GitHub / Vercel | Quality Gate and automatic Vercel deployment passed on `3b548f5b4bfd1122c4c0a35b1966cfe132b72363` |
+| Platform Health phase branch base HEAD | `0743f5cff13e3359746abbe6d1760a26a90b4dc7` |
+| Phase-entry local `main` / `origin/main` / GitHub `main` | `0743f5cff13e3359746abbe6d1760a26a90b4dc7` |
+| Active worktree | `codex/platform-health-final-closure`; delivery evidence remains separate from `main` until GitHub records a merge |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-The active Platform Governance & Architecture Closure pass is pending delivery from its dedicated phase branch. GitHub remains the authority for its eventual PR, merge, checks, and deployment state; authenticated Admin Browser proof remains environment-dependent.
+The active Platform Health Final Closure pass is being delivered from its dedicated phase branch. GitHub remains the authority for its PR, exact-head checks, merge, and deployment state. Repository verification does not imply merge, deployment, migration application, or authenticated Admin Browser proof.
 
 ## Active phase
 
-- **Title:** Platform Governance & Architecture Closure
-- **Baseline:** `756734128d0b32cf0dd2766328f26da94ccd2d4b`
-- **Branch:** `codex/locations-shared-collection-adoption`
-- **Scope:** existing Admin Collection/Data/Domain owners, fail-closed adoption evidence, Location eligibility projection, and local route/page health verification.
-- **Delivery:** pending dedicated PR at the time of this state snapshot; live GitHub evidence supersedes this line after delivery.
+- **Title:** Platform Health Final Closure
+- **Baseline:** `0743f5cff13e3359746abbe6d1760a26a90b4dc7`
+- **Branch:** `codex/platform-health-final-closure`
+- **Scope:** evidence-backed Platform Health bugs, reliability debt, maintainability debt, one measured metadata waterfall, and confirmed dead source, all within current owners.
+- **Boundaries:** no new Runtime, Capability, Provider, System, owner, source of truth, Product policy, Production data mutation, merge, or deployment.
+- **Delivery:** dedicated PR and exact-head checks are required; live GitHub evidence supersedes this snapshot.
 
 ## Current architecture truth
 
@@ -68,15 +71,15 @@ The active Platform Governance & Architecture Closure pass is pending delivery f
 | PR #82 | Closed unmerged as superseded by PR #84; its old baseline, owners, contracts, and superseded implementations are not architecture authority. |
 | PR #85 | GitHub Actions PostgreSQL service jobs aligned with Production PostgreSQL 17; no product or schema change. |
 
-## Production database reconciliation
+## Configured live database reconciliation
 
-The 2026-08-12 read-only reconciliation established the following live facts against the repository migration corpus:
+The 2026-08-14 read-only reconciliation established the following facts against the configured Supabase target. The target was healthy, but its identity as Production was not independently proven in this pass.
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 78 |
-| Production registry versions | 75 |
-| Registry SQL provenance | Exact repository SQL for all 75 deployed repository versions |
+| Repository migration files | 79 |
+| Configured live registry versions | 78 |
+| Registry SQL provenance | Exact repository SQL for all 78 deployed versions; one new Admin invariant migration remains unapplied |
 | Public tables | 51 |
 | Public tables with RLS enabled | 51 |
 | Public catalog objects with repository provenance | 265 |
@@ -96,7 +99,7 @@ scripts/verify-database-reconciliation.mts
 scripts/reconcile-migration-registry.mts
 ```
 
-The structural guard is part of `ci:check`. On 2026-08-12, a read-only live run exposed the stale documented registry count (`74` versus live `75`); an independent `BEGIN READ ONLY` inventory then reverified all table, RLS, catalog, index, constraint, overload, policy, callable-function, platform-function, and audit counts above. No database write was performed.
+The structural guard is part of `ci:check`. The Platform Health pass aligned three repository migration filenames with their existing live registry versions after proving byte-identical SQL. The additive `20260814174238_admin_users_active_invariant.sql` migration is repository work only until an authorized deployment applies it. No database write was performed by this phase.
 
 ## Removed final-cleanup legacy
 

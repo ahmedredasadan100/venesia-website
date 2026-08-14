@@ -69,6 +69,9 @@ const residentialPage = read(
 const commercialPage = read(
   "src/app/admin/projects/commercial/page.tsx",
 );
+const columnPreferencesOwner = read(
+  "src/lib/admin/preferences/admin-column-preferences.ts",
+);
 const migration = read(
   "sql/migrations/20260728090000_rebuild_project_admin_data_entry.sql",
 );
@@ -251,13 +254,19 @@ check(
 );
 check(
   residentialPage.includes("loadProjectsEntityListResult(initialQuery)") &&
-    residentialPage.includes("requireAdminSession()"),
-  "Residential RSC authenticates and hydrates the shared list",
+    residentialPage.includes(
+      "readAdminColumnPreferences(PROJECTS_RESIDENTIAL_LIST_VIEW_KEY)",
+    ) &&
+    columnPreferencesOwner.includes("const actor = await requireAdminSession()"),
+  "Residential RSC delegates authenticated preferences and hydrates the shared list",
 );
 check(
   commercialPage.includes("loadProjectsEntityListResult(initialQuery)") &&
-    commercialPage.includes("requireAdminSession()"),
-  "Commercial RSC authenticates and hydrates the shared list",
+    commercialPage.includes(
+      "readAdminColumnPreferences(PROJECTS_COMMERCIAL_LIST_VIEW_KEY)",
+    ) &&
+    columnPreferencesOwner.includes("const actor = await requireAdminSession()"),
+  "Commercial RSC delegates authenticated preferences and hydrates the shared list",
 );
 check(
   !residentialPage.includes("/admin/projects/construction-updates"),

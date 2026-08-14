@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import {
   AdminFeedbackChannelViewport,
@@ -11,20 +11,27 @@ import AdminConfirmDialog from "../../../../components/admin/ui/AdminConfirmDial
 import { updateMaintenanceModeAction } from "./actions";
 
 type MaintenanceModePanelProps = {
-  initialEnabled: boolean;
+  initialReadState:
+    | { status: "ready"; enabled: boolean }
+    | { status: "unavailable" };
 };
 
 const FEEDBACK_CHANNEL = "settings-general-maintenance";
 
-export default function MaintenanceModePanel({ initialEnabled }: MaintenanceModePanelProps) {
+export default function MaintenanceModePanel({ initialReadState }: MaintenanceModePanelProps) {
   const router = useRouter();
   const { clearFeedback, publishFeedback } = useAdminFeedback();
-  const [enabled, setEnabled] = useState(initialEnabled);
+  const readAvailable = initialReadState.status === "ready";
+  const [enabled, setEnabled] = useState(
+    initialReadState.status === "ready" ? initialReadState.enabled : false,
+  );
   const [pending, setPending] = useState(false);
+  const [refreshPending, startRefreshTransition] = useTransition();
   const [confirmNextEnabled, setConfirmNextEnabled] = useState<boolean | null>(null);
   const toggleTriggerRef = useRef<HTMLButtonElement>(null);
 
   async function applyMaintenanceMode(nextValue: boolean) {
+    if (!readAvailable) return;
     clearFeedback(FEEDBACK_CHANNEL);
     setPending(true);
     try {
@@ -88,19 +95,46 @@ export default function MaintenanceModePanel({ initialEnabled }: MaintenanceMode
           <button
             ref={toggleTriggerRef}
             type="button"
-            onClick={() => setConfirmNextEnabled(!enabled)}
-            disabled={pending}
-            aria-pressed={enabled}
+            onClick={() => {
+              if (readAvailable) setConfirmNextEnabled(!enabled);
+            }}
+            disabled={pending || refreshPending || !readAvailable}
+            aria-pressed={readAvailable ? enabled : undefined}
             className={[
               "rounded-2xl px-5 py-3 text-sm font-semibold transition disabled:opacity-60",
-              enabled
+              readAvailable && enabled
                 ? "border border-red-400/25 bg-red-500/10 text-red-100 hover:bg-red-500/15"
-                : "border border-[#D8B87A]/30 bg-[#D8B87A] text-[#06101C] hover:bg-[#e5c98d]",
+                : readAvailable
+                  ? "border border-[#D8B87A]/30 bg-[#D8B87A] text-[#06101C] hover:bg-[#e5c98d]"
+                  : "border border-white/10 bg-white/5 text-white/45",
             ].join(" ")}
           >
-            {pending ? "جاري الحفظ…" : enabled ? "إيقاف الصيانة" : "تشغيل الصيانة"}
+            {pending
+              ? "جاري الحفظ…"
+              : !readAvailable
+                ? "الحالة غير متاحة"
+                : enabled
+                  ? "إيقاف الصيانة"
+                  : "تشغيل الصيانة"}
           </button>
         </div>
+
+        {!readAvailable ? (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100"
+          >
+            <p>تعذرت قراءة إعداد وضع الصيانة. أعد المحاولة قبل إجراء أي تغيير.</p>
+            <button
+              type="button"
+              disabled={refreshPending}
+              onClick={() => startRefreshTransition(() => router.refresh())}
+              className="rounded-xl border border-red-200/25 px-3 py-2 font-semibold transition hover:bg-red-100/10 disabled:opacity-60"
+            >
+              {refreshPending ? "جاري إعادة القراءة…" : "إعادة المحاولة"}
+            </button>
+          </div>
+        ) : null}
 
         <AdminFeedbackChannelViewport
           channel={FEEDBACK_CHANNEL}
@@ -109,15 +143,15 @@ export default function MaintenanceModePanel({ initialEnabled }: MaintenanceMode
 
         <p className="text-sm text-white/45">
           الحالة الحالية:{" "}
-          <span className={enabled ? "font-semibold text-[#D8B87A]" : "font-semibold text-white/70"}>
-            {enabled ? "مفعّل" : "متوقف"}
+          <span className={readAvailable && enabled ? "font-semibold text-[#D8B87A]" : "font-semibold text-white/70"}>
+            {!readAvailable ? "غير متاحة" : enabled ? "مفعّل" : "متوقف"}
           </span>
         </p>
 
       </section>
 
       <AdminConfirmDialog
-        open={confirmNextEnabled !== null}
+        open={readAvailable && confirmNextEnabled !== null}
         title={
           confirmNextEnabled
             ? "تشغيل وضع الصيانة؟"

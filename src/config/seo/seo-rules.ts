@@ -1,17 +1,5 @@
 import type { SeoRobotsDirective } from "./seo-types";
 
-export const DEFAULT_ROBOTS: SeoRobotsDirective = {
-  index: true,
-  follow: true,
-  googleBot: {
-    index: true,
-    follow: true,
-    maxImagePreview: "large",
-    maxSnippet: -1,
-    maxVideoPreview: -1,
-  },
-};
-
 export const NO_INDEX_ROBOTS: SeoRobotsDirective = {
   index: false,
   follow: false,
@@ -23,13 +11,6 @@ export const NO_INDEX_ROBOTS: SeoRobotsDirective = {
     maxVideoPreview: 0,
   },
 };
-
-export const SEO_LIMITS = {
-  titleMin: 20,
-  titleMax: 65,
-  descriptionMin: 70,
-  descriptionMax: 165,
-} as const;
 
 export const SEO_DEFAULTS = {
   titleTemplate: "%s | Venesia Developments",

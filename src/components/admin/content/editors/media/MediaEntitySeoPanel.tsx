@@ -9,7 +9,7 @@ import AdminEntitySeoPanel, {
 import {
   getContentTypeLabel,
   type MediaEditableContentType,
-} from "./media-content-config";
+} from "../../../../../lib/admin/content/content-types";
 import { CONTENT_EDITOR_NAVIGATION_EVENT } from "../content-editor-navigation";
 
 const MEDIA_SEO_FIELD_IDS = {

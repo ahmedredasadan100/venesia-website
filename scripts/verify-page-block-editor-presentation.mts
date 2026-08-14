@@ -2,16 +2,35 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createJiti } from "jiti";
 import { getModuleEditorSectionMetadata } from "../src/lib/page-composition/module-registry-metadata.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
+const jiti = createJiti(import.meta.url);
+const {
+  HERO_BULK_ACTIONS,
+  PAGE_BLOCK_BULK_ACTIONS,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
+} = await jiti.import<typeof import("../src/lib/page-blocks/admin-utils.ts")>(
+  "../src/lib/page-blocks/admin-utils.ts",
+);
 
 let passed = 0;
 function check(label: string, condition: unknown) {
   assert.ok(condition, label);
   passed += 1;
   console.log(`PASS ${label}`);
+}
+
+function rejects(run: () => unknown) {
+  try {
+    run();
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 const tabsOwner = read("src/components/admin/ui/AdminModuleTabs.tsx");
@@ -249,6 +268,14 @@ const statusActionAdopters = [
   "src/app/admin/pages-blocks/blocks/hero/actions.ts",
 ];
 const statusActionSources = statusActionAdopters.map(read);
+const bulkActionAdopters = [
+  ["src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts", "bulkBreadcrumbBlocks"],
+  ["src/app/admin/pages-blocks/blocks/cards/actions.ts", "bulkCardsBlocks"],
+  ["src/app/admin/pages-blocks/blocks/content/actions.ts", "bulkContentBlocks"],
+  ["src/app/admin/pages-blocks/blocks/cta/actions.ts", "bulkCtaBlocks"],
+  ["src/app/admin/pages-blocks/blocks/feed/actions.ts", "bulkFeedModules"],
+  ["src/app/admin/pages-blocks/blocks/hero/actions.ts", "bulkHeroTemplates"],
+] as const;
 const heroManager = read("src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx");
 const lifecycleTables = [
   "content_block_templates",
@@ -260,6 +287,52 @@ const lifecycleTables = [
   "media_hub_module_templates",
 ] as const;
 const allowedStatusConstraint = "check (status in ('published', 'unpublished'))";
+
+check(
+  "Page Block bulk input owner accepts only supported actions and positive safe-integer ids",
+  parsePageBlockBulkAction("publish", PAGE_BLOCK_BULK_ACTIONS) === "publish" &&
+    parsePageBlockBulkAction("show", HERO_BULK_ACTIONS) === "show" &&
+    JSON.stringify(parsePageBlockBulkIds(["1", "2,3", "1"])) === "[1,2,3]" &&
+    [null, "", "archive"].every((action) =>
+      rejects(() => parsePageBlockBulkAction(action, PAGE_BLOCK_BULK_ACTIONS)),
+    ) &&
+    [
+      [],
+      [""],
+      ["0"],
+      ["-1"],
+      ["1.5"],
+      ["NaN"],
+      ["1,,2"],
+      ["1e2"],
+      ["0x10"],
+      ["+1"],
+      ["9007199254740992"],
+    ].every((ids) => rejects(() => parsePageBlockBulkIds(ids))),
+);
+
+check(
+  "all Page Block bulk actions validate the shared strict contract before database or revalidation work",
+  bulkActionAdopters.every(([sourceFile, functionName]) => {
+    const source = read(sourceFile);
+    const start = source.indexOf(`export async function ${functionName}`);
+    const nextExport = source.indexOf("\nexport ", start + 1);
+    const body = source.slice(start, nextExport === -1 ? undefined : nextExport);
+    const actionValidation = body.indexOf("parsePageBlockBulkAction(");
+    const idValidation = body.indexOf("parsePageBlockBulkIds(");
+    const databaseWork = body.indexOf("getSupabaseAdmin()");
+    const revalidation = body.search(/revalidate(?:BlockModulePaths|HeroAdmin)\(/u);
+    return (
+      start >= 0 &&
+      actionValidation >= 0 &&
+      idValidation >= 0 &&
+      databaseWork > actionValidation &&
+      databaseWork > idValidation &&
+      revalidation > actionValidation &&
+      revalidation > idValidation
+    );
+  }),
+);
 
 check(
   "persisted module lifecycle is binary across database and editor contracts",

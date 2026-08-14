@@ -138,6 +138,12 @@ const projectsListConfig = read(
 const projectsListAdapter = read(
   "src/lib/admin/projects/entity-list-adapter.ts",
 );
+const residentialProjectsPage = read(
+  "src/app/admin/projects/residential/page.tsx",
+);
+const commercialProjectsPage = read(
+  "src/app/admin/projects/commercial/page.tsx",
+);
 const projectPublishingMigration = read(
   "sql/migrations/20260803120000_project_publishing_visibility_capability.sql",
 );
@@ -770,6 +776,20 @@ check(
         source.includes("saveAdminColumnPreferences") &&
         source.includes("allowedColumns:"),
     ),
+);
+
+check(
+  "Category, Series, Residential, and Commercial lists adopt the shared column preference owner",
+  [
+    categoriesPage,
+    seriesPage,
+    residentialProjectsPage,
+    commercialProjectsPage,
+  ].every(
+    (source) =>
+      source.includes("readAdminColumnPreferences") &&
+      !source.includes('.from("admin_user_preferences")'),
+  ),
 );
 
 check(

@@ -15,9 +15,12 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  PAGE_BLOCK_BULK_ACTIONS,
   parseFormBoolean,
   parseFormStatus,
   parseNumber,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
@@ -911,14 +914,11 @@ export async function duplicateContentBlock(formData: FormData) {
 
 export async function bulkContentBlocks(formData: FormData) {
   await requireAdminSession();
-  const action = cleanText(formData.get("bulk_action"));
-  const ids = formData
-    .getAll("ids")
-    .flatMap((value) => String(value).split(","))
-    .map((value) => Number(value))
-    .filter(Boolean);
-
-  if (!ids.length) return;
+  const action = parsePageBlockBulkAction(
+    formData.get("bulk_action"),
+    PAGE_BLOCK_BULK_ACTIONS,
+  );
+  const ids = parsePageBlockBulkIds(formData.getAll("ids"));
 
   const now = new Date().toISOString();
 

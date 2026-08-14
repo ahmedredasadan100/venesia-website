@@ -42,6 +42,29 @@ function isUniqueViolation(error: { code?: string; message?: string } | null) {
   return error.code === "23505" || /duplicate key|unique/i.test(error.message ?? "");
 }
 
+const LAST_ACTIVE_ADMIN_ERROR =
+  "لا يمكن تعطيل أو حذف آخر مستخدم نشط في النظام.";
+export const ADMIN_SELF_PASSWORD_SETTINGS_MESSAGE =
+  "لتغيير كلمة مرورك استخدم صفحة الأمان في الإعدادات.";
+
+function isLastActiveAdminViolation(
+  error: { code?: string; message?: string; details?: string } | null,
+) {
+  if (!error || error.code !== "23514") return false;
+  return `${error.message ?? ""} ${error.details ?? ""}`.includes(
+    "admin_users_last_active_required",
+  );
+}
+
+function throwAdminUserMutationError(
+  error: { code?: string; message?: string; details?: string },
+): never {
+  if (isLastActiveAdminViolation(error)) {
+    throw new Error(LAST_ACTIVE_ADMIN_ERROR);
+  }
+  throw new Error(error.message ?? "تعذر تحديث المستخدم.");
+}
+
 export async function countAdminUsers() {
   const { count, error } = await getSupabaseAdmin()
     .from("admin_users")
@@ -113,6 +136,8 @@ export async function updateAdminUserProfile(
     email: string;
     full_name: string;
     is_active: boolean;
+    password?: string;
+    confirmPassword?: string;
   },
 ) {
   const user = await getAdminUserById(targetUserId);
@@ -122,6 +147,7 @@ export async function updateAdminUserProfile(
   const email = normalizeAdminEmail(input.email);
   const fullName = normalizeAdminFullName(input.full_name);
   const nextActive = input.is_active;
+  const password = input.password?.trim() ? input.password : null;
 
   const usernameError = validateAdminUsername(username);
   if (usernameError) throw new Error(usernameError);
@@ -131,6 +157,16 @@ export async function updateAdminUserProfile(
 
   const fullNameError = validateAdminFullName(fullName);
   if (fullNameError) throw new Error(fullNameError);
+
+  let passwordHash: string | null = null;
+  if (password) {
+    const passwordError = validateAdminPasswordPair(
+      password,
+      input.confirmPassword ?? "",
+    );
+    if (passwordError) throw new Error(passwordError);
+    passwordHash = await hashPassword(password);
+  }
 
   if (!nextActive && user.is_active) {
     const activeCount = await countActiveAdminUsers();
@@ -149,9 +185,15 @@ export async function updateAdminUserProfile(
     full_name: fullName,
     is_active: nextActive,
     updated_at: now,
+    ...(passwordHash ? { password_hash: passwordHash } : {}),
   };
 
-  if (usernameChanged || emailChanged || (user.is_active && !nextActive)) {
+  if (
+    usernameChanged ||
+    emailChanged ||
+    (user.is_active && !nextActive) ||
+    passwordHash
+  ) {
     payload.session_version = user.session_version + 1;
   }
 
@@ -166,7 +208,7 @@ export async function updateAdminUserProfile(
     if (isUniqueViolation(error)) {
       throw new Error("اسم المستخدم أو البريد الإلكتروني مستخدم بالفعل.");
     }
-    throw new Error(error.message);
+    throwAdminUserMutationError(error);
   }
 
   return mapListItem(data as Record<string, unknown>);
@@ -208,7 +250,7 @@ export async function setAdminUserActiveStatus(
     .select(LIST_SELECT)
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throwAdminUserMutationError(error);
   return mapListItem(data as Record<string, unknown>);
 }
 
@@ -233,7 +275,7 @@ export async function deleteAdminUser(targetUserId: number, actingUserId: number
   }
 
   const { error } = await getSupabaseAdmin().from("admin_users").delete().eq("id", targetUserId);
-  if (error) throw new Error(error.message);
+  if (error) throwAdminUserMutationError(error);
 
   return {
     id: user.id,
@@ -249,7 +291,7 @@ export async function adminResetUserPassword(
   confirmPassword: string,
 ) {
   if (targetUserId === actingUserId) {
-    throw new Error("لتغيير كلمة مرورك استخدم صفحة الأمان في الإعدادات.");
+    throw new Error(ADMIN_SELF_PASSWORD_SETTINGS_MESSAGE);
   }
 
   const user = await getAdminUserById(targetUserId);

@@ -13,6 +13,7 @@ import {
   validateSlugFormat,
   type TopicPublishInput,
 } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
+import { slugifyFromTitle } from "../../../../../lib/admin/slug";
 import type { CategoryRow, SeriesRow, TopicRow, TopicStatus } from "./types";
 import { VALID_STATUSES } from "./types";
 
@@ -40,61 +41,6 @@ export function redirectFormError(path: string, message: string): never {
 
 export function redirectEditError(id: string, message: string): never {
   redirectFormError(`/admin/content/topics/${id}`, message);
-}
-
-function normalizeArabicForSlug(value: string) {
-  const map: Record<string, string> = {
-    ا: "a",
-    أ: "a",
-    إ: "e",
-    آ: "a",
-    ب: "b",
-    ت: "t",
-    ث: "th",
-    ج: "g",
-    ح: "h",
-    خ: "kh",
-    د: "d",
-    ذ: "z",
-    ر: "r",
-    ز: "z",
-    س: "s",
-    ش: "sh",
-    ص: "s",
-    ض: "d",
-    ط: "t",
-    ظ: "z",
-    ع: "a",
-    غ: "gh",
-    ف: "f",
-    ق: "q",
-    ك: "k",
-    ل: "l",
-    م: "m",
-    ن: "n",
-    ه: "h",
-    و: "w",
-    ي: "y",
-    ى: "a",
-    ة: "h",
-    ء: "",
-    ئ: "e",
-    ؤ: "o",
-  };
-
-  return value
-    .split("")
-    .map((char) => map[char] ?? char)
-    .join("");
-}
-
-export function createSlug(value: string) {
-  return normalizeArabicForSlug(value)
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
 }
 
 export function validateSlug(slug: string) {
@@ -140,7 +86,7 @@ export function getNormalizedStatus(value: string, fallback: TopicStatus = "unpu
 export function getPayload(formData: FormData) {
   const title = getString(formData, "title");
   const rawSlug = getString(formData, "slug");
-  const slug = rawSlug ? createSlug(rawSlug) : createSlug(title);
+  const slug = slugifyFromTitle(rawSlug || title);
   const seriesId = getString(formData, "series_id");
   const categoryId = getString(formData, "category_id");
   const legacySeries = getString(formData, "legacy_series");
@@ -159,7 +105,7 @@ export function getPayload(formData: FormData) {
       categoryId && validateId(categoryId) ? Number(categoryId) : null,
     seriesId: seriesId && validateId(seriesId) ? Number(seriesId) : null,
     legacySeries: legacySeries || null,
-    legacySeriesSlug: legacySeriesSlug ? createSlug(legacySeriesSlug) : null,
+    legacySeriesSlug: legacySeriesSlug ? slugifyFromTitle(legacySeriesSlug) : null,
     dateLabel: getDateLabel(formData),
     publishedAt: parseFormPublishedDate(formData),
     ...seo,

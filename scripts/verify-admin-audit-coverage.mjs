@@ -40,18 +40,35 @@ const TARGET_FILES = [
   "src/app/admin/pages-blocks/menus/menu-actions/items-status.ts",
   "src/app/admin/pages-blocks/footer/footer-actions/save.ts",
   "src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts",
+  "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
+  "src/app/admin/pages-blocks/blocks/cards/actions.ts",
+  "src/app/admin/pages-blocks/blocks/cta/actions.ts",
+  "src/app/admin/pages-blocks/blocks/feed/actions.ts",
+  "src/app/admin/pages-blocks/blocks/hero/actions.ts",
+  "src/app/admin/pages-blocks/blocks/media-hub/actions.ts",
+  "src/app/admin/pages-blocks/blocks/media-sidebar/actions.ts",
   "src/app/admin/settings/general/actions.ts",
   "src/app/admin/seo/redirects/actions.ts",
   "src/app/admin/seo/meta-manager/actions.ts",
 ];
 
-const MUTATION_MARKERS = [".insert(", ".update(", ".delete(", ".upsert("];
+const MUTATION_MARKERS = [".insert(", ".update(", ".delete(", ".upsert(", ".rpc("];
 
 const AUDIT_MARKERS = [
-  "recordCmsAdminAudit",
-  "auditMenuAction",
-  "auditPageBlockAssignment",
+  "recordCmsAdminAudit(",
+  "auditMenuAction(",
+  "auditPageBlockAssignment(",
 ];
+
+const MINIMUM_PAGE_BLOCK_AUDIT_CALLS = new Map([
+  ["src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts", 6],
+  ["src/app/admin/pages-blocks/blocks/cards/actions.ts", 6],
+  ["src/app/admin/pages-blocks/blocks/cta/actions.ts", 6],
+  ["src/app/admin/pages-blocks/blocks/feed/actions.ts", 6],
+  ["src/app/admin/pages-blocks/blocks/hero/actions.ts", 6],
+  ["src/app/admin/pages-blocks/blocks/media-hub/actions.ts", 2],
+  ["src/app/admin/pages-blocks/blocks/media-sidebar/actions.ts", 2],
+]);
 
 const failures = [];
 
@@ -69,6 +86,16 @@ for (const rel of TARGET_FILES) {
   const hasAudit = AUDIT_MARKERS.some((marker) => content.includes(marker));
   if (!hasAudit) {
     failures.push(`${rel} performs mutations but has no CMS audit helper call`);
+  }
+
+  const minimumAuditCalls = MINIMUM_PAGE_BLOCK_AUDIT_CALLS.get(rel);
+  if (minimumAuditCalls) {
+    const auditCallCount = content.match(/\brecordCmsAdminAudit\s*\(/gu)?.length ?? 0;
+    if (auditCallCount < minimumAuditCalls) {
+      failures.push(
+        `${rel} has ${auditCallCount} CMS audit calls; expected at least ${minimumAuditCalls} for its mutation inventory`,
+      );
+    }
   }
 }
 

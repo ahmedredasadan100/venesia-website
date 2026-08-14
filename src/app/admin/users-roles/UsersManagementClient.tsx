@@ -46,7 +46,6 @@ import {
   type AdminUserEntityListRow,
   type AdminUserFilters,
   type AdminUserSortField,
-  type AdminUserStatusFilter,
 } from "../../../lib/admin/users/entity-list-contract";
 import {
   ADMIN_USERS_LIST_COLUMN_META,

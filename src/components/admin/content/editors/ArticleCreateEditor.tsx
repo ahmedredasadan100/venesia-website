@@ -84,7 +84,14 @@ export default function ArticleCreateEditor({
                   mode="create"
                   categories={categoryOptions}
                   series={safeSeries}
-                  contentEditor={<TopicMarkdownEditor defaultValue={defaultContent} variant="compact" />}
+                  contentEditor={(
+                    <TopicMarkdownEditor
+                      defaultValue={defaultContent}
+                      variant="compact"
+                      draftIdentity="topic:article:create"
+                      baselineRevision={null}
+                    />
+                  )}
                   displaySettings={<ContentDisplaySettings />}
                 />
               ),

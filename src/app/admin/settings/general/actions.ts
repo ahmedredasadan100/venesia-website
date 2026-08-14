@@ -10,7 +10,10 @@ import {
   getMediaReferenceWriteLeaseUserMessage,
   MediaReferenceWriteLeaseError,
 } from "../../../../lib/admin/media-catalog/write-lease";
-import { setMaintenanceModeSetting } from "../../../../lib/maintenance/site-settings";
+import {
+  getMaintenanceModeSetting,
+  setMaintenanceModeSetting,
+} from "../../../../lib/maintenance/site-settings";
 import type { AdminFormActionState } from "../../../../lib/admin/form-runtime";
 import {
   parseAdminCompanyIdentity,
@@ -164,7 +167,12 @@ export async function updateAdminCompanyAction(
 }
 
 export async function updateMaintenanceModeAction(enabled: boolean) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
+  if (typeof enabled !== "boolean") {
+    throw new Error("Invalid maintenance mode value.");
+  }
+
+  await getMaintenanceModeSetting();
   await setMaintenanceModeSetting(enabled);
 
   await recordCmsAdminAudit({
@@ -172,7 +180,7 @@ export async function updateMaintenanceModeAction(enabled: boolean) {
     entityType: "site_settings",
     entityLabel: "maintenance_mode",
     metadata: { enabled },
-  });
+  }, actor);
 
   revalidatePath("/");
   revalidatePath("/maintenance");

@@ -6,7 +6,7 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   isMediaEditableContentType,
   MEDIA_EDITABLE_CONTENT_TYPES,
-} from "../../../../../components/admin/content/editors/media/media-content-config";
+} from "../../../../../lib/admin/content/content-types";
 import type {
   CategoryRow,
   MediaTopicRow,

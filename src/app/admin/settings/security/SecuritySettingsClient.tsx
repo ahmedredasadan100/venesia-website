@@ -125,7 +125,8 @@ export default function SecuritySettingsClient({
     setRevokePending(true);
     try {
       await revokeAllAdminSessionsAction(revokePassword);
-      window.location.href = "/admin/login";
+      router.replace("/admin/login");
+      router.refresh();
     } catch (actionError) {
       announce(
         "danger",
