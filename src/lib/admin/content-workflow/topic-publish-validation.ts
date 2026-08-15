@@ -1,7 +1,6 @@
 import {
   buildContentReviewChecks,
   getContentDraftBlockingChecks,
-  getContentDraftValidationError,
   getContentPublishBlockingChecks,
   getContentPublishValidationError,
   validateContentSlug,
@@ -58,19 +57,8 @@ function toContentReviewInput(input: TopicPublishInput): ContentReviewInput {
 
 export const validateSlugFormat = validateContentSlug;
 
-export function getTopicDraftValidationError(input: TopicPublishInput) {
-  return getContentDraftValidationError(toContentReviewInput(input));
-}
-
 export function getTopicDraftBlockingChecks(input: TopicPublishInput) {
   return getContentDraftBlockingChecks(toContentReviewInput(input));
-}
-
-export function getTopicPublishReadyError(input: TopicPublishInput): string | null {
-  return getTopicPublishBlockingChecks(input).find(
-    (item) =>
-      ["title", "slug", "category", "excerpt", "content", "image", "image-alt", "faq"].includes(item.id),
-  )?.hint ?? null;
 }
 
 export function getTopicPublishOnlyValidationError(input: TopicPublishInput): string | null {

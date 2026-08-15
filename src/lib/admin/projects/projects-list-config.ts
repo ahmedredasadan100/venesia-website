@@ -120,10 +120,6 @@ export function getProjectsListViewKey(
     : PROJECTS_COMMERCIAL_LIST_VIEW_KEY;
 }
 
-export function getProjectsColumnMeta() {
-  return PROJECTS_LIST_COLUMNS;
-}
-
 export function getProjectsDefaultColumnKeys(): readonly ProjectColumnKey[] {
   return PROJECTS_DEFAULT_COLUMN_KEYS;
 }

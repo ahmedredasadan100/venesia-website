@@ -6,7 +6,6 @@ export const TOPICS_LIST_VIEW_KEY = "content-topics";
  */
 export const TOPICS_COLUMN_CONTRACT_VERSION = 2;
 export const TOPICS_LIST_PAGE_SIZES = [10, 20, 30, 50] as const;
-export const TOPICS_LIST_DEFAULT_PAGE_SIZE = 10;
 
 export const TOPICS_PREFERENCE_COLUMN_KEYS = [
   "category",

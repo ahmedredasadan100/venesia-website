@@ -11,7 +11,6 @@ import {
 } from "../admin/media-intelligence/cms-upload-policy";
 import {
   MediaStorageError,
-  resolveMediaStorageProvider,
   type MediaStorageAdapter,
   type MediaUploadOptions,
 } from "../admin/media-storage-adapter";
@@ -59,10 +58,6 @@ export type ManagedStorageAsset = {
   objectPath: string;
   kind: "image" | "document";
 };
-
-export function isSupabaseCmsStorageEnabled() {
-  return resolveMediaStorageProvider() === "supabase";
-}
 
 function bucketForFolder(folder: string) {
   const normalized = normalizeMediaFolder(folder);
@@ -203,15 +198,6 @@ export function parseManagedStorageAsset(
   }
 
   return null;
-}
-
-export function storageObjectPathFromPublicValue(
-  value: string,
-  bucket: string,
-  supabase: SupabaseAdminClient = getSupabaseStorageAdmin(),
-) {
-  const managed = parseManagedStorageAsset(value, supabase);
-  return managed?.bucket === bucket ? managed.objectPath : null;
 }
 
 function uniqueStorageFilename(
@@ -609,28 +595,4 @@ export async function moveManagedStorageAsset(
     objectKey: normalizedTarget,
     publicUrl: publicUrlForObject(supabase, managed.bucket, normalizedTarget),
   };
-}
-
-export function listPublicImagePathsFromStorage(folder = "images", limit = 240) {
-  return createSupabaseCmsMediaStorageAdapter().listImagePaths(folder, limit);
-}
-
-export function listCmsFolderFromStorage(folder = "images") {
-  return createSupabaseCmsMediaStorageAdapter().listFolder(folder);
-}
-
-export function uploadCmsImageToStorage(
-  folder: string,
-  file: File,
-  options?: MediaUploadOptions,
-) {
-  return createSupabaseCmsMediaStorageAdapter().uploadImage(folder, file, options);
-}
-
-export function uploadCmsDocumentToStorage(
-  folder: string,
-  file: File,
-  options?: MediaUploadOptions,
-) {
-  return createSupabaseCmsMediaStorageAdapter().uploadDocument(folder, file, options);
 }

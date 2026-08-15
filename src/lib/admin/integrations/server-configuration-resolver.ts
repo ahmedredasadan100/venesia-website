@@ -1,10 +1,7 @@
 import "server-only";
 
 import { resolveCanonicalBaseUrl } from "../../seo/generate-sitemap-entries";
-import {
-  getIntegrationsEnvironmentKey,
-  readVaultSecret,
-} from "./connection-repository";
+import { readVaultSecret } from "./connection-repository";
 import type { LiveIntegrationKey } from "./integrations-contract";
 import {
   applicationConfigurationProviderForIntegration,
@@ -198,10 +195,6 @@ export async function resolveIntegrationOAuthOrigin() {
 
 export async function integrationCallbackUri(integration: LiveIntegrationKey) {
   return `${await resolveIntegrationOAuthOrigin()}/api/admin/integrations/${integration}/callback`;
-}
-
-export function currentIntegrationEnvironmentKey() {
-  return getIntegrationsEnvironmentKey();
 }
 
 export function resolveMetaGraphApiVersion() {

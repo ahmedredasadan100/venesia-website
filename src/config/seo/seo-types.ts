@@ -1,5 +1,3 @@
-import type { Metadata } from "next";
-
 export type SeoRouteKind =
   | "home"
   | "static"
@@ -45,17 +43,3 @@ export type SeoRouteConfig = {
     | "yearly"
     | "never";
 };
-
-export type BuildMetadataInput = {
-  path: string;
-  title?: string;
-  description?: string;
-  image?: string;
-  type?: SeoOpenGraphType;
-  robots?: SeoRobotsDirective;
-  publishedTime?: string;
-  modifiedTime?: string;
-  authors?: string[];
-};
-
-export type BuiltMetadata = Metadata;

@@ -10,7 +10,6 @@ import {
   unifiedGetMediaItems,
   unifiedGetMediaItemsLimited,
   unifiedGetMediaListingPage,
-  unifiedGetMediaStaticParams,
 } from "./media-center/unified-provider";
 import { normalizePublicContentSearchQuery } from "./content/public-content-read/contract";
 
@@ -27,10 +26,6 @@ export async function getMediaItems(type?: MediaContentType) {
 
 export async function getMediaItemBySlug(type: MediaContentType, slug: string) {
   return unifiedGetMediaItemBySlug(type, slug);
-}
-
-export async function getMediaStaticParams(type: MediaContentType) {
-  return unifiedGetMediaStaticParams(type);
 }
 
 export async function getMediaListingPage(
@@ -73,28 +68,6 @@ export async function getMediaSidebarPopular(limit = 4): Promise<MediaContentIte
   });
 }
 
-export async function getFeaturedNews() {
-  const featured = await unifiedGetMediaItemsLimited({
-    type: "news",
-    limit: 1,
-    featuredOnly: true,
-  });
-  if (featured[0]) return featured[0];
-
-  const latest = await unifiedGetMediaItemsLimited({
-    type: "news",
-    limit: 1,
-    sort: "newest",
-  });
-  return latest[0] ?? null;
-}
-
-export async function getRegularNews() {
-  const items = await getMediaItems("news");
-  const featured = items.find((item) => item.featured);
-  return featured ? items.filter((item) => item.slug !== featured.slug) : items;
-}
-
 export async function getRelatedMediaItems(
   type: MediaContentType,
   excludeId: number,
@@ -105,29 +78,4 @@ export async function getRelatedMediaItems(
     limit: Math.max(1, limit),
     excludeIds: [excludeId],
   });
-}
-
-export async function getMediaSidebarData() {
-  const [latestNews, popularItems] = await Promise.all([
-    getMediaSidebarLatest(3),
-    getMediaSidebarPopular(4),
-  ]);
-
-  const latestNewsSidebar: MediaSidebarItem[] = latestNews.map((item) => ({
-    title: item.title,
-    ...(item.showDateOnPage && item.date ? { date: item.date } : {}),
-    image: item.image,
-    href: getMediaHref(item),
-  }));
-
-  const popularMediaSidebarItems: MediaSidebarItem[] = popularItems.map((item) => ({
-    title: item.title,
-    ...(item.showDateOnPage && item.date ? { date: item.date } : {}),
-    image: item.image,
-    href: getMediaHref(item),
-    ...(item.showCategoryOnPage && item.category ? { label: item.category } : {}),
-    ...(item.showSeriesOnPage && item.series ? { seriesLabel: item.series } : {}),
-  }));
-
-  return { latestNewsSidebar, popularMediaSidebarItems };
 }

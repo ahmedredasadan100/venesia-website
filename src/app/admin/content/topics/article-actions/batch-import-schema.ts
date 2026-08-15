@@ -64,11 +64,6 @@ export type ArticleBatchImportTarget = z.infer<
 export type ArticleBatchImportItem = z.infer<
   typeof articleBatchImportItemSchema
 >;
-export type ArticleBatchImportDataset = {
-  batch_key: string;
-  target: ArticleBatchImportTarget;
-  articles: ArticleBatchImportItem[];
-};
 
 export type ArticleBatchImportError = {
   code: string;

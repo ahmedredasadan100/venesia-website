@@ -60,13 +60,6 @@ export const seriesTaxonomyFormSchema = z.object({
   is_published: checkboxSchema,
 });
 
-export type CategoryTaxonomyFormInput = z.infer<
-  typeof categoryTaxonomyFormSchema
->;
-export type SeriesTaxonomyFormInput = z.infer<
-  typeof seriesTaxonomyFormSchema
->;
-
 export type TaxonomyFieldErrors = Record<string, string[]>;
 
 export function taxonomyFormDataValue(formData: FormData, name: string) {

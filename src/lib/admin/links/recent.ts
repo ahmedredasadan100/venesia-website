@@ -43,18 +43,3 @@ export function pushRecentAdminLink(value: AdminLinkValue) {
   );
   window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(next));
 }
-
-export const FAVORITE_LINKS_STORAGE_KEY = "venesia-admin-favorite-links";
-
-export function readFavoriteAdminLinks(): AdminLinkValue[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(FAVORITE_LINKS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => deserializeAdminLink(item)).filter((item) => item.link_kind !== "none");
-  } catch {
-    return [];
-  }
-}

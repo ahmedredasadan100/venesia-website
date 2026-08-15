@@ -924,12 +924,6 @@ export function assessProjectEntryPayload(
   };
 }
 
-export function validateProjectEntryPayload(
-  payload: ProjectEntryPayload,
-): ProjectEntryFieldErrors {
-  return assessProjectEntryPayload(payload).fieldErrors;
-}
-
 export function projectEntryFirstErrorTarget(errors: ProjectEntryFieldErrors) {
   const field = Object.keys(errors)[0];
   if (!field) return null;

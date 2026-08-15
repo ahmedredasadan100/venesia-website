@@ -8,7 +8,7 @@ import {
   type MediaSidebarItem,
 } from "../media-center";
 import { parseMediaSidebarModuleConfig, type MediaSidebarModuleConfig } from "./parse-config";
-import type { MediaSidebarModulesState, MediaSidebarWidgetKey } from "./types";
+import type { MediaSidebarModulesState } from "./types";
 
 function mapMediaItemToSidebarItem(item: MediaContentItem, showLabel: boolean): MediaSidebarItem {
   return {
@@ -78,8 +78,4 @@ export async function enrichMediaSidebarModules(
   });
 
   return { ...state, widgets };
-}
-
-export function defaultConfigForWidget(widgetKey: MediaSidebarWidgetKey): MediaSidebarModuleConfig {
-  return parseMediaSidebarModuleConfig(null, widgetKey);
 }

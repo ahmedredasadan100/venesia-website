@@ -119,10 +119,4 @@ export async function loadFooterSettingsForAdmin(): Promise<FooterSettings> {
   return queryFooterSettings();
 }
 
-export function loadFooterSettingsFromValues(
-  values: Partial<Record<(typeof FOOTER_LOADER_SETTING_KEYS)[number], unknown>>,
-): FooterSettings {
-  return buildSettingsFromRows(new Map<string, unknown>(Object.entries(values)));
-}
-
 export { DEFAULT_FOOTER_SLOTS };

@@ -1,5 +1,3 @@
-export type ContentPublicationStatus = "published" | "unpublished";
-
 export type ContentVisibilityActionIntent =
   | "hide"
   | "publish"
@@ -44,11 +42,4 @@ export function getContentPublicVisibilityState(input: {
     tooltip: "المحتوى غير منشور — اضغط للنشر",
     ariaLabel: "المحتوى غير منشور. نشر المحتوى",
   };
-}
-
-export function isContentPubliclyVisible(input: {
-  status?: string | null;
-  deletedAt?: string | null;
-}) {
-  return getContentPublicVisibilityState(input).isPubliclyVisible;
 }

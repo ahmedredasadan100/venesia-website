@@ -23,14 +23,6 @@ export type AdminEntityListAdapter<
   ) => Promise<AdminEntityListResult<Row, Metrics>>;
 };
 
-export type AnyAdminEntityListAdapter = AdminEntityListAdapter<
-  string,
-  Record<string, unknown>,
-  string,
-  unknown,
-  unknown
->;
-
 export type AdminEntityListPageSlice<Row> = {
   rows: Row[];
   totalRows: number;
@@ -97,26 +89,4 @@ export async function loadNormalizedAdminEntityListPage<Row>({
   }
 
   throw new AdminEntityListPageNormalizationError(requestedPage, maxReads);
-}
-
-export function toAdminEntityListResult<Row, Metrics>(
-  rows: Row[],
-  query: AdminEntityListQuery<Record<string, unknown>, string>,
-  totalRows: number,
-  metrics?: Metrics,
-): AdminEntityListResult<Row, Metrics> {
-  return {
-    rows,
-    pagination: {
-      page: query.page,
-      pageSize: query.pageSize,
-      totalRows,
-      totalPages: Math.max(1, Math.ceil(totalRows / query.pageSize)),
-    },
-    ...(metrics === undefined ? {} : { metrics }),
-    meta: {
-      generatedAt: new Date().toISOString(),
-      mode: query.mode,
-    },
-  };
 }

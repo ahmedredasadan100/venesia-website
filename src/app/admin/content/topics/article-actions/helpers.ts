@@ -6,10 +6,7 @@ import {
 } from "../../../../../lib/seo/entity-seo-types";
 import {
   getTopicDraftBlockingChecks,
-  getTopicDraftValidationError,
   getTopicPublishBlockingChecks,
-  getTopicPublishOnlyValidationError,
-  getTopicPublishValidationError,
   validateSlugFormat,
   type TopicPublishInput,
 } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
@@ -20,11 +17,6 @@ import { VALID_STATUSES } from "./types";
 export function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
-}
-
-export function getRedirectTo(formData: FormData, fallback = "/admin/content/topics") {
-  const redirectTo = getString(formData, "redirect_to");
-  return redirectTo.startsWith("/admin/content/topics") ? redirectTo : fallback;
 }
 
 export function getBoolean(formData: FormData, key: string) {
@@ -147,25 +139,8 @@ function payloadToPublishInput(payload: TopicPayload): TopicPublishInput {
   };
 }
 
-export function getDraftValidationError(payload: TopicPayload) {
-  return getTopicDraftValidationError(payloadToPublishInput(payload));
-}
-
 export function getDraftBlockingChecks(payload: TopicPayload) {
   return getTopicDraftBlockingChecks(payloadToPublishInput(payload));
-}
-
-export function getPublishOnlyValidationError(payload: TopicPayload) {
-  return getTopicPublishOnlyValidationError(payloadToPublishInput(payload));
-}
-
-export function getValidationError(payload: TopicPayload, mode: "save" | "publish" | "draft") {
-  if (mode === "publish") return getPublishValidationError(payload);
-  return getDraftValidationError(payload);
-}
-
-export function getPublishValidationError(payload: TopicPayload) {
-  return getTopicPublishValidationError(payloadToPublishInput(payload));
 }
 
 export function getPublishBlockingChecks(payload: TopicPayload) {
@@ -206,12 +181,6 @@ export function preservePayloadFromCurrent(payload: TopicPayload, currentTopic: 
   }
 
   return payload;
-}
-
-export function appendNotice(path: string, notice: string) {
-  const [baseWithQuery, hash = ""] = path.split("#");
-  const joiner = baseWithQuery.includes("?") ? "&" : "?";
-  return `${baseWithQuery}${joiner}notice=${notice}${hash ? `#${hash}` : "#topics-table"}`;
 }
 
 export function buildTopicWritePayload(

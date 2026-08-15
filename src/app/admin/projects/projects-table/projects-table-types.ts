@@ -18,9 +18,4 @@ export type ProjectGridRow = {
   updated_at: string;
 };
 
-export type ProjectTableSortState = {
-  field: string;
-  direction: "asc" | "desc";
-};
-
 export type { ProjectColumnKey };

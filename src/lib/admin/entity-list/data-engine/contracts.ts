@@ -173,10 +173,6 @@ export function parseAdminEntityListRequestQuery<
   return normalizeAdminEntityListQuery(contract, params);
 }
 
-export const adminEntityListRawPositiveIntSchema = z
-  .string()
-  .regex(RAW_POSITIVE_INT_PATTERN);
-
 export function normalizeAdminEntityListQuery<
   Filters extends Record<string, unknown>,
   SortField extends string,

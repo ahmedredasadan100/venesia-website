@@ -2,9 +2,7 @@ import type { MediaTopicPayload } from "../media-topic-payload";
 import {
   buildContentReviewChecks,
   getContentDraftBlockingChecks,
-  getContentDraftValidationError,
   getContentPublishBlockingChecks,
-  getContentPublishValidationError,
   type ContentReviewInput,
 } from "./content-review-capability";
 
@@ -34,16 +32,8 @@ function toContentReviewInput(input: MediaPublishInput): ContentReviewInput {
   return { ...input, faq: [] };
 }
 
-export function getMediaBaseValidationError(input: MediaPublishInput) {
-  return getContentDraftValidationError(toContentReviewInput(input));
-}
-
 export function getMediaDraftBlockingChecks(input: MediaPublishInput) {
   return getContentDraftBlockingChecks(toContentReviewInput(input));
-}
-
-export function getMediaPublishValidationError(input: MediaPublishInput) {
-  return getContentPublishValidationError(toContentReviewInput(input));
 }
 
 export function getMediaPublishBlockingChecks(input: MediaPublishInput) {

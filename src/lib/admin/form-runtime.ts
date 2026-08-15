@@ -41,12 +41,6 @@ export function resolveAdminFormNavigationDecision(options: {
   return "confirm_discard";
 }
 
-export const ADMIN_FORM_INITIAL_STATE: AdminFormActionState = {
-  status: "idle",
-  mode: "create",
-  revision: 0,
-};
-
 export function createAdminFormInitialState<TResult = unknown>(
   mode: AdminFormMode,
 ): AdminFormActionState<TResult> {

@@ -149,14 +149,3 @@ export function getUnsupportedSlotAssignmentMessage(
 
   return `الموضع «${normalized}» غير مدعوم لموديول «${kindLabel}» على هذه الصفحة. المواضع المتاحة: ${options.join(", ")}.`;
 }
-
-/** Exported for verifies — documents intentional route freeform matrices. */
-export const ROUTE_SLOT_POLICY_FIXTURES: Record<string, PageLayoutSlot[]> = {
-  home: ["main"],
-  projects: ["main"],
-  topics: ["main", "sidebar", "bottom", "footer"],
-  "media-center": ["main", "bottom", "footer"],
-  "media-center-news": ["main", "bottom"],
-  about: ["main", "sidebar", "bottom", "footer"],
-  contact: ["main", "sidebar", "bottom", "footer"],
-};

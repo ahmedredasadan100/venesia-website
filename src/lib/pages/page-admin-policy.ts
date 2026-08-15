@@ -48,27 +48,3 @@ export function getPageDeleteBlockReason(page: PageDeleteIdentity) {
 
   return null;
 }
-
-export function canDeletePage(page: PageDeleteIdentity) {
-  return getPageDeleteBlockReason(page) === null;
-}
-
-export function buildDuplicatePageIdentity(
-  source: { title: string; slug: string; path: string },
-  suffix: string,
-) {
-  const slug = `${source.slug}-copy-${suffix}`;
-
-  let path: string;
-  if (source.path === "/" || source.slug === "home") {
-    path = `/page-copy-${suffix}`;
-  } else {
-    path = `${source.path.replace(/\/$/, "")}-copy-${suffix}`;
-  }
-
-  return {
-    title: `${source.title} — نسخة`,
-    slug,
-    path,
-  };
-}

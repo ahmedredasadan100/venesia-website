@@ -32,17 +32,6 @@ export function getAdminAuthConfig() {
   };
 }
 
-export function getAdminEnvDiagnostics() {
-  const secret = process.env["ADMIN_SESSION_SECRET"] ?? "";
-
-  return {
-    hasAdminSecret: Boolean(secret),
-    secretLengthOk: secret.length >= 16,
-    authConfigured: getAdminAuthConfig().configured,
-    usesDatabaseAdminUsers: true,
-  };
-}
-
 export function resolveRequestIsHttps(request?: Pick<Request, "headers" | "url">) {
   if (!request) return false;
 
@@ -90,19 +79,6 @@ export function getAdminSessionCookieDomain(request?: Pick<Request, "headers" | 
   } catch {
     return undefined;
   }
-}
-
-export function describeAdminSessionCookieOptions(request?: Pick<Request, "headers" | "url">) {
-  const secure = shouldUseSecureAdminSessionCookie(request);
-  const domain = getAdminSessionCookieDomain(request);
-
-  return {
-    cookieName: ADMIN_SESSION_COOKIE,
-    path: "/",
-    sameSite: "lax" as const,
-    secure,
-    hasDomain: Boolean(domain),
-  };
 }
 
 function signPayload(encodedPayload: string, secret: string) {
@@ -161,7 +137,3 @@ export {
   isAdminAuthPublicPath,
   isAdminPath,
 } from "./session-paths";
-
-export function hasValidAdminSession(cookieValue: string | undefined, secret: string) {
-  return Boolean(verifyAdminSessionToken(cookieValue, secret));
-}

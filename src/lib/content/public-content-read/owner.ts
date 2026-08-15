@@ -425,25 +425,6 @@ export const loadPublicContentDetail = cache(async function loadPublicContentDet
   )();
 });
 
-export async function loadPublicContentSlugs(contentType: ContentType) {
-  const { data, error } = await getSupabaseAdmin()
-    .from("topics")
-    .select("slug")
-    .eq("content_type", contentType)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .not("slug", "like", "e2e-test%");
-
-  if (error) {
-    logError("Public Content slugs query failed", error, { contentType });
-    return [];
-  }
-  return (data ?? []).flatMap((row) => {
-    const slug = typeof row.slug === "string" ? row.slug.trim() : "";
-    return slug ? [{ slug }] : [];
-  });
-}
-
 export async function loadPublicContentSitemapRows(): Promise<PublicContentSitemapRow[]> {
   return unstable_cache(async () => {
     const { data, error } = await getSupabaseAdmin()

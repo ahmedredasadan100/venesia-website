@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
 export const MEDIA_QA_MUTATION_OPT_IN = "MEDIA_COORDINATION_DISPOSABLE_QA";
-export const MEDIA_QA_BROWSER_OPT_IN = "MEDIA_RECOVERY_AUTHENTICATED_BROWSER_QA";
 export const MEDIA_QA_CLEANUP_ACK = "SAFE_DELETE_OR_RECORDED_RECOVERY";
 export const MEDIA_QA_DESTRUCTIVE_ENV_OPT_IN = "ALLOW_DESTRUCTIVE_MEDIA_QA";
 export const MEDIA_COORDINATION_ACL_MIGRATION_VERSION = "20260726070000";

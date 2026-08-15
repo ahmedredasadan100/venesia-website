@@ -9,13 +9,12 @@ import {
   ENTITY_SEO_LIMITS,
   validateEntitySeoValues,
 } from "../../seo/entity-seo-types";
-import {
-  getEntityReviewScore,
-  type EntityReviewAnalysisGroup,
-  type EntityReviewCheck,
-  type EntityReviewCorrectionTarget,
-  type EntityReviewSeverity,
-  type EntityReviewStatus,
+import type {
+  EntityReviewAnalysisGroup,
+  EntityReviewCheck,
+  EntityReviewCorrectionTarget,
+  EntityReviewSeverity,
+  EntityReviewStatus,
 } from "../review/entity-review-presentation";
 
 export type ContentReviewStatus = EntityReviewStatus;
@@ -155,10 +154,6 @@ function effectiveImageAlt(input: ContentReviewInput) {
   if (input.imageAlt.trim()) return input.imageAlt.trim();
   if (input.mediaPayload?.kind === "gallery") return input.mediaPayload.images[0]?.alt?.trim() ?? "";
   return "";
-}
-
-export function getContentDraftValidationError(input: ContentReviewInput): string | null {
-  return getContentDraftBlockingChecks(input)[0]?.hint ?? null;
 }
 
 export function buildContentReviewChecks(input: ContentReviewInput): ContentReviewCheck[] {
@@ -379,10 +374,6 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
   }
 
   return checks;
-}
-
-export function getContentReviewScore(checks: readonly ContentReviewCheck[]) {
-  return getEntityReviewScore(checks);
 }
 
 export function getContentPublishBlockingChecks(

@@ -1,7 +1,6 @@
 import "server-only";
 
 import { legacyHrefFromConfig, resolveAdminLink } from "./index";
-import type { AdminLinkValue } from "./types";
 import type {
   AboutCtaModuleConfig,
   BreadcrumbBlockConfig,
@@ -144,12 +143,6 @@ export async function resolveContentBlockConfigLinks(
   }
 
   return config;
-}
-
-export async function resolveFooterLinkValue(link: AdminLinkValue | null | undefined, hrefFallback?: string | null) {
-  const value = link ?? { link_kind: "none" as const };
-  if (value.link_kind === "none") return hrefFallback?.trim() || "";
-  return resolveAdminLink(value);
 }
 
 export async function resolveFooterSettingsLinks<T extends { slots: { slots: Array<{ type: string; config: Record<string, unknown> }> } }>(

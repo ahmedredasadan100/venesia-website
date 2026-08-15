@@ -1,17 +1,6 @@
 import type { CardsBlockConfig, ContentBlockConfig, CtaBlockConfig } from "../../lib/page-blocks";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
-export const KNOWN_CONTACT_SECTION_SLUGS = new Set([
-  "contact-trust-cards",
-  "contact-form-office",
-  "contact-form",
-  "contact-map",
-  "contact-reasons",
-  "contact-departments",
-  "contact-faq",
-  "contact-cta",
-]);
-
 export type ContactTrustCard = {
   type: "phone" | "whatsapp" | "mail" | "location";
   label: string;
@@ -220,12 +209,4 @@ export function isContactStyleCtaBlock(block: ResolvedPageBlock): boolean {
   if (block.blockType !== "cta") return false;
   if (CONTACT_STYLE_CTA_EXCLUDED_SLUGS.has(block.template.slug)) return false;
   return (block.template.variant ?? "band") === "band";
-}
-
-export function indexContactBlocksBySlug(blocks: ResolvedPageBlock[]) {
-  const bySlug = new Map<string, ResolvedPageBlock>();
-  for (const block of blocks) {
-    bySlug.set(block.template.slug, block);
-  }
-  return bySlug;
 }

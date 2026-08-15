@@ -418,18 +418,3 @@ export async function bulkBreadcrumbBlocks(formData: FormData) {
   }
   await revalidateBlockModulePaths("breadcrumb");
 }
-
-export async function getBreadcrumbBlockRows() {
-  await requireAdminSession();
-  const { data, error } = await getSupabaseAdmin()
-    .from("breadcrumb_block_templates")
-    .select("id,name,slug,description,variant,status")
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({
-    ...row,
-    description: row.description ?? null,
-  }));
-}
