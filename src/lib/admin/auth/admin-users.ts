@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 
+import type { Tables } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   AdminSelfAccountValidationError,
@@ -19,19 +20,8 @@ import {
   verifyAdminSessionToken,
 } from "./session";
 
-export type AdminUserRecord = {
-  id: number;
-  email: string;
-  username: string;
-  password_hash: string;
-  full_name: string | null;
-  role: string;
-  is_active: boolean;
-  session_version: number;
-  last_login_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type AdminUserRecord = Tables<"admin_users">;
+type AdminUserSessionRow = Omit<AdminUserRecord, "password_hash">;
 
 const ADMIN_USER_SESSION_COLUMNS =
   "id, email, username, full_name, role, is_active, session_version, last_login_at, created_at, updated_at";
@@ -53,35 +43,34 @@ function toAdminAuthDependencyError(operation: string, error: unknown) {
     : new AdminAuthDependencyError(operation, error);
 }
 
-function mapAdminUser(row: Record<string, unknown>): AdminUserRecord {
+function mapAdminSessionUser(row: AdminUserSessionRow): AdminUserRecord {
   return {
-    id: Number(row.id),
-    email: String(row.email),
-    username: String(row.username),
-    password_hash: String(row.password_hash ?? ""),
-    full_name: row.full_name ? String(row.full_name) : null,
-    role: String(row.role ?? "admin"),
-    is_active: Boolean(row.is_active),
-    session_version: Number(row.session_version ?? 1),
-    last_login_at: row.last_login_at ? String(row.last_login_at) : null,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
+    ...row,
+    // Session reads intentionally exclude credential material. The exported
+    // record shape remains stable, and password verification always reloads
+    // the full generated row through getAdminUserById.
+    password_hash: "",
   };
 }
 
-async function getAdminUserByIdWithColumns(id: number, columns: string) {
-  const { data, error } = await getSupabaseAdmin().from("admin_users").select(columns).eq("id", id).maybeSingle();
-  if (error) throw toAdminAuthDependencyError("admin_user_by_id", error);
-  if (!data) return null;
-  return mapAdminUser(data as unknown as Record<string, unknown>);
-}
-
 export async function getAdminUserById(id: number) {
-  return getAdminUserByIdWithColumns(id, "*");
+  const { data, error } = await getSupabaseAdmin()
+    .from("admin_users")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw toAdminAuthDependencyError("admin_user_by_id", error);
+  return data;
 }
 
 async function getAdminUserForSession(id: number) {
-  return getAdminUserByIdWithColumns(id, ADMIN_USER_SESSION_COLUMNS);
+  const { data, error } = await getSupabaseAdmin()
+    .from("admin_users")
+    .select(ADMIN_USER_SESSION_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw toAdminAuthDependencyError("admin_user_by_id", error);
+  return data ? mapAdminSessionUser(data) : null;
 }
 
 async function getAdminUserByUsername(username: string) {
@@ -91,8 +80,7 @@ async function getAdminUserByUsername(username: string) {
     .eq("username", username)
     .maybeSingle();
   if (error) throw toAdminAuthDependencyError("admin_user_by_username", error);
-  if (!data) return null;
-  return mapAdminUser(data as Record<string, unknown>);
+  return data;
 }
 
 async function getAdminUserByEmail(email: string) {
@@ -102,8 +90,7 @@ async function getAdminUserByEmail(email: string) {
     .eq("email", email.toLowerCase())
     .maybeSingle();
   if (error) throw toAdminAuthDependencyError("admin_user_by_email", error);
-  if (!data) return null;
-  return mapAdminUser(data as Record<string, unknown>);
+  return data;
 }
 
 export async function findAdminUserByLoginIdentifier(identifier: string) {
@@ -221,7 +208,7 @@ export async function updateAdminUserIdentity(
     })
     .eq("id", userId)
     .select("email, full_name")
-    .maybeSingle<{ email: string; full_name: string | null }>();
+    .maybeSingle();
 
   if (error) {
     if (isUniqueViolation(error)) {

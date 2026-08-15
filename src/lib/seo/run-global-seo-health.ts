@@ -6,9 +6,9 @@ import {
   GLOBAL_SEO_SPECIALIZED_OWNERS,
 } from "../admin/seo/global-seo-adoption-manifest";
 import { normalizeYouTubeUrl } from "../admin/media-topic-payload";
+import type { Json } from "../database.types";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { validateRedirectInput } from "../redirects/validate-redirect";
-import type { UrlRedirectRecord } from "../redirects/redirect-types";
 import { loadGlobalSeoEffectiveContractForAdmin } from "./load-global-seo-settings";
 import { validateGlobalSeoSettingsInput } from "./parse-global-seo";
 import { runSitemapDiagnostics } from "./run-sitemap-diagnostics";
@@ -74,7 +74,7 @@ async function buildRedirectChecks(): Promise<GlobalSeoHealthCheck[]> {
   if (error) {
     return [{ id: "redirect_diagnostics_query", dimension: "crawl", status: "fail", weight: 8, title: "Redirect diagnostics unavailable", detail: error.message }];
   }
-  const redirects = (data ?? []) as UrlRedirectRecord[];
+  const redirects = data ?? [];
   const invalid = redirects.flatMap((redirect) => {
     const result = validateRedirectInput(
       {
@@ -122,12 +122,47 @@ type InfrastructureProof = {
   footer_public_composition_audit_count?: number;
 };
 
+function readInfrastructureBoolean(value: Json | undefined): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readInfrastructureNumber(value: Json | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function parseInfrastructureProof(value: Json): InfrastructureProof {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  return {
+    site_settings_service_only: readInfrastructureBoolean(value.site_settings_service_only),
+    url_redirects_service_only: readInfrastructureBoolean(value.url_redirects_service_only),
+    admin_views_service_only: readInfrastructureBoolean(value.admin_views_service_only),
+    topics_publication_policy: readInfrastructureBoolean(value.topics_publication_policy),
+    topics_no_public_writes: readInfrastructureBoolean(value.topics_no_public_writes),
+    public_media_single_source: readInfrastructureBoolean(value.public_media_single_source),
+    public_media_module_contract: readInfrastructureBoolean(value.public_media_module_contract),
+    public_media_link_contract: readInfrastructureBoolean(value.public_media_link_contract),
+    public_media_migrated_category_count: readInfrastructureNumber(value.public_media_migrated_category_count),
+    public_media_migrated_count: readInfrastructureNumber(value.public_media_migrated_count),
+    public_media_seo_normalization_count: readInfrastructureNumber(value.public_media_seo_normalization_count),
+    public_media_published_count: readInfrastructureNumber(value.public_media_published_count),
+    footer_single_source: readInfrastructureBoolean(value.footer_single_source),
+    footer_orphan_setting_count: readInfrastructureNumber(value.footer_orphan_setting_count),
+    home_composition_assignment_count: readInfrastructureNumber(value.home_composition_assignment_count),
+    media_hub_composition_assignment_count: readInfrastructureNumber(value.media_hub_composition_assignment_count),
+    media_sidebar_composition_assignment_count: readInfrastructureNumber(value.media_sidebar_composition_assignment_count),
+    media_hero_composition_assignment_count: readInfrastructureNumber(value.media_hero_composition_assignment_count),
+    public_composition_unresolved_reference_count: readInfrastructureNumber(value.public_composition_unresolved_reference_count),
+    footer_public_composition_audit_count: readInfrastructureNumber(value.footer_public_composition_audit_count),
+  };
+}
+
 async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
   const { data, error } = await getSupabaseAdmin().rpc("global_seo_infrastructure_health");
   if (error) {
     return [{ id: "infrastructure_rpc", dimension: "infrastructure", status: "fail", weight: 10, title: "Infrastructure proof unavailable", detail: error.message }];
   }
-  const proof = (data ?? {}) as InfrastructureProof;
+  const proof = parseInfrastructureProof(data);
   const entries: Array<[keyof InfrastructureProof, string]> = [
     ["site_settings_service_only", "site_settings service-role only"],
     ["url_redirects_service_only", "url_redirects service-role only"],
@@ -268,17 +303,17 @@ async function buildPublicMediaDataChecks(): Promise<GlobalSeoHealthCheck[]> {
   const invalidRichPayload = rows.filter((row) => {
     const payload = row.media_payload;
     if (row.content_type === "gallery") {
-      return !payload || typeof payload !== "object" || payload.kind !== "gallery" || !Array.isArray(payload.images) || payload.images.length === 0;
+      return !payload || typeof payload !== "object" || Array.isArray(payload) || payload.kind !== "gallery" || !Array.isArray(payload.images) || payload.images.length === 0;
     }
     if (row.content_type === "video") {
-      return !payload || typeof payload !== "object" || payload.kind !== "video";
+      return !payload || typeof payload !== "object" || Array.isArray(payload) || payload.kind !== "video";
     }
     return payload !== null;
   });
   const videosWithoutUrl = rows.filter((row) => {
     if (row.content_type !== "video") return false;
     const payload = row.media_payload;
-    if (!payload || typeof payload !== "object" || payload.kind !== "video") return false;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) || payload.kind !== "video") return false;
     return !normalizeYouTubeUrl(typeof payload.video_url === "string" ? payload.video_url : "");
   });
 

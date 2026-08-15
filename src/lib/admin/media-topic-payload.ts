@@ -21,6 +21,66 @@ export type MediaTopicPayload = VideoMediaPayload | GalleryMediaPayload;
 
 export type RichMediaContentType = "video" | "gallery";
 
+function isJsonObject(
+  value: Json | undefined,
+): value is { [key: string]: Json | undefined } {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isOptionalNullableString(
+  value: Json | undefined,
+): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === "string";
+}
+
+/**
+ * Narrows the Database JSON wire contract to the canonical media payload.
+ * Invalid persisted JSON fails closed instead of being asserted as domain data.
+ */
+export function parseMediaTopicPayload(value: Json | undefined): MediaTopicPayload | null {
+  if (!isJsonObject(value)) return null;
+
+  if (
+    value.kind === "video" &&
+    value.provider === "youtube" &&
+    typeof value.video_url === "string" &&
+    isOptionalNullableString(value.thumbnail) &&
+    isOptionalNullableString(value.duration)
+  ) {
+    return {
+      kind: "video",
+      provider: "youtube",
+      video_url: value.video_url,
+      thumbnail: value.thumbnail ?? null,
+      duration: value.duration ?? null,
+    };
+  }
+
+  if (value.kind !== "gallery" || !Array.isArray(value.images)) return null;
+
+  const images: GalleryImageItem[] = [];
+  for (const item of value.images) {
+    if (
+      !isJsonObject(item) ||
+      typeof item.url !== "string" ||
+      !isOptionalNullableString(item.alt) ||
+      !isOptionalNullableString(item.caption)
+    ) {
+      return null;
+    }
+    images.push({
+      url: item.url,
+      alt: item.alt ?? null,
+      caption: item.caption ?? null,
+    });
+  }
+
+  return {
+    kind: "gallery",
+    images,
+  };
+}
+
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"]);
 
 export function isRichMediaContentType(contentType: string): contentType is RichMediaContentType {
@@ -208,3 +268,4 @@ export function parseMediaPayloadFromForm(
 
   return null;
 }
+import type { Json } from "../database.types";

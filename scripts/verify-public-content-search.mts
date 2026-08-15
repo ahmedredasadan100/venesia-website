@@ -88,6 +88,14 @@ assert.ok(detailSelect.includes("content") && detailSelect.includes("seo_title")
 assert.ok(collectionSelect.includes("media_duration:media_payload->>duration"));
 assert.ok(collectionSelect.includes("media_gallery_cover:media_payload->images->0->>url"));
 assert.ok(sitemapSelect.includes("updated_at") && !sitemapSelect.includes("title"));
+assert.ok(
+  owner.includes("faq?: Json") &&
+    owner.includes("for (const item of value)") &&
+    owner.includes('typeof item.question !== "string"') &&
+    owner.includes('typeof item.answer !== "string"') &&
+    !owner.includes("return value.flatMap((item) =>"),
+  "Public FAQ parsing must reject the complete malformed Database JSON payload",
+);
 
 for (const [label, source] of [
   ["Topics adapter", topicsAdapter],

@@ -17,9 +17,7 @@ import {
 import { isPublishedPageBlockStatus, normalizeBoolean } from "./admin-utils";
 import { sortPageBlocks } from "./page-block-layout";
 import { normalizeLayoutSlot } from "./layout-slots";
-import type { PageBlockTemplateBase, ResolvedPageBlock } from "./types";
-
-type TemplateRow = PageBlockTemplateBase & { config: Record<string, unknown> | null };
+import type { ResolvedPageBlock } from "./types";
 
 function joinedTemplate<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
@@ -122,7 +120,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   assignmentRowCount += breadcrumbAssignments?.length ?? 0;
 
   for (const row of contentAssignments ?? []) {
-    const template = joinedTemplate(row.content_block_templates) as TemplateRow | null;
+    const template = joinedTemplate(row.content_block_templates);
     const homeModuleSlug = template
       ? resolveHomeModuleSlugFromTemplate(template.slug, template.variant)
       : null;
@@ -157,7 +155,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   for (const row of ctaAssignments ?? []) {
     if (!normalizeBoolean(row.is_visible, true)) continue;
 
-    const template = joinedTemplate(row.cta_block_templates) as TemplateRow | null;
+    const template = joinedTemplate(row.cta_block_templates);
     if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
     blockPromises.push(
@@ -178,7 +176,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   for (const row of cardsAssignments ?? []) {
     if (!normalizeBoolean(row.is_visible, true)) continue;
 
-    const template = joinedTemplate(row.cards_block_templates) as TemplateRow | null;
+    const template = joinedTemplate(row.cards_block_templates);
     if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
     blockPromises.push(
@@ -199,7 +197,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   for (const row of breadcrumbAssignments ?? []) {
     if (!normalizeBoolean(row.is_visible, true)) continue;
 
-    const template = joinedTemplate(row.breadcrumb_block_templates) as TemplateRow | null;
+    const template = joinedTemplate(row.breadcrumb_block_templates);
     if (!template || !isPublishedPageBlockStatus(template.status)) continue;
 
     blockPromises.push(

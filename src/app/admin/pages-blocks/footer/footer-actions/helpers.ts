@@ -9,12 +9,13 @@ import {
 import type { FooterContactItem, FooterSocialLink } from "../../../../../lib/footer/types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type { AdminUserRecord } from "../../../../../lib/admin/auth/admin-users";
+import type { Json } from "../../../../../lib/database.types";
 
 export async function saveFooterSettingsWithAudit(input: {
-  settings: readonly { key: string; value: unknown }[];
+  settings: { key: string; value: Json }[];
   actor: AdminUserRecord;
   action: string;
-  metadata?: Record<string, unknown>;
+  metadata?: { [key: string]: Json | undefined };
 }) {
   const { error } = await getSupabaseAdmin().rpc("save_footer_settings", {
     p_settings: input.settings,

@@ -314,13 +314,13 @@ export async function saveArticleContentAdapter(
                 ? { published_by: actor.id }
                 : {}),
             })
-            .eq("id", id);
+            .eq("id", Number(id));
           const guardedQuery = expectedRevision.value === null
             ? updateQuery.is("updated_at", null)
             : updateQuery.eq("updated_at", expectedRevision.value);
           const { data, error } = await guardedQuery
             .select("id, slug")
-            .maybeSingle<{ id: number; slug: string }>();
+            .maybeSingle();
           if (error) throw new Error(error.message);
           if (!data) throw new TopicRevisionConflictError();
           return data;

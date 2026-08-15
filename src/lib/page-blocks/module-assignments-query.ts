@@ -3,7 +3,10 @@ import "server-only";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { MEDIA_HUB_ASSIGNMENT_TABLE } from "../media-hub-modules/registry";
 import { MEDIA_SIDEBAR_ASSIGNMENT_TABLE } from "../media-sidebar-modules/registry";
-import { BLOCK_MODULE_REGISTRY } from "./block-module-registry";
+import {
+  BLOCK_MODULE_REGISTRY,
+  type PageModuleAssignmentTable,
+} from "./block-module-registry";
 import { normalizeLayoutSlot } from "./layout-slots";
 import { normalizeBoolean } from "./admin-utils";
 import type { PageBlockType } from "./types";
@@ -26,7 +29,7 @@ export type ModuleAssignmentContext = {
 };
 
 async function loadModuleAssignmentContext(
-  assignmentTable: string,
+  assignmentTable: PageModuleAssignmentTable,
   templateId: number,
 ): Promise<ModuleAssignmentContext> {
   const [{ data: assignments }, { data: pages }] = await Promise.all([
@@ -61,7 +64,7 @@ async function loadModuleAssignmentContext(
 
   return {
     assignments: rows,
-    pages: (pages ?? []) as Array<{ id: number; title: string; slug: string; path: string }>,
+    pages: pages ?? [],
   };
 }
 
@@ -95,6 +98,7 @@ export async function getHeroModuleAssignmentContext(templateId: number): Promis
   const rows: ModuleAssignmentRow[] = [];
 
   for (const row of assignments ?? []) {
+    if (row.target_id === null) continue;
     const page = pageById.get(row.target_id);
     if (!page) continue;
 
@@ -113,6 +117,6 @@ export async function getHeroModuleAssignmentContext(templateId: number): Promis
 
   return {
     assignments: rows,
-    pages: (pages ?? []) as Array<{ id: number; title: string; slug: string; path: string }>,
+    pages: pages ?? [],
   };
 }

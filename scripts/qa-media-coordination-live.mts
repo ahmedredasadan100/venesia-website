@@ -20,6 +20,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import type { Database } from "../src/lib/database.types";
 import {
   assertExternalAuthenticationState,
   assertOnlyArguments,
@@ -123,7 +124,7 @@ async function expectRpcFailure(
 }
 
 async function assertCatalogRuntime(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   expected: {
     provider: string;
     runtimeEnvironment: string;
@@ -297,7 +298,7 @@ async function run() {
     providerRegistryVersion: authority.providerRegistryVersion,
   });
 
-  const supabase = createClient(authority.supabaseUrl, serviceRoleKey, {
+  const supabase = createClient<Database>(authority.supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   await assertCatalogRuntime(supabase, {
@@ -431,7 +432,6 @@ async function run() {
         entityType: "qa_fixture",
         entityIdentity,
       })),
-      p_actor_id: null,
       p_request_identity: `${fixtureNamespace}:${requestSuffix}`,
       p_ttl_seconds: 180,
       p_expected_provider: authority.provider,
@@ -503,7 +503,6 @@ async function run() {
       "reserve_media_asset_deletion",
       {
         p_asset_id: asset.id,
-        p_actor_id: null,
         p_request_identity: `${fixtureNamespace}:cleanup-reservation`,
         p_expected_asset_provider: asset.provider,
         p_expected_asset_bucket: asset.bucket,
@@ -554,7 +553,6 @@ async function run() {
             verificationError: verificationError.message,
           },
           p_storage_state: "uncertain",
-          p_storage_verified_at: null,
         });
         throw new Error(
           `Fixture Storage cleanup result is uncertain; Recovery Center mark=${recoveryError?.message ?? "completed"}.`,
@@ -578,7 +576,6 @@ async function run() {
         p_failure_code: "qa_fixture_cleanup_verification_failed",
         p_failure_metadata: { fixtureNamespace, verificationError: listError.message },
         p_storage_state: "uncertain",
-        p_storage_verified_at: null,
       });
       throw new Error(
         `Storage absence not proven after cleanup; Recovery Center mark=${recoveryError?.message ?? "completed"}.`,
@@ -686,7 +683,6 @@ async function run() {
     await expectRpcFailure(
       supabase.rpc("reserve_media_asset_deletion", {
         p_asset_id: asset.id,
-        p_actor_id: null,
         p_request_identity: `${fixtureNamespace}:blocked-delete`,
         p_expected_asset_provider: asset.provider,
         p_expected_asset_bucket: asset.bucket,

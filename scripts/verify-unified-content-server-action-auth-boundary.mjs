@@ -42,6 +42,11 @@ function loadValidationModule(relativePath) {
         throw new Error("Article category resolution must follow authorization.");
       },
     },
+    "../../../../../lib/admin/content-workflow/topic-publish-validation": {
+      parseTopicFaq() {
+        return [];
+      },
+    },
     "../../../../../lib/logging": { logError() {} },
     "../../../../../lib/supabase-admin": {
       getSupabaseAdmin() {

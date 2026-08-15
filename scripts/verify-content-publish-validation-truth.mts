@@ -29,7 +29,11 @@ const {
 const {
   buildTopicPublishChecklist,
   getTopicPublishBlockingChecks,
+  parseTopicFaq,
 } = require("../src/lib/admin/content-workflow/topic-publish-validation.ts") as typeof import("../src/lib/admin/content-workflow/topic-publish-validation.ts");
+const {
+  buildContentReviewReport,
+} = require("../src/lib/admin/content-workflow/content-review-report.ts") as typeof import("../src/lib/admin/content-workflow/content-review-report.ts");
 const {
   buildMediaPublishChecklist,
   getMediaPublishBlockingChecks,
@@ -46,6 +50,8 @@ const reviewContract = read("src/lib/admin/review/entity-review-presentation.ts"
 const articleSave = read("src/app/admin/content/topics/article-actions/save.ts");
 const mediaSave = read("src/app/admin/content/topics/media-actions/save.ts");
 const listActions = read("src/app/admin/content/topics/actions.ts");
+const articleValidation = read("src/app/admin/content/topics/article-actions/validation.ts");
+const reviewLoader = read("src/lib/admin/content-workflow/load-content-review-report.ts");
 const projectReview = read("src/components/admin/projects/ProjectPublishChecklistPanel.tsx");
 
 let passed = 0;
@@ -73,6 +79,56 @@ const base: ReviewInput = {
   faq: [],
   mediaPayload: null,
 };
+
+check(
+  "the FAQ Database JSON parser accepts only a complete canonical array",
+  JSON.stringify(parseTopicFaq([{ question: "Question", answer: "Answer" }])) ===
+    JSON.stringify([{ question: "Question", answer: "Answer" }]) &&
+    parseTopicFaq(null) === null &&
+    parseTopicFaq([
+      { question: "Question", answer: "Answer" },
+      { question: "Malformed", answer: 42 },
+    ]) === null,
+);
+
+const invalidFaqReview = buildContentReviewReport([{
+  id: 1,
+  title: base.title,
+  slug: base.slug,
+  status: "published",
+  contentType: "article",
+  excerpt: base.excerpt,
+  content: base.content,
+  image: base.image,
+  imageAlt: base.imageAlt,
+  categorySlug: base.categorySlug,
+  seoTitle: base.seoTitle,
+  seoDescription: base.seoDescription,
+  focusKeyword: base.focusKeyword,
+  canonicalUrl: base.canonicalUrl,
+  ogImage: base.ogImage,
+  ogImageAlt: base.ogImageAlt,
+  faq: [],
+  faqContractValid: false,
+  mediaPayload: null,
+}]);
+check(
+  "Content Review reports malformed persisted FAQ JSON as an explicit blocker",
+  invalidFaqReview.blockingChecks.some((item) => item.id === "faq") &&
+    invalidFaqReview.publishedWithBlocks === 1,
+);
+check(
+  "FAQ Database JSON narrowing has one owner and bulk publish fails closed",
+  [listActions, articleValidation, reviewLoader].every((source) =>
+    source.includes("parseTopicFaq"),
+  ) &&
+    [listActions, articleValidation, reviewLoader].every((source) =>
+      !source.includes("function normalizeTopicFaq"),
+    ) &&
+    listActions.includes('topic.content_type === "article" && faq === null') &&
+    listActions.includes('focusTarget: "topic-faq-editor"') &&
+    reviewLoader.includes("faqContractValid: faq !== null"),
+);
 
 function inputFor(contentType: ReviewInput["contentType"]): ReviewInput {
   if (contentType === "video") {

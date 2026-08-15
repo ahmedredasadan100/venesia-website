@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { getStatus } from "../../../../../../lib/page-blocks/admin-utils";
 import { getHeroModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
 import HeroEditClient from "./HeroEditClient";
@@ -51,7 +52,10 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
 
   if (error || !hero) notFound();
 
-  const config = (hero.config ?? {}) as Record<string, unknown>;
+  const config =
+    hero.config && typeof hero.config === "object" && !Array.isArray(hero.config)
+      ? hero.config
+      : {};
   return (
     <HeroEditClient
       hero={{
@@ -64,7 +68,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
         source_type: hero.source_type,
         source_slug: hero.source_slug,
         limit_count: hero.limit_count,
-        status: hero.status,
+        status: getStatus(hero.status),
       }}
       config={config}
       imagesText={imagesToTextarea(config)}

@@ -16,6 +16,7 @@ import {
   ModuleEditorStatusSwitch,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
+import type { Json } from "../../../lib/database.types";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import {
   MEDIA_SIDEBAR_WIDGET_LABELS,
@@ -35,7 +36,7 @@ type MediaSidebarModuleEditClientProps = {
     description: string | null;
     status: string;
     widget_key: string;
-    config: Record<string, unknown>;
+    config: Json;
   };
   assignmentContext: ModuleAssignmentContext;
   saved?: boolean;
@@ -48,7 +49,7 @@ function readInitialWidgetKey(value: string): MediaSidebarWidgetKey {
   return value === "sections" || value === "latest" || value === "popular" ? value : "latest";
 }
 
-function readInitialLimit(widgetKey: MediaSidebarWidgetKey, config: Record<string, unknown>) {
+function readInitialLimit(widgetKey: MediaSidebarWidgetKey, config: Json) {
   const parsed = parseMediaSidebarModuleConfig(config, widgetKey);
   return typeof parsed.limit === "number" ? parsed.limit : MEDIA_SIDEBAR_WIDGET_DEFAULTS[widgetKey].defaultLimit ?? "";
 }

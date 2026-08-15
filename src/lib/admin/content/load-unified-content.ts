@@ -3,9 +3,10 @@ import "server-only";
 import {
   analyzeEntitySeo,
   sortRowsBySeoScore,
-  type FaqItem,
 } from "../seo-score";
+import type { Json, Tables } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { parseTopicFaq } from "../content-workflow/topic-publish-validation";
 import {
   getCategoryAndDescendantIds,
   type AdminContentCategory,
@@ -120,11 +121,11 @@ type UnifiedContentSeoInputRow = {
   image_alt: string | null;
   seo_title: string | null;
   seo_description: string | null;
-  seo_keywords: unknown;
+  seo_keywords: string[] | null;
   focus_keyword: string | null;
   og_image: string | null;
   og_image_alt: string | null;
-  faq: unknown;
+  faq: Json | null;
 };
 
 type UnifiedContentSeoSourceRow = Omit<UnifiedContentRow, "seo_score"> &
@@ -137,19 +138,113 @@ type UnifiedContentMetricsSourceRow = UnifiedContentSeoInputRow & {
   series_id: number | null;
 };
 
-function normalizeSeoKeywords(value: unknown) {
-  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+type AdminContentTopicDatabaseRow = Tables<"admin_content_topics">;
+type TopicDatabaseRow = Tables<"topics">;
+
+type UnifiedContentListDatabaseRow = Pick<
+  AdminContentTopicDatabaseRow,
+  | "id"
+  | "title"
+  | "slug"
+  | "excerpt"
+  | "content"
+  | "image"
+  | "image_alt"
+  | "content_type"
+  | "category_id"
+  | "category_name"
+  | "category_color_token"
+  | "series_id"
+  | "series_name"
+  | "status"
+  | "is_featured"
+  | "views_count"
+  | "created_at"
+  | "updated_at"
+  | "published_at"
+  | "created_by_display"
+  | "updated_by_display"
+  | "published_by_display"
+  | "deleted_at"
+  | "seo_title"
+  | "seo_description"
+  | "seo_keywords"
+  | "focus_keyword"
+  | "og_image"
+  | "og_image_alt"
+  | "faq"
+>;
+
+type UnifiedContentMetricsDatabaseRow = Pick<
+  TopicDatabaseRow,
+  | "id"
+  | "title"
+  | "slug"
+  | "excerpt"
+  | "content"
+  | "image"
+  | "image_alt"
+  | "content_type"
+  | "status"
+  | "is_featured"
+  | "series_id"
+  | "seo_title"
+  | "seo_description"
+  | "seo_keywords"
+  | "focus_keyword"
+  | "og_image"
+  | "og_image_alt"
+  | "faq"
+>;
+
+function normalizeUnifiedContentListSourceRow(
+  row: UnifiedContentListDatabaseRow,
+): UnifiedContentSeoSourceRow | null {
+  if (row.id === null || !isContentType(row.content_type)) return null;
+  return {
+    ...row,
+    id: row.id,
+    content_type: row.content_type,
+  };
 }
 
-function normalizeFaq(value: unknown): FaqItem[] {
-  if (!Array.isArray(value)) return [];
-
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const question = "question" in item ? String(item.question ?? "") : "";
-    const answer = "answer" in item ? String(item.answer ?? "") : "";
-    return [{ question, answer }];
+function normalizeUnifiedContentListSourceRows(
+  rows: readonly UnifiedContentListDatabaseRow[],
+): UnifiedContentSeoSourceRow[] | null {
+  const normalized = rows.flatMap((row) => {
+    const item = normalizeUnifiedContentListSourceRow(row);
+    return item ? [item] : [];
   });
+  return normalized.length === rows.length ? normalized : null;
+}
+
+function normalizeUnifiedContentMetricsSourceRow(
+  row: UnifiedContentMetricsDatabaseRow,
+): UnifiedContentMetricsSourceRow | null {
+  if (!Number.isSafeInteger(row.id) || !isContentType(row.content_type)) {
+    return null;
+  }
+  return {
+    ...row,
+    content_type: row.content_type,
+  };
+}
+
+function normalizeUnifiedContentMetricsSourceRows(
+  rows: readonly UnifiedContentMetricsDatabaseRow[],
+): UnifiedContentMetricsSourceRow[] | null {
+  const normalized = rows.flatMap((row) => {
+    const item = normalizeUnifiedContentMetricsSourceRow(row);
+    return item ? [item] : [];
+  });
+  return normalized.length === rows.length ? normalized : null;
+}
+
+function normalizeSeoKeywords(value: string[] | null) {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return [];
+  }
+  return value.filter(Boolean);
 }
 
 function getUnifiedContentSeoScore(row: UnifiedContentSeoInputRow) {
@@ -167,7 +262,7 @@ function getUnifiedContentSeoScore(row: UnifiedContentSeoInputRow) {
     seoDescription: row.seo_description ?? "",
     seoKeywords: normalizeSeoKeywords(row.seo_keywords),
     focusKeyword: row.focus_keyword ?? "",
-    faq: normalizeFaq(row.faq),
+    faq: parseTopicFaq(row.faq ?? null) ?? [],
   }).score;
 }
 
@@ -275,8 +370,23 @@ export function normalizeUnifiedContentFilters(
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyFilters(query: any, filters: UnifiedContentFilters, categories: AdminContentCategory[]) {
+interface UnifiedContentFilterQuery {
+  not(column: "deleted_at" | "series_id", operator: "is", value: null): this;
+  is(column: "deleted_at", value: null): this;
+  ilike(column: "title", pattern: string): this;
+  eq(column: "content_type", value: ContentType): this;
+  eq(column: "series_id", value: number): this;
+  eq(column: "status", value: string): this;
+  eq(column: "is_featured", value: boolean): this;
+  in(column: "category_id", values: readonly number[]): this;
+  or(filter: string): this;
+}
+
+function applyFilters<Query extends UnifiedContentFilterQuery>(
+  query: Query,
+  filters: UnifiedContentFilters,
+  categories: AdminContentCategory[],
+): Query {
   let next = filters.view === "trash"
     ? query.not("deleted_at", "is", null)
     : query.is("deleted_at", null);
@@ -302,9 +412,34 @@ function applyFilters(query: any, filters: UnifiedContentFilters, categories: Ad
   return next;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applySort(query: any, sort: Exclude<ContentSortValue, SeoContentSortValue>) {
-  const sortMap: Record<Exclude<ContentSortValue, SeoContentSortValue>, { column: string; ascending: boolean }> = {
+type UnifiedContentSortColumn =
+  | "id"
+  | "title"
+  | "content_type"
+  | "category_name"
+  | "series_name"
+  | "is_featured"
+  | "views_count"
+  | "created_at"
+  | "updated_at"
+  | "created_by_display"
+  | "status";
+
+interface UnifiedContentSortQuery {
+  order(
+    column: UnifiedContentSortColumn,
+    options: { ascending: boolean; nullsFirst?: boolean },
+  ): this;
+}
+
+function applySort<Query extends UnifiedContentSortQuery>(
+  query: Query,
+  sort: Exclude<ContentSortValue, SeoContentSortValue>,
+): Query {
+  const sortMap: Record<
+    Exclude<ContentSortValue, SeoContentSortValue>,
+    { column: UnifiedContentSortColumn; ascending: boolean }
+  > = {
     id_asc: { column: "id", ascending: true },
     id_desc: { column: "id", ascending: false },
     title_asc: { column: "title", ascending: true },
@@ -364,30 +499,39 @@ export async function loadUnifiedContentList(
     if (error) {
       dataError = error.message;
     } else {
-      seoSourceRows = (data ?? []) as UnifiedContentSeoSourceRow[];
-      totalCount = count ?? seoSourceRows.length;
+      const normalizedRows = normalizeUnifiedContentListSourceRows(data ?? []);
+      if (!normalizedRows) {
+        dataError = "The Topics list returned an invalid generated Database row.";
+      } else {
+        seoSourceRows = normalizedRows;
+        totalCount = count ?? seoSourceRows.length;
 
-      // PostgREST may cap a response. Continue only when the authoritative
-      // count proves that the first response was truncated; no fixed fan-out.
-      while (seoSourceRows.length < totalCount) {
-        const offset = seoSourceRows.length;
-        const { data: nextData, error: nextError } = await applyFilters(
-          supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
-          filters,
-          categories,
-        )
-          .order("id", { ascending: true })
-          .range(offset, totalCount - 1);
-        if (nextError) {
-          dataError = nextError.message;
-          break;
+        // PostgREST may cap a response. Continue only when the authoritative
+        // count proves that the first response was truncated; no fixed fan-out.
+        while (seoSourceRows.length < totalCount) {
+          const offset = seoSourceRows.length;
+          const { data: nextData, error: nextError } = await applyFilters(
+            supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
+            filters,
+            categories,
+          )
+            .order("id", { ascending: true })
+            .range(offset, totalCount - 1);
+          if (nextError) {
+            dataError = nextError.message;
+            break;
+          }
+          const nextRows = normalizeUnifiedContentListSourceRows(nextData ?? []);
+          if (!nextRows) {
+            dataError = "The Topics list returned an invalid generated Database row.";
+            break;
+          }
+          if (!nextRows.length) {
+            dataError = "The complete SEO sorting source could not be read.";
+            break;
+          }
+          seoSourceRows.push(...nextRows);
         }
-        const nextRows = (nextData ?? []) as UnifiedContentSeoSourceRow[];
-        if (!nextRows.length) {
-          dataError = "The complete SEO sorting source could not be read.";
-          break;
-        }
-        seoSourceRows.push(...nextRows);
       }
     }
   } else {
@@ -434,12 +578,15 @@ export async function loadUnifiedContentList(
       ),
       filters.sort,
     ).range(from, to);
-    dataError = error?.message ?? null;
-    rows = error
-      ? []
-      : ((data ?? []) as UnifiedContentSeoSourceRow[]).map(
-          toUnifiedContentRow,
-        );
+    const sourceRows = error
+      ? null
+      : normalizeUnifiedContentListSourceRows(data ?? []);
+    dataError = error?.message ?? (
+      sourceRows === null
+        ? "The Topics list returned an invalid generated Database row."
+        : null
+    );
+    rows = sourceRows?.map(toUnifiedContentRow) ?? [];
   }
 
   return {
@@ -464,10 +611,15 @@ export async function loadUnifiedContentMetrics() {
   ]);
 
   const activeCount = active.count ?? active.data?.length ?? 0;
-  const activeRows = active.error
-    ? []
-    : ((active.data ?? []) as UnifiedContentMetricsSourceRow[]);
-  let activeError = active.error?.message ?? null;
+  const normalizedActiveRows = active.error
+    ? null
+    : normalizeUnifiedContentMetricsSourceRows(active.data ?? []);
+  const activeRows = normalizedActiveRows ?? [];
+  let activeError = active.error?.message ?? (
+    normalizedActiveRows === null
+      ? "The Topics metrics query returned an invalid generated Database row."
+      : null
+  );
 
   while (!activeError && activeRows.length < activeCount) {
     const offset = activeRows.length;
@@ -481,7 +633,11 @@ export async function loadUnifiedContentMetrics() {
       activeError = error.message;
       break;
     }
-    const nextRows = (data ?? []) as UnifiedContentMetricsSourceRow[];
+    const nextRows = normalizeUnifiedContentMetricsSourceRows(data ?? []);
+    if (!nextRows) {
+      activeError = "The Topics metrics query returned an invalid generated Database row.";
+      break;
+    }
     if (!nextRows.length) {
       activeError = "The complete Topics metrics source could not be read.";
       break;

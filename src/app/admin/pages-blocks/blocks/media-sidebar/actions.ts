@@ -52,7 +52,7 @@ export async function updateMediaSidebarModule(formData: FormData) {
         .update(nextRow)
         .eq("id", id)
         .select("id")
-        .maybeSingle<{ id: number }>();
+        .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "Unable to update media sidebar module.");
       return data;
     },

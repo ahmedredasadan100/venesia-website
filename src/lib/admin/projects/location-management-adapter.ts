@@ -26,18 +26,8 @@ import {
   type ProjectLocationSortField,
 } from "./location-management-contract";
 
-const LOCATION_SELECT = [
-  "id",
-  "client_key",
-  "level",
-  "parent_id",
-  "name_ar",
-  "name_en",
-  "sort_order",
-  "is_active",
-  "created_at",
-  "updated_at",
-].join(",");
+const LOCATION_SELECT =
+  "id,client_key,level,parent_id,name_ar,name_en,sort_order,is_active,created_at,updated_at";
 
 const projectLocationBaseRowSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -68,16 +58,18 @@ export class ProjectLocationManagementDatabaseError extends Error {
   }
 }
 
+const PROJECT_REFERENCE_COLUMNS = {
+  governorate: "governorate_id",
+  city: "city_id",
+  main_area: "main_area_id",
+  sub_area: "sub_area_id",
+} as const satisfies Record<ProjectLocationLevel, string>;
+
+const PROJECT_LOCATION_REFERENCE_SELECT =
+  "id,governorate_id,city_id,main_area_id,sub_area_id";
+
 function projectReferenceFilter(level: ProjectLocationLevel) {
-  return `${
-    level === "governorate"
-      ? "governorate_id"
-      : level === "city"
-        ? "city_id"
-        : level === "main_area"
-          ? "main_area_id"
-          : "sub_area_id"
-  }`;
+  return PROJECT_REFERENCE_COLUMNS[level];
 }
 
 async function loadProjectLocationPage(
@@ -127,7 +119,10 @@ async function loadProjectLocationPage(
       ? supabase.from("project_locations").select("id,parent_id,is_active").in("parent_id", ids)
       : Promise.resolve({ data: [], error: null }),
     ids.length
-      ? supabase.from("projects").select(`id,${projectReferenceFilter(level)}`).in(projectReferenceFilter(level), ids)
+      ? supabase
+          .from("projects")
+          .select(PROJECT_LOCATION_REFERENCE_SELECT)
+          .in(projectReferenceFilter(level), ids)
       : Promise.resolve({ data: [], error: null }),
   ]);
   const relatedError =
@@ -147,8 +142,9 @@ async function loadProjectLocationPage(
     }
   }
   const projectCounts = new Map<number, number>();
-  for (const project of (projectsResult.data ?? []) as unknown as Record<string, unknown>[]) {
-    const locationId = Number(project[projectReferenceFilter(level)]);
+  for (const project of projectsResult.data ?? []) {
+    const locationId = project[projectReferenceFilter(level)];
+    if (locationId === null) continue;
     projectCounts.set(locationId, (projectCounts.get(locationId) ?? 0) + 1);
   }
 

@@ -12,14 +12,6 @@ export type PublishedPageByPath = EntitySeoPersistenceRecord & {
   status: "published";
 };
 
-type DbPublishedPageRow = EntitySeoPersistenceRecord & {
-  id: number;
-  title: string;
-  slug: string;
-  path: string;
-  status: string;
-};
-
 /**
  * Resolves one published CMS page by its exact public path.
  * Returns null when the page is missing, unpublished, or lookup fails.
@@ -31,7 +23,7 @@ export async function getPublishedPageByPath(path: string): Promise<PublishedPag
       .select("id,title,slug,path,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,status")
       .eq("path", path)
       .eq("status", "published")
-      .maybeSingle<DbPublishedPageRow>();
+      .maybeSingle();
 
     if (error) {
       logError("getPublishedPageByPath failed", error, { path });

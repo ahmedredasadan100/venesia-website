@@ -89,10 +89,10 @@ export default async function UnifiedContentTopicsPage({
     }),
   ]);
 
-  const categories = (categoryRows ?? []) as AdminContentCategory[];
+  const categories: AdminContentCategory[] = categoryRows ?? [];
   const categoryTree = buildAdminCategoryTree(categories);
   const flattenedCategories = flattenAdminCategoryTree(categoryTree);
-  const series = (seriesRows ?? []) as SeriesRow[];
+  const series: SeriesRow[] = seriesRows ?? [];
   let listError: string | null = null;
   let initialResult = null;
   try {

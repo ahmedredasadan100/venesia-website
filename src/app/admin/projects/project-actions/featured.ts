@@ -53,7 +53,7 @@ export async function setProjectFeaturedAjax(
     };
   }
 
-  const parsed = featuredResultSchema.safeParse(Array.isArray(data) ? data[0] : data);
+  const parsed = featuredResultSchema.safeParse(data?.[0]);
   if (!parsed.success) {
     return {
       ok: false as const,

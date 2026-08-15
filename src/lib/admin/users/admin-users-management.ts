@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Tables, TablesUpdate } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { getAdminUserById, updateAdminUserPassword } from "../auth/admin-users";
 import { hashPassword } from "../auth/password";
@@ -23,7 +24,20 @@ export type AdminUserListItem = AdminUserEntityListRow;
 const LIST_SELECT =
   "id, email, username, full_name, role, is_active, last_login_at, created_at, updated_at";
 
-function mapListItem(row: Record<string, unknown>): AdminUserListItem {
+type AdminUserListRow = Pick<
+  Tables<"admin_users">,
+  | "id"
+  | "email"
+  | "username"
+  | "full_name"
+  | "role"
+  | "is_active"
+  | "last_login_at"
+  | "created_at"
+  | "updated_at"
+>;
+
+function mapListItem(row: AdminUserListRow): AdminUserListItem {
   return {
     id: Number(row.id),
     email: String(row.email),
@@ -126,7 +140,7 @@ export async function createAdminUser(input: {
     throw new Error(error.message);
   }
 
-  return mapListItem(data as Record<string, unknown>);
+  return mapListItem(data);
 }
 
 export async function updateAdminUserProfile(
@@ -179,7 +193,7 @@ export async function updateAdminUserProfile(
   const emailChanged = user.email !== email;
   const now = new Date().toISOString();
 
-  const payload: Record<string, unknown> = {
+  const payload: TablesUpdate<"admin_users"> = {
     username,
     email,
     full_name: fullName,
@@ -211,7 +225,7 @@ export async function updateAdminUserProfile(
     throwAdminUserMutationError(error);
   }
 
-  return mapListItem(data as Record<string, unknown>);
+  return mapListItem(data);
 }
 
 export async function setAdminUserActiveStatus(
@@ -234,7 +248,7 @@ export async function setAdminUserActiveStatus(
   }
 
   const now = new Date().toISOString();
-  const payload: Record<string, unknown> = {
+  const payload: TablesUpdate<"admin_users"> = {
     is_active: isActive,
     updated_at: now,
   };
@@ -251,7 +265,7 @@ export async function setAdminUserActiveStatus(
     .single();
 
   if (error) throwAdminUserMutationError(error);
-  return mapListItem(data as Record<string, unknown>);
+  return mapListItem(data);
 }
 
 export async function deleteAdminUser(targetUserId: number, actingUserId: number) {

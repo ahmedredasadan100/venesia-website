@@ -31,13 +31,14 @@ export type ContentReviewReportRow = {
   canonicalUrl: string;
   ogImage: string;
   ogImageAlt: string;
-  faq: Array<{ question?: string; answer?: string }>;
+  faq: Array<{ question: string; answer: string }>;
+  faqContractValid: boolean;
   mediaPayload: MediaTopicPayload | null;
 };
 
 function blockingChecks(row: ContentReviewReportRow) {
   if (row.contentType === "article") {
-    return getTopicPublishBlockingChecks(
+    const checks = getTopicPublishBlockingChecks(
       topicRowToPublishInput({
         title: row.title,
         slug: row.slug,
@@ -55,6 +56,9 @@ function blockingChecks(row: ContentReviewReportRow) {
         faq: row.faq,
       }),
     );
+    return row.faqContractValid
+      ? checks
+      : [{ id: "faq" }, ...checks];
   }
 
   const input = mediaRowToPublishInput({

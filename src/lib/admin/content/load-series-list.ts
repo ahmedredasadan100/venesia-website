@@ -25,11 +25,6 @@ export const seriesListRowSchema = z.object({
 
 export type SeriesListRow = z.infer<typeof seriesListRowSchema>;
 
-type SeriesSourceRow = Omit<
-  SeriesListRow,
-  "category_name" | "topics_count"
->;
-
 export async function loadSeriesListData() {
   const [
     { data: seriesRows, error: seriesError },
@@ -57,11 +52,11 @@ export async function loadSeriesListData() {
   if (topicError) throw new Error(topicError.message);
   if (categoryError) throw new Error(categoryError.message);
 
-  const categories = (categoryRows ?? []) as AdminContentCategory[];
+  const categories: AdminContentCategory[] = categoryRows ?? [];
   const categoryNameById = new Map(
     categories.map((category) => [category.id, category.name]),
   );
-  const rows = ((seriesRows ?? []) as SeriesSourceRow[]).map((series) => ({
+  const rows: SeriesListRow[] = (seriesRows ?? []).map((series) => ({
     ...series,
     category_name: series.category_id
       ? (categoryNameById.get(series.category_id) ?? null)

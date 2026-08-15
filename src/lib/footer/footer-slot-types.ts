@@ -1,4 +1,5 @@
 import type { FooterContactItem } from "./types";
+import type { AdminLinkValue } from "../admin/links/types";
 
 export const FOOTER_SLOT_INDICES = [1, 2, 3, 4] as const;
 
@@ -20,7 +21,7 @@ export type FooterTextCtaConfig = {
   enabled: boolean;
   label: string;
   href: string;
-  link?: Record<string, unknown> | null;
+  link?: AdminLinkValue | null;
   target: "_self" | "_blank";
 };
 
@@ -50,7 +51,7 @@ export type FooterContactSlotConfig = {
 export type FooterManualLink = {
   label: string;
   href: string;
-  link?: Record<string, unknown> | null;
+  link?: AdminLinkValue | null;
   target?: "_self" | "_blank";
   visible?: boolean;
   sortOrder?: number;
@@ -59,7 +60,7 @@ export type FooterManualLink = {
 export type FooterMediaSlotConfig = {
   source: "main_submenu" | "menu_id" | "manual";
   parentHref: string;
-  parentLink?: Record<string, unknown> | null;
+  parentLink?: AdminLinkValue | null;
   menuId: number | null;
   manualLinks: FooterManualLink[];
   maxItems: number | null;

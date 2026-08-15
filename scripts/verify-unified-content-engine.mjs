@@ -424,6 +424,15 @@ check(
     loader.includes('row.status === "unpublished"') &&
     !loader.includes("const base = () =>"),
 );
+check(
+  "Unified Content SEO inputs narrow generated FAQ and keyword contracts without partial coercion",
+  loader.includes("faq: Json | null") &&
+    loader.includes("seo_keywords: string[] | null") &&
+    loader.includes("parseTopicFaq(row.faq ?? null) ?? []") &&
+    loader.includes('value.every((item) => typeof item === "string")') &&
+    !loader.includes("value.map(String)") &&
+    !loader.includes("function normalizeFaq"),
+);
 
 const filters = read("src/components/admin/content/UnifiedContentFilters.tsx");
 const sharedCollectionToolbar = read(

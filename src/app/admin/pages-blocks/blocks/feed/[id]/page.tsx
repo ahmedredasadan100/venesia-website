@@ -33,7 +33,11 @@ export default async function FeedModuleEditPage({ params, searchParams }: PageP
     : null;
   if (!feedType) notFound();
 
-  const config = parseFeedModuleConfig(block.config, feedType);
+  const persistedConfig =
+    block.config && typeof block.config === "object" && !Array.isArray(block.config)
+      ? block.config
+      : null;
+  const config = parseFeedModuleConfig(persistedConfig, feedType);
 
   return (
     <FeedModuleEditClient

@@ -1,4 +1,4 @@
-import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
+import type { Json } from "../../../../../lib/database.types";
 
 export const VALID_STATUSES = ["published", "unpublished"] as const;
 
@@ -38,7 +38,7 @@ export type MediaTopicRow = {
   show_series_on_page: boolean | null;
   show_intro_card_on_page: boolean | null;
   deleted_at?: string | null;
-  media_payload: MediaTopicPayload | null;
+  media_payload: Json | null;
   media_project?: string | null;
   seo_title?: string | null;
   seo_description?: string | null;
@@ -49,5 +49,5 @@ export type MediaTopicRow = {
   robots_follow?: boolean | null;
   og_image?: string | null;
   og_image_alt?: string | null;
-  faq?: { question: string; answer: string }[] | null;
+  faq?: Json | null;
 };

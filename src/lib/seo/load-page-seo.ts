@@ -9,13 +9,8 @@ import {
   ENTITY_SEO_SELECT,
   entitySeoDataFromPersistence,
   type EntitySeoData,
-  type EntitySeoPersistenceRow,
 } from "./entity-seo-types";
 import { normalizePath } from "./seo-utils";
-
-type DbPageSeoRow = EntitySeoPersistenceRow & {
-  path: string;
-};
 
 async function queryPageSeoByPath(path: string): Promise<EntitySeoData | null> {
   const normalizedPath = normalizePath(path);
@@ -24,7 +19,7 @@ async function queryPageSeoByPath(path: string): Promise<EntitySeoData | null> {
     .from("pages")
     .select(`path,${ENTITY_SEO_SELECT}`)
     .eq("path", normalizedPath)
-    .maybeSingle<DbPageSeoRow>();
+    .maybeSingle();
 
   if (error) {
     logError("loadPageSeoByPath failed", error, { path: normalizedPath, resource: `page-seo:${normalizedPath}` });

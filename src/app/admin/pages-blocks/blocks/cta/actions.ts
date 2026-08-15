@@ -11,6 +11,7 @@ import {
 } from "../../../../../lib/admin/media-catalog/synchronization";
 
 import { redirect } from "next/navigation";
+import type { Tables, TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
@@ -28,7 +29,6 @@ import {
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import type { CtaBlockConfig } from "../../../../../lib/page-blocks/configs";
-
 import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
 
 function buildCtaLink(formData: FormData, prefix: string, labelField: string) {
@@ -122,7 +122,7 @@ export async function createCtaBlock(
   let createdId: number | null = null;
   let mediaWarning = false;
   try {
-    const nextRow = {
+    const nextRow: TablesInsert<"cta_block_templates"> = {
       name,
       slug,
       description: cleanText(formData.get("description")) || null,
@@ -143,7 +143,7 @@ export async function createCtaBlock(
           .from("cta_block_templates")
           .insert(nextRow)
           .select("id")
-          .single<{ id: number }>();
+          .single();
         if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء البلوك.");
         return data;
       },
@@ -189,7 +189,7 @@ export async function updateCtaBlock(formData: FormData) {
   if (!id || !name || !slug) throw new Error("بيانات البلوك غير مكتملة.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
 
-  const nextRow = {
+  const nextRow: TablesUpdate<"cta_block_templates"> = {
     name,
     slug,
     description: cleanText(formData.get("description")) || null,
@@ -211,7 +211,7 @@ export async function updateCtaBlock(formData: FormData) {
         .update(nextRow)
         .eq("id", id)
         .select("id")
-        .maybeSingle<{ id: number }>();
+        .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "تعذر تحديث البلوك.");
       return data;
     },
@@ -263,7 +263,7 @@ export async function deleteCtaBlock(formData: FormData) {
     .from("cta_block_templates")
     .select("id")
     .eq("id", id)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
   const cleanupIdentity = existing?.id ?? id;
 
@@ -325,7 +325,7 @@ export async function duplicateCtaBlock(formData: FormData) {
         .from("cta_block_templates")
         .insert(nextRow)
         .select("id")
-        .single<{ id: number }>();
+        .single();
       if (insertError || !data) throw new Error(insertError?.message ?? "تعذر نسخ البلوك.");
       return data;
     },
@@ -406,15 +406,10 @@ export async function bulkCtaBlocks(formData: FormData) {
   await revalidateBlockModulePaths("cta");
 }
 
-export type CtaBlockRow = {
-  id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  variant: string;
-  status: string;
-  updated_at: string;
-};
+export type CtaBlockRow = Pick<
+  Tables<"cta_block_templates">,
+  "id" | "name" | "slug" | "description" | "variant" | "status" | "updated_at"
+>;
 
 export async function getCtaBlockRows(): Promise<CtaBlockRow[]> {
   await requireAdminSession();
@@ -425,5 +420,5 @@ export async function getCtaBlockRows(): Promise<CtaBlockRow[]> {
     .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as CtaBlockRow[];
+  return data ?? [];
 }

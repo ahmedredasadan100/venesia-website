@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Json } from "../../database.types";
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
@@ -38,6 +39,8 @@ type RpcError = {
   details?: string | null;
 };
 
+type JsonObject = { [key: string]: Json | undefined };
+
 export class MediaReferenceWriteLeaseError extends Error {
   readonly code: string;
 
@@ -58,13 +61,6 @@ function leaseErrorCode(error: RpcError | null, fallback: string) {
 function throwLeaseError(error: RpcError | null, fallback: string): never {
   const code = leaseErrorCode(error, fallback);
   throw new MediaReferenceWriteLeaseError(code);
-}
-
-function firstRpcRow(value: unknown) {
-  if (Array.isArray(value)) return value[0] as Record<string, unknown> | undefined;
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
 
 export function collectManagedMediaWriteTargets(
@@ -124,7 +120,7 @@ export async function acquireMediaReferenceWriteLease(input: {
     "acquire_media_reference_write_lease",
     {
       p_targets: targets,
-      p_actor_id: input.actorId ?? null,
+      ...(input.actorId == null ? {} : { p_actor_id: input.actorId }),
       p_request_identity: input.requestIdentity,
       p_ttl_seconds: input.ttlSeconds ?? 180,
       p_expected_provider: context.provider,
@@ -135,7 +131,7 @@ export async function acquireMediaReferenceWriteLease(input: {
   );
   if (error) throwLeaseError(error, "media_write_lease_acquisition_failed");
 
-  const row = firstRpcRow(data);
+  const row = data?.[0];
   const token = typeof row?.lease_token === "string" ? row.lease_token : "";
   const assetCount = Number(row?.leased_asset_count ?? 0);
   const startedAt = typeof row?.lease_started_at === "string" ? row.lease_started_at : "";
@@ -176,7 +172,7 @@ export async function failMediaReferenceWriteLease(input: {
   failureCode: string;
   reasons: string[];
   domainWriteCommitted: boolean;
-  metadata?: Record<string, unknown>;
+  metadata?: JsonObject;
 }) {
   const { data, error } = await getSupabaseAdmin().rpc(
     "fail_media_reference_write_lease",
@@ -209,7 +205,9 @@ export async function resolveMediaReferenceWriteLease(input: {
       p_lease_token: input.leaseToken,
       p_reconciliation_run_identity: input.reconciliationRunIdentity,
       p_resolution_code: input.resolutionCode,
-      p_entity_identity: input.entityIdentity ?? null,
+      ...(input.entityIdentity == null
+        ? {}
+        : { p_entity_identity: input.entityIdentity }),
     },
   );
   if (error) throwLeaseError(error, "media_write_lease_resolution_failed");

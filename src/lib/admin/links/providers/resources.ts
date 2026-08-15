@@ -105,17 +105,19 @@ export const topicsLinkProvider: AdminLinkProvider = {
     return (data ?? [])
       .filter((row) => matchesQuery([row.title, row.slug, row.category], query))
       .slice(0, limit)
-      .filter((row) => isContentType(row.content_type))
-      .map((row) => ({
-        id: `topics:${row.id}`,
-        resourceType: "topics" as const,
-        resourceId: row.id,
-        title: row.title,
-        slug: row.slug,
-        publicPath: resolvePublicContentPath(row.content_type, row.slug),
-        subtitle: row.category,
-        meta: { content_type: row.content_type },
-      }));
+      .flatMap((row) => {
+        if (!isContentType(row.content_type)) return [];
+        return [{
+          id: `topics:${row.id}`,
+          resourceType: "topics" as const,
+          resourceId: row.id,
+          title: row.title,
+          slug: row.slug,
+          publicPath: resolvePublicContentPath(row.content_type, row.slug),
+          subtitle: row.category,
+          meta: { content_type: row.content_type },
+        }];
+      });
   },
   async resolveMany(ids) {
     if (!ids.length) return new Map();

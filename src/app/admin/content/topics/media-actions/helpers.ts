@@ -34,7 +34,8 @@ export function getBoolean(formData: FormData, key: string) {
 }
 
 export function validateId(id: string) {
-  return /^\d+$/.test(id);
+  const parsed = Number(id);
+  return /^\d+$/.test(id) && Number.isSafeInteger(parsed) && parsed > 0;
 }
 
 export function redirectFormError(path: string, message: string): never {

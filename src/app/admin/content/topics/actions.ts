@@ -16,6 +16,7 @@ import {
 } from "../../../../lib/admin/content-workflow/media-publish-validation";
 import {
   getTopicPublishBlockingChecks,
+  parseTopicFaq,
   topicRowToPublishInput,
 } from "../../../../lib/admin/content-workflow/topic-publish-validation";
 import { isContentType } from "../../../../lib/admin/content/content-types";
@@ -50,6 +51,8 @@ import {
   MediaReferenceWriteLeaseError,
 } from "../../../../lib/admin/media-catalog/write-lease";
 import { getResourceLinkUsageCount } from "../../../../lib/admin/links/usage";
+import type { Tables, TablesUpdate } from "../../../../lib/database.types";
+import { parseMediaTopicPayload } from "../../../../lib/admin/media-topic-payload";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -67,7 +70,7 @@ async function loadTopic(id: number) {
     .select("*")
     .eq("id", id)
     .is("deleted_at", null)
-    .maybeSingle<Record<string, unknown>>();
+    .maybeSingle();
   return data;
 }
 
@@ -89,7 +92,7 @@ async function loadDeletedTopics(ids: number[]) {
     .not("deleted_at", "is", null)
     .order("id", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as DeletedTopicMutationRow[];
+  return data ?? [];
 }
 
 async function loadAllDeletedTopics() {
@@ -104,7 +107,7 @@ async function loadAllDeletedTopics() {
       .order("id", { ascending: true })
       .range(offset, offset + pageSize - 1);
     if (error) throw error;
-    const page = (data ?? []) as DeletedTopicMutationRow[];
+    const page = data ?? [];
     rows.push(...page);
     if (page.length < pageSize) break;
   }
@@ -141,7 +144,7 @@ async function findActiveTopicSlugConflict(
     .is("deleted_at", null)
     .order("id", { ascending: true })
     .limit(1)
-    .maybeSingle<{ id: number; slug: string }>();
+    .maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -152,16 +155,28 @@ type PublishPreflightFailure = {
 };
 
 function getPublishFailure(
-  topic: Record<string, unknown>,
+  topic: Tables<"topics">,
 ): PublishPreflightFailure | null {
-  const contentType = topic.content_type;
+  const faq = parseTopicFaq(topic.faq);
+  if (topic.content_type === "article" && faq === null) {
+    return {
+      message: "بيانات الأسئلة الشائعة المحفوظة غير صالحة. افتح تبويب الأسئلة الشائعة وأعد حفظها.",
+      focusTarget: "topic-faq-editor",
+    };
+  }
+  const publishTopic = {
+    ...topic,
+    faq: faq ?? [],
+    media_payload: parseMediaTopicPayload(topic.media_payload),
+  };
+  const contentType = publishTopic.content_type;
   if (!isContentType(contentType)) {
     return { message: "نوع المحتوى غير مدعوم." };
   }
   const issue = contentType === "article"
-    ? getTopicPublishBlockingChecks(topicRowToPublishInput(topic))[0]
+    ? getTopicPublishBlockingChecks(topicRowToPublishInput(publishTopic))[0]
     : (() => {
-        const input = mediaRowToPublishInput(topic);
+        const input = mediaRowToPublishInput(publishTopic);
         return input ? getMediaPublishBlockingChecks(input)[0] : null;
       })();
   if (!issue) return null;
@@ -309,7 +324,7 @@ export async function setUnifiedContentStatus(
   }
 
   const now = new Date().toISOString();
-  const payload: Record<string, unknown> = {
+  const payload: TablesUpdate<"topics"> = {
     status: nextStatus,
     updated_at: now,
     updated_by: actor.id,
@@ -436,7 +451,7 @@ export async function duplicateUnifiedContent(
           .from("topics")
           .insert(nextRow)
           .select("id")
-          .single<{ id: number }>();
+          .single();
         if (error || !data) throw new Error(error?.message ?? "تعذر نسخ المحتوى.");
         return data;
       },
@@ -826,7 +841,7 @@ export async function bulkUpdateUnifiedContent(
   }
 
   const now = new Date().toISOString();
-  let payload: Record<string, unknown> | null = null;
+  let payload: TablesUpdate<"topics"> | null = null;
   const moveToTrash = action === "delete" || action === "move_to_trash";
 
   if (action === "publish") {
@@ -916,7 +931,7 @@ export async function bulkUpdateUnifiedContent(
       .eq("id", categoryId)
       .is("deleted_at", null)
       .eq("is_active", true)
-      .maybeSingle<{ id: number; name: string; slug: string }>();
+      .maybeSingle();
     if (!category) return invalidMutation("التصنيف المختار غير متاح.");
     try {
       const seriesCategoryError = await validateBulkCategoryMoveSeries(

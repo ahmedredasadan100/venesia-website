@@ -61,7 +61,7 @@ export function createArticleDomainRecord(input: {
           published_by: input.status === "published" ? input.actorId : null,
         })
         .select("id, slug")
-        .single<{ id: number; slug: string }>();
+        .single();
 
       if (isSlugUniqueViolation(error)) {
         throw new ArticleSlugConflictError(input.payload.slug, {

@@ -30,6 +30,7 @@ import {
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import { revalidatePath } from "next/cache";
 import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
+import type { TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
 import type { BreadcrumbBlockConfig, BreadcrumbBlockItem } from "../../../../../lib/page-blocks/configs";
 
 function buildManualItems(formData: FormData): BreadcrumbBlockItem[] {
@@ -125,7 +126,7 @@ export async function createBreadcrumbBlock(
   let createdId: number | null = null;
   let mediaWarning = false;
   try {
-    const nextRow = {
+    const nextRow: TablesInsert<"breadcrumb_block_templates"> = {
       name,
       slug,
       description: cleanText(formData.get("description")) || null,
@@ -146,7 +147,7 @@ export async function createBreadcrumbBlock(
           .from("breadcrumb_block_templates")
           .insert(nextRow)
           .select("id")
-          .single<{ id: number }>();
+          .single();
         if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء بلوك Breadcrumb.");
         return data;
       },
@@ -192,7 +193,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
   if (!id || !name || !slug) throw new Error("بيانات البلوك غير مكتملة.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
 
-  const nextRow = {
+  const nextRow: TablesUpdate<"breadcrumb_block_templates"> = {
     name,
     slug,
     description: cleanText(formData.get("description")) || null,
@@ -214,7 +215,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
         .update(nextRow)
         .eq("id", id)
         .select("id")
-        .maybeSingle<{ id: number }>();
+        .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "Unable to update breadcrumb block.");
       return data;
     },
@@ -267,7 +268,7 @@ export async function deleteBreadcrumbBlock(formData: FormData) {
     .from("breadcrumb_block_templates")
     .select("id")
     .eq("id", id)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
   const cleanupIdentity = existing?.id ?? id;
 
@@ -334,7 +335,7 @@ export async function duplicateBreadcrumbBlock(formData: FormData) {
         .from("breadcrumb_block_templates")
         .insert(nextRow)
         .select("id")
-        .single<{ id: number }>();
+        .single();
       if (insertError || !data) throw new Error(insertError?.message ?? "Unable to duplicate breadcrumb block.");
       return data;
     },

@@ -6,10 +6,12 @@ import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import { MEDIA_HUB_TEMPLATE_TABLE } from "../../../../../lib/media-hub-modules/registry";
 import { MEDIA_SIDEBAR_TEMPLATE_TABLE } from "../../../../../lib/media-sidebar-modules/registry";
+import type { TablesInsert } from "../../../../../lib/database.types";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
+import type { PageModuleTemplateTable } from "../../../../../lib/page-blocks/block-module-registry";
 import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { cleanText, moduleEditHref, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
-import type { PageBlockType, PageModuleKind } from "../../../../../lib/page-blocks/types";
+import type { PageModuleKind } from "../../../../../lib/page-blocks/types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   databaseAssignmentKind,
@@ -21,11 +23,11 @@ import {
   templateTable,
 } from "./helpers";
 
-function templateOwner(kind: PageModuleKind) {
+function templateOwner(kind: PageModuleKind): PageModuleTemplateTable {
   if (isMediaHubKind(kind)) return MEDIA_HUB_TEMPLATE_TABLE;
   if (isMediaSidebarKind(kind)) return MEDIA_SIDEBAR_TEMPLATE_TABLE;
   if (kind === "hero") return "hero_templates";
-  return templateTable(kind as PageBlockType);
+  return templateTable(kind);
 }
 
 function redirectFor(kind: PageModuleKind, templateId: number, warning: boolean) {
@@ -55,19 +57,34 @@ export async function duplicateAssignedPageModule(formData: FormData): Promise<P
       requestIdentity: `page-module:${kind}:duplicate:${provisionalIdentity}`,
       mutate: async () => {
         if (kind === "hero") {
-          const excludedColumns = new Set(["id", "created_at", "updated_at"]);
-          const copy = Object.fromEntries(
-            Object.entries(source as Record<string, unknown>).filter(([column]) => !excludedColumns.has(column)),
-          );
-          const slug = `${String(source.slug ?? "hero")}-copy-${Date.now().toString().slice(-7)}`;
-          const { data, error: insertError } = await getSupabaseAdmin().from("hero_templates").insert({
-            ...copy,
-            name: `${String(source.name ?? "Hero")} — نسخة`,
-            slug,
+          if (!("is_visible" in source)) {
+            throw new Error("Hero template owner returned an incompatible row.");
+          }
+          const slug = `${source.slug || "hero"}-copy-${Date.now().toString().slice(-7)}`;
+          const copy: TablesInsert<"hero_templates"> = {
+            config: source.config,
+            description: source.description,
             is_visible: false,
-          }).select("id").single();
+            limit_count: source.limit_count,
+            name: `${source.name || "Hero"} — نسخة`,
+            section_key: source.section_key,
+            slug,
+            sort_order: source.sort_order,
+            source_id: source.source_id,
+            source_slug: source.source_slug,
+            source_type: source.source_type,
+            status: source.status,
+            style_preset: source.style_preset,
+            variant: source.variant,
+          };
+          const { data, error: insertError } = await getSupabaseAdmin()
+            .from("hero_templates")
+            .insert(copy)
+            .select("id")
+            .single();
           if (insertError || !data) throw new Error(insertError?.message ?? "تعذر نسخ Hero.");
-          return { templateId: Number(data.id), assignmentId: null as number | null };
+          const duplicatedAssignmentId: number | null = null;
+          return { templateId: Number(data.id), assignmentId: duplicatedAssignmentId };
         }
         const result = await mutatePageComposition(pageId, "duplicate_assignment", {
           kind: databaseAssignmentKind(kind),

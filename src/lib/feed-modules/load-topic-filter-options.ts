@@ -22,13 +22,6 @@ export type TopicFilterOptions = {
   seriesByCategorySlug: Record<string, TopicSeriesFilterOption[]>;
 };
 
-type SeriesRow = {
-  id: number;
-  name: string;
-  slug: string;
-  category_id: number | null;
-};
-
 export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptions> {
   const supabase = getSupabaseAdmin();
 
@@ -59,14 +52,16 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
     categorySlugById.set(category.id, category.slug);
   }
 
-  const series: TopicSeriesFilterOption[] = ((seriesRows ?? []) as SeriesRow[])
-    .filter((row) => row.category_id && categorySlugById.has(row.category_id))
-    .map((row) => ({
+  const series: TopicSeriesFilterOption[] = (seriesRows ?? []).flatMap((row) => {
+    const categoryId = row.category_id;
+    if (categoryId === null || !categorySlugById.has(categoryId)) return [];
+    return [{
       id: row.id,
       slug: row.slug,
       name: row.name,
-      categoryId: row.category_id as number,
-    }));
+      categoryId,
+    }];
+  });
 
   const seriesByCategorySlug: Record<string, TopicSeriesFilterOption[]> = {};
 

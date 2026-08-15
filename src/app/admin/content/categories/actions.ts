@@ -65,7 +65,7 @@ async function ensureUniqueSlug(slug: string, id?: number) {
     .limit(1);
   if (id) query = query.neq("id", id);
 
-  const { data, error } = await query.maybeSingle<{ id: number }>();
+  const { data, error } = await query.maybeSingle();
   if (error) return false;
   return !data;
 }
@@ -84,7 +84,7 @@ async function loadCategoryLifecycleRows(
       : query.is("deleted_at", null);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as CategoryLifecycleRow[];
+  return data ?? [];
 }
 
 async function loadAllDeletedCategories() {
@@ -94,7 +94,7 @@ async function loadAllDeletedCategories() {
     .not("deleted_at", "is", null)
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as CategoryLifecycleRow[];
+  return data ?? [];
 }
 
 function categoryLifecycleFailure(error: unknown, entityId?: number) {
@@ -323,7 +323,7 @@ export async function toggleCategoryStatusAjax(
     .select("id, status")
     .eq("id", id)
     .is("deleted_at", null)
-    .maybeSingle<{ id: number; status: string | null }>();
+    .maybeSingle();
   if (readError || !current) {
     return adminActionFailure(
       "تعذر تنفيذ العملية",
@@ -341,13 +341,7 @@ export async function toggleCategoryStatusAjax(
     .eq("id", id)
     .is("deleted_at", null)
     .select("id, is_active, status, published_at, updated_at")
-    .maybeSingle<{
-      id: number;
-      is_active: boolean | null;
-      status: string | null;
-      published_at: string | null;
-      updated_at: string | null;
-    }>();
+    .maybeSingle();
   if (updateError || !updated || Boolean(updated.is_active) !== isActive) {
     return adminActionFailure(
       "تعذر تنفيذ العملية",
@@ -396,14 +390,7 @@ export async function duplicateCategoryAjax(
     .select("name, slug, description, sort_order, parent_id, color_token")
     .eq("id", id)
     .is("deleted_at", null)
-    .maybeSingle<{
-      name: string;
-      slug: string;
-      description: string | null;
-      sort_order: number | null;
-      parent_id: number | null;
-      color_token: string | null;
-    }>();
+    .maybeSingle();
   if (readError || !current) {
     return adminActionFailure(
       "تعذر نسخ التصنيف",
@@ -438,7 +425,7 @@ export async function duplicateCategoryAjax(
       updated_at: now,
     })
     .select("id")
-    .single<{ id: number }>();
+    .single();
   if (error || !inserted) {
     return adminActionFailure(
       "تعذر نسخ التصنيف",

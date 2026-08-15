@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Json } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import type { MediaDeleteReservation } from "./delete-saga";
@@ -10,6 +11,8 @@ type RpcError = {
   message?: string | null;
   details?: string | null;
 };
+
+type JsonObject = { [key: string]: Json | undefined };
 
 export class MediaDeleteReservationError extends Error {
   readonly code: string;
@@ -33,13 +36,6 @@ function throwReservationError(error: RpcError | null, fallback: string): never 
   throw new MediaDeleteReservationError(code);
 }
 
-function firstRpcRow(value: unknown) {
-  if (Array.isArray(value)) return value[0] as Record<string, unknown> | undefined;
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
 function metadataForReasons(reasons: string[]) {
   return {
     reasons: [...new Set(reasons.map((reason) => reason.trim()).filter(Boolean))].slice(0, 20),
@@ -60,7 +56,7 @@ export async function reserveCatalogAssetDeletion(input: {
   }
   const { data, error } = await getSupabaseAdmin().rpc("reserve_media_asset_deletion", {
     p_asset_id: input.assetId,
-    p_actor_id: input.actorId ?? null,
+    ...(input.actorId == null ? {} : { p_actor_id: input.actorId }),
     p_request_identity: input.requestIdentity,
     p_expected_asset_provider: input.expectedProvider,
     p_expected_asset_bucket: input.expectedBucket,
@@ -72,7 +68,7 @@ export async function reserveCatalogAssetDeletion(input: {
   });
   if (error) throwReservationError(error, "media_delete_reservation_failed");
 
-  const row = firstRpcRow(data);
+  const row = data?.[0];
   const id = typeof row?.reservation_id === "string" ? row.reservation_id : "";
   const assetId = typeof row?.reserved_asset_id === "string" ? row.reserved_asset_id : "";
   const provider = typeof row?.reserved_provider === "string" ? row.reserved_provider : "";
@@ -137,7 +133,9 @@ export async function markCatalogAssetDeleteRecovery(input: {
     p_failure_code: input.failureCode,
     p_failure_metadata: metadataForReasons(input.reasons),
     p_storage_state: input.storageState,
-    p_storage_verified_at: input.storageVerifiedAt,
+    ...(input.storageVerifiedAt === null
+      ? {}
+      : { p_storage_verified_at: input.storageVerifiedAt }),
   });
   if (error) throwReservationError(error, "media_delete_recovery_mark_failed");
 }
@@ -148,7 +146,7 @@ export async function repairCatalogAssetDeleteReservation(input: {
   action: "cancel" | "finalize" | "confirm_missing";
   storageState: "exists" | "missing";
   storageVerifiedAt: string;
-  metadata?: Record<string, unknown>;
+  metadata?: JsonObject;
 }) {
   const { data, error } = await getSupabaseAdmin().rpc(
     "repair_media_delete_reservation",

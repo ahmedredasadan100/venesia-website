@@ -206,7 +206,7 @@ export async function reconcileMediaCatalog(options: {
             .eq("id", existing.id)
             .eq("status", "active")
             .select("id")
-            .maybeSingle<{ id: string }>()
+            .maybeSingle()
         : await supabase
             .from("media_assets")
             .insert({
@@ -215,7 +215,7 @@ export async function reconcileMediaCatalog(options: {
               created_at: item.uploadedAt ?? new Date().toISOString(),
             })
             .select("id")
-            .single<{ id: string }>();
+            .single();
       if (result.error || !result.data) {
         throw new Error(`media_catalog_asset_upsert_failed:${result.error?.code ?? "coordination_conflict"}`);
       }
@@ -233,7 +233,7 @@ export async function reconcileMediaCatalog(options: {
         .eq("id", asset.id)
         .eq("status", "active")
         .select("id")
-        .maybeSingle<{ id: string }>();
+        .maybeSingle();
       if (error || !data) {
         throw new Error(`media_catalog_missing_mark_failed:${error?.code ?? "coordination_conflict"}`);
       }

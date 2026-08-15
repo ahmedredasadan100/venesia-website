@@ -1,7 +1,7 @@
 # Roadmap and Debt Register
 
 **Status:** Controlled work ledger
-**Updated:** 2026-08-14
+**Updated:** 2026-08-15
 **Baseline authority:** current GitHub `main` resolved live before each phase
 **Platform Health entering baseline:** `0743f5cff13e3359746abbe6d1760a26a90b4dc7`
 
@@ -25,6 +25,7 @@ This ledger contains only evidence-backed open work and explicit boundaries. Clo
 | CLOSED-CI-PG17-01 | GitHub CI Media Coordination, Dashboard Truth, and Reports Analytics service jobs align with Production PostgreSQL 17 | `.github/workflows/quality-gate.yml`, exact-head checks, and PR #85 |
 | CLOSED-DOC-DRIFT-01 | Volatile baseline and database facts resolve from live authority and retain only an explicitly dated entering snapshot | Current-state update protocol and read-only database inventory |
 | CLOSED-ADMIN-COLLECTION-GOVERNANCE-01 | Full Management Collection claims fail closed against canonical Collection, Data Runtime, preferences, primary-column, Row Actions, Bulk, and registry evidence; Bulk execution has one lifecycle owner | Adoption manifest, `verify:admin-row-actions`, and `verify:platform` |
+| CLOSED-TYPE-01 | The generated public `Database` contract parameterizes the existing privileged Database and Storage clients; current Supabase consumers use generated table/query contracts and explicit fail-closed JSON normalization instead of local result overrides | Generated `database.types.ts`, `verify:platform-health-owner-contracts`, full TypeScript, targeted owner verification, and final `ci:check` |
 
 ## 2. Open Product/Auth decisions
 
@@ -54,9 +55,7 @@ The sections below remain open as Product/Auth decisions, QA/environment gaps, m
 
 ### 4.1 Outstanding implementation debt
 
-| ID | Evidence-backed debt | Current boundary | Retirement proof |
-|---|---|---|---|
-| DEBT-TYPE-01 | The privileged Supabase client still uses the library's unparameterized compatibility type. Applying the generated live `Database` generic exposed 299 lines of TypeScript failures across dynamic tables, JSON payloads, Topic/Page Block contracts, Navigation, and SEO. | Do not hide the gap with a second client, broad `any`/casts, or consumer-local patches. The generated trial file was not retained. | One approved cross-domain contract-normalization scope, a committed generated schema, invalid table/column compile fixtures, and full typecheck/behavioral verification. |
+No evidence-backed implementation debt remains from the Platform Health discovery. `DEBT-TYPE-01` is retired as `CLOSED-TYPE-01`; this is a bounded debt closure and is not a claim of Platform or Global Closure.
 
 ## 5. Measured optimization backlog
 

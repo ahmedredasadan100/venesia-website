@@ -2,6 +2,7 @@ import "server-only";
 
 import { isDeepStrictEqual } from "node:util";
 
+import type { Database, Json, TablesUpdate } from "../../database.types";
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { isContentType } from "../content/content-types";
@@ -10,6 +11,9 @@ import { getCanonicalMediaIdentityKey, parseLegacyPublicMediaAsset } from "./ide
 import type { CanonicalMediaIdentity, MediaReferenceState } from "./types";
 
 const PROVIDER_PAGE_SIZE = 200;
+
+type MediaReferenceProviderTable = keyof Database["public"]["Tables"];
+type ProviderRow = Record<string, Json | undefined>;
 
 export type DiscoveredMediaReference = {
   identity: CanonicalMediaIdentity;
@@ -39,7 +43,7 @@ export class MediaReferenceProviderRebindError extends Error {
 
 export type MediaReferenceProvider = {
   readonly domainKey: string;
-  readonly table: string;
+  readonly table: MediaReferenceProviderTable;
   readonly entityType: string;
   readonly idField: string;
   readonly fields: readonly string[];
@@ -52,7 +56,7 @@ export type MediaReferenceProvider = {
 
 type ProviderConfig = {
   domainKey: string;
-  table: string;
+  table: MediaReferenceProviderTable;
   entityType: string;
   idField?: string;
   labelField?: string;
@@ -62,16 +66,16 @@ type ProviderConfig = {
   stateFields?: readonly string[];
   supportsRebind?: boolean;
   adoptsCanonicalLegacyPublic?: boolean;
-  editHref: (row: Record<string, unknown>) => string | null;
-  publicHref?: (row: Record<string, unknown>) => string | null;
-  state?: (row: Record<string, unknown>) => { state: MediaReferenceState; restorable: boolean };
+  editHref: (row: ProviderRow) => string | null;
+  publicHref?: (row: ProviderRow) => string | null;
+  state?: (row: ProviderRow) => { state: MediaReferenceState; restorable: boolean };
 };
 
 function valueText(value: unknown) {
   return typeof value === "string" ? value : value == null ? "" : String(value);
 }
 
-function defaultReferenceState(row: Record<string, unknown>) {
+function defaultReferenceState(row: ProviderRow) {
   if (row.deleted_at) return { state: "soft_deleted" as const, restorable: true };
   const status = valueText(row.status ?? row.publication_status).toLowerCase();
   if (status === "draft" || status === "unpublished") return { state: "draft" as const, restorable: false };
@@ -100,7 +104,7 @@ export function extractMediaCandidateValues(value: unknown): string[] {
       return;
     }
     if (current && typeof current === "object") {
-      Object.values(current as Record<string, unknown>).forEach(visit);
+      Object.values(current).forEach(visit);
     }
   }
 
@@ -130,7 +134,7 @@ function mediaPublicValuesMatch(left: string, right: string) {
   );
 }
 
-function discoverRowUsage(config: ProviderConfig, row: Record<string, unknown>, requestedPublicValue: string) {
+function discoverRowUsage(config: ProviderConfig, row: ProviderRow, requestedPublicValue: string) {
   const entityIdentity = valueText(row[config.idField ?? "id"]);
   const entityLabel = config.labelField ? valueText(row[config.labelField]) || null : entityIdentity;
   const state = config.state?.(row) ?? defaultReferenceState(row);
@@ -160,21 +164,56 @@ function discoverRowUsage(config: ProviderConfig, row: Record<string, unknown>, 
   return hits;
 }
 
-export function replaceMediaValue(value: unknown, previousValue: string, nextValue: string): unknown {
+export function replaceMediaValue(value: Json, previousValue: string, nextValue: string): Json {
   if (typeof value === "string") return value.split(previousValue).join(nextValue);
   if (Array.isArray(value)) return value.map((item) => replaceMediaValue(item, previousValue, nextValue));
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      Object.entries(value).map(([key, item]) => [
         key,
-        replaceMediaValue(item, previousValue, nextValue),
+        item === undefined
+          ? undefined
+          : replaceMediaValue(item, previousValue, nextValue),
       ]),
     );
   }
   return value;
 }
 
-function discoverRowReferences(config: ProviderConfig, row: Record<string, unknown>) {
+function providerJsonValue(value: unknown): Json {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (Array.isArray(value)) return value.map(providerJsonValue);
+  if (value && typeof value === "object") {
+    const result: { [key: string]: Json | undefined } = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (item === undefined) continue;
+      result[key] = providerJsonValue(item);
+    }
+    return result;
+  }
+  throw new MediaReferenceProviderRebindError(
+    "media_reference_rebind_value_invalid",
+    false,
+  );
+}
+
+function isProviderRow(value: Json): value is ProviderRow {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function providerRow(value: unknown): ProviderRow {
+  const normalized = providerJsonValue(value);
+  if (isProviderRow(normalized)) return normalized;
+  throw new MediaReferenceProviderRebindError(
+    "media_reference_provider_row_invalid",
+    false,
+  );
+}
+
+function discoverRowReferences(config: ProviderConfig, row: ProviderRow) {
   const entityIdentity = valueText(row[config.idField ?? "id"]);
   const entityLabel = config.labelField ? valueText(row[config.labelField]) || null : entityIdentity;
   const state = config.state?.(row) ?? defaultReferenceState(row);
@@ -230,7 +269,7 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
 
   async function fetchRows(entityIdentity?: string) {
     const supabase = getSupabaseAdmin();
-    const rows: Record<string, unknown>[] = [];
+    const rows: ProviderRow[] = [];
     let offset = 0;
 
     while (true) {
@@ -240,7 +279,7 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
       if (error) {
         throw new Error(`media_reference_provider:${config.domainKey}:${error.code ?? "query_failed"}`);
       }
-      const pageRows = (data ?? []) as unknown as Record<string, unknown>[];
+      const pageRows = (data ?? []).map(providerRow);
       rows.push(...pageRows);
       if (entityIdentity !== undefined || pageRows.length < PROVIDER_PAGE_SIZE) break;
       offset += PROVIDER_PAGE_SIZE;
@@ -292,7 +331,7 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
           false,
         );
       }
-      const currentValue = (row as unknown as Record<string, unknown>)[reference.fieldKey];
+      const currentValue = providerJsonValue(providerRow(row)[reference.fieldKey]);
       const nextValue = replaceMediaValue(currentValue, reference.publicValue, nextPublicValue);
       if (isDeepStrictEqual(currentValue, nextValue)) {
         throw new MediaReferenceProviderRebindError(
@@ -300,16 +339,33 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
           false,
         );
       }
+      const update: TablesUpdate<MediaReferenceProviderTable> = {};
+      Object.assign(update, { [reference.fieldKey]: nextValue });
+      const jsonField = config.jsonFields?.includes(reference.fieldKey) === true;
+      let comparisonValue: string;
+      if (jsonField) {
+        const serialized = JSON.stringify(currentValue);
+        if (serialized === undefined) {
+          throw new MediaReferenceProviderRebindError(
+            "media_reference_rebind_json_value_invalid",
+            false,
+          );
+        }
+        comparisonValue = serialized;
+      } else {
+        if (typeof currentValue !== "string") {
+          throw new MediaReferenceProviderRebindError(
+            "media_reference_rebind_text_value_invalid",
+            false,
+          );
+        }
+        comparisonValue = currentValue;
+      }
       const { data: updatedRow, error: updateError } = await supabase
         .from(config.table)
-        .update({ [reference.fieldKey]: nextValue })
+        .update(update)
         .eq(idField, reference.entityIdentity)
-        .eq(
-          reference.fieldKey,
-          config.jsonFields?.includes(reference.fieldKey)
-            ? JSON.stringify(currentValue)
-            : currentValue,
-        )
+        .eq(reference.fieldKey, comparisonValue)
         .select(idField)
         .maybeSingle();
       if (!updateError && updatedRow) return;
@@ -325,7 +381,9 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
           true,
         );
       }
-      const observedValue = (observedRow as unknown as Record<string, unknown>)[reference.fieldKey];
+      const observedValue = providerJsonValue(
+        providerRow(observedRow)[reference.fieldKey],
+      );
       if (isDeepStrictEqual(observedValue, nextValue)) return;
       throw new MediaReferenceProviderRebindError(
         updateError

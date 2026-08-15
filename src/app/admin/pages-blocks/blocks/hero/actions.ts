@@ -16,6 +16,7 @@ import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { revalidateHeroCache } from "../../../../../lib/cache/revalidate-public-cache-tags";
+import type { Tables } from "../../../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   HERO_BULK_ACTIONS,
@@ -33,17 +34,13 @@ import {
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
 import { mutatePageComposition } from "../../pages/page-actions/helpers";
 
-export type HeroTemplateRow = {
-  id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  status: "published" | "unpublished";
-  hero_assignments: Array<{
-    id: number;
-    path: string | null;
-    is_active: boolean;
-  }>;
+export type HeroTemplateRow = Pick<
+  Tables<"hero_templates">,
+  "id" | "name" | "slug" | "description" | "status"
+> & {
+  hero_assignments: Array<
+    Pick<Tables<"hero_assignments">, "id" | "path" | "is_active">
+  >;
 };
 
 function cleanText(value: FormDataEntryValue | null) {
@@ -267,7 +264,7 @@ export async function createHeroTemplate(
           .from("hero_templates")
           .insert(nextRow)
           .select("id")
-          .single<{ id: number }>();
+          .single();
         if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء Hero.");
         return data;
       },
@@ -340,7 +337,7 @@ export async function deleteHeroTemplate(formData: FormData) {
     .from("hero_templates")
     .select("id")
     .eq("id", id)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
   const cleanupIdentity = existing?.id ?? id;
 
@@ -414,7 +411,7 @@ export async function duplicateHeroTemplate(formData: FormData) {
         .from("hero_templates")
         .insert(nextRow)
         .select("id")
-        .single<{ id: number }>();
+        .single();
       if (insertError || !data) throw new Error(insertError?.message ?? "تعذر نسخ Hero.");
       return data;
     },
@@ -576,5 +573,5 @@ export async function getHeroTemplateRows(): Promise<HeroTemplateRow[]> {
     .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as HeroTemplateRow[];
+  return data ?? [];
 }

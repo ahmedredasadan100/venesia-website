@@ -10,29 +10,13 @@ import {
   mapProjectAggregateToPublicProject,
   mapProjectRowToPublicProject,
   PublicProjectMappingError,
-  type PublicProjectChildRow,
+  type PublicProjectLocationRow,
   type PublicProjectRootRow,
 } from "./map-public-project";
 import type { ProjectHubFilterId, PublicProject } from "./public-types";
 import { getProjectStats, getProjectsByFilter } from "./public-helpers";
 
-const PUBLIC_PROJECT_COLUMNS = [
-  "id", "type", "arabic_name", "english_name", "slug", "code", "featured",
-  "show_on_homepage", "homepage_order", "brochure_url",
-  "publication_status", "published_at",
-  "general_description", "short_description",
-  "image", "image_alt", "hero_image", "hero_image_alt",
-  "small_box_image", "small_box_image_alt",
-  "governorate_id", "city_id", "main_area_id", "sub_area_id",
-  "location_label", "location_description", "google_maps_url",
-  "latitude", "longitude", "map_zoom",
-  "overview_title", "overview_body", "overview_media_type",
-  "overview_main_image", "overview_main_image_alt",
-  "delivery_title", "delivery_body",
-  "seo_title", "seo_description", "focus_keyword", "seo_keywords",
-  "canonical_url", "robots_index", "robots_follow", "og_image", "og_image_alt",
-  "created_at", "updated_at",
-].join(",");
+const PUBLIC_PROJECT_COLUMNS = "id,type,arabic_name,english_name,slug,code,featured,show_on_homepage,homepage_order,brochure_url,publication_status,published_at,general_description,short_description,image,image_alt,hero_image,hero_image_alt,small_box_image,small_box_image_alt,governorate_id,city_id,main_area_id,sub_area_id,location_label,location_description,google_maps_url,latitude,longitude,map_zoom,overview_title,overview_body,overview_media_type,overview_main_image,overview_main_image_alt,delivery_title,delivery_body,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,created_at,updated_at";
 
 const PROJECT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -78,7 +62,9 @@ function locationIdsFromProjects(projects: PublicProjectRootRow[]) {
   )];
 }
 
-async function loadLocationRows(projects: PublicProjectRootRow[]) {
+async function loadLocationRows(
+  projects: PublicProjectRootRow[],
+): Promise<PublicProjectLocationRow[]> {
   const ids = locationIdsFromProjects(projects);
   if (!ids.length) return [];
   const result = await getSupabaseAdmin()
@@ -86,7 +72,7 @@ async function loadLocationRows(projects: PublicProjectRootRow[]) {
     .select("id,level,parent_id,name_ar,name_en")
     .in("id", ids);
   if (result.error) throwReadError("Public projects location lookup failed", result.error);
-  return (result.data ?? []) as PublicProjectChildRow[];
+  return result.data ?? [];
 }
 
 async function queryPublicProjects(featuredOnly = false) {
@@ -101,7 +87,7 @@ async function queryPublicProjects(featuredOnly = false) {
 
   if (result.error) throwReadError("Public projects query failed", result.error);
 
-  const projects = (result.data ?? []) as unknown as PublicProjectRootRow[];
+  const projects = result.data ?? [];
   const locations = await loadLocationRows(projects);
   try {
     return projects.map((project) => mapProjectRowToPublicProject(project, locations));
@@ -209,14 +195,14 @@ async function mapLoadedProjectAggregate(
   try {
     return mapProjectAggregateToPublicProject({
       project,
-      locations: (locations.data ?? []) as PublicProjectChildRow[],
-      locationPoints: (locationPoints.data ?? []) as PublicProjectChildRow[],
-      features: (features.data ?? []) as PublicProjectChildRow[],
-      floorPlans: (floorPlans.data ?? []) as PublicProjectChildRow[],
-      floorPlanDetails: (details.data ?? []) as PublicProjectChildRow[],
-      deliveryItems: (deliveryItems.data ?? []) as PublicProjectChildRow[],
-      media: (media.data ?? []) as PublicProjectChildRow[],
-      videos: (videos.data ?? []) as PublicProjectChildRow[],
+      locations: locations.data ?? [],
+      locationPoints: locationPoints.data ?? [],
+      features: features.data ?? [],
+      floorPlans: floorPlans.data ?? [],
+      floorPlanDetails: details.data ?? [],
+      deliveryItems: deliveryItems.data ?? [],
+      media: media.data ?? [],
+      videos: videos.data ?? [],
     });
   } catch (error) {
     logError("Project aggregate mapping failed", error, {
@@ -254,7 +240,7 @@ async function queryProjectBySlug(
   return {
     status: "ok",
     project: await mapLoadedProjectAggregate(
-      rootResult.data as unknown as PublicProjectRootRow,
+      rootResult.data,
       { identity: slug, source },
     ),
   };
@@ -296,7 +282,7 @@ export const loadProjectForAdminPreviewResult = cache(
     if (error) throwReadError("Admin project preview root lookup failed", error, { id });
     if (!data) return { status: "not_found", project: null };
 
-    const project = data as unknown as PublicProjectRootRow;
+    const project = data;
     const publicationStatus = project.publication_status;
     if (
       publicationStatus !== "published" &&

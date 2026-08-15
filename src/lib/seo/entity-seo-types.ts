@@ -17,7 +17,8 @@ export const ENTITY_SEO_LIMITS = {
   description: { min: 120, max: 160 },
 } as const;
 
-export const ENTITY_SEO_SELECT = Object.values(ENTITY_SEO_FIELD_NAMES).join(",");
+export const ENTITY_SEO_SELECT =
+  `${ENTITY_SEO_FIELD_NAMES.seoTitle},${ENTITY_SEO_FIELD_NAMES.seoDescription},${ENTITY_SEO_FIELD_NAMES.focusKeyword},${ENTITY_SEO_FIELD_NAMES.seoKeywords},${ENTITY_SEO_FIELD_NAMES.canonicalUrl},${ENTITY_SEO_FIELD_NAMES.robotsIndex},${ENTITY_SEO_FIELD_NAMES.robotsFollow},${ENTITY_SEO_FIELD_NAMES.ogImage},${ENTITY_SEO_FIELD_NAMES.ogImageAlt}` as const;
 
 export type EntitySeoValues = {
   seoTitle: string;

@@ -41,9 +41,7 @@ export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaS
 
   const widgets: MediaSidebarWidgetState[] = [];
   for (const row of rows ?? []) {
-    const template = joinedTemplate(row.media_sidebar_module_templates) as {
-      widget_key: string; name: string; status: string; config: unknown;
-    } | null;
+    const template = joinedTemplate(row.media_sidebar_module_templates);
     if (!template || !isPublishedPageBlockStatus(template.status) || !isWidgetKey(template.widget_key)) continue;
     widgets.push({
       widgetKey: template.widget_key,

@@ -8,8 +8,25 @@ import {
   type ContentReviewFaqItem,
   type ContentReviewInput,
 } from "./content-review-capability";
+import type { Json } from "../../database.types";
 
 export type TopicFaqItem = ContentReviewFaqItem;
+
+export function parseTopicFaq(
+  value: Json,
+): Array<{ question: string; answer: string }> | null {
+  if (!Array.isArray(value)) return null;
+
+  const faq: Array<{ question: string; answer: string }> = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    if (typeof item.question !== "string" || typeof item.answer !== "string") {
+      return null;
+    }
+    faq.push({ question: item.question, answer: item.answer });
+  }
+  return faq;
+}
 
 export type TopicPublishInput = {
   title: string;

@@ -160,7 +160,7 @@ export async function createFeedModule(
           .from("feed_module_templates")
           .insert(nextRow)
           .select("id,config")
-          .single<{ id: number; config: unknown }>();
+          .single();
         if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء Feed Module.");
         return data;
       },
@@ -234,7 +234,7 @@ export async function updateFeedModule(formData: FormData) {
         .update(nextRow)
         .eq("id", id)
         .select("id,config")
-        .maybeSingle<{ id: number; config: unknown }>();
+        .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "تعذر تحديث موديول المحتوى.");
       return data;
     },
@@ -291,7 +291,7 @@ export async function deleteFeedModule(formData: FormData) {
     .from("feed_module_templates")
     .select("id")
     .eq("id", id)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
   const cleanupIdentity = existing?.id ?? id;
 
@@ -357,7 +357,7 @@ export async function duplicateFeedModule(formData: FormData) {
         .from("feed_module_templates")
         .insert(nextRow)
         .select("id")
-        .single<{ id: number }>();
+        .single();
       if (insertError || !data) throw new Error(insertError?.message ?? "Unable to duplicate feed module.");
       return data;
     },

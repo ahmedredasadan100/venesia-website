@@ -55,7 +55,7 @@ export async function updateMediaHubModule(formData: FormData) {
         .update(nextRow)
         .eq("id", id)
         .select("id")
-        .maybeSingle<{ id: number }>();
+        .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "Unable to update media hub module.");
       return data;
     },

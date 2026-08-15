@@ -1,3 +1,4 @@
+import type { Json } from "../database.types";
 import type { MediaHubSectionKey } from "./types";
 
 export type MediaHubMediaType = "news" | "site_update" | "video" | "gallery" | "press";
@@ -52,28 +53,27 @@ export function parseMediaHubSectionKey(value: string): MediaHubSectionKey {
   throw new Error("نوع السكشن غير صالح.");
 }
 
-function readLimit(value: unknown, fallback: number) {
+function readLimit(value: Json | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 export function parseMediaHubModuleConfig(
-  raw: unknown,
+  raw: Json,
   sectionKey: MediaHubSectionKey,
 ): MediaHubModuleConfig {
   const fallback = MEDIA_HUB_SECTION_DEFAULTS[sectionKey].config;
-  if (!raw || typeof raw !== "object") return { ...fallback };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...fallback };
 
-  const value = raw as Record<string, unknown>;
-  const source = value.source === "topics" ? "topics" : fallback.source;
+  const source = raw.source === "topics" ? "topics" : fallback.source;
 
   if (sectionKey === "featured") {
     return {
       source,
       type: "news",
       featured: true,
-      sideLimit: readLimit(value.sideLimit, fallback.sideLimit ?? 3),
-      listLimit: readLimit(value.listLimit, fallback.listLimit ?? 4),
+      sideLimit: readLimit(raw.sideLimit, fallback.sideLimit ?? 3),
+      listLimit: readLimit(raw.listLimit, fallback.listLimit ?? 4),
     };
   }
 
@@ -81,7 +81,7 @@ export function parseMediaHubModuleConfig(
   return {
     source,
     type: mediaType as MediaHubMediaType,
-    limit: readLimit(value.limit, fallback.limit ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit ?? 4),
+    limit: readLimit(raw.limit, fallback.limit ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit ?? 4),
   };
 }
 

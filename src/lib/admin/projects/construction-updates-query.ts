@@ -52,7 +52,7 @@ export async function getConstructionUpdatesPlanningData(): Promise<Construction
   }
 
   return {
-    projects: (projects ?? []) as ConstructionProjectRow[],
-    siteUpdates: (siteUpdates ?? []) as ConstructionSiteUpdateRow[],
+    projects: projects ?? [],
+    siteUpdates: siteUpdates ?? [],
   };
 }

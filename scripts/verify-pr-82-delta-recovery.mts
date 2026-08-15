@@ -30,7 +30,12 @@ const dynamicHero = read("src/components/sections/DynamicHeroSection.tsx");
 const publicE2e = read("tests/e2e/public-foundation.spec.ts");
 
 assert.ok(navigationOwner.includes('.eq("is_active", true)'));
-assert.ok(navigationOwner.includes('.eq("status", "published").is("deleted_at", null)'));
+assert.equal(
+  navigationOwner.match(
+    /\.eq\(\s*"status"\s*,\s*"published"\s*\)\s*\.is\(\s*"deleted_at"\s*,\s*null\s*\)/gu,
+  )?.length,
+  2,
+);
 assert.ok(navigationOwner.includes('.eq("publication_status", "published")'));
 assert.ok(navigationRoute.includes("getPublicNavigationSnapshot"));
 assert.equal(navigationRoute.includes("getSupabaseAdmin"), false);

@@ -346,7 +346,7 @@ check(
   "Additive migration owns featured truth and transaction-complete aggregate duplication",
 );
 check(
-  publicLoader.includes('"publication_status", "published_at"') &&
+  publicLoader.includes("publication_status,published_at") &&
     publicLoader.includes('.eq("publication_status", "published")') &&
     publicMapper.includes("featured: project.featured === true") &&
     publicHelpers.includes("projects.filter((project) => project.featured)") &&

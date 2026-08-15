@@ -357,7 +357,7 @@ for (const owner of manifest.owners ?? []) {
 
     if (
       mutationPath.contract === "explicit_empty_delete"
-      && (!/\.maybeSingle<\{ id: number \}>\(\)/.test(actionSource)
+      && (!/\.maybeSingle\(\)/.test(actionSource)
         || !/const cleanupIdentity = existing\?\.id \?\? id/.test(actionSource)
         || !/\.eq\(\s*["']id["']\s*,\s*cleanupIdentity\s*\)/.test(actionSource)
         || !/entityIdentity:\s*cleanupIdentity/.test(actionSource))

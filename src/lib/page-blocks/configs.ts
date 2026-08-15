@@ -1,3 +1,6 @@
+import type { AdminLinkValue } from "../admin/links/types";
+import { deserializeAdminLink } from "../admin/links/serialize";
+
 export type ContentBlockConfig = {
   eyebrow?: string;
   title?: string;
@@ -65,14 +68,14 @@ export type AboutCtaContactConfig = {
   secondaryValue?: string;
   href?: string;
   icon?: string;
-  link?: Record<string, unknown>;
+  link?: AdminLinkValue;
   target?: "_self" | "_blank";
 };
 
 export type AboutCtaButtonConfig = {
   label?: string;
   href?: string;
-  link?: Record<string, unknown>;
+  link?: AdminLinkValue;
   target?: "_self" | "_blank";
   /** Home Story CTA layout — optional; ignored by other About CTA renderers. */
   alignment?: "right" | "center" | "left";
@@ -150,7 +153,7 @@ export type HomeProjectsModuleConfig = {
   footerCta?: {
     label?: string;
     href?: string;
-    link?: Record<string, unknown>;
+    link?: AdminLinkValue;
     target?: "_self" | "_blank";
     /** Physical section alignment for the footer CTA. Default for legacy content: center. */
     alignment?: "right" | "center" | "left";
@@ -161,7 +164,7 @@ export type CtaLinkConfig = {
   label?: string;
   href?: string;
   target?: "_self" | "_blank";
-  link?: Record<string, unknown>;
+  link?: AdminLinkValue;
 };
 
 export type CtaBlockConfig = {
@@ -180,7 +183,7 @@ export type CardsBlockItem = {
   body?: string;
   icon?: string;
   href?: string;
-  link?: Record<string, unknown>;
+  link?: AdminLinkValue;
   target?: "_self" | "_blank";
 };
 
@@ -195,7 +198,7 @@ export type CardsBlockConfig = {
 export type BreadcrumbBlockItem = {
   label?: string;
   href?: string;
-  link?: Record<string, unknown>;
+  link?: AdminLinkValue;
 };
 
 export type BreadcrumbBlockConfig = {
@@ -338,7 +341,7 @@ export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
   const buttonHref = readText(buttonRaw?.href ?? config.button_href) || undefined;
   const buttonLink =
     buttonRaw?.link && typeof buttonRaw.link === "object"
-      ? (buttonRaw.link as Record<string, unknown>)
+      ? deserializeAdminLink(buttonRaw.link)
       : undefined;
   const buttonTarget =
     buttonRaw?.target === "_blank" || buttonRaw?.target === "_self"
@@ -487,7 +490,7 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
   const buttonHref = readText(buttonRaw?.href) || readText(config.button_href) || undefined;
   const buttonLink =
     buttonRaw?.link && typeof buttonRaw.link === "object"
-      ? (buttonRaw.link as Record<string, unknown>)
+      ? deserializeAdminLink(buttonRaw.link)
       : undefined;
   const buttonTarget = readTarget(buttonRaw?.target);
   const button =
@@ -519,7 +522,9 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
           const href = readText(row.href) || undefined;
           const icon = readText(row.icon) || undefined;
           const link =
-            row.link && typeof row.link === "object" ? (row.link as Record<string, unknown>) : undefined;
+            row.link && typeof row.link === "object"
+              ? deserializeAdminLink(row.link)
+              : undefined;
           const target = readTarget(row.target);
           if (!label && !value && !secondaryValue && !href && !link) return null;
           return {
@@ -683,7 +688,7 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
           href: readText(footer.href) || undefined,
           link:
             footer.link && typeof footer.link === "object"
-              ? (footer.link as Record<string, unknown>)
+              ? deserializeAdminLink(footer.link)
               : undefined,
           target: footer.target === "_blank" ? "_blank" : footer.target === "_self" ? "_self" : undefined,
           alignment:

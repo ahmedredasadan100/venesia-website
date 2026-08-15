@@ -11,6 +11,7 @@ import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-ac
 import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 
 import { redirect } from "next/navigation";
+import type { Json, Tables, TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
@@ -178,7 +179,9 @@ function buildAboutIntroConfig(formData: FormData): AboutIntroModuleConfig {
   return config;
 }
 
-function buildAboutIntroSingleImageConfig(formData: FormData): AboutIntroSingleImageModuleConfig {
+function buildAboutIntroSingleImageConfig(
+  formData: FormData,
+): AboutIntroSingleImageModuleConfig {
   const beats = Array.from({ length: 3 }, (_, index) => ({
     num: cleanText(formData.get(`beat_${index}_num`)),
     title: cleanText(formData.get(`beat_${index}_title`)),
@@ -230,22 +233,24 @@ function buildVisionGoalsConfig(formData: FormData): VisionGoalsModuleConfig {
   };
 }
 
-function readContacts(formData: FormData) {
-  return Array.from({ length: 4 }, (_, index) => {
+function readContacts(formData: FormData): NonNullable<AboutCtaModuleConfig["contacts"]> {
+  const contacts: NonNullable<AboutCtaModuleConfig["contacts"]> = [];
+  for (let index = 0; index < 4; index += 1) {
     const label = cleanText(formData.get(`contact_${index}_label`));
     const value = cleanText(formData.get(`contact_${index}_value`));
     const secondaryValue = cleanText(formData.get(`contact_${index}_secondary_value`));
     const icon = cleanText(formData.get(`contact_${index}_icon`));
     const linkData = linkFieldFromFormData(formData, `contact_${index}`);
-    if (!label && !value && !secondaryValue && !hasSavedLinkField(linkData)) return null;
-    return {
+    if (!label && !value && !secondaryValue && !hasSavedLinkField(linkData)) continue;
+    contacts.push({
       label: label || undefined,
       value: value || undefined,
       ...(secondaryValue ? { secondaryValue } : {}),
       icon: icon || undefined,
       ...(linkData ? { link: linkData.link, target: linkData.target } : {}),
-    };
-  }).filter(Boolean) as AboutCtaModuleConfig["contacts"];
+    });
+  }
+  return contacts;
 }
 
 function buildAboutCtaConfig(formData: FormData): AboutCtaModuleConfig {
@@ -525,17 +530,8 @@ function resolveStructuredVariant(slug: string, variantInput: string | null) {
 async function buildContentConfig(
   formData: FormData,
   slug?: string,
-  existingConfig?: unknown,
-): Promise<
-  | ContentBlockConfig
-  | AboutIntroModuleConfig
-  | VisionGoalsModuleConfig
-  | AboutCtaModuleConfig
-  | AboutPrinciplesModuleConfig
-  | AboutApproachModuleConfig
-  | HomeProjectsModuleConfig
-  | Record<string, unknown>
-> {
+  existingConfig?: Json,
+): Promise<Json> {
   const variantInput = cleanText(formData.get("variant")) || null;
   const schema = cleanText(formData.get("config_schema"));
   const resolvedSlug = slug ?? "";
@@ -682,7 +678,7 @@ export async function createContentBlock(
     const variantInput = cleanText(formData.get("variant")) || null;
     const variant = resolveStructuredVariant(slug, variantInput);
 
-    const nextRow = {
+    const nextRow: TablesInsert<"content_block_templates"> = {
       name,
       slug,
       description: readTemplateInternalDescription(formData),
@@ -703,7 +699,7 @@ export async function createContentBlock(
           .from("content_block_templates")
           .insert(nextRow)
           .select("id")
-          .single<{ id: number }>();
+          .single();
         if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء بلوك المحتوى.");
         return data;
       },
@@ -777,7 +773,7 @@ export async function updateContentBlock(formData: FormData) {
   const variant = resolveStructuredVariant(slug, variantInput);
   const nextConfig = await buildContentConfig(formData, slug, existing.config);
 
-  const nextRow = {
+  const nextRow: TablesUpdate<"content_block_templates"> = {
     name,
     slug,
     description: readTemplateInternalDescription(formData),
@@ -799,7 +795,7 @@ export async function updateContentBlock(formData: FormData) {
         .update(nextRow)
         .eq("id", id)
         .select("id")
-        .maybeSingle<{ id: number }>();
+        .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "Unable to update content block.");
       return data;
     },
@@ -842,7 +838,7 @@ export async function deleteContentBlock(formData: FormData) {
     .from("content_block_templates")
     .select("id")
     .eq("id", id)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
   const cleanupIdentity = existing?.id ?? id;
 
@@ -900,7 +896,7 @@ export async function duplicateContentBlock(formData: FormData) {
         .from("content_block_templates")
         .insert(nextRow)
         .select("id")
-        .single<{ id: number }>();
+        .single();
       if (insertError || !data) throw new Error(insertError?.message ?? "Unable to duplicate content block.");
       return data;
     },
@@ -965,15 +961,10 @@ export async function bulkContentBlocks(formData: FormData) {
   await revalidateBlockModulePaths("content");
 }
 
-export type ContentBlockRow = {
-  id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  variant: string;
-  status: string;
-  updated_at: string;
-};
+export type ContentBlockRow = Pick<
+  Tables<"content_block_templates">,
+  "id" | "name" | "slug" | "description" | "variant" | "status" | "updated_at"
+>;
 
 export async function getContentBlockRows(): Promise<ContentBlockRow[]> {
   await requireAdminSession();
@@ -984,5 +975,5 @@ export async function getContentBlockRows(): Promise<ContentBlockRow[]> {
     .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as ContentBlockRow[];
+  return data ?? [];
 }

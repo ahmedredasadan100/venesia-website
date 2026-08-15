@@ -59,7 +59,7 @@ export async function savePageSeoAction(formData: FormData) {
     .from("pages")
     .select("path")
     .eq("id", pageId)
-    .maybeSingle<{ path: string | null }>();
+    .maybeSingle();
 
   revalidatePublicCacheTags(["page-seo", "pages"]);
   if (page?.path) {

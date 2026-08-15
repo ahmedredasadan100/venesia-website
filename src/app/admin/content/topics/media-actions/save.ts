@@ -210,12 +210,7 @@ export async function saveMediaContentAdapter(
     ? await (Number(payload.seriesId) === currentTopic?.series_id
         ? seriesQuery
         : seriesQuery.eq("status", "published")
-      ).maybeSingle<{
-        id: number;
-        name: string;
-        slug: string;
-        category_id: number | null;
-      }>()
+      ).maybeSingle()
     : { data: null };
   if (payload.seriesId && !series) {
     return failure("السلسلة المختارة غير موجودة أو غير مفعلة.", {
@@ -278,7 +273,7 @@ export async function saveMediaContentAdapter(
                 payload.status === "published" ? actor.id : null,
             })
             .select("id,slug")
-            .single<{ id: number; slug: string }>();
+            .single();
           if (error || !data) {
             throw new Error(error?.message ?? "تعذر إنشاء المحتوى.");
           }
@@ -294,7 +289,7 @@ export async function saveMediaContentAdapter(
               updated_by: actor.id,
               ...(becamePublished ? { published_by: actor.id } : {}),
             })
-            .eq("id", id)
+            .eq("id", Number(id))
             .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
             .is("deleted_at", null);
           const guardedQuery = expectedRevision.value === null
@@ -302,7 +297,7 @@ export async function saveMediaContentAdapter(
             : updateQuery.eq("updated_at", expectedRevision.value);
           const { data, error } = await guardedQuery
             .select("id,slug")
-            .maybeSingle<{ id: number; slug: string }>();
+            .maybeSingle();
           if (error) throw new Error(error.message);
           if (!data) throw new TopicRevisionConflictError();
           return data;

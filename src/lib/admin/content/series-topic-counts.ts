@@ -20,7 +20,7 @@ export async function loadActiveSeriesTopicCounts(): Promise<SeriesTopicCountsRe
     .is("deleted_at", null);
 
   const counts = new Map<number, number>();
-  ((data ?? []) as { series_id: number | null }[]).forEach((row) => {
+  (data ?? []).forEach((row) => {
     if (!row.series_id) return;
     counts.set(row.series_id, (counts.get(row.series_id) ?? 0) + 1);
   });

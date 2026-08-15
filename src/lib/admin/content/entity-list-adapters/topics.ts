@@ -76,7 +76,7 @@ export async function loadTopicsEntityListResult(
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true });
     if (categoriesError) throw new Error(categoriesError.message);
-    categories = (data ?? []) as AdminContentCategory[];
+    categories = data ?? [];
   }
 
   const [list, metrics] = await Promise.all([

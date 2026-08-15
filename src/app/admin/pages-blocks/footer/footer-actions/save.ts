@@ -12,6 +12,7 @@ import {
 import { isFooterContactItemPublic } from "../../../../../lib/footer/parse-footer-settings";
 import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidate-footer";
 import { FOOTER_SLOTS_SETTING_KEY, type FooterLegal } from "../../../../../lib/footer/types";
+import type { Json } from "../../../../../lib/database.types";
 import { assertValidFooterSlots } from "../../../../../lib/footer/validate-footer-slots";
 import type { FooterBuilderSaveInput } from "./types";
 import {
@@ -40,12 +41,12 @@ export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
     copyright: input.legal.copyright.trim() || "Venesia Developments. All rights reserved.",
     tagline: input.legal.tagline.trim() || "Trust Built On Ground",
   };
-  const settings = [
+  const settings: { key: string; value: Json }[] = [
     { key: FOOTER_SLOTS_SETTING_KEY, value: validatedSlots },
     { key: "footer.contact_items", value: contactItems },
     { key: "footer.social_links", value: socialLinks },
     { key: "footer.legal", value: legal },
-  ] as const;
+  ];
   const targets = settings.map((setting) => ({
     domainKey: "site_settings",
     entityIdentity: setting.key,

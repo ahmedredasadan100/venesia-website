@@ -1,3 +1,4 @@
+import type { Json } from "../database.types";
 import type { MediaSidebarWidgetKey } from "./types";
 
 export type MediaSidebarModuleConfig = {
@@ -35,23 +36,21 @@ export function parseMediaSidebarWidgetKey(value: string): MediaSidebarWidgetKey
 }
 
 export function parseMediaSidebarModuleConfig(
-  raw: unknown,
+  raw: Json,
   widgetKey: MediaSidebarWidgetKey,
 ): MediaSidebarModuleConfig {
   const fallback = MEDIA_SIDEBAR_WIDGET_DEFAULTS[widgetKey].config;
-  if (!raw || typeof raw !== "object") return { ...fallback };
-
-  const value = raw as Record<string, unknown>;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...fallback };
 
   if (widgetKey === "sections") {
     return {
       source: "navigation",
-      menuParent: typeof value.menuParent === "string" && value.menuParent.trim() ? value.menuParent.trim() : "/media-center",
+      menuParent: typeof raw.menuParent === "string" && raw.menuParent.trim() ? raw.menuParent.trim() : "/media-center",
     };
   }
 
   if (widgetKey === "latest") {
-    const limit = Number(value.limit);
+    const limit = Number(raw.limit);
     return {
       source: "topics",
       type: "news",
@@ -59,7 +58,7 @@ export function parseMediaSidebarModuleConfig(
     };
   }
 
-  const limit = Number(value.limit);
+  const limit = Number(raw.limit);
   return {
     source: "topics",
     isPopular: true,

@@ -1,23 +1,120 @@
 import type {
-  ProjectCategory,
   PublicProject,
   PublicProjectImage,
+  PublicProjectLocationPoint,
   PublicProjectLocationLevel,
 } from "./public-types";
+import type { Tables } from "../database.types";
 
-export type PublicProjectRootRow = Record<string, unknown>;
-export type PublicProjectChildRow = Record<string, unknown>;
+export type PublicProjectRootRow = Pick<
+  Tables<"projects">,
+  | "id"
+  | "type"
+  | "arabic_name"
+  | "english_name"
+  | "slug"
+  | "code"
+  | "featured"
+  | "show_on_homepage"
+  | "homepage_order"
+  | "brochure_url"
+  | "publication_status"
+  | "published_at"
+  | "general_description"
+  | "short_description"
+  | "image"
+  | "image_alt"
+  | "hero_image"
+  | "hero_image_alt"
+  | "small_box_image"
+  | "small_box_image_alt"
+  | "governorate_id"
+  | "city_id"
+  | "main_area_id"
+  | "sub_area_id"
+  | "location_label"
+  | "location_description"
+  | "google_maps_url"
+  | "latitude"
+  | "longitude"
+  | "map_zoom"
+  | "overview_title"
+  | "overview_body"
+  | "overview_media_type"
+  | "overview_main_image"
+  | "overview_main_image_alt"
+  | "delivery_title"
+  | "delivery_body"
+  | "seo_title"
+  | "seo_description"
+  | "focus_keyword"
+  | "seo_keywords"
+  | "canonical_url"
+  | "robots_index"
+  | "robots_follow"
+  | "og_image"
+  | "og_image_alt"
+  | "created_at"
+  | "updated_at"
+>;
+
+export type PublicProjectLocationRow = Pick<
+  Tables<"project_locations">,
+  "id" | "level" | "parent_id" | "name_ar" | "name_en"
+>;
+
+type PublicProjectLocationPointRow = Pick<
+  Tables<"project_location_points">,
+  "id" | "kind" | "label" | "distance_text"
+>;
+
+type PublicProjectFeatureRow = Pick<
+  Tables<"project_features">,
+  "id" | "body"
+>;
+
+type PublicProjectFloorPlanRow = Pick<
+  Tables<"project_floor_plans">,
+  | "id"
+  | "name"
+  | "area_text"
+  | "featured"
+  | "architectural_image"
+  | "architectural_image_alt"
+  | "furnishing_image"
+  | "furnishing_image_alt"
+>;
+
+type PublicProjectFloorPlanDetailRow = Pick<
+  Tables<"project_floor_plan_details">,
+  "id" | "floor_plan_id" | "label" | "value"
+>;
+
+type PublicProjectDeliveryItemRow = Pick<
+  Tables<"project_delivery_items">,
+  "id" | "body"
+>;
+
+type PublicProjectMediaRow = Pick<
+  Tables<"project_media">,
+  "id" | "section" | "image" | "alt_text"
+>;
+
+type PublicProjectVideoRow = Pick<
+  Tables<"project_videos">,
+  "id" | "section" | "video_url" | "poster_image" | "poster_alt"
+>;
 
 export type PublicProjectAggregate = {
   project: PublicProjectRootRow;
-  locations?: PublicProjectChildRow[];
-  locationPoints?: PublicProjectChildRow[];
-  features?: PublicProjectChildRow[];
-  floorPlans?: PublicProjectChildRow[];
-  floorPlanDetails?: PublicProjectChildRow[];
-  deliveryItems?: PublicProjectChildRow[];
-  media?: PublicProjectChildRow[];
-  videos?: PublicProjectChildRow[];
+  locations?: PublicProjectLocationRow[];
+  locationPoints?: PublicProjectLocationPointRow[];
+  features?: PublicProjectFeatureRow[];
+  floorPlans?: PublicProjectFloorPlanRow[];
+  floorPlanDetails?: PublicProjectFloorPlanDetailRow[];
+  deliveryItems?: PublicProjectDeliveryItemRow[];
+  media?: PublicProjectMediaRow[];
+  videos?: PublicProjectVideoRow[];
 };
 
 export class PublicProjectMappingError extends Error {
@@ -29,9 +126,10 @@ export class PublicProjectMappingError extends Error {
   }
 }
 
-function requiredString(row: PublicProjectRootRow, field: string) {
-  const value = typeof row[field] === "string" ? row[field].trim() : "";
-  if (!value) throw new PublicProjectMappingError(`Missing required project field: ${field}`);
+function requiredString<Row extends object, Key extends keyof Row>(row: Row, field: Key) {
+  const candidate = row[field];
+  const value = typeof candidate === "string" ? candidate.trim() : "";
+  if (!value) throw new PublicProjectMappingError(`Missing required project field: ${String(field)}`);
   return value;
 }
 
@@ -41,10 +139,10 @@ function optionalString(value: unknown) {
   return normalized || null;
 }
 
-function requiredNumber(row: PublicProjectRootRow, field: string) {
+function requiredNumber<Row extends object, Key extends keyof Row>(row: Row, field: Key) {
   const value = Number(row[field]);
   if (!Number.isFinite(value)) {
-    throw new PublicProjectMappingError(`Invalid numeric project field: ${field}`);
+    throw new PublicProjectMappingError(`Invalid numeric project field: ${String(field)}`);
   }
   return value;
 }
@@ -61,8 +159,8 @@ function mapImage(source: unknown, alt: unknown): PublicProjectImage | null {
 
 function requireImage(
   row: PublicProjectRootRow,
-  sourceField: string,
-  altField: string,
+  sourceField: keyof PublicProjectRootRow,
+  altField: keyof PublicProjectRootRow,
 ): PublicProjectImage {
   const image = mapImage(row[sourceField], row[altField]);
   if (!image?.alt) {
@@ -72,8 +170,8 @@ function requireImage(
 }
 
 function mapLocationLevel(
-  locations: PublicProjectChildRow[],
-  idValue: unknown,
+  locations: PublicProjectLocationRow[],
+  idValue: number | null,
 ): PublicProjectLocationLevel | null {
   if (idValue === null || idValue === undefined) return null;
   const id = Number(idValue);
@@ -86,8 +184,15 @@ function mapLocationLevel(
   };
 }
 
-function rows(value: PublicProjectChildRow[] | undefined) {
+function rows<Row>(value: Row[] | undefined): Row[] {
   return value ?? [];
+}
+
+function requireLocationPointKind(value: string): PublicProjectLocationPoint["kind"] {
+  if (value === "transport" || value === "road" || value === "landmark") {
+    return value;
+  }
+  throw new PublicProjectMappingError("Invalid project location point kind");
 }
 
 export function mapProjectAggregateToPublicProject(
@@ -131,7 +236,7 @@ export function mapProjectAggregateToPublicProject(
   return {
     id: String(requiredNumber(project, "id")),
     slug: requiredString(project, "slug"),
-    category: category as ProjectCategory,
+    category,
     arabicName: requiredString(project, "arabic_name"),
     englishName: requiredString(project, "english_name"),
     featured: project.featured === true,
@@ -157,7 +262,7 @@ export function mapProjectAggregateToPublicProject(
       subArea: mapLocationLevel(locations, project.sub_area_id),
       points: rows(aggregate.locationPoints).map((item) => ({
         id: String(item.id),
-        kind: item.kind as PublicProject["location"]["points"][number]["kind"],
+        kind: requireLocationPointKind(item.kind),
         label: requiredString(item, "label"),
         distanceText: optionalString(item.distance_text) ?? "",
       })),
@@ -219,7 +324,7 @@ export function mapProjectAggregateToPublicProject(
 
 export function mapProjectRowToPublicProject(
   project: PublicProjectRootRow,
-  locations: PublicProjectChildRow[] = [],
+  locations: PublicProjectLocationRow[] = [],
 ) {
   return mapProjectAggregateToPublicProject({ project, locations });
 }

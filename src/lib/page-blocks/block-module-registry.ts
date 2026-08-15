@@ -1,11 +1,17 @@
+import type { Database } from "../database.types";
 import type { PageBlockType } from "./types";
-import { MEDIA_HUB_ASSIGNMENT_TABLE } from "../media-hub-modules/registry";
-import { MEDIA_SIDEBAR_ASSIGNMENT_TABLE } from "../media-sidebar-modules/registry";
+import {
+  MEDIA_HUB_ASSIGNMENT_TABLE,
+  MEDIA_HUB_TEMPLATE_TABLE,
+} from "../media-hub-modules/registry";
+import {
+  MEDIA_SIDEBAR_ASSIGNMENT_TABLE,
+  MEDIA_SIDEBAR_TEMPLATE_TABLE,
+} from "../media-sidebar-modules/registry";
 
-export const BLOCK_MODULE_REGISTRY: Record<
-  PageBlockType,
-  { assignmentTable: string; templateTable: string }
-> = {
+type DatabaseTable = keyof Database["public"]["Tables"];
+
+export const BLOCK_MODULE_REGISTRY = {
   content: {
     assignmentTable: "page_content_block_assignments",
     templateTable: "content_block_templates",
@@ -26,11 +32,28 @@ export const BLOCK_MODULE_REGISTRY: Record<
     assignmentTable: "page_feed_module_assignments",
     templateTable: "feed_module_templates",
   },
-};
+} satisfies Record<
+  PageBlockType,
+  { assignmentTable: DatabaseTable; templateTable: DatabaseTable }
+>;
+
+export type PageBlockAssignmentTable =
+  (typeof BLOCK_MODULE_REGISTRY)[PageBlockType]["assignmentTable"];
+export type PageBlockTemplateTable =
+  (typeof BLOCK_MODULE_REGISTRY)[PageBlockType]["templateTable"];
+export type PageModuleAssignmentTable =
+  | PageBlockAssignmentTable
+  | typeof MEDIA_SIDEBAR_ASSIGNMENT_TABLE
+  | typeof MEDIA_HUB_ASSIGNMENT_TABLE;
+export type PageModuleTemplateTable =
+  | PageBlockTemplateTable
+  | typeof MEDIA_SIDEBAR_TEMPLATE_TABLE
+  | typeof MEDIA_HUB_TEMPLATE_TABLE
+  | "hero_templates";
 
 export const ASSIGNMENT_TABLES = Object.values(BLOCK_MODULE_REGISTRY).map((entry) => entry.assignmentTable);
 export const ALL_ASSIGNMENT_TABLES = [
   ...ASSIGNMENT_TABLES,
   MEDIA_SIDEBAR_ASSIGNMENT_TABLE,
   MEDIA_HUB_ASSIGNMENT_TABLE,
-];
+] satisfies PageModuleAssignmentTable[];

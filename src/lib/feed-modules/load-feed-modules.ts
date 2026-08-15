@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
+import type { Json } from "../database.types";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import { getPublishedPageBySlug } from "../pages/get-published-page-by-slug";
@@ -14,11 +15,24 @@ import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
 import type { PageLayoutSlot } from "../page-blocks/layout-slots";
 import { parseFeedModuleConfig } from "./parse-feed-config";
 import { resolveTopicsFeedModule } from "./resolve-topics-feed";
-import type { FeedModuleTemplateRow, ResolvedFeedModule, TopicsFeedType } from "./types";
+import {
+  TOPICS_FEED_TYPES,
+  type FeedModuleTemplateRow,
+  type ResolvedFeedModule,
+  type TopicsFeedType,
+} from "./types";
 
 function joinedTemplate<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function isJsonObject(value: Json): value is Record<string, Json | undefined> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function findTopicsFeedType(value: string): TopicsFeedType | null {
+  return TOPICS_FEED_TYPES.find((candidate) => candidate === value) ?? null;
 }
 
 export type LoadedFeedModule = ResolvedFeedModule & {
@@ -75,8 +89,18 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
   const resolvableAssignments = (assignments ?? []).flatMap((row) => {
     if (!normalizeBoolean(row.is_visible, true)) return [];
 
-    const template = joinedTemplate(row.feed_module_templates) as FeedModuleTemplateRow | null;
-    if (!template || !isPublishedPageBlockStatus(template.status)) return [];
+    const selectedTemplate = joinedTemplate(row.feed_module_templates);
+    if (!selectedTemplate) return [];
+
+    const feedType = findTopicsFeedType(selectedTemplate.feed_type);
+    if (!feedType) return [];
+
+    const template: FeedModuleTemplateRow = {
+      ...selectedTemplate,
+      feed_type: feedType,
+      config: isJsonObject(selectedTemplate.config) ? selectedTemplate.config : null,
+    };
+    if (!isPublishedPageBlockStatus(template.status)) return [];
 
     const config = parseFeedModuleConfig(template.config, template.feed_type);
     return [{ row, template, config }];
@@ -90,7 +114,7 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
         assignmentId: row.id,
         templateId: template.id,
         sortOrder: row.sort_order ?? 0,
-        feedType: template.feed_type as TopicsFeedType,
+        feedType: template.feed_type,
         presentation: config.presentation,
         payload,
         slot: normalizeLayoutSlot(row.slot),

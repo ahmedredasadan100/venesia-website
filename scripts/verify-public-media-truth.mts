@@ -4,6 +4,7 @@ import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   normalizeYouTubeUrl,
+  parseMediaTopicPayload,
   resolveYouTubeEmbedUrl,
 } from "../src/lib/admin/media-topic-payload.ts";
 
@@ -21,6 +22,55 @@ assert.equal(
   "https://www.youtube.com/embed/dQw4w9WgXcQ",
 );
 assert.equal(resolveYouTubeEmbedUrl("not a URL"), null, "Invalid playback links must not create an iframe URL");
+assert.deepEqual(
+  parseMediaTopicPayload({
+    kind: "video",
+    provider: "youtube",
+    video_url: "https://youtu.be/dQw4w9WgXcQ",
+    duration: "3:32",
+  }),
+  {
+    kind: "video",
+    provider: "youtube",
+    video_url: "https://youtu.be/dQw4w9WgXcQ",
+    thumbnail: null,
+    duration: "3:32",
+  },
+);
+assert.equal(
+  parseMediaTopicPayload({ kind: "video", provider: "youtube", video_url: 42 }),
+  null,
+  "Malformed Database JSON must fail closed before reaching public media consumers",
+);
+assert.deepEqual(
+  parseMediaTopicPayload({
+    kind: "gallery",
+    images: [
+      { url: "/valid.jpg", alt: "Valid" },
+      { url: 42, alt: "Invalid" },
+    ],
+  }),
+  null,
+  "A malformed Gallery item must reject the complete Database JSON payload",
+);
+assert.equal(
+  parseMediaTopicPayload({
+    kind: "video",
+    provider: "youtube",
+    video_url: "https://youtu.be/dQw4w9WgXcQ",
+    thumbnail: 42,
+  }),
+  null,
+  "Malformed optional Video fields must reject the complete Database JSON payload",
+);
+assert.equal(
+  parseMediaTopicPayload({
+    kind: "gallery",
+    images: [{ url: "/valid.jpg", alt: 42 }],
+  }),
+  null,
+  "Malformed optional Gallery fields must reject the complete Database JSON payload",
+);
 
 function walk(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
@@ -87,6 +137,7 @@ assert.ok(metadata.includes("getMediaItemBySlug"), "Metadata must consume the pu
 assert.ok(sitemap.includes("loadPublicContentSitemapRows") && sitemap.includes("item.href"));
 assert.ok(revalidation.includes("revalidateMediaCenterCache") && revalidation.includes("MEDIA_CENTER_PUBLIC_PATHS"));
 assert.ok(mediaPayloadOwner.includes("export function resolveYouTubeEmbedUrl"), "Video link resolution must stay in the existing payload owner");
+assert.ok(publicContentOwner.includes("parseMediaTopicPayload(row.media_payload)"), "Public Content must narrow Database JSON through the existing payload owner");
 assert.ok(publicContentOwner.includes("normalizeYouTubeUrl(video?.video_url"), "Unified Content must reject invalid video URLs at its public detail boundary");
 assert.ok(publicMediaArticle.includes("resolveYouTubeEmbedUrl(item.videoUrl"));
 assert.ok(publicMediaArticle.includes("data-public-media-video-unavailable"), "Missing video links need an explicit public fail-safe state");

@@ -7,6 +7,7 @@ import type {
   FooterMenuSlotConfig,
   FooterTextSlotConfig,
 } from "./footer-slot-types";
+import { deserializeAdminLink } from "../admin/links/serialize";
 import { parseFooterContactItem } from "./parse-footer-settings";
 import type { FooterContactItem } from "./types";
 
@@ -48,7 +49,10 @@ function parseManualLinks(value: unknown): FooterManualLink[] {
     const record = item as Record<string, unknown>;
     const label = cleanText(record.label);
     const href = cleanText(record.href);
-    const link = record.link && typeof record.link === "object" ? record.link as Record<string, unknown> : null;
+    const link =
+      record.link && typeof record.link === "object"
+        ? deserializeAdminLink(record.link)
+        : null;
     if (!label || (!href && !link)) return [];
     return [{
       label,
@@ -73,7 +77,10 @@ export function parseTextSlotConfig(raw: unknown, fallback: FooterTextSlotConfig
       enabled: parseBoolean(cta.enabled, fallback.cta.enabled),
       label: cleanText(cta.label),
       href: cleanText(cta.href),
-      link: cta.link && typeof cta.link === "object" ? cta.link as Record<string, unknown> : null,
+      link:
+        cta.link && typeof cta.link === "object"
+          ? deserializeAdminLink(cta.link)
+          : null,
       target: cleanText(cta.target) === "_blank" ? "_blank" : "_self",
     },
   };
@@ -113,7 +120,10 @@ export function parseMediaSlotConfig(raw: unknown, fallback: FooterMediaSlotConf
   return {
     source,
     parentHref: typeof record.parentHref === "string" ? cleanText(record.parentHref) : fallback.parentHref,
-    parentLink: record.parentLink && typeof record.parentLink === "object" ? record.parentLink as Record<string, unknown> : null,
+    parentLink:
+      record.parentLink && typeof record.parentLink === "object"
+        ? deserializeAdminLink(record.parentLink)
+        : null,
     menuId: parsePositiveIntOrNull(record.menuId),
     manualLinks: parseManualLinks(record.manualLinks),
     maxItems: parsePositiveIntOrNull(record.maxItems),

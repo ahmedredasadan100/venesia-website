@@ -18,12 +18,27 @@ import {
   type ProjectLocationManagementRow,
 } from "../../../../lib/admin/projects/location-management-contract";
 import { loadProjectLocationManagementRow } from "../../../../lib/admin/projects/location-management-adapter";
+import type { Json } from "../../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 export type ProjectLocationFormActionState =
   AdminFormActionState<ProjectLocationManagementRow>;
 
 type DatabaseErrorLike = { code?: string; message?: string };
+
+function readDatabaseError(error: unknown): DatabaseErrorLike {
+  if (!error || typeof error !== "object") return {};
+  const code = "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+  const message = "message" in error && typeof error.message === "string"
+    ? error.message
+    : undefined;
+  return {
+    ...(code ? { code } : {}),
+    ...(message ? { message } : {}),
+  };
+}
 
 function getText(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -79,8 +94,7 @@ function mapDatabaseError(
   revision: number,
   error: unknown,
 ) {
-  const databaseError =
-    error && typeof error === "object" ? (error as DatabaseErrorLike) : {};
+  const databaseError = readDatabaseError(error);
   if (databaseError.code === "23505") {
     return formFailure(
       mode,
@@ -107,22 +121,21 @@ function mapDatabaseError(
 async function mutateLocation(
   action: "create" | "update" | "delete",
   locationId: number | null,
-  payload: Record<string, unknown>,
+  payload: Json,
 ) {
   const { data, error } = await getSupabaseAdmin().rpc(
     "mutate_project_location",
     {
       p_action: action,
-      p_location_id: locationId,
       p_payload: payload,
+      ...(locationId === null ? {} : { p_location_id: locationId }),
     },
   );
   if (error) throw error;
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row || typeof row !== "object") {
+  if (!data) {
     throw new Error("Location command returned no canonical row.");
   }
-  return row as Record<string, unknown>;
+  return data;
 }
 
 function readLocationPayload(formData: FormData) {
@@ -296,7 +309,7 @@ export async function setProjectLocationActiveAction(
       location: saved,
     };
   } catch (error) {
-    const databaseError = error as DatabaseErrorLike;
+    const databaseError = readDatabaseError(error);
     return adminActionFailure(
       "تعذر تحديث حالة الموقع",
       databaseError.message ?? "تعذر تحديث حالة الموقع.",
@@ -338,7 +351,7 @@ export async function deleteProjectLocationAction(
       { code: "deleted", entityId: id },
     );
   } catch (error) {
-    const databaseError = error as DatabaseErrorLike;
+    const databaseError = readDatabaseError(error);
     const message =
       databaseError.code === "23503"
         ? databaseError.message?.includes("child")

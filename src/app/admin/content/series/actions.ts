@@ -57,7 +57,7 @@ async function ensureUniqueSlug(slug: string) {
     .select("id")
     .eq("slug", slug)
     .limit(1)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (error) return false;
   return !data;
 }
@@ -76,7 +76,7 @@ async function loadSeriesLifecycleRows(
       : query.is("deleted_at", null);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as SeriesLifecycleRow[];
+  return data ?? [];
 }
 
 async function loadAllDeletedSeries() {
@@ -86,7 +86,7 @@ async function loadAllDeletedSeries() {
     .not("deleted_at", "is", null)
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as SeriesLifecycleRow[];
+  return data ?? [];
 }
 
 function seriesLifecycleFailure(error: unknown, entityId?: number) {
@@ -271,7 +271,7 @@ export async function toggleSeriesStatusAjax(
     .eq("id", id)
     .is("deleted_at", null)
     .select("id")
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (error || !data) {
     return adminActionFailure(
       "تعذر تنفيذ العملية",
@@ -309,12 +309,7 @@ export async function duplicateSeriesAjax(id: number): Promise<AdminActionResult
     .select("name, slug, sort_order, category_id")
     .eq("id", id)
     .is("deleted_at", null)
-    .maybeSingle<{
-      name: string;
-      slug: string;
-      sort_order: number | null;
-      category_id: number | null;
-    }>();
+    .maybeSingle();
   if (error || !data) {
     return adminActionFailure(
       "تعذر نسخ السلسلة",
@@ -349,7 +344,7 @@ export async function duplicateSeriesAjax(id: number): Promise<AdminActionResult
       updated_at: now,
     })
     .select("id")
-    .single<{ id: number }>();
+    .single();
   if (insertError || !inserted) {
     return adminActionFailure(
       "تعذر نسخ السلسلة",
