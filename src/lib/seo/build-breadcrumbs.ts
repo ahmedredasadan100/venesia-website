@@ -1,4 +1,3 @@
-
 import { absoluteUrl, absoluteUrlWithBase, normalizePath } from "./seo-utils";
 
 export type BreadcrumbItem = {

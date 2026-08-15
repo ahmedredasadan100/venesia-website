@@ -1,4 +1,3 @@
-
 import type { FooterBlockType, FooterSlotConfigByType } from "./footer-slot-types";
 import {
   parseContactSlotConfig,

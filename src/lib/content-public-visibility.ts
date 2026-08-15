@@ -1,5 +1,3 @@
-
-
 export type ContentVisibilityActionIntent =
   | "hide"
   | "publish"

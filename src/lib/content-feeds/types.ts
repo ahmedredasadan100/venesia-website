@@ -1,5 +1,3 @@
-
-
 export type SidebarCategoryItem = {
   name: string;
   href: string;

@@ -1,5 +1,3 @@
-
-
 export const PAGE_COMPOSITION_SLOTS = ["hero", "main", "sidebar", "bottom", "footer"] as const;
 
 export type PageCompositionSlot = (typeof PAGE_COMPOSITION_SLOTS)[number];
