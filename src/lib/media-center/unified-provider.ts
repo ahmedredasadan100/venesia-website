@@ -43,6 +43,7 @@ export async function unifiedGetMediaListingPage(
     pageSize: number;
     sort: ListingSort;
     pickFeatured: boolean;
+    featuredTopicId?: number;
     search?: string;
   },
 ) {
@@ -53,6 +54,7 @@ export async function unifiedGetMediaListingPage(
     sort: params.sort,
     search: params.search,
     featured: params.pickFeatured ? "separate" : "none",
+    featuredId: params.pickFeatured ? params.featuredTopicId : undefined,
   });
 
   return {

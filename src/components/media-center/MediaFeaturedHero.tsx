@@ -1,12 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getMediaHref, type MediaNewsItem } from "../../lib/media-center/types";
+import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 
-type FeaturedNewsProps = {
-  item: MediaNewsItem;
+type MediaFeaturedHeroProps = {
+  item: MediaContentItem;
+  ctaText: string;
 };
 
-export default function FeaturedNews({ item }: FeaturedNewsProps) {
+export default function MediaFeaturedHero({ item, ctaText }: MediaFeaturedHeroProps) {
   return (
     <article className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-[0_25px_90px_rgba(0,0,0,0.32)]">
       <div className="relative h-[420px] overflow-hidden">
@@ -54,7 +55,7 @@ export default function FeaturedNews({ item }: FeaturedNewsProps) {
             href={getMediaHref(item)}
             className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#D8B87A]/25 bg-[#D8B87A]/10 px-6 py-3 text-sm font-medium text-[#D8B87A] transition duration-500 hover:border-[#D8B87A]/50 hover:bg-[#D8B87A]/15"
           >
-            اقرأ الخبر الكامل
+            {ctaText}
             <span aria-hidden="true">←</span>
           </Link>
         </div>

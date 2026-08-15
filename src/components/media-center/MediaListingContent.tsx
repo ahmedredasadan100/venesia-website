@@ -3,6 +3,11 @@ import Link from "next/link";
 import Pagination from "../Pagination";
 import MediaContentCard from "./MediaContentCard";
 import type { MediaContentItem } from "../../lib/media-center/types";
+import type {
+  MediaListingCardVariant,
+  MediaListingColumns,
+  MediaListingLayout,
+} from "../../lib/media-hub-modules/parse-config";
 
 type MediaListingContentProps = {
   /** Current server-paginated page items (browse mode). */
@@ -15,9 +20,19 @@ type MediaListingContentProps = {
   basePath: string;
   emptyTitle: string;
   emptyDescription: string;
-  actionLabel?: string;
+  cardCtaText: string;
   itemsLabel?: string;
+  layout: MediaListingLayout;
+  columns: MediaListingColumns;
+  paginationEnabled: boolean;
+  cardVariant: MediaListingCardVariant;
   children?: ReactNode;
+};
+
+const GRID_COLUMN_CLASSES: Record<MediaListingColumns, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-1 md:grid-cols-2",
+  3: "grid-cols-1 md:grid-cols-2 xl:grid-cols-3",
 };
 
 export default function MediaListingContent({
@@ -30,14 +45,21 @@ export default function MediaListingContent({
   basePath,
   emptyTitle,
   emptyDescription,
-  actionLabel,
+  cardCtaText,
   itemsLabel = "عناصر",
+  layout,
+  columns,
+  paginationEnabled,
+  cardVariant,
   children,
 }: MediaListingContentProps) {
   const isSearching = searchQuery.length > 0;
   const hasItems = items.length > 0;
   const countLabel = isSearching ? "نتائج البحث" : itemsLabel;
   const safePage = Math.min(Math.max(currentPage, 1), Math.max(totalPages, 1));
+  const collectionClassName = layout === "vertical"
+    ? "space-y-6"
+    : `grid gap-8 ${GRID_COLUMN_CLASSES[columns]}`;
 
   return (
     <div className="space-y-10">
@@ -85,17 +107,18 @@ export default function MediaListingContent({
 
       {hasItems ? (
         <>
-          <div className="grid gap-8 md:grid-cols-2">
+          <div className={collectionClassName}>
             {items.map((item) => (
               <MediaContentCard
                 key={item.id}
                 item={item}
-                actionLabel={actionLabel}
+                actionLabel={cardCtaText}
+                variant={cardVariant}
               />
             ))}
           </div>
 
-          {!isSearching ? (
+          {!isSearching && paginationEnabled ? (
             <Pagination
               currentPage={safePage}
               totalPages={Math.max(totalPages, 1)}

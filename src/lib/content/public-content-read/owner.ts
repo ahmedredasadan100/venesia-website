@@ -234,6 +234,24 @@ function buildCollectionQuery(
 async function resolveSeparateFeatured(
   input: ReturnType<typeof normalizePublicContentCollectionInput>,
 ) {
+  if (input.featuredId) {
+    const manualResult = await buildCollectionQuery({
+      ...input,
+      featured: "none",
+      excludeIds: [],
+    })
+      .eq("id", input.featuredId)
+      .limit(1);
+    if (manualResult.error) {
+      logError("Public Content manual featured query failed", manualResult.error, {
+        contentTypes: input.contentTypes,
+        featuredId: input.featuredId,
+      });
+      return null;
+    }
+    return mapCollectionRows(manualResult.data)[0] ?? null;
+  }
+
   const featuredInput = { ...input, featured: "only" as const, excludeIds: [] };
   const featuredResult = await buildCollectionQuery(featuredInput).limit(1);
   if (featuredResult.error) {

@@ -12,12 +12,10 @@ import {
   unifiedGetMediaListingPage,
 } from "./media-center/unified-provider";
 import { normalizePublicContentSearchQuery } from "./content/public-content-read/contract";
+import { getDefaultMediaListingPresentation } from "./media-hub-modules/parse-config";
 
 export type { MediaContentItem, MediaContentType, MediaNewsItem, MediaSidebarItem };
 export { getMediaHref, MEDIA_TYPE_PATHS, MEDIA_CONTENT_TYPES };
-
-/** Public listing page size — keep in sync with the public presentation. */
-export const MEDIA_LISTING_PAGE_SIZE = 2;
 
 /** Media remains a presentation facade over Unified Content's Public Collection owner. */
 export async function getMediaItems(type?: MediaContentType) {
@@ -35,11 +33,12 @@ export async function getMediaListingPage(
     sort?: "newest" | "oldest";
     pageSize?: number;
     pickFeatured?: boolean;
+    featuredTopicId?: number;
     search?: string;
   },
 ) {
   const sort = input.sort === "oldest" ? "oldest" : "newest";
-  const pageSize = input.pageSize ?? MEDIA_LISTING_PAGE_SIZE;
+  const pageSize = input.pageSize ?? getDefaultMediaListingPresentation(input.type).pageSize;
   const search = normalizePublicContentSearchQuery(input.search);
 
   return unifiedGetMediaListingPage({
@@ -48,6 +47,7 @@ export async function getMediaListingPage(
     pageSize,
     sort,
     pickFeatured: search ? false : Boolean(input.pickFeatured),
+    featuredTopicId: search ? undefined : input.featuredTopicId,
     search,
   });
 }

@@ -32,6 +32,7 @@ export type PublicContentCollectionInput = {
   seriesSlug?: string;
   seriesSlugs?: readonly string[];
   featured?: "none" | "separate" | "only";
+  featuredId?: number;
   popularOnly?: boolean;
   excludeIds?: readonly number[];
   relatedTo?: {
@@ -131,13 +132,14 @@ export function applyPublicContentTextSearch<
 export function normalizePublicContentCollectionInput(
   input: PublicContentCollectionInput,
 ): Required<Pick<PublicContentCollectionInput, "sort" | "page" | "pageSize" | "featured" | "popularOnly">> &
-  Omit<PublicContentCollectionInput, "sort" | "page" | "pageSize" | "featured" | "popularOnly"> & {
+  Omit<PublicContentCollectionInput, "sort" | "page" | "pageSize" | "featured" | "featuredId" | "popularOnly"> & {
     contentTypes: ContentType[];
     search: string;
     categorySlugs: string[];
     seriesSlug: string;
     seriesSlugs: string[];
     excludeIds: number[];
+    featuredId: number | undefined;
     relatedTo: { categorySlug: string; seriesSlug: string };
   } {
   const contentTypes = CONTENT_TYPES.filter((contentType) =>
@@ -147,6 +149,7 @@ export function normalizePublicContentCollectionInput(
   const requestedPageSize = search
     ? PUBLIC_CONTENT_SEARCH_RESULT_LIMIT
     : Math.floor(Number(input.pageSize ?? 12));
+  const featuredId = Number(input.featuredId);
 
   return {
     ...input,
@@ -162,6 +165,8 @@ export function normalizePublicContentCollectionInput(
     seriesSlug: normalizeSlug(input.seriesSlug),
     seriesSlugs: normalizeSlugList(input.seriesSlugs),
     featured: search ? "none" : input.featured ?? "none",
+    featuredId:
+      !search && Number.isSafeInteger(featuredId) && featuredId > 0 ? featuredId : undefined,
     popularOnly: Boolean(input.popularOnly),
     excludeIds: [...new Set((input.excludeIds ?? []).filter(Number.isInteger))],
     relatedTo: {
