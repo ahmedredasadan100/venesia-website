@@ -1,34 +1,24 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
+import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
+import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
 type MediaCenterHubTimelineProps = {
   items: MediaContentItem[];
+  presentation: MediaHubModulePresentation;
 };
 
 export default function MediaCenterHubTimeline({
   items,
+  presentation,
 }: MediaCenterHubTimelineProps) {
   return (
     <section>
-      <div className="mb-6 flex items-center justify-between gap-4 border-b border-white/10 pb-5">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.28em] text-[#D8B87A]/70">
-            Site Updates
-          </p>
-
-          <h2 className="mt-3 text-2xl font-semibold text-white">
-            من أرض التنفيذ
-          </h2>
-        </div>
-
-        <Link
-          href="/media-center/site-updates"
-          className="text-sm font-medium text-[#D8B87A] transition hover:text-white"
-        >
-          استكشف القسم
-        </Link>
-      </div>
+      <MediaCenterHubSectionHeader
+        presentation={presentation}
+        href="/media-center/site-updates"
+      />
 
       <div className="relative space-y-5 before:absolute before:right-[13px] before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-[#D8B87A]/20">
         {items.map((item) => (

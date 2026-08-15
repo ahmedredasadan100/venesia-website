@@ -3,6 +3,13 @@ import type { MediaHubSectionKey } from "./types";
 
 export type MediaHubMediaType = "news" | "site_update" | "video" | "gallery" | "press";
 
+export type MediaHubModulePresentation = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  ctaText: string;
+};
+
 export type MediaHubModuleConfig = {
   source: "topics";
   type?: MediaHubMediaType;
@@ -10,6 +17,7 @@ export type MediaHubModuleConfig = {
   limit?: number;
   sideLimit?: number;
   listLimit?: number;
+  presentation: MediaHubModulePresentation;
 };
 
 export const MEDIA_HUB_SECTION_DEFAULTS: Record<
@@ -22,24 +30,76 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
   }
 > = {
   featured: {
-    config: { source: "topics", type: "news", featured: true, sideLimit: 3, listLimit: 4 },
+    config: {
+      source: "topics",
+      type: "news",
+      featured: true,
+      sideLimit: 3,
+      listLimit: 4,
+      presentation: {
+        eyebrow: "Latest News",
+        title: "آخر الأخبار",
+        description: "",
+        ctaText: "استكشف الأخبار",
+      },
+    },
     defaultSideLimit: 3,
     defaultListLimit: 4,
   },
   "site-updates": {
-    config: { source: "topics", type: "site_update", limit: 4 },
+    config: {
+      source: "topics",
+      type: "site_update",
+      limit: 4,
+      presentation: {
+        eyebrow: "Site Updates",
+        title: "من أرض التنفيذ",
+        description: "",
+        ctaText: "استكشف القسم",
+      },
+    },
     defaultLimit: 4,
   },
   videos: {
-    config: { source: "topics", type: "video", limit: 4 },
+    config: {
+      source: "topics",
+      type: "video",
+      limit: 4,
+      presentation: {
+        eyebrow: "Videos",
+        title: "الفيديوهات",
+        description: "",
+        ctaText: "استكشف القسم",
+      },
+    },
     defaultLimit: 4,
   },
   gallery: {
-    config: { source: "topics", type: "gallery", limit: 8 },
+    config: {
+      source: "topics",
+      type: "gallery",
+      limit: 8,
+      presentation: {
+        eyebrow: "Gallery",
+        title: "معرض الصور",
+        description: "",
+        ctaText: "استكشف القسم",
+      },
+    },
     defaultLimit: 8,
   },
   press: {
-    config: { source: "topics", type: "press", limit: 6 },
+    config: {
+      source: "topics",
+      type: "press",
+      limit: 6,
+      presentation: {
+        eyebrow: "Press Releases",
+        title: "البيانات الصحفية",
+        description: "",
+        ctaText: "كل البيانات",
+      },
+    },
     defaultLimit: 6,
   },
 };
@@ -58,6 +118,25 @@ function readLimit(value: Json | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function readPresentation(
+  value: Json | undefined,
+  fallback: MediaHubModulePresentation,
+): MediaHubModulePresentation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...fallback };
+  }
+
+  const readText = (key: keyof MediaHubModulePresentation) =>
+    typeof value[key] === "string" ? value[key].trim() : fallback[key];
+
+  return {
+    eyebrow: readText("eyebrow"),
+    title: readText("title"),
+    description: readText("description"),
+    ctaText: readText("ctaText"),
+  };
+}
+
 export function parseMediaHubModuleConfig(
   raw: Json,
   sectionKey: MediaHubSectionKey,
@@ -66,6 +145,7 @@ export function parseMediaHubModuleConfig(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...fallback };
 
   const source = raw.source === "topics" ? "topics" : fallback.source;
+  const presentation = readPresentation(raw.presentation, fallback.presentation);
 
   if (sectionKey === "featured") {
     return {
@@ -74,6 +154,7 @@ export function parseMediaHubModuleConfig(
       featured: true,
       sideLimit: readLimit(raw.sideLimit, fallback.sideLimit ?? 3),
       listLimit: readLimit(raw.listLimit, fallback.listLimit ?? 4),
+      presentation,
     };
   }
 
@@ -82,6 +163,7 @@ export function parseMediaHubModuleConfig(
     source,
     type: mediaType as MediaHubMediaType,
     limit: readLimit(raw.limit, fallback.limit ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit ?? 4),
+    presentation,
   };
 }
 
@@ -89,6 +171,7 @@ export function buildMediaHubModuleConfig(
   sectionKey: MediaHubSectionKey,
   dataSource: string,
   limits: { limit?: number; sideLimit?: number; listLimit?: number },
+  presentation: MediaHubModulePresentation,
 ): MediaHubModuleConfig {
   if (dataSource !== "topics") {
     throw new Error("مصدر البيانات غير مدعوم حاليًا.");
@@ -102,6 +185,7 @@ export function buildMediaHubModuleConfig(
       featured: true,
       sideLimit: Math.max(1, limits.sideLimit || defaults.defaultSideLimit || 3),
       listLimit: Math.max(1, limits.listLimit || defaults.defaultListLimit || 4),
+      presentation,
     };
   }
 
@@ -110,5 +194,6 @@ export function buildMediaHubModuleConfig(
     source: "topics",
     type: (sectionKey === "site-updates" ? "site_update" : sectionKey) as MediaHubMediaType,
     limit: Math.max(1, limits.limit || defaults.defaultLimit || 4),
+    presentation,
   };
 }

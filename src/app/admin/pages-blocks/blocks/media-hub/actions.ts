@@ -33,6 +33,11 @@ export async function updateMediaHubModule(formData: FormData) {
     limit: parseNumber(formData.get("limit"), 0),
     sideLimit: parseNumber(formData.get("side_limit"), 0),
     listLimit: parseNumber(formData.get("list_limit"), 0),
+  }, {
+    eyebrow: cleanText(formData.get("eyebrow")),
+    title: cleanText(formData.get("title")),
+    description: cleanText(formData.get("presentation_description")),
+    ctaText: cleanText(formData.get("cta_text")),
   });
 
   const nextRow = {

@@ -1,13 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
+import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
+import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
 type MediaCenterHubGalleryProps = {
   items: MediaContentItem[];
+  presentation: MediaHubModulePresentation;
 };
 
 export default function MediaCenterHubGallery({
   items,
+  presentation,
 }: MediaCenterHubGalleryProps) {
   const featuredImage = items[0];
   const sideImages = items.slice(1, 5);
@@ -16,24 +20,10 @@ export default function MediaCenterHubGallery({
 
   return (
     <section>
-      <div className="mb-6 flex items-center justify-between gap-4 border-b border-white/10 pb-5">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.28em] text-[#D8B87A]/70">
-            Gallery
-          </p>
-
-          <h2 className="mt-3 text-2xl font-semibold text-white">
-            معرض الصور
-          </h2>
-        </div>
-
-        <Link
-          href="/media-center/gallery"
-          className="text-sm font-medium text-[#D8B87A] transition hover:text-white"
-        >
-          استكشف القسم
-        </Link>
-      </div>
+      <MediaCenterHubSectionHeader
+        presentation={presentation}
+        href="/media-center/gallery"
+      />
 
 <div className="grid gap-3 lg:grid-cols-[1.35fr_0.85fr] lg:[direction:ltr]">        <div className="grid grid-cols-2 gap-3">
           {sideImages.map((item) => (

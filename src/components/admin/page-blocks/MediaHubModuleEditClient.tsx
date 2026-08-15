@@ -65,6 +65,10 @@ export default function MediaHubModuleEditClient({
   const parsedInitial = parseMediaHubModuleConfig(initialConfig, initialSectionKey);
 
   const [sectionKey, setSectionKey] = useState<MediaHubSectionKey>(initialSectionKey);
+  const [eyebrow, setEyebrow] = useState(parsedInitial.presentation.eyebrow);
+  const [title, setTitle] = useState(parsedInitial.presentation.title);
+  const [description, setDescription] = useState(parsedInitial.presentation.description);
+  const [ctaText, setCtaText] = useState(parsedInitial.presentation.ctaText);
   const [limit, setLimit] = useState<number | "">(
     typeof parsedInitial.limit === "number" ? parsedInitial.limit : MEDIA_HUB_SECTION_DEFAULTS[initialSectionKey].defaultLimit ?? "",
   );
@@ -77,6 +81,11 @@ export default function MediaHubModuleEditClient({
 
   function handleSectionChange(nextSectionKey: MediaHubSectionKey) {
     setSectionKey(nextSectionKey);
+    const nextPresentation = MEDIA_HUB_SECTION_DEFAULTS[nextSectionKey].config.presentation;
+    setEyebrow(nextPresentation.eyebrow);
+    setTitle(nextPresentation.title);
+    setDescription(nextPresentation.description);
+    setCtaText(nextPresentation.ctaText);
 
     if (nextSectionKey === "featured") {
       setSideLimit(MEDIA_HUB_SECTION_DEFAULTS.featured.defaultSideLimit ?? 3);
@@ -135,6 +144,46 @@ export default function MediaHubModuleEditClient({
                       </p>
                     </div>
                   </ModuleEditorField>
+
+                  <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
+                    <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
+                    <input
+                      name="eyebrow"
+                      value={eyebrow}
+                      onChange={(event) => setEyebrow(event.target.value)}
+                      className={fieldClassName()}
+                    />
+                  </label></ModuleEditorField>
+
+                  <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
+                    <span className="text-xs font-semibold text-white/55">عنوان السكشن</span>
+                    <input
+                      name="title"
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      className={fieldClassName()}
+                    />
+                  </label></ModuleEditorField>
+
+                  <ModuleEditorField nature="short-description" span={3}><label className="block space-y-2">
+                    <span className="text-xs font-semibold text-white/55">وصف السكشن</span>
+                    <input
+                      name="presentation_description"
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      className={fieldClassName()}
+                    />
+                  </label></ModuleEditorField>
+
+                  <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
+                    <span className="text-xs font-semibold text-white/55">نص زر الاستكشاف</span>
+                    <input
+                      name="cta_text"
+                      value={ctaText}
+                      onChange={(event) => setCtaText(event.target.value)}
+                      className={fieldClassName()}
+                    />
+                  </label></ModuleEditorField>
 
                   {sectionKey === "featured" ? (
                     <ModuleEditorField nature="standard" span={6}><div className="grid gap-5 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">

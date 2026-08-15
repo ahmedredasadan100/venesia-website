@@ -22,9 +22,7 @@ export default async function MediaCenterPage() {
 
   return (
     <InternalPageLayout
-      title={config.title}
-      eyebrow={config.eyebrow}
-      subtitle={config.subtitle}
+      title=""
       heroImage={config.heroImage}
       heroImagePositionClassName={config.heroImagePositionClassName}
       dynamicHero={heroEntry?.hero}
