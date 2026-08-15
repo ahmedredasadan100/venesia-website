@@ -25,7 +25,3 @@ export function resolveHomeModuleSlugFromTemplate(
   if (isHomeContactTemplate(templateSlug, variant)) return "home-contact";
   return null;
 }
-
-export function isHomeModuleSlug(value: string): value is HomeModuleSlug {
-  return HOME_MODULE_SLUGS.some((slug) => slug === value);
-}

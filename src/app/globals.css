@@ -79,15 +79,6 @@ p {
   }
 }
 
-@keyframes hero-ken-burns-alt {
-  0% {
-    transform: translate(calc(-50% + 0.32%), calc(-50% + 0.16%)) scale(1.00);
-  }
-  100% {
-    transform: translate(calc(-50% - 0.38%), calc(-50% - 0.20%)) scale(1.050);
-  }
-}
-
 .hero-slide-ken-burns {
   /* 44 s — unhurried cinematic drift, starts at natural scale */
   animation: hero-ken-burns 44s ease-in-out infinite alternate;
@@ -106,64 +97,6 @@ p {
   min-width: 100%;
   min-height: 100%;
   max-width: none;
-}
-
-.hero-slide-ken-burns-alt {
-  /* 48 s — slightly longer to avoid feeling synchronised with even slides */
-  animation: hero-ken-burns-alt 48s ease-in-out infinite alternate;
-  will-change: transform;
-}
-
-@keyframes hero-card-ken-burns {
-  0% {
-    transform: scale(1.03);
-  }
-  100% {
-    transform: scale(1.08) translate3d(-0.6%, 0.4%, 0);
-  }
-}
-
-@keyframes hero-card-ken-burns-alt {
-  0% {
-    transform: scale(1.03) translate3d(0.25%, 0.15%, 0);
-  }
-  100% {
-    transform: scale(1.075) translate3d(0.65%, -0.35%, 0);
-  }
-}
-
-.hero-card-ken-burns {
-  animation: hero-card-ken-burns 20s ease-in-out infinite alternate;
-  will-change: transform;
-  transform-origin: center center;
-}
-
-.hero-card-ken-burns-alt {
-  animation: hero-card-ken-burns-alt 22s ease-in-out infinite alternate;
-  will-change: transform;
-  transform-origin: center center;
-}
-
-.hero-bg-parallax-layer {
-  transform: translate3d(0, 0, 0) scale(1.025);
-  will-change: transform;
-}
-
-/* ─── hero melt ────────────────────────────────────────────────────────────────
-   Minimal colour seal only — ensures the hero's bottom edge is #05070B so
-   the join with <main> is invisible. No atmosphere is added here; all
-   atmospheric blending happens at the TOP of the Projects section instead.       */
-.venesia-hero-melt {
-  background:
-    linear-gradient(
-      to bottom,
-      transparent              0%,
-      transparent             58%,
-      rgba(5,  7,  11, 0.08)  70%,
-      rgba(5,  7,  11, 0.45)  83%,
-      rgba(5,  7,  11, 0.86)  93%,
-      #05070B                 100%
-    );
 }
 
 /* ─── projects section atmospheric cap ─────────────────────────────────────────
@@ -208,36 +141,6 @@ p {
   background-size: 250px 250px;
   opacity: 0.028;
   mix-blend-mode: overlay;
-}
-
-/* ─── gold sweep — cinematic hover light on cards / images ──────────────────────
-   A skewed luminance band that travels across the card once on mouse-enter.
-   Add a <div aria-hidden className="venesia-gold-sweep" /> inside any
-   overflow-hidden container whose ancestor has class "group".                     */
-@keyframes venesia-gold-sweep {
-  0%   { transform: translateX(-130%) skewX(-12deg); }
-  100% { transform: translateX(230%)  skewX(-12deg); }
-}
-
-.venesia-gold-sweep {
-  position: absolute;
-  inset: 0;
-  width: 55%;
-  background: linear-gradient(
-    90deg,
-    transparent                  0%,
-    rgba(216, 184, 122, 0.05)   35%,
-    rgba(216, 184, 122, 0.13)   50%,
-    rgba(216, 184, 122, 0.05)   65%,
-    transparent                100%
-  );
-  transform: translateX(-130%) skewX(-12deg);
-  pointer-events: none;
-  z-index: 8;
-}
-
-.group:hover .venesia-gold-sweep {
-  animation: venesia-gold-sweep 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
 /* ─── scroll reveal (safe-by-default) ─────────────────────────────────────────
@@ -332,147 +235,6 @@ p {
     linear-gradient(to bottom, transparent 0%, rgba(5, 7, 11, 0.60) 100%);
 }
 
-/* ─── about internal hero — restrained cinematic motion ─────────────────────── */
-@keyframes about-hero-ken-burns {
-  0% {
-    transform: translate(-50%, -50%) scale(1);
-  }
-  100% {
-    transform: translate(calc(-50% - 0.16%), calc(-50% + 0.1%)) scale(1.014);
-  }
-}
-
-.about-hero-ken-burns {
-  animation: about-hero-ken-burns 66s ease-in-out infinite alternate;
-  will-change: transform;
-}
-
-@keyframes about-hero-media-enter {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.about-hero-media-enter {
-  animation: about-hero-media-enter 1.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-@keyframes about-hero-content-enter {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.about-hero-content-enter {
-  animation: about-hero-content-enter 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.12s forwards;
-  opacity: 0;
-}
-
-@keyframes about-hero-atmosphere-drift {
-  0%,
-  100% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-  50% {
-    opacity: 0.94;
-    transform: translate3d(0, -0.2%, 0);
-  }
-}
-
-.about-hero-atmosphere-drift {
-  animation: about-hero-atmosphere-drift 34s ease-in-out infinite;
-  will-change: opacity, transform;
-}
-
-@keyframes about-hero-glow-breathe {
-  0%,
-  100% {
-    opacity: 0.88;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.about-hero-glow-breathe {
-  animation: about-hero-glow-breathe 22s ease-in-out infinite;
-}
-
-.about-hero-parallax-layer {
-  transform: translate3d(0, 0, 0) scale(1.035);
-  will-change: transform;
-  transition: transform 0.18s linear;
-}
-
-/* ─── About Hero Cinematic Diagonal Cut ───────────────────────── */
-
-.about-hero-diagonal-cut {
-  position: absolute;
-  inset-inline: 0;
-  bottom: -1px;
-  height: 100px;
-  z-index: 6;
-  pointer-events: none;
-
-  background:
-    linear-gradient(
-      to bottom right,
-      transparent 0%,
-      transparent 43%,
-      rgba(5,7,11,0.72) 44%,
-      #05070B 72%,
-      #05070B 100%
-    );
-    box-shadow:
-  inset 0 1px 0 rgba(216,184,122,0.05);
-}
-
-/* subtle atmospheric continuation */
-.about-hero-diagonal-cut::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-
-  background:
-    radial-gradient(
-      ellipse at 20% 0%,
-      rgba(216,184,122,0.10) 0%,
-      transparent 58%
-    ),
-    linear-gradient(
-      to bottom,
-      rgba(5,7,11,0.00) 0%,
-      rgba(5,7,11,0.28) 100%
-    );
-
-  mix-blend-mode: screen;
-  opacity: 0.65;
-}
-@keyframes shimmer {
-  0% {
-    transform: translateX(130%);
-    opacity: 0;
-  }
-  18% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(-230%);
-    opacity: 0;
-  }
-}
 @keyframes featuredFade {
   0% {
     opacity: 0;
@@ -492,17 +254,6 @@ p {
 
   100% {
     opacity: 1;
-  }
-}
- @keyframes heroProjectCard {
-  0% {
-    opacity: 0;
-    transform: translateY(14px) scale(0.985);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
@@ -613,8 +364,7 @@ p {
   inherits: false;
 }
 
-.admin-premium-card::after,
-.admin-mini-card::after {
+.admin-premium-card::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -641,19 +391,9 @@ p {
   transition: opacity 280ms ease;
 }
 
-.admin-premium-card:hover::after,
-.admin-mini-card:hover::after {
+.admin-premium-card:hover::after {
   opacity: 1;
   animation: admin-edge-trace 1.15s linear infinite;
-}
-
-.admin-mini-card {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
-}
-
-.admin-mini-card > * {
-  position: relative;
-  z-index: 2;
 }
 
 .admin-premium-card > * {
@@ -692,13 +432,6 @@ select.admin-select option {
 .admin-select option:hover {
   background-color: #1B2330;
   color: #D8B87A;
-}
-
-/* ─────────────────────────────────────────────────────────
-   Admin Bulk Actions Visibility
-───────────────────────────────────────────────────────── */
-.bulk-menu-scope:has(input[name="menu_ids"]:checked) .bulk-menu-bar {
-  display: flex;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -1693,10 +1426,7 @@ select.admin-select option {
     transition: none !important;
   }
 
-  .hero-slide-ken-burns,
-  .hero-slide-ken-burns-alt,
-  .hero-card-ken-burns,
-  .hero-card-ken-burns-alt {
+  .hero-slide-ken-burns {
     animation: none !important;
   }
 

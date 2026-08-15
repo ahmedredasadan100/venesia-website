@@ -9,32 +9,32 @@ This file records the minimum current facts needed to begin work safely. Archite
 
 ## Current official baseline
 
-The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified Platform Health implementation merge is:
+The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified Platform Performance Optimization merge is:
 
 ```text
-b7c726f97378513adc3adc759242a975a57babc5
+e7a041982c0a816f14a264181f17ce41af7652c9
 ```
 
-Verified after PR #98 merged on 2026-08-15:
+Verified after PR #100 merged on 2026-08-15:
 
 | Surface | SHA / state |
 |---|---|
-| Platform Health implementation merge | `b7c726f97378513adc3adc759242a975a57babc5` |
-| Post-merge local `main` / `origin/main` / GitHub `main` | `b7c726f97378513adc3adc759242a975a57babc5` |
-| Delivery state | PR #98 merged; the implementation branch is no longer an active authority |
+| Platform Performance Optimization merge | `e7a041982c0a816f14a264181f17ce41af7652c9` |
+| Post-merge local `main` / `origin/main` / GitHub `main` | `e7a041982c0a816f14a264181f17ce41af7652c9` |
+| Delivery state | PR #100 merged; the implementation branch is no longer an active authority |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-The Platform Health implementation and `DEBT-TYPE-01` closure were delivered through PR #98. Current `main` is the only official baseline. Future work starts from live `main` and is limited to requested Features or explicitly scoped Bugs; this snapshot does not reopen closed Architecture or historical Technical Debt.
+The Platform Health implementation and `DEBT-TYPE-01` closure were delivered through PR #98, and Platform Performance Optimization was delivered through PR #100. Current `main` is the only official baseline. This snapshot does not reopen closed Architecture, historical Technical Debt, or completed Performance work.
 
 ## Active phase
 
-- **Title:** Feature Development Baseline
-- **Baseline:** live GitHub `main`; Platform Health implementation merge `b7c726f97378513adc3adc759242a975a57babc5`
-- **Status:** Platform Health Discovery, Final Closure, and `DEBT-TYPE-01` are closed at implementation and merge level through PR #98.
-- **Scope:** future Features and explicitly requested, evidence-backed Bugs only.
+- **Title:** Dead Code Cleanup
+- **Baseline:** live GitHub `main`; Platform Performance Optimization merge `e7a041982c0a816f14a264181f17ce41af7652c9`
+- **Status:** Platform Health Discovery, Final Closure, and `DEBT-TYPE-01` are closed through PR #98; Platform Performance Optimization is closed at implementation and merge level through PR #100.
+- **Scope:** remove only dead code proven unreachable across repository, runtime, CMS, configuration, registry, and external-use evidence.
 - **Boundaries:** do not reopen Architecture, historical PRs, or old Technical Debt without current-`main` regression evidence and an explicit scoped request.
 - **Delivery:** every future phase must independently prove local `main` = `origin/main` = GitHub `main` before implementation.
 

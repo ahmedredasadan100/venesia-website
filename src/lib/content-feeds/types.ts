@@ -1,4 +1,4 @@
-export type ContentFeedParent = "topics" | "media-center";
+
 
 export type SidebarCategoryItem = {
   name: string;
@@ -20,21 +20,4 @@ export type SidebarArticleItem = {
   excerpt?: string;
   image: string;
   href: string;
-};
-
-export type SidebarFeedsData = {
-  categories: SidebarCategoryItem[];
-  series: SidebarSeriesItem[];
-  latest: SidebarArticleItem[];
-  popular: SidebarArticleItem[];
-};
-
-export type SidebarFeedLabels = {
-  categoriesEyebrow: string;
-  categoriesTitle: string;
-  seriesEyebrow: string;
-  seriesTitle: string;
-  seriesLinkText: string;
-  latestTitle: string;
-  mostReadTitle: string;
 };

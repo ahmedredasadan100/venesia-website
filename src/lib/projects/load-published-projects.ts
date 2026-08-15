@@ -14,8 +14,7 @@ import {
   type PublicProjectLocationRow,
   type PublicProjectRootRow,
 } from "./map-public-project";
-import type { ProjectHubFilterId, PublicProject } from "./public-types";
-import { getProjectStats, getProjectsByFilter } from "./public-helpers";
+import type { PublicProject } from "./public-types";
 
 const PUBLIC_PROJECT_COLUMNS = "id,type,arabic_name,english_name,slug,code,featured,show_on_homepage,homepage_order,brochure_url,publication_status,published_at,general_description,short_description,image,image_alt,hero_image,hero_image_alt,small_box_image,small_box_image_alt,governorate_id,city_id,main_area_id,sub_area_id,location_label,location_description,google_maps_url,latitude,longitude,map_zoom,overview_title,overview_body,overview_media_type,overview_main_image,overview_main_image_alt,delivery_title,delivery_body,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,created_at,updated_at";
 
@@ -88,12 +87,11 @@ async function loadLocationRows(
   return result.data ?? [];
 }
 
-async function queryPublicProjects(featuredOnly = false) {
-  let request = getSupabaseAdmin()
+async function queryPublicProjects() {
+  const request = getSupabaseAdmin()
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
     .eq("publication_status", "published");
-  if (featuredOnly) request = request.eq("featured", true);
   const result = await request
     .order("updated_at", { ascending: false })
     .order("id", { ascending: false });
@@ -112,7 +110,7 @@ async function queryPublicProjects(featuredOnly = false) {
 
 async function queryPublicProjectsCached() {
   return unstable_cache(
-    () => queryPublicProjects(false),
+    () => queryPublicProjects(),
     ["public-projects-clean-aggregate"],
     { revalidate: 300, tags: ["projects"] },
   )();
@@ -289,21 +287,3 @@ export const loadProjectForAdminPreviewResult = cache(
     };
   },
 );
-
-export async function loadFeaturedProjects(): Promise<PublicProject[]> {
-  return unstable_cache(
-    () => queryPublicProjects(true),
-    ["public-featured-projects-clean-aggregate"],
-    { revalidate: 300, tags: ["projects"] },
-  )();
-}
-
-export async function loadProjectsHubData(filterId: ProjectHubFilterId = "all") {
-  const projects = await loadPublishedProjects();
-  return {
-    projects: getProjectsByFilter(projects, filterId),
-    allProjects: [...projects],
-    featuredProjects: projects.filter((project) => project.featured),
-    stats: getProjectStats(projects),
-  };
-}

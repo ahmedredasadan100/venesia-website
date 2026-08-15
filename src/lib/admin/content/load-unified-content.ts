@@ -14,13 +14,7 @@ import {
 import { isContentType, type ContentType } from "./content-types";
 
 export {
-  TOPICS_LIST_DEFAULT_PAGE_SIZE as DEFAULT_CONTENT_LIST_PAGE_SIZE,
-  TOPICS_LIST_PAGE_SIZES as CONTENT_LIST_PAGE_SIZES,
   TOPICS_LIST_VIEW_KEY as CONTENT_LIST_VIEW_KEY,
-} from "./topics-list-config";
-import {
-  TOPICS_LIST_DEFAULT_PAGE_SIZE,
-  TOPICS_LIST_PAGE_SIZES,
 } from "./topics-list-config";
 
 export const CONTENT_SORT_VALUES = [
@@ -51,10 +45,6 @@ export const CONTENT_SORT_VALUES = [
 ] as const;
 
 export type ContentSortValue = (typeof CONTENT_SORT_VALUES)[number];
-
-export const DEFAULT_CONTENT_LIST_SORT: ContentSortValue = "title_asc";
-
-const CONTENT_SORT_SET = new Set<string>(CONTENT_SORT_VALUES);
 type SeoContentSortValue = "seo_asc" | "seo_desc";
 const SEO_SORT_VALUES = new Set<ContentSortValue>(["seo_asc", "seo_desc"]);
 
@@ -63,8 +53,6 @@ function isSeoContentSortValue(
 ): value is SeoContentSortValue {
   return SEO_SORT_VALUES.has(value);
 }
-const STATUS_VALUES = new Set(["published", "unpublished"]);
-const FEATURED_VALUES = new Set(["yes", "no"]);
 
 export type UnifiedContentFilters = {
   q: string;
@@ -323,51 +311,6 @@ export function cleanContentTitleSearch(value?: string | null) {
     .replace(/[%_,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function getPositiveInteger(value: string | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function getOptionalId(value?: string) {
-  if (!value) return null;
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
-export function normalizeUnifiedContentFilters(
-  params?: ContentListSearchParams,
-): UnifiedContentFilters {
-  const rawType = params?.content_type;
-  const rawStatus = params?.status;
-  const rawFeatured = params?.featured;
-  const rawSort = params?.sort;
-  const requestedPageSize = getPositiveInteger(params?.limit, TOPICS_LIST_DEFAULT_PAGE_SIZE);
-
-  return {
-    q: cleanContentTitleSearch(params?.q),
-    view: params?.view === "trash" ? "trash" : "active",
-    contentType: isContentType(rawType) ? rawType : "all",
-    categoryId: getOptionalId(params?.category),
-    seriesId: params?.series === "any" ? "any" : getOptionalId(params?.series),
-    status: rawStatus && STATUS_VALUES.has(rawStatus) ? rawStatus : "all",
-    featured:
-      rawFeatured && FEATURED_VALUES.has(rawFeatured)
-        ? (rawFeatured as "yes" | "no")
-        : "all",
-    image: params?.image === "without" ? "without" : "all",
-    sort:
-      rawSort && CONTENT_SORT_SET.has(rawSort)
-        ? (rawSort as ContentSortValue)
-        : DEFAULT_CONTENT_LIST_SORT,
-    page: getPositiveInteger(params?.page, 1),
-    pageSize: TOPICS_LIST_PAGE_SIZES.includes(
-      requestedPageSize as (typeof TOPICS_LIST_PAGE_SIZES)[number],
-    )
-      ? requestedPageSize
-      : TOPICS_LIST_DEFAULT_PAGE_SIZE,
-  };
 }
 
 interface UnifiedContentFilterQuery {

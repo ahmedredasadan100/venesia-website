@@ -3,7 +3,6 @@ import "server-only";
 import {
   loadPublicContentCollection,
   loadPublicContentDetail,
-  loadPublicContentSlugs,
 } from "../content/public-content-read/owner";
 import { adaptPublicContentToMediaItem } from "./adapt-topic-row";
 import {
@@ -35,10 +34,6 @@ export async function unifiedGetMediaItems(type?: MediaContentType) {
 export async function unifiedGetMediaItemBySlug(type: MediaContentType, slug: string) {
   const item = await loadPublicContentDetail(type, slug);
   return item ? adaptPublicContentToMediaItem(item) : null;
-}
-
-export async function unifiedGetMediaStaticParams(type: MediaContentType) {
-  return loadPublicContentSlugs(type);
 }
 
 export async function unifiedGetMediaListingPage(

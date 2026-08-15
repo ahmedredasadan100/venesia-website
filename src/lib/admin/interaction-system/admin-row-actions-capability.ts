@@ -101,11 +101,6 @@ export type AdminRowActionTarget =
   | AdminRowActionDisabled
   | AdminRowActionAllowed;
 
-export type AdminRowActionState =
-  | AdminRowActionHidden
-  | AdminRowActionDisabled
-  | AdminRowActionAllowedState;
-
 export type AdminRowActionInformationItem = {
   label: string;
   value: string;

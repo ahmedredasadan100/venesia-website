@@ -19,17 +19,3 @@ export function buildAdminListSearchOrFilter(fields: readonly string[], term: st
   const pattern = `"%${escaped}%"`;
   return fields.map((field) => `${field}.ilike.${pattern}`).join(",");
 }
-
-interface AdminListTextSearchQuery {
-  or(filter: string): this;
-}
-
-export function applyAdminListTextSearch<Query extends AdminListTextSearchQuery>(
-  query: Query,
-  term: string | undefined | null,
-  fields: readonly string[],
-): Query {
-  const filter = term?.trim() ? buildAdminListSearchOrFilter(fields, term) : "";
-  if (!filter) return query;
-  return query.or(filter);
-}

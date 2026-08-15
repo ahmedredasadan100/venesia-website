@@ -251,10 +251,3 @@ export const projectLocationManagementMetricsSchema = z.object({
 export type ProjectLocationManagementMetrics = z.infer<
   typeof projectLocationManagementMetricsSchema
 >;
-
-export type ProjectLocationMutationResult = {
-  ok: boolean;
-  code: string;
-  message: string;
-  location?: ProjectLocationManagementRow;
-};

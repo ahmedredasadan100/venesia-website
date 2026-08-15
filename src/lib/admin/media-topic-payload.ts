@@ -19,8 +19,6 @@ export type GalleryMediaPayload = {
 
 export type MediaTopicPayload = VideoMediaPayload | GalleryMediaPayload;
 
-export type RichMediaContentType = "video" | "gallery";
-
 function isJsonObject(
   value: Json | undefined,
 ): value is { [key: string]: Json | undefined } {
@@ -82,10 +80,6 @@ export function parseMediaTopicPayload(value: Json | undefined): MediaTopicPaylo
 }
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"]);
-
-export function isRichMediaContentType(contentType: string): contentType is RichMediaContentType {
-  return contentType === "video" || contentType === "gallery";
-}
 
 export function normalizeYouTubeUrl(raw: string): string | null {
   const trimmed = raw.trim();

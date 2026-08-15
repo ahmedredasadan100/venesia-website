@@ -83,23 +83,3 @@ export function getMediaCenterCmsPageConfig(slug: MediaCenterCmsPageSlug) {
 export function isMediaCenterCmsPageSlug(slug: string): slug is MediaCenterCmsPageSlug {
   return slug in MEDIA_CENTER_CMS_PAGES;
 }
-
-export function isMediaCenterListingCmsPageSlug(slug: string): slug is Exclude<MediaCenterCmsPageSlug, "media-center"> {
-  return slug.startsWith("media-center-") && isMediaCenterCmsPageSlug(slug);
-}
-
-/** Detail routes inherit sidebar assignments from their parent listing CMS page. */
-export const MEDIA_CENTER_DETAIL_PARENT_SLUG = {
-  news: "media-center-news",
-  videos: "media-center-videos",
-  gallery: "media-center-gallery",
-  press: "media-center-press",
-  "site-updates": "media-center-site-updates",
-} as const satisfies Record<string, Exclude<MediaCenterCmsPageSlug, "media-center">>;
-
-export function getMediaCenterDetailParentSlug(section: string) {
-  return MEDIA_CENTER_DETAIL_PARENT_SLUG[section as keyof typeof MEDIA_CENTER_DETAIL_PARENT_SLUG] ?? null;
-}
-
-/** Listing pages render optional CMS blocks inside the content card only. */
-export const MEDIA_CENTER_LISTING_BLOCK_SLOTS = ["main", "bottom"] as const;

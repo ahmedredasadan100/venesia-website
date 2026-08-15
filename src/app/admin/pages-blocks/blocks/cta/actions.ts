@@ -11,7 +11,7 @@ import {
 } from "../../../../../lib/admin/media-catalog/synchronization";
 
 import { redirect } from "next/navigation";
-import type { Tables, TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
+import type { TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
@@ -404,21 +404,4 @@ export async function bulkCtaBlocks(formData: FormData) {
     redirect("/admin/pages-blocks/blocks/cta?notice=saved_with_media_sync_warning");
   }
   await revalidateBlockModulePaths("cta");
-}
-
-export type CtaBlockRow = Pick<
-  Tables<"cta_block_templates">,
-  "id" | "name" | "slug" | "description" | "variant" | "status" | "updated_at"
->;
-
-export async function getCtaBlockRows(): Promise<CtaBlockRow[]> {
-  await requireAdminSession();
-  const { data, error } = await getSupabaseAdmin()
-    .from("cta_block_templates")
-    .select("id,name,slug,description,variant,status,updated_at")
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
 }

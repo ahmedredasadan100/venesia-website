@@ -128,12 +128,6 @@ export function getCategoryAndDescendantIds(
   return [...ids];
 }
 
-export function getSelectableAdminCategories(categories: AdminContentCategory[]) {
-  return flattenAdminCategoryTree(buildAdminCategoryTree(categories)).filter(
-    (category) => category.status === "published",
-  );
-}
-
 /** Project adapter: category tree data -> portable hierarchical filter options. */
 export function toAdminCategoryFilterOptions(
   categories: readonly AdminContentCategoryNode[],

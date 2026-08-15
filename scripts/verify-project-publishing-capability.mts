@@ -164,9 +164,10 @@ check(
     !publicDetail.includes("loadProjectForAdminPreviewResult"),
 );
 check(
-  "featured Marketing query requires both published and featured at the database",
-  publicLoader.includes("queryPublicProjects(true)") &&
-    publicLoader.includes('request = request.eq("featured", true)'),
+  "featured Marketing views reuse the published collection without a dead featured-only loader",
+  publicLoader.includes("async function queryPublicProjects()") &&
+    !publicLoader.includes("featuredOnly") &&
+    !publicLoader.includes("loadFeaturedProjects"),
 );
 check(
   "Track uses its explicit non-Marketing loader",

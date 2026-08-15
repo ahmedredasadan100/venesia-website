@@ -27,7 +27,7 @@ import {
   parsePageIdsFromForm,
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
-import type { Tables, TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
+import type { TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
 import type { CardsBlockConfig, CardsBlockItem } from "../../../../../lib/page-blocks/configs";
 import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
 
@@ -437,21 +437,4 @@ export async function bulkCardsBlocks(formData: FormData) {
     redirect("/admin/pages-blocks/blocks/cards?notice=saved_with_media_sync_warning");
   }
   await revalidateBlockModulePaths("cards");
-}
-
-export type CardsBlockRow = Pick<
-  Tables<"cards_block_templates">,
-  "id" | "name" | "slug" | "description" | "variant" | "status" | "updated_at"
->;
-
-export async function getCardsBlockRows(): Promise<CardsBlockRow[]> {
-  await requireAdminSession();
-  const { data, error } = await getSupabaseAdmin()
-    .from("cards_block_templates")
-    .select("id,name,slug,description,variant,status,updated_at")
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
 }

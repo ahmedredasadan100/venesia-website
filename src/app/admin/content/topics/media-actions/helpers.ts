@@ -10,7 +10,6 @@ import {
 import {
   getMediaDraftBlockingChecks,
   getMediaPublishBlockingChecks,
-  getMediaPublishValidationError as validateMediaPublishInput,
   type MediaPublishInput,
 } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { validateSlugFormat } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
@@ -128,16 +127,6 @@ function payloadToMediaPublishInput(
   };
 }
 
-export function getPublishedValidationError(
-  contentType: MediaEditableContentType,
-  mediaPayload: MediaTopicPayload | null,
-  status: MediaStatus,
-  payload: MediaPayload,
-) {
-  if (status !== "published") return null;
-  return validateMediaPublishInput(payloadToMediaPublishInput(payload, mediaPayload, contentType));
-}
-
 export function getPublishedValidationChecks(
   contentType: MediaEditableContentType,
   mediaPayload: MediaTopicPayload | null,
@@ -234,18 +223,4 @@ export function buildMediaWritePayload(
     deleted_at: currentTopic?.deleted_at ?? null,
     updated_at: now,
   };
-}
-
-export function getMediaRedirectTo(formData: FormData) {
-  const value = getString(formData, "redirect_to");
-  return value.startsWith("/admin/content/topics") ? value : "/admin/content/topics";
-}
-
-export function appendMediaListNotice(path: string, notice: string, hash = "") {
-  const [pathname, search = ""] = path.split("?");
-  const params = new URLSearchParams(search);
-  params.set("notice", notice);
-  const query = params.toString();
-  const base = query ? `${pathname}?${query}` : `${pathname}?notice=${notice}`;
-  return hash ? `${base}#${hash}` : base;
 }

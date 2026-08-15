@@ -1,8 +1,6 @@
 import type { ContentBlockConfig, CtaBlockConfig } from "../../lib/page-blocks";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
-export const KNOWN_TOPICS_SECTION_SLUGS = new Set(["topics-intro", "topics-insight-cta"]);
-
 export type TopicsIntroContent = {
   eyebrow: string;
   title: string;
@@ -37,12 +35,4 @@ export function mapTopicsInsightCtaBlock(block: ResolvedPageBlock): TopicsInsigh
     buttonLabel: config.primaryCta?.label ?? "",
     buttonHref: config.primaryCta?.href ?? "/contact",
   };
-}
-
-export function indexTopicsBlocksBySlug(blocks: ResolvedPageBlock[]) {
-  const bySlug = new Map<string, ResolvedPageBlock>();
-  for (const block of blocks) {
-    bySlug.set(block.template.slug, block);
-  }
-  return bySlug;
 }

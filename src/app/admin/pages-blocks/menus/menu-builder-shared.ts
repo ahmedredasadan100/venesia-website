@@ -26,19 +26,6 @@ export type MenuItem = {
 
 export type TreeMenuItem = MenuItem & { children: TreeMenuItem[] };
 
-export type ReferenceOption = {
-  id: number;
-  title?: string | null;
-  name?: string | null;
-  slug?: string | null;
-};
-
-export type MenuReferences = {
-  topics: ReferenceOption[];
-  categories: ReferenceOption[];
-  projects: ReferenceOption[];
-};
-
 export type FlatMenuItemRow = {
   item: MenuItem;
   level: number;
@@ -49,21 +36,6 @@ export type FlatMenuItemRow = {
   /** Per ancestor depth: true when a vertical guide should continue downward. */
   ancestorLines: boolean[];
 };
-
-export const MENU_PAGE_OPTIONS = [
-  { label: "الرئيسية", href: "/" },
-  { label: "من نحن", href: "/about" },
-  { label: "مشروعاتنا", href: "/projects" },
-  { label: "تابع مشروعك", href: "/track-your-project" },
-  { label: "موضوعات تهمك", href: "/topics" },
-  { label: "المركز الإعلامي", href: "/media-center" },
-  { label: "الأخبار", href: "/media-center/news" },
-  { label: "من أرض التنفيذ", href: "/media-center/site-updates" },
-  { label: "الفيديوهات", href: "/media-center/videos" },
-  { label: "البيانات الصحفية", href: "/media-center/press" },
-  { label: "معرض الصور", href: "/media-center/gallery" },
-  { label: "تواصل معنا", href: "/contact" },
-] as const;
 
 export function menuFieldClassName(extra = "") {
   return [
@@ -129,20 +101,6 @@ export function getMenuItemTypeLabel(type: string) {
   };
 
   return labels[type] ?? type;
-}
-
-export function referenceOptionTitle(option: ReferenceOption) {
-  return option.title ?? option.name ?? option.slug ?? `#${option.id}`;
-}
-
-export function selectedReferenceId(item: MenuItem | undefined, type: string) {
-  if (!item || item.item_type !== type) return "";
-  return item.linked_id ?? "";
-}
-
-export function getParentLabel(items: MenuItem[], parentId: number | null) {
-  if (!parentId) return null;
-  return items.find((item) => item.id === parentId)?.label ?? `#${parentId}`;
 }
 
 export function flattenMenuItemsForTable(items: MenuItem[]): FlatMenuItemRow[] {

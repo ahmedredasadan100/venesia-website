@@ -15,14 +15,6 @@ import {
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type { ParsedAssignmentKey } from "./types";
 
-export function pagesListPath(options?: { notice?: string; error?: string }) {
-  const params = new URLSearchParams();
-  if (options?.notice) params.set("notice", options.notice);
-  if (options?.error) params.set("error", options.error);
-  const query = params.toString();
-  return `/admin/pages-blocks/pages${query ? `?${query}` : ""}`;
-}
-
 export function databaseAssignmentKind(kind: string) {
   return kind === "media-sidebar" ? "media_sidebar" : kind === "media-hub" ? "media_hub" : kind;
 }

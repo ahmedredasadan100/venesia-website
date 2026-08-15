@@ -30,5 +30,3 @@ export const PWA_CONFIG = {
     storageKey: "venesia-pwa-install-dismissed-at",
   },
 } as const;
-
-export type PwaIconPaths = typeof PWA_ICON_PATHS;

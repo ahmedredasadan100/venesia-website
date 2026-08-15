@@ -7,11 +7,7 @@ import {
   type MediaStorageAdapter,
   type MediaUploadOptions,
 } from "./media-storage-adapter";
-import type {
-  MediaAssetItem,
-  PublicMediaFolderListing,
-  PublicMediaInventory,
-} from "./media-library-paths";
+import type { MediaAssetItem, PublicMediaInventory } from "./media-library-paths";
 
 export type { PublicMediaFolderListing } from "./media-library-paths";
 export { normalizeMediaFolder } from "./media-library-paths";
@@ -31,20 +27,6 @@ function mergeMediaItems(...collections: MediaAssetItem[][]) {
     .sort((left, right) => left.path.localeCompare(right.path));
 }
 
-function mergeFolderListings(
-  managed: PublicMediaFolderListing,
-  local: PublicMediaFolderListing,
-): PublicMediaFolderListing {
-  return {
-    folder: managed.folder,
-    parentFolder: managed.parentFolder,
-    subfolders: [...new Set([...managed.subfolders, ...local.subfolders])].sort((left, right) => left.localeCompare(right)),
-    images: [...new Set([...managed.images, ...local.images])].sort((left, right) => left.localeCompare(right)),
-    documents: [...new Set([...managed.documents, ...local.documents])].sort((left, right) => left.localeCompare(right)),
-    items: mergeMediaItems(managed.items, local.items),
-  };
-}
-
 export async function getManagedMediaStorageAdapter(
   environment: NodeJS.ProcessEnv = process.env,
 ): Promise<MediaStorageAdapter> {
@@ -52,12 +34,6 @@ export async function getManagedMediaStorageAdapter(
     throw new Error("managed_media_provider_must_be_supabase");
   }
   return createSupabaseCmsMediaStorageAdapter();
-}
-
-export async function getMediaStorageAdapter(
-  environment: NodeJS.ProcessEnv = process.env,
-) {
-  return getManagedMediaStorageAdapter(environment);
 }
 
 export async function listManagedMediaInventory(
@@ -70,23 +46,6 @@ export async function listManagedMediaInventory(
     providerAvailable: true,
     warning: null,
   } satisfies PublicMediaInventory;
-}
-
-export async function listPublicMediaFolder(folder = "images") {
-  const environment = process.env;
-  const managedAdapter = await getManagedMediaStorageAdapter(environment);
-  if (!shouldIncludeLocalFilesystemReadThrough(environment)) {
-    return managedAdapter.listFolder(folder);
-  }
-
-  const { createFilesystemMediaStorageAdapter } = await import("./media-library-fs");
-  const localAdapter = createFilesystemMediaStorageAdapter();
-  const local = await localAdapter.listFolder(folder);
-  try {
-    return mergeFolderListings(await managedAdapter.listFolder(folder), local);
-  } catch {
-    return local;
-  }
 }
 
 export async function listPublicMediaInventory() {
@@ -114,23 +73,6 @@ export async function listPublicMediaInventory() {
       folders: local.folders,
       items: local.items,
     } satisfies PublicMediaInventory;
-  }
-}
-
-export async function listPublicImagePaths(folder = "images", limit = 240) {
-  const environment = process.env;
-  const managedAdapter = await getManagedMediaStorageAdapter(environment);
-  if (!shouldIncludeLocalFilesystemReadThrough(environment)) {
-    return managedAdapter.listImagePaths(folder, limit);
-  }
-
-  const { createFilesystemMediaStorageAdapter } = await import("./media-library-fs");
-  const local = await createFilesystemMediaStorageAdapter().listImagePaths(folder, limit);
-  try {
-    const managed = await managedAdapter.listImagePaths(folder, limit);
-    return [...new Set([...managed, ...local])].sort((left, right) => left.localeCompare(right)).slice(0, limit);
-  } catch {
-    return local;
   }
 }
 

@@ -56,11 +56,6 @@ export type AdminLinkProvider = {
   resolveMany: (ids: number[]) => Promise<Map<number, string>>;
 };
 
-export type LinkResolver = {
-  resolve: (value: AdminLinkValue | null | undefined) => Promise<string>;
-  resolveMany: (values: AdminLinkValue[]) => Promise<string[]>;
-};
-
 export type AdminLinkValidationResult =
   | { ok: true }
   | { ok: false; message: string };

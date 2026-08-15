@@ -68,26 +68,6 @@ export async function resolveAdminLink(value: AdminLinkValue | null | undefined)
   return appendAnchor(link.href?.trim() || "#", link.anchor);
 }
 
-export async function resolveAdminLinks(values: AdminLinkValue[]) {
-  return Promise.all(values.map((value) => resolveAdminLink(value)));
-}
-
-export async function enrichConfigWithResolvedLinks<T extends Record<string, unknown>>(
-  config: T,
-  mappings: Array<{ linkKey: string; hrefKey: string }>,
-): Promise<T> {
-  const next: Record<string, unknown> = { ...config };
-
-  for (const mapping of mappings) {
-    const link = deserializeAdminLink(config[mapping.linkKey] ?? config[mapping.hrefKey]);
-    if (link.link_kind === "none") continue;
-    next[mapping.hrefKey] = await resolveAdminLink(link);
-    next[mapping.linkKey] = link;
-  }
-
-  return next as T;
-}
-
 export async function describeAdminLink(value: AdminLinkValue | null | undefined): Promise<AdminLinkDisplay> {
   const link = value ? deserializeAdminLink(value) : { link_kind: "none" as const, target: "_self" as const };
   const publicPath = await resolveAdminLink(link);

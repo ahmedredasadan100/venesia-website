@@ -114,10 +114,3 @@ export function normalizeSlotsForSave(slots: FooterSlot[]): FooterSlotsConfig {
       .sort((a, b) => a.index - b.index),
   };
 }
-
-export function normalizeSlotsConfig(slots: FooterSlot[]): FooterSlotsConfig {
-  return {
-    version: FOOTER_SLOTS_CONFIG_VERSION,
-    slots: slots.slice().sort((a, b) => a.index - b.index),
-  };
-}

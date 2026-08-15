@@ -51,5 +51,3 @@ export const FOOTER_SETTING_KEYS = [
 export const FOOTER_SLOTS_SETTING_KEY = "footer.slots" as const;
 
 export const FOOTER_LOADER_SETTING_KEYS = FOOTER_SETTING_KEYS;
-
-export type FooterSettingKey = (typeof FOOTER_SETTING_KEYS)[number];

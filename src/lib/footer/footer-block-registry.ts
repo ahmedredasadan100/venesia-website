@@ -1,4 +1,4 @@
-import { DEFAULT_FOOTER_SLOTS } from "./defaults";
+
 import type { FooterBlockType, FooterSlotConfigByType } from "./footer-slot-types";
 import {
   parseContactSlotConfig,
@@ -14,19 +14,6 @@ export type FooterBlockDefinition<T extends FooterBlockType = FooterBlockType> =
   label: string;
   parseConfig(raw: unknown, fallback: FooterSlotConfigByType[T]): FooterSlotConfigByType[T];
 };
-
-function slotConfigByType<T extends FooterBlockType>(type: T): FooterSlotConfigByType[T] {
-  const match = DEFAULT_FOOTER_SLOTS.slots.find((slot) => slot.type === type);
-  if (match) {
-    return structuredClone(match.config) as FooterSlotConfigByType[T];
-  }
-
-  if (type === "custom_links") {
-    return { links: [] } as unknown as FooterSlotConfigByType[T];
-  }
-
-  throw new Error(`No default footer block config for type: ${type}`);
-}
 
 export const FOOTER_BLOCK_REGISTRY: {
   readonly [K in FooterBlockType]: FooterBlockDefinition<K>;
@@ -62,18 +49,6 @@ export const FOOTER_BLOCK_REGISTRY: {
     parseConfig: parseCustomLinksSlotConfig,
   },
 };
-
-export function getFooterBlockDefinition<T extends FooterBlockType>(type: T): FooterBlockDefinition<T> {
-  return FOOTER_BLOCK_REGISTRY[type];
-}
-
-export function parseFooterSlotConfig<T extends FooterBlockType>(
-  type: T,
-  raw: unknown,
-): FooterSlotConfigByType[T] {
-  const definition = getFooterBlockDefinition(type);
-  return definition.parseConfig(raw, slotConfigByType(type));
-}
 
 export function isRegisteredFooterBlockType(value: string): value is FooterBlockType {
   return value in FOOTER_BLOCK_REGISTRY;

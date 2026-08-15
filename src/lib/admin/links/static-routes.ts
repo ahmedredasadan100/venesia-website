@@ -13,8 +13,6 @@ export const ADMIN_STATIC_ROUTES = [
   { key: "contact", label: "تواصل معنا", href: "/contact" },
 ] as const;
 
-export type AdminStaticRouteKey = (typeof ADMIN_STATIC_ROUTES)[number]["key"];
-
 export function findStaticRouteByHref(href: string) {
   const normalized = href.trim();
   return ADMIN_STATIC_ROUTES.find((route) => route.href === normalized) ?? null;
