@@ -82,7 +82,7 @@ The 2026-08-14 read-only reconciliation established the following facts against 
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 79 |
+| Repository migration files | 80 |
 | Configured live registry versions | 78 |
 | Registry SQL provenance | Exact repository SQL for all 78 deployed versions; one new Admin invariant migration remains unapplied |
 | Public tables | 51 |

@@ -7,7 +7,9 @@ export default function MediaCenterHub({ composition }: { composition: PageCompo
   const sidebarModules = composition.mediaSidebarModules;
   if (!hubModulesState || !sidebarModules) return null;
 
-  const sectionNodes = renderMediaHubSections(hubModulesState.modules);
+  const sectionNodes = renderMediaHubSections(
+    hubModulesState.modules.filter((module) => module.config.placement === "hub"),
+  );
 
   return (
     <MediaPageShell sidebarModules={sidebarModules}>

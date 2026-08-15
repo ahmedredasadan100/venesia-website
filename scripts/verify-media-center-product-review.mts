@@ -10,6 +10,7 @@ import {
 } from "../src/components/media-center/media-listing-shell-model.ts";
 import {
   buildMediaHubModuleConfig,
+  getDefaultMediaListingPresentation,
   parseMediaHubModuleConfig,
 } from "../src/lib/media-hub-modules/parse-config.ts";
 import type { ContentBlockConfig } from "../src/lib/page-blocks/configs.ts";
@@ -53,6 +54,7 @@ const legacyVideoConfig = parseMediaHubModuleConfig(
   "videos",
 );
 assert.equal(legacyVideoConfig.limit, 6);
+assert.equal(legacyVideoConfig.placement, "hub");
 assert.ok(legacyVideoConfig.presentation.title);
 assert.ok(legacyVideoConfig.presentation.ctaText);
 
@@ -73,6 +75,40 @@ assert.deepEqual(
   parseMediaHubModuleConfig(managedVideoConfig, "videos").presentation,
   presentation,
 );
+
+const listingDefaults = getDefaultMediaListingPresentation("video");
+const managedListingConfig = buildMediaHubModuleConfig(
+  "videos",
+  "topics",
+  {},
+  presentation,
+  {
+    placement: "listing",
+    mediaType: "video",
+    featuredMode: "manual",
+    manualTopicId: 42,
+    pageSize: 12,
+    layout: "vertical",
+    columns: 3,
+    paginationEnabled: false,
+    cardVariant: "compact",
+    featuredCtaText: "شاهد الآن",
+    cardCtaText: "شاهد التفاصيل",
+  },
+);
+assert.equal(managedListingConfig.placement, "listing");
+assert.deepEqual(managedListingConfig.listing, {
+  featuredMode: "manual",
+  manualTopicId: 42,
+  pageSize: 12,
+  layout: "vertical",
+  columns: 3,
+  paginationEnabled: false,
+  cardVariant: "compact",
+  featuredCtaText: "شاهد الآن",
+  cardCtaText: "شاهد التفاصيل",
+});
+assert.equal(listingDefaults.featuredMode, "automatic");
 
 function contentBlock(
   assignmentId: number,
@@ -185,6 +221,8 @@ assert.ok(!videosSource.includes("smallVideos.slice"));
 
 const listingConfigSource = read("src/lib/media-center/listing-page-config.ts");
 assert.ok(!/^\s+(title|eyebrow|description):/m.test(listingConfigSource));
+assert.ok(!listingConfigSource.includes("showFeaturedNews"));
+assert.ok(!listingConfigSource.includes("actionLabel"));
 
 const shellConfigSource = read("src/lib/media-center-page-config.ts");
 assert.ok(!/^\s+(title|eyebrow|subtitle):/m.test(shellConfigSource));
@@ -193,12 +231,27 @@ const listingContentSource = read("src/components/media-center/MediaListingConte
 assert.ok(!listingContentSource.includes("title: string"));
 assert.ok(!listingContentSource.includes("eyebrow: string"));
 assert.ok(!listingContentSource.includes("description: string"));
+for (const contract of ["layout", "columns", "paginationEnabled", "cardVariant", "cardCtaText"]) {
+  assert.ok(listingContentSource.includes(contract), `listing content must adopt ${contract}`);
+}
+
+const listingPageSource = read("src/components/media-center/MediaListingPage.tsx");
+assert.ok(listingPageSource.includes("resolveMediaListingPresentation"));
+assert.ok(listingPageSource.includes('presentation.featuredMode === "manual"'));
+assert.ok(listingPageSource.includes("featuredTopicId"));
+assert.ok(listingPageSource.includes("MediaFeaturedHero"));
+assert.ok(!listingPageSource.includes("FeaturedNews"));
+const listingPresentationSource = read("src/lib/media-hub-modules/listing-presentation.ts");
+assert.ok(listingPresentationSource.includes('module.config.placement === "listing"'));
+assert.ok(listingPresentationSource.includes('featuredMode: "disabled"'));
 
 const shellSource = read("src/components/media-center/MediaCenterShellLayout.tsx");
 assert.ok(shellSource.includes("resolveMediaListingMainBlocks"));
 assert.ok(shellSource.includes("MediaListingShellPlaceholder"));
 assert.ok(shellSource.includes("!composition.hasCompositionError"));
 assert.ok(shellSource.includes("mainBlocks.length === 0"));
+assert.ok(shellSource.includes("hasListingPresentationModule"));
+assert.ok(shellSource.includes('module.config.placement === "listing"'));
 assert.ok(!shellSource.includes("listingMainBlocks.length === 0"));
 
 const listingRouteConsumers = {
@@ -239,10 +292,46 @@ const editorSource = read("src/components/admin/page-blocks/MediaHubModuleEditCl
 for (const fieldName of ["eyebrow", "title", "presentation_description", "cta_text"]) {
   assert.ok(editorSource.includes(`name="${fieldName}"`), `missing CMS field ${fieldName}`);
 }
+for (const fieldName of [
+  "featured_mode",
+  "manual_topic_id",
+  "page_size",
+  "listing_layout",
+  "listing_columns",
+  "pagination_enabled",
+  "card_variant",
+  "featured_cta_text",
+  "card_cta_text",
+]) {
+  assert.ok(editorSource.includes(`name="${fieldName}"`), `missing listing CMS field ${fieldName}`);
+}
 
 const actionSource = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
 assert.ok(actionSource.includes("buildMediaHubModuleConfig"));
 assert.ok(actionSource.includes('formData.get("presentation_description")'));
 assert.ok(actionSource.includes('formData.get("cta_text")'));
+assert.ok(actionSource.includes('formData.get("featured_mode")'));
+assert.ok(actionSource.includes('formData.get("manual_topic_id")'));
+
+const compositionSource = read("src/lib/page-blocks/load-page-composition.ts");
+assert.ok(compositionSource.includes("queryMediaHubModules(pageSlug, { enrich: pageSlug === \"media-center\" })"));
+
+const publicContractSource = read("src/lib/content/public-content-read/contract.ts");
+const publicOwnerSource = read("src/lib/content/public-content-read/owner.ts");
+assert.ok(publicContractSource.includes("featuredId?: number"));
+assert.ok(publicOwnerSource.includes('.eq("id", input.featuredId)'));
+
+const listingMigration = read("sql/migrations/20260815092555_media_center_listing_presentation.sql");
+for (const slug of [
+  "media-listing-presentation-news",
+  "media-listing-presentation-videos",
+  "media-listing-presentation-gallery",
+  "media-listing-presentation-press",
+  "media-listing-presentation-site-updates",
+]) {
+  assert.ok(listingMigration.includes(slug), `missing seeded listing template ${slug}`);
+}
+assert.equal(listingMigration.match(/\"featuredMode\":\"automatic\"/g)?.length, 5);
+assert.ok(!listingMigration.match(/create\s+(table|function|view|trigger)/iu));
 
 console.log("Media Center product review verification passed.");

@@ -20,7 +20,10 @@ function isSectionKey(value: string): value is MediaHubSectionKey {
 }
 
 /** Internal query used only by the canonical Page Composition resolver. */
-export async function queryMediaHubModules(pageSlug: string): Promise<MediaHubModulesState> {
+export async function queryMediaHubModules(
+  pageSlug: string,
+  options: { enrich?: boolean } = {},
+): Promise<MediaHubModulesState> {
   const pageState = await getPublishedPageStateBySlug(pageSlug);
   if (!pageState.page) {
     return {
@@ -54,5 +57,6 @@ export async function queryMediaHubModules(pageSlug: string): Promise<MediaHubMo
     });
   }
 
-  return enrichMediaHubModules({ modules, sourceStatus: "database", sourceIssues: [] });
+  const state = { modules, sourceStatus: "database" as const, sourceIssues: [] };
+  return options.enrich === false ? state : enrichMediaHubModules(state);
 }

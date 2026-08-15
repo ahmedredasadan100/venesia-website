@@ -3,6 +3,11 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 
 import MediaHubModuleEditClient from "../../../../../../components/admin/page-blocks/MediaHubModuleEditClient";
+import { loadMediaHubListingTopicOptions } from "../../../../../../lib/media-hub-modules/load-listing-topic-options";
+import {
+  parseMediaHubModuleConfig,
+  parseMediaHubSectionKey,
+} from "../../../../../../lib/media-hub-modules/parse-config";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
 import { getMediaHubModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
 import { updateMediaHubModule } from "../actions";
@@ -25,10 +30,17 @@ export default async function MediaHubModuleEditPage({ params, searchParams }: P
 
   if (error || !block) notFound();
 
+  const sectionKey = parseMediaHubSectionKey(block.section_key);
+  const config = parseMediaHubModuleConfig(block.config, sectionKey);
+  const topicOptions = config.placement === "listing" && config.type
+    ? await loadMediaHubListingTopicOptions(config.type)
+    : [];
+
   return (
     <MediaHubModuleEditClient
       block={block}
       assignmentContext={assignmentContext}
+      topicOptions={topicOptions}
       saved={Boolean(resolvedSearch.saved)}
       updateAction={updateMediaHubModule}
     />

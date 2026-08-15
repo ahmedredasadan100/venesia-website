@@ -3,6 +3,24 @@ import type { MediaHubSectionKey } from "./types";
 
 export type MediaHubMediaType = "news" | "site_update" | "video" | "gallery" | "press";
 
+export type MediaHubModulePlacement = "hub" | "listing";
+export type MediaListingFeaturedMode = "automatic" | "manual" | "disabled";
+export type MediaListingLayout = "grid" | "vertical";
+export type MediaListingColumns = 1 | 2 | 3;
+export type MediaListingCardVariant = "default" | "compact";
+
+export type MediaListingPresentationConfig = {
+  featuredMode: MediaListingFeaturedMode;
+  manualTopicId: number | null;
+  pageSize: number;
+  layout: MediaListingLayout;
+  columns: MediaListingColumns;
+  paginationEnabled: boolean;
+  cardVariant: MediaListingCardVariant;
+  featuredCtaText: string;
+  cardCtaText: string;
+};
+
 export type MediaHubModulePresentation = {
   eyebrow: string;
   title: string;
@@ -11,14 +29,50 @@ export type MediaHubModulePresentation = {
 };
 
 export type MediaHubModuleConfig = {
+  placement: MediaHubModulePlacement;
   source: "topics";
   type?: MediaHubMediaType;
   featured?: boolean;
   limit?: number;
   sideLimit?: number;
   listLimit?: number;
+  listing?: MediaListingPresentationConfig;
   presentation: MediaHubModulePresentation;
 };
+
+const MEDIA_HUB_MEDIA_TYPES: readonly MediaHubMediaType[] = [
+  "news",
+  "site_update",
+  "video",
+  "gallery",
+  "press",
+];
+
+const LISTING_CTA_DEFAULTS: Record<
+  MediaHubMediaType,
+  Pick<MediaListingPresentationConfig, "featuredCtaText" | "cardCtaText">
+> = {
+  news: { featuredCtaText: "اقرأ الخبر الكامل", cardCtaText: "قراءة الخبر" },
+  press: { featuredCtaText: "اقرأ البيان الكامل", cardCtaText: "قراءة البيان" },
+  site_update: { featuredCtaText: "عرض التحديث الكامل", cardCtaText: "عرض التحديث" },
+  video: { featuredCtaText: "مشاهدة الفيديو", cardCtaText: "مشاهدة الفيديو" },
+  gallery: { featuredCtaText: "عرض الصور", cardCtaText: "عرض الصور" },
+};
+
+export function getDefaultMediaListingPresentation(
+  mediaType: MediaHubMediaType,
+): MediaListingPresentationConfig {
+  return {
+    featuredMode: "automatic",
+    manualTopicId: null,
+    pageSize: 2,
+    layout: "grid",
+    columns: 2,
+    paginationEnabled: true,
+    cardVariant: "default",
+    ...LISTING_CTA_DEFAULTS[mediaType],
+  };
+}
 
 export const MEDIA_HUB_SECTION_DEFAULTS: Record<
   MediaHubSectionKey,
@@ -31,6 +85,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
 > = {
   featured: {
     config: {
+      placement: "hub",
       source: "topics",
       type: "news",
       featured: true,
@@ -48,6 +103,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
   },
   "site-updates": {
     config: {
+      placement: "hub",
       source: "topics",
       type: "site_update",
       limit: 4,
@@ -62,6 +118,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
   },
   videos: {
     config: {
+      placement: "hub",
       source: "topics",
       type: "video",
       limit: 4,
@@ -76,6 +133,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
   },
   gallery: {
     config: {
+      placement: "hub",
       source: "topics",
       type: "gallery",
       limit: 8,
@@ -90,6 +148,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
   },
   press: {
     config: {
+      placement: "hub",
       source: "topics",
       type: "press",
       limit: 6,
@@ -116,6 +175,55 @@ export function parseMediaHubSectionKey(value: string): MediaHubSectionKey {
 function readLimit(value: Json | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function isMediaHubMediaType(value: Json | undefined): value is MediaHubMediaType {
+  return typeof value === "string" && MEDIA_HUB_MEDIA_TYPES.includes(value as MediaHubMediaType);
+}
+
+function mediaTypeForSection(sectionKey: MediaHubSectionKey): MediaHubMediaType {
+  if (sectionKey === "featured") return "news";
+  if (sectionKey === "videos") return "video";
+  return sectionKey === "site-updates" ? "site_update" : sectionKey;
+}
+
+function readListingPresentation(
+  value: Json | undefined,
+  mediaType: MediaHubMediaType,
+): MediaListingPresentationConfig {
+  const fallback = getDefaultMediaListingPresentation(mediaType);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+
+  const pageSize = Math.min(60, Math.max(1, Math.floor(readLimit(value.pageSize, fallback.pageSize))));
+  const columns = value.columns === 1 || value.columns === 2 || value.columns === 3
+    ? value.columns
+    : fallback.columns;
+  const manualTopicId = Number(value.manualTopicId);
+
+  return {
+    featuredMode:
+      value.featuredMode === "manual" || value.featuredMode === "disabled"
+        ? value.featuredMode
+        : "automatic",
+    manualTopicId:
+      Number.isSafeInteger(manualTopicId) && manualTopicId > 0 ? manualTopicId : null,
+    pageSize,
+    layout: value.layout === "vertical" ? "vertical" : "grid",
+    columns,
+    paginationEnabled:
+      typeof value.paginationEnabled === "boolean"
+        ? value.paginationEnabled
+        : fallback.paginationEnabled,
+    cardVariant: value.cardVariant === "compact" ? "compact" : "default",
+    featuredCtaText:
+      typeof value.featuredCtaText === "string" && value.featuredCtaText.trim()
+        ? value.featuredCtaText.trim()
+        : fallback.featuredCtaText,
+    cardCtaText:
+      typeof value.cardCtaText === "string" && value.cardCtaText.trim()
+        ? value.cardCtaText.trim()
+        : fallback.cardCtaText,
+  };
 }
 
 function readPresentation(
@@ -146,9 +254,24 @@ export function parseMediaHubModuleConfig(
 
   const source = raw.source === "topics" ? "topics" : fallback.source;
   const presentation = readPresentation(raw.presentation, fallback.presentation);
+  const placement = raw.placement === "listing" ? "listing" : "hub";
+  const configuredMediaType = isMediaHubMediaType(raw.type)
+    ? raw.type
+    : mediaTypeForSection(sectionKey);
+
+  if (placement === "listing") {
+    return {
+      placement,
+      source,
+      type: configuredMediaType,
+      presentation,
+      listing: readListingPresentation(raw.listing, configuredMediaType),
+    };
+  }
 
   if (sectionKey === "featured") {
     return {
+      placement,
       source,
       type: "news",
       featured: true,
@@ -158,10 +281,10 @@ export function parseMediaHubModuleConfig(
     };
   }
 
-  const mediaType = sectionKey === "site-updates" ? "site_update" : sectionKey;
   return {
+    placement,
     source,
-    type: mediaType as MediaHubMediaType,
+    type: mediaTypeForSection(sectionKey),
     limit: readLimit(raw.limit, fallback.limit ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit ?? 4),
     presentation,
   };
@@ -172,14 +295,62 @@ export function buildMediaHubModuleConfig(
   dataSource: string,
   limits: { limit?: number; sideLimit?: number; listLimit?: number },
   presentation: MediaHubModulePresentation,
+  listingInput?: {
+    placement: MediaHubModulePlacement;
+    mediaType: string;
+    featuredMode: string;
+    manualTopicId: number;
+    pageSize: number;
+    layout: string;
+    columns: number;
+    paginationEnabled: boolean;
+    cardVariant: string;
+    featuredCtaText: string;
+    cardCtaText: string;
+  },
 ): MediaHubModuleConfig {
   if (dataSource !== "topics") {
     throw new Error("مصدر البيانات غير مدعوم حاليًا.");
   }
 
+  if (listingInput?.placement === "listing") {
+    if (!isMediaHubMediaType(listingInput.mediaType)) {
+      throw new Error("نوع محتوى القائمة غير صالح.");
+    }
+    const mediaType = listingInput.mediaType;
+    const defaults = getDefaultMediaListingPresentation(mediaType);
+    return {
+      placement: "listing",
+      source: "topics",
+      type: mediaType,
+      presentation,
+      listing: {
+        featuredMode:
+          listingInput.featuredMode === "manual" || listingInput.featuredMode === "disabled"
+            ? listingInput.featuredMode
+            : "automatic",
+        manualTopicId:
+          Number.isSafeInteger(listingInput.manualTopicId) && listingInput.manualTopicId > 0
+            ? listingInput.manualTopicId
+            : null,
+        pageSize: Math.min(60, Math.max(1, Math.floor(listingInput.pageSize || defaults.pageSize))),
+        layout: listingInput.layout === "vertical" ? "vertical" : "grid",
+        columns:
+          listingInput.columns === 1 || listingInput.columns === 2 || listingInput.columns === 3
+            ? listingInput.columns
+            : defaults.columns,
+        paginationEnabled: listingInput.paginationEnabled,
+        cardVariant: listingInput.cardVariant === "compact" ? "compact" : "default",
+        featuredCtaText: listingInput.featuredCtaText || defaults.featuredCtaText,
+        cardCtaText: listingInput.cardCtaText || defaults.cardCtaText,
+      },
+    };
+  }
+
   if (sectionKey === "featured") {
     const defaults = MEDIA_HUB_SECTION_DEFAULTS.featured;
     return {
+      placement: "hub",
       source: "topics",
       type: "news",
       featured: true,
@@ -191,8 +362,9 @@ export function buildMediaHubModuleConfig(
 
   const defaults = MEDIA_HUB_SECTION_DEFAULTS[sectionKey];
   return {
+    placement: "hub",
     source: "topics",
-    type: (sectionKey === "site-updates" ? "site_update" : sectionKey) as MediaHubMediaType,
+    type: mediaTypeForSection(sectionKey),
     limit: Math.max(1, limits.limit || defaults.defaultLimit || 4),
     presentation,
   };

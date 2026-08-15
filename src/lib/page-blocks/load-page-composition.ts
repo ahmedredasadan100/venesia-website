@@ -44,7 +44,9 @@ export async function loadPageCompositionBySlug(
     getHeroSectionState(pageSlug),
     loadPageBlockStateBySlug(pageSlug),
     loadFeedModuleStateForPageSlug(pageSlug),
-    isMediaCenterPage && pageSlug === "media-center" ? queryMediaHubModules(pageSlug) : null,
+    isMediaCenterPage
+      ? queryMediaHubModules(pageSlug, { enrich: pageSlug === "media-center" })
+      : null,
     isMediaCenterPage ? queryMediaSidebarModules(pageSlug) : null,
   ]);
 

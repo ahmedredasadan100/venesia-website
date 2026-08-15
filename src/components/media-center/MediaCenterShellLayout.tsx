@@ -49,9 +49,15 @@ export default async function MediaCenterShellLayout({
   const mainBlocks = getSlotBlocks(composition, "main");
   const bottomBlocks = getSlotBlocks(composition, "bottom");
   const listingMainBlocks = resolveMediaListingMainBlocks(cmsPageSlug, mainBlocks);
+  const hasListingPresentationModule = Boolean(
+    composition.mediaHubModules?.modules.some(
+      (module) => module.isVisible && module.config.placement === "listing",
+    ),
+  );
   const showListingPlaceholder =
     cmsPageSlug !== "media-center" &&
     mainBlocks.length === 0 &&
+    !hasListingPresentationModule &&
     !composition.hasCompositionError;
 
   const prefixBlocks =
