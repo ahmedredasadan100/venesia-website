@@ -34,6 +34,7 @@ const ibmArabic = localFont({
     },
   ],
   variable: "--font-arabic",
+  preload: false,
 });
 
 const inter = localFont({

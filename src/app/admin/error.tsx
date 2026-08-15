@@ -2,10 +2,8 @@
 
 import { useEffect } from "react";
 
-import {
-  AdminPageContextHeader,
-  AdminPageExperience,
-} from "../../components/admin/ui";
+import AdminPageContextHeader from "../../components/admin/ui/AdminPageContextHeader";
+import AdminPageExperience from "../../components/admin/ui/AdminPageExperience";
 import { logError } from "../../lib/logging";
 
 export default function AdminError({

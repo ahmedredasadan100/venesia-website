@@ -13,6 +13,7 @@ function check(name, condition, detail = "") {
 
 const layout = read("src/app/admin/layout.tsx");
 const access = read("src/components/admin/AdminAccessLayout.tsx");
+const authenticatedLayout = read("src/components/admin/AdminAuthenticatedLayout.tsx");
 const shell = read("src/components/admin/AdminShell.tsx");
 const registry = read("src/config/admin/navigation.ts");
 const company = read("src/config/admin/company.ts");
@@ -48,7 +49,8 @@ check("Shell uses the one shared page header core for fallback coverage", shell.
 check(
   "Authenticated routes inherit the one shared page surface owner",
   layout.includes("<AdminAccessLayout") &&
-    access.includes("<AdminShell") &&
+    access.includes("<AdminAuthenticatedLayout") &&
+    authenticatedLayout.includes("<AdminShell") &&
     shell.includes("<AdminPageExperience") &&
     shell.includes("data-admin-route-content") &&
     pageExperience.includes('data-admin-page-surface-owner="AdminPageExperience"') &&

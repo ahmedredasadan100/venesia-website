@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { QueryData } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
@@ -17,6 +18,18 @@ import type { ProjectHubFilterId, PublicProject } from "./public-types";
 import { getProjectStats, getProjectsByFilter } from "./public-helpers";
 
 const PUBLIC_PROJECT_COLUMNS = "id,type,arabic_name,english_name,slug,code,featured,show_on_homepage,homepage_order,brochure_url,publication_status,published_at,general_description,short_description,image,image_alt,hero_image,hero_image_alt,small_box_image,small_box_image_alt,governorate_id,city_id,main_area_id,sub_area_id,location_label,location_description,google_maps_url,latitude,longitude,map_zoom,overview_title,overview_body,overview_media_type,overview_main_image,overview_main_image_alt,delivery_title,delivery_body,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,created_at,updated_at";
+
+const PUBLIC_PROJECT_AGGREGATE_COLUMNS = `${PUBLIC_PROJECT_COLUMNS},governorate:project_locations!projects_governorate_id_fkey(id,level,parent_id,name_ar,name_en),city:project_locations!projects_city_id_fkey(id,level,parent_id,name_ar,name_en),main_area:project_locations!projects_main_area_id_fkey(id,level,parent_id,name_ar,name_en),sub_area:project_locations!projects_sub_area_id_fkey(id,level,parent_id,name_ar,name_en),location_points:project_location_points(id,kind,label,distance_text,sort_order),features:project_features(id,body,sort_order),floor_plans:project_floor_plans(id,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order,details:project_floor_plan_details(id,floor_plan_id,label,value,sort_order)),delivery_items:project_delivery_items(id,body,sort_order),media:project_media(id,section,image,alt_text,sort_order),videos:project_videos(id,section,video_url,poster_image,poster_alt,sort_order)` as const;
+
+function selectPublicProjectAggregate() {
+  return getSupabaseAdmin()
+    .from("projects")
+    .select(PUBLIC_PROJECT_AGGREGATE_COLUMNS);
+}
+
+type PublicProjectAggregateRow = QueryData<
+  ReturnType<typeof selectPublicProjectAggregate>
+>[number];
 
 const PROJECT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -143,66 +156,43 @@ export async function loadPublishedProjectSlugs(): Promise<string[]> {
   return (await loadPublishedProjectSitemapRows()).map((project) => project.slug);
 }
 
-async function mapLoadedProjectAggregate(
-  project: PublicProjectRootRow,
+function bySortOrder<Row extends { sort_order: number }>(left: Row, right: Row) {
+  return left.sort_order - right.sort_order;
+}
+
+function mapLoadedProjectAggregate(
+  project: PublicProjectAggregateRow,
   context: { identity: string; source: "marketing" | "track" | "admin-preview" },
-): Promise<PublicProject> {
-  const supabase = getSupabaseAdmin();
+): PublicProject {
   const projectId = Number(project.id);
-  const locationIds = locationIdsFromProjects([project]);
-
-  const [locations, locationPoints, features, floorPlans, deliveryItems, media, videos] =
-    await Promise.all([
-      locationIds.length
-        ? supabase.from("project_locations").select("id,level,parent_id,name_ar,name_en").in("id", locationIds)
-        : Promise.resolve({ data: [], error: null }),
-      supabase.from("project_location_points").select("id,kind,label,distance_text,sort_order").eq("project_id", projectId).order("kind").order("sort_order"),
-      supabase.from("project_features").select("id,body,sort_order").eq("project_id", projectId).order("sort_order"),
-      supabase.from("project_floor_plans").select("id,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order").eq("project_id", projectId).order("sort_order"),
-      supabase.from("project_delivery_items").select("id,body,sort_order").eq("project_id", projectId).order("sort_order"),
-      supabase.from("project_media").select("id,section,image,alt_text,sort_order").eq("project_id", projectId).order("section").order("sort_order"),
-      supabase.from("project_videos").select("id,section,video_url,poster_image,poster_alt,sort_order").eq("project_id", projectId).order("section").order("sort_order"),
-    ]);
-
-  const childResults = { locations, locationPoints, features, floorPlans, deliveryItems, media, videos };
-  const failedChild = Object.entries(childResults).find(([, result]) => result.error);
-  if (failedChild) {
-    throwReadError("Project aggregate child lookup failed", failedChild[1].error, {
-      projectId,
-      identity: context.identity,
-      source: context.source,
-      relation: failedChild[0],
-    });
-  }
-
-  const planIds = (floorPlans.data ?? []).map((row) => Number(row.id)).filter(Number.isFinite);
-  const details = planIds.length
-    ? await supabase
-        .from("project_floor_plan_details")
-        .select("id,floor_plan_id,label,value,sort_order")
-        .in("floor_plan_id", planIds)
-        .order("floor_plan_id")
-        .order("sort_order")
-    : { data: [], error: null };
-  if (details.error) {
-    throwReadError("Project aggregate floor-plan details lookup failed", details.error, {
-      projectId,
-      identity: context.identity,
-      source: context.source,
-    });
-  }
+  const locations = [
+    project.governorate,
+    project.city,
+    project.main_area,
+    project.sub_area,
+  ].filter((row): row is PublicProjectLocationRow => row !== null);
+  const floorPlans = [...project.floor_plans].sort(bySortOrder);
+  const floorPlanDetails = floorPlans.flatMap((plan) =>
+    [...plan.details].sort(bySortOrder),
+  );
 
   try {
     return mapProjectAggregateToPublicProject({
       project,
-      locations: locations.data ?? [],
-      locationPoints: locationPoints.data ?? [],
-      features: features.data ?? [],
-      floorPlans: floorPlans.data ?? [],
-      floorPlanDetails: details.data ?? [],
-      deliveryItems: deliveryItems.data ?? [],
-      media: media.data ?? [],
-      videos: videos.data ?? [],
+      locations,
+      locationPoints: [...project.location_points].sort(
+        (left, right) => left.kind.localeCompare(right.kind) || bySortOrder(left, right),
+      ),
+      features: [...project.features].sort(bySortOrder),
+      floorPlans,
+      floorPlanDetails,
+      deliveryItems: [...project.delivery_items].sort(bySortOrder),
+      media: [...project.media].sort(
+        (left, right) => left.section.localeCompare(right.section) || bySortOrder(left, right),
+      ),
+      videos: [...project.videos].sort(
+        (left, right) => left.section.localeCompare(right.section) || bySortOrder(left, right),
+      ),
     });
   } catch (error) {
     logError("Project aggregate mapping failed", error, {
@@ -223,10 +213,7 @@ async function queryProjectBySlug(
 ): Promise<LoadProjectBySlugResult> {
   if (!PROJECT_SLUG_PATTERN.test(slug)) return { status: "invalid_slug", project: null };
 
-  let request = getSupabaseAdmin()
-    .from("projects")
-    .select(PUBLIC_PROJECT_COLUMNS)
-    .eq("slug", slug);
+  let request = selectPublicProjectAggregate().eq("slug", slug);
   if (source === "marketing") {
     request = request.eq("publication_status", "published");
   }
@@ -239,7 +226,7 @@ async function queryProjectBySlug(
 
   return {
     status: "ok",
-    project: await mapLoadedProjectAggregate(
+    project: mapLoadedProjectAggregate(
       rootResult.data,
       { identity: slug, source },
     ),
@@ -274,9 +261,7 @@ export const loadProjectForAdminPreviewResult = cache(
     if (!Number.isSafeInteger(id) || id <= 0) {
       return { status: "invalid_id", project: null };
     }
-    const { data, error } = await getSupabaseAdmin()
-      .from("projects")
-      .select(PUBLIC_PROJECT_COLUMNS)
+    const { data, error } = await selectPublicProjectAggregate()
       .eq("id", id)
       .maybeSingle();
     if (error) throwReadError("Admin project preview root lookup failed", error, { id });
@@ -297,7 +282,7 @@ export const loadProjectForAdminPreviewResult = cache(
     return {
       status: "ok",
       publicationStatus,
-      project: await mapLoadedProjectAggregate(
+      project: mapLoadedProjectAggregate(
         project,
         { identity: String(id), source: "admin-preview" },
       ),
