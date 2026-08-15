@@ -35,11 +35,15 @@ export function isMediaListingShellPlaceholder(block: ResolvedPageBlock) {
   }
 
   const config = block.template.config;
-  return (
-    (config.eyebrow ?? "").trim() === "" &&
-    (config.body ?? "").trim() === "" &&
-    isLegacyListingShellTitle(config.title) &&
-    isLegacyListingShellSubtitle(config.subtitle)
+  const managedTitle = isLegacyListingShellTitle(config.title)
+    ? ""
+    : (config.title ?? "").trim();
+  const managedSubtitle = isLegacyListingShellSubtitle(config.subtitle)
+    ? ""
+    : (config.subtitle ?? "").trim();
+
+  return [config.eyebrow, managedTitle, managedSubtitle, config.body].every(
+    (value) => (value ?? "").trim() === "",
   );
 }
 

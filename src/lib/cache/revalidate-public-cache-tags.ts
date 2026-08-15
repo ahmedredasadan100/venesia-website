@@ -1,6 +1,6 @@
 import "server-only";
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag, updateTag } from "next/cache";
 
 export const PUBLIC_CACHE_TAG_GROUPS = {
   navigation: ["navigation", "menus"],
@@ -15,6 +15,12 @@ export const PUBLIC_CACHE_TAG_GROUPS = {
 export function revalidatePublicCacheTags(tags: readonly string[]) {
   for (const tag of tags) {
     revalidateTag(tag, "max");
+  }
+}
+
+function updatePublicCacheTags(tags: readonly string[]) {
+  for (const tag of tags) {
+    updateTag(tag);
   }
 }
 
@@ -55,7 +61,7 @@ export function revalidateGlobalSeoCaches() {
 }
 
 export function revalidatePageCompositionCache() {
-  revalidatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.pageComposition);
+  updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.pageComposition);
 }
 
 export function revalidateHeroCache() {

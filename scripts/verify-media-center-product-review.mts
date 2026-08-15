@@ -118,6 +118,23 @@ assert.deepEqual(
   resolveMediaListingMainBlocks("media-center-news", [placeholderBlock]),
   [],
 );
+
+const emptySiteUpdatesShell = contentBlock(
+  4,
+  "media-center-site-updates-listing-shell",
+  {
+    eyebrow: "",
+    title: "",
+    subtitle: "",
+    body: "",
+    alignment: "start",
+  },
+);
+assert.equal(isMediaListingShellPlaceholder(emptySiteUpdatesShell), true);
+assert.deepEqual(
+  resolveMediaListingMainBlocks("media-center-site-updates", [emptySiteUpdatesShell]),
+  [],
+);
 assert.deepEqual(
   resolveMediaListingMainBlocks("media-center-news", [placeholderBlock, configuredBlock]),
   [configuredBlock],
@@ -183,6 +200,30 @@ assert.ok(shellSource.includes("MediaListingShellPlaceholder"));
 assert.ok(shellSource.includes("!composition.hasCompositionError"));
 assert.ok(shellSource.includes("mainBlocks.length === 0"));
 assert.ok(!shellSource.includes("listingMainBlocks.length === 0"));
+
+const listingRouteConsumers = {
+  news: "news",
+  videos: "videos",
+  gallery: "gallery",
+  press: "press",
+  "site-updates": "site-updates",
+} as const;
+for (const [route, configKey] of Object.entries(listingRouteConsumers)) {
+  const routeSource = read(`src/app/(site)/media-center/${route}/page.tsx`);
+  assert.ok(
+    routeSource.includes(`<MediaListingPage configKey="${configKey}"`),
+    `${route} must adopt the shared Media Listing Page owner`,
+  );
+}
+
+const cacheOwnerSource = read("src/lib/cache/revalidate-public-cache-tags.ts");
+assert.ok(cacheOwnerSource.includes('import { revalidatePath, revalidateTag, updateTag } from "next/cache"'));
+assert.ok(cacheOwnerSource.includes("updateTag(tag)"));
+assert.match(
+  cacheOwnerSource,
+  /export function revalidatePageCompositionCache\(\) \{\s+updatePublicCacheTags\(PUBLIC_CACHE_TAG_GROUPS\.pageComposition\);\s+\}/,
+  "Page Composition writes must expire their shared cache immediately",
+);
 
 const paginationSource = read("src/components/Pagination.tsx");
 assert.ok(paginationSource.startsWith('"use client"'));
