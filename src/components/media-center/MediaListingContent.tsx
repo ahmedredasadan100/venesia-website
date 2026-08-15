@@ -13,9 +13,6 @@ type MediaListingContentProps = {
   totalCount: number;
   sort: "newest" | "oldest";
   basePath: string;
-  title: string;
-  eyebrow: string;
-  description: string;
   emptyTitle: string;
   emptyDescription: string;
   actionLabel?: string;
@@ -31,9 +28,6 @@ export default function MediaListingContent({
   totalCount,
   sort,
   basePath,
-  title,
-  eyebrow,
-  description,
   emptyTitle,
   emptyDescription,
   actionLabel,
@@ -47,20 +41,6 @@ export default function MediaListingContent({
 
   return (
     <div className="space-y-10">
-      <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-[#D8B87A]/70">
-          {eyebrow}
-        </p>
-
-        <h1 className="mt-3 text-3xl font-semibold text-white md:text-4xl">
-          {title}
-        </h1>
-
-        <p className="mt-4 max-w-3xl leading-8 text-white/60">
-          {description}
-        </p>
-      </div>
-
       {!isSearching ? children : null}
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-5 py-4">

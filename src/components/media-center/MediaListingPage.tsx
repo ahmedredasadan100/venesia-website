@@ -74,9 +74,6 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
           totalCount={listing.totalRegular}
           sort={sort}
           basePath={config.basePath}
-          title={config.title}
-          eyebrow={config.eyebrow}
-          description={config.description}
           emptyTitle={config.emptyTitle}
           emptyDescription={config.emptyDescription}
           actionLabel={config.actionLabel}

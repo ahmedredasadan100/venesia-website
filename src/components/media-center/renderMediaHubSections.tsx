@@ -21,16 +21,37 @@ function renderHubSection(module: MediaHubModuleState): ReactNode {
           featuredItem={data.featuredNews}
           news={data.latestNews}
           sideLimit={data.sideLimit}
+          presentation={module.config.presentation}
         />
       ) : null;
     case "site-updates":
-      return <MediaCenterHubTimeline items={data.items} />;
+      return (
+        <MediaCenterHubTimeline
+          items={data.items}
+          presentation={module.config.presentation}
+        />
+      );
     case "videos":
-      return <MediaCenterHubVideos items={data.items} />;
+      return (
+        <MediaCenterHubVideos
+          items={data.items}
+          presentation={module.config.presentation}
+        />
+      );
     case "gallery":
-      return <MediaCenterHubGallery items={data.items} />;
+      return (
+        <MediaCenterHubGallery
+          items={data.items}
+          presentation={module.config.presentation}
+        />
+      );
     case "press":
-      return <MediaCenterHubPress items={data.items} />;
+      return (
+        <MediaCenterHubPress
+          items={data.items}
+          presentation={module.config.presentation}
+        />
+      );
     default:
       return null;
   }

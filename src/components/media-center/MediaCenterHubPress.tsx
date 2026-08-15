@@ -3,15 +3,19 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
+import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
+import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
 type MediaCenterHubPressProps = {
   items: MediaContentItem[];
+  presentation: MediaHubModulePresentation;
 };
 
 const ITEMS_PER_VIEW = 4;
 
 export default function MediaCenterHubPress({
   items,
+  presentation,
 }: MediaCenterHubPressProps) {
   const [startIndex, setStartIndex] = useState(0);
 
@@ -37,48 +41,31 @@ export default function MediaCenterHubPress({
 
   return (
     <section className="relative">
-      <div className="mb-6 flex items-center justify-between gap-4 border-b border-white/10 pb-5">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.28em] text-[#D8B87A]/70">
-            Press Releases
-          </p>
+      <MediaCenterHubSectionHeader
+        presentation={presentation}
+        href="/media-center/press"
+        actions={canSlide ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={goPrev}
+              aria-label="البيان السابق"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
+            >
+              →
+            </button>
 
-          <h2 className="mt-3 text-2xl font-semibold text-white">
-            البيانات الصحفية
-          </h2>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {canSlide ? (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={goPrev}
-                aria-label="البيان السابق"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
-              >
-                →
-              </button>
-
-              <button
-                type="button"
-                onClick={goNext}
-                aria-label="البيان التالي"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
-              >
-                ←
-              </button>
-            </div>
-          ) : null}
-
-          <Link
-            href="/media-center/press"
-            className="text-sm font-medium text-[#D8B87A] transition hover:text-white"
-          >
-            كل البيانات
-          </Link>
-        </div>
-      </div>
+            <button
+              type="button"
+              onClick={goNext}
+              aria-label="البيان التالي"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
+            >
+              ←
+            </button>
+          </div>
+        ) : undefined}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {visibleItems.map((item) => (

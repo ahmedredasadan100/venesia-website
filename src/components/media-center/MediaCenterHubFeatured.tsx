@@ -4,17 +4,21 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
+import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
+import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
 type MediaCenterHubFeaturedProps = {
   featuredItem: MediaContentItem;
   news: MediaContentItem[];
   sideLimit?: number;
+  presentation: MediaHubModulePresentation;
 };
 
 export default function MediaCenterHubFeatured({
   featuredItem,
   news,
   sideLimit = 3,
+  presentation,
 }: MediaCenterHubFeaturedProps) {
   const sideNews = news
     .filter((item) => item.id !== featuredItem.id)
@@ -26,24 +30,10 @@ export default function MediaCenterHubFeatured({
 
   return (
     <section className="relative">
-      <div className="mb-6 flex items-center justify-between gap-4 border-b border-white/10 pb-5">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.28em] text-[#D8B87A]/70">
-            Latest News
-          </p>
-
-          <h2 className="mt-3 text-2xl font-semibold text-white md:text-3xl">
-            آخر الأخبار
-          </h2>
-        </div>
-
-        <Link
-          href="/media-center/news"
-          className="text-sm font-medium text-[#D8B87A] transition hover:text-white"
-        >
-          استكشف الأخبار
-        </Link>
-      </div>
+      <MediaCenterHubSectionHeader
+        presentation={presentation}
+        href="/media-center/news"
+      />
 
       <div className="grid items-stretch gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="order-2 flex flex-col lg:order-1">

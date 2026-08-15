@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buildPaginationItems } from "./pagination-model";
 
 type PaginationProps = {
   currentPage: number;
@@ -48,11 +49,12 @@ export default function Pagination({
   const previousPage = Math.max(safeCurrentPage - 1, 1);
   const nextPage = Math.min(safeCurrentPage + 1, totalPages);
 
-  const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+  const paginationItems = buildPaginationItems(safeCurrentPage, totalPages);
 
   return (
     <nav
       aria-label="Pagination"
+      dir="rtl"
       className="mt-10 flex flex-wrap items-center justify-center gap-2"
     >
       {safeCurrentPage === 1 ? (
@@ -69,7 +71,20 @@ export default function Pagination({
         </Link>
       )}
 
-      {pages.map((page) => {
+      {paginationItems.map((item) => {
+        if (item.type === "ellipsis") {
+          return (
+            <span
+              key={`ellipsis-${item.position}`}
+              aria-hidden="true"
+              className="flex h-10 min-w-8 items-center justify-center text-sm text-white/40"
+            >
+              &hellip;
+            </span>
+          );
+        }
+
+        const page = item.page;
         const isActive = page === safeCurrentPage;
 
         return (
