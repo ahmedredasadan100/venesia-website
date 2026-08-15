@@ -1,9 +1,7 @@
 import Link from "next/link";
 
-import {
-  AdminPageContextHeader,
-  AdminPageExperience,
-} from "../../components/admin/ui";
+import AdminPageContextHeader from "../../components/admin/ui/AdminPageContextHeader";
+import AdminPageExperience from "../../components/admin/ui/AdminPageExperience";
 
 export default function AdminNotFound() {
   return (

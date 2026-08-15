@@ -113,6 +113,9 @@ type HeroSlideImageProps = {
   brightnessFilter?: string;
 };
 
+const TRANSPARENT_IMAGE_FALLBACK =
+  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+
 /**
  * Browser picks mobile/desktop source via <picture> before hydration —
  * no client matchMedia swap, no desktop-first flash on phones.
@@ -145,7 +148,8 @@ function HeroArtDirectedImage({
     alt: "",
     sizes: "100vw",
     fill: true as const,
-    priority,
+    fetchPriority: priority ? ("high" as const) : ("auto" as const),
+    loading: priority ? ("eager" as const) : ("lazy" as const),
   };
 
   const {
@@ -161,6 +165,7 @@ function HeroArtDirectedImage({
       <source media="(min-width: 768px)" srcSet={desktopSrcSet} sizes="100vw" />
       <img
         {...mobileRest}
+        src={TRANSPARENT_IMAGE_FALLBACK}
         alt=""
         className={className}
         style={{ ...mobileRest.style, ...style }}
@@ -188,6 +193,9 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   const mobileImages = config.mobileImages ?? [];
   const slides = buildHomeHeroSlides(images, mobileImages);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [preparedSlideIndexes, setPreparedSlideIndexes] = useState<ReadonlySet<number>>(
+    () => new Set([0]),
+  );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reducedMotion = usePrefersReducedMotion();
   const canSwipe = slides.length > 1;
@@ -208,6 +216,20 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [startAutoplay]);
+
+  useEffect(() => {
+    if (!canSwipe || reducedMotion) return;
+
+    const nextIndex = (safeIndex + 1) % slides.length;
+    const preparationTimer = setTimeout(() => {
+      setPreparedSlideIndexes((current) => {
+        if (current.has(nextIndex)) return current;
+        return new Set([...current, nextIndex]);
+      });
+    }, 2500);
+
+    return () => clearTimeout(preparationTimer);
+  }, [canSwipe, reducedMotion, safeIndex, slides.length]);
 
   const goToNext = useCallback(() => {
     if (!canSwipe) return;
@@ -267,8 +289,8 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               index === safeIndex ? "opacity-100" : "opacity-0"
             } ${reducedMotion ? "duration-150" : "duration-[2400ms]"}`}
           >
-            {/* Only mount near-active slides to avoid eager-loading the full deck. */}
-            {Math.abs(index - safeIndex) <= 1 || index === 0 ? (
+            {/* Mount the active slide immediately, then prepare the next slide ahead of autoplay. */}
+            {index === safeIndex || preparedSlideIndexes.has(index) ? (
               <HeroArtDirectedImage
                 desktopSrc={slide.desktop}
                 mobileSrc={slide.mobile}

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -8,9 +9,11 @@ import type {
   AdminNavigationItem,
   ResolvedAdminCompanyConfig,
 } from "../../lib/admin/shell/contracts";
-import AdminShell from "./AdminShell";
-import AdminFeedbackProvider from "./AdminFeedbackProvider";
-import AdminEntityListQueryProvider from "./entity-list/AdminEntityListQueryProvider";
+
+const AdminAuthenticatedLayout = dynamic(
+  () => import("./AdminAuthenticatedLayout"),
+  { ssr: false },
+);
 
 type AdminAccessLayoutProps = {
   children: ReactNode;
@@ -30,12 +33,8 @@ export default function AdminAccessLayout({
   }
 
   return (
-    <AdminEntityListQueryProvider>
-      <AdminFeedbackProvider>
-        <AdminShell company={company} navigation={navigation}>
-          {children}
-        </AdminShell>
-      </AdminFeedbackProvider>
-    </AdminEntityListQueryProvider>
+    <AdminAuthenticatedLayout company={company} navigation={navigation}>
+      {children}
+    </AdminAuthenticatedLayout>
   );
 }
