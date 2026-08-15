@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-14
+**Updated:** 2026-08-15
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -9,34 +9,34 @@ This file records the minimum current facts needed to begin work safely. Archite
 
 ## Current official baseline
 
-The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified entering baseline for this Platform Health closure is:
+The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified Platform Health implementation merge is:
 
 ```text
-0743f5cff13e3359746abbe6d1760a26a90b4dc7
+b7c726f97378513adc3adc759242a975a57babc5
 ```
 
-Verified at phase entry on 2026-08-14:
+Verified after PR #98 merged on 2026-08-15:
 
 | Surface | SHA / state |
 |---|---|
-| Platform Health phase branch base HEAD | `0743f5cff13e3359746abbe6d1760a26a90b4dc7` |
-| Phase-entry local `main` / `origin/main` / GitHub `main` | `0743f5cff13e3359746abbe6d1760a26a90b4dc7` |
-| Active worktree | `codex/platform-health-final-closure`; delivery evidence remains separate from `main` until GitHub records a merge |
+| Platform Health implementation merge | `b7c726f97378513adc3adc759242a975a57babc5` |
+| Post-merge local `main` / `origin/main` / GitHub `main` | `b7c726f97378513adc3adc759242a975a57babc5` |
+| Delivery state | PR #98 merged; the implementation branch is no longer an active authority |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-The active Platform Health Final Closure pass is being delivered from its dedicated phase branch. GitHub remains the authority for its PR, exact-head checks, merge, and deployment state. Repository verification does not imply merge, deployment, migration application, or authenticated Admin Browser proof.
+The Platform Health implementation and `DEBT-TYPE-01` closure were delivered through PR #98. Current `main` is the only official baseline. Future work starts from live `main` and is limited to requested Features or explicitly scoped Bugs; this snapshot does not reopen closed Architecture or historical Technical Debt.
 
 ## Active phase
 
-- **Title:** Platform Health Final Closure
-- **Baseline:** `0743f5cff13e3359746abbe6d1760a26a90b4dc7`
-- **Branch:** `codex/platform-health-final-closure`
-- **Scope:** evidence-backed Platform Health bugs, reliability debt, maintainability debt, one measured metadata waterfall, and confirmed dead source, all within current owners.
-- **Boundaries:** no new Runtime, Capability, Provider, System, owner, source of truth, Product policy, Production data mutation, merge, or deployment.
-- **Delivery:** dedicated PR and exact-head checks are required; live GitHub evidence supersedes this snapshot.
+- **Title:** Feature Development Baseline
+- **Baseline:** live GitHub `main`; Platform Health implementation merge `b7c726f97378513adc3adc759242a975a57babc5`
+- **Status:** Platform Health Discovery, Final Closure, and `DEBT-TYPE-01` are closed at implementation and merge level through PR #98.
+- **Scope:** future Features and explicitly requested, evidence-backed Bugs only.
+- **Boundaries:** do not reopen Architecture, historical PRs, or old Technical Debt without current-`main` regression evidence and an explicit scoped request.
+- **Delivery:** every future phase must independently prove local `main` = `origin/main` = GitHub `main` before implementation.
 
 ## Current architecture truth
 
@@ -60,6 +60,7 @@ The active Platform Health Final Closure pass is being delivered from its dedica
 - Browser verification uses the existing Playwright dependency through one formal configuration on port 3000. `verify:platform` derives route/page health from Next build manifests plus the existing public-route and Admin-navigation registries; authenticated state is supplied externally and absent state is reported as `SKIPPED / UNPROVEN`.
 - Operational failures use the existing structured logger with context redaction, the Next.js server `onRequestError` hook, and public/Admin error boundaries. Vercel remains the current server-log sink; no external monitoring vendor has been selected.
 - GitHub CI uses PostgreSQL 17 for the Media Coordination, Dashboard Truth, and Reports Analytics service jobs. This alignment changes CI infrastructure only and does not change application behavior, schema, Supabase, or Vercel.
+- Existing Supabase admin clients adopt the generated `Database` contract. Compiler-visible table, relation, RPC, and JSON-boundary guards prevent consumers from restoring local result generics or broad database-result assertions; this is contract adoption, not a new Runtime or source of truth.
 
 ## Closed architecture phases since the previous state snapshot
 
@@ -70,6 +71,10 @@ The active Platform Health Final Closure pass is being delivered from its dedica
 | PR #84 | The remaining valid PR #82 delta was reimplemented on the then-current `main` inside current owners and guarded by `verify:pr-82-delta-recovery`. |
 | PR #82 | Closed unmerged as superseded by PR #84; its old baseline, owners, contracts, and superseded implementations are not architecture authority. |
 | PR #85 | GitHub Actions PostgreSQL service jobs aligned with Production PostgreSQL 17; no product or schema change. |
+
+## Closed Platform Health phase
+
+PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` within current owners. Generated Database types were adopted without a new Runtime, Provider, Adapter, Product rule, or parallel implementation. This records implementation and merge closure only; it is not a Platform Global Closure or an Architecture reopening.
 
 ## Configured live database reconciliation
 
