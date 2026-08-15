@@ -1,8 +1,36 @@
 import type { MediaCenterCmsPageSlug } from "../../lib/media-center-page-config";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
+const LEGACY_LISTING_SHELL_TITLE = "Listing shell";
+const LEGACY_LISTING_SHELL_SUBTITLE_PREFIX =
+  "Publish or replace to show CMS content above";
+
+type MediaListingShellBlock = Extract<
+  ResolvedPageBlock,
+  { blockType: "content" }
+>;
+
+function isMediaListingShellBlock(
+  block: ResolvedPageBlock,
+): block is MediaListingShellBlock {
+  return (
+    block.blockType === "content" &&
+    block.template.slug.endsWith("-listing-shell")
+  );
+}
+
+function isLegacyListingShellTitle(value: string | undefined) {
+  return (value ?? "").trim() === LEGACY_LISTING_SHELL_TITLE;
+}
+
+function isLegacyListingShellSubtitle(value: string | undefined) {
+  return (value ?? "")
+    .trim()
+    .startsWith(LEGACY_LISTING_SHELL_SUBTITLE_PREFIX);
+}
+
 export function isMediaListingShellPlaceholder(block: ResolvedPageBlock) {
-  if (block.blockType !== "content" || !block.template.slug.endsWith("-listing-shell")) {
+  if (!isMediaListingShellBlock(block)) {
     return false;
   }
 
@@ -10,9 +38,30 @@ export function isMediaListingShellPlaceholder(block: ResolvedPageBlock) {
   return (
     (config.eyebrow ?? "").trim() === "" &&
     (config.body ?? "").trim() === "" &&
-    (config.title ?? "").trim() === "Listing shell" &&
-    (config.subtitle ?? "").trim().startsWith("Publish or replace to show CMS content above")
+    isLegacyListingShellTitle(config.title) &&
+    isLegacyListingShellSubtitle(config.subtitle)
   );
+}
+
+function removeLegacyListingShellFallbacks(
+  block: ResolvedPageBlock,
+): ResolvedPageBlock {
+  if (!isMediaListingShellBlock(block)) return block;
+
+  const config = block.template.config;
+  return {
+    ...block,
+    template: {
+      ...block.template,
+      config: {
+        ...config,
+        title: isLegacyListingShellTitle(config.title) ? "" : config.title,
+        subtitle: isLegacyListingShellSubtitle(config.subtitle)
+          ? ""
+          : config.subtitle,
+      },
+    },
+  };
 }
 
 export function resolveMediaListingMainBlocks(
@@ -21,11 +70,9 @@ export function resolveMediaListingMainBlocks(
 ) {
   if (cmsPageSlug === "media-center") return mainBlocks;
 
-  const configuredBlocks = mainBlocks.filter(
-    (block) => !isMediaListingShellPlaceholder(block),
+  return mainBlocks.flatMap((block) =>
+    isMediaListingShellPlaceholder(block)
+      ? []
+      : [removeLegacyListingShellFallbacks(block)],
   );
-  if (configuredBlocks.length > 0) return configuredBlocks;
-
-  const placeholderBlock = mainBlocks.find(isMediaListingShellPlaceholder);
-  return placeholderBlock ? [placeholderBlock] : [];
 }

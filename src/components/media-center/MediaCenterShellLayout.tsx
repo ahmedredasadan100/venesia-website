@@ -51,7 +51,7 @@ export default async function MediaCenterShellLayout({
   const listingMainBlocks = resolveMediaListingMainBlocks(cmsPageSlug, mainBlocks);
   const showListingPlaceholder =
     cmsPageSlug !== "media-center" &&
-    listingMainBlocks.length === 0 &&
+    mainBlocks.length === 0 &&
     !composition.hasCompositionError;
 
   const prefixBlocks =

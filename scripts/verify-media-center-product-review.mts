@@ -116,13 +116,36 @@ const configuredBlock = contentBlock(2, "media-center-news-header", {
 assert.equal(isMediaListingShellPlaceholder(placeholderBlock), true);
 assert.deepEqual(
   resolveMediaListingMainBlocks("media-center-news", [placeholderBlock]),
-  [placeholderBlock],
+  [],
 );
 assert.deepEqual(
   resolveMediaListingMainBlocks("media-center-news", [placeholderBlock, configuredBlock]),
   [configuredBlock],
 );
 assert.deepEqual(resolveMediaListingMainBlocks("media-center-news", []), []);
+
+const partiallyManagedListingShell = contentBlock(
+  3,
+  "media-center-videos-listing-shell",
+  {
+    eyebrow: "Video Stories",
+    title: "Listing shell",
+    subtitle: "Publish or replace to show CMS content above the listing.",
+    body: "Managed listing introduction.",
+    alignment: "start",
+  },
+);
+const [normalizedListingShell] = resolveMediaListingMainBlocks(
+  "media-center-videos",
+  [partiallyManagedListingShell],
+);
+assert.equal(normalizedListingShell?.blockType, "content");
+if (normalizedListingShell?.blockType === "content") {
+  assert.equal(normalizedListingShell.template.config.eyebrow, "Video Stories");
+  assert.equal(normalizedListingShell.template.config.body, "Managed listing introduction.");
+  assert.equal(normalizedListingShell.template.config.title, "");
+  assert.equal(normalizedListingShell.template.config.subtitle, "");
+}
 
 const hubComponents = [
   "MediaCenterHubFeatured.tsx",
@@ -158,6 +181,18 @@ const shellSource = read("src/components/media-center/MediaCenterShellLayout.tsx
 assert.ok(shellSource.includes("resolveMediaListingMainBlocks"));
 assert.ok(shellSource.includes("MediaListingShellPlaceholder"));
 assert.ok(shellSource.includes("!composition.hasCompositionError"));
+assert.ok(shellSource.includes("mainBlocks.length === 0"));
+assert.ok(!shellSource.includes("listingMainBlocks.length === 0"));
+
+const paginationSource = read("src/components/Pagination.tsx");
+assert.ok(paginationSource.startsWith('"use client"'));
+assert.ok(paginationSource.includes("useLayoutEffect"));
+assert.ok(paginationSource.includes("retainedViewportTopRef"));
+assert.ok(paginationSource.includes("window.scrollBy(0, delta)"));
+assert.equal(
+  paginationSource.match(/onNavigate=\{retainViewportPosition\}/g)?.length,
+  3,
+);
 
 const editorSource = read("src/components/admin/page-blocks/MediaHubModuleEditClient.tsx");
 for (const fieldName of ["eyebrow", "title", "presentation_description", "cta_text"]) {

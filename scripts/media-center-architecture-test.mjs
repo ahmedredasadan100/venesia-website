@@ -84,15 +84,22 @@ try {
 
 try {
   const hub = read("src/app/(site)/media-center/page.tsx");
-  if (hub.includes("getHeroSectionState") && hub.includes("MediaCenterGrid")) {
-    pass("Hub uses CMS hero + MediaCenterGrid core");
+  if (
+    hub.includes("loadPageCompositionBySlug") &&
+    hub.includes("findHeroInComposition") &&
+    hub.includes("MediaCenterGrid")
+  ) {
+    pass("Hub uses Page Composition hero + MediaCenterGrid core");
   } else {
-    fail("Hub core wiring", "expected getHeroSectionState + MediaCenterGrid");
+    fail("Hub core wiring", "expected Page Composition hero + MediaCenterGrid");
   }
-  if (hub.includes("PageSlotLayout") && hub.includes("mainAfter={<MediaCenterGrid />}")) {
-    pass("Hub PageSlotLayout with frozen grid");
+  if (
+    hub.includes("PageSlotLayout") &&
+    hub.includes("mainAfter={<MediaCenterGrid composition={composition} />}")
+  ) {
+    pass("Hub PageSlotLayout with composition-backed grid");
   } else {
-    fail("Hub PageSlotLayout", "mainAfter MediaCenterGrid missing");
+    fail("Hub PageSlotLayout", "composition-backed MediaCenterGrid missing");
   }
 } catch (error) {
   fail("Hub page", error instanceof Error ? error.message : String(error));
@@ -139,15 +146,20 @@ try {
 
 try {
   const shell = read("src/components/media-center/MediaCenterShellLayout.tsx");
-  if (shell.includes("getHeroSectionState") && shell.includes("allowStaticHeroFallback")) {
+  const listingPage = read("src/components/media-center/MediaListingPage.tsx");
+  if (shell.includes("findHeroInComposition") && shell.includes("allowStaticHeroFallback")) {
     pass("Shell hero visibility rule");
   } else {
-    fail("Shell hero visibility rule", "getHeroSectionState/allowStaticHeroFallback missing");
+    fail("Shell hero visibility rule", "composition hero/allowStaticHeroFallback missing");
   }
-  if (shell.includes("loadPageCompositionBySlug") && shell.includes("getSlotBlocks")) {
+  if (
+    listingPage.includes("loadPageCompositionBySlug") &&
+    listingPage.includes("composition={composition}") &&
+    shell.includes("getSlotBlocks")
+  ) {
     pass("Shell loads CMS blocks for listing pages");
   } else {
-    fail("Shell loads CMS blocks", "loadPageCompositionBySlug/getSlotBlocks missing");
+    fail("Shell loads CMS blocks", "shared listing composition handoff missing");
   }
   if (shell.includes("MediaCenterCmsBlocksProvider")) {
     pass("Shell provides CMS blocks context to MediaPageShell");
