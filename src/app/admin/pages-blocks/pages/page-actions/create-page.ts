@@ -143,7 +143,7 @@ export async function createPage(
       status: "unpublished",
     })
     .select("id")
-    .single<{ id: number }>();
+    .single();
 
   if (insertError || !createdPage) {
     const message = resolveInsertFailure(insertError);

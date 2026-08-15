@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 
+import type { Tables } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   AdminSelfAccountValidationError,
@@ -19,51 +20,57 @@ import {
   verifyAdminSessionToken,
 } from "./session";
 
-export type AdminUserRecord = {
-  id: number;
-  email: string;
-  username: string;
-  password_hash: string;
-  full_name: string | null;
-  role: string;
-  is_active: boolean;
-  session_version: number;
-  last_login_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type AdminUserRecord = Tables<"admin_users">;
+type AdminUserSessionRow = Omit<AdminUserRecord, "password_hash">;
 
 const ADMIN_USER_SESSION_COLUMNS =
   "id, email, username, full_name, role, is_active, session_version, last_login_at, created_at, updated_at";
 
-function mapAdminUser(row: Record<string, unknown>): AdminUserRecord {
+export class AdminAuthDependencyError extends Error {
+  readonly code = "admin_auth_dependency_unavailable";
+  readonly operation: string;
+
+  constructor(operation: string, cause: unknown) {
+    super("Admin authentication dependency is unavailable.", { cause });
+    this.name = "AdminAuthDependencyError";
+    this.operation = operation;
+  }
+}
+
+function toAdminAuthDependencyError(operation: string, error: unknown) {
+  return error instanceof AdminAuthDependencyError
+    ? error
+    : new AdminAuthDependencyError(operation, error);
+}
+
+function mapAdminSessionUser(row: AdminUserSessionRow): AdminUserRecord {
   return {
-    id: Number(row.id),
-    email: String(row.email),
-    username: String(row.username),
-    password_hash: String(row.password_hash ?? ""),
-    full_name: row.full_name ? String(row.full_name) : null,
-    role: String(row.role ?? "admin"),
-    is_active: Boolean(row.is_active),
-    session_version: Number(row.session_version ?? 1),
-    last_login_at: row.last_login_at ? String(row.last_login_at) : null,
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
+    ...row,
+    // Session reads intentionally exclude credential material. The exported
+    // record shape remains stable, and password verification always reloads
+    // the full generated row through getAdminUserById.
+    password_hash: "",
   };
 }
 
-async function getAdminUserByIdWithColumns(id: number, columns: string) {
-  const { data, error } = await getSupabaseAdmin().from("admin_users").select(columns).eq("id", id).maybeSingle();
-  if (error || !data) return null;
-  return mapAdminUser(data as unknown as Record<string, unknown>);
-}
-
 export async function getAdminUserById(id: number) {
-  return getAdminUserByIdWithColumns(id, "*");
+  const { data, error } = await getSupabaseAdmin()
+    .from("admin_users")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw toAdminAuthDependencyError("admin_user_by_id", error);
+  return data;
 }
 
 async function getAdminUserForSession(id: number) {
-  return getAdminUserByIdWithColumns(id, ADMIN_USER_SESSION_COLUMNS);
+  const { data, error } = await getSupabaseAdmin()
+    .from("admin_users")
+    .select(ADMIN_USER_SESSION_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw toAdminAuthDependencyError("admin_user_by_id", error);
+  return data ? mapAdminSessionUser(data) : null;
 }
 
 async function getAdminUserByUsername(username: string) {
@@ -72,8 +79,8 @@ async function getAdminUserByUsername(username: string) {
     .select("*")
     .eq("username", username)
     .maybeSingle();
-  if (error || !data) return null;
-  return mapAdminUser(data as Record<string, unknown>);
+  if (error) throw toAdminAuthDependencyError("admin_user_by_username", error);
+  return data;
 }
 
 async function getAdminUserByEmail(email: string) {
@@ -82,8 +89,8 @@ async function getAdminUserByEmail(email: string) {
     .select("*")
     .eq("email", email.toLowerCase())
     .maybeSingle();
-  if (error || !data) return null;
-  return mapAdminUser(data as Record<string, unknown>);
+  if (error) throw toAdminAuthDependencyError("admin_user_by_email", error);
+  return data;
 }
 
 export async function findAdminUserByLoginIdentifier(identifier: string) {
@@ -116,7 +123,7 @@ export async function authenticateAdminUser(identifier: string, password: string
     .eq("id", user.id);
 
   if (error) {
-    throw new Error(error.message);
+    throw toAdminAuthDependencyError("admin_user_login_timestamp", error);
   }
 
   return user;
@@ -174,22 +181,45 @@ function isUniqueViolation(error: { code?: string; message?: string } | null) {
   return error.code === "23505" || /duplicate key|unique/i.test(error.message ?? "");
 }
 
-export async function updateAdminUserFullName(userId: number, fullName: string | null) {
-  const normalized = normalizeAdminFullName(fullName ?? "");
-  const fullNameError = validateAdminFullName(normalized);
-  if (fullNameError) {
-    throw new AdminSelfAccountValidationError({ full_name: fullNameError });
+export async function updateAdminUserIdentity(
+  userId: number,
+  input: { fullName: string | null; email: string },
+) {
+  const fullName = normalizeAdminFullName(input.fullName ?? "");
+  const email = normalizeAdminEmail(input.email);
+  const fieldErrors = {
+    ...(validateAdminFullName(fullName)
+      ? { full_name: validateAdminFullName(fullName) ?? undefined }
+      : {}),
+    ...(validateAdminEmail(email)
+      ? { email: validateAdminEmail(email) ?? undefined }
+      : {}),
+  };
+  if (Object.values(fieldErrors).some(Boolean)) {
+    throw new AdminSelfAccountValidationError(fieldErrors);
   }
 
-  const { error } = await getSupabaseAdmin()
+  const { data, error } = await getSupabaseAdmin()
     .from("admin_users")
     .update({
-      full_name: normalized,
+      full_name: fullName,
+      email,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", userId);
+    .eq("id", userId)
+    .select("email, full_name")
+    .maybeSingle();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isUniqueViolation(error)) {
+      throw new AdminSelfAccountValidationError(
+        mapUniqueViolationToSelfAccountFieldErrors(error),
+      );
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("User not found.");
+  return data;
 }
 
 export async function updateAdminUserEmail(userId: number, email: string) {
@@ -240,16 +270,29 @@ export async function invalidateAdminSessionOnLogout(userId: number) {
   await revokeAllAdminUserSessions(userId);
 }
 
-export async function hasAnyAdminUser() {
+type AdminUsersDependencyState =
+  | { status: "ready" }
+  | { status: "empty" }
+  | { status: "unavailable"; error: AdminAuthDependencyError };
+
+export async function getAdminUsersDependencyState(): Promise<AdminUsersDependencyState> {
   try {
     const { count, error } = await getSupabaseAdmin()
       .from("admin_users")
       .select("id", { count: "exact", head: true })
       .limit(1);
 
-    if (error) return false;
-    return (count ?? 0) > 0;
-  } catch {
-    return false;
+    if (error) {
+      return {
+        status: "unavailable",
+        error: toAdminAuthDependencyError("admin_users_availability", error),
+      };
+    }
+    return (count ?? 0) > 0 ? { status: "ready" } : { status: "empty" };
+  } catch (error) {
+    return {
+      status: "unavailable",
+      error: toAdminAuthDependencyError("admin_users_availability", error),
+    };
   }
 }

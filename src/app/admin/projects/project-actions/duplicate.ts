@@ -90,7 +90,7 @@ export async function duplicateProjectAjax(id: number) {
     };
   }
 
-  const parsed = duplicateResultSchema.safeParse(Array.isArray(data) ? data[0] : data);
+  const parsed = duplicateResultSchema.safeParse(data?.[0]);
   if (!parsed.success) {
     return {
       ok: false as const,
@@ -104,12 +104,7 @@ export async function duplicateProjectAjax(id: number) {
     .from("projects")
     .select("publication_status,published_at,published_by,featured")
     .eq("id", duplicated.project_id)
-    .maybeSingle<{
-      publication_status: "published" | "unpublished";
-      published_at: string | null;
-      published_by: number | null;
-      featured: boolean;
-    }>();
+    .maybeSingle();
   if (
     publicationError ||
     !publication ||

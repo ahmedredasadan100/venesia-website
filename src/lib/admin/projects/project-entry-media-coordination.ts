@@ -54,17 +54,17 @@ async function loadExistingMediaChildren(projectId: number | null) {
   if (error) throw new Error(`project_media_preflight_failed:${error.message}`);
 
   return [
-    ...((plans.data ?? []) as { id: number; client_key: string }[]).map((row) => ({
+    ...(plans.data ?? []).map((row) => ({
       domainKey: "project_floor_plans" as const,
       id: row.id,
       clientKey: row.client_key,
     })),
-    ...((media.data ?? []) as { id: number; client_key: string }[]).map((row) => ({
+    ...(media.data ?? []).map((row) => ({
       domainKey: "project_media" as const,
       id: row.id,
       clientKey: row.client_key,
     })),
-    ...((videos.data ?? []) as { id: number; client_key: string }[]).map((row) => ({
+    ...(videos.data ?? []).map((row) => ({
       domainKey: "project_videos" as const,
       id: row.id,
       clientKey: row.client_key,

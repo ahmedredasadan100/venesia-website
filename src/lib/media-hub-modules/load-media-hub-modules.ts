@@ -41,9 +41,7 @@ export async function queryMediaHubModules(pageSlug: string): Promise<MediaHubMo
 
   const modules: MediaHubModuleState[] = [];
   for (const row of rows ?? []) {
-    const template = joinedTemplate(row.media_hub_module_templates) as {
-      section_key: string; name: string; slug: string; status: string; config: unknown;
-    } | null;
+    const template = joinedTemplate(row.media_hub_module_templates);
     if (!template || !isPublishedPageBlockStatus(template.status) || !isSectionKey(template.section_key)) continue;
     modules.push({
       sectionKey: template.section_key,

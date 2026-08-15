@@ -3,6 +3,7 @@ import {
   normalizeInternalRedirectPath,
   normalizeRedirectDestination,
 } from "./normalize-redirect-path";
+import type { Tables } from "../database.types";
 import type { RedirectType, UrlRedirectRecord } from "./redirect-types";
 
 export type RedirectValidationInput = {
@@ -30,6 +31,11 @@ export type RedirectValidationResult =
         | "redirectType"
         | "status";
     };
+
+type PersistedRedirectValidationRecord = Pick<
+  Tables<"url_redirects">,
+  "id" | "source_path" | "destination_path" | "status"
+>;
 
 function pathsEqual(left: string, right: string) {
   return left === right;
@@ -94,7 +100,7 @@ export function detectRedirectLoop(
 
 export function validateRedirectInput(
   input: RedirectValidationInput,
-  activeRedirects: Array<Pick<UrlRedirectRecord, "id" | "source_path" | "destination_path" | "status">>,
+  activeRedirects: PersistedRedirectValidationRecord[],
 ): RedirectValidationResult {
   const source = normalizeInternalRedirectPath(input.sourcePath);
   if (!source.ok) {

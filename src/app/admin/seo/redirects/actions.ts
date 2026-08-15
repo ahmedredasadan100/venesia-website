@@ -16,6 +16,7 @@ import {
   REDIRECTS_LIST_VIEW_KEY,
   type RedirectColumnKey,
 } from "../../../../lib/admin/redirects/list-config";
+import { redirectEntityListRowSchema } from "../../../../lib/admin/redirects/entity-list-adapter";
 import type { RedirectStatus, UrlRedirectRecord } from "../../../../lib/redirects/redirect-types";
 import {
   validateRedirectInput,
@@ -155,7 +156,7 @@ async function listRedirectsForValidation() {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Array<Pick<UrlRedirectRecord, "id" | "source_path" | "destination_path" | "status">>;
+  return data ?? [];
 }
 
 async function getRedirectById(id: number) {
@@ -163,10 +164,10 @@ async function getRedirectById(id: number) {
     .from("url_redirects")
     .select("*")
     .eq("id", id)
-    .maybeSingle<UrlRedirectRecord>();
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data;
+  return data ? redirectEntityListRowSchema.parse(data) : null;
 }
 
 export async function createRedirectAction(
@@ -205,7 +206,7 @@ export async function createRedirectAction(
         updated_at: now,
       })
       .select("*")
-      .single<UrlRedirectRecord>();
+      .single();
 
     if (error || !data) {
       return buildRedirectDatabaseFailure(
@@ -216,11 +217,13 @@ export async function createRedirectAction(
       );
     }
 
+    const redirectRecord = redirectEntityListRowSchema.parse(data);
+
     await recordCmsAdminAudit(
       {
         action: buildCmsAuditAction("redirect", "create"),
         entityType: "redirect",
-        entityId: data.id,
+        entityId: redirectRecord.id,
         entityLabel: validation.sourcePath,
         metadata: {
           destination_path: validation.destinationPath,
@@ -232,7 +235,7 @@ export async function createRedirectAction(
     );
 
     revalidateRedirectsAdmin();
-    return buildRedirectFormSuccess(mode, revision, "created", data);
+    return buildRedirectFormSuccess(mode, revision, "created", redirectRecord);
   } catch (error) {
     return buildRedirectDatabaseFailure(
       mode,
@@ -300,7 +303,7 @@ export async function updateRedirectAction(
       })
       .eq("id", id)
       .select("*")
-      .maybeSingle<UrlRedirectRecord>();
+      .maybeSingle();
 
     if (error || !data) {
       return buildRedirectDatabaseFailure(
@@ -310,6 +313,8 @@ export async function updateRedirectAction(
         "تعذر تحديث التحويل. حاول مرة أخرى.",
       );
     }
+
+    const redirectRecord = redirectEntityListRowSchema.parse(data);
 
     await recordCmsAdminAudit(
       {
@@ -343,7 +348,7 @@ export async function updateRedirectAction(
     }
 
     revalidateRedirectsAdmin();
-    return buildRedirectFormSuccess(mode, revision, "updated", data);
+    return buildRedirectFormSuccess(mode, revision, "updated", redirectRecord);
   } catch (error) {
     return buildRedirectDatabaseFailure(
       mode,
@@ -407,7 +412,7 @@ export async function toggleRedirectStatusAction(
     })
     .eq("id", id)
     .select("status, updated_at")
-    .maybeSingle<Pick<UrlRedirectRecord, "status" | "updated_at">>();
+    .maybeSingle();
 
   if (error || !data) {
     return {
@@ -433,10 +438,10 @@ export async function toggleRedirectStatusAction(
     ok: true,
     feedbackStatus: "success",
     message:
-      data.status === "active"
+      nextStatus === "active"
         ? "تم تفعيل التحويل بنجاح."
         : "تم إيقاف التحويل بنجاح.",
-    status: data.status,
+    status: nextStatus,
     updatedAt: data.updated_at,
   };
 }
@@ -468,7 +473,7 @@ export async function deleteRedirectAction(
     .delete()
     .eq("id", id)
     .select("id")
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
 
   if (error || !data) {
     return {

@@ -48,6 +48,8 @@ type AdminRichTextEditorProps = {
   storageFormat?: "html" | "markdown";
   /** Enables the Article block structure while retaining the same TipTap editor engine. */
   enableArticleStructure?: boolean;
+  /** Locks editor input and toolbar commands without removing its submitted value. */
+  readOnly?: boolean;
   onValueChange?: (value: string) => void;
 };
 
@@ -104,10 +106,12 @@ export default function AdminRichTextEditor({
   appearance = "dark",
   storageFormat = "html",
   enableArticleStructure = false,
+  readOnly = false,
   onValueChange,
 }: AdminRichTextEditorProps) {
   const runtime = useOptionalAdminFormRuntime();
   const pending = runtime?.pending ?? false;
+  const editorReadOnly = pending || readOnly;
   const hasError = Boolean(runtime?.fieldErrors[name]?.length);
   const styleScope = `rich-text-${useId().replace(/:/g, "")}`;
   const initialValue = useMemo(
@@ -215,8 +219,8 @@ export default function AdminRichTextEditor({
   }, [editor, initialContent, initialValue]);
 
   useEffect(() => {
-    editor?.setEditable(!pending);
-  }, [editor, pending]);
+    editor?.setEditable(!editorReadOnly);
+  }, [editor, editorReadOnly]);
 
   function openLinkEditor() {
     if (!editor) return;
@@ -452,19 +456,25 @@ export default function AdminRichTextEditor({
         </span>
       ) : null}
 
-      <div
-        className={[
-          "overflow-hidden rounded-[24px] border",
-          appearance === "light" ? "border-slate-200 bg-white" : "border-white/10 bg-black/25",
-          sideToolbar ? "md:flex md:flex-row-reverse md:items-stretch" : "",
-        ].join(" ")}
+      <fieldset
+        disabled={editorReadOnly}
+        className="contents"
+        data-admin-rich-text-readonly={editorReadOnly ? "true" : "false"}
       >
-        {toolbar}
+        <div
+          className={[
+            "overflow-hidden rounded-[24px] border",
+            appearance === "light" ? "border-slate-200 bg-white" : "border-white/10 bg-black/25",
+            sideToolbar ? "md:flex md:flex-row-reverse md:items-stretch" : "",
+          ].join(" ")}
+        >
+          {toolbar}
 
-        <div className="admin-rich-text-editor min-w-0 flex-1 px-4 py-4" style={{ minHeight }}>
-          <EditorContent editor={editor} />
+          <div className="admin-rich-text-editor min-w-0 flex-1 px-4 py-4" style={{ minHeight }}>
+            <EditorContent editor={editor} />
+          </div>
         </div>
-      </div>
+      </fieldset>
 
       {helperText ? (
         <p className={`text-xs leading-6 ${appearance === "light" ? "text-slate-500" : "text-white/45"}`}>

@@ -517,7 +517,10 @@ export default function AdminFormRuntime<TResult = unknown>({
     const snapshot = submittedControlsRef.current;
     if (!form || !snapshot) return;
 
-    restoreAdminFormControls(form, snapshot);
+    restoreAdminFormControls(form, snapshot, {
+      preserveServerOwned:
+        state.status === "success" || state.status === "warning",
+    });
   }, [actionPending, state]);
 
   useEffect(() => {

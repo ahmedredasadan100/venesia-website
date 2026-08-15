@@ -154,6 +154,7 @@ export default function ArticleEditor({
         mode="edit"
         contentType="article"
         entityId={topic.id}
+        baselineRevision={topic.updated_at}
         closeHref={returnPath}
         formId="topic-edit-form"
         tabs={[
@@ -170,7 +171,14 @@ export default function ArticleEditor({
                   mode="edit"
                   categories={categoryOptions}
                   series={safeSeries}
-                  contentEditor={<TopicMarkdownEditor defaultValue={topic.content ?? ""} variant="compact" />}
+                  contentEditor={(
+                    <TopicMarkdownEditor
+                      defaultValue={topic.content ?? ""}
+                      variant="compact"
+                      draftIdentity={`topic:article:${topic.id}`}
+                      baselineRevision={topic.updated_at}
+                    />
+                  )}
                   displaySettings={
                     <ContentDisplaySettings
                       showTitle={topic.show_title_on_page}

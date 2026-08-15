@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Json, Tables } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { buildAdminListSearchOrFilter } from "../admin-list-search";
 import { loadNormalizedAdminEntityListPage } from "../entity-list/data-engine/adapter";
@@ -8,7 +9,13 @@ import type { AuditLogFilters, AuditLogListResult, AuditLogRecord } from "./audi
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
 
-function mapAuditRow(row: Record<string, unknown>): AuditLogRecord {
+function auditMetadata(value: Json): AuditLogRecord["metadata"] {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
+}
+
+function mapAuditRow(row: Tables<"admin_audit_logs">): AuditLogRecord {
   return {
     id: Number(row.id),
     actor_admin_user_id: row.actor_admin_user_id == null ? null : Number(row.actor_admin_user_id),
@@ -17,7 +24,7 @@ function mapAuditRow(row: Record<string, unknown>): AuditLogRecord {
     entity_type: row.entity_type ? String(row.entity_type) : null,
     entity_id: row.entity_id == null ? null : Number(row.entity_id),
     entity_label: row.entity_label ? String(row.entity_label) : null,
-    metadata: (row.metadata as Record<string, unknown> | null) ?? {},
+    metadata: auditMetadata(row.metadata),
     ip_address: row.ip_address ? String(row.ip_address) : null,
     user_agent: row.user_agent ? String(row.user_agent) : null,
     created_at: String(row.created_at),
@@ -68,9 +75,7 @@ async function loadAdminAuditLogPage(
   if (error) throw new Error(error.message);
 
   return {
-    rows: (data ?? []).map((row) =>
-      mapAuditRow(row as Record<string, unknown>),
-    ),
+    rows: (data ?? []).map(mapAuditRow),
     totalRows: count ?? 0,
   };
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import type { Json } from "../../../../../lib/database.types";
 import { coordinateMediaReferenceDomainMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import { buildMediaReferenceWriteScope } from "../../../../../lib/admin/media-catalog/reference-providers";
 import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
@@ -22,7 +23,7 @@ export async function importMenuJson(formData: FormData) {
   if (!menuId) backToMenus("القائمة غير موجودة.");
   if (!(file instanceof File) || !file.size) backToMenus("اختر ملف JSON صالحًا للاستيراد.");
 
-  let payload: unknown;
+  let payload: Json;
   try {
     payload = JSON.parse(await file.text());
   } catch {

@@ -5,6 +5,7 @@ import { unstable_cache } from "next/cache";
 
 import { resolveHeroConfigLinks } from "./admin/links/hero-config";
 import { loadPublicContentCollection } from "./content/public-content-read/owner";
+import type { Json, Tables } from "./database.types";
 import { MEDIA_CONTENT_TYPES } from "./media-center/types";
 import { getPublishedPageBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
@@ -15,6 +16,8 @@ import type {
   PageRecord,
   PageSectionRecord,
 } from "./page-sections";
+
+type JsonObject = Record<string, Json | undefined>;
 
 type HeroTemplateRecord = {
   id: number;
@@ -28,12 +31,76 @@ type HeroTemplateRecord = {
   limit_count: number;
   status: "published" | "unpublished";
   sort_order: number;
-  config: Record<string, unknown> | null;
+  config: JsonObject | null;
 };
+
+type HeroTemplateSelection = Pick<
+  Tables<"hero_templates">,
+  | "id"
+  | "name"
+  | "slug"
+  | "variant"
+  | "style_preset"
+  | "source_type"
+  | "source_id"
+  | "source_slug"
+  | "limit_count"
+  | "status"
+  | "sort_order"
+  | "config"
+>;
+
+function isHeroSourceType(value: string): value is HeroSourceType {
+  return (
+    value === "manual" ||
+    value === "latest_topics" ||
+    value === "featured_topics" ||
+    value === "topic_category" ||
+    value === "latest_media" ||
+    value === "featured_media" ||
+    value === "media_category"
+  );
+}
+
+function isHeroTemplateStatus(
+  value: string,
+): value is HeroTemplateRecord["status"] {
+  return value === "published" || value === "unpublished";
+}
+
+function isJsonObject(value: Json): value is JsonObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function mapHeroTemplateSelection(
+  template: HeroTemplateSelection,
+): HeroTemplateRecord | null {
+  if (
+    !isHeroSourceType(template.source_type) ||
+    !isHeroTemplateStatus(template.status)
+  ) {
+    return null;
+  }
+
+  return {
+    id: template.id,
+    name: template.name,
+    slug: template.slug,
+    variant: template.variant,
+    style_preset: template.style_preset,
+    source_type: template.source_type,
+    source_id: template.source_id,
+    source_slug: template.source_slug,
+    limit_count: template.limit_count,
+    status: template.status,
+    sort_order: template.sort_order,
+    config: isJsonObject(template.config) ? template.config : null,
+  };
+}
 
 async function getPageBySlug(slug: string): Promise<PageRecord | null> {
   const page = await getPublishedPageBySlug(slug);
-  return page as PageRecord | null;
+  return page;
 }
 
 function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): HeroSectionData {
@@ -85,8 +152,8 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
   if (byId.error) {
     logError("getAssignedHeroTemplate by id failed", byId.error, { pageId: page.id });
   } else if (byId.data?.hero_templates) {
-    const template = byId.data.hero_templates as unknown as HeroTemplateRecord;
-    return template.status === "published" ? template : null;
+    const template = mapHeroTemplateSelection(byId.data.hero_templates);
+    return template?.status === "published" ? template : null;
   }
 
   const byPath = await supabaseAdmin
@@ -102,8 +169,8 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
   if (byPath.error) {
     logError("getAssignedHeroTemplate by path failed", byPath.error, { path: page.path });
   } else if (byPath.data?.hero_templates) {
-    const template = byPath.data.hero_templates as unknown as HeroTemplateRecord;
-    return template.status === "published" ? template : null;
+    const template = mapHeroTemplateSelection(byPath.data.hero_templates);
+    return template?.status === "published" ? template : null;
   }
 
   return null;

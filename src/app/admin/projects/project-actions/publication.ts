@@ -126,7 +126,7 @@ export async function setProjectPublicationAjax(
     );
   }
 
-  const parsed = resultSchema.safeParse(Array.isArray(data) ? data[0] : data);
+  const parsed = resultSchema.safeParse(data?.[0]);
   if (!parsed.success) {
     return publicationFailure(
       "تعذر إثبات حالة النشر النهائية",

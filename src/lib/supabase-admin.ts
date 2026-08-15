@@ -2,10 +2,11 @@ import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import type { Database } from "./database.types";
 import { createSupabaseFetch } from "./supabase-fetch";
 
-let adminClient: SupabaseClient | null = null;
-let storageAdminClient: SupabaseClient | null = null;
+let adminClient: SupabaseClient<Database> | null = null;
+let storageAdminClient: SupabaseClient<Database> | null = null;
 
 export const SUPABASE_STORAGE_REQUEST_TIMEOUT_MS = 60_000;
 
@@ -21,7 +22,7 @@ function missingEnvMessage() {
 }
 
 /** Server-only Supabase client using the service role key. Never import in client components. */
-export function getSupabaseAdmin(): SupabaseClient {
+export function getSupabaseAdmin(): SupabaseClient<Database> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
@@ -30,7 +31,7 @@ export function getSupabaseAdmin(): SupabaseClient {
   }
 
   if (!adminClient) {
-    adminClient = createClient(url, serviceRoleKey, {
+    adminClient = createClient<Database>(url, serviceRoleKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -45,7 +46,7 @@ export function getSupabaseAdmin(): SupabaseClient {
 }
 
 /** Storage uploads can legitimately exceed the short database-query timeout. */
-export function getSupabaseStorageAdmin(): SupabaseClient {
+export function getSupabaseStorageAdmin(): SupabaseClient<Database> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
@@ -54,7 +55,7 @@ export function getSupabaseStorageAdmin(): SupabaseClient {
   }
 
   if (!storageAdminClient) {
-    storageAdminClient = createClient(url, serviceRoleKey, {
+    storageAdminClient = createClient<Database>(url, serviceRoleKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,

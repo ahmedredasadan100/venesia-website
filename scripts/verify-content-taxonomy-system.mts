@@ -66,6 +66,10 @@ const paths = {
   taxonomyFormActions: "src/app/admin/content/taxonomy-form-actions.ts",
   taxonomyFormValidation:
     "src/lib/admin/content/taxonomy-form-validation.ts",
+  articleTopicHelpers:
+    "src/app/admin/content/topics/article-actions/helpers.ts",
+  mediaTopicHelpers:
+    "src/app/admin/content/topics/media-actions/helpers.ts",
   seriesForm: "src/app/admin/content/series/SeriesForm.tsx",
   seriesNew: "src/app/admin/content/series/new/page.tsx",
   seriesEdit: "src/app/admin/content/series/[id]/page.tsx",
@@ -115,6 +119,8 @@ const categoryRowActions = read(paths.categoryRowActions);
 const categoryActions = read(paths.categoryActions);
 const taxonomyFormActions = read(paths.taxonomyFormActions);
 const taxonomyFormValidation = read(paths.taxonomyFormValidation);
+const articleTopicHelpers = read(paths.articleTopicHelpers);
+const mediaTopicHelpers = read(paths.mediaTopicHelpers);
 const seriesForm = read(paths.seriesForm);
 const seriesNew = read(paths.seriesNew);
 const seriesEdit = read(paths.seriesEdit);
@@ -398,6 +404,16 @@ check(
   "shared validation rejects malformed slugs",
   validateSlugFormat("Bad Slug!") !== null &&
     taxonomyFormValidation.includes("validateSlugFormat(value)"),
+);
+check(
+  "slug-policy",
+  "Article and Media topic payloads reuse the canonical slug owner",
+  [articleTopicHelpers, mediaTopicHelpers].every(
+    (source) =>
+      source.includes('import { slugifyFromTitle } from "../../../../../lib/admin/slug"') &&
+      !source.includes("normalizeArabicForSlug") &&
+      !source.includes("export function createSlug"),
+  ),
 );
 check(
   "slug-policy",

@@ -2,28 +2,31 @@
 
 import {
   resolveArticleTopicCategory,
-  type ArticleTopicCategoryRecord,
 } from "../../../../../lib/admin/article-topic-categories";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { parseTopicFaq } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
 import { logError } from "../../../../../lib/logging";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import type {
-  SeriesRow,
-  TopicRow,
-} from "./types";
+import type { TopicRow } from "./types";
+
+function validateId(id: string) {
+  const parsed = Number(id);
+  return /^\d+$/.test(id) && Number.isSafeInteger(parsed) && parsed > 0;
+}
 
 export async function getTopicById(id: string) {
   await requireAdminSession();
+  if (!validateId(id)) return null;
 
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
-      "id, title, slug, excerpt, content, image, image_alt, media_payload, category_id, category_slug, series_id, status, published_at, published_by, date_label, deleted_at, seo_title, seo_description, focus_keyword, seo_keywords, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page, show_faq_on_page, show_faq_title_on_page",
+      "id, title, slug, excerpt, content, image, image_alt, media_payload, category_id, category_slug, series_id, status, published_at, published_by, date_label, updated_at, deleted_at, seo_title, seo_description, focus_keyword, seo_keywords, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page, show_faq_on_page, show_faq_title_on_page",
     )
-    .eq("id", id)
+    .eq("id", Number(id))
     .eq("content_type", "article")
     .is("deleted_at", null)
-    .maybeSingle<TopicRow>();
+    .maybeSingle();
 
   if (error) {
     logError("getTopicById failed", error, { id });
@@ -31,19 +34,23 @@ export async function getTopicById(id: string) {
   }
 
   if (!data) return null;
-  return data;
+  return {
+    ...data,
+    faq: parseTopicFaq(data.faq),
+  } satisfies TopicRow;
 }
 
 export async function ensureUniqueSlug(slug: string, id?: string) {
   await requireAdminSession();
+  if (id && !validateId(id)) return false;
 
   let query = getSupabaseAdmin().from("topics").select("id").eq("slug", slug).limit(1);
 
   if (id) {
-    query = query.neq("id", id);
+    query = query.neq("id", Number(id));
   }
 
-  const { data, error } = await query.maybeSingle<{ id: number }>();
+  const { data, error } = await query.maybeSingle();
   if (error) return false;
   return !data;
 }
@@ -83,10 +90,10 @@ async function loadTopicCategoriesForValidation() {
 
   if (error) {
     logError("loadActiveTopicCategoriesForValidation failed", error);
-    return [] as ArticleTopicCategoryRecord[];
+    return [];
   }
 
-  return (data ?? []) as ArticleTopicCategoryRecord[];
+  return data ?? [];
 }
 
 export async function getCategory(categoryId: number | null, currentCategoryId?: number | null) {
@@ -131,7 +138,7 @@ export async function getSeries(seriesId: number | null, currentSeriesId?: numbe
     .eq("id", seriesId)
     .is("deleted_at", null);
   if (seriesId !== currentSeriesId) query = query.eq("status", "published");
-  const { data, error } = await query.maybeSingle<SeriesRow>();
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     logError("getSeries failed", error, { seriesId });
@@ -144,15 +151,16 @@ export async function getSeries(seriesId: number | null, currentSeriesId?: numbe
 
 export async function getTopicForDuplicate(id: string) {
   await requireAdminSession();
+  if (!validateId(id)) return null;
 
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
       "title, slug, excerpt, content, image, image_alt, category, category_slug, category_id, series_id, series, series_slug, date_label, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, is_featured, is_popular, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page, show_faq_on_page, show_faq_title_on_page",
     )
-    .eq("id", id)
+    .eq("id", Number(id))
     .eq("content_type", "article")
-    .maybeSingle<Record<string, unknown>>();
+    .maybeSingle();
 
   if (error || !data) return null;
   return data;

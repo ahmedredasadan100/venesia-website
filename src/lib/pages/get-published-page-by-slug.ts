@@ -3,17 +3,14 @@ import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
+import type { Tables } from "../database.types";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 
-export type PublishedPageRow = {
-  id: number;
-  title: string;
-  slug: string;
-  path: string;
-  page_type: string;
-  status: string;
-};
+export type PublishedPageRow = Pick<
+  Tables<"pages">,
+  "id" | "title" | "slug" | "path" | "page_type" | "status"
+>;
 
 export type PublishedPageLookupResult = {
   page: PublishedPageRow | null;
@@ -42,7 +39,7 @@ async function queryPublishedPageStateBySlug(pageSlug: string): Promise<Publishe
     };
   }
 
-  return { page: data as PublishedPageRow, sourceStatus: "database" };
+  return { page: data, sourceStatus: "database" };
 }
 
 /**

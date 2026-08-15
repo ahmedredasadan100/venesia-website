@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import {
@@ -9,12 +11,16 @@ import {
 } from "../../../../../lib/admin/media-catalog/synchronization";
 
 import { redirect } from "next/navigation";
+import type { Tables, TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  PAGE_BLOCK_BULK_ACTIONS,
   parseFormStatus,
   parseNumber,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
@@ -23,7 +29,6 @@ import {
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import type { CtaBlockConfig } from "../../../../../lib/page-blocks/configs";
-
 import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
 
 function buildCtaLink(formData: FormData, prefix: string, labelField: string) {
@@ -117,7 +122,7 @@ export async function createCtaBlock(
   let createdId: number | null = null;
   let mediaWarning = false;
   try {
-    const nextRow = {
+    const nextRow: TablesInsert<"cta_block_templates"> = {
       name,
       slug,
       description: cleanText(formData.get("description")) || null,
@@ -138,7 +143,7 @@ export async function createCtaBlock(
           .from("cta_block_templates")
           .insert(nextRow)
           .select("id")
-          .single<{ id: number }>();
+          .single();
         if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء البلوك.");
         return data;
       },
@@ -148,6 +153,13 @@ export async function createCtaBlock(
     createdId = data.id;
     mediaWarning = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
 
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("content_block_template", "create"),
+      entityType: "content_block_template",
+      entityId: data.id,
+      entityLabel: name,
+      metadata: { blockType: "cta", slug },
+    }, actor);
     await revalidateBlockModulePaths("cta");
     return createCtaBlockSuccess(revision, data.id, mediaWarning);
   } catch (error) {
@@ -177,7 +189,7 @@ export async function updateCtaBlock(formData: FormData) {
   if (!id || !name || !slug) throw new Error("بيانات البلوك غير مكتملة.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
 
-  const nextRow = {
+  const nextRow: TablesUpdate<"cta_block_templates"> = {
     name,
     slug,
     description: cleanText(formData.get("description")) || null,
@@ -199,7 +211,7 @@ export async function updateCtaBlock(formData: FormData) {
         .update(nextRow)
         .eq("id", id)
         .select("id")
-        .maybeSingle<{ id: number }>();
+        .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "تعذر تحديث البلوك.");
       return data;
     },
@@ -207,12 +219,19 @@ export async function updateCtaBlock(formData: FormData) {
   });
 
   await syncBlockModulePageAssignments("cta", id, parsePageIdsFromForm(formData), actor);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "update"),
+    entityType: "content_block_template",
+    entityId: id,
+    entityLabel: name,
+    metadata: { blockType: "cta", slug },
+  }, actor);
   await revalidateBlockModulePaths("cta");
   redirect(`/admin/pages-blocks/blocks/cta/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function toggleCtaBlockStatus(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "unpublished");
   if (!id) throw new Error("معرّف البلوك مفقود.");
@@ -223,11 +242,20 @@ export async function toggleCtaBlockStatus(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      nextStatus === "published" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityId: id,
+    metadata: { blockType: "cta", status: nextStatus },
+  }, actor);
   await revalidateBlockModulePaths("cta");
 }
 
 export async function deleteCtaBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -235,7 +263,7 @@ export async function deleteCtaBlock(formData: FormData) {
     .from("cta_block_templates")
     .select("id")
     .eq("id", id)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
   const cleanupIdentity = existing?.id ?? id;
 
@@ -245,6 +273,12 @@ export async function deleteCtaBlock(formData: FormData) {
     .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "delete"),
+    entityType: "content_block_template",
+    entityId: cleanupIdentity,
+    metadata: { blockType: "cta" },
+  }, actor);
   const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     [],
     null,
@@ -291,12 +325,19 @@ export async function duplicateCtaBlock(formData: FormData) {
         .from("cta_block_templates")
         .insert(nextRow)
         .select("id")
-        .single<{ id: number }>();
+        .single();
       if (insertError || !data) throw new Error(insertError?.message ?? "تعذر نسخ البلوك.");
       return data;
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "duplicate"),
+    entityType: "content_block_template",
+    entityId: coordinated.value.id,
+    entityLabel: nextRow.name,
+    metadata: { blockType: "cta", sourceId: id },
+  }, actor);
   await revalidateBlockModulePaths("cta");
   if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
     redirect("/admin/pages-blocks/blocks/cta?notice=saved_with_media_sync_warning");
@@ -304,15 +345,12 @@ export async function duplicateCtaBlock(formData: FormData) {
 }
 
 export async function bulkCtaBlocks(formData: FormData) {
-  await requireAdminSession();
-  const action = cleanText(formData.get("bulk_action"));
-  const ids = formData
-    .getAll("ids")
-    .flatMap((value) => String(value).split(","))
-    .map((value) => Number(value))
-    .filter(Boolean);
-
-  if (!ids.length) return;
+  const actor = await requireAdminSession();
+  const action = parsePageBlockBulkAction(
+    formData.get("bulk_action"),
+    PAGE_BLOCK_BULK_ACTIONS,
+  );
+  const ids = parsePageBlockBulkIds(formData.getAll("ids"));
 
   const now = new Date().toISOString();
 
@@ -348,6 +386,15 @@ export async function bulkCtaBlocks(formData: FormData) {
     );
   }
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      action === "delete" ? "delete" : action === "publish" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityLabel: "cta_block_templates",
+    metadata: { blockType: "cta", action, ids, count: ids.length },
+  }, actor);
   if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
     try {
       await revalidateBlockModulePaths("cta");
@@ -359,15 +406,10 @@ export async function bulkCtaBlocks(formData: FormData) {
   await revalidateBlockModulePaths("cta");
 }
 
-export type CtaBlockRow = {
-  id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  variant: string;
-  status: string;
-  updated_at: string;
-};
+export type CtaBlockRow = Pick<
+  Tables<"cta_block_templates">,
+  "id" | "name" | "slug" | "description" | "variant" | "status" | "updated_at"
+>;
 
 export async function getCtaBlockRows(): Promise<CtaBlockRow[]> {
   await requireAdminSession();
@@ -378,5 +420,5 @@ export async function getCtaBlockRows(): Promise<CtaBlockRow[]> {
     .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as CtaBlockRow[];
+  return data ?? [];
 }

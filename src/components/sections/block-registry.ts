@@ -16,9 +16,4 @@ const BLOCK_RENDERERS: Record<RenderableBlockType, ComponentType<BlockRendererPr
   cards: CardsSection,
 };
 
-export function getBlockRenderer(blockType: ResolvedPageBlock["blockType"]) {
-  if (blockType === "breadcrumb") return null;
-  return BLOCK_RENDERERS[blockType];
-}
-
 export { BLOCK_RENDERERS };

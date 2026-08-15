@@ -42,6 +42,11 @@ function loadValidationModule(relativePath) {
         throw new Error("Article category resolution must follow authorization.");
       },
     },
+    "../../../../../lib/admin/content-workflow/topic-publish-validation": {
+      parseTopicFaq() {
+        return [];
+      },
+    },
     "../../../../../lib/logging": { logError() {} },
     "../../../../../lib/supabase-admin": {
       getSupabaseAdmin() {
@@ -49,7 +54,7 @@ function loadValidationModule(relativePath) {
         throw privilegedReadReached;
       },
     },
-    "../../../../../components/admin/content/editors/media/media-content-config": {
+    "../../../../../lib/admin/content/content-types": {
       isMediaEditableContentType: () => true,
       MEDIA_EDITABLE_CONTENT_TYPES: ["news", "press", "site_update", "video", "gallery"],
     },

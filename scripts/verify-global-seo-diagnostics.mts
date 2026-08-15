@@ -21,6 +21,14 @@ assert.ok(
 );
 assert.ok(!migration.includes("projects.canonical_url =") && !migration.match(/update\s+public\.projects/i), "migration must not mutate live project canonical values");
 assert.ok(runner.includes("global_seo_infrastructure_health") && runner.includes("validateRedirectInput") && runner.includes("runSitemapDiagnostics"));
+assert.ok(
+  runner.includes("function parseInfrastructureProof(value: Json): InfrastructureProof") &&
+    runner.includes("const proof = parseInfrastructureProof(data)") &&
+    runner.includes("site_settings_service_only: readInfrastructureBoolean(value.site_settings_service_only)") &&
+    runner.includes("footer_public_composition_audit_count: readInfrastructureNumber(value.footer_public_composition_audit_count)") &&
+    !runner.includes("as InfrastructureProof"),
+  "infrastructure RPC Json must be narrowed field-by-field into the existing proof contract",
+);
 assert.ok(dashboard.includes("Effective Source Contract") && dashboard.includes("Product Decision"));
 
 console.log("PASS Global SEO diagnostics: five real dimensions, weighted checks, effective sources, specialized diagnostics, canonical decision-only boundary.");

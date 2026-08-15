@@ -1,8 +1,9 @@
 # Roadmap and Debt Register
 
 **Status:** Controlled work ledger
-**Updated:** 2026-08-14
-**Current baseline:** `3b548f5b4bfd1122c4c0a35b1966cfe132b72363`
+**Updated:** 2026-08-15
+**Baseline authority:** current GitHub `main` resolved live before each phase
+**Platform Health entering baseline:** `0743f5cff13e3359746abbe6d1760a26a90b4dc7`
 
 This ledger contains only evidence-backed open work and explicit boundaries. Closed historical stages remain available in Git history and must not be kept as active debt.
 
@@ -22,8 +23,9 @@ This ledger contains only evidence-backed open work and explicit boundaries. Clo
 | CLOSED-PUBLIC-SEARCH-01 | Public Topics and media search use the entity-neutral public content read owner | `verify:public-content-search` and PR #83 |
 | CLOSED-DELTA-82-01 | All remaining valid PR #82 behavior was reimplemented on current `main`; old owners/contracts/runtimes were excluded and PR #82 was closed superseded | `verify:pr-82-delta-recovery`, PR #84, and closed PR #82 |
 | CLOSED-CI-PG17-01 | GitHub CI Media Coordination, Dashboard Truth, and Reports Analytics service jobs align with Production PostgreSQL 17 | `.github/workflows/quality-gate.yml`, exact-head checks, and PR #85 |
-| CLOSED-DOC-DRIFT-01 | The stale Medium Hardening baseline and 74-version Production registry snapshot were replaced with the verified 2026-08-12 current state | Constitution Refresh review and read-only database inventory |
+| CLOSED-DOC-DRIFT-01 | Volatile baseline and database facts resolve from live authority and retain only an explicitly dated entering snapshot | Current-state update protocol and read-only database inventory |
 | CLOSED-ADMIN-COLLECTION-GOVERNANCE-01 | Full Management Collection claims fail closed against canonical Collection, Data Runtime, preferences, primary-column, Row Actions, Bulk, and registry evidence; Bulk execution has one lifecycle owner | Adoption manifest, `verify:admin-row-actions`, and `verify:platform` |
+| CLOSED-TYPE-01 | The generated public `Database` contract parameterizes the existing privileged Database and Storage clients; current Supabase consumers use generated table/query contracts and explicit fail-closed JSON normalization instead of local result overrides | Generated `database.types.ts`, `verify:platform-health-owner-contracts`, full TypeScript, targeted owner verification, and final `ci:check` |
 
 ## 2. Open Product/Auth decisions
 
@@ -50,6 +52,10 @@ These are not Legacy or drift. They require authority beyond cleanup and must no
 No unresolved item is currently proven to be architecture debt under the constitutional definition. Authenticated Admin route proof remains an explicit environment-dependent QA boundary and is never converted into a silent PASS when storage state is unavailable.
 
 The sections below remain open as Product/Auth decisions, QA/environment gaps, measured risks, or compatibility boundaries. They must not be relabeled as debt merely to create a roadmap item.
+
+### 4.1 Outstanding implementation debt
+
+No evidence-backed implementation debt remains from the Platform Health discovery. `DEBT-TYPE-01` is retired as `CLOSED-TYPE-01`; this is a bounded debt closure and is not a claim of Platform or Global Closure.
 
 ## 5. Measured optimization backlog
 

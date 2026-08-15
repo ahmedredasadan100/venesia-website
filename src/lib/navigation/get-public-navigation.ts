@@ -29,13 +29,26 @@ async function fetchSlugMap(table: "topics" | "topic_categories" | "projects", i
   const slugMap = new Map<number, string>();
   if (!ids.length) return slugMap;
 
-  let query = getSupabaseAdmin().from(table).select("id, slug").in("id", ids);
-  if (table === "topics" || table === "topic_categories") {
-    query = query.eq("status", "published").is("deleted_at", null);
-  } else {
-    query = query.eq("publication_status", "published");
-  }
-  const { data, error } = await query;
+  const supabase = getSupabaseAdmin();
+  const { data, error } = table === "topics"
+    ? await supabase
+        .from("topics")
+        .select("id, slug")
+        .in("id", ids)
+        .eq("status", "published")
+        .is("deleted_at", null)
+    : table === "topic_categories"
+      ? await supabase
+          .from("topic_categories")
+          .select("id, slug")
+          .in("id", ids)
+          .eq("status", "published")
+          .is("deleted_at", null)
+      : await supabase
+          .from("projects")
+          .select("id, slug")
+          .in("id", ids)
+          .eq("publication_status", "published");
 
   if (error) {
     logError(`Failed to resolve ${table} slugs for navigation`, error, { ids, table, resource: `nav-slugs:${table}` });
@@ -62,7 +75,7 @@ async function getPublicNavigationItemsForMenuId(menuId: number): Promise<Public
     return [];
   }
 
-  const cleanRows = (rows ?? []) as MenuItemRow[];
+  const cleanRows: MenuItemRow[] = rows ?? [];
   const maps = await getSlugMaps(cleanRows, fetchSlugMap);
 
   return buildPublicMenuTree(cleanRows, maps);

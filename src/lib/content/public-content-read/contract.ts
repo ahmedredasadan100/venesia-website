@@ -115,10 +115,15 @@ export function buildPublicContentSearchOrFilter(term: string) {
   ).join(",");
 }
 
+export interface PublicContentTextSearchQuery {
+  or(filter: string): this;
+}
+
 // Supabase changes the query-builder type after each filter. This function owns
 // the single allowlisted text predicate used by the Public Collection owner.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyPublicContentTextSearch(query: any, term: string | null | undefined) {
+export function applyPublicContentTextSearch<
+  Query extends PublicContentTextSearchQuery,
+>(query: Query, term: string | null | undefined): Query {
   const filter = buildPublicContentSearchOrFilter(term ?? "");
   return filter ? query.or(filter) : query;
 }

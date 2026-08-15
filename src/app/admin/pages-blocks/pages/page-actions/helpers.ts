@@ -6,6 +6,7 @@ import {
   MEDIA_SIDEBAR_ASSIGNMENT_TABLE,
 } from "../../../../../lib/media-sidebar-modules/registry";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
+import type { Json } from "../../../../../lib/database.types";
 import type { PageBlockType, PageModuleKind } from "../../../../../lib/page-blocks/types";
 import {
   getUnsupportedSlotAssignmentMessage,
@@ -29,7 +30,7 @@ export function databaseAssignmentKind(kind: string) {
 export async function mutatePageComposition(
   pageId: number,
   operation: string,
-  payload: Record<string, unknown>,
+  payload: Json,
   actor: { id: number; username: string },
 ) {
   const { data, error } = await getSupabaseAdmin().rpc("mutate_page_composition", {
@@ -43,14 +44,14 @@ export async function mutatePageComposition(
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Page Composition atomic mutation returned an invalid result.");
   }
-  return data as Record<string, unknown>;
+  return data;
 }
 
-export function isMediaSidebarKind(kind: string) {
+export function isMediaSidebarKind(kind: string): kind is "media-sidebar" {
   return kind === "media-sidebar";
 }
 
-export function isMediaHubKind(kind: string) {
+export function isMediaHubKind(kind: string): kind is "media-hub" {
   return kind === "media-hub";
 }
 
@@ -87,7 +88,7 @@ export async function nextSortOrder(pageId: number, blockType: PageBlockType) {
     .order("sort_order", { ascending: false })
     .limit(1);
 
-  return ((data?.[0]?.sort_order as number | undefined) ?? 0) + 10;
+  return (data?.[0]?.sort_order ?? 0) + 10;
 }
 
 export async function nextMediaSidebarSortOrder(pageId: number) {
@@ -98,7 +99,7 @@ export async function nextMediaSidebarSortOrder(pageId: number) {
     .order("sort_order", { ascending: false })
     .limit(1);
 
-  return ((data?.[0]?.sort_order as number | undefined) ?? 0) + 10;
+  return (data?.[0]?.sort_order ?? 0) + 10;
 }
 
 export async function nextMediaHubSortOrder(pageId: number) {
@@ -109,7 +110,7 @@ export async function nextMediaHubSortOrder(pageId: number) {
     .order("sort_order", { ascending: false })
     .limit(1);
 
-  return ((data?.[0]?.sort_order as number | undefined) ?? 0) + 10;
+  return (data?.[0]?.sort_order ?? 0) + 10;
 }
 
 export function failure(message: string): PageBlockActionResult {

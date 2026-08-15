@@ -14,12 +14,13 @@ import {
   type MediaPublishInput,
 } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { validateSlugFormat } from "../../../../../lib/admin/content-workflow/topic-publish-validation";
+import { slugifyFromTitle } from "../../../../../lib/admin/slug";
 import { parseFormPublishedDate, resolveTopicPublishedAt } from "../../../../../lib/content-dates";
 import {
   readEntitySeoFormData,
   toEntitySeoPersistence,
 } from "../../../../../lib/seo/entity-seo-types";
-import type { MediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
+import type { MediaEditableContentType } from "../../../../../lib/admin/content/content-types";
 import type { MediaStatus, MediaTopicRow } from "./types";
 import { VALID_STATUSES } from "./types";
 
@@ -33,7 +34,8 @@ export function getBoolean(formData: FormData, key: string) {
 }
 
 export function validateId(id: string) {
-  return /^\d+$/.test(id);
+  const parsed = Number(id);
+  return /^\d+$/.test(id) && Number.isSafeInteger(parsed) && parsed > 0;
 }
 
 export function redirectFormError(path: string, message: string): never {
@@ -42,61 +44,6 @@ export function redirectFormError(path: string, message: string): never {
 
 export function redirectEditError(id: string, message: string): never {
   redirectFormError(`/admin/content/topics/${id}`, message);
-}
-
-function normalizeArabicForSlug(value: string) {
-  const map: Record<string, string> = {
-    ا: "a",
-    أ: "a",
-    إ: "e",
-    آ: "a",
-    ب: "b",
-    ت: "t",
-    ث: "th",
-    ج: "g",
-    ح: "h",
-    خ: "kh",
-    د: "d",
-    ذ: "z",
-    ر: "r",
-    ز: "z",
-    س: "s",
-    ش: "sh",
-    ص: "s",
-    ض: "d",
-    ط: "t",
-    ظ: "z",
-    ع: "a",
-    غ: "gh",
-    ف: "f",
-    ق: "q",
-    ك: "k",
-    ل: "l",
-    م: "m",
-    ن: "n",
-    ه: "h",
-    و: "w",
-    ي: "y",
-    ى: "a",
-    ة: "h",
-    ء: "",
-    ئ: "e",
-    ؤ: "o",
-  };
-
-  return value
-    .split("")
-    .map((char) => map[char] ?? char)
-    .join("");
-}
-
-export function createSlug(value: string) {
-  return normalizeArabicForSlug(value)
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
 }
 
 export function validateSlug(slug: string) {
@@ -125,7 +72,7 @@ export async function uploadMediaImage(formData: FormData, _slug: string) {
 export function getPayload(formData: FormData) {
   const title = getString(formData, "title");
   const rawSlug = getString(formData, "slug");
-  const slug = rawSlug ? createSlug(rawSlug) : createSlug(title);
+  const slug = slugifyFromTitle(rawSlug || title);
   const seo = readEntitySeoFormData(formData);
 
   return {

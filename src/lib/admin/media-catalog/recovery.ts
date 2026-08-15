@@ -4,6 +4,7 @@ import {
   CMS_IMAGES_BUCKET,
   verifyManagedStorageAssetExists,
 } from "../../storage/upload-cms-asset";
+import type { Json, Tables } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { resolveMediaStorageRuntimeContext } from "../media-library";
 import { getMediaCatalogRuntimeState, listCatalogReferences } from "./catalog";
@@ -24,7 +25,64 @@ import { resolveMediaReferenceWriteLease } from "./write-lease";
 const RECOVERY_LIMIT = 100;
 const STUCK_DELETE_MILLISECONDS = 10 * 60 * 1000;
 
-type Row = Record<string, unknown>;
+type JsonRecord = Record<string, Json | undefined>;
+type RecoveryReservationRow = Pick<
+  Tables<"media_delete_reservations">,
+  | "id"
+  | "asset_id"
+  | "status"
+  | "reserved_bucket"
+  | "reserved_object_key"
+  | "reserved_public_url"
+  | "started_at"
+  | "finished_at"
+  | "failure_code"
+  | "failure_metadata"
+  | "updated_at"
+>;
+type RecoveryAssetRow = Pick<
+  Tables<"media_assets">,
+  | "id"
+  | "display_name"
+  | "original_filename"
+  | "public_url"
+  | "status"
+  | "reconciliation_state"
+  | "missing_object"
+  | "updated_at"
+>;
+type RecoveryLeaseRow = Pick<
+  Tables<"media_reference_write_leases">,
+  | "id"
+  | "lease_token"
+  | "asset_id"
+  | "domain_key"
+  | "entity_type"
+  | "entity_identity"
+  | "status"
+  | "started_at"
+  | "expires_at"
+  | "completed_at"
+  | "resolved_at"
+  | "failure_code"
+  | "failure_metadata"
+  | "updated_at"
+>;
+type RecoveryActionReservationRow = Pick<
+  Tables<"media_delete_reservations">,
+  | "id"
+  | "asset_id"
+  | "status"
+  | "provider"
+  | "reserved_bucket"
+  | "reserved_object_key"
+  | "reserved_public_url"
+  | "updated_at"
+>;
+type RecoveryActionAssetRow = Pick<
+  Tables<"media_assets">,
+  "id" | "public_url" | "display_name" | "status" | "updated_at"
+>;
 
 export class MediaRecoveryError extends Error {
   readonly code: string;
@@ -56,11 +114,16 @@ function isMissingRecoverySchema(error: { code?: string | null; message?: string
   return error?.code === "42P01" || error?.code === "PGRST205" || /does not exist/i.test(error?.message ?? "");
 }
 
-function safeFailureMetadata(value: unknown) {
-  return value && typeof value === "object" ? (value as Row) : {};
+function safeFailureMetadata(value: Json): JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
 }
 
-function assetLabel(asset: Row | undefined, fallback: string) {
+function assetLabel(
+  asset: { display_name: string; original_filename?: string } | undefined,
+  fallback: string,
+) {
   return nullableText(asset?.display_name) ?? nullableText(asset?.original_filename) ?? fallback;
 }
 
@@ -131,9 +194,9 @@ export async function listMediaRecoveryQueue(): Promise<MediaRecoveryQueue> {
     );
   }
 
-  const reservations = (reservationsResult.data ?? []) as Row[];
-  const troubledAssets = (assetsResult.data ?? []) as Row[];
-  const leases = (leasesResult.data ?? []) as Row[];
+  const reservations: RecoveryReservationRow[] = reservationsResult.data ?? [];
+  const troubledAssets: RecoveryAssetRow[] = assetsResult.data ?? [];
+  const leases: RecoveryLeaseRow[] = leasesResult.data ?? [];
   const assetIds = [...new Set([
     ...reservations.map((row) => text(row.asset_id)),
     ...troubledAssets.map((row) => text(row.id)),
@@ -154,7 +217,7 @@ export async function listMediaRecoveryQueue(): Promise<MediaRecoveryQueue> {
         503,
       );
     }
-    allAssets = (data ?? []) as Row[];
+    allAssets = data ?? [];
   }
   const assetMap = new Map(allAssets.map((row) => [text(row.id), row]));
   const now = Date.now();
@@ -224,7 +287,7 @@ export async function listMediaRecoveryQueue(): Promise<MediaRecoveryQueue> {
     });
   }
 
-  const leaseGroups = new Map<string, Row[]>();
+  const leaseGroups = new Map<string, RecoveryLeaseRow[]>();
   for (const lease of leases) {
     const token = text(lease.lease_token);
     leaseGroups.set(token, [...(leaseGroups.get(token) ?? []), lease]);
@@ -302,7 +365,10 @@ export async function listMediaRecoveryQueue(): Promise<MediaRecoveryQueue> {
   };
 }
 
-async function loadReservationAndAsset(reservationId: string) {
+async function loadReservationAndAsset(reservationId: string): Promise<{
+  reservation: RecoveryActionReservationRow;
+  asset: RecoveryActionAssetRow;
+}> {
   const supabase = getSupabaseAdmin();
   const { data: reservation, error } = await supabase
     .from("media_delete_reservations")
@@ -328,10 +394,13 @@ async function loadReservationAndAsset(reservationId: string) {
       404,
     );
   }
-  return { reservation: reservation as Row, asset: asset as Row };
+  return { reservation, asset };
 }
 
-async function verifyRecoveryAsset(asset: Row, reservedPublicValue?: string) {
+async function verifyRecoveryAsset(
+  asset: Pick<Tables<"media_assets">, "id" | "public_url">,
+  reservedPublicValue?: string,
+) {
   const publicValue = reservedPublicValue ?? text(asset.public_url);
   const [storage, persisted, live] = await Promise.all([
     verifyManagedStorageAssetExists(publicValue),
@@ -426,7 +495,7 @@ export async function executeMediaRecoveryAction(input: {
       .eq("id", input.target.id)
       .maybeSingle();
     if (error || !asset) throw new MediaRecoveryError("media_recovery_asset_not_found", "الأصل غير موجود.", 404);
-    const verification = await verifyRecoveryAsset(asset as Row);
+    const verification = await verifyRecoveryAsset(asset);
     return { mutated: false, state: text(asset.status), verification };
   }
 

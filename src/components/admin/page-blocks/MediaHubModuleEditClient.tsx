@@ -16,6 +16,7 @@ import {
   ModuleEditorStatusSwitch,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
+import type { Json } from "../../../lib/database.types";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import {
   MEDIA_HUB_SECTION_LABELS,
@@ -36,7 +37,7 @@ type MediaHubModuleEditClientProps = {
     description: string | null;
     status: string;
     section_key: string;
-    config: Record<string, unknown>;
+    config: Json;
   };
   assignmentContext: ModuleAssignmentContext;
   saved?: boolean;

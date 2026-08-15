@@ -1,8 +1,10 @@
 "use server";
 
 import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
-import { isContentType } from "../../../../../lib/admin/content/content-types";
-import { isMediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
+import {
+  isContentType,
+  isMediaEditableContentType,
+} from "../../../../../lib/admin/content/content-types";
 import { saveArticleContentAdapter } from "../article-actions/save";
 import { saveMediaContentAdapter } from "../media-actions/save";
 

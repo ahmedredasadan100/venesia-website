@@ -41,6 +41,13 @@ import {
   ArticleSlugConflictError,
   createArticleDomainRecord,
 } from "./create-domain";
+import {
+  parseTopicRevisionToken,
+  TOPIC_REVISION_CONFLICT_CODE,
+  TOPIC_REVISION_CONFLICT_MESSAGE,
+  topicRevisionMatches,
+  TopicRevisionConflictError,
+} from "../../../../../lib/admin/content/topic-revision";
 
 type FieldErrors = Record<string, string[]>;
 
@@ -49,6 +56,7 @@ function buildFormFailure(
   revision: number,
   message: string,
   fieldErrors?: FieldErrors,
+  code?: string,
 ): AdminFormActionState {
   const focusTarget = fieldErrors ? Object.keys(fieldErrors)[0] : undefined;
   return {
@@ -57,6 +65,7 @@ function buildFormFailure(
     revision,
     title: "تعذر حفظ الموضوع",
     message,
+    ...(code ? { code } : {}),
     ...(fieldErrors ? { fieldErrors } : {}),
     ...(focusTarget ? { focusTarget } : {}),
   };
@@ -123,6 +132,14 @@ export async function saveArticleContentAdapter(
   const revision = previousState.revision + 1;
   const formFailure = (message: string, fieldErrors?: FieldErrors) =>
     buildFormFailure(mode, revision, message, fieldErrors);
+  const revisionConflict = () =>
+    buildFormFailure(
+      mode,
+      revision,
+      TOPIC_REVISION_CONFLICT_MESSAGE,
+      undefined,
+      TOPIC_REVISION_CONFLICT_CODE,
+    );
 
   if (mode === "edit" && !validateId(id)) {
     return formFailure("معرّف الموضوع غير صالح.");
@@ -131,6 +148,17 @@ export async function saveArticleContentAdapter(
   const currentTopic = mode === "edit" ? await getTopicById(id) : null;
   if (mode === "edit" && !currentTopic) {
     return formFailure("الموضوع غير موجود أو تعذر تحميله.");
+  }
+
+  const expectedRevision = parseTopicRevisionToken(
+    formData.get("expected_updated_at"),
+  );
+  if (
+    mode === "edit" &&
+    (!expectedRevision.provided ||
+      !topicRevisionMatches(expectedRevision.value, currentTopic?.updated_at))
+  ) {
+    return revisionConflict();
   }
 
   const payload = getPayload(formData);
@@ -274,7 +302,10 @@ export async function saveArticleContentAdapter(
         actorId: actor.id,
         requestIdentity: `topic-article:edit:${id}`,
         mutate: async () => {
-          const { data, error } = await getSupabaseAdmin()
+          if (!expectedRevision.provided) {
+            throw new TopicRevisionConflictError();
+          }
+          const updateQuery = getSupabaseAdmin()
             .from("topics")
             .update({
               ...writePayload,
@@ -283,16 +314,24 @@ export async function saveArticleContentAdapter(
                 ? { published_by: actor.id }
                 : {}),
             })
-            .eq("id", id)
+            .eq("id", Number(id));
+          const guardedQuery = expectedRevision.value === null
+            ? updateQuery.is("updated_at", null)
+            : updateQuery.eq("updated_at", expectedRevision.value);
+          const { data, error } = await guardedQuery
             .select("id, slug")
-            .maybeSingle<{ id: number; slug: string }>();
-          if (error || !data) throw new Error(error?.message ?? "تعذر تحديث الموضوع.");
+            .maybeSingle();
+          if (error) throw new Error(error.message);
+          if (!data) throw new TopicRevisionConflictError();
           return data;
         },
         resolveEntityIdentity: (value) => String(value.id),
       });
     }
   } catch (error) {
+    if (error instanceof TopicRevisionConflictError) {
+      return revisionConflict();
+    }
     if (error instanceof ArticleSlugConflictError) {
       return formFailure("هذا الـ Slug مستخدم بالفعل في موضوع آخر.", {
         slug: ["اختر Slug مختلفًا."],

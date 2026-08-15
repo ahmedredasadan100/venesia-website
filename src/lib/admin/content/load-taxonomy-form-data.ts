@@ -43,7 +43,7 @@ async function loadCategoryRows() {
     .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as AdminContentCategory[];
+  return data ?? [];
 }
 
 function toOptions(rows: AdminContentCategory[]): TaxonomyFormOption[] {
@@ -78,7 +78,7 @@ export async function loadCategoryFormRecord(id: number) {
     .select("id, name, slug, parent_id, is_active, status, color_token")
     .eq("id", id)
     .is("deleted_at", null)
-    .maybeSingle<CategoryFormRecord>();
+    .maybeSingle();
 
   if (error || !data) notFound();
   return data;
@@ -90,7 +90,7 @@ export async function loadSeriesFormRecord(id: number) {
     .select("id, name, slug, status, category_id")
     .eq("id", id)
     .is("deleted_at", null)
-    .maybeSingle<SeriesFormRecord>();
+    .maybeSingle();
 
   if (error || !data) notFound();
   return data;

@@ -148,40 +148,57 @@ export async function updateTopicSeriesAtomically(
   return updateTopicSeriesResultSchema.parse(data);
 }
 
+type TaxonomyLifecycleMutation =
+  | {
+      rpcName:
+        | "admin_move_topic_categories_to_trash"
+        | "admin_restore_topic_categories"
+        | "admin_permanently_delete_topic_categories";
+      idParameter: "p_category_ids";
+    }
+  | {
+      rpcName:
+        | "admin_move_topic_series_to_trash"
+        | "admin_restore_topic_series"
+        | "admin_permanently_delete_topic_series";
+      idParameter: "p_series_ids";
+    };
+
 async function runTaxonomyLifecycleMutation(
-  rpcName:
-    | "admin_move_topic_categories_to_trash"
-    | "admin_restore_topic_categories"
-    | "admin_permanently_delete_topic_categories"
-    | "admin_move_topic_series_to_trash"
-    | "admin_restore_topic_series"
-    | "admin_permanently_delete_topic_series",
-  idParameter: "p_category_ids" | "p_series_ids",
+  mutation: TaxonomyLifecycleMutation,
   input: TaxonomyLifecycleAtomicInput,
 ): Promise<TaxonomyLifecycleAtomicResult> {
   const parsed = taxonomyLifecycleInputSchema.parse(input);
   const ids = [...new Set(parsed.ids)];
-  const { data, error } = await getSupabaseAdmin().rpc(rpcName, {
-    [idParameter]: ids,
-    p_actor_id: parsed.actorId,
-  });
-  if (error) throw new TaxonomyMutationDatabaseError(error);
-  const result = taxonomyLifecycleResultSchema.parse(data);
+  const { rpcName, idParameter } = mutation;
+  const result = idParameter === "p_category_ids"
+    ? await getSupabaseAdmin().rpc(rpcName, {
+        p_category_ids: ids,
+        p_actor_id: parsed.actorId,
+      })
+    : await getSupabaseAdmin().rpc(rpcName, {
+        p_series_ids: ids,
+        p_actor_id: parsed.actorId,
+      });
+  if (result.error) throw new TaxonomyMutationDatabaseError(result.error);
+  const parsedResult = taxonomyLifecycleResultSchema.parse(result.data);
   if (
-    result.affected_count !== ids.length ||
-    result.affected_ids.length !== ids.length
+    parsedResult.affected_count !== ids.length ||
+    parsedResult.affected_ids.length !== ids.length
   ) {
     throw new Error("taxonomy lifecycle mutation returned a partial result");
   }
-  return result;
+  return parsedResult;
 }
 
 export function moveTopicCategoriesToTrashAtomically(
   input: TaxonomyLifecycleAtomicInput,
 ) {
   return runTaxonomyLifecycleMutation(
-    "admin_move_topic_categories_to_trash",
-    "p_category_ids",
+    {
+      rpcName: "admin_move_topic_categories_to_trash",
+      idParameter: "p_category_ids",
+    },
     input,
   );
 }
@@ -190,8 +207,10 @@ export function restoreTopicCategoriesAtomically(
   input: TaxonomyLifecycleAtomicInput,
 ) {
   return runTaxonomyLifecycleMutation(
-    "admin_restore_topic_categories",
-    "p_category_ids",
+    {
+      rpcName: "admin_restore_topic_categories",
+      idParameter: "p_category_ids",
+    },
     input,
   );
 }
@@ -200,8 +219,10 @@ export function permanentlyDeleteTopicCategoriesAtomically(
   input: TaxonomyLifecycleAtomicInput,
 ) {
   return runTaxonomyLifecycleMutation(
-    "admin_permanently_delete_topic_categories",
-    "p_category_ids",
+    {
+      rpcName: "admin_permanently_delete_topic_categories",
+      idParameter: "p_category_ids",
+    },
     input,
   );
 }
@@ -210,8 +231,10 @@ export function moveTopicSeriesToTrashAtomically(
   input: TaxonomyLifecycleAtomicInput,
 ) {
   return runTaxonomyLifecycleMutation(
-    "admin_move_topic_series_to_trash",
-    "p_series_ids",
+    {
+      rpcName: "admin_move_topic_series_to_trash",
+      idParameter: "p_series_ids",
+    },
     input,
   );
 }
@@ -220,8 +243,10 @@ export function restoreTopicSeriesAtomically(
   input: TaxonomyLifecycleAtomicInput,
 ) {
   return runTaxonomyLifecycleMutation(
-    "admin_restore_topic_series",
-    "p_series_ids",
+    {
+      rpcName: "admin_restore_topic_series",
+      idParameter: "p_series_ids",
+    },
     input,
   );
 }
@@ -230,8 +255,10 @@ export function permanentlyDeleteTopicSeriesAtomically(
   input: TaxonomyLifecycleAtomicInput,
 ) {
   return runTaxonomyLifecycleMutation(
-    "admin_permanently_delete_topic_series",
-    "p_series_ids",
+    {
+      rpcName: "admin_permanently_delete_topic_series",
+      idParameter: "p_series_ids",
+    },
     input,
   );
 }

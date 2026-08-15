@@ -10,11 +10,10 @@ import {
 } from "../../admin/content/content-types";
 import {
   normalizeYouTubeUrl,
-  type GalleryMediaPayload,
-  type MediaTopicPayload,
-  type VideoMediaPayload,
+  parseMediaTopicPayload,
 } from "../../admin/media-topic-payload";
 import { formatArabicContentDate } from "../../content-dates";
+import type { Json } from "../../database.types";
 import { logError } from "../../logging";
 import { resolveLocalPublicImage } from "../../media/resolve-local-public-image";
 import { getSupabaseAdmin } from "../../supabase-admin";
@@ -26,6 +25,7 @@ import {
   type PublicContentCollectionInput,
   type PublicContentCollectionResult,
   type PublicContentSummary,
+  type PublicContentTextSearchQuery,
 } from "./contract";
 
 const PUBLIC_CONTENT_CACHE_TAG = "public-content";
@@ -62,7 +62,7 @@ type PublicContentRow = {
   content_type: string | null;
   is_featured: boolean | null;
   is_popular: boolean | null;
-  media_payload?: MediaTopicPayload | null;
+  media_payload?: Json | null;
   media_kind?: string | null;
   media_duration?: string | null;
   media_gallery_cover?: string | null;
@@ -76,7 +76,7 @@ type PublicContentRow = {
   robots_follow?: boolean | null;
   og_image?: string | null;
   og_image_alt?: string | null;
-  faq?: unknown;
+  faq?: Json;
   show_title_on_page?: boolean | null;
   show_image_on_page?: boolean | null;
   show_excerpt_on_page?: boolean | null;
@@ -121,21 +121,13 @@ export type PublicContentSitemapRow = {
   robotsIndex: boolean | null;
 };
 
-function parsePayload(value: unknown): MediaTopicPayload | null {
-  if (!value || typeof value !== "object" || !("kind" in value)) return null;
-  if (value.kind === "video" || value.kind === "gallery") {
-    return value as MediaTopicPayload;
-  }
-  return null;
-}
-
 function mapCollectionRow(row: PublicContentRow): PublicContentSummary | null {
   if (!isContentType(row.content_type)) return null;
   const id = Number(row.id);
   const slug = row.slug?.trim() ?? "";
   if (!Number.isInteger(id) || !slug) return null;
 
-  const mediaPayload = parsePayload(row.media_payload);
+  const mediaPayload = parseMediaTopicPayload(row.media_payload);
   const mediaKind = row.media_kind === "video" || row.media_kind === "gallery"
     ? row.media_kind
     : mediaPayload?.kind ?? null;
@@ -181,18 +173,29 @@ function mapCollectionRow(row: PublicContentRow): PublicContentSummary | null {
   };
 }
 
-function mapCollectionRows(value: unknown): PublicContentSummary[] {
-  return ((value ?? []) as PublicContentRow[]).flatMap((row) => {
+function mapCollectionRows(
+  value: readonly PublicContentRow[] | null,
+): PublicContentSummary[] {
+  return (value ?? []).flatMap((row) => {
     const item = mapCollectionRow(row);
     return item ? [item] : [];
   });
 }
 
-function applyPublicFilters(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  query: any,
+interface PublicContentFilterQuery extends PublicContentTextSearchQuery {
+  in(column: "content_type", values: readonly ContentType[]): this;
+  in(column: "category_slug" | "series_slug", values: readonly string[]): this;
+  eq(column: "status" | "series_slug", value: string): this;
+  eq(column: "is_featured" | "is_popular", value: boolean): this;
+  is(column: "deleted_at", value: null): this;
+  not(column: "slug", operator: "like", value: string): this;
+  neq(column: "id", value: number): this;
+}
+
+function applyPublicFilters<Query extends PublicContentFilterQuery>(
+  query: Query,
   input: ReturnType<typeof normalizePublicContentCollectionInput>,
-) {
+): Query {
   let next = query
     .in("content_type", input.contentTypes)
     .eq("status", "published")
@@ -345,22 +348,29 @@ export async function loadPublicContentCollection(
   )();
 }
 
-function normalizeFaq(value: unknown): Array<{ question: string; answer: string }> {
+function normalizeFaq(value: Json | undefined): Array<{ question: string; answer: string }> {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const question = String("question" in item ? item.question ?? "" : "").trim();
-    const answer = String("answer" in item ? item.answer ?? "" : "").trim();
-    return question && answer ? [{ question, answer }] : [];
-  });
+
+  const faq: Array<{ question: string; answer: string }> = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    if (typeof item.question !== "string" || typeof item.answer !== "string") {
+      return [];
+    }
+    const question = item.question.trim();
+    const answer = item.answer.trim();
+    if (!question || !answer) return [];
+    faq.push({ question, answer });
+  }
+  return faq;
 }
 
 function mapDetailRow(row: PublicContentRow): PublicContentDetail | null {
   const summary = mapCollectionRow(row);
   if (!summary) return null;
-  const payload = parsePayload(row.media_payload);
-  const video = payload?.kind === "video" ? payload as VideoMediaPayload : null;
-  const gallery = payload?.kind === "gallery" ? payload as GalleryMediaPayload : null;
+  const payload = parseMediaTopicPayload(row.media_payload);
+  const video = payload?.kind === "video" ? payload : null;
+  const gallery = payload?.kind === "gallery" ? payload : null;
 
   return {
     ...summary,
@@ -400,7 +410,7 @@ async function queryPublicContentDetail(contentType: ContentType, slug: string) 
     logError("Public Content detail query failed", error, { contentType, slug });
     return null;
   }
-  return data ? mapDetailRow(data as PublicContentRow) : null;
+  return data ? mapDetailRow(data) : null;
 }
 
 export const loadPublicContentDetail = cache(async function loadPublicContentDetail(
@@ -445,7 +455,7 @@ export async function loadPublicContentSitemapRows(): Promise<PublicContentSitem
       .not("slug", "like", "e2e-test%");
 
     if (error) throw new Error(error.message);
-    return ((data ?? []) as PublicContentRow[]).flatMap((row) => {
+    return (data ?? []).flatMap((row) => {
       if (!isContentType(row.content_type)) return [];
       const id = Number(row.id);
       const slug = row.slug?.trim() ?? "";

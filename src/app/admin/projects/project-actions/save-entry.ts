@@ -22,6 +22,7 @@ import { loadProjectEntry } from "../../../../lib/admin/projects/project-entry-d
 import { coordinateProjectEntrySave } from "../../../../lib/admin/projects/project-entry-media-coordination";
 import {
   getProjectPublishingReadiness,
+  isProjectPublicationStatus,
   resolveProjectPublicationAuditOperation,
   type ProjectPublicationStatus,
 } from "../../../../lib/admin/projects/project-publishing-capability";
@@ -182,12 +183,12 @@ export async function saveProjectEntry(
         .from("projects")
         .select("publication_status,published_at,slug")
         .eq("id", projectId)
-        .maybeSingle<{
-          publication_status: ProjectPublicationStatus;
-          published_at: string | null;
-          slug: string;
-        }>();
-      if (currentError || !current) {
+        .maybeSingle();
+      if (
+        currentError ||
+        !current ||
+        !isProjectPublicationStatus(current.publication_status)
+      ) {
         return databaseFailure(mode, revision, currentError);
       }
       previousPublicationStatus = current.publication_status;
@@ -213,8 +214,8 @@ export async function saveProjectEntry(
         const { data, error } = await getSupabaseAdmin().rpc(
           "save_project_admin_entry",
           {
-            p_project_id: projectId,
             p_payload: trustedPayload,
+            ...(projectId === null ? {} : { p_project_id: projectId }),
           },
         );
         if (error) {
@@ -223,7 +224,7 @@ export async function saveProjectEntry(
             details: error.details,
           });
         }
-        const row = Array.isArray(data) ? data[0] : data;
+        const row = data?.[0];
         const savedId = Number(row?.project_id);
         const slug = String(row?.slug ?? payload.project.slug);
         const updatedAt = String(row?.updated_at ?? new Date().toISOString());

@@ -276,21 +276,19 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   return {
     assignments,
     templates: {
-      content: (contentTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
-      cta: (ctaTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
-      cards: (cardsTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
-      breadcrumb: (breadcrumbTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
-      feed: (feedTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
-      hero: ((heroTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>).map(
-        (hero) => ({
+      content: contentTemplates ?? [],
+      cta: ctaTemplates ?? [],
+      cards: cardsTemplates ?? [],
+      breadcrumb: breadcrumbTemplates ?? [],
+      feed: feedTemplates ?? [],
+      hero: (heroTemplates ?? []).map((hero) => ({
           id: hero.id,
           name: hero.name,
           slug: hero.slug,
           status: hero.status,
-        }),
-      ),
-      mediaSidebar: (mediaSidebarTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
-      mediaHub: (mediaHubTemplates ?? []) as Array<{ id: number; name: string; slug: string; status: string }>,
+        })),
+      mediaSidebar: mediaSidebarTemplates ?? [],
+      mediaHub: mediaHubTemplates ?? [],
     },
   };
 }

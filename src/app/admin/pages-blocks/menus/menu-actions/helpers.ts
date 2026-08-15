@@ -1,4 +1,5 @@
 import { buildCmsAuditAction, type CmsAuditVerb } from "../../../../../lib/admin/audit/cms-audit-actions";
+import type { Json } from "../../../../../lib/database.types";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import { parseAdminLinkFromFormData } from "../../../../../lib/admin/links/form-fields";
 import {
@@ -43,7 +44,7 @@ export function getBoolean(formData: FormData, key: string) {
 export async function mutateMenuTree(
   menuId: number,
   operation: string,
-  payload: Record<string, unknown>,
+  payload: Json,
   actor: { id: number; username: string },
 ) {
   const { data, error } = await getSupabaseAdmin().rpc("mutate_menu_tree", {
@@ -57,7 +58,7 @@ export async function mutateMenuTree(
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Menu atomic mutation returned an invalid result.");
   }
-  return data as Record<string, unknown>;
+  return data;
 }
 
 export async function auditMenuAction(
@@ -137,11 +138,11 @@ export async function synchronizeDeletedMenuItemReferences(
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function isRecord(value: Json): value is ImportedMenuItem {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function parseImportedMenuItems(payload: unknown): ImportedMenuItem[] {
+export function parseImportedMenuItems(payload: Json): ImportedMenuItem[] {
   if (Array.isArray(payload)) {
     return payload.filter(isRecord);
   }

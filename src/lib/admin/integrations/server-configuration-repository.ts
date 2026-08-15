@@ -1,14 +1,37 @@
 import "server-only";
 
+import type { Json, Tables } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { getIntegrationsEnvironmentKey } from "./connection-repository";
+import {
+  INTEGRATION_APP_CONFIGURATION_KEYS,
+  isIntegrationAppConfigurationProvider,
+} from "./server-configuration-contract";
 import type {
   IntegrationAppConfigurationKey,
   IntegrationAppConfigurationProvider,
   IntegrationAppConfigurationStatus,
 } from "./server-configuration-contract";
 
-type JsonRecord = Record<string, unknown>;
+type JsonRecord = Record<string, Json | undefined>;
+type ConfigurationGroupRow = Pick<
+  Tables<"integration_app_configuration_groups">,
+  "id" | "provider_key" | "environment_key" | "configuration_source" | "version" | "updated_at"
+>;
+type ConfigurationEntryRow = Pick<
+  Tables<"integration_app_configuration_entries">,
+  "group_id" | "configuration_key" | "is_secret" | "vault_secret_id" | "safe_value"
+>;
+type ConfigurationValidationRow = Pick<
+  Tables<"integration_app_configuration_validations">,
+  | "group_id"
+  | "integration_key"
+  | "status"
+  | "missing_keys"
+  | "last_tested_at"
+  | "safe_error_code"
+  | "version"
+>;
 
 export type PersistedApplicationConfigurationEntry = {
   key: IntegrationAppConfigurationKey;
@@ -45,42 +68,74 @@ function optionalText(value: unknown) {
   return typeof value === "string" && value ? value : null;
 }
 
-function stringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((item): item is IntegrationAppConfigurationKey => typeof item === "string")
-    : [];
+function isJsonRecord(value: Json): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isConfigurationKey(value: string): value is IntegrationAppConfigurationKey {
+  return INTEGRATION_APP_CONFIGURATION_KEYS.some((key) => key === value);
+}
+
+function requireConfigurationKey(value: string): IntegrationAppConfigurationKey {
+  if (isConfigurationKey(value)) return value;
+  throw new Error("integration_app_configuration_key_invalid");
+}
+
+function requireConfigurationStatus(value: string): IntegrationAppConfigurationStatus {
+  if (value === "needs_configuration" ||
+    value === "configuration_incomplete" ||
+    value === "configuration_invalid" ||
+    value === "configuration_saved_waiting_for_authorization" ||
+    value === "ready_to_connect") {
+    return value;
+  }
+  throw new Error("integration_app_configuration_status_invalid");
+}
+
+function requireConfigurationSource(value: string): PersistedApplicationConfigurationGroup["source"] {
+  if (value === "cms_vault" || value === "environment_import") return value;
+  throw new Error("integration_app_configuration_source_invalid");
+}
+
+function requireConfigurationProvider(value: string): IntegrationAppConfigurationProvider {
+  if (isIntegrationAppConfigurationProvider(value)) return value;
+  throw new Error("integration_app_configuration_provider_invalid");
+}
+
+function configurationKeys(value: string[]) {
+  return value.map(requireConfigurationKey);
 }
 
 function mapGroup(
-  row: JsonRecord,
-  entryRows: JsonRecord[],
-  validationRows: JsonRecord[],
+  row: ConfigurationGroupRow,
+  entryRows: ConfigurationEntryRow[],
+  validationRows: ConfigurationValidationRow[],
 ): PersistedApplicationConfigurationGroup {
-  const groupId = String(row.id);
+  const groupId = row.id;
   return {
     id: groupId,
-    provider: String(row.provider_key) as IntegrationAppConfigurationProvider,
-    environmentKey: String(row.environment_key),
-    source: String(row.configuration_source) as "cms_vault" | "environment_import",
-    version: Number(row.version ?? 0),
-    updatedAt: String(row.updated_at),
+    provider: requireConfigurationProvider(row.provider_key),
+    environmentKey: row.environment_key,
+    source: requireConfigurationSource(row.configuration_source),
+    version: row.version,
+    updatedAt: row.updated_at,
     entries: entryRows
-      .filter((entry) => String(entry.group_id) === groupId)
+      .filter((entry) => entry.group_id === groupId)
       .map((entry) => ({
-        key: String(entry.configuration_key) as IntegrationAppConfigurationKey,
-        secret: Boolean(entry.is_secret),
+        key: requireConfigurationKey(entry.configuration_key),
+        secret: entry.is_secret,
         secretId: optionalText(entry.vault_secret_id),
         safeValue: optionalText(entry.safe_value),
       })),
     validations: validationRows
-      .filter((validation) => String(validation.group_id) === groupId)
+      .filter((validation) => validation.group_id === groupId)
       .map((validation) => ({
-        integration: String(validation.integration_key),
-        status: String(validation.status) as IntegrationAppConfigurationStatus,
-        missing: stringArray(validation.missing_keys),
+        integration: validation.integration_key,
+        status: requireConfigurationStatus(validation.status),
+        missing: configurationKeys(validation.missing_keys),
         lastTestedAt: optionalText(validation.last_tested_at),
         safeErrorCode: optionalText(validation.safe_error_code),
-        version: Number(validation.version ?? 1),
+        version: validation.version,
       })),
   };
 }
@@ -99,9 +154,9 @@ export async function loadApplicationConfigurationGroups() {
     }
     throw new Error("integration_app_configuration_persistence_unavailable");
   }
-  const groups = (groupsResult.data ?? []) as JsonRecord[];
+  const groups = groupsResult.data ?? [];
   if (!groups.length) return [];
-  const groupIds = groups.map((group) => String(group.id));
+  const groupIds = groups.map((group) => group.id);
   const [entriesResult, validationsResult] = await Promise.all([
     database
       .from("integration_app_configuration_entries")
@@ -114,8 +169,8 @@ export async function loadApplicationConfigurationGroups() {
   ]);
   const error = entriesResult.error ?? validationsResult.error;
   if (error) throw new Error("integration_app_configuration_persistence_unavailable");
-  const entries = (entriesResult.data ?? []) as JsonRecord[];
-  const validations = (validationsResult.data ?? []) as JsonRecord[];
+  const entries = entriesResult.data ?? [];
+  const validations = validationsResult.data ?? [];
   return groups.map((group) =>
     mapGroup(group, entries, validations),
   );
@@ -150,11 +205,10 @@ export async function replaceApplicationConfiguration(input: {
     p_actor_admin_user_id: input.actorAdminUserId,
     p_configuration_source: input.source === "environment_import" ? "environment_import" : "cms_vault",
   });
-  if (error || !data || typeof data !== "object") {
+  if (error || !isJsonRecord(data)) {
     throw new Error(error?.message ?? "integration_app_configuration_replace_failed");
   }
-  const result = data as JsonRecord;
-  return { groupId: String(result.groupId), version: Number(result.version) };
+  return { groupId: String(data.groupId), version: Number(data.version) };
 }
 
 export async function removeApplicationConfiguration(input: {
@@ -181,13 +235,12 @@ export async function claimApplicationConfigurationTest(input: {
     p_environment_key: getIntegrationsEnvironmentKey(),
     p_expected_group_version: input.expectedVersion,
   });
-  if (error || !data || typeof data !== "object") {
+  if (error || !isJsonRecord(data)) {
     throw new Error(error?.message ?? "integration_app_configuration_test_claim_failed");
   }
-  const result = data as JsonRecord;
   return {
-    groupVersion: Number(result.groupVersion),
-    testVersion: Number(result.testVersion),
+    groupVersion: Number(data.groupVersion),
+    testVersion: Number(data.testVersion),
   };
 }
 
@@ -205,7 +258,9 @@ export async function completeApplicationConfigurationTest(input: {
     p_environment_key: getIntegrationsEnvironmentKey(),
     p_test_version: input.testVersion,
     p_status: input.status,
-    p_safe_error_code: input.safeErrorCode,
+    ...(input.safeErrorCode === null
+      ? {}
+      : { p_safe_error_code: input.safeErrorCode }),
   });
   if (error) throw new Error(error.message);
 }

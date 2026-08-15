@@ -8,8 +8,8 @@ import {
 } from "../../../../../../components/admin/ui";
 import RichTextContent from "../../../../../../components/content/RichTextContent";
 import {
+  parseMediaTopicPayload,
   resolveYouTubeEmbedUrl,
-  type MediaTopicPayload,
 } from "../../../../../../lib/admin/media-topic-payload";
 import { requireAdminSession } from "../../../../../../lib/admin/auth/require-admin-session";
 import { getContentTypeLabel, isContentType } from "../../../../../../lib/admin/content/content-types";
@@ -26,16 +26,18 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
   await requireAdminSession();
   const { id } = await props.params;
   if (!/^\d+$/.test(id)) notFound();
+  const topicId = Number(id);
+  if (!Number.isSafeInteger(topicId) || topicId <= 0) notFound();
 
   const { data: topic } = await getSupabaseAdmin()
     .from("admin_content_topics")
     .select("id,title,slug,excerpt,content,image,image_alt,category_name,category_color_token,content_type,status,media_payload")
-    .eq("id", id)
+    .eq("id", topicId)
     .is("deleted_at", null)
     .maybeSingle();
 
   if (!topic || !isContentType(topic.content_type)) notFound();
-  const payload = (topic.media_payload ?? null) as MediaTopicPayload | null;
+  const payload = parseMediaTopicPayload(topic.media_payload);
   const publication = getContentStatusMetadata(topic.status);
 
   return (

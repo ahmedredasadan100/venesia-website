@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
+import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
 import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import {
@@ -13,9 +15,12 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  PAGE_BLOCK_BULK_ACTIONS,
   parseFormBoolean,
   parseFormStatus,
   parseNumber,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
   slugify,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
@@ -25,6 +30,7 @@ import {
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import { revalidatePath } from "next/cache";
 import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
+import type { TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
 import type { BreadcrumbBlockConfig, BreadcrumbBlockItem } from "../../../../../lib/page-blocks/configs";
 
 function buildManualItems(formData: FormData): BreadcrumbBlockItem[] {
@@ -120,7 +126,7 @@ export async function createBreadcrumbBlock(
   let createdId: number | null = null;
   let mediaWarning = false;
   try {
-    const nextRow = {
+    const nextRow: TablesInsert<"breadcrumb_block_templates"> = {
       name,
       slug,
       description: cleanText(formData.get("description")) || null,
@@ -141,7 +147,7 @@ export async function createBreadcrumbBlock(
           .from("breadcrumb_block_templates")
           .insert(nextRow)
           .select("id")
-          .single<{ id: number }>();
+          .single();
         if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء بلوك Breadcrumb.");
         return data;
       },
@@ -151,6 +157,13 @@ export async function createBreadcrumbBlock(
     createdId = data.id;
     mediaWarning = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
 
+    await recordCmsAdminAudit({
+      action: buildCmsAuditAction("content_block_template", "create"),
+      entityType: "content_block_template",
+      entityId: data.id,
+      entityLabel: name,
+      metadata: { blockType: "breadcrumb", slug },
+    }, actor);
     await revalidateBlockModulePaths("breadcrumb");
     return createBreadcrumbBlockSuccess(revision, data.id, mediaWarning);
   } catch (error) {
@@ -180,7 +193,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
   if (!id || !name || !slug) throw new Error("بيانات البلوك غير مكتملة.");
   if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
 
-  const nextRow = {
+  const nextRow: TablesUpdate<"breadcrumb_block_templates"> = {
     name,
     slug,
     description: cleanText(formData.get("description")) || null,
@@ -202,7 +215,7 @@ export async function updateBreadcrumbBlock(formData: FormData) {
         .update(nextRow)
         .eq("id", id)
         .select("id")
-        .maybeSingle<{ id: number }>();
+        .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "Unable to update breadcrumb block.");
       return data;
     },
@@ -210,13 +223,20 @@ export async function updateBreadcrumbBlock(formData: FormData) {
   });
 
   await syncBlockModulePageAssignments("breadcrumb", id, parsePageIdsFromForm(formData), actor);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "update"),
+    entityType: "content_block_template",
+    entityId: id,
+    entityLabel: name,
+    metadata: { blockType: "breadcrumb", slug },
+  }, actor);
   await revalidateBlockModulePaths("breadcrumb");
   revalidatePath(`/admin/pages-blocks/blocks/breadcrumb/${id}`, "page");
   redirect(`/admin/pages-blocks/blocks/breadcrumb/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
 }
 
 export async function toggleBreadcrumbBlockStatus(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(cleanText(formData.get("next_status")) || "unpublished");
   if (!id) throw new Error("معرّف البلوك مفقود.");
@@ -227,11 +247,20 @@ export async function toggleBreadcrumbBlockStatus(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      nextStatus === "published" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityId: id,
+    metadata: { blockType: "breadcrumb", status: nextStatus },
+  }, actor);
   await revalidateBlockModulePaths("breadcrumb");
 }
 
 export async function deleteBreadcrumbBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -239,7 +268,7 @@ export async function deleteBreadcrumbBlock(formData: FormData) {
     .from("breadcrumb_block_templates")
     .select("id")
     .eq("id", id)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
   const cleanupIdentity = existing?.id ?? id;
 
@@ -249,6 +278,12 @@ export async function deleteBreadcrumbBlock(formData: FormData) {
     .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "delete"),
+    entityType: "content_block_template",
+    entityId: cleanupIdentity,
+    metadata: { blockType: "breadcrumb" },
+  }, actor);
   const mediaSynchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     [],
     null,
@@ -300,12 +335,19 @@ export async function duplicateBreadcrumbBlock(formData: FormData) {
         .from("breadcrumb_block_templates")
         .insert(nextRow)
         .select("id")
-        .single<{ id: number }>();
+        .single();
       if (insertError || !data) throw new Error(insertError?.message ?? "Unable to duplicate breadcrumb block.");
       return data;
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "duplicate"),
+    entityType: "content_block_template",
+    entityId: coordinated.value.id,
+    entityLabel: nextRow.name,
+    metadata: { blockType: "breadcrumb", sourceId: id },
+  }, actor);
   await revalidateBlockModulePaths("breadcrumb");
   if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
     redirect("/admin/pages-blocks/blocks/breadcrumb?notice=saved_with_media_sync_warning");
@@ -313,15 +355,12 @@ export async function duplicateBreadcrumbBlock(formData: FormData) {
 }
 
 export async function bulkBreadcrumbBlocks(formData: FormData) {
-  await requireAdminSession();
-  const action = cleanText(formData.get("bulk_action"));
-  const ids = formData
-    .getAll("ids")
-    .flatMap((value) => String(value).split(","))
-    .map((value) => Number(value))
-    .filter(Boolean);
-
-  if (!ids.length) return;
+  const actor = await requireAdminSession();
+  const action = parsePageBlockBulkAction(
+    formData.get("bulk_action"),
+    PAGE_BLOCK_BULK_ACTIONS,
+  );
+  const ids = parsePageBlockBulkIds(formData.getAll("ids"));
 
   const now = new Date().toISOString();
 
@@ -360,6 +399,15 @@ export async function bulkBreadcrumbBlocks(formData: FormData) {
     );
   }
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      action === "delete" ? "delete" : action === "publish" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityLabel: "breadcrumb_block_templates",
+    metadata: { blockType: "breadcrumb", action, ids, count: ids.length },
+  }, actor);
   if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
     try {
       await revalidateBlockModulePaths("breadcrumb");

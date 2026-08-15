@@ -37,11 +37,11 @@ const globalTruthAtomicMigration = readFileSync(
   "utf8",
 ).replace(/\r\n?/gu, "\n");
 const projectDomainHardeningMigration = readFileSync(
-  new URL("../sql/migrations/20260813233530_projects_domain_hardening.sql", import.meta.url),
+  new URL("../sql/migrations/20260814020742_projects_domain_hardening.sql", import.meta.url),
   "utf8",
 ).replace(/\r\n?/gu, "\n");
 const locationManagementMigration = readFileSync(
-  new URL("../sql/migrations/20260814002948_location_management_foundation.sql", import.meta.url),
+  new URL("../sql/migrations/20260814020750_location_management_foundation.sql", import.meta.url),
   "utf8",
 ).replace(/\r\n?/gu, "\n");
 const dashboardTruthMigration = readFileSync(

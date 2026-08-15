@@ -75,7 +75,9 @@ export async function loadSeriesEntityListResult(
     p_sort_direction: query.sort.direction,
     p_search: query.search,
     p_status: query.filters.status,
-    p_category_id: query.filters.categoryId,
+    ...(query.filters.categoryId === null
+      ? {}
+      : { p_category_id: query.filters.categoryId }),
     p_view: query.filters.view,
   });
   if (error) throw new SeriesEntityListDatabaseError(error);

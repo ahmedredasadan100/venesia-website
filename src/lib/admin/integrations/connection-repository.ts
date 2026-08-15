@@ -2,9 +2,11 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
+import type { Json, Tables } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   INTEGRATIONS_MIGRATION_VERSION,
+  isLiveIntegrationKey,
   type IntegrationAsset,
   type IntegrationCredentialStrategy,
   type LiveIntegrationKey,
@@ -13,6 +15,47 @@ import {
 import type { ProviderTokenSet } from "./provider-adapter-contract";
 
 type JsonRecord = Record<string, unknown>;
+
+function jsonValue(value: unknown): Json | undefined {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "bigint") throw new TypeError("integration_json_bigint_unsupported");
+  if (value === undefined || typeof value === "function" || typeof value === "symbol") {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => jsonValue(item) ?? null);
+  }
+  if (!value || typeof value !== "object") return undefined;
+  if ("toJSON" in value && typeof value.toJSON === "function") {
+    return jsonValue(value.toJSON());
+  }
+  const result: { [key: string]: Json | undefined } = {};
+  for (const [key, item] of Object.entries(value)) {
+    const mapped = jsonValue(item);
+    if (mapped !== undefined) result[key] = mapped;
+  }
+  return result;
+}
+
+function jsonRecord(value: Record<string, unknown>): Json {
+  return jsonValue(value) ?? {};
+}
+
+function integrationAssetJson(asset: IntegrationAsset): Json {
+  return {
+    ...(asset.id === undefined ? {} : { id: asset.id }),
+    type: asset.type,
+    externalId: asset.externalId,
+    parentExternalId: asset.parentExternalId,
+    displayName: asset.displayName,
+    permissions: asset.permissions,
+    metadata: { ...asset.metadata },
+    ...(asset.selected === undefined ? {} : { selected: asset.selected }),
+  };
+}
 
 export function getIntegrationsEnvironmentKey() {
   const value = process.env.INTEGRATIONS_ENVIRONMENT_KEY?.trim() ||
@@ -29,10 +72,14 @@ export function hashOAuthState(value: string) {
 }
 
 function asRecord(value: unknown, name: string): JsonRecord {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`${name}_invalid`);
   }
-  return value as JsonRecord;
+  return value;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function optionalText(value: unknown) {
@@ -43,33 +90,102 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function mapAsset(row: JsonRecord): IntegrationAsset {
-  const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-    ? row.metadata as IntegrationAsset["metadata"]
-    : {};
+function requireAssetType(value: string): IntegrationAsset["type"] {
+  if (value === "account" ||
+    value === "property" ||
+    value === "site" ||
+    value === "manager_customer" ||
+    value === "customer" ||
+    value === "business" ||
+    value === "ad_account" ||
+    value === "pixel" ||
+    value === "dataset" ||
+    value === "business_center" ||
+    value === "advertiser" ||
+    value === "organization" ||
+    value === "waba" ||
+    value === "phone_number") {
+    return value;
+  }
+  throw new Error("integration_asset_type_invalid");
+}
+
+function requireConnectionStatus(
+  value: string,
+): PersistedIntegrationConnection["status"] {
+  if (value === "authorized_unbound" ||
+    value === "discovering_assets" ||
+    value === "pending_selection" ||
+    value === "testing" ||
+    value === "syncing" ||
+    value === "connected" ||
+    value === "needs_reauth" ||
+    value === "needs_attention") {
+    return value;
+  }
+  throw new Error("integration_connection_status_invalid");
+}
+
+function requireCredentialStrategy(
+  value: string,
+): IntegrationCredentialStrategy["kind"] {
+  if (value === "google_oauth_refresh" ||
+    value === "meta_user" ||
+    value === "meta_system_user" ||
+    value === "tiktok_marketing_long_lived" ||
+    value === "snap_oauth_refresh") {
+    return value;
+  }
+  throw new Error("integration_credential_strategy_invalid");
+}
+
+function requireLiveIntegrationKey(value: string): LiveIntegrationKey {
+  if (isLiveIntegrationKey(value)) return value;
+  throw new Error("integration_key_invalid");
+}
+
+function integrationAssetMetadata(value: Json): IntegrationAsset["metadata"] {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
+  const metadata: IntegrationAsset["metadata"] = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined) continue;
+    if (item === null || typeof item === "string" || typeof item === "boolean") {
+      metadata[key] = item;
+      continue;
+    }
+    if (typeof item === "number" && Number.isFinite(item)) {
+      metadata[key] = item;
+      continue;
+    }
+    throw new Error("integration_asset_metadata_invalid");
+  }
+  return metadata;
+}
+
+function mapAsset(row: Tables<"integration_connection_assets">): IntegrationAsset {
   return {
-    id: String(row.id),
-    type: String(row.asset_type) as IntegrationAsset["type"],
-    externalId: String(row.external_id),
+    id: row.id,
+    type: requireAssetType(row.asset_type),
+    externalId: row.external_id,
     parentExternalId: optionalText(row.parent_external_id),
-    displayName: String(row.display_name),
+    displayName: row.display_name,
     permissions: stringArray(row.permissions),
-    metadata,
-    selected: Boolean(row.selected),
+    metadata: integrationAssetMetadata(row.metadata),
+    selected: row.selected,
   };
 }
 
 function mapConnection(
-  row: JsonRecord,
+  row: Tables<"integration_connections">,
   assets: IntegrationAsset[],
   analyticsReady: boolean,
 ): PersistedIntegrationConnection {
   return {
-    id: String(row.id),
-    integrationKey: String(row.integration_key) as LiveIntegrationKey,
+    id: row.id,
+    integrationKey: requireLiveIntegrationKey(row.integration_key),
     externalSubjectId: optionalText(row.external_subject_id),
-    status: String(row.status) as PersistedIntegrationConnection["status"],
-    credentialStrategy: String(row.credential_strategy) as IntegrationCredentialStrategy["kind"],
+    status: requireConnectionStatus(row.status),
+    credentialStrategy: requireCredentialStrategy(row.credential_strategy),
     grantedScopes: stringArray(row.granted_scopes),
     accessExpiresAt: optionalText(row.access_expires_at),
     refreshExpiresAt: optionalText(row.refresh_expires_at),
@@ -78,9 +194,9 @@ function mapConnection(
     nextSyncAt: optionalText(row.next_sync_at),
     lastErrorCode: optionalText(row.last_error_code),
     lastErrorMessage: optionalText(row.last_error_message),
-    consecutiveFailures: Number(row.consecutive_failures ?? 0),
+    consecutiveFailures: row.consecutive_failures,
     backoffUntil: optionalText(row.backoff_until),
-    version: Number(row.version ?? 1),
+    version: row.version,
     assets,
     analyticsReady,
   };
@@ -98,23 +214,20 @@ export async function loadIntegrationPersistenceSnapshot() {
   if (error) throw new Error(error.message);
 
   const assetsByConnection = new Map<string, IntegrationAsset[]>();
-  for (const raw of assetsResult.data ?? []) {
-    const row = raw as JsonRecord;
+  for (const row of assetsResult.data ?? []) {
     const connectionId = String(row.connection_id);
     assetsByConnection.set(connectionId, [...(assetsByConnection.get(connectionId) ?? []), mapAsset(row)]);
   }
   const analyticsReady = new Set(
     (analyticsResult.data ?? [])
-      .filter((raw) => {
-        const row = raw as JsonRecord;
+      .filter((row) => {
         return (row.status === "ready" || row.status === "partial") &&
           Array.isArray(row.metrics) && row.metrics.length > 0;
       })
-      .map((raw) => String((raw as JsonRecord).connection_id)),
+      .map((row) => row.connection_id),
   );
-  const connections = (connectionsResult.data ?? []).map((raw) => {
-    const row = raw as JsonRecord;
-    const id = String(row.id);
+  const connections = (connectionsResult.data ?? []).map((row) => {
+    const id = row.id;
     return mapConnection(row, assetsByConnection.get(id) ?? [], analyticsReady.has(id));
   });
   const health = asRecord(healthResult.data, "integrations_health");
@@ -196,7 +309,7 @@ export async function createAuthorizationAttempt(input: {
     await deleteIntegrationVaultSecret(verifierSecretId);
     throw new Error(error?.message ?? "integration_oauth_attempt_write_failed");
   }
-  return String((data as JsonRecord).id);
+  return data.id;
 }
 
 export async function consumeAuthorizationAttempt(input: {
@@ -211,11 +324,12 @@ export async function consumeAuthorizationAttempt(input: {
   });
   if (error) throw new Error(error.message);
   const row = asRecord(data, "integration_oauth_attempt");
+  const integration = requireLiveIntegrationKey(String(row.integrationKey));
   const verifierSecretId = optionalText(row.pkceVerifierSecretId);
   const pkceVerifier = await readVaultSecret(verifierSecretId);
   await deleteIntegrationVaultSecret(verifierSecretId);
   return {
-    integration: String(row.integrationKey) as LiveIntegrationKey,
+    integration,
     environmentKey: String(row.environmentKey),
     returnPath: String(row.returnPath),
     pkceVerifier,
@@ -314,7 +428,7 @@ export async function replaceDiscoveredAssets(
 ) {
   const { data, error } = await getSupabaseAdmin().rpc("replace_integration_discovered_assets", {
     p_connection_id: connectionId,
-    p_assets: assets,
+    p_assets: assets.map(integrationAssetJson),
     p_actor_admin_user_id: actorAdminUserId,
   });
   if (error) throw new Error(error.message);
@@ -346,10 +460,10 @@ export async function getRuntimeConnection(connectionId: string) {
   if (error || !connectionResult.data || !credentialResult.data) {
     throw new Error(error?.message ?? "integration_connection_runtime_missing");
   }
-  const connectionRow = connectionResult.data as JsonRecord;
-  const credentialRow = credentialResult.data as JsonRecord;
-  const assets = (assetsResult.data ?? []).map((row) => mapAsset(row as JsonRecord));
-  const accessToken = await readVaultSecret(String(credentialRow.access_secret_id));
+  const connectionRow = connectionResult.data;
+  const credentialRow = credentialResult.data;
+  const assets = (assetsResult.data ?? []).map(mapAsset);
+  const accessToken = await readVaultSecret(credentialRow.access_secret_id);
   if (!accessToken) throw new Error("integration_access_credential_missing");
   return {
     connection: mapConnection(connectionRow, assets, false),
@@ -367,7 +481,7 @@ export async function findRuntimeConnection(integration: LiveIntegrationKey) {
     .is("revoked_at", null)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? getRuntimeConnection(String((data as JsonRecord).id)) : null;
+  return data ? getRuntimeConnection(data.id) : null;
 }
 
 export async function queueConnectionSync(
@@ -386,7 +500,7 @@ export async function queueConnectionSync(
 
 export async function claimSyncRun(runId?: string) {
   const { data, error } = await getSupabaseAdmin().rpc("claim_integration_sync_run", {
-    p_run_id: runId ?? null,
+    ...(runId === undefined ? {} : { p_run_id: runId }),
     p_lease_seconds: 240,
   });
   if (error) throw new Error(error.message);
@@ -419,7 +533,7 @@ export async function completeSyncRun(input: {
     p_run_id: input.runId,
     p_lease_token: input.leaseToken,
     p_status: input.status,
-    p_watermark: input.watermark,
+    p_watermark: jsonRecord(input.watermark),
     p_records_written: input.recordsWritten,
     p_message: input.message,
   });

@@ -8,13 +8,14 @@ import {
 import {
   buildAdminCategoryTree,
   flattenAdminCategoryTree,
-  type AdminContentCategory,
 } from "../../../../../lib/admin/content/category-hierarchy";
-import { isContentType } from "../../../../../lib/admin/content/content-types";
+import {
+  isContentType,
+  isMediaEditableContentType,
+} from "../../../../../lib/admin/content/content-types";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
-import { isMediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
 
 export const dynamic = "force-dynamic";
 
@@ -47,19 +48,12 @@ export default async function NewUnifiedContentPage({
     ]);
   const categories = flattenAdminCategoryTree(
     buildAdminCategoryTree(
-      ((categoryRows ?? []) as AdminContentCategory[]).filter(
+      (categoryRows ?? []).filter(
         (category) => category.status === "published",
       ),
     ),
   );
-  const series = (seriesRows ?? []) as Array<{
-    id: number;
-    name: string;
-    slug: string;
-    status: string;
-    deleted_at: string | null;
-    category_id: number | null;
-  }>;
+  const series = seriesRows ?? [];
   const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
   const loadError = categoriesError?.message ?? seriesError?.message;
 

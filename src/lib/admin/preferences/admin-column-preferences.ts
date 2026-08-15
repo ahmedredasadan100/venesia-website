@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Json } from "../../database.types";
 import { requireAdminSession } from "../auth/require-admin-session";
 import { filterPersistableColumnKeys } from "../entity-list/column-preferences";
 import type { AdminEntityPersistResult } from "../entity-list/types";
@@ -10,8 +11,30 @@ type StoredAdminColumnPreferences = {
   columnContractVersion?: number;
 };
 
+function parseStoredAdminColumnPreferences(
+  value: Json,
+): StoredAdminColumnPreferences {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const visibleColumns = Array.isArray(value.visibleColumns)
+    ? value.visibleColumns.filter((column): column is string =>
+        typeof column === "string",
+      )
+    : undefined;
+  const columnContractVersion =
+    typeof value.columnContractVersion === "number" &&
+    Number.isSafeInteger(value.columnContractVersion)
+      ? value.columnContractVersion
+      : undefined;
+
+  return {
+    ...(visibleColumns ? { visibleColumns } : {}),
+    ...(columnContractVersion === undefined ? {} : { columnContractVersion }),
+  };
+}
+
 /**
- * Project infrastructure adapter for column preferences.
+ * Entity-neutral Admin infrastructure adapter for column preferences.
  * UI core must not import this module — pages/actions call it with a view key.
  */
 export async function readAdminColumnPreferences(
@@ -27,18 +50,21 @@ export async function readAdminColumnPreferences(
     .select("preferences")
     .eq("admin_user_id", actor.id)
     .eq("view_key", viewKey)
-    .maybeSingle<{ preferences: StoredAdminColumnPreferences }>();
+    .maybeSingle();
 
   if (error) {
     return { visibleColumns: null, error: error.message };
   }
 
+  const preferences = data
+    ? parseStoredAdminColumnPreferences(data.preferences)
+    : null;
   const contractMatches =
     options.contractVersion === undefined ||
-    data?.preferences?.columnContractVersion === options.contractVersion;
+    preferences?.columnContractVersion === options.contractVersion;
   const visibleColumns =
-    contractMatches && Array.isArray(data?.preferences?.visibleColumns)
-    ? data.preferences.visibleColumns
+    contractMatches && preferences?.visibleColumns
+    ? preferences.visibleColumns
     : null;
 
   return { visibleColumns, error: null };
@@ -74,12 +100,12 @@ export async function saveAdminColumnPreferences(input: {
       { onConflict: "admin_user_id,view_key" },
     )
     .select("preferences")
-    .single<{ preferences: StoredAdminColumnPreferences }>();
+    .single();
 
   if (error) return { ok: false, message: error.message };
 
-  const storedColumns = Array.isArray(data?.preferences?.visibleColumns)
-    ? data.preferences.visibleColumns
+  const storedColumns = data
+    ? (parseStoredAdminColumnPreferences(data.preferences).visibleColumns ?? [])
     : [];
   const matchesRequestedValue =
     storedColumns.length === safeColumns.length &&

@@ -27,10 +27,7 @@ export default async function MediaSidebarModuleEditPage({ params, searchParams 
 
   return (
     <MediaSidebarModuleEditClient
-      block={{
-        ...block,
-        config: (block.config ?? {}) as Record<string, unknown>,
-      }}
+      block={block}
       assignmentContext={assignmentContext}
       saved={Boolean(resolvedSearch.saved)}
       updateAction={updateMediaSidebarModule}

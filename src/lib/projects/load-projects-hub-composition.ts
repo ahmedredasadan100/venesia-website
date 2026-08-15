@@ -2,6 +2,7 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
+import type { Json } from "../database.types";
 import { normalizeBoolean } from "../page-blocks/admin-utils";
 import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -18,7 +19,7 @@ export type ProjectsHubCompositionAssignment = {
   templateVariant: string;
   templateStatus: string;
   /** Raw template config JSON — parse with Phase 2 projects-hub parsers only. */
-  config: unknown;
+  config: Json;
 };
 
 export type ProjectsHubComposition = {
@@ -67,28 +68,19 @@ async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoad
   const assignments: ProjectsHubCompositionAssignment[] = [];
 
   for (const row of rows ?? []) {
-    const templateRaw = row.content_block_templates;
-    const template = Array.isArray(templateRaw) ? templateRaw[0] : templateRaw;
-    if (!template || typeof template !== "object") continue;
-
-    const templateRecord = template as {
-      id: number;
-      slug: string;
-      variant: string;
-      status: string;
-      config: unknown;
-    };
+    const template = row.content_block_templates;
+    if (!template) continue;
 
     assignments.push({
       assignmentId: row.id,
-      templateId: templateRecord.id,
+      templateId: template.id,
       slot: row.slot ?? "main",
       sortOrder: row.sort_order ?? 0,
       isVisible: normalizeBoolean(row.is_visible, true),
-      templateSlug: templateRecord.slug,
-      templateVariant: templateRecord.variant,
-      templateStatus: templateRecord.status,
-      config: templateRecord.config,
+      templateSlug: template.slug,
+      templateVariant: template.variant,
+      templateStatus: template.status,
+      config: template.config,
     });
   }
 

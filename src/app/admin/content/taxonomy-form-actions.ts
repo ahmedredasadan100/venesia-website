@@ -144,7 +144,7 @@ async function slugExists(
     .select("id")
     .eq("slug", slug)
     .limit(1)
-    .maybeSingle<{ id: number }>();
+    .maybeSingle();
   if (error) throw error;
   return Boolean(data);
 }
@@ -161,7 +161,7 @@ async function validateCategoryParent(parentId: number | null, currentId?: numbe
     .is("deleted_at", null);
   if (error) throw error;
 
-  const rows = (data ?? []) as Array<{ id: number; parent_id: number | null }>;
+  const rows = data ?? [];
   if (!rows.some((row) => row.id === parentId)) {
     return "التصنيف الأب غير موجود.";
   }
@@ -194,7 +194,7 @@ async function validateSeriesCategory(
     .select("id, is_active")
     .eq("id", categoryId)
     .is("deleted_at", null)
-    .maybeSingle<{ id: number; is_active: boolean | null }>();
+    .maybeSingle();
   if (error) throw error;
   if (!data) return "التصنيف المحدد غير موجود.";
   if (data.is_active === false && data.id !== currentCategoryId) {
@@ -254,7 +254,7 @@ export async function createCategoryForm(
         updated_at: now,
       })
       .select("id, published_at")
-      .single<{ id: number; published_at: string | null }>();
+      .single();
     if (error) throw error;
 
     await recordCmsAdminAudit(
@@ -308,11 +308,7 @@ export async function updateCategoryForm(
     .select("id, slug, status")
     .eq("id", id)
     .is("deleted_at", null)
-    .maybeSingle<{
-      id: number;
-      slug: string;
-      status: string | null;
-    }>();
+    .maybeSingle();
   if (currentError || !current) {
     return formFailure("التصنيف غير موجود أو تعذر تحميله.");
   }
@@ -431,7 +427,7 @@ export async function createSeriesForm(
         updated_at: now,
       })
       .select("id")
-      .single<{ id: number }>();
+      .single();
     if (error) throw error;
 
     await recordCmsAdminAudit(
@@ -480,12 +476,7 @@ export async function updateSeriesForm(
     .select("id, slug, status, category_id")
     .eq("id", id)
     .is("deleted_at", null)
-    .maybeSingle<{
-      id: number;
-      slug: string;
-      status: string | null;
-      category_id: number | null;
-    }>();
+    .maybeSingle();
   if (currentError || !current) {
     return formFailure("السلسلة غير موجودة أو تعذر تحميلها.");
   }

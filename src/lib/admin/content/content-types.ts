@@ -8,6 +8,7 @@ export const CONTENT_TYPES = [
 ] as const;
 
 export type ContentType = (typeof CONTENT_TYPES)[number];
+export type MediaEditableContentType = Exclude<ContentType, "article">;
 export type ContentEditorKind = "article" | "text-media" | "video" | "gallery";
 export type ContentEditorBodyKind = "markdown" | "video" | "gallery";
 
@@ -70,6 +71,23 @@ export const CONTENT_EDITOR_ADAPTERS = {
     supportsPopular: true,
   },
 } as const satisfies Record<ContentType, ContentEditorAdapter>;
+
+export const MEDIA_EDITABLE_CONTENT_TYPES = CONTENT_TYPES.filter(
+  (contentType): contentType is MediaEditableContentType => contentType !== "article",
+);
+
+export const MEDIA_CONTENT_TYPE_ERROR =
+  "نوع المحتوى غير مسموح. يُسمح فقط بـ news و press و site_update و video و gallery.";
+
+const MEDIA_EDITABLE_CONTENT_TYPE_SET = new Set<string>(
+  MEDIA_EDITABLE_CONTENT_TYPES,
+);
+
+export function isMediaEditableContentType(
+  value?: string | null,
+): value is MediaEditableContentType {
+  return typeof value === "string" && MEDIA_EDITABLE_CONTENT_TYPE_SET.has(value);
+}
 
 const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
   article: "مقال",

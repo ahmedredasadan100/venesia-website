@@ -20,8 +20,15 @@ export function buildAdminListSearchOrFilter(fields: readonly string[], term: st
   return fields.map((field) => `${field}.ilike.${pattern}`).join(",");
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyAdminListTextSearch(query: any, term: string | undefined | null, fields: readonly string[]) {
+interface AdminListTextSearchQuery {
+  or(filter: string): this;
+}
+
+export function applyAdminListTextSearch<Query extends AdminListTextSearchQuery>(
+  query: Query,
+  term: string | undefined | null,
+  fields: readonly string[],
+): Query {
   const filter = term?.trim() ? buildAdminListSearchOrFilter(fields, term) : "";
   if (!filter) return query;
   return query.or(filter);

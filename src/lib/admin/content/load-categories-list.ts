@@ -127,7 +127,7 @@ export async function loadCategoriesListData() {
     .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
-  const categories = (data ?? []) as CategoryRow[];
+  const categories: CategoryRow[] = data ?? [];
   const nameById = new Map(categories.map((category) => [category.id, category.name]));
   const tree = buildCategoryTree(categories);
   return {

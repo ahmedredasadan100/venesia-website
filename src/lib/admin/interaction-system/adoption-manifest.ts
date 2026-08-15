@@ -577,7 +577,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
         "src/app/admin/projects/locations/actions.ts",
         "src/lib/admin/projects/location-management-adapter.ts",
-        "sql/migrations/20260814002948_location_management_foundation.sql",
+        "sql/migrations/20260814020750_location_management_foundation.sql",
       ],
       manualOrder: false,
       actions: {

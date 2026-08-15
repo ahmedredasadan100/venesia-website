@@ -3,33 +3,6 @@ import type { ChangeEventHandler, ReactNode } from "react";
 export const ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME =
   "rounded-xl border border-white/10 bg-black/16 px-4 py-3";
 
-export const ADMIN_FORM_SWITCH_GROUP_CLASS_NAME =
-  "flex flex-wrap items-center justify-start gap-4";
-
-export const ADMIN_FORM_SWITCH_EQUAL_GRID_CLASS_NAME =
-  "grid gap-4 sm:grid-flow-col sm:auto-cols-fr";
-
-export function AdminFormSwitchGroup({
-  children,
-  layout = "flow",
-  className = "",
-}: {
-  children: ReactNode;
-  layout?: "flow" | "equal-grid";
-  className?: string;
-}) {
-  const layoutClassName =
-    layout === "equal-grid"
-      ? ADMIN_FORM_SWITCH_EQUAL_GRID_CLASS_NAME
-      : ADMIN_FORM_SWITCH_GROUP_CLASS_NAME;
-
-  return (
-    <div className={`${layoutClassName} ${className}`.trim()}>
-      {children}
-    </div>
-  );
-}
-
 export type AdminFormSwitchProps = {
   id?: string;
   name: string;

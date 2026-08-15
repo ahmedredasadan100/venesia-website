@@ -3,7 +3,10 @@ import "server-only";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { MEDIA_HUB_ASSIGNMENT_TABLE } from "../media-hub-modules/registry";
 import { MEDIA_SIDEBAR_ASSIGNMENT_TABLE } from "../media-sidebar-modules/registry";
-import { BLOCK_MODULE_REGISTRY } from "./block-module-registry";
+import {
+  BLOCK_MODULE_REGISTRY,
+  type PageModuleAssignmentTable,
+} from "./block-module-registry";
 import { revalidatePageBlocksPath } from "./admin-revalidate";
 import type { PageBlockType } from "./types";
 
@@ -20,7 +23,7 @@ export function parsePageIdsFromForm(formData: FormData) {
 }
 
 async function syncModulePageAssignmentsForTable(
-  table: string,
+  table: PageModuleAssignmentTable,
   kind: string,
   templateId: number,
   pageIds: number[],

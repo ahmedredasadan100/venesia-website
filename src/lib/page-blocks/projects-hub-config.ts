@@ -3,6 +3,8 @@
  * Public `/projects` does not consume these configs yet.
  */
 
+import type { Json } from "../database.types";
+
 export const PROJECTS_HUB_HERO_SELECTION_MODES = ["auto_residential_with_media"] as const;
 export type ProjectsHubHeroSelectionMode = (typeof PROJECTS_HUB_HERO_SELECTION_MODES)[number];
 
@@ -286,12 +288,17 @@ export function asProjectsHubMapConfig(raw: unknown): ProjectsHubMapModuleConfig
 }
 
 /** Merge typed fields onto existing config without dropping unknown top-level keys. */
-export function mergeProjectsHubConfig<T extends Record<string, unknown>>(
-  existing: unknown,
+export function mergeProjectsHubConfig<
+  T extends { [Key in keyof T]: Json | undefined },
+>(
+  existing: Json | undefined,
   typedPatch: T,
   knownKeys: readonly (keyof T & string)[],
-): Record<string, unknown> {
-  const base = { ...asRecord(existing) };
+): { [key: string]: Json | undefined } {
+  const base: { [key: string]: Json | undefined } =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? { ...existing }
+      : {};
   for (const key of knownKeys) {
     base[key] = typedPatch[key];
   }

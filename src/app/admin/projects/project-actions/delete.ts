@@ -9,6 +9,10 @@ import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../.
 import { withProjectMediaSynchronization } from "./helpers";
 import { revalidateProjectPaths } from "./revalidate";
 
+function isProjectCategory(value: string): value is ProjectCategory {
+  return value === "residential" || value === "commercial";
+}
+
 export async function deleteProjectAjax(id: number, confirmPermanent = false) {
   await requireAdminSession();
   if (!confirmPermanent) {
@@ -23,9 +27,9 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     .from("projects")
     .select("type, slug")
     .eq("id", id)
-    .maybeSingle<{ type: ProjectCategory; slug: string | null }>();
+    .maybeSingle();
 
-  if (lookupError || !existing) {
+  if (lookupError || !existing || !isProjectCategory(existing.type)) {
     return {
       ok: false as const,
       code: lookupError ? "lookup_failed" : "project_not_found",

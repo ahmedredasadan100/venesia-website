@@ -1,10 +1,6 @@
 import { notFound } from "next/navigation";
 import AdminNotice from "../../../../../components/admin/AdminNotice";
-import ArticleEditor, {
-  type ArticleEditorCategory,
-  type ArticleEditorSeries,
-  type ArticleEditorTopic,
-} from "../../../../../components/admin/content/editors/ArticleEditor";
+import ArticleEditor from "../../../../../components/admin/content/editors/ArticleEditor";
 import {
   AdminActionButton,
   AdminEntityPreviewActions,
@@ -14,14 +10,17 @@ import {
 import {
   buildAdminCategoryTree,
   flattenAdminCategoryTree,
-  type AdminContentCategory,
 } from "../../../../../lib/admin/content/category-hierarchy";
-import { getContentTypeLabel, resolveContentEditor } from "../../../../../lib/admin/content/content-types";
+import {
+  getContentTypeLabel,
+  isContentType,
+  isMediaEditableContentType,
+  resolveContentEditor,
+} from "../../../../../lib/admin/content/content-types";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
-import { isMediaEditableContentType } from "../../../../../components/admin/content/editors/media/media-content-config";
-import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
+import { parseMediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import {
   ADMIN_CONTENT_ROUTES,
   isAdminContentReturnPath,
@@ -48,6 +47,8 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       ? query.return_to
       : ADMIN_CONTENT_ROUTES.topics;
   if (!/^\d+$/.test(id)) notFound();
+  const topicId = Number(id);
+  if (!Number.isSafeInteger(topicId) || topicId <= 0) notFound();
 
   const supabase = getSupabaseAdmin();
   const [
@@ -58,7 +59,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
     supabase
       .from("topics")
       .select("*")
-      .eq("id", id)
+      .eq("id", topicId)
       .is("deleted_at", null)
       .maybeSingle(),
     supabase
@@ -75,10 +76,10 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       .order("name", { ascending: true }),
   ]);
 
-  if (!topic) notFound();
+  if (!topic || !isContentType(topic.content_type)) notFound();
   const editorKind = resolveContentEditor(topic.content_type);
   if (!editorKind) notFound();
-  const categories = (categoryRows ?? []) as AdminContentCategory[];
+  const categories = categoryRows ?? [];
   const selectableCategories = categories
     .filter(
       (category) =>
@@ -89,14 +90,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
         ? { ...category, is_active: true }
         : category,
     );
-  const allSeries = (seriesRows ?? []) as Array<{
-    id: number;
-    name: string;
-    slug: string;
-    status: string;
-    deleted_at: string | null;
-    category_id: number | null;
-  }>;
+  const allSeries = seriesRows ?? [];
   const selectableSeries = allSeries.filter(
     (item) =>
       (item.status === "published" && !item.deleted_at) ||
@@ -107,9 +101,9 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
   if (editorKind === "article") {
     return (
       <ArticleEditor
-        topic={topic as ArticleEditorTopic}
-        categories={selectableCategories as ArticleEditorCategory[]}
-        series={selectableSeries as ArticleEditorSeries[]}
+        topic={topic}
+        categories={selectableCategories}
+        series={selectableSeries}
         errorMessage={errorMessage}
         returnPath={returnPath}
       />
@@ -188,7 +182,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
           show_category_on_page: topic.show_category_on_page,
           show_series_on_page: topic.show_series_on_page,
           show_intro_card_on_page: topic.show_intro_card_on_page,
-          media_payload: (topic.media_payload as MediaTopicPayload | null) ?? null,
+          media_payload: parseMediaTopicPayload(topic.media_payload),
           media_project: topic.media_project,
           seo_title: topic.seo_title,
           seo_description: topic.seo_description,

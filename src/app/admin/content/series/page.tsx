@@ -6,7 +6,6 @@ import {
   AdminPageHeader,
 } from "../../../../components/admin/ui";
 import { PlusIcon } from "../../../../components/admin/AdminRowActions";
-import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import {
   SERIES_DEFAULT_COLUMN_KEYS,
   SERIES_LIST_VIEW_KEY,
@@ -16,7 +15,7 @@ import { seriesEntityListAdapter } from "../../../../lib/admin/content/entity-li
 import { seriesQueryContract } from "../../../../lib/admin/content/entity-list-contracts/series";
 import { normalizeAdminEntityListQuery } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list";
-import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import SeriesTableClient from "./SeriesTableClient";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +37,6 @@ export default async function Page({
 }: {
   searchParams?: Promise<SeriesSearchParams>;
 }) {
-  const actor = await requireAdminSession();
   const params = await searchParams;
   const noticeFeedback = resolveAdminNoticeFeedback(
     SERIES_NOTICE_CODE_MAP,
@@ -62,23 +60,17 @@ export default async function Page({
     ),
   );
 
-  const [{ data: preference, error: preferenceError }, listResult] =
-    await Promise.all([
-      getSupabaseAdmin()
-        .from("admin_user_preferences")
-        .select("preferences")
-        .eq("admin_user_id", actor.id)
-        .eq("view_key", SERIES_LIST_VIEW_KEY)
-        .maybeSingle<{ preferences: { visibleColumns?: string[] } }>(),
-      seriesEntityListAdapter
-        .load(query)
-        .then((data) => ({ data, error: null as Error | null }))
-        .catch((error: unknown) => ({
-          data: null,
-          error:
-            error instanceof Error ? error : new Error("Unable to load series."),
-        })),
-    ]);
+  const [preference, listResult] = await Promise.all([
+    readAdminColumnPreferences(SERIES_LIST_VIEW_KEY),
+    seriesEntityListAdapter
+      .load(query)
+      .then((data) => ({ data, error: null as Error | null }))
+      .catch((error: unknown) => ({
+        data: null,
+        error:
+          error instanceof Error ? error : new Error("Unable to load series."),
+      })),
+  ]);
 
   if (listResult.error) {
     return (
@@ -97,9 +89,8 @@ export default async function Page({
     );
   }
 
-  const visibleColumns = Array.isArray(preference?.preferences?.visibleColumns)
-    ? preference.preferences.visibleColumns
-    : [...SERIES_DEFAULT_COLUMN_KEYS];
+  const visibleColumns =
+    preference.visibleColumns ?? [...SERIES_DEFAULT_COLUMN_KEYS];
 
   return (
     <AdminPageExperience>
@@ -129,11 +120,11 @@ export default async function Page({
         }
       />
 
-      {preferenceError ? (
+      {preference.error ? (
         <AdminNotice
           variant="danger"
           title="تعذر تحميل تفضيلات الأعمدة"
-          message={preferenceError.message}
+          message={preference.error}
         />
       ) : null}
 

@@ -6,11 +6,13 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   isMediaEditableContentType,
   MEDIA_EDITABLE_CONTENT_TYPES,
-} from "../../../../../components/admin/content/editors/media/media-content-config";
-import type {
-  CategoryRow,
-  MediaTopicRow,
-} from "./types";
+} from "../../../../../lib/admin/content/content-types";
+import type { MediaTopicRow } from "./types";
+
+function validateId(id: string) {
+  const parsed = Number(id);
+  return /^\d+$/.test(id) && Number.isSafeInteger(parsed) && parsed > 0;
+}
 
 export async function resolveMediaSection(
   categoryId: string,
@@ -33,7 +35,7 @@ export async function resolveMediaSection(
     .eq("id", normalizedId)
     .is("deleted_at", null);
   if (normalizedId !== currentCategoryId) query = query.eq("is_active", true);
-  const { data, error } = await query.maybeSingle<CategoryRow>();
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     logError("resolveMediaSection failed", error, { categoryId: normalizedId });
@@ -53,30 +55,34 @@ export async function resolveMediaSection(
 
 export async function ensureUniqueSlug(slug: string, id?: string) {
   await requireAdminSession();
+  if (id && !validateId(id)) return false;
 
   let query = getSupabaseAdmin().from("topics").select("id").eq("slug", slug).limit(1);
 
   if (id) {
-    query = query.neq("id", id);
+    query = query.neq("id", Number(id));
   }
 
-  const { data, error } = await query.maybeSingle<{ id: number }>();
+  const { data, error } = await query.maybeSingle();
   if (error) return false;
   return !data;
 }
 
-export async function getEditableMediaTopicById(id: string) {
+export async function getEditableMediaTopicById(
+  id: string,
+): Promise<MediaTopicRow | null> {
   await requireAdminSession();
+  if (!validateId(id)) return null;
 
   const { data, error } = await getSupabaseAdmin()
     .from("topics")
     .select(
       "id, title, slug, excerpt, content, image, image_alt, category_id, category_slug, series_id, content_type, status, is_featured, is_popular, published_at, date_label, updated_at, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page, deleted_at, media_payload, media_project, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq",
     )
-    .eq("id", id)
+    .eq("id", Number(id))
     .in("content_type", [...MEDIA_EDITABLE_CONTENT_TYPES])
     .is("deleted_at", null)
-    .maybeSingle<MediaTopicRow>();
+    .maybeSingle();
 
   if (error) {
     logError("getEditableMediaTopicById failed", error, { id });

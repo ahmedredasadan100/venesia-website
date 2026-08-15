@@ -2,6 +2,7 @@ import "server-only";
 
 import path from "path";
 
+import type { Json, Tables, TablesUpdate } from "../../database.types";
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { adminCollectionSearchIncludes } from "../entity-list/search-normalization";
@@ -84,10 +85,12 @@ function numberOrNull(value: unknown) {
   return Number.isFinite(result) ? result : null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function recordOrNull(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  return isRecord(value) ? value : null;
 }
 
 function mapManagedUploadProof(value: unknown): ManagedMediaUploadProof | null {
@@ -125,7 +128,10 @@ function mapManagedUploadProof(value: unknown): ManagedMediaUploadProof | null {
   };
 }
 
-function mapCatalogAsset(row: Record<string, unknown>): MediaCatalogAsset {
+type CatalogAssetRow = Tables<"admin_media_assets_catalog"> |
+  (Tables<"media_assets"> & { reference_count: number | null });
+
+function mapCatalogAsset(row: CatalogAssetRow): MediaCatalogAsset {
   return {
     id: text(row.id),
     provider: row.provider === "filesystem" ? "filesystem" : "supabase",
@@ -291,7 +297,7 @@ export async function prepareCatalogUploadRegistration(actorId?: number | null) 
   }
 }
 
-function mapCatalogFolder(row: Record<string, unknown>): MediaCatalogFolder {
+function mapCatalogFolder(row: Tables<"admin_media_folders_catalog">): MediaCatalogFolder {
   return {
     id: text(row.id),
     path: text(row.normalized_path),
@@ -311,7 +317,7 @@ function mapCatalogFolder(row: Record<string, unknown>): MediaCatalogFolder {
   };
 }
 
-function mapReference(row: Record<string, unknown>): MediaReferenceRecord {
+function mapReference(row: Tables<"media_references">): MediaReferenceRecord {
   const state = text(row.reference_state);
   return {
     id: text(row.id),
@@ -683,7 +689,7 @@ export async function listMediaCatalogSnapshot(): Promise<MediaCatalogSnapshot> 
       };
     }
     if (error) throw new Error(error.message);
-    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const rows = data ?? [];
     assets.push(...rows.map(mapCatalogAsset));
     if (rows.length < pageSize) break;
   }
@@ -692,7 +698,7 @@ export async function listMediaCatalogSnapshot(): Promise<MediaCatalogSnapshot> 
     catalogState: "available",
     warning: null,
     assets,
-    folders: (foldersResult.data ?? []).map((row) => mapCatalogFolder(row as Record<string, unknown>)),
+    folders: (foldersResult.data ?? []).map(mapCatalogFolder),
   };
 }
 
@@ -724,7 +730,7 @@ export async function registerCatalogUpload(
   result: MediaUploadResult,
   file: Pick<File, "name" | "type" | "size" | "arrayBuffer">,
   actorId: number | null | undefined,
-  managedUploadProofMetadata: Record<string, unknown>,
+  managedUploadProofMetadata: Json,
 ) {
   if (result.provider !== "supabase" || !result.bucket || !result.objectKey) return null;
   const provider = result.provider;
@@ -755,7 +761,7 @@ export async function registerCatalogUpload(
       !observed.missingObject,
   );
 
-  let data: unknown = null;
+  let data: Tables<"media_assets"> | null = null;
   let error: { code?: string | null; message?: string | null } | null = null;
   try {
     const insertResult = await getSupabaseAdmin()
@@ -798,7 +804,8 @@ export async function registerCatalogUpload(
     if (registrationMatchesUpload(observed)) return observed;
     throw new MediaCatalogUploadRegistrationUnprovenError();
   }
-  return mapCatalogAsset({ ...(data as Record<string, unknown>), reference_count: 0 });
+  if (!data) throw new MediaCatalogUploadRegistrationUnprovenError();
+  return mapCatalogAsset({ ...data, reference_count: 0 });
 }
 
 export async function getCatalogAssetByIdentity(identity: CanonicalMediaIdentity) {
@@ -811,7 +818,7 @@ export async function getCatalogAssetByIdentity(identity: CanonicalMediaIdentity
     .maybeSingle();
   if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
   if (error) throw new Error(error.message);
-  return data ? mapCatalogAsset(data as Record<string, unknown>) : null;
+  return data ? mapCatalogAsset(data) : null;
 }
 
 export async function getCatalogAssetById(assetId: string) {
@@ -822,7 +829,7 @@ export async function getCatalogAssetById(assetId: string) {
     .maybeSingle();
   if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
   if (error) throw new Error(error.message);
-  return data ? mapCatalogAsset(data as Record<string, unknown>) : null;
+  return data ? mapCatalogAsset(data) : null;
 }
 
 export async function getCatalogAssetByPublicValue(value: string) {
@@ -843,14 +850,14 @@ export async function listCatalogReferences(assetId: string) {
     .order("entity_identity");
   if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => mapReference(row as Record<string, unknown>));
+  return (data ?? []).map(mapReference);
 }
 
 export async function updateCatalogAssetMetadata(
   assetId: string,
   input: { displayName?: string; defaultAltText?: string | null; defaultTitle?: string | null; defaultCaption?: string | null },
 ) {
-  const payload: Record<string, unknown> = {};
+  const payload: TablesUpdate<"media_assets"> = {};
   if (input.displayName !== undefined) payload.display_name = input.displayName.trim();
   if (input.defaultAltText !== undefined) payload.default_alt_text = input.defaultAltText?.trim() || null;
   if (input.defaultTitle !== undefined) payload.default_title = input.defaultTitle?.trim() || null;
@@ -865,7 +872,8 @@ export async function updateCatalogAssetMetadata(
     .single();
   if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
   if (error) throw new Error(error.message);
-  return mapCatalogAsset({ ...(data as Record<string, unknown>), reference_count: 0 });
+  if (!data) throw new Error("media_catalog_asset_update_result_missing");
+  return mapCatalogAsset({ ...data, reference_count: 0 });
 }
 
 export async function markCatalogAssetState(
@@ -902,7 +910,7 @@ export async function createCatalogFolder(folderPath: string, actorId?: number |
     .single();
   if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
   if (error) throw new Error(error.message);
-  return mapCatalogFolder(data as Record<string, unknown>);
+  return mapCatalogFolder(data);
 }
 
 export async function getAllCatalogAssetIdentityMap() {
@@ -921,7 +929,7 @@ export async function getAllCatalogAssetIdentityMap() {
       .range(offset, offset + pageSize - 1);
     if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
     if (error) throw new Error(error.message);
-    const rows = (data ?? []).map((row) => mapCatalogAsset(row as Record<string, unknown>));
+    const rows = (data ?? []).map(mapCatalogAsset);
     for (const asset of rows) {
       result.set(getCanonicalMediaIdentityKey(asset), asset);
     }
@@ -940,7 +948,7 @@ export async function getMediaCatalogRuntimeState(): Promise<MediaCatalogRuntime
     .maybeSingle();
   if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
   if (error) throw new Error(error.message);
-  const value = (data?.value ?? {}) as Record<string, unknown>;
+  const value = recordOrNull(data?.value) ?? {};
   return {
     state: value.state === "synced" ? "synced" : "uncertain",
     provider: value.provider === "supabase" || value.provider === "filesystem" ? value.provider : null,

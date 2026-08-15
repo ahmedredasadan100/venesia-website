@@ -65,6 +65,9 @@ const normalizePath = (value: string) => value.replaceAll("\\", "/");
 const absolutePath = (sourceFile: string) => join(ROOT, sourceFile);
 const read = (sourceFile: string) =>
   readFileSync(absolutePath(sourceFile), "utf8");
+const maintenanceSettingsPage = read("src/app/admin/settings/general/page.tsx");
+const maintenanceSettingsPanel = read("src/app/admin/settings/general/MaintenanceModePanel.tsx");
+const maintenanceSettingsAction = read("src/app/admin/settings/general/actions.ts");
 
 let passed = 0;
 function check(label: string, condition: unknown) {
@@ -337,6 +340,19 @@ check(
   "in-scope generic adoption gaps are closed without claiming global Form Runtime closure",
   sourcePathsFor("legacy_generic_gap").length === 0 &&
     ADMIN_FORM_SYSTEM_CLOSURE.globalClosed === false,
+);
+
+check(
+  "Maintenance setting mutation stays unavailable until its current value is read successfully",
+  !maintenanceSettingsPage.includes(".catch(() => false)") &&
+    maintenanceSettingsPage.includes('status: "unavailable" as const') &&
+    maintenanceSettingsPage.includes("initialReadState={maintenanceSetting}") &&
+    maintenanceSettingsPanel.includes('role="alert"') &&
+    maintenanceSettingsPanel.includes("disabled={pending || refreshPending || !readAvailable}") &&
+    maintenanceSettingsPanel.includes("open={readAvailable && confirmNextEnabled !== null}") &&
+    maintenanceSettingsAction.indexOf("await getMaintenanceModeSetting();") >= 0 &&
+    maintenanceSettingsAction.indexOf("await getMaintenanceModeSetting();") <
+      maintenanceSettingsAction.indexOf("await setMaintenanceModeSetting(enabled);"),
 );
 
 const formMutationOwnerSources = [
@@ -752,12 +768,17 @@ const formDomPreservation = read(
   "src/lib/admin/form-dom-preservation.ts",
 );
 check(
-  "shared runtime wires central DOM snapshot restoration; React timing remains Browser QA",
+  "shared runtime restores submitted DOM while successful RSC revisions stay server-owned",
   runtime.includes("captureAdminFormControls(form)") &&
-    runtime.includes("restoreAdminFormControls(form, snapshot)") &&
+    runtime.includes("restoreAdminFormControls(form, snapshot, {") &&
+    runtime.includes("preserveServerOwned:") &&
     runtime.includes("useLayoutEffect(() =>") &&
     formDomPreservation.includes("form.elements") &&
+    formDomPreservation.includes("serverOwnedNames") &&
+    formDomPreservation.includes("!serverOwnedNames.has(name)") &&
     formDomPreservation.includes("entry.element.form !== form") &&
+    formDomPreservation.includes('hasAttribute("data-admin-form-server-owned")') &&
+    contentEditorShell.includes('data-admin-form-server-owned=""') &&
     formDomPreservation.includes("new DataTransfer()"),
 );
 check(

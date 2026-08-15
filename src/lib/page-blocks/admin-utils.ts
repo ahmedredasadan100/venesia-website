@@ -3,6 +3,9 @@ import { getContentStatusMetadata } from "../admin/content/content-status-metada
 
 export const BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"];
 
+export const PAGE_BLOCK_BULK_ACTIONS = ["publish", "hide", "delete"] as const;
+export const HERO_BULK_ACTIONS = ["show", "hide", "delete"] as const;
+
 export function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
@@ -18,6 +21,37 @@ export function slugify(value: string) {
 export function parseNumber(value: FormDataEntryValue | null, fallback = 0) {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export function parsePageBlockBulkAction<const TAction extends string>(
+  value: FormDataEntryValue | null,
+  allowedActions: readonly TAction[],
+): TAction {
+  const action = cleanText(value);
+  if (!action || !allowedActions.includes(action as TAction)) {
+    throw new Error("Unsupported page block bulk action.");
+  }
+  return action as TAction;
+}
+
+export function parsePageBlockBulkIds(values: readonly FormDataEntryValue[]) {
+  const tokens = values
+    .flatMap((value) => String(value).split(","))
+    .map((value) => value.trim());
+
+  if (!tokens.length) {
+    throw new Error("At least one page block id is required.");
+  }
+
+  const ids = tokens.map(Number);
+  if (
+    tokens.some((value) => !/^[1-9]\d*$/u.test(value)) ||
+    ids.some((id) => !Number.isSafeInteger(id) || id <= 0)
+  ) {
+    throw new Error("Page block ids must be positive integers.");
+  }
+
+  return [...new Set(ids)];
 }
 
 /** Reads checkbox / boolean fields from FormData (hidden "true"/"false" or checkbox "on"). */

@@ -11,7 +11,6 @@ import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/pag
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 
 import MenuBuilderClient from "../MenuBuilderClient";
-import type { Menu, MenuItem } from "../menu-builder-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +36,8 @@ export default async function Page({
 
   if (!menuResult.data) notFound();
 
-  const menu = menuResult.data as Menu;
-  const items = (itemsResult.data ?? []) as MenuItem[];
+  const menu = menuResult.data;
+  const items = itemsResult.data ?? [];
   const databaseReady = Boolean(menu.is_active && items.some((item) => item.is_visible));
 
   return (

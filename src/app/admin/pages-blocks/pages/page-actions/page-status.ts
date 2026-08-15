@@ -13,7 +13,7 @@ export async function togglePageStatus(pageId: number): Promise<PageMutationResu
     return { ok: false, code: "invalid_page", message: "الصفحة غير موجودة." };
   }
   const { data: page, error: loadError } = await getSupabaseAdmin()
-    .from("pages").select("status").eq("id", pageId).maybeSingle<{ status: string }>();
+    .from("pages").select("status").eq("id", pageId).maybeSingle();
   if (loadError || !page) return { ok: false, code: "page_not_found", message: loadError?.message ?? "الصفحة غير موجودة." };
 
   const nextStatus = page.status === "published" ? "unpublished" : "published";

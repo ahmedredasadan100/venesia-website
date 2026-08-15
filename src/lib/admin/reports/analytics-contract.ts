@@ -179,6 +179,11 @@ const METRIC_DOMAINS: Record<AnalyticsMetricKey, AnalyticsReportDomain> = {
   "business.sources": "business",
 };
 
+export function isAnalyticsMetricKey(value: unknown): value is AnalyticsMetricKey {
+  return typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(METRIC_DOMAINS, value);
+}
+
 export function assertAnalyticsProviderResult(
   definition: AnalyticsProviderDefinition,
   result: AnalyticsProviderResult,

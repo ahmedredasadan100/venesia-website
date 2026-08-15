@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Json } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { isContentType } from "../content/content-types";
 import { resolvePublicContentPath } from "../../content/public-content-path";
@@ -29,6 +30,13 @@ export type LinkUsageQuery = {
   linkedId: number;
 };
 
+type JsonObject = { [key: string]: Json | undefined };
+
+function jsonObject(value: Json | undefined): JsonObject | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value;
+}
+
 function linkMatchesResource(link: AdminLinkValue, query: LinkUsageQuery) {
   if (link.link_kind !== "internal") return false;
   return link.linked_type === query.linkedType && Number(link.linked_id) === query.linkedId;
@@ -42,7 +50,7 @@ function hrefMatchesResourcePath(href: string | null | undefined, publicPath: st
 }
 
 function scanAdminLinkValue(
-  raw: unknown,
+  raw: Json | undefined,
   query: LinkUsageQuery,
   publicPath: string | null,
   meta: Omit<LinkUsageReference, "sourceType" | "sourceId" | "sourceLabel"> & {
@@ -65,7 +73,7 @@ function scanAdminLinkValue(
 }
 
 function scanLinkContainer(
-  container: Record<string, unknown> | null | undefined,
+  container: JsonObject | null | undefined,
   linkKey: string,
   hrefKey: string,
   query: LinkUsageQuery,
@@ -83,7 +91,7 @@ function scanLinkContainer(
 }
 
 function scanHrefValue(
-  href: unknown,
+  href: Json | undefined,
   query: LinkUsageQuery,
   publicPath: string | null,
   meta: Omit<LinkUsageReference, "sourceType" | "sourceId" | "sourceLabel"> & {
@@ -165,10 +173,7 @@ async function scanMenuItems(query: LinkUsageQuery, publicPath: string | null) {
     if (seenIds.has(item.id)) return;
     seenIds.add(item.id);
 
-    const menuName =
-      item.menus && typeof item.menus === "object" && "name" in item.menus
-        ? String((item.menus as { name: string }).name)
-        : "قائمة";
+    const menuName = item.menus?.name ?? "قائمة";
 
     matches.push({
       sourceType: "menu_item",
@@ -187,7 +192,7 @@ async function scanHeroTemplates(query: LinkUsageQuery, publicPath: string | nul
   const { data: heroes } = await getSupabaseAdmin().from("hero_templates").select("id,name,config");
 
   (heroes ?? []).forEach((hero) => {
-    const config = (hero.config ?? {}) as Record<string, unknown>;
+    const config = jsonObject(hero.config) ?? {};
     const base = {
       sourceType: "hero_template" as const,
       sourceId: hero.id,
@@ -215,7 +220,7 @@ async function scanBlockTemplates(
   const { data: rows } = await getSupabaseAdmin().from(table).select("id,name,config");
 
   (rows ?? []).forEach((row) => {
-    const config = (row.config ?? {}) as Record<string, unknown>;
+    const config = jsonObject(row.config) ?? {};
     const base = {
       sourceType,
       sourceId: row.id,
@@ -224,8 +229,8 @@ async function scanBlockTemplates(
     };
 
     if (table === "cta_block_templates") {
-      const primary = config.primaryCta as Record<string, unknown> | undefined;
-      const secondary = config.secondaryCta as Record<string, unknown> | undefined;
+      const primary = jsonObject(config.primaryCta);
+      const secondary = jsonObject(config.secondaryCta);
       scanLinkContainer(primary, "link", "href", query, publicPath, { ...base, fieldPath: "config.primaryCta" }, matches);
       scanLinkContainer(
         secondary,
@@ -239,16 +244,17 @@ async function scanBlockTemplates(
     }
 
     if (table === "content_block_templates") {
-      const button = config.button as Record<string, unknown> | undefined;
+      const button = jsonObject(config.button);
       scanLinkContainer(button, "link", "href", query, publicPath, { ...base, fieldPath: "config.button" }, matches);
       if (!button && config.button_href) {
         scanHrefValue(config.button_href, query, publicPath, { ...base, fieldPath: "config.button_href" }, matches);
       }
       const contacts = Array.isArray(config.contacts) ? config.contacts : [];
       contacts.forEach((contact, index) => {
-        if (contact && typeof contact === "object") {
+        const contactRecord = jsonObject(contact);
+        if (contactRecord) {
           scanLinkContainer(
-            contact as Record<string, unknown>,
+            contactRecord,
             "link",
             "href",
             query,
@@ -263,9 +269,10 @@ async function scanBlockTemplates(
     if (table === "cards_block_templates") {
       const items = Array.isArray(config.items) ? config.items : [];
       items.forEach((item, index) => {
-        if (item && typeof item === "object") {
+        const itemRecord = jsonObject(item);
+        if (itemRecord) {
           scanLinkContainer(
-            item as Record<string, unknown>,
+            itemRecord,
             "link",
             "href",
             query,
@@ -284,9 +291,10 @@ async function scanBlockTemplates(
           ? config.manual_items
           : [];
       manualItems.forEach((item, index) => {
-        if (item && typeof item === "object") {
+        const itemRecord = jsonObject(item);
+        if (itemRecord) {
           scanLinkContainer(
-            item as Record<string, unknown>,
+            itemRecord,
             "link",
             "href",
             query,
@@ -310,15 +318,14 @@ async function scanFooterSettings(query: LinkUsageQuery, publicPath: string | nu
     .eq("key", "footer.slots")
     .maybeSingle();
 
-  if (!data?.value || typeof data.value !== "object") return matches;
-
-  const footer = data.value as Record<string, unknown>;
+  const footer = jsonObject(data?.value);
+  if (!footer) return matches;
   const slots = Array.isArray(footer.slots) ? footer.slots : [];
 
   slots.forEach((slot, index) => {
-    if (!slot || typeof slot !== "object") return;
-    const record = slot as Record<string, unknown>;
-    const config = (record.config ?? {}) as Record<string, unknown>;
+    const record = jsonObject(slot);
+    if (!record) return;
+    const config = jsonObject(record.config) ?? {};
     const base = {
       sourceType: "footer_slot" as const,
       sourceId: `slot-${index + 1}`,
@@ -326,14 +333,15 @@ async function scanFooterSettings(query: LinkUsageQuery, publicPath: string | nu
       adminPath: "/admin/pages-blocks/footer",
     };
 
-    const cta = config.cta as Record<string, unknown> | undefined;
+    const cta = jsonObject(config.cta);
     scanLinkContainer(cta, "link", "href", query, publicPath, { ...base, fieldPath: `slots[${index}].config.cta` }, matches);
 
     const manualLinks = Array.isArray(config.manualLinks) ? config.manualLinks : [];
     manualLinks.forEach((link, linkIndex) => {
-      if (link && typeof link === "object") {
+      const linkRecord = jsonObject(link);
+      if (linkRecord) {
         scanLinkContainer(
-          link as Record<string, unknown>,
+          linkRecord,
           "link",
           "href",
           query,
@@ -346,9 +354,10 @@ async function scanFooterSettings(query: LinkUsageQuery, publicPath: string | nu
 
     const links = Array.isArray(config.links) ? config.links : [];
     links.forEach((link, linkIndex) => {
-      if (link && typeof link === "object") {
+      const linkRecord = jsonObject(link);
+      if (linkRecord) {
         scanLinkContainer(
-          link as Record<string, unknown>,
+          linkRecord,
           "link",
           "href",
           query,
@@ -378,8 +387,9 @@ async function scanFooterSettings(query: LinkUsageQuery, publicPath: string | nu
 
   const contacts = Array.isArray(contactSetting?.value) ? contactSetting.value : [];
   contacts.forEach((item, index) => {
-    if (item && typeof item === "object") {
-      scanHrefValue((item as Record<string, unknown>).href, query, publicPath, {
+    const itemRecord = jsonObject(item);
+    if (itemRecord) {
+      scanHrefValue(itemRecord.href, query, publicPath, {
         sourceType: "footer_contact",
         sourceId: `contact-${index}`,
         sourceLabel: "Footer Contact Items",

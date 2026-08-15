@@ -26,6 +26,12 @@ function summarize(samples: string[], limit = 5) {
   return samples.slice(0, limit);
 }
 
+function numericEntityIds(entries: SitemapEntry[]) {
+  return entries
+    .map((entry) => Number(entry.entityId))
+    .filter((id) => Number.isSafeInteger(id) && id > 0);
+}
+
 async function loadExcludedCounts(): Promise<SitemapExcludedCounts> {
   const supabase = getSupabaseAdmin();
 
@@ -164,13 +170,13 @@ async function findUnpublishedSitemapTargets(entries: SitemapEntry[]) {
   const supabase = getSupabaseAdmin();
   const [projects, topics, pages] = await Promise.all([
     projectEntries.length
-      ? supabase.from("projects").select("id,publication_status").in("id", projectEntries.map((entry) => entry.entityId!))
+      ? supabase.from("projects").select("id,publication_status").in("id", numericEntityIds(projectEntries))
       : Promise.resolve({ data: [], error: null }),
     topicEntries.length
-      ? supabase.from("topics").select("id,status,deleted_at").in("id", topicEntries.map((entry) => entry.entityId!))
+      ? supabase.from("topics").select("id,status,deleted_at").in("id", numericEntityIds(topicEntries))
       : Promise.resolve({ data: [], error: null }),
     pageEntries.length
-      ? supabase.from("pages").select("id,status").in("id", pageEntries.map((entry) => entry.entityId!))
+      ? supabase.from("pages").select("id,status").in("id", numericEntityIds(pageEntries))
       : Promise.resolve({ data: [], error: null }),
   ]);
   const error = projects.error ?? topics.error ?? pages.error;

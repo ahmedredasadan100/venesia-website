@@ -75,14 +75,13 @@ async function readCatalogIdentity(assetId: string): Promise<CatalogIdentitySnap
     .maybeSingle();
   if (error) throw new Error(`media_physical_move_catalog_read_failed:${error.code ?? "unknown"}`);
   if (!data) return null;
-  const row = data as Record<string, unknown>;
   return {
-    provider: String(row.provider ?? ""),
-    bucket: String(row.bucket ?? ""),
-    objectKey: String(row.object_key ?? ""),
-    publicUrl: String(row.public_url ?? ""),
-    reconciliationState: String(row.reconciliation_state ?? ""),
-    missingObject: Boolean(row.missing_object),
+    provider: data.provider,
+    bucket: data.bucket,
+    objectKey: data.object_key,
+    publicUrl: data.public_url,
+    reconciliationState: data.reconciliation_state,
+    missingObject: data.missing_object,
   };
 }
 

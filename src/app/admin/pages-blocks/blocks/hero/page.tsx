@@ -2,7 +2,6 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import HeroManagerClient from "./HeroManagerClient";
-import type { HeroTemplateRow } from "./actions";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string }> | { notice?: string };
@@ -24,7 +23,7 @@ export default async function HeroesManagerPage({ searchParams }: PageProps) {
 
   return (
     <HeroManagerClient
-      heroes={(data ?? []) as HeroTemplateRow[]}
+      heroes={data ?? []}
       loadError={error ? `حدث خطأ أثناء قراءة الهيروهات: ${error.message}` : null}
       mediaSynchronizationWarning={
         resolvedSearch.notice === "saved_with_media_sync_warning"
