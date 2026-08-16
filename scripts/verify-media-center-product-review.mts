@@ -333,5 +333,11 @@ for (const slug of [
 }
 assert.equal(listingMigration.match(/\"featuredMode\":\"automatic\"/g)?.length, 5);
 assert.ok(!listingMigration.match(/create\s+(table|function|view|trigger)/iu));
+assert.ok(listingMigration.includes("public.mutate_page_composition("));
+assert.ok(listingMigration.includes("'sync_template_pages'"));
+assert.ok(listingMigration.includes("'kind', 'media_hub'"));
+assert.ok(listingMigration.includes("'default_slot', 'main'"));
+assert.ok(listingMigration.includes("'page_ids', jsonb_build_array(v_listing.page_id)"));
+assert.ok(!listingMigration.match(/insert\s+into\s+public\.page_media_hub_module_assignments/iu));
 
 console.log("Media Center product review verification passed.");
