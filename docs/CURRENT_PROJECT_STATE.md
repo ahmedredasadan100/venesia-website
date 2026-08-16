@@ -42,6 +42,7 @@ The Platform Health implementation and `DEBT-TYPE-01` closure were delivered thr
 
 - Unified Content owns administrative article, news, press, site-update, video, and gallery records through `public.topics`.
 - The public content read owner under `src/lib/content/public-content-read/` owns current public Topic/media listing and detail query contracts. Public search consumers adopt it and do not create entity-specific public search runtimes.
+- The same public content read owner owns Featured selection. `automatic` means published content of the requested `content_type` with `is_featured = true`; it has no Latest fallback, so absence returns no Hero. All Media Center listing pages and the hub Featured section adopt that contract, while the CMS declares the same behavior.
 - Projects use the database as their only project truth and persist the aggregate through the Project domain RPC owners.
 - Project create/edit delegates generic lifecycle, dirty protection, feedback, validation focus, and Create-to-Edit handoff to the current Form Runtime; Project validation and aggregate persistence remain domain-owned.
 - Media writes use the Media coordination contract; the global writer-adoption manifest is closed and contains no unadopted tooling owner.

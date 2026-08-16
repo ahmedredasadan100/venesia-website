@@ -105,11 +105,16 @@ function ListingPresentationFields({
             }
           }}
           options={[
-            { value: "automatic", label: "تلقائي — حسب is_featured" },
+            { value: "automatic", label: "تلقائي — المحتوى المميّز فقط" },
             { value: "manual", label: "يدوي — محتوى محدد" },
             { value: "disabled", label: "معطل" },
           ]}
         />
+        {featuredMode === "automatic" ? (
+          <p className="mt-2 text-xs leading-5 text-white/45">
+            يعتمد على is_featured فقط؛ عند عدم وجود محتوى مميّز لن يظهر الـHero.
+          </p>
+        ) : null}
       </ModuleEditorField>
 
       {featuredMode === "manual" ? (

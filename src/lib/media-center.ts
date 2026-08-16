@@ -12,6 +12,7 @@ import {
   unifiedGetMediaListingPage,
 } from "./media-center/unified-provider";
 import { normalizePublicContentSearchQuery } from "./content/public-content-read/contract";
+import type { PublicContentFeaturedSelection } from "./content/public-content-read/contract";
 import { getDefaultMediaListingPresentation } from "./media-hub-modules/parse-config";
 
 export type { MediaContentItem, MediaContentType, MediaNewsItem, MediaSidebarItem };
@@ -32,8 +33,7 @@ export async function getMediaListingPage(
     page: number;
     sort?: "newest" | "oldest";
     pageSize?: number;
-    pickFeatured?: boolean;
-    featuredTopicId?: number;
+    featuredSelection?: PublicContentFeaturedSelection;
     search?: string;
   },
 ) {
@@ -46,8 +46,7 @@ export async function getMediaListingPage(
     page: search ? 1 : Number.isFinite(input.page) && input.page > 0 ? Math.floor(input.page) : 1,
     pageSize,
     sort,
-    pickFeatured: search ? false : Boolean(input.pickFeatured),
-    featuredTopicId: search ? undefined : input.featuredTopicId,
+    featuredSelection: search ? undefined : input.featuredSelection,
     search,
   });
 }

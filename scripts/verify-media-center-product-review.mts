@@ -237,13 +237,16 @@ for (const contract of ["layout", "columns", "paginationEnabled", "cardVariant",
 
 const listingPageSource = read("src/components/media-center/MediaListingPage.tsx");
 assert.ok(listingPageSource.includes("resolveMediaListingPresentation"));
-assert.ok(listingPageSource.includes('presentation.featuredMode === "manual"'));
-assert.ok(listingPageSource.includes("featuredTopicId"));
+assert.ok(listingPageSource.includes("resolveMediaListingFeaturedSelection"));
+assert.ok(!listingPageSource.includes('presentation.featuredMode ==='));
 assert.ok(listingPageSource.includes("MediaFeaturedHero"));
 assert.ok(!listingPageSource.includes("FeaturedNews"));
 const listingPresentationSource = read("src/lib/media-hub-modules/listing-presentation.ts");
 assert.ok(listingPresentationSource.includes('module.config.placement === "listing"'));
 assert.ok(listingPresentationSource.includes('featuredMode: "disabled"'));
+assert.ok(listingPresentationSource.includes('presentation.featuredMode === "automatic"'));
+assert.ok(listingPresentationSource.includes('{ mode: "automatic" }'));
+assert.ok(listingPresentationSource.includes('{ mode: "manual", topicId: presentation.manualTopicId }'));
 
 const shellSource = read("src/components/media-center/MediaCenterShellLayout.tsx");
 assert.ok(shellSource.includes("resolveMediaListingMainBlocks"));
@@ -318,8 +321,59 @@ assert.ok(compositionSource.includes("queryMediaHubModules(pageSlug, { enrich: p
 
 const publicContractSource = read("src/lib/content/public-content-read/contract.ts");
 const publicOwnerSource = read("src/lib/content/public-content-read/owner.ts");
-assert.ok(publicContractSource.includes("featuredId?: number"));
-assert.ok(publicOwnerSource.includes('.eq("id", input.featuredId)'));
+const mediaProviderSource = read("src/lib/media-center/unified-provider.ts");
+const hubDataSource = read("src/lib/media-hub-modules/resolve-hub-section-data.ts");
+assert.ok(publicContractSource.includes("PublicContentFeaturedSelection"));
+assert.ok(publicContractSource.includes("absence never falls back to latest"));
+assert.ok(publicOwnerSource.includes("resolveFeaturedSelection"));
+assert.ok(publicOwnerSource.includes('featured: "only"'));
+assert.ok(!publicOwnerSource.includes("fallbackResult"));
+assert.ok(!publicOwnerSource.includes("featured fallback"));
+assert.ok(mediaProviderSource.includes("contentTypes: [params.type]"));
+assert.ok(mediaProviderSource.includes("featuredSelection: params.featuredSelection"));
+assert.ok(hubDataSource.includes('featuredSelection: { mode: "automatic" }'));
+assert.ok(!hubDataSource.includes("news.find"));
+assert.ok(!hubDataSource.includes("news[0]"));
+assert.ok(editorSource.includes("المحتوى المميّز فقط"));
+assert.ok(editorSource.includes("عند عدم وجود محتوى مميّز لن يظهر الـHero"));
+
+const featuredOwnerCandidates = [
+  "src/components/media-center/MediaListingPage.tsx",
+  "src/lib/media-hub-modules/resolve-hub-section-data.ts",
+  "src/lib/media-center/unified-provider.ts",
+];
+for (const candidate of featuredOwnerCandidates) {
+  const source = read(candidate);
+  assert.ok(
+    !/featured[^\n]{0,120}(?:\?\?|\|\|)[^\n]{0,80}(?:latest|\[0\])/iu.test(source),
+    `${candidate} must not own a Latest featured fallback`,
+  );
+}
+
+const topicsClientSource = read("src/components/admin/content/TopicsListClient.tsx");
+const instantMutationSource = read("src/lib/admin/entity-list/data-engine/instant-mutation.ts");
+const featuredToggleQaSource = read("tests/e2e/qa-media-center-featured-toggle.mjs");
+assert.ok(topicsClientSource.includes("useAdminEntityInstantMutation"));
+assert.ok(topicsClientSource.includes("reconcileSuccess"));
+assert.ok(topicsClientSource.includes("is_featured: confirmedFeatured"));
+assert.ok(instantMutationSource.includes("request.optimistic(helpers)"));
+assert.ok(instantMutationSource.includes("request.reconcileSuccess(result"));
+assert.ok(instantMutationSource.includes('refetchType: "active"'));
+for (const forbidden of ["router.refresh", "forceUpdate", "forceRerender", "setRows("]) {
+  assert.ok(!topicsClientSource.includes(forbidden), `Topics Featured mutation must not use ${forbidden}`);
+  assert.ok(!instantMutationSource.includes(forbidden), `Instant Mutation owner must not use ${forbidden}`);
+}
+for (const proof of [
+  "Menu exposes the unfeature command",
+  "Optimistic update changes aria-pressed before Server Action completion",
+  "Spinner ends after reconcile and invalidation",
+  "Final star is unfilled",
+  "Final database truth is unfeatured",
+  "Visibility row action remains available",
+  "More row action remains available",
+]) {
+  assert.ok(featuredToggleQaSource.includes(proof), `Featured Toggle QA is missing: ${proof}`);
+}
 
 const listingMigration = read("sql/migrations/20260815092555_media_center_listing_presentation.sql");
 for (const slug of [

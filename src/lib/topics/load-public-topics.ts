@@ -128,7 +128,7 @@ export async function loadPublicTopicsListing(
     search: params.search,
     categorySlugs: params.categorySlug ? [params.categorySlug] : [],
     seriesSlug: params.seriesSlug,
-    featured: params.search ? "none" : "separate",
+    featuredSelection: params.search ? undefined : { mode: "automatic" },
   });
 
   return {

@@ -12,7 +12,10 @@ import {
   type MediaListingPageKey,
 } from "../../lib/media-center/listing-page-config";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
-import { resolveMediaListingPresentation } from "../../lib/media-hub-modules/listing-presentation";
+import {
+  resolveMediaListingFeaturedSelection,
+  resolveMediaListingPresentation,
+} from "../../lib/media-hub-modules/listing-presentation";
 
 type MediaListingPageProps = {
   configKey: MediaListingPageKey;
@@ -39,25 +42,20 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     composition.mediaHubModules,
     config.mediaType,
   );
-  const pickFeatured =
-    !searchQuery &&
-    (presentation.featuredMode === "automatic" ||
-      (presentation.featuredMode === "manual" && Boolean(presentation.manualTopicId)));
-  const featuredTopicId = presentation.featuredMode === "manual"
-    ? presentation.manualTopicId ?? undefined
-    : undefined;
+  const featuredSelection = searchQuery
+    ? undefined
+    : resolveMediaListingFeaturedSelection(presentation);
 
   const listing = await getMediaListingPage({
     type: config.mediaType,
     page: presentation.paginationEnabled ? requestedPage : 1,
     sort,
     pageSize: presentation.pageSize,
-    pickFeatured,
-    featuredTopicId,
+    featuredSelection,
     search: searchQuery,
   });
 
-  const featuredItem = pickFeatured ? listing.featured : null;
+  const featuredItem = listing.featured;
   const searchSuggestions = searchQuery
     ? listing.items.slice(0, 8).map((item) => ({
         id: `${item.type}:${item.id}`,

@@ -4,6 +4,7 @@ import {
   loadPublicContentCollection,
   loadPublicContentDetail,
 } from "../content/public-content-read/owner";
+import type { PublicContentFeaturedSelection } from "../content/public-content-read/contract";
 import { adaptPublicContentToMediaItem } from "./adapt-topic-row";
 import {
   MEDIA_CONTENT_TYPES,
@@ -42,8 +43,7 @@ export async function unifiedGetMediaListingPage(
     page: number;
     pageSize: number;
     sort: ListingSort;
-    pickFeatured: boolean;
-    featuredTopicId?: number;
+    featuredSelection?: PublicContentFeaturedSelection;
     search?: string;
   },
 ) {
@@ -53,8 +53,7 @@ export async function unifiedGetMediaListingPage(
     pageSize: params.pageSize,
     sort: params.sort,
     search: params.search,
-    featured: params.pickFeatured ? "separate" : "none",
-    featuredId: params.pickFeatured ? params.featuredTopicId : undefined,
+    featuredSelection: params.featuredSelection,
   });
 
   return {
