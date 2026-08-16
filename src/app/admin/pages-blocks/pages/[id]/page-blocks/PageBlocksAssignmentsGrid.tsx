@@ -113,7 +113,7 @@ export default function PageBlocksAssignmentsGrid({
 
       {rows.map((row, index) => {
         const rowId = assignmentRowId(row);
-        const isVisible = normalizeBoolean(row.is_visible, true);
+        const isVisible = normalizeBoolean(row.is_publicly_visible, false);
         const manageable = isManageableAssignment(row);
         const interaction = rowInteraction(rowId);
         return (

@@ -4,7 +4,7 @@ import type { MediaHubModulesState } from "../media-hub-modules/types";
 import type { MediaSidebarModulesState } from "../media-sidebar-modules/types";
 import type { HeroSectionData } from "../page-sections";
 import type { PageLayoutSlot } from "./layout-slots";
-import type { ResolvedPageBlock } from "./types";
+import type { PageBlockPublicState, ResolvedPageBlock } from "./types";
 
 export type PageLayoutMode = "stack" | "main-sidebar";
 
@@ -34,6 +34,8 @@ export type SlotEntry = HeroSlotEntry | BlockSlotEntry | FeedSlotEntry;
 export type PageComposition = {
   layoutMode: PageLayoutMode;
   slots: Record<PageLayoutSlot, SlotEntry[]>;
+  /** Page Block assignment/publication truth before render filtering. */
+  blockStates: PageBlockPublicState[];
   heroVisibility: HeroSectionVisibility;
   mediaHubModules: MediaHubModulesState | null;
   mediaSidebarModules: MediaSidebarModulesState | null;

@@ -15,10 +15,10 @@ import { getHeroConfig } from "../../lib/page-sections";
 import {
   heroFlexJustifyClass,
   heroTextAlignClass,
+  resolveDistinctHeroDescription,
   type HeroElementKey,
   type HeroTextAlignment,
 } from "../../lib/hero/hero-content-controls";
-import { isHtmlContent } from "../../lib/rich-text/html-utils";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
 import { usePrefersReducedMotion } from "../../hooks/use-prefers-reduced-motion";
@@ -198,17 +198,18 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reducedMotion = usePrefersReducedMotion();
-  const canSwipe = slides.length > 1;
-  const safeIndex = Math.min(activeIndex, Math.max(slides.length - 1, 0));
+  const slideCount = slides.length;
+  const canSwipe = slideCount > 1;
+  const safeIndex = Math.min(activeIndex, Math.max(slideCount - 1, 0));
 
   const startAutoplay = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (!canSwipe || reducedMotion) return;
 
     timerRef.current = setInterval(() => {
-      setActiveIndex((current) => (current + 1) % slides.length);
+      setActiveIndex((current) => (current + 1) % slideCount);
     }, 7500);
-  }, [canSwipe, reducedMotion, slides.length]);
+  }, [canSwipe, reducedMotion, slideCount]);
 
   useEffect(() => {
     startAutoplay();
@@ -220,7 +221,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   useEffect(() => {
     if (!canSwipe || reducedMotion) return;
 
-    const nextIndex = (safeIndex + 1) % slides.length;
+    const nextIndex = (safeIndex + 1) % slideCount;
     const preparationTimer = setTimeout(() => {
       setPreparedSlideIndexes((current) => {
         if (current.has(nextIndex)) return current;
@@ -229,19 +230,19 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
     }, 2500);
 
     return () => clearTimeout(preparationTimer);
-  }, [canSwipe, reducedMotion, safeIndex, slides.length]);
+  }, [canSwipe, reducedMotion, safeIndex, slideCount]);
 
   const goToNext = useCallback(() => {
     if (!canSwipe) return;
-    setActiveIndex((current) => (current + 1) % slides.length);
+    setActiveIndex((current) => (current + 1) % slideCount);
     startAutoplay();
-  }, [canSwipe, slides.length, startAutoplay]);
+  }, [canSwipe, slideCount, startAutoplay]);
 
   const goToPrev = useCallback(() => {
     if (!canSwipe) return;
-    setActiveIndex((current) => (current - 1 + slides.length) % slides.length);
+    setActiveIndex((current) => (current - 1 + slideCount) % slideCount);
     startAutoplay();
-  }, [canSwipe, slides.length, startAutoplay]);
+  }, [canSwipe, slideCount, startAutoplay]);
 
   const handleGoTo = useCallback(
     (index: number) => {
@@ -260,7 +261,10 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   const title = config.title ?? "";
   const highlight = config.highlight ?? "";
   const subtitle = config.subtitle ?? "";
-  const description = config.description ?? "";
+  const description = resolveDistinctHeroDescription(
+    config.description,
+    subtitle,
+  );
 
   const hasHeroContent = Boolean(
     images.length ||
@@ -333,7 +337,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               </div>
             ) : null}
 
-            {description && description !== subtitle ? (
+            {description ? (
               <p
                 className={`${subtitle ? "mt-4" : "mt-6"} max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9`}
               >
@@ -423,13 +427,6 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
       ) : null}
     </section>
   );
-}
-
-function splitHeroDescription(description?: string) {
-  return (description ?? "")
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
 }
 
 function HeroReservedSlot({
@@ -522,7 +519,10 @@ function InternalDynamicHero({
   const eyebrow = config.eyebrow || fallbackEyebrow || "Internal Page";
   const highlight = (config.highlight || "").trim();
   const subtitle = (config.subtitle || fallbackSubtitle || "").trim();
-  const description = (config.description || "").trim();
+  const description = resolveDistinctHeroDescription(
+    config.description,
+    subtitle,
+  );
   const imagePosition =
     config.imagePositionClassName ?? (isCompactHero ? "object-[50%_42%]" : "object-center");
   const brightness = isCompactHero
@@ -639,17 +639,11 @@ function InternalDynamicHero({
               : ""
         }`}
       >
-        {isHtmlContent(description) ? (
-          <RichTextContent
-            value={description}
-            mode="rich"
-            className="text-[15px] leading-8 text-white/60 md:text-base md:leading-9 [&_p]:mb-1.5 [&_p:last-child]:mb-0"
-          />
-        ) : (
-          <p className="text-[15px] leading-8 whitespace-pre-line text-white/60 md:text-base md:leading-9">
-            {splitHeroDescription(description).join("\n")}
-          </p>
-        )}
+        <RichTextContent
+          value={description}
+          mode="auto"
+          className="block whitespace-pre-line text-[15px] leading-8 text-white/68 md:text-base md:leading-9 [&_a]:text-[#E8D5A8] [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-r-2 [&_blockquote]:border-[#D8B87A]/45 [&_blockquote]:pr-4 [&_h1]:mb-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pr-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-white/85 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pr-5"
+        />
       </HeroReservedSlot>
     ),
     breadcrumb: hasBreadcrumb ? (

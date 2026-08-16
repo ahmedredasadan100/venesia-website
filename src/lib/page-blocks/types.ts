@@ -61,13 +61,28 @@ export type ResolvedPageBlock =
       template: PageBlockTemplateBase & { config: BreadcrumbBlockConfig };
     };
 
+/** Canonical pre-filter truth for a Page Block assignment on a public page. */
+export type PageBlockPublicState = {
+  assignmentId: number;
+  blockType: PageBlockType;
+  templateId: number;
+  templateSlug: string;
+  templateStatus: string;
+  templatePublished: boolean;
+  assignmentVisible: boolean;
+  publiclyVisible: boolean;
+};
+
 export type PageBlockAssignmentRow = {
   id: number;
   page_id: number;
   template_id: number;
   slot: string;
   sort_order: number;
+  /** Raw page-assignment visibility, independently editable while published. */
   is_visible: boolean;
+  /** Effective public state: published template and visible assignment. */
+  is_publicly_visible: boolean;
   updated_at: string;
   module_kind: PageModuleKind;
   block_type: PageBlockType | null;

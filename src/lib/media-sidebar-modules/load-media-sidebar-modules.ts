@@ -1,9 +1,6 @@
 import "server-only";
 
-import {
-  isPublishedPageBlockStatus,
-  normalizeBoolean,
-} from "../page-blocks/admin-utils";
+import { isPageModulePubliclyVisible } from "../page-blocks/admin-utils";
 import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseMediaSidebarModuleConfig } from "./parse-config";
@@ -42,12 +39,16 @@ export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaS
   const widgets: MediaSidebarWidgetState[] = [];
   for (const row of rows ?? []) {
     const template = joinedTemplate(row.media_sidebar_module_templates);
-    if (!template || !isPublishedPageBlockStatus(template.status) || !isWidgetKey(template.widget_key)) continue;
+    if (
+      !template ||
+      !isPageModulePubliclyVisible(true, template.status) ||
+      !isWidgetKey(template.widget_key)
+    ) continue;
     widgets.push({
       widgetKey: template.widget_key,
       assignmentId: row.id,
       sortOrder: row.sort_order,
-      isVisible: normalizeBoolean(row.is_visible, true),
+      isVisible: isPageModulePubliclyVisible(row.is_visible, template.status),
       title: template.name,
       config: parseMediaSidebarModuleConfig(template.config, template.widget_key),
     });

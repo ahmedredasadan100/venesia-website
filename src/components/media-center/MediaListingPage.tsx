@@ -2,6 +2,7 @@ import MediaFeaturedHero from "./MediaFeaturedHero";
 import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
+import { isMediaListingShellPublished } from "./media-listing-shell-model";
 import {
   getMediaHref,
   getMediaListingPage,
@@ -32,6 +33,12 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     searchParams ?? Promise.resolve(undefined),
     loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
   ]);
+  if (
+    !isMediaListingShellPublished(
+      config.cmsPageSlug,
+      composition.blockStates,
+    )
+  ) return null;
   if (!composition.mediaSidebarModules) return null;
 
   const sort = params?.sort === "oldest" ? "oldest" : "newest";

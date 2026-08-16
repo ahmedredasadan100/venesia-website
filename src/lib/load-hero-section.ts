@@ -7,6 +7,7 @@ import { resolveHeroConfigLinks } from "./admin/links/hero-config";
 import { loadPublicContentCollection } from "./content/public-content-read/owner";
 import type { Json, Tables } from "./database.types";
 import { MEDIA_CONTENT_TYPES } from "./media-center/types";
+import { isPageModulePubliclyVisible } from "./page-blocks/admin-utils";
 import { getPublishedPageBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { logError } from "./logging";
@@ -116,7 +117,7 @@ function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): 
     source_id: template.source_id,
     source_slug: template.source_slug,
     limit_count: template.limit_count,
-    is_visible: template.status === "published",
+    is_visible: isPageModulePubliclyVisible(true, template.status),
     sort_order: template.sort_order,
     config: template.config,
     page,
@@ -153,7 +154,7 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
     logError("getAssignedHeroTemplate by id failed", byId.error, { pageId: page.id });
   } else if (byId.data?.hero_templates) {
     const template = mapHeroTemplateSelection(byId.data.hero_templates);
-    return template?.status === "published" ? template : null;
+    return isPageModulePubliclyVisible(true, template?.status) ? template : null;
   }
 
   const byPath = await supabaseAdmin
@@ -170,7 +171,7 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
     logError("getAssignedHeroTemplate by path failed", byPath.error, { path: page.path });
   } else if (byPath.data?.hero_templates) {
     const template = mapHeroTemplateSelection(byPath.data.hero_templates);
-    return template?.status === "published" ? template : null;
+    return isPageModulePubliclyVisible(true, template?.status) ? template : null;
   }
 
   return null;

@@ -8,8 +8,7 @@ import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import { getPublishedPageBySlug } from "../pages/get-published-page-by-slug";
 import {
-  isPublishedPageBlockStatus,
-  normalizeBoolean,
+  isPageModulePubliclyVisible,
 } from "../page-blocks/admin-utils";
 import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
 import type { PageLayoutSlot } from "../page-blocks/layout-slots";
@@ -87,8 +86,6 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
   const hasAnyAssignmentRows = (assignments?.length ?? 0) > 0;
 
   const resolvableAssignments = (assignments ?? []).flatMap((row) => {
-    if (!normalizeBoolean(row.is_visible, true)) return [];
-
     const selectedTemplate = joinedTemplate(row.feed_module_templates);
     if (!selectedTemplate) return [];
 
@@ -100,7 +97,7 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
       feed_type: feedType,
       config: isJsonObject(selectedTemplate.config) ? selectedTemplate.config : null,
     };
-    if (!isPublishedPageBlockStatus(template.status)) return [];
+    if (!isPageModulePubliclyVisible(row.is_visible, template.status)) return [];
 
     const config = parseFeedModuleConfig(template.config, template.feed_type);
     return [{ row, template, config }];

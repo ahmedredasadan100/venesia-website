@@ -5,16 +5,21 @@ import { fileURLToPath } from "node:url";
 
 import { buildPaginationItems } from "../src/components/pagination-model.ts";
 import {
+  isMediaListingShellPublished,
   isMediaListingShellPlaceholder,
   resolveMediaListingMainBlocks,
 } from "../src/components/media-center/media-listing-shell-model.ts";
+import { resolveDistinctHeroDescription } from "../src/lib/hero/hero-content-controls.ts";
 import {
   buildMediaHubModuleConfig,
   getDefaultMediaListingPresentation,
   parseMediaHubModuleConfig,
 } from "../src/lib/media-hub-modules/parse-config.ts";
 import type { ContentBlockConfig } from "../src/lib/page-blocks/configs.ts";
-import type { ResolvedPageBlock } from "../src/lib/page-blocks/types.ts";
+import type {
+  PageBlockPublicState,
+  ResolvedPageBlock,
+} from "../src/lib/page-blocks/types.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -177,6 +182,50 @@ assert.deepEqual(
 );
 assert.deepEqual(resolveMediaListingMainBlocks("media-center-news", []), []);
 
+function listingShellState(
+  status: string,
+  assignmentVisible: boolean,
+): PageBlockPublicState {
+  return {
+    assignmentId: 66,
+    blockType: "content",
+    templateId: 62,
+    templateSlug: "media-center-site-updates-listing-shell",
+    templateStatus: status,
+    templatePublished: status === "published",
+    assignmentVisible,
+    publiclyVisible: status === "published" && assignmentVisible,
+  };
+}
+
+assert.equal(
+  isMediaListingShellPublished(
+    "media-center-site-updates",
+    [listingShellState("published", true)],
+  ),
+  true,
+);
+assert.equal(
+  isMediaListingShellPublished(
+    "media-center-site-updates",
+    [listingShellState("published", false)],
+  ),
+  true,
+  "assignment visibility controls the optional prefix, not listing activation",
+);
+assert.equal(
+  isMediaListingShellPublished(
+    "media-center-site-updates",
+    [listingShellState("unpublished", true)],
+  ),
+  false,
+);
+assert.equal(
+  isMediaListingShellPublished("media-center-site-updates", []),
+  false,
+);
+assert.equal(isMediaListingShellPublished("media-center", []), true);
+
 const partiallyManagedListingShell = contentBlock(
   3,
   "media-center-videos-listing-shell",
@@ -237,10 +286,21 @@ for (const contract of ["layout", "columns", "paginationEnabled", "cardVariant",
 
 const listingPageSource = read("src/components/media-center/MediaListingPage.tsx");
 assert.ok(listingPageSource.includes("resolveMediaListingPresentation"));
+assert.ok(listingPageSource.includes("isMediaListingShellPublished"));
+assert.ok(
+  listingPageSource.indexOf("isMediaListingShellPublished") <
+    listingPageSource.indexOf("getMediaListingPage({"),
+  "Listing Shell publication must gate the runtime before its content query",
+);
 assert.ok(listingPageSource.includes("resolveMediaListingFeaturedSelection"));
 assert.ok(!listingPageSource.includes('presentation.featuredMode ==='));
 assert.ok(listingPageSource.includes("MediaFeaturedHero"));
 assert.ok(!listingPageSource.includes("FeaturedNews"));
+const listingShellOwnerSource = read(
+  "src/components/media-center/media-listing-shell-model.ts",
+);
+assert.ok(listingShellOwnerSource.includes("shell?.templatePublished"));
+assert.ok(!listingShellOwnerSource.includes('templateStatus === "published"'));
 const listingPresentationSource = read("src/lib/media-hub-modules/listing-presentation.ts");
 assert.ok(listingPresentationSource.includes('module.config.placement === "listing"'));
 assert.ok(listingPresentationSource.includes('featuredMode: "disabled"'));
@@ -349,6 +409,38 @@ for (const candidate of featuredOwnerCandidates) {
     `${candidate} must not own a Latest featured fallback`,
   );
 }
+
+assert.equal(
+  resolveDistinctHeroDescription(
+    "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
+    "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
+  ),
+  "",
+);
+assert.equal(
+  resolveDistinctHeroDescription(
+    "<p>متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.</p>",
+    "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
+  ),
+  "",
+  "equivalent rich text and plain subtitle copy must deduplicate",
+);
+assert.equal(
+  resolveDistinctHeroDescription("وصف مستقل", "عنوان فرعي"),
+  "وصف مستقل",
+);
+const dynamicHeroSource = read("src/components/sections/DynamicHeroSection.tsx");
+assert.ok(dynamicHeroSource.includes("resolveDistinctHeroDescription"));
+assert.ok(dynamicHeroSource.includes('mode="auto"'));
+assert.ok(dynamicHeroSource.includes("[&_p]:mb-3"));
+assert.ok(dynamicHeroSource.includes("whitespace-pre-line"));
+const contentSectionSource = read("src/components/sections/ContentSection.tsx");
+assert.ok(contentSectionSource.includes("RichTextContent"));
+assert.equal(contentSectionSource.match(/mode="auto"/g)?.length, 2);
+assert.ok(contentSectionSource.includes('dir="rtl"'));
+assert.ok(contentSectionSource.includes("md:leading-9"));
+assert.ok(contentSectionSource.includes("[&_p]:mb-4"));
+assert.ok(!contentSectionSource.includes(".split(/\\n{2,}/)"));
 
 const topicsClientSource = read("src/components/admin/content/TopicsListClient.tsx");
 const instantMutationSource = read("src/lib/admin/entity-list/data-engine/instant-mutation.ts");

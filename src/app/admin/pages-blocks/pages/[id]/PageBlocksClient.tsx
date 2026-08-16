@@ -29,6 +29,7 @@ import {
   normalizePageCompositionVisibleColumnKeys,
 } from "../../../../../lib/page-blocks/admin-collection-columns";
 import {
+  isPageModulePubliclyVisible,
   moduleKindLabel,
   normalizeBoolean,
 } from "../../../../../lib/page-blocks/admin-utils";
@@ -176,7 +177,8 @@ export default function PageBlocksClient({
       module_kind: (row: PageBlockAssignmentRow) => moduleKindLabel(row.module_kind),
       template_name: (row: PageBlockAssignmentRow) => row.template_name,
       slot: (row: PageBlockAssignmentRow) => PAGE_LAYOUT_SLOT_ORDER.indexOf(normalizeLayoutSlot(row.slot)),
-      visibility: (row: PageBlockAssignmentRow) => (normalizeBoolean(row.is_visible, true) ? 0 : 1),
+      visibility: (row: PageBlockAssignmentRow) =>
+        (normalizeBoolean(row.is_publicly_visible, false) ? 0 : 1),
     }),
     [],
   );
@@ -244,7 +246,9 @@ export default function PageBlocksClient({
         const visibility = query.filters.visibility;
         if (moduleType !== "all" && row.module_kind !== moduleType) return false;
         if (slot !== "all" && normalizeLayoutSlot(row.slot) !== slot) return false;
-        const rowVisibility = normalizeBoolean(row.is_visible, true) ? "visible" : "hidden";
+        const rowVisibility = normalizeBoolean(row.is_publicly_visible, false)
+          ? "visible"
+          : "hidden";
         return visibility === "all" || rowVisibility === visibility;
       },
       getRowId: assignmentRowId,
@@ -288,6 +292,7 @@ export default function PageBlocksClient({
   async function handleToggleVisibility(row: PageBlockAssignmentRow) {
     if (!isManageableAssignment(row)) return;
     const isVisible = normalizeBoolean(row.is_visible, true);
+    const nextAssignmentVisible = !isVisible;
     const formData = new FormData();
     formData.set("page_id", String(page.id));
     formData.set("assignment_id", String(row.id));
@@ -301,7 +306,14 @@ export default function PageBlocksClient({
         optimistic: (cache) =>
           cache.patchRows((candidate) =>
             assignmentRowId(candidate) === assignmentRowId(row)
-              ? { ...candidate, is_visible: !isVisible }
+              ? {
+                  ...candidate,
+                  is_visible: nextAssignmentVisible,
+                  is_publicly_visible: isPageModulePubliclyVisible(
+                    nextAssignmentVisible,
+                    candidate.template_status,
+                  ),
+                }
               : candidate,
           ),
         execute: async () => {
@@ -478,7 +490,14 @@ export default function PageBlocksClient({
           }
           cache.patchRows((candidate) =>
             idSet.has(assignmentRowId(candidate))
-              ? { ...candidate, is_visible: action === "show" }
+              ? {
+                  ...candidate,
+                  is_visible: action === "show",
+                  is_publicly_visible: isPageModulePubliclyVisible(
+                    action === "show",
+                    candidate.template_status,
+                  ),
+                }
               : candidate,
           );
         },
