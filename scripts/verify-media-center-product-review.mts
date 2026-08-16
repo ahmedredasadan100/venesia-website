@@ -90,30 +90,24 @@ const managedListingConfig = buildMediaHubModuleConfig(
   {
     placement: "listing",
     mediaType: "video",
-    featuredMode: "manual",
-    manualTopicId: 42,
     pageSize: 12,
     layout: "vertical",
     columns: 3,
     paginationEnabled: false,
     cardVariant: "compact",
-    featuredCtaText: "شاهد الآن",
     cardCtaText: "شاهد التفاصيل",
   },
 );
 assert.equal(managedListingConfig.placement, "listing");
 assert.deepEqual(managedListingConfig.listing, {
-  featuredMode: "manual",
-  manualTopicId: 42,
   pageSize: 12,
   layout: "vertical",
   columns: 3,
   paginationEnabled: false,
   cardVariant: "compact",
-  featuredCtaText: "شاهد الآن",
   cardCtaText: "شاهد التفاصيل",
 });
-assert.equal(listingDefaults.featuredMode, "automatic");
+assert.equal("featuredMode" in listingDefaults, false);
 
 function contentBlock(
   assignmentId: number,
@@ -292,9 +286,9 @@ assert.ok(
     listingPageSource.indexOf("getMediaListingPage({"),
   "Listing Shell publication must gate the runtime before its content query",
 );
-assert.ok(listingPageSource.includes("resolveMediaListingFeaturedSelection"));
-assert.ok(!listingPageSource.includes('presentation.featuredMode ==='));
-assert.ok(listingPageSource.includes("MediaFeaturedHero"));
+assert.ok(!listingPageSource.includes("resolveMediaListingFeaturedSelection"));
+assert.ok(!listingPageSource.includes("featuredSelection"));
+assert.ok(!listingPageSource.includes("MediaFeaturedHero"));
 assert.ok(!listingPageSource.includes("FeaturedNews"));
 const listingShellOwnerSource = read(
   "src/components/media-center/media-listing-shell-model.ts",
@@ -303,10 +297,9 @@ assert.ok(listingShellOwnerSource.includes("shell?.templatePublished"));
 assert.ok(!listingShellOwnerSource.includes('templateStatus === "published"'));
 const listingPresentationSource = read("src/lib/media-hub-modules/listing-presentation.ts");
 assert.ok(listingPresentationSource.includes('module.config.placement === "listing"'));
-assert.ok(listingPresentationSource.includes('featuredMode: "disabled"'));
-assert.ok(listingPresentationSource.includes('presentation.featuredMode === "automatic"'));
-assert.ok(listingPresentationSource.includes('{ mode: "automatic" }'));
-assert.ok(listingPresentationSource.includes('{ mode: "manual", topicId: presentation.manualTopicId }'));
+for (const retiredField of ["featuredMode", "manualTopicId", "featuredSelection"]) {
+  assert.ok(!listingPresentationSource.includes(retiredField));
+}
 
 const shellSource = read("src/components/media-center/MediaCenterShellLayout.tsx");
 assert.ok(shellSource.includes("resolveMediaListingMainBlocks"));
@@ -340,6 +333,18 @@ assert.match(
   /export function revalidatePageCompositionCache\(\) \{\s+updatePublicCacheTags\(PUBLIC_CACHE_TAG_GROUPS\.pageComposition\);\s+\}/,
   "Page Composition writes must expire their shared cache immediately",
 );
+for (const owner of [
+  "revalidateHeroCache",
+  "revalidatePageBlocksCache",
+  "revalidateFeedModulesCache",
+  "revalidateMediaSidebarCache",
+]) {
+  assert.match(
+    cacheOwnerSource,
+    new RegExp(`export function ${owner}\\(\\) \\{\\s+updatePublicCacheTags\\(`),
+    `${owner} must expire its Page Composition cache immediately`,
+  );
+}
 
 const paginationSource = read("src/components/Pagination.tsx");
 assert.ok(paginationSource.startsWith('"use client"'));
@@ -356,14 +361,11 @@ for (const fieldName of ["eyebrow", "title", "presentation_description", "cta_te
   assert.ok(editorSource.includes(`name="${fieldName}"`), `missing CMS field ${fieldName}`);
 }
 for (const fieldName of [
-  "featured_mode",
-  "manual_topic_id",
   "page_size",
   "listing_layout",
   "listing_columns",
   "pagination_enabled",
   "card_variant",
-  "featured_cta_text",
   "card_cta_text",
 ]) {
   assert.ok(editorSource.includes(`name="${fieldName}"`), `missing listing CMS field ${fieldName}`);
@@ -373,8 +375,10 @@ const actionSource = read("src/app/admin/pages-blocks/blocks/media-hub/actions.t
 assert.ok(actionSource.includes("buildMediaHubModuleConfig"));
 assert.ok(actionSource.includes('formData.get("presentation_description")'));
 assert.ok(actionSource.includes('formData.get("cta_text")'));
-assert.ok(actionSource.includes('formData.get("featured_mode")'));
-assert.ok(actionSource.includes('formData.get("manual_topic_id")'));
+for (const retiredField of ["featured_mode", "manual_topic_id", "featured_cta_text"]) {
+  assert.ok(!editorSource.includes(retiredField));
+  assert.ok(!actionSource.includes(retiredField));
+}
 
 const compositionSource = read("src/lib/page-blocks/load-page-composition.ts");
 assert.ok(compositionSource.includes("queryMediaHubModules(pageSlug, { enrich: pageSlug === \"media-center\" })"));
@@ -394,8 +398,6 @@ assert.ok(mediaProviderSource.includes("featuredSelection: params.featuredSelect
 assert.ok(hubDataSource.includes('featuredSelection: { mode: "automatic" }'));
 assert.ok(!hubDataSource.includes("news.find"));
 assert.ok(!hubDataSource.includes("news[0]"));
-assert.ok(editorSource.includes("المحتوى المميّز فقط"));
-assert.ok(editorSource.includes("عند عدم وجود محتوى مميّز لن يظهر الـHero"));
 
 const featuredOwnerCandidates = [
   "src/components/media-center/MediaListingPage.tsx",
@@ -430,17 +432,33 @@ assert.equal(
   "وصف مستقل",
 );
 const dynamicHeroSource = read("src/components/sections/DynamicHeroSection.tsx");
+const heroOwnerSource = read("src/lib/load-hero-section.ts");
 assert.ok(dynamicHeroSource.includes("resolveDistinctHeroDescription"));
 assert.ok(dynamicHeroSource.includes('mode="auto"'));
 assert.ok(dynamicHeroSource.includes("[&_p]:mb-3"));
 assert.ok(dynamicHeroSource.includes("whitespace-pre-line"));
+assert.ok(dynamicHeroSource.includes('data-hero-featured-topic="true"'));
+assert.ok(heroOwnerSource.includes("heroSourceRequiresResolvedItems"));
+assert.ok(heroOwnerSource.includes("resolvedItems.length === 0"));
+assert.ok(heroOwnerSource.includes('hero.source_type === "featured_media" && isMediaContentType(hero.source_slug)'));
 const contentSectionSource = read("src/components/sections/ContentSection.tsx");
 assert.ok(contentSectionSource.includes("RichTextContent"));
 assert.equal(contentSectionSource.match(/mode="auto"/g)?.length, 2);
 assert.ok(contentSectionSource.includes('dir="rtl"'));
 assert.ok(contentSectionSource.includes("md:leading-9"));
 assert.ok(contentSectionSource.includes("[&_p]:mb-4"));
+assert.ok(contentSectionSource.includes("if (!hasHeading && !hasBody) return null"));
+assert.ok(contentSectionSource.includes("max-w-4xl"));
 assert.ok(!contentSectionSource.includes(".split(/\\n{2,}/)"));
+
+const adminAssignmentRowSource = read(
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
+);
+assert.ok(adminAssignmentRowSource.includes("data-module-publication-state="));
+assert.ok(adminAssignmentRowSource.includes("data-module-public-visibility="));
+assert.ok(adminAssignmentRowSource.includes('label: "حالة النشر"'));
+assert.ok(adminAssignmentRowSource.includes('label: "الربط بالصفحة"'));
+assert.ok(adminAssignmentRowSource.includes('label: "الظهور العام"'));
 
 const topicsClientSource = read("src/components/admin/content/TopicsListClient.tsx");
 const instantMutationSource = read("src/lib/admin/entity-list/data-engine/instant-mutation.ts");
@@ -485,5 +503,17 @@ assert.ok(listingMigration.includes("'kind', 'media_hub'"));
 assert.ok(listingMigration.includes("'default_slot', 'main'"));
 assert.ok(listingMigration.includes("'page_ids', jsonb_build_array(v_listing.page_id)"));
 assert.ok(!listingMigration.match(/insert\s+into\s+public\.page_media_hub_module_assignments/iu));
+
+const heroOwnerMigration = read(
+  "sql/migrations/20260816090000_media_center_hero_owner_closure.sql",
+);
+for (const sourceSlug of ["news", "video", "gallery", "press", "site_update"]) {
+  assert.ok(heroOwnerMigration.includes(`then '${sourceSlug}'`));
+}
+assert.ok(heroOwnerMigration.includes("source_type = 'featured_media'"));
+for (const retiredKey of ["featuredMode", "manualTopicId", "featuredCtaText"]) {
+  assert.ok(heroOwnerMigration.includes(`- '${retiredKey}'`));
+}
+assert.ok(!heroOwnerMigration.match(/create\s+(table|function|view|trigger)/iu));
 
 console.log("Media Center product review verification passed.");

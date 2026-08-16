@@ -15,6 +15,7 @@ import {
   isPublishedPageBlockStatus,
   moduleEditHref,
   moduleKindLabel,
+  normalizeBoolean,
 } from "../../../../../../lib/page-blocks/admin-utils";
 import { LAYOUT_SLOT_LABELS_AR, normalizeLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
@@ -67,6 +68,7 @@ export default function PageBlocksAssignmentRow({
 }: PageBlocksAssignmentRowProps) {
   const pendingAction = interaction.pendingAction;
   const templatePublished = isPublishedPageBlockStatus(row.template_status);
+  const assignmentVisible = normalizeBoolean(row.is_visible, false);
   const hidden = { access: "hidden" as const };
   const reorderDisabledTitle =
     "أعد فرز العرض إلى الترتيب الافتراضي لاستخدام الترتيب اليدوي.";
@@ -102,14 +104,9 @@ export default function PageBlocksAssignmentRow({
           { label: "نوع الموديول", value: moduleKindLabel(row.module_kind) },
           { label: "المعرّف", value: row.template_slug },
           { label: "الموضع", value: LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)] },
-          {
-            label: "الحالة",
-            value: !templatePublished
-              ? "غير منشور"
-              : isVisible
-                ? "ظاهر"
-                : "مخفي",
-          },
+          { label: "حالة النشر", value: templatePublished ? "منشور" : "غير منشور" },
+          { label: "الربط بالصفحة", value: assignmentVisible ? "ظاهر" : "مخفي" },
+          { label: "الظهور العام", value: isVisible ? "ظاهر للعامة" : "غير ظاهر للعامة" },
         ],
       },
       copyPublicLink: hidden,
@@ -185,11 +182,16 @@ export default function PageBlocksAssignmentRow({
         >
           {row.template_name}
         </Link>
-        {!templatePublished ? (
-          <span className="shrink-0 rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-200/85">
-            غير منشور
-          </span>
-        ) : null}
+        <span
+          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${
+            templatePublished
+              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200/85"
+              : "border-amber-400/25 bg-amber-400/10 text-amber-200/85"
+          }`}
+          data-module-publication-state={templatePublished ? "published" : "unpublished"}
+        >
+          {templatePublished ? "منشور" : "غير منشور"}
+        </span>
       </AdminDataGridPrimaryCell>
 
       {showModule ? (
@@ -204,11 +206,19 @@ export default function PageBlocksAssignmentRow({
 
       {showStatus ? (
         <AdminDataGridStatusCell>
-          <AdminDataGridRowActions
-            capability={capability}
-            display="visibility"
-            size="compact"
-          />
+          <div className="flex items-center justify-center gap-2">
+            <span
+              className={`text-[10px] ${isVisible ? "text-emerald-200/80" : "text-white/40"}`}
+              data-module-public-visibility={isVisible ? "visible" : "hidden"}
+            >
+              {isVisible ? "ظاهر للعامة" : "غير ظاهر للعامة"}
+            </span>
+            <AdminDataGridRowActions
+              capability={capability}
+              display="visibility"
+              size="compact"
+            />
+          </div>
         </AdminDataGridStatusCell>
       ) : null}
 

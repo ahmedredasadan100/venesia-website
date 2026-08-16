@@ -4,20 +4,16 @@ import type { MediaHubSectionKey } from "./types";
 export type MediaHubMediaType = "news" | "site_update" | "video" | "gallery" | "press";
 
 export type MediaHubModulePlacement = "hub" | "listing";
-export type MediaListingFeaturedMode = "automatic" | "manual" | "disabled";
 export type MediaListingLayout = "grid" | "vertical";
 export type MediaListingColumns = 1 | 2 | 3;
 export type MediaListingCardVariant = "default" | "compact";
 
 export type MediaListingPresentationConfig = {
-  featuredMode: MediaListingFeaturedMode;
-  manualTopicId: number | null;
   pageSize: number;
   layout: MediaListingLayout;
   columns: MediaListingColumns;
   paginationEnabled: boolean;
   cardVariant: MediaListingCardVariant;
-  featuredCtaText: string;
   cardCtaText: string;
 };
 
@@ -50,21 +46,19 @@ const MEDIA_HUB_MEDIA_TYPES: readonly MediaHubMediaType[] = [
 
 const LISTING_CTA_DEFAULTS: Record<
   MediaHubMediaType,
-  Pick<MediaListingPresentationConfig, "featuredCtaText" | "cardCtaText">
+  Pick<MediaListingPresentationConfig, "cardCtaText">
 > = {
-  news: { featuredCtaText: "اقرأ الخبر الكامل", cardCtaText: "قراءة الخبر" },
-  press: { featuredCtaText: "اقرأ البيان الكامل", cardCtaText: "قراءة البيان" },
-  site_update: { featuredCtaText: "عرض التحديث الكامل", cardCtaText: "عرض التحديث" },
-  video: { featuredCtaText: "مشاهدة الفيديو", cardCtaText: "مشاهدة الفيديو" },
-  gallery: { featuredCtaText: "عرض الصور", cardCtaText: "عرض الصور" },
+  news: { cardCtaText: "قراءة الخبر" },
+  press: { cardCtaText: "قراءة البيان" },
+  site_update: { cardCtaText: "عرض التحديث" },
+  video: { cardCtaText: "مشاهدة الفيديو" },
+  gallery: { cardCtaText: "عرض الصور" },
 };
 
 export function getDefaultMediaListingPresentation(
   mediaType: MediaHubMediaType,
 ): MediaListingPresentationConfig {
   return {
-    featuredMode: "automatic",
-    manualTopicId: null,
     pageSize: 2,
     layout: "grid",
     columns: 2,
@@ -198,15 +192,7 @@ function readListingPresentation(
   const columns = value.columns === 1 || value.columns === 2 || value.columns === 3
     ? value.columns
     : fallback.columns;
-  const manualTopicId = Number(value.manualTopicId);
-
   return {
-    featuredMode:
-      value.featuredMode === "manual" || value.featuredMode === "disabled"
-        ? value.featuredMode
-        : "automatic",
-    manualTopicId:
-      Number.isSafeInteger(manualTopicId) && manualTopicId > 0 ? manualTopicId : null,
     pageSize,
     layout: value.layout === "vertical" ? "vertical" : "grid",
     columns,
@@ -215,10 +201,6 @@ function readListingPresentation(
         ? value.paginationEnabled
         : fallback.paginationEnabled,
     cardVariant: value.cardVariant === "compact" ? "compact" : "default",
-    featuredCtaText:
-      typeof value.featuredCtaText === "string" && value.featuredCtaText.trim()
-        ? value.featuredCtaText.trim()
-        : fallback.featuredCtaText,
     cardCtaText:
       typeof value.cardCtaText === "string" && value.cardCtaText.trim()
         ? value.cardCtaText.trim()
@@ -298,14 +280,11 @@ export function buildMediaHubModuleConfig(
   listingInput?: {
     placement: MediaHubModulePlacement;
     mediaType: string;
-    featuredMode: string;
-    manualTopicId: number;
     pageSize: number;
     layout: string;
     columns: number;
     paginationEnabled: boolean;
     cardVariant: string;
-    featuredCtaText: string;
     cardCtaText: string;
   },
 ): MediaHubModuleConfig {
@@ -325,14 +304,6 @@ export function buildMediaHubModuleConfig(
       type: mediaType,
       presentation,
       listing: {
-        featuredMode:
-          listingInput.featuredMode === "manual" || listingInput.featuredMode === "disabled"
-            ? listingInput.featuredMode
-            : "automatic",
-        manualTopicId:
-          Number.isSafeInteger(listingInput.manualTopicId) && listingInput.manualTopicId > 0
-            ? listingInput.manualTopicId
-            : null,
         pageSize: Math.min(60, Math.max(1, Math.floor(listingInput.pageSize || defaults.pageSize))),
         layout: listingInput.layout === "vertical" ? "vertical" : "grid",
         columns:
@@ -341,7 +312,6 @@ export function buildMediaHubModuleConfig(
             : defaults.columns,
         paginationEnabled: listingInput.paginationEnabled,
         cardVariant: listingInput.cardVariant === "compact" ? "compact" : "default",
-        featuredCtaText: listingInput.featuredCtaText || defaults.featuredCtaText,
         cardCtaText: listingInput.cardCtaText || defaults.cardCtaText,
       },
     };

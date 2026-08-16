@@ -1,4 +1,3 @@
-import MediaFeaturedHero from "./MediaFeaturedHero";
 import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
@@ -14,7 +13,6 @@ import {
 } from "../../lib/media-center/listing-page-config";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 import {
-  resolveMediaListingFeaturedSelection,
   resolveMediaListingPresentation,
 } from "../../lib/media-hub-modules/listing-presentation";
 
@@ -49,20 +47,14 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     composition.mediaHubModules,
     config.mediaType,
   );
-  const featuredSelection = searchQuery
-    ? undefined
-    : resolveMediaListingFeaturedSelection(presentation);
-
   const listing = await getMediaListingPage({
     type: config.mediaType,
     page: presentation.paginationEnabled ? requestedPage : 1,
     sort,
     pageSize: presentation.pageSize,
-    featuredSelection,
     search: searchQuery,
   });
 
-  const featuredItem = listing.featured;
   const searchSuggestions = searchQuery
     ? listing.items.slice(0, 8).map((item) => ({
         id: `${item.type}:${item.id}`,
@@ -97,14 +89,7 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
           columns={presentation.columns}
           paginationEnabled={presentation.paginationEnabled}
           cardVariant={presentation.cardVariant}
-        >
-          {featuredItem ? (
-            <MediaFeaturedHero
-              item={featuredItem}
-              ctaText={presentation.featuredCtaText}
-            />
-          ) : null}
-        </MediaListingContent>
+        />
       </MediaPageShell>
     </MediaCenterShellLayout>
   );

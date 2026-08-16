@@ -6,7 +6,7 @@ import { unstable_cache } from "next/cache";
 import { resolveHeroConfigLinks } from "./admin/links/hero-config";
 import { loadPublicContentCollection } from "./content/public-content-read/owner";
 import type { Json, Tables } from "./database.types";
-import { MEDIA_CONTENT_TYPES } from "./media-center/types";
+import { isMediaContentType, MEDIA_CONTENT_TYPES } from "./media-center/types";
 import { isPageModulePubliclyVisible } from "./page-blocks/admin-utils";
 import { getPublishedPageBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
@@ -177,7 +177,9 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
   return null;
 }
 
-async function resolveHeroItems(hero: PageSectionRecord): Promise<HeroSectionData["resolvedItems"]> {
+async function resolveHeroItems(
+  hero: PageSectionRecord,
+): Promise<NonNullable<HeroSectionData["resolvedItems"]>> {
   const limit = Math.max(1, Math.min(hero.limit_count ?? 1, 12));
 
   if (hero.source_type === "manual") return [];
@@ -213,8 +215,12 @@ async function resolveHeroItems(hero: PageSectionRecord): Promise<HeroSectionDat
     hero.source_type === "featured_media" ||
     hero.source_type === "media_category"
   ) {
+    const contentTypes =
+      hero.source_type === "featured_media" && isMediaContentType(hero.source_slug)
+        ? [hero.source_slug]
+        : MEDIA_CONTENT_TYPES;
     const result = await loadPublicContentCollection({
-      contentTypes: MEDIA_CONTENT_TYPES,
+      contentTypes,
       page: 1,
       pageSize: limit,
       sort: "newest",
@@ -235,6 +241,11 @@ async function resolveHeroItems(hero: PageSectionRecord): Promise<HeroSectionDat
   }
 
   return [];
+}
+
+/** Dynamic Hero sources are renderable only when their authoritative source resolves content. */
+export function heroSourceRequiresResolvedItems(sourceType: HeroSourceType) {
+  return sourceType !== "manual";
 }
 
 async function pageHasHeroAssignment(page: PageRecord): Promise<boolean> {
@@ -288,7 +299,14 @@ async function queryHeroSectionState(pageSlug: string): Promise<HeroSectionState
   const assignedTemplate = await getAssignedHeroTemplate(page);
   if (assignedTemplate) {
     const hero = await templateToHeroSectionResolved(assignedTemplate, page);
-    hero.resolvedItems = await resolveHeroItems(hero);
+    const resolvedItems = await resolveHeroItems(hero);
+    hero.resolvedItems = resolvedItems;
+    if (
+      heroSourceRequiresResolvedItems(hero.source_type) &&
+      resolvedItems.length === 0
+    ) {
+      return { hero: null, visibility: "hidden" };
+    }
     return { hero, visibility: "visible" };
   }
 

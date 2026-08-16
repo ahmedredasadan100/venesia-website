@@ -534,6 +534,7 @@ function InternalDynamicHero({
     : "max-w-[14ch] text-[2rem] leading-[1.2] sm:text-4xl md:text-[2.5rem]";
 
   const hasBreadcrumb = Boolean(belowTitle);
+  const featuredItem = hero.resolvedItems?.[0] ?? null;
 
   const elements: Partial<Record<HeroElementKey, ReactNode>> = {
     eyebrow: (
@@ -664,7 +665,11 @@ function InternalDynamicHero({
   return (
     <section
       className={`relative isolate z-0 overflow-hidden bg-[#05070B] ${
-        isCompactHero ? "h-[min(46vh,500px)] min-h-[400px]" : "h-[min(62vh,580px)] min-h-[440px]"
+        isCompactHero
+          ? "h-[min(46vh,500px)] min-h-[400px]"
+          : featuredItem
+            ? "h-[min(74vh,680px)] min-h-[560px]"
+            : "h-[min(62vh,580px)] min-h-[440px]"
       }`}
       dir="rtl"
       data-hero-reduced-motion={reducedMotion ? "true" : undefined}
@@ -703,7 +708,49 @@ function InternalDynamicHero({
               })}
             </div>
 
-            <div aria-hidden className="hidden min-w-0 lg:block" />
+            {featuredItem ? (
+              <HeroIntentLink
+                href={featuredItem.href ?? "#"}
+                className="group min-w-0 rounded-[2rem] border border-white/[0.14] bg-black/30 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:border-[#D8B87A]/35 hover:bg-black/40"
+              >
+                <span
+                  className="flex min-w-0 items-center gap-4 lg:block"
+                  data-hero-featured-topic="true"
+                >
+                  {featuredItem.image ? (
+                    <span className="relative block h-24 w-28 shrink-0 overflow-hidden rounded-2xl lg:h-44 lg:w-full">
+                      <Image
+                        src={featuredItem.image}
+                        alt=""
+                        fill
+                        sizes="(min-width: 1024px) 420px, 112px"
+                        className="object-cover transition duration-700 group-hover:scale-105"
+                      />
+                    </span>
+                  ) : null}
+
+                  <span className="min-w-0 flex-1 px-1 py-1 text-right lg:px-3 lg:py-4">
+                    {featuredItem.category ? (
+                      <span className="block text-[11px] text-[#D8B87A]/75">
+                        {featuredItem.category}
+                      </span>
+                    ) : null}
+                    {featuredItem.title ? (
+                      <span className="mt-1 line-clamp-2 block text-base font-semibold leading-7 text-white/90 group-hover:text-white lg:text-xl lg:leading-8">
+                        {featuredItem.title}
+                      </span>
+                    ) : null}
+                    {featuredItem.excerpt ? (
+                      <span className="mt-2 hidden line-clamp-2 text-sm leading-7 text-white/58 lg:block">
+                        {featuredItem.excerpt}
+                      </span>
+                    ) : null}
+                  </span>
+                </span>
+              </HeroIntentLink>
+            ) : (
+              <div aria-hidden className="hidden min-w-0 lg:block" />
+            )}
           </div>
         </div>
       </div>

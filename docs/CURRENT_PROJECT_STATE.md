@@ -83,7 +83,7 @@ The 2026-08-16 authorized Production migration closure established the following
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 80 |
+| Repository migration files | 81 |
 | Production registry versions | 80 |
 | Registry SQL provenance | Exact repository SQL for all 80 deployed versions |
 | Public tables | 51 |

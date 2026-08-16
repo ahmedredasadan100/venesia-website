@@ -157,11 +157,19 @@ assert(withCrumb.descriptionAlignment === "justify", "description justify alignm
 
 // Hidden reserved-space contract markers (static source check)
 const heroSource = readFileSync(resolve("src/components/sections/DynamicHeroSection.tsx"), "utf8");
+const heroVisibilitySource = readFileSync(
+  resolve("src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx"),
+  "utf8",
+);
 assert(heroSource.includes("data-hero-slot-visible"), "reserved-space attribute present");
 assert(heroSource.includes('visibility: "hidden"') || heroSource.includes("visibility: 'hidden'"), "uses visibility hidden");
 assert(heroSource.includes("inert: true") || heroSource.includes("inert:true"), "uses boolean inert true");
 assert(!/inert:\s*""/.test(heroSource) && !/inert:\s*''/.test(heroSource), "does not pass empty-string inert");
 assert(heroSource.includes("Fragment"), "empty slots use Fragment to avoid flex gap wrappers");
+assert(
+  heroVisibilitySource.includes('uncheckedValue="false"'),
+  "Hero visibility controls persist explicit false state",
+);
 assert(!heroSource.includes("goldAccent"), "About goldAccent merge removed");
 assert(heroSource.includes("HomeDynamicHero"), "Home hero path still present");
 assert(

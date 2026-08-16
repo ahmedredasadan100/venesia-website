@@ -25,10 +25,7 @@ import {
   type MediaHubMediaType,
   type MediaListingPresentationConfig,
 } from "../../../lib/media-hub-modules/parse-config";
-import type {
-  MediaHubListingTopicOption,
-  MediaHubSectionKey,
-} from "../../../lib/media-hub-modules/types";
+import type { MediaHubSectionKey } from "../../../lib/media-hub-modules/types";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 
@@ -43,7 +40,6 @@ type MediaHubModuleEditClientProps = {
     config: Json;
   };
   assignmentContext: ModuleAssignmentContext;
-  topicOptions: MediaHubListingTopicOption[];
   saved?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
 };
@@ -68,18 +64,10 @@ function readInitialSectionKey(value: string): MediaHubSectionKey {
 function ListingPresentationFields({
   config,
   mediaType,
-  topicOptions,
 }: {
   config: MediaListingPresentationConfig;
   mediaType: MediaHubMediaType;
-  topicOptions: MediaHubListingTopicOption[];
 }) {
-  const [featuredMode, setFeaturedMode] = useState(config.featuredMode);
-  const manualOptions = topicOptions.map((topic) => ({
-    value: String(topic.id),
-    label: topic.title,
-  }));
-
   return (
     <>
       <input type="hidden" name="placement" value="listing" />
@@ -93,46 +81,6 @@ function ListingPresentationFields({
           </p>
         </div>
       </ModuleEditorField>
-
-      <ModuleEditorField nature="standard" span={4}>
-        <AdminFormListboxSelect
-          name="featured_mode"
-          label="وضع المحتوى المميز"
-          value={featuredMode}
-          onChange={(value) => {
-            if (value === "automatic" || value === "manual" || value === "disabled") {
-              setFeaturedMode(value);
-            }
-          }}
-          options={[
-            { value: "automatic", label: "تلقائي — المحتوى المميّز فقط" },
-            { value: "manual", label: "يدوي — محتوى محدد" },
-            { value: "disabled", label: "معطل" },
-          ]}
-        />
-        {featuredMode === "automatic" ? (
-          <p className="mt-2 text-xs leading-5 text-white/45">
-            يعتمد على is_featured فقط؛ عند عدم وجود محتوى مميّز لن يظهر الـHero.
-          </p>
-        ) : null}
-      </ModuleEditorField>
-
-      {featuredMode === "manual" ? (
-        <ModuleEditorField nature="standard" span={4}>
-          <AdminFormListboxSelect
-            name="manual_topic_id"
-            label="المحتوى المميز"
-            defaultValue={config.manualTopicId ? String(config.manualTopicId) : ""}
-            options={manualOptions}
-            placeholder="اختر محتوى منشورًا"
-            searchable
-            required
-            emptyMessage="لا يوجد محتوى منشور من هذا النوع."
-          />
-        </ModuleEditorField>
-      ) : (
-        <input type="hidden" name="manual_topic_id" value="" />
-      )}
 
       <ModuleEditorField nature="standard" span={3}>
         <label className="block space-y-2">
@@ -201,18 +149,6 @@ function ListingPresentationFields({
 
       <ModuleEditorField nature="short-text" span={4}>
         <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">CTA للمحتوى المميز</span>
-          <input
-            name="featured_cta_text"
-            defaultValue={config.featuredCtaText}
-            required
-            className={fieldClassName()}
-          />
-        </label>
-      </ModuleEditorField>
-
-      <ModuleEditorField nature="short-text" span={4}>
-        <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">CTA للكروت</span>
           <input
             name="card_cta_text"
@@ -229,7 +165,6 @@ function ListingPresentationFields({
 export default function MediaHubModuleEditClient({
   block,
   assignmentContext,
-  topicOptions,
   saved,
   updateAction,
 }: MediaHubModuleEditClientProps) {
@@ -330,7 +265,6 @@ export default function MediaHubModuleEditClient({
                       <ListingPresentationFields
                         config={parsedInitial.listing}
                         mediaType={parsedInitial.type}
-                        topicOptions={topicOptions}
                       />
                     ) : (
                       <>

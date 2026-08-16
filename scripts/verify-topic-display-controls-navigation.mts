@@ -81,7 +81,7 @@ const [
   read("src/lib/media-sidebar-modules/resolve-widget-items.ts"),
   read("src/components/media-center/MediaSidebar.tsx"),
   Promise.all([
-    "MediaFeaturedHero.tsx",
+    "../sections/DynamicHeroSection.tsx",
     "MediaCenterHubFeatured.tsx",
     "MediaCenterHubGallery.tsx",
     "MediaCenterHubPress.tsx",

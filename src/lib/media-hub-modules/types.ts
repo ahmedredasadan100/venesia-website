@@ -33,8 +33,3 @@ export type MediaHubModulesState = {
   sourceStatus: "database" | "missing" | "error";
   sourceIssues: string[];
 };
-
-export type MediaHubListingTopicOption = {
-  id: number;
-  title: string;
-};

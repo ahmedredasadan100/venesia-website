@@ -1,5 +1,4 @@
 import type { MediaContentType } from "../media-center/types";
-import type { PublicContentFeaturedSelection } from "../content/public-content-read/contract";
 import {
   getDefaultMediaListingPresentation,
   type MediaListingPresentationConfig,
@@ -22,23 +21,5 @@ export function resolveMediaListingPresentation(
 
   return {
     ...getDefaultMediaListingPresentation(mediaType),
-    featuredMode: "disabled",
-    manualTopicId: null,
   };
-}
-
-/** Translates the CMS mode into the single Public Content hero contract. */
-export function resolveMediaListingFeaturedSelection(
-  presentation: MediaListingPresentationConfig,
-): PublicContentFeaturedSelection | undefined {
-  if (presentation.featuredMode === "automatic") {
-    return { mode: "automatic" };
-  }
-  if (
-    presentation.featuredMode === "manual" &&
-    presentation.manualTopicId
-  ) {
-    return { mode: "manual", topicId: presentation.manualTopicId };
-  }
-  return undefined;
 }

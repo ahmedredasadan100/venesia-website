@@ -65,19 +65,19 @@ export function revalidatePageCompositionCache() {
 }
 
 export function revalidateHeroCache() {
-  revalidatePublicCacheTags(["page-composition", "hero"]);
+  updatePublicCacheTags(["page-composition", "hero"]);
 }
 
 export function revalidatePageBlocksCache() {
-  revalidatePublicCacheTags(["page-composition", "page-blocks"]);
+  updatePublicCacheTags(["page-composition", "page-blocks"]);
 }
 
 export function revalidateFeedModulesCache() {
-  revalidatePublicCacheTags(["page-composition", "feed-modules"]);
+  updatePublicCacheTags(["page-composition", "feed-modules"]);
 }
 
 export function revalidateMediaSidebarCache() {
-  revalidatePublicCacheTags(["page-composition", "media-center", "media-sidebar"]);
+  updatePublicCacheTags(["page-composition", "media-center", "media-sidebar"]);
 }
 
 export function revalidateBlockModuleCache(modulePath: string) {

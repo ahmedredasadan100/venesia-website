@@ -8,10 +8,14 @@ export default function ContentSection({ block }: BlockRendererProps) {
   const centered = config.alignment === "center";
   const alignmentClass = centered ? "text-center" : "text-right";
   const contentWidthClass = centered ? "mx-auto" : "ml-auto";
+  const hasHeading = Boolean(config.eyebrow?.trim() || config.title?.trim());
+  const hasBody = Boolean(config.subtitle?.trim() || config.body?.trim());
+
+  if (!hasHeading && !hasBody) return null;
 
   return (
     <section
-      className="relative py-10 md:py-12"
+      className="relative py-7 md:py-9"
       data-block-variant={variant}
       dir="rtl"
     >
@@ -21,7 +25,7 @@ export default function ContentSection({ block }: BlockRendererProps) {
         ) : null}
 
         {config.title ? (
-          <h2 className="mt-3 text-2xl font-bold leading-tight tracking-[-0.03em] text-white md:text-[2rem]">
+          <h2 className="mt-3 text-[1.75rem] font-bold leading-[1.35] tracking-[-0.025em] text-white md:text-[2.25rem]">
             {config.title}
           </h2>
         ) : null}
@@ -30,7 +34,7 @@ export default function ContentSection({ block }: BlockRendererProps) {
           <RichTextContent
             value={config.subtitle}
             mode="auto"
-            className={`mt-4 block max-w-3xl whitespace-pre-line text-[15px] leading-8 text-white/64 md:text-base md:leading-9 ${contentWidthClass}`}
+            className={`mt-4 block max-w-4xl whitespace-pre-line text-[15px] leading-8 text-white/66 md:text-base md:leading-9 ${contentWidthClass} [&_p]:mb-3 [&_p:last-child]:mb-0`}
           />
         ) : null}
 
@@ -38,7 +42,7 @@ export default function ContentSection({ block }: BlockRendererProps) {
           <RichTextContent
             value={config.body}
             mode="auto"
-            className={`mt-5 block max-w-3xl whitespace-pre-line text-[15px] leading-8 text-white/68 md:text-base md:leading-9 ${contentWidthClass} [&_a]:text-[#E8D5A8] [&_a]:underline [&_blockquote]:my-4 [&_blockquote]:border-r-2 [&_blockquote]:border-[#D8B87A]/45 [&_blockquote]:pr-4 [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1.5 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pr-5 [&_p]:mb-4 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-white/90 [&_ul]:my-4 [&_ul]:list-disc [&_ul]:pr-5`}
+            className={`mt-5 block max-w-4xl whitespace-pre-line text-[15px] leading-8 text-white/72 md:text-base md:leading-9 ${contentWidthClass} [&_a]:text-[#E8D5A8] [&_a]:underline [&_a]:underline-offset-4 [&_blockquote]:my-5 [&_blockquote]:border-r-2 [&_blockquote]:border-[#D8B87A]/45 [&_blockquote]:py-1 [&_blockquote]:pr-5 [&_h1]:mb-3 [&_h1]:mt-7 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1.5 [&_ol]:my-5 [&_ol]:list-decimal [&_ol]:pr-6 [&_p]:mb-4 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-white/90 [&_ul]:my-5 [&_ul]:list-disc [&_ul]:pr-6`}
           />
         ) : null}
       </div>
