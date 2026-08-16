@@ -11,10 +11,15 @@ const jiti = createJiti(import.meta.url);
 const {
   HERO_BULK_ACTIONS,
   PAGE_BLOCK_BULK_ACTIONS,
+  isPageModulePubliclyVisible,
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
+  resolvePageModuleVisibilityFields,
 } = await jiti.import<typeof import("../src/lib/page-blocks/admin-utils.ts")>(
   "../src/lib/page-blocks/admin-utils.ts",
+);
+const { PAGE_MODULE_KINDS } = await jiti.import<typeof import("../src/lib/page-blocks/types.ts")>(
+  "../src/lib/page-blocks/types.ts",
 );
 
 let passed = 0;
@@ -55,6 +60,7 @@ const cardsActions = read("src/app/admin/pages-blocks/blocks/cards/actions.ts");
 const cardsRepeater = read("src/components/admin/page-blocks/editors/AdminCardsItemsField.tsx");
 const breadcrumbRepeater = read("src/components/admin/page-blocks/editors/BreadcrumbManualItemsField.tsx");
 const breadcrumbActions = read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts");
+const heroPublicLoader = read("src/lib/load-hero-section.ts");
 const pageBlockPublicLoader = read("src/lib/page-blocks/load-page-blocks.ts");
 const feedPublicLoader = read("src/lib/feed-modules/load-feed-modules.ts");
 const mediaSidebarPublicLoader = read("src/lib/media-sidebar-modules/load-media-sidebar-modules.ts");
@@ -78,6 +84,7 @@ const assignmentColumns = read("src/lib/page-blocks/admin-collection-columns.ts"
 const assignmentGrid = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx");
 const assignmentRow = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx");
 const adminQueries = read("src/lib/page-blocks/admin-queries.ts");
+const adminRevalidationOwner = read("src/lib/page-blocks/admin-revalidate.ts");
 const assignmentContextQuery = read("src/lib/page-blocks/module-assignments-query.ts");
 const heroDetailRoute = read("src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx");
 const adoptionManifest = read("src/lib/admin/interaction-system/adoption-manifest.ts");
@@ -415,18 +422,58 @@ check(
 );
 
 check(
-  "public rendering requires both published template state and visible assignment state",
+  "one shared contract resolves public visibility for every Page Module kind",
+  PAGE_MODULE_KINDS.length === 8 &&
+    PAGE_MODULE_KINDS.every(() =>
+      isPageModulePubliclyVisible(true, "published") &&
+      !isPageModulePubliclyVisible(false, "published") &&
+      !isPageModulePubliclyVisible(true, "unpublished") &&
+      !isPageModulePubliclyVisible(false, "unpublished"),
+    ) &&
+    resolvePageModuleVisibilityFields(true, "unpublished").is_visible === true &&
+    resolvePageModuleVisibilityFields(true, "unpublished").is_publicly_visible === false &&
+    blockStatusOwner.includes("export function isPageModulePubliclyVisible") &&
+    blockStatusOwner.includes("isPublishedPageBlockStatus(templateStatus)") &&
+    [
+      heroPublicLoader,
+      pageBlockPublicLoader,
+      feedPublicLoader,
+      mediaSidebarPublicLoader,
+      mediaHubPublicLoader,
+    ].every((source) => source.includes("isPageModulePubliclyVisible")) &&
+    (adminQueries.match(/\.\.\.resolvePageModuleVisibilityFields\(/g)?.length ?? 0) === 8,
+);
+
+check(
+  "Page Composition rows expose effective public truth without overwriting assignment truth",
+  blockTypes.includes("is_publicly_visible: boolean") &&
+    pagesClient.includes("isPageModulePubliclyVisible") &&
+    pagesClient.includes("row.is_publicly_visible") &&
+    assignmentGrid.includes("row.is_publicly_visible") &&
+    slotMap.includes("row.is_publicly_visible") &&
+    assignmentRow.includes("const templatePublished = isPublishedPageBlockStatus") &&
+    assignmentRow.includes('disabledReason: "انشر الموديول أولًا') &&
+    !pagesClient.includes("router.refresh") &&
+    !pagesClient.includes("forceRerender"),
+);
+
+check(
+  "Page Module mutations invalidate literal public and Admin paths with the Next 16 contract",
+  adminRevalidationOwner.includes("revalidatePath(normalizedPath);") &&
+    adminRevalidationOwner.includes("revalidatePath(`/admin/pages-blocks/pages/${pageId}`);") &&
+    !adminRevalidationOwner.includes('revalidatePath(normalizedPath, "page")') &&
+    !adminRevalidationOwner.includes('revalidatePath(`/admin/pages-blocks/pages/${pageId}`, "page")'),
+);
+
+check(
+  "public rendering still requires both published template state and visible assignment state",
   blockStatusOwner.includes("export function isPublishedPageBlockStatus") &&
     blockStatusOwner.includes('return value === "published"') &&
-    pageBlockPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
-    pageBlockPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
-    feedPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
-    feedPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
-    mediaSidebarPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
-    mediaSidebarPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
+    pageBlockPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
+    feedPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
+    mediaSidebarPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
     mediaSidebarRenderer.includes(".filter((widget) => widget.isVisible)") &&
-    mediaHubPublicLoader.includes("isPublishedPageBlockStatus(template.status)") &&
-    mediaHubPublicLoader.includes("normalizeBoolean(row.is_visible, true)") &&
+    mediaHubPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
     mediaHubRenderPlan.includes(".filter((module) => module.isVisible)"),
 );
 

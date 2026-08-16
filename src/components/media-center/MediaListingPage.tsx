@@ -1,7 +1,7 @@
-import MediaFeaturedHero from "./MediaFeaturedHero";
 import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
+import { isMediaListingShellPublished } from "./media-listing-shell-model";
 import {
   getMediaHref,
   getMediaListingPage,
@@ -12,7 +12,9 @@ import {
   type MediaListingPageKey,
 } from "../../lib/media-center/listing-page-config";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
-import { resolveMediaListingPresentation } from "../../lib/media-hub-modules/listing-presentation";
+import {
+  resolveMediaListingPresentation,
+} from "../../lib/media-hub-modules/listing-presentation";
 
 type MediaListingPageProps = {
   configKey: MediaListingPageKey;
@@ -29,6 +31,12 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     searchParams ?? Promise.resolve(undefined),
     loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
   ]);
+  if (
+    !isMediaListingShellPublished(
+      config.cmsPageSlug,
+      composition.blockStates,
+    )
+  ) return null;
   if (!composition.mediaSidebarModules) return null;
 
   const sort = params?.sort === "oldest" ? "oldest" : "newest";
@@ -39,25 +47,14 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     composition.mediaHubModules,
     config.mediaType,
   );
-  const pickFeatured =
-    !searchQuery &&
-    (presentation.featuredMode === "automatic" ||
-      (presentation.featuredMode === "manual" && Boolean(presentation.manualTopicId)));
-  const featuredTopicId = presentation.featuredMode === "manual"
-    ? presentation.manualTopicId ?? undefined
-    : undefined;
-
   const listing = await getMediaListingPage({
     type: config.mediaType,
     page: presentation.paginationEnabled ? requestedPage : 1,
     sort,
     pageSize: presentation.pageSize,
-    pickFeatured,
-    featuredTopicId,
     search: searchQuery,
   });
 
-  const featuredItem = pickFeatured ? listing.featured : null;
   const searchSuggestions = searchQuery
     ? listing.items.slice(0, 8).map((item) => ({
         id: `${item.type}:${item.id}`,
@@ -92,14 +89,7 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
           columns={presentation.columns}
           paginationEnabled={presentation.paginationEnabled}
           cardVariant={presentation.cardVariant}
-        >
-          {featuredItem ? (
-            <MediaFeaturedHero
-              item={featuredItem}
-              ctaText={presentation.featuredCtaText}
-            />
-          ) : null}
-        </MediaListingContent>
+        />
       </MediaPageShell>
     </MediaCenterShellLayout>
   );

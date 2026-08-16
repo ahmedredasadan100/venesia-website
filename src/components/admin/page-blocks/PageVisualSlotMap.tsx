@@ -75,7 +75,7 @@ export default function PageVisualSlotMap({ assignments, pageSlug }: PageVisualS
               ) : (
                 <ul className="space-y-2">
                   {rows.map((row) => {
-                    const visible = normalizeBoolean(row.is_visible, true);
+                    const visible = normalizeBoolean(row.is_publicly_visible, false);
                     const compatibility = getSlotCompatibilityLabel(row.module_kind, pageSlug);
 
                     return (

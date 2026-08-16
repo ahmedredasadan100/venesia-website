@@ -1,5 +1,8 @@
 import type { MediaCenterCmsPageSlug } from "../../lib/media-center-page-config";
-import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
+import type {
+  PageBlockPublicState,
+  ResolvedPageBlock,
+} from "../../lib/page-blocks/types";
 
 const LEGACY_LISTING_SHELL_TITLE = "Listing shell";
 const LEGACY_LISTING_SHELL_SUBTITLE_PREFIX =
@@ -9,6 +12,25 @@ type MediaListingShellBlock = Extract<
   ResolvedPageBlock,
   { blockType: "content" }
 >;
+
+/**
+ * The assigned Listing Shell is the publication switch for listing routes.
+ * Assignment visibility still controls the optional authored prefix itself;
+ * template publication controls whether the listing runtime may render.
+ */
+export function isMediaListingShellPublished(
+  cmsPageSlug: MediaCenterCmsPageSlug,
+  blockStates: readonly PageBlockPublicState[],
+) {
+  if (cmsPageSlug === "media-center") return true;
+
+  const expectedSlug = `${cmsPageSlug}-listing-shell`;
+  const shell = blockStates.find(
+    (state) =>
+      state.blockType === "content" && state.templateSlug === expectedSlug,
+  );
+  return shell?.templatePublished ?? false;
+}
 
 function isMediaListingShellBlock(
   block: ResolvedPageBlock,

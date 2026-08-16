@@ -15,10 +15,10 @@ import { getHeroConfig } from "../../lib/page-sections";
 import {
   heroFlexJustifyClass,
   heroTextAlignClass,
+  resolveDistinctHeroDescription,
   type HeroElementKey,
   type HeroTextAlignment,
 } from "../../lib/hero/hero-content-controls";
-import { isHtmlContent } from "../../lib/rich-text/html-utils";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
 import { usePrefersReducedMotion } from "../../hooks/use-prefers-reduced-motion";
@@ -198,17 +198,18 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reducedMotion = usePrefersReducedMotion();
-  const canSwipe = slides.length > 1;
-  const safeIndex = Math.min(activeIndex, Math.max(slides.length - 1, 0));
+  const slideCount = slides.length;
+  const canSwipe = slideCount > 1;
+  const safeIndex = Math.min(activeIndex, Math.max(slideCount - 1, 0));
 
   const startAutoplay = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (!canSwipe || reducedMotion) return;
 
     timerRef.current = setInterval(() => {
-      setActiveIndex((current) => (current + 1) % slides.length);
+      setActiveIndex((current) => (current + 1) % slideCount);
     }, 7500);
-  }, [canSwipe, reducedMotion, slides.length]);
+  }, [canSwipe, reducedMotion, slideCount]);
 
   useEffect(() => {
     startAutoplay();
@@ -220,7 +221,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   useEffect(() => {
     if (!canSwipe || reducedMotion) return;
 
-    const nextIndex = (safeIndex + 1) % slides.length;
+    const nextIndex = (safeIndex + 1) % slideCount;
     const preparationTimer = setTimeout(() => {
       setPreparedSlideIndexes((current) => {
         if (current.has(nextIndex)) return current;
@@ -229,19 +230,19 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
     }, 2500);
 
     return () => clearTimeout(preparationTimer);
-  }, [canSwipe, reducedMotion, safeIndex, slides.length]);
+  }, [canSwipe, reducedMotion, safeIndex, slideCount]);
 
   const goToNext = useCallback(() => {
     if (!canSwipe) return;
-    setActiveIndex((current) => (current + 1) % slides.length);
+    setActiveIndex((current) => (current + 1) % slideCount);
     startAutoplay();
-  }, [canSwipe, slides.length, startAutoplay]);
+  }, [canSwipe, slideCount, startAutoplay]);
 
   const goToPrev = useCallback(() => {
     if (!canSwipe) return;
-    setActiveIndex((current) => (current - 1 + slides.length) % slides.length);
+    setActiveIndex((current) => (current - 1 + slideCount) % slideCount);
     startAutoplay();
-  }, [canSwipe, slides.length, startAutoplay]);
+  }, [canSwipe, slideCount, startAutoplay]);
 
   const handleGoTo = useCallback(
     (index: number) => {
@@ -260,7 +261,10 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
   const title = config.title ?? "";
   const highlight = config.highlight ?? "";
   const subtitle = config.subtitle ?? "";
-  const description = config.description ?? "";
+  const description = resolveDistinctHeroDescription(
+    config.description,
+    subtitle,
+  );
 
   const hasHeroContent = Boolean(
     images.length ||
@@ -333,7 +337,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
               </div>
             ) : null}
 
-            {description && description !== subtitle ? (
+            {description ? (
               <p
                 className={`${subtitle ? "mt-4" : "mt-6"} max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9`}
               >
@@ -423,13 +427,6 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
       ) : null}
     </section>
   );
-}
-
-function splitHeroDescription(description?: string) {
-  return (description ?? "")
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
 }
 
 function HeroReservedSlot({
@@ -522,7 +519,10 @@ function InternalDynamicHero({
   const eyebrow = config.eyebrow || fallbackEyebrow || "Internal Page";
   const highlight = (config.highlight || "").trim();
   const subtitle = (config.subtitle || fallbackSubtitle || "").trim();
-  const description = (config.description || "").trim();
+  const description = resolveDistinctHeroDescription(
+    config.description,
+    subtitle,
+  );
   const imagePosition =
     config.imagePositionClassName ?? (isCompactHero ? "object-[50%_42%]" : "object-center");
   const brightness = isCompactHero
@@ -534,6 +534,7 @@ function InternalDynamicHero({
     : "max-w-[14ch] text-[2rem] leading-[1.2] sm:text-4xl md:text-[2.5rem]";
 
   const hasBreadcrumb = Boolean(belowTitle);
+  const featuredItem = hero.resolvedItems?.[0] ?? null;
 
   const elements: Partial<Record<HeroElementKey, ReactNode>> = {
     eyebrow: (
@@ -639,17 +640,11 @@ function InternalDynamicHero({
               : ""
         }`}
       >
-        {isHtmlContent(description) ? (
-          <RichTextContent
-            value={description}
-            mode="rich"
-            className="text-[15px] leading-8 text-white/60 md:text-base md:leading-9 [&_p]:mb-1.5 [&_p:last-child]:mb-0"
-          />
-        ) : (
-          <p className="text-[15px] leading-8 whitespace-pre-line text-white/60 md:text-base md:leading-9">
-            {splitHeroDescription(description).join("\n")}
-          </p>
-        )}
+        <RichTextContent
+          value={description}
+          mode="auto"
+          className="block whitespace-pre-line text-[15px] leading-8 text-white/68 md:text-base md:leading-9 [&_a]:text-[#E8D5A8] [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-r-2 [&_blockquote]:border-[#D8B87A]/45 [&_blockquote]:pr-4 [&_h1]:mb-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pr-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-white/85 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pr-5"
+        />
       </HeroReservedSlot>
     ),
     breadcrumb: hasBreadcrumb ? (
@@ -670,7 +665,11 @@ function InternalDynamicHero({
   return (
     <section
       className={`relative isolate z-0 overflow-hidden bg-[#05070B] ${
-        isCompactHero ? "h-[min(46vh,500px)] min-h-[400px]" : "h-[min(62vh,580px)] min-h-[440px]"
+        isCompactHero
+          ? "h-[min(46vh,500px)] min-h-[400px]"
+          : featuredItem
+            ? "h-[min(74vh,680px)] min-h-[560px]"
+            : "h-[min(62vh,580px)] min-h-[440px]"
       }`}
       dir="rtl"
       data-hero-reduced-motion={reducedMotion ? "true" : undefined}
@@ -709,7 +708,49 @@ function InternalDynamicHero({
               })}
             </div>
 
-            <div aria-hidden className="hidden min-w-0 lg:block" />
+            {featuredItem ? (
+              <HeroIntentLink
+                href={featuredItem.href ?? "#"}
+                className="group min-w-0 rounded-[2rem] border border-white/[0.14] bg-black/30 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:border-[#D8B87A]/35 hover:bg-black/40"
+              >
+                <span
+                  className="flex min-w-0 items-center gap-4 lg:block"
+                  data-hero-featured-topic="true"
+                >
+                  {featuredItem.image ? (
+                    <span className="relative block h-24 w-28 shrink-0 overflow-hidden rounded-2xl lg:h-44 lg:w-full">
+                      <Image
+                        src={featuredItem.image}
+                        alt=""
+                        fill
+                        sizes="(min-width: 1024px) 420px, 112px"
+                        className="object-cover transition duration-700 group-hover:scale-105"
+                      />
+                    </span>
+                  ) : null}
+
+                  <span className="min-w-0 flex-1 px-1 py-1 text-right lg:px-3 lg:py-4">
+                    {featuredItem.category ? (
+                      <span className="block text-[11px] text-[#D8B87A]/75">
+                        {featuredItem.category}
+                      </span>
+                    ) : null}
+                    {featuredItem.title ? (
+                      <span className="mt-1 line-clamp-2 block text-base font-semibold leading-7 text-white/90 group-hover:text-white lg:text-xl lg:leading-8">
+                        {featuredItem.title}
+                      </span>
+                    ) : null}
+                    {featuredItem.excerpt ? (
+                      <span className="mt-2 hidden line-clamp-2 text-sm leading-7 text-white/58 lg:block">
+                        {featuredItem.excerpt}
+                      </span>
+                    ) : null}
+                  </span>
+                </span>
+              </HeroIntentLink>
+            ) : (
+              <div aria-hidden className="hidden min-w-0 lg:block" />
+            )}
           </div>
         </div>
       </div>

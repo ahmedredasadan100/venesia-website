@@ -17,7 +17,7 @@ function revalidateStoredPublicPagePath(path: string | null | undefined) {
   if (!path) return;
 
   const normalizedPath = normalizePath(path);
-  revalidatePath(normalizedPath, "page");
+  revalidatePath(normalizedPath);
   revalidateTag(`page-seo:${normalizedPath}`, "max");
 }
 
@@ -80,7 +80,7 @@ export async function revalidateBlockModulePaths(modulePath: string) {
 export async function revalidatePageBlocksPath(pageId: number) {
   revalidatePageCompositionCache();
   revalidatePath("/admin/pages-blocks/pages", "layout");
-  revalidatePath(`/admin/pages-blocks/pages/${pageId}`, "page");
+  revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
 
   const { data: page } = await getSupabaseAdmin()
     .from("pages")

@@ -73,6 +73,7 @@ export default function HeroVisibilityAlignRow({
             name={showName}
             label={show ? "ظاهر" : "مخفي"}
             value="true"
+            uncheckedValue="false"
             checked={show}
             onChange={(event) => setShow(event.target.checked)}
             surface

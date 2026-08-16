@@ -21,7 +21,5 @@ export function resolveMediaListingPresentation(
 
   return {
     ...getDefaultMediaListingPresentation(mediaType),
-    featuredMode: "disabled",
-    manualTopicId: null,
   };
 }

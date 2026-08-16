@@ -55,6 +55,31 @@ function readText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeHeroCopy(value: string) {
+  return value
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/p>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Prevents the same authored copy from occupying subtitle and description slots. */
+export function resolveDistinctHeroDescription(
+  descriptionValue: unknown,
+  subtitleValue: unknown,
+) {
+  const description = readText(descriptionValue);
+  if (!description) return "";
+
+  const subtitle = readText(subtitleValue);
+  return normalizeHeroCopy(description) === normalizeHeroCopy(subtitle)
+    ? ""
+    : description;
+}
+
 export function parseOptionalBool(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
   if (value === "true" || value === 1 || value === "1" || value === "on") return true;

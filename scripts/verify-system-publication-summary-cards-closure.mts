@@ -206,9 +206,12 @@ check(
 );
 
 check(
-  "Hero publication status is canonical while assignment visibility stays independent",
-  heroLoader.includes('template.status === "published"') &&
-    assignmentLoader.includes('normalizeBoolean(row.is_active, true) && template.status === "published"') &&
+  "Hero and assignment visibility adopt the shared public publication contract",
+  moduleStatus.includes("export function isPageModulePubliclyVisible") &&
+    heroLoader.includes("isPageModulePubliclyVisible(true, template.status)") &&
+    assignmentLoader.includes("resolvePageModuleVisibilityFields(row.is_active, template.status)") &&
+    !heroLoader.includes('template.status === "published"') &&
+    !assignmentLoader.includes('template.status === "published"') &&
     migration.includes("sync_hero_template_publication_compatibility") &&
     migration.includes("before insert or update of status, is_visible on public.hero_templates"),
 );

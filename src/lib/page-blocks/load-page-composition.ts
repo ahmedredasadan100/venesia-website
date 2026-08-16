@@ -89,6 +89,7 @@ export async function loadPageCompositionBySlug(
   return {
     layoutMode,
     slots,
+    blockStates: blockState.blockStates ?? [],
     heroVisibility: heroState.visibility,
     mediaHubModules,
     mediaSidebarModules,

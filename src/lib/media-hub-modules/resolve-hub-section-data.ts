@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { MediaContentItem, MediaContentType } from "../media-center";
-import { getMediaItems } from "../media-center";
+import { getMediaItems, getMediaListingPage } from "../media-center";
 import { parseMediaHubModuleConfig, type MediaHubModuleConfig } from "./parse-config";
 import type { MediaHubModulesState, MediaHubSectionData, MediaHubSectionKey } from "./types";
 
@@ -23,6 +23,9 @@ const SECTION_MEDIA_TYPE: Record<MediaHubSectionKey, MediaContentType> = {
 };
 
 async function loadHubDataCaches(state: MediaHubModulesState): Promise<HubDataCaches> {
+  const needsFeaturedNews = state.modules.some(
+    (module) => module.isVisible && module.sectionKey === "featured",
+  );
   const requiredTypes = Array.from(
     new Set(
       state.modules
@@ -30,18 +33,29 @@ async function loadHubDataCaches(state: MediaHubModulesState): Promise<HubDataCa
         .map((module) => SECTION_MEDIA_TYPE[module.sectionKey]),
     ),
   );
-  const entries = await Promise.all(
-    requiredTypes.map(async (type) => [type, await getMediaItems(type)] as const),
-  );
-  const itemsByType = new Map<MediaContentType, MediaContentItem[]>(entries);
+  const entries = await Promise.all(requiredTypes.map(async (type) => {
+    if (type === "news" && needsFeaturedNews) {
+      const collection = await getMediaListingPage({
+        type,
+        page: 1,
+        pageSize: 60,
+        sort: "newest",
+        featuredSelection: { mode: "automatic" },
+      });
+      return [type, { items: collection.items, featured: collection.featured }] as const;
+    }
+    return [type, { items: await getMediaItems(type), featured: null }] as const;
+  }));
+  const collectionsByType = new Map(entries);
 
-  const news = itemsByType.get("news") ?? [];
-  const siteUpdates = itemsByType.get("site_update") ?? [];
-  const videos = itemsByType.get("video") ?? [];
-  const gallery = itemsByType.get("gallery") ?? [];
-  const press = itemsByType.get("press") ?? [];
+  const newsCollection = collectionsByType.get("news");
+  const news = newsCollection?.items ?? [];
+  const siteUpdates = collectionsByType.get("site_update")?.items ?? [];
+  const videos = collectionsByType.get("video")?.items ?? [];
+  const gallery = collectionsByType.get("gallery")?.items ?? [];
+  const press = collectionsByType.get("press")?.items ?? [];
 
-  const featuredNews = news.find((item) => item.featured) ?? news[0] ?? null;
+  const featuredNews = newsCollection?.featured ?? null;
   return { featuredNews, news, siteUpdates, videos, gallery, press };
 }
 

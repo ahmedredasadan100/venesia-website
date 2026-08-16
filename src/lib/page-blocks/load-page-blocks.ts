@@ -14,10 +14,15 @@ import {
   resolveCtaBlockConfigLinks,
   resolveContentBlockConfigLinks,
 } from "../admin/links/block-config-links";
-import { isPublishedPageBlockStatus, normalizeBoolean } from "./admin-utils";
+import {
+  isPageModulePubliclyVisible,
+  isPublishedPageBlockStatus,
+  normalizeBoolean,
+  resolvePageModuleVisibilityFields,
+} from "./admin-utils";
 import { sortPageBlocks } from "./page-block-layout";
 import { normalizeLayoutSlot } from "./layout-slots";
-import type { ResolvedPageBlock } from "./types";
+import type { PageBlockPublicState, PageBlockType, ResolvedPageBlock } from "./types";
 
 function joinedTemplate<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
@@ -26,6 +31,8 @@ function joinedTemplate<T>(value: T | T[] | null | undefined): T | null {
 
 export type PageBlockLoadResult = {
   blocks: ResolvedPageBlock[];
+  /** Assignment + publication truth before public rendering filters. */
+  blockStates: PageBlockPublicState[];
   /**
    * True when at least one assignment row exists for the page (any kind),
    * before visibility / published filters. Use this to decide CMS-managed layout
@@ -52,12 +59,36 @@ export type PageBlockLoadResult = {
 function emptyPageBlockLoadResult(): PageBlockLoadResult {
   return {
     blocks: [],
+    blockStates: [],
     hasAnyAssignmentRows: false,
     hasRenderableModules: false,
     hasCompositionError: false,
     hasAssignments: false,
     hiddenHomeModuleSlugs: [],
   };
+}
+
+function appendBlockState(
+  states: PageBlockPublicState[],
+  blockType: PageBlockType,
+  row: { id: number; is_visible: unknown },
+  template: { id: number; slug: string; status: string } | null,
+) {
+  if (!template) return;
+  const visibility = resolvePageModuleVisibilityFields(
+    row.is_visible,
+    template.status,
+  );
+  states.push({
+    assignmentId: row.id,
+    blockType,
+    templateId: template.id,
+    templateSlug: template.slug,
+    templateStatus: template.status,
+    templatePublished: isPublishedPageBlockStatus(template.status),
+    assignmentVisible: visibility.is_visible,
+    publiclyVisible: visibility.is_publicly_visible,
+  });
 }
 
 /**
@@ -69,7 +100,7 @@ export const loadPageBlockStateBySlug = cache(async function loadPageBlockStateB
 ): Promise<PageBlockLoadResult> {
   return unstable_cache(
     async () => queryPageBlockStateBySlug(pageSlug),
-    ["page-block-state", pageSlug],
+    ["page-block-state-v2", pageSlug],
     { revalidate: 300, tags: ["page-composition", "page-blocks"] },
   )();
 });
@@ -81,6 +112,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   if (!page) return emptyPageBlockLoadResult();
 
   const blockPromises: Array<Promise<ResolvedPageBlock>> = [];
+  const blockStates: PageBlockPublicState[] = [];
   const hiddenHomeModuleSlugs = new Set<HomeModuleSlug>();
   let assignmentRowCount = 0;
 
@@ -121,6 +153,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
 
   for (const row of contentAssignments ?? []) {
     const template = joinedTemplate(row.content_block_templates);
+    appendBlockState(blockStates, "content", row, template);
     const homeModuleSlug = template
       ? resolveHomeModuleSlugFromTemplate(template.slug, template.variant)
       : null;
@@ -130,7 +163,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
       continue;
     }
 
-    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
+    if (!template || !isPageModulePubliclyVisible(row.is_visible, template.status)) continue;
 
     blockPromises.push(
       resolveContentBlockConfigLinks(
@@ -153,10 +186,9 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   }
 
   for (const row of ctaAssignments ?? []) {
-    if (!normalizeBoolean(row.is_visible, true)) continue;
-
     const template = joinedTemplate(row.cta_block_templates);
-    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
+    appendBlockState(blockStates, "cta", row, template);
+    if (!template || !isPageModulePubliclyVisible(row.is_visible, template.status)) continue;
 
     blockPromises.push(
       resolveCtaBlockConfigLinks(asCtaConfig(template.config)).then(
@@ -174,10 +206,9 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   }
 
   for (const row of cardsAssignments ?? []) {
-    if (!normalizeBoolean(row.is_visible, true)) continue;
-
     const template = joinedTemplate(row.cards_block_templates);
-    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
+    appendBlockState(blockStates, "cards", row, template);
+    if (!template || !isPageModulePubliclyVisible(row.is_visible, template.status)) continue;
 
     blockPromises.push(
       resolveCardsBlockConfigLinks(asCardsConfig(template.config)).then(
@@ -195,10 +226,9 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   }
 
   for (const row of breadcrumbAssignments ?? []) {
-    if (!normalizeBoolean(row.is_visible, true)) continue;
-
     const template = joinedTemplate(row.breadcrumb_block_templates);
-    if (!template || !isPublishedPageBlockStatus(template.status)) continue;
+    appendBlockState(blockStates, "breadcrumb", row, template);
+    if (!template || !isPageModulePubliclyVisible(row.is_visible, template.status)) continue;
 
     blockPromises.push(
       resolveBreadcrumbBlockConfigLinks(asBreadcrumbConfig(template.config)).then(
@@ -222,6 +252,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
 
   return {
     blocks: sortPageBlocks(blocks),
+    blockStates,
     hasAnyAssignmentRows,
     hasRenderableModules,
     hasCompositionError,

@@ -5,16 +5,21 @@ import { fileURLToPath } from "node:url";
 
 import { buildPaginationItems } from "../src/components/pagination-model.ts";
 import {
+  isMediaListingShellPublished,
   isMediaListingShellPlaceholder,
   resolveMediaListingMainBlocks,
 } from "../src/components/media-center/media-listing-shell-model.ts";
+import { resolveDistinctHeroDescription } from "../src/lib/hero/hero-content-controls.ts";
 import {
   buildMediaHubModuleConfig,
   getDefaultMediaListingPresentation,
   parseMediaHubModuleConfig,
 } from "../src/lib/media-hub-modules/parse-config.ts";
 import type { ContentBlockConfig } from "../src/lib/page-blocks/configs.ts";
-import type { ResolvedPageBlock } from "../src/lib/page-blocks/types.ts";
+import type {
+  PageBlockPublicState,
+  ResolvedPageBlock,
+} from "../src/lib/page-blocks/types.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -85,30 +90,24 @@ const managedListingConfig = buildMediaHubModuleConfig(
   {
     placement: "listing",
     mediaType: "video",
-    featuredMode: "manual",
-    manualTopicId: 42,
     pageSize: 12,
     layout: "vertical",
     columns: 3,
     paginationEnabled: false,
     cardVariant: "compact",
-    featuredCtaText: "شاهد الآن",
     cardCtaText: "شاهد التفاصيل",
   },
 );
 assert.equal(managedListingConfig.placement, "listing");
 assert.deepEqual(managedListingConfig.listing, {
-  featuredMode: "manual",
-  manualTopicId: 42,
   pageSize: 12,
   layout: "vertical",
   columns: 3,
   paginationEnabled: false,
   cardVariant: "compact",
-  featuredCtaText: "شاهد الآن",
   cardCtaText: "شاهد التفاصيل",
 });
-assert.equal(listingDefaults.featuredMode, "automatic");
+assert.equal("featuredMode" in listingDefaults, false);
 
 function contentBlock(
   assignmentId: number,
@@ -177,6 +176,50 @@ assert.deepEqual(
 );
 assert.deepEqual(resolveMediaListingMainBlocks("media-center-news", []), []);
 
+function listingShellState(
+  status: string,
+  assignmentVisible: boolean,
+): PageBlockPublicState {
+  return {
+    assignmentId: 66,
+    blockType: "content",
+    templateId: 62,
+    templateSlug: "media-center-site-updates-listing-shell",
+    templateStatus: status,
+    templatePublished: status === "published",
+    assignmentVisible,
+    publiclyVisible: status === "published" && assignmentVisible,
+  };
+}
+
+assert.equal(
+  isMediaListingShellPublished(
+    "media-center-site-updates",
+    [listingShellState("published", true)],
+  ),
+  true,
+);
+assert.equal(
+  isMediaListingShellPublished(
+    "media-center-site-updates",
+    [listingShellState("published", false)],
+  ),
+  true,
+  "assignment visibility controls the optional prefix, not listing activation",
+);
+assert.equal(
+  isMediaListingShellPublished(
+    "media-center-site-updates",
+    [listingShellState("unpublished", true)],
+  ),
+  false,
+);
+assert.equal(
+  isMediaListingShellPublished("media-center-site-updates", []),
+  false,
+);
+assert.equal(isMediaListingShellPublished("media-center", []), true);
+
 const partiallyManagedListingShell = contentBlock(
   3,
   "media-center-videos-listing-shell",
@@ -237,13 +280,26 @@ for (const contract of ["layout", "columns", "paginationEnabled", "cardVariant",
 
 const listingPageSource = read("src/components/media-center/MediaListingPage.tsx");
 assert.ok(listingPageSource.includes("resolveMediaListingPresentation"));
-assert.ok(listingPageSource.includes('presentation.featuredMode === "manual"'));
-assert.ok(listingPageSource.includes("featuredTopicId"));
-assert.ok(listingPageSource.includes("MediaFeaturedHero"));
+assert.ok(listingPageSource.includes("isMediaListingShellPublished"));
+assert.ok(
+  listingPageSource.indexOf("isMediaListingShellPublished") <
+    listingPageSource.indexOf("getMediaListingPage({"),
+  "Listing Shell publication must gate the runtime before its content query",
+);
+assert.ok(!listingPageSource.includes("resolveMediaListingFeaturedSelection"));
+assert.ok(!listingPageSource.includes("featuredSelection"));
+assert.ok(!listingPageSource.includes("MediaFeaturedHero"));
 assert.ok(!listingPageSource.includes("FeaturedNews"));
+const listingShellOwnerSource = read(
+  "src/components/media-center/media-listing-shell-model.ts",
+);
+assert.ok(listingShellOwnerSource.includes("shell?.templatePublished"));
+assert.ok(!listingShellOwnerSource.includes('templateStatus === "published"'));
 const listingPresentationSource = read("src/lib/media-hub-modules/listing-presentation.ts");
 assert.ok(listingPresentationSource.includes('module.config.placement === "listing"'));
-assert.ok(listingPresentationSource.includes('featuredMode: "disabled"'));
+for (const retiredField of ["featuredMode", "manualTopicId", "featuredSelection"]) {
+  assert.ok(!listingPresentationSource.includes(retiredField));
+}
 
 const shellSource = read("src/components/media-center/MediaCenterShellLayout.tsx");
 assert.ok(shellSource.includes("resolveMediaListingMainBlocks"));
@@ -277,6 +333,18 @@ assert.match(
   /export function revalidatePageCompositionCache\(\) \{\s+updatePublicCacheTags\(PUBLIC_CACHE_TAG_GROUPS\.pageComposition\);\s+\}/,
   "Page Composition writes must expire their shared cache immediately",
 );
+for (const owner of [
+  "revalidateHeroCache",
+  "revalidatePageBlocksCache",
+  "revalidateFeedModulesCache",
+  "revalidateMediaSidebarCache",
+]) {
+  assert.match(
+    cacheOwnerSource,
+    new RegExp(`export function ${owner}\\(\\) \\{\\s+updatePublicCacheTags\\(`),
+    `${owner} must expire its Page Composition cache immediately`,
+  );
+}
 
 const paginationSource = read("src/components/Pagination.tsx");
 assert.ok(paginationSource.startsWith('"use client"'));
@@ -293,14 +361,11 @@ for (const fieldName of ["eyebrow", "title", "presentation_description", "cta_te
   assert.ok(editorSource.includes(`name="${fieldName}"`), `missing CMS field ${fieldName}`);
 }
 for (const fieldName of [
-  "featured_mode",
-  "manual_topic_id",
   "page_size",
   "listing_layout",
   "listing_columns",
   "pagination_enabled",
   "card_variant",
-  "featured_cta_text",
   "card_cta_text",
 ]) {
   assert.ok(editorSource.includes(`name="${fieldName}"`), `missing listing CMS field ${fieldName}`);
@@ -310,16 +375,115 @@ const actionSource = read("src/app/admin/pages-blocks/blocks/media-hub/actions.t
 assert.ok(actionSource.includes("buildMediaHubModuleConfig"));
 assert.ok(actionSource.includes('formData.get("presentation_description")'));
 assert.ok(actionSource.includes('formData.get("cta_text")'));
-assert.ok(actionSource.includes('formData.get("featured_mode")'));
-assert.ok(actionSource.includes('formData.get("manual_topic_id")'));
+for (const retiredField of ["featured_mode", "manual_topic_id", "featured_cta_text"]) {
+  assert.ok(!editorSource.includes(retiredField));
+  assert.ok(!actionSource.includes(retiredField));
+}
 
 const compositionSource = read("src/lib/page-blocks/load-page-composition.ts");
 assert.ok(compositionSource.includes("queryMediaHubModules(pageSlug, { enrich: pageSlug === \"media-center\" })"));
 
 const publicContractSource = read("src/lib/content/public-content-read/contract.ts");
 const publicOwnerSource = read("src/lib/content/public-content-read/owner.ts");
-assert.ok(publicContractSource.includes("featuredId?: number"));
-assert.ok(publicOwnerSource.includes('.eq("id", input.featuredId)'));
+const mediaProviderSource = read("src/lib/media-center/unified-provider.ts");
+const hubDataSource = read("src/lib/media-hub-modules/resolve-hub-section-data.ts");
+assert.ok(publicContractSource.includes("PublicContentFeaturedSelection"));
+assert.ok(publicContractSource.includes("absence never falls back to latest"));
+assert.ok(publicOwnerSource.includes("resolveFeaturedSelection"));
+assert.ok(publicOwnerSource.includes('featured: "only"'));
+assert.ok(!publicOwnerSource.includes("fallbackResult"));
+assert.ok(!publicOwnerSource.includes("featured fallback"));
+assert.ok(mediaProviderSource.includes("contentTypes: [params.type]"));
+assert.ok(mediaProviderSource.includes("featuredSelection: params.featuredSelection"));
+assert.ok(hubDataSource.includes('featuredSelection: { mode: "automatic" }'));
+assert.ok(!hubDataSource.includes("news.find"));
+assert.ok(!hubDataSource.includes("news[0]"));
+
+const featuredOwnerCandidates = [
+  "src/components/media-center/MediaListingPage.tsx",
+  "src/lib/media-hub-modules/resolve-hub-section-data.ts",
+  "src/lib/media-center/unified-provider.ts",
+];
+for (const candidate of featuredOwnerCandidates) {
+  const source = read(candidate);
+  assert.ok(
+    !/featured[^\n]{0,120}(?:\?\?|\|\|)[^\n]{0,80}(?:latest|\[0\])/iu.test(source),
+    `${candidate} must not own a Latest featured fallback`,
+  );
+}
+
+assert.equal(
+  resolveDistinctHeroDescription(
+    "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
+    "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
+  ),
+  "",
+);
+assert.equal(
+  resolveDistinctHeroDescription(
+    "<p>متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.</p>",
+    "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
+  ),
+  "",
+  "equivalent rich text and plain subtitle copy must deduplicate",
+);
+assert.equal(
+  resolveDistinctHeroDescription("وصف مستقل", "عنوان فرعي"),
+  "وصف مستقل",
+);
+const dynamicHeroSource = read("src/components/sections/DynamicHeroSection.tsx");
+const heroOwnerSource = read("src/lib/load-hero-section.ts");
+assert.ok(dynamicHeroSource.includes("resolveDistinctHeroDescription"));
+assert.ok(dynamicHeroSource.includes('mode="auto"'));
+assert.ok(dynamicHeroSource.includes("[&_p]:mb-3"));
+assert.ok(dynamicHeroSource.includes("whitespace-pre-line"));
+assert.ok(dynamicHeroSource.includes('data-hero-featured-topic="true"'));
+assert.ok(heroOwnerSource.includes("heroSourceRequiresResolvedItems"));
+assert.ok(heroOwnerSource.includes("resolvedItems.length === 0"));
+assert.ok(heroOwnerSource.includes('hero.source_type === "featured_media" && isMediaContentType(hero.source_slug)'));
+const contentSectionSource = read("src/components/sections/ContentSection.tsx");
+assert.ok(contentSectionSource.includes("RichTextContent"));
+assert.equal(contentSectionSource.match(/mode="auto"/g)?.length, 2);
+assert.ok(contentSectionSource.includes('dir="rtl"'));
+assert.ok(contentSectionSource.includes("md:leading-9"));
+assert.ok(contentSectionSource.includes("[&_p]:mb-4"));
+assert.ok(contentSectionSource.includes("if (!hasHeading && !hasBody) return null"));
+assert.ok(contentSectionSource.includes("max-w-4xl"));
+assert.ok(!contentSectionSource.includes(".split(/\\n{2,}/)"));
+
+const adminAssignmentRowSource = read(
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
+);
+assert.ok(adminAssignmentRowSource.includes("data-module-publication-state="));
+assert.ok(adminAssignmentRowSource.includes("data-module-public-visibility="));
+assert.ok(adminAssignmentRowSource.includes('label: "حالة النشر"'));
+assert.ok(adminAssignmentRowSource.includes('label: "الربط بالصفحة"'));
+assert.ok(adminAssignmentRowSource.includes('label: "الظهور العام"'));
+
+const topicsClientSource = read("src/components/admin/content/TopicsListClient.tsx");
+const instantMutationSource = read("src/lib/admin/entity-list/data-engine/instant-mutation.ts");
+const featuredToggleQaSource = read("tests/e2e/qa-media-center-featured-toggle.mjs");
+assert.ok(topicsClientSource.includes("useAdminEntityInstantMutation"));
+assert.ok(topicsClientSource.includes("reconcileSuccess"));
+assert.ok(topicsClientSource.includes("is_featured: confirmedFeatured"));
+assert.ok(instantMutationSource.includes("request.optimistic(helpers)"));
+assert.ok(instantMutationSource.includes("request.reconcileSuccess(result"));
+assert.ok(instantMutationSource.includes('refetchType: "active"'));
+for (const forbidden of ["router.refresh", "forceUpdate", "forceRerender", "setRows("]) {
+  assert.ok(!topicsClientSource.includes(forbidden), `Topics Featured mutation must not use ${forbidden}`);
+  assert.ok(!instantMutationSource.includes(forbidden), `Instant Mutation owner must not use ${forbidden}`);
+}
+for (const proof of [
+  "Menu exposes the unfeature command",
+  "Optimistic update changes aria-pressed before Server Action completion",
+  "Spinner ends after reconcile and invalidation",
+  "Final star is unfilled",
+  "Final database truth is unfeatured",
+  "Visibility row action remains available",
+  "More row action remains available",
+]) {
+  assert.ok(featuredToggleQaSource.includes(proof), `Featured Toggle QA is missing: ${proof}`);
+}
 
 const listingMigration = read("sql/migrations/20260815092555_media_center_listing_presentation.sql");
 for (const slug of [
@@ -339,5 +503,17 @@ assert.ok(listingMigration.includes("'kind', 'media_hub'"));
 assert.ok(listingMigration.includes("'default_slot', 'main'"));
 assert.ok(listingMigration.includes("'page_ids', jsonb_build_array(v_listing.page_id)"));
 assert.ok(!listingMigration.match(/insert\s+into\s+public\.page_media_hub_module_assignments/iu));
+
+const heroOwnerMigration = read(
+  "sql/migrations/20260816090000_media_center_hero_owner_closure.sql",
+);
+for (const sourceSlug of ["news", "video", "gallery", "press", "site_update"]) {
+  assert.ok(heroOwnerMigration.includes(`then '${sourceSlug}'`));
+}
+assert.ok(heroOwnerMigration.includes("source_type = 'featured_media'"));
+for (const retiredKey of ["featuredMode", "manualTopicId", "featuredCtaText"]) {
+  assert.ok(heroOwnerMigration.includes(`- '${retiredKey}'`));
+}
+assert.ok(!heroOwnerMigration.match(/create\s+(table|function|view|trigger)/iu));
 
 console.log("Media Center product review verification passed.");

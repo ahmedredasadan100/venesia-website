@@ -36,19 +36,6 @@ export async function updateMediaHubModule(formData: FormData) {
   const sectionKey = parseMediaHubSectionKey(cleanText(formData.get("section_key")));
   const dataSource = cleanText(formData.get("data_source")) || "topics";
   const placement = cleanText(formData.get("placement")) === "listing" ? "listing" : "hub";
-  const featuredMode = cleanText(formData.get("featured_mode"));
-  const manualTopicId = parseNumber(formData.get("manual_topic_id"), 0);
-  if (
-    placement === "listing" &&
-    featuredMode !== "automatic" &&
-    featuredMode !== "manual" &&
-    featuredMode !== "disabled"
-  ) {
-    throw new Error("وضع المحتوى المميز غير صالح.");
-  }
-  if (placement === "listing" && featuredMode === "manual" && !manualTopicId) {
-    throw new Error("اختر المحتوى المميز عند استخدام الوضع اليدوي.");
-  }
   const config = buildMediaHubModuleConfig(sectionKey, dataSource, {
     limit: parseNumber(formData.get("limit"), 0),
     sideLimit: parseNumber(formData.get("side_limit"), 0),
@@ -61,34 +48,13 @@ export async function updateMediaHubModule(formData: FormData) {
   }, {
     placement,
     mediaType: cleanText(formData.get("media_type")),
-    featuredMode,
-    manualTopicId,
     pageSize: parseNumber(formData.get("page_size"), 2),
     layout: cleanText(formData.get("listing_layout")),
     columns: parseNumber(formData.get("listing_columns"), 2),
     paginationEnabled: parseFormBoolean(formData, "pagination_enabled", true),
     cardVariant: cleanText(formData.get("card_variant")),
-    featuredCtaText: cleanText(formData.get("featured_cta_text")),
     cardCtaText: cleanText(formData.get("card_cta_text")),
   });
-  if (
-    config.placement === "listing" &&
-    config.type &&
-    config.listing?.featuredMode === "manual" &&
-    config.listing.manualTopicId
-  ) {
-    const { data: manualTopic, error: manualTopicError } = await getSupabaseAdmin()
-      .from("topics")
-      .select("id")
-      .eq("id", config.listing.manualTopicId)
-      .eq("content_type", config.type)
-      .eq("status", "published")
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (manualTopicError || !manualTopic) {
-      throw new Error("المحتوى المميز اليدوي غير متاح أو لا يطابق نوع القائمة.");
-    }
-  }
 
   const nextRow = {
     name,

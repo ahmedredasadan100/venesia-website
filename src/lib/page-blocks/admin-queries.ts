@@ -1,7 +1,11 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "../supabase-admin";
-import { blockModuleHref, blockModuleListHref, normalizeBoolean } from "./admin-utils";
+import {
+  blockModuleHref,
+  blockModuleListHref,
+  resolvePageModuleVisibilityFields,
+} from "./admin-utils";
 import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageBlockAssignmentRow } from "./types";
 
@@ -105,7 +109,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: template.id,
       slot: "hero",
       sort_order: Math.max(0, 1000 - Number(row.priority ?? 1000)),
-      is_visible: normalizeBoolean(row.is_active, true) && template.status === "published",
+      ...resolvePageModuleVisibilityFields(row.is_active, template.status),
       updated_at: String(row.updated_at),
       module_kind: "hero",
       block_type: null,
@@ -126,7 +130,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: row.template_id,
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
-      is_visible: normalizeBoolean(row.is_visible, true),
+      ...resolvePageModuleVisibilityFields(row.is_visible, template?.status),
       updated_at: String(row.updated_at),
       module_kind: "content",
       block_type: "content",
@@ -147,7 +151,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: row.template_id,
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
-      is_visible: normalizeBoolean(row.is_visible, true),
+      ...resolvePageModuleVisibilityFields(row.is_visible, template?.status),
       updated_at: String(row.updated_at),
       module_kind: "cta",
       block_type: "cta",
@@ -168,7 +172,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: row.template_id,
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
-      is_visible: normalizeBoolean(row.is_visible, true),
+      ...resolvePageModuleVisibilityFields(row.is_visible, template?.status),
       updated_at: String(row.updated_at),
       module_kind: "cards",
       block_type: "cards",
@@ -189,7 +193,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: row.template_id,
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
-      is_visible: normalizeBoolean(row.is_visible, true),
+      ...resolvePageModuleVisibilityFields(row.is_visible, template?.status),
       updated_at: String(row.updated_at),
       module_kind: "breadcrumb",
       block_type: "breadcrumb",
@@ -210,7 +214,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: row.template_id,
       slot: normalizeLayoutSlot(row.slot),
       sort_order: row.sort_order,
-      is_visible: normalizeBoolean(row.is_visible, true),
+      ...resolvePageModuleVisibilityFields(row.is_visible, template?.status),
       updated_at: String(row.updated_at),
       module_kind: "feed",
       block_type: "feed",
@@ -231,7 +235,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: row.template_id,
       slot: row.slot,
       sort_order: row.sort_order,
-      is_visible: normalizeBoolean(row.is_visible, true),
+      ...resolvePageModuleVisibilityFields(row.is_visible, template?.status),
       updated_at: String(row.updated_at),
       module_kind: "media-sidebar",
       block_type: null,
@@ -252,7 +256,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_id: row.template_id,
       slot: row.slot,
       sort_order: row.sort_order,
-      is_visible: normalizeBoolean(row.is_visible, true),
+      ...resolvePageModuleVisibilityFields(row.is_visible, template?.status),
       updated_at: String(row.updated_at),
       module_kind: "media-hub",
       block_type: null,

@@ -52,6 +52,7 @@
     "verify:global-seo": "npm run verify:global-seo-adoption && npm run verify:global-seo-fallback-chain && npm run verify:global-seo-diagnostics && npm run verify:global-seo-organization && npm run verify:global-seo-cache-revalidation && npm run verify:global-seo-public-consumers",
     "verify:public-media-truth": "node --experimental-strip-types scripts/verify-public-media-truth.mts",
     "verify:media-center-product-review": "node --experimental-strip-types scripts/verify-media-center-product-review.mts",
+    "qa:media-center-featured-toggle": "node tests/e2e/qa-media-center-featured-toggle.mjs",
     "verify:public-content-search": "node --experimental-strip-types scripts/verify-public-content-search.mts",
     "verify:pr-82-delta-recovery": "node --experimental-strip-types scripts/verify-pr-82-delta-recovery.mts",
     "verify:public-media-truth-db": "node scripts/verify-public-media-truth-db.mjs",

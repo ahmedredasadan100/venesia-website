@@ -96,6 +96,36 @@ export function isPublishedPageBlockStatus(value: string | null | undefined) {
   return value === "published";
 }
 
+/**
+ * Canonical public visibility contract for every Page Module kind.
+ * Template publication and page-assignment visibility are independent inputs,
+ * but public rendering is allowed only when both are true.
+ */
+export function isPageModulePubliclyVisible(
+  assignmentValue: unknown,
+  templateStatus: string | null | undefined,
+) {
+  return (
+    normalizeBoolean(assignmentValue, true) &&
+    isPublishedPageBlockStatus(templateStatus)
+  );
+}
+
+/** Keeps assignment visibility and effective public visibility distinct. */
+export function resolvePageModuleVisibilityFields(
+  assignmentValue: unknown,
+  templateStatus: string | null | undefined,
+) {
+  const assignmentVisible = normalizeBoolean(assignmentValue, true);
+  return {
+    is_visible: assignmentVisible,
+    is_publicly_visible: isPageModulePubliclyVisible(
+      assignmentVisible,
+      templateStatus,
+    ),
+  };
+}
+
 export function statusMeta(status?: string | null) {
   return getContentStatusMetadata(status);
 }

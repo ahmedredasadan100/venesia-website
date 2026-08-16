@@ -1,9 +1,6 @@
 import "server-only";
 
-import {
-  isPublishedPageBlockStatus,
-  normalizeBoolean,
-} from "../page-blocks/admin-utils";
+import { isPageModulePubliclyVisible } from "../page-blocks/admin-utils";
 import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseMediaHubModuleConfig } from "./parse-config";
@@ -45,12 +42,16 @@ export async function queryMediaHubModules(
   const modules: MediaHubModuleState[] = [];
   for (const row of rows ?? []) {
     const template = joinedTemplate(row.media_hub_module_templates);
-    if (!template || !isPublishedPageBlockStatus(template.status) || !isSectionKey(template.section_key)) continue;
+    if (
+      !template ||
+      !isPageModulePubliclyVisible(true, template.status) ||
+      !isSectionKey(template.section_key)
+    ) continue;
     modules.push({
       sectionKey: template.section_key,
       assignmentId: row.id,
       sortOrder: row.sort_order,
-      isVisible: normalizeBoolean(row.is_visible, true),
+      isVisible: isPageModulePubliclyVisible(row.is_visible, template.status),
       title: template.name,
       templateSlug: template.slug,
       config: parseMediaHubModuleConfig(template.config, template.section_key),

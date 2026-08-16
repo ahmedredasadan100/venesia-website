@@ -231,21 +231,24 @@ function buildCollectionQuery(
     .order("id", { ascending: input.sort === "oldest" });
 }
 
-async function resolveSeparateFeatured(
+async function resolveFeaturedSelection(
   input: ReturnType<typeof normalizePublicContentCollectionInput>,
 ) {
-  if (input.featuredId) {
+  const selection = input.featuredSelection;
+  if (!selection) return null;
+
+  if (selection.mode === "manual") {
     const manualResult = await buildCollectionQuery({
       ...input,
       featured: "none",
       excludeIds: [],
     })
-      .eq("id", input.featuredId)
+      .eq("id", selection.topicId)
       .limit(1);
     if (manualResult.error) {
       logError("Public Content manual featured query failed", manualResult.error, {
         contentTypes: input.contentTypes,
-        featuredId: input.featuredId,
+        featuredTopicId: selection.topicId,
       });
       return null;
     }
@@ -261,21 +264,7 @@ async function resolveSeparateFeatured(
     return null;
   }
 
-  const featured = mapCollectionRows(featuredResult.data)[0];
-  if (featured) return featured;
-
-  const fallbackResult = await buildCollectionQuery({
-    ...input,
-    featured: "none",
-    excludeIds: [],
-  }).limit(1);
-  if (fallbackResult.error) {
-    logError("Public Content featured fallback query failed", fallbackResult.error, {
-      contentTypes: input.contentTypes,
-    });
-    return null;
-  }
-  return mapCollectionRows(fallbackResult.data)[0] ?? null;
+  return mapCollectionRows(featuredResult.data)[0] ?? null;
 }
 
 function emptyCollection(
@@ -300,8 +289,8 @@ async function queryPublicContentCollection(
   const input = normalizePublicContentCollectionInput(rawInput);
   if (!input.contentTypes.length) return emptyCollection(input);
 
-  const featured = input.featured === "separate"
-    ? await resolveSeparateFeatured(input)
+  const featured = input.featuredSelection
+    ? await resolveFeaturedSelection(input)
     : null;
   const listInput = featured
     ? { ...input, featured: "none" as const, excludeIds: [...input.excludeIds, featured.id] }
