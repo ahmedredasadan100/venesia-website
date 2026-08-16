@@ -67,33 +67,39 @@ on conflict (slug) do update set
   sort_order = excluded.sort_order,
   updated_at = now();
 
-insert into public.page_media_hub_module_assignments (
-  page_id,
-  template_id,
-  slot,
-  sort_order,
-  is_visible
-)
-select
-  page.id,
-  template.id,
-  'main',
-  10,
-  true
-from (
-  values
-    ('media-center-news', 'media-listing-presentation-news'),
-    ('media-center-videos', 'media-listing-presentation-videos'),
-    ('media-center-gallery', 'media-listing-presentation-gallery'),
-    ('media-center-press', 'media-listing-presentation-press'),
-    ('media-center-site-updates', 'media-listing-presentation-site-updates')
-) as listing(page_slug, template_slug)
-join public.pages page on page.slug = listing.page_slug
-join public.media_hub_module_templates template on template.slug = listing.template_slug
-on conflict (page_id, template_id) do update set
-  slot = excluded.slot,
-  sort_order = excluded.sort_order,
-  is_visible = excluded.is_visible,
-  updated_at = now();
+do $sync_media_center_listing_presentations$
+declare
+  v_listing record;
+begin
+  for v_listing in
+    select
+      page.id as page_id,
+      template.id as template_id
+    from (
+      values
+        ('media-center-news', 'media-listing-presentation-news'),
+        ('media-center-videos', 'media-listing-presentation-videos'),
+        ('media-center-gallery', 'media-listing-presentation-gallery'),
+        ('media-center-press', 'media-listing-presentation-press'),
+        ('media-center-site-updates', 'media-listing-presentation-site-updates')
+    ) as listing(page_slug, template_slug)
+    join public.pages page on page.slug = listing.page_slug
+    join public.media_hub_module_templates template on template.slug = listing.template_slug
+  loop
+    perform public.mutate_page_composition(
+      v_listing.page_id,
+      'sync_template_pages',
+      jsonb_build_object(
+        'kind', 'media_hub',
+        'template_id', v_listing.template_id,
+        'default_slot', 'main',
+        'page_ids', jsonb_build_array(v_listing.page_id)
+      ),
+      null,
+      'system:migration:20260815092555_media_center_listing_presentation'
+    );
+  end loop;
+end;
+$sync_media_center_listing_presentations$;
 
 commit;
