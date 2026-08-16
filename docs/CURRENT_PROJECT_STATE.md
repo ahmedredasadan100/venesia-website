@@ -76,24 +76,24 @@ The Platform Health implementation and `DEBT-TYPE-01` closure were delivered thr
 
 PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` within current owners. Generated Database types were adopted without a new Runtime, Provider, Adapter, Product rule, or parallel implementation. This records implementation and merge closure only; it is not a Platform Global Closure or an Architecture reopening.
 
-## Configured live database reconciliation
+## Production database reconciliation
 
-The 2026-08-14 read-only reconciliation established the following facts against the configured Supabase target. The target was healthy, but its identity as Production was not independently proven in this pass.
+The 2026-08-16 authorized Production migration closure established the following facts against the configured Supabase Production project.
 
 | Proof | Reconciled state |
 |---|---:|
 | Repository migration files | 80 |
-| Configured live registry versions | 78 |
-| Registry SQL provenance | Exact repository SQL for all 78 deployed versions; one new Admin invariant migration remains unapplied |
+| Production registry versions | 80 |
+| Registry SQL provenance | Exact repository SQL for all 80 deployed versions |
 | Public tables | 51 |
 | Public tables with RLS enabled | 51 |
-| Public catalog objects with repository provenance | 265 |
+| Public catalog objects with repository provenance | 267 |
 | Invalid, unready, or non-live indexes | 0 |
 | Unvalidated public constraints | 0 |
 | Parallel public function overload names | 0 |
 | Public RLS policies | 3 |
 | Anonymous-callable application data functions | 0 |
-| Registry reconciliation audit records | At least 7 |
+| Registry reconciliation audit records | 8 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
@@ -104,7 +104,7 @@ scripts/verify-database-reconciliation.mts
 scripts/reconcile-migration-registry.mts
 ```
 
-The structural guard is part of `ci:check`. The Platform Health pass aligned three repository migration filenames with their existing live registry versions after proving byte-identical SQL. The additive `20260814174238_admin_users_active_invariant.sql` migration is repository work only until an authorized deployment applies it. No database write was performed by this phase.
+The structural guard is part of `ci:check`. The authorized closure applied `20260814174238_admin_users_active_invariant.sql` and `20260815092555_media_center_listing_presentation.sql` in repository order. The latter adopted the existing `mutate_page_composition` / `sync_template_pages` write owner. The canonical registry reconciler then restored exact repository SQL provenance without replaying either migration.
 
 ## Removed final-cleanup legacy
 
