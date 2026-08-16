@@ -85,6 +85,10 @@ const isPersistedFeedModuleConfigEqual =
 const isPublishedPageBlockStatus = adminUtils.isPublishedPageBlockStatus as (
   value: string | null | undefined,
 ) => boolean;
+const isPageModulePubliclyVisible = adminUtils.isPageModulePubliclyVisible as (
+  assignmentVisible: unknown,
+  templateStatus: string | null | undefined,
+) => boolean;
 const normalizeBoolean = adminUtils.normalizeBoolean as (
   value: unknown,
   fallback?: boolean,
@@ -249,6 +253,10 @@ assert.equal(
 assert.equal(isPublishedPageBlockStatus("published"), true);
 assert.equal(isPublishedPageBlockStatus("unpublished"), false);
 assert.equal(isPublishedPageBlockStatus(null), false);
+assert.equal(isPageModulePubliclyVisible(true, "published"), true);
+assert.equal(isPageModulePubliclyVisible(false, "published"), false);
+assert.equal(isPageModulePubliclyVisible(true, "unpublished"), false);
+assert.equal(isPageModulePubliclyVisible(false, "unpublished"), false);
 assert.equal(normalizeBoolean("false", true), false);
 
 const db = await PGlite.create();
@@ -602,7 +610,8 @@ assert.ok(
 );
 
 assert.ok(loader.includes("parseFeedModuleConfig(template.config, template.feed_type)"));
-assert.ok(loader.includes("isPublishedPageBlockStatus(template.status)"));
+assert.ok(loader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
+assert.equal(loader.includes("isPublishedPageBlockStatus"), false);
 assert.equal(loader.includes("function isPublishedTemplate"), false);
 assert.ok(resolver.includes('.select("id, name, slug, description, status, sort_order, category_id")'));
 assert.ok(resolver.includes('subtitle: row.description ?? ""'));
@@ -613,11 +622,13 @@ assert.ok(resolver.includes('.is("topics.deleted_at", null)'));
 assert.ok(resolver.includes("categorySlugs: config.query.categorySlugs"));
 assert.ok(resolver.includes('query = query.in("category_id", categoryIds)'));
 assert.ok(resolver.includes('if (!name || !slug) return []'));
-assert.ok(adminUtilsSource.includes("export function isPublishedPageBlockStatus"));
-assert.ok(blockLoader.includes("isPublishedPageBlockStatus(template.status)"));
+assert.ok(adminUtilsSource.includes("export function isPageModulePubliclyVisible"));
+assert.ok(blockLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
 assert.equal(blockLoader.includes("function isPublishedTemplate"), false);
-assert.ok(mediaHubLoader.includes("isPublishedPageBlockStatus(template.status)"));
-assert.ok(mediaSidebarLoader.includes("isPublishedPageBlockStatus(template.status)"));
+assert.ok(mediaHubLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
+assert.equal(mediaHubLoader.includes("isPublishedPageBlockStatus"), false);
+assert.ok(mediaSidebarLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
+assert.equal(mediaSidebarLoader.includes("isPublishedPageBlockStatus"), false);
 assert.ok(section.includes("showImage={presentation.showImage}"));
 assert.ok(section.includes("showDate={presentation.showDate}"));
 assert.ok(section.includes("showExcerpt={presentation.showExcerpt}"));
