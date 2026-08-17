@@ -5,6 +5,7 @@ import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import ContentBlocksTableClient from "./ContentBlocksTableClient";
 import type { ContentBlockRow } from "./actions";
+import { isRetiredContentBlockTemplateSlug } from "../../../../../lib/page-blocks/deprecated-block-modules";
 
 type PageProps = { searchParams?: Promise<{ notice?: string }> | { notice?: string } };
 
@@ -22,10 +23,12 @@ export default async function ContentBlocksPage({ searchParams }: PageProps) {
   ]);
   const { data, error } = templatesResult;
 
-  const rows: ContentBlockRow[] = (data ?? []).map((row) => ({
-    ...row,
-    description: row.description ?? null,
-  }));
+  const rows: ContentBlockRow[] = (data ?? [])
+    .filter((row) => !isRetiredContentBlockTemplateSlug(row.slug))
+    .map((row) => ({
+      ...row,
+      description: row.description ?? null,
+    }));
 
   return (
     <ContentBlocksTableClient

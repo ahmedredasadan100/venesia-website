@@ -21,6 +21,7 @@ import {
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
   slugify,
+  withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
@@ -90,7 +91,8 @@ function buildCardsConfig(formData: FormData): CardsBlockConfig {
 async function ensureUniqueSlug(slug: string, id?: number) {
   let query = getSupabaseAdmin().from("cards_block_templates").select("id").eq("slug", slug).limit(1);
   if (id) query = query.neq("id", id);
-  const { data } = await query.maybeSingle();
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(`Cards module slug lookup failed: ${error.message}`);
   return !data;
 }
 
@@ -260,7 +262,10 @@ export async function updateCardsBlock(formData: FormData) {
     metadata: { blockType: "cards", slug },
   }, actor);
   await revalidateBlockModulePaths("cards");
-  redirect(`/admin/pages-blocks/blocks/cards/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
+  redirect(withModuleEditorReturnContextFromForm(
+    `/admin/pages-blocks/blocks/cards/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    formData,
+  ));
 }
 
 export async function toggleCardsBlockStatus(formData: FormData) {

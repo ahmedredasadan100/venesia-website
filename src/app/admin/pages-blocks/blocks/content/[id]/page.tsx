@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
 import { getModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
 import ContentModuleEditClient from "../../../../../../components/admin/page-blocks/ContentModuleEditClient";
 import { updateContentBlock } from "../actions";
+import { isRetiredContentBlockTemplateSlug } from "../../../../../../lib/page-blocks/deprecated-block-modules";
 
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
@@ -22,7 +23,8 @@ export default async function ContentBlockEditPage({ params, searchParams }: Pag
     getModuleAssignmentContext("content", id),
   ]);
 
-  if (error || !block) notFound();
+  if (error) throw new Error(`Content template read failed: ${error.message}`);
+  if (!block || isRetiredContentBlockTemplateSlug(block.slug)) notFound();
 
   return (
     <ContentModuleEditClient

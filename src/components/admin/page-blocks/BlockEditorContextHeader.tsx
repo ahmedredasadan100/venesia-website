@@ -14,6 +14,7 @@ export type BlockEditorContextHeaderProps = {
   title: ReactNode;
   description?: ReactNode;
   status?: string;
+  meta?: ReactNode;
   saved?: boolean;
   actions?: ReactNode;
 };
@@ -25,6 +26,7 @@ export default function BlockEditorContextHeader({
   title,
   description,
   status,
+  meta,
   actions,
 }: BlockEditorContextHeaderProps) {
   const statusInfo = status ? statusMeta(status) : null;
@@ -43,7 +45,7 @@ export default function BlockEditorContextHeader({
         </Link>
       }
       meta={
-        statusInfo ? (
+        meta ?? (statusInfo ? (
           <AdminStatusPill
             tone={
               statusInfo.tone === "green"
@@ -55,7 +57,7 @@ export default function BlockEditorContextHeader({
           >
             {statusInfo.label}
           </AdminStatusPill>
-        ) : undefined
+        ) : undefined)
       }
       actions={actions}
     />

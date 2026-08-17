@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
 import {
   AdminFeedbackRegion,
@@ -25,6 +25,7 @@ import {
   AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridRowActions,
+  AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminFormError,
   AdminFormRuntime,
@@ -39,6 +40,7 @@ import {
   type AdminRowActionsCapability,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
+import { useAdminTable } from "../../../../../components/admin/table-engine";
 import type { AdminFormRuntimeHandle } from "../../../../../components/admin/ui/AdminFormRuntime";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
 import {
@@ -75,15 +77,7 @@ type HeroManagerClientProps = {
   preferenceError?: string | null;
 };
 
-const sourceLabels: Record<string, string> = {
-  manual: "يدوي",
-  latest_topics: "آخر مواضيع تهمك",
-  featured_topics: "مواضيع مميزة",
-  topic_category: "تصنيف مواضيع",
-  latest_media: "آخر المركز الإعلامي",
-  featured_media: "إعلامي مميز",
-  media_category: "تصنيف إعلامي",
-};
+type HeroTemplateSortKey = "name" | "slug" | "status";
 
 /**
  * RTL table: اسم الهيرو (1fr, يمين) → … → الإجراءات (ثابت، شمال).
@@ -157,6 +151,23 @@ export default function HeroManagerClient({
     entity: "hero-templates",
     initialRows: heroes,
   });
+  const sortAccessors = useMemo(
+    () => ({
+      name: (hero: HeroTemplateRow) => hero.name,
+      slug: (hero: HeroTemplateRow) => hero.slug,
+      status: (hero: HeroTemplateRow) => hero.status,
+    }),
+    [],
+  );
+  const table = useAdminTable<HeroTemplateRow, HeroTemplateSortKey>({
+    initialRows: instant.rows,
+    getRowId: (hero) => hero.id,
+    sortAccessors,
+  });
+  const setTableRows = table.setRows;
+  useEffect(() => {
+    setTableRows(instant.rows);
+  }, [instant.rows, setTableRows]);
   const queryContract = useMemo<AdminBoundedClientQueryContract<HeroTemplateRow>>(
     () => ({
       mode: "bounded-client",
@@ -177,7 +188,7 @@ export default function HeroManagerClient({
     [],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: instant.rows,
+    rows: table.rows,
     datasetKey: "hero-templates",
     queryContract,
     defaultPageSize: PAGE_SIZE,
@@ -425,12 +436,46 @@ export default function HeroManagerClient({
                 label="تحديد كل الهيروهات"
               />
             </AdminDataGridCheckboxCell>
-            <AdminDataGridPrimaryCell>اسم الهيرو</AdminDataGridPrimaryCell>
+            <AdminDataGridPrimaryCell>
+              <AdminDataGridSortLabel
+                active={table.sort.key === "name"}
+                direction={table.sort.direction}
+                onClick={() => {
+                  pagination.resetPage();
+                  table.toggleSort("name");
+                }}
+                className="justify-end"
+              >
+                اسم الهيرو
+              </AdminDataGridSortLabel>
+            </AdminDataGridPrimaryCell>
             {visibleColumnSet.has("slug") ? (
-              <AdminDataGridCenterCell>المعرّف</AdminDataGridCenterCell>
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel
+                  active={table.sort.key === "slug"}
+                  direction={table.sort.direction}
+                  onClick={() => {
+                    pagination.resetPage();
+                    table.toggleSort("slug");
+                  }}
+                >
+                  المعرّف
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
             ) : null}
             {visibleColumnSet.has("status") ? (
-              <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+              <AdminDataGridCenterCell>
+                <AdminDataGridSortLabel
+                  active={table.sort.key === "status"}
+                  direction={table.sort.direction}
+                  onClick={() => {
+                    pagination.resetPage();
+                    table.toggleSort("status");
+                  }}
+                >
+                  الحالة
+                </AdminDataGridSortLabel>
+              </AdminDataGridCenterCell>
             ) : null}
             <div className="text-center">الإجراءات</div>
           </AdminDataGridHeader>
@@ -636,15 +681,8 @@ export default function HeroManagerClient({
                   <option value="home-cinematic">سينمائي للصفحة الرئيسية</option>
                 </select>
               </label>
-              <label className={adminFormLabelClassName()}>
-                Source
-                <select name="source_type" defaultValue="manual" className={adminFormFieldClassName()}>
-                  {Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </label>
               <ModuleEditorStatusSwitch status="unpublished" className="md:col-span-2" />
               <input type="hidden" name="style_preset" value="cinematic-gold" />
-              <input type="hidden" name="limit_count" value="1" />
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end md:col-span-2">
                 <AdminModalCancelButton onClick={requestClose} disabled={pending}>
                   إلغاء

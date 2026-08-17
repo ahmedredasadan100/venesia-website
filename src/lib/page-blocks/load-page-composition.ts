@@ -45,7 +45,7 @@ export async function loadPageCompositionBySlug(
     loadPageBlockStateBySlug(pageSlug),
     loadFeedModuleStateForPageSlug(pageSlug),
     isMediaCenterPage
-      ? queryMediaHubModules(pageSlug, { enrich: pageSlug === "media-center" })
+      ? queryMediaHubModules(pageSlug)
       : null,
     isMediaCenterPage ? queryMediaSidebarModules(pageSlug) : null,
   ]);
@@ -65,10 +65,10 @@ export async function loadPageCompositionBySlug(
     });
   }
 
-  if (heroState.hero) {
+  if (heroState.hero && heroState.assignmentId !== null) {
     slots.hero.push({
       kind: "hero",
-      assignmentId: heroState.hero.template?.id ?? heroState.hero.id,
+      assignmentId: heroState.assignmentId,
       sortOrder: 0,
       hero: heroState.hero,
     });
@@ -78,9 +78,20 @@ export async function loadPageCompositionBySlug(
     slots[key] = sortEntries(slots[key]);
   }
 
-  const hasAnyAssignmentRows = blockState.hasAnyAssignmentRows || feedState.hasAnyAssignmentRows;
-  const hasRenderableModules = blockState.hasRenderableModules || feedState.modules.length > 0;
+  const hasAnyAssignmentRows =
+    heroState.hasAnyAssignmentRows ||
+    blockState.hasAnyAssignmentRows ||
+    feedState.hasAnyAssignmentRows ||
+    Boolean(mediaHubModules?.hasAnyAssignmentRows) ||
+    Boolean(mediaSidebarModules?.hasAnyAssignmentRows);
+  const hasRenderableModules =
+    heroState.visibility === "visible" ||
+    blockState.hasRenderableModules ||
+    feedState.modules.length > 0 ||
+    Boolean(mediaHubModules?.hasRenderableModules) ||
+    Boolean(mediaSidebarModules?.hasRenderableModules);
   const hasCompositionError =
+    heroState.visibility === "error" ||
     blockState.hasCompositionError ||
     feedState.hasCompositionError ||
     mediaHubModules?.sourceStatus === "error" ||

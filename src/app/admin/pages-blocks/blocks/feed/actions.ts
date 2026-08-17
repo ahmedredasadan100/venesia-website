@@ -21,6 +21,7 @@ import {
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
   slugify,
+  withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
@@ -63,7 +64,8 @@ async function sanitizeFeedModuleConfig(config: ReturnType<typeof buildFeedModul
 async function ensureUniqueSlug(slug: string, id?: number) {
   let query = getSupabaseAdmin().from("feed_module_templates").select("id").eq("slug", slug).limit(1);
   if (id) query = query.neq("id", id);
-  const { data } = await query.maybeSingle();
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(`Feed module slug lookup failed: ${error.message}`);
   return !data;
 }
 
@@ -255,7 +257,10 @@ export async function updateFeedModule(formData: FormData) {
   }, actor);
   await revalidateBlockModulePaths("feed");
   revalidatePath(`/admin/pages-blocks/blocks/feed/${id}`, "page");
-  redirect(`/admin/pages-blocks/blocks/feed/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
+  redirect(withModuleEditorReturnContextFromForm(
+    `/admin/pages-blocks/blocks/feed/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    formData,
+  ));
 }
 
 export async function toggleFeedModuleStatus(formData: FormData) {

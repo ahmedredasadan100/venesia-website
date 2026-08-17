@@ -10,10 +10,15 @@ const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
 const jiti = createJiti(import.meta.url);
 const {
   HERO_BULK_ACTIONS,
+  MODULE_EDITOR_RETURN_PAGE_FORM_FIELD,
+  MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM,
   PAGE_BLOCK_BULK_ACTIONS,
+  PAGE_BLOCK_PUBLICATION_BULK_ACTIONS,
   isPageModulePubliclyVisible,
+  moduleEditHref,
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
+  resolveModuleEditorReturnNavigation,
   resolvePageModuleVisibilityFields,
 } = await jiti.import<typeof import("../src/lib/page-blocks/admin-utils.ts")>(
   "../src/lib/page-blocks/admin-utils.ts",
@@ -73,6 +78,10 @@ const blocksHub = read("src/app/admin/pages-blocks/blocks/page.tsx");
 const blockManager = read("src/components/admin/page-blocks/BlockModuleManagerClient.tsx");
 const contentManager = read("src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx");
 const summaryManager = read("src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx");
+const mediaHubListRoute = read("src/app/admin/pages-blocks/blocks/media-hub/page.tsx");
+const mediaSidebarListRoute = read("src/app/admin/pages-blocks/blocks/media-sidebar/page.tsx");
+const mediaHubActions = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
+const mediaSidebarActions = read("src/app/admin/pages-blocks/blocks/media-sidebar/actions.ts");
 const moduleListManagers = [
   blockManager,
   contentManager,
@@ -458,6 +467,35 @@ check(
 );
 
 check(
+  "Page Composition status cells keep the compact shared state contract",
+  assignmentGrid.includes("ADMIN_DATA_GRID_COLUMNS.statusCompact") &&
+    assignmentRow.includes('display="visibility"') &&
+    !assignmentRow.includes('{isVisible ? "ظاهر" : "مخفي"}') &&
+    !assignmentRow.includes('{isVisible ? "ظاهر للعامة" : "غير ظاهر للعامة"}'),
+);
+
+check(
+  "Page Module editors preserve one validated Page Composition return contract",
+  MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM === "returnPageId" &&
+    MODULE_EDITOR_RETURN_PAGE_FORM_FIELD === "return_page_id" &&
+    moduleEditHref("media-hub", 15, { returnPageId: 17 }) ===
+      "/admin/pages-blocks/blocks/media-hub/15?returnPageId=17" &&
+    moduleEditHref("media-hub", 15) ===
+      "/admin/pages-blocks/blocks/media-hub/15" &&
+    resolveModuleEditorReturnNavigation("17")?.backHref ===
+      "/admin/pages-blocks/pages/17?tab=modules" &&
+    resolveModuleEditorReturnNavigation("../17") === null &&
+    assignmentRow.includes("returnPageId: row.page_id") &&
+    presentation.includes("resolveModuleEditorReturnNavigation") &&
+    presentation.includes("MODULE_EDITOR_RETURN_PAGE_FORM_FIELD") &&
+    statusActionSources.every((source) =>
+      source.includes("withModuleEditorReturnContextFromForm"),
+    ) &&
+    read("src/app/admin/pages-blocks/pages/page-actions/assignment-duplicate.ts")
+      .includes("withModuleEditorReturnPageId"),
+);
+
+check(
   "Page Module mutations invalidate literal public and Admin paths with the Next 16 contract",
   adminRevalidationOwner.includes("revalidatePath(normalizedPath);") &&
     adminRevalidationOwner.includes("revalidatePath(`/admin/pages-blocks/pages/${pageId}`);") &&
@@ -580,6 +618,31 @@ check(
     source.includes("AdminTablePagination") &&
     source.includes("AdminDataGridRowActions"),
   ),
+);
+
+check(
+  "Media Hub and Media Sidebar adopt the shared supported Management Collection lifecycle",
+  summaryManager.includes("useAdminTable") &&
+    summaryManager.includes("AdminDataGridSortLabel") &&
+    summaryManager.includes("useAdminGridSelection") &&
+    summaryManager.includes("AdminBulkActionBar") &&
+    summaryManager.includes("AdminDataGridCheckboxCell") &&
+    summaryManager.includes('paramKey: "status"') &&
+    summaryManager.includes("AdminDataGridRowActions") &&
+    mediaHubListRoute.includes("bulkMediaHubModuleStatuses") &&
+    mediaSidebarListRoute.includes("bulkMediaSidebarModuleStatuses") &&
+    [mediaHubActions, mediaSidebarActions].every((source) =>
+      source.includes("PAGE_BLOCK_PUBLICATION_BULK_ACTIONS") &&
+      source.includes("parsePageBlockBulkIds") &&
+      source.includes('.in("id", ids)'),
+    ) &&
+    parsePageBlockBulkAction("publish", PAGE_BLOCK_PUBLICATION_BULK_ACTIONS) === "publish" &&
+    rejects(() =>
+      parsePageBlockBulkAction("delete", PAGE_BLOCK_PUBLICATION_BULK_ACTIONS),
+    ) &&
+    adoptionManifest.includes(
+      "Create, duplicate, and delete are not supported by the current Media module domain action contract.",
+    ),
 );
 
 check(

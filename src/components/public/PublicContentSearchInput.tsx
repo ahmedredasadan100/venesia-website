@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import {
   type KeyboardEvent,
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   useTransition,
@@ -28,6 +30,48 @@ type PublicContentSearchInputProps = {
   helpText: string;
 };
 
+type FloatingListboxPosition = {
+  left: number;
+  top: number;
+  width: number;
+  maxHeight: number;
+};
+
+const FLOATING_LISTBOX_GAP = 9;
+const FLOATING_LISTBOX_VIEWPORT_MARGIN = 12;
+const FLOATING_LISTBOX_MAX_HEIGHT = 360;
+
+function resolveFloatingListboxPosition(anchor: DOMRect): FloatingListboxPosition {
+  const availableWidth = Math.max(0, window.innerWidth - FLOATING_LISTBOX_VIEWPORT_MARGIN * 2);
+  const width = Math.min(anchor.width, availableWidth);
+  const left = Math.min(
+    Math.max(FLOATING_LISTBOX_VIEWPORT_MARGIN, anchor.left),
+    Math.max(FLOATING_LISTBOX_VIEWPORT_MARGIN, window.innerWidth - width - FLOATING_LISTBOX_VIEWPORT_MARGIN),
+  );
+  const availableBelow = Math.max(
+    0,
+    window.innerHeight - anchor.bottom - FLOATING_LISTBOX_GAP - FLOATING_LISTBOX_VIEWPORT_MARGIN,
+  );
+  const availableAbove = Math.max(
+    0,
+    anchor.top - FLOATING_LISTBOX_GAP - FLOATING_LISTBOX_VIEWPORT_MARGIN,
+  );
+  const placeAbove = availableBelow < 180 && availableAbove > availableBelow;
+  const maxHeight = Math.max(
+    96,
+    Math.min(FLOATING_LISTBOX_MAX_HEIGHT, placeAbove ? availableAbove : availableBelow),
+  );
+
+  return {
+    left,
+    top: placeAbove
+      ? Math.max(FLOATING_LISTBOX_VIEWPORT_MARGIN, anchor.top - FLOATING_LISTBOX_GAP - maxHeight)
+      : anchor.bottom + FLOATING_LISTBOX_GAP,
+    width,
+    maxHeight,
+  };
+}
+
 export default function PublicContentSearchInput({
   basePath,
   query = "",
@@ -38,6 +82,7 @@ export default function PublicContentSearchInput({
   helpText,
 }: PublicContentSearchInputProps) {
   const router = useRouter();
+  const anchorRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialQuery = normalizePublicContentSearchQuery(query);
   const requestedQueryRef = useRef(initialQuery);
@@ -49,6 +94,7 @@ export default function PublicContentSearchInput({
   const [draftQuery, setDraftQuery] = useState(query);
   const [listboxOpen, setListboxOpen] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const [floatingPosition, setFloatingPosition] = useState<FloatingListboxPosition | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const committedQuery = normalizePublicContentSearchQuery(query);
@@ -58,6 +104,32 @@ export default function PublicContentSearchInput({
     Boolean(committedQuery) &&
     normalizedDraft === committedQuery &&
     suggestions.length > 0;
+
+  const updateFloatingPosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor?.isConnected || anchor.getClientRects().length === 0) {
+      setFloatingPosition(null);
+      return;
+    }
+    setFloatingPosition(resolveFloatingListboxPosition(anchor.getBoundingClientRect()));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!showSuggestions) return;
+
+    updateFloatingPosition();
+    window.addEventListener("scroll", updateFloatingPosition, true);
+    window.addEventListener("resize", updateFloatingPosition);
+    window.visualViewport?.addEventListener("scroll", updateFloatingPosition);
+    window.visualViewport?.addEventListener("resize", updateFloatingPosition);
+
+    return () => {
+      window.removeEventListener("scroll", updateFloatingPosition, true);
+      window.removeEventListener("resize", updateFloatingPosition);
+      window.visualViewport?.removeEventListener("scroll", updateFloatingPosition);
+      window.visualViewport?.removeEventListener("resize", updateFloatingPosition);
+    };
+  }, [showSuggestions, updateFloatingPosition]);
 
   const navigateToSearch = useCallback(
     (nextQuery: string) => {
@@ -181,8 +253,55 @@ export default function PublicContentSearchInput({
     window.requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  const listbox = showSuggestions && floatingPosition
+    ? createPortal(
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-label="اقتراحات البحث"
+          data-public-content-search-listbox=""
+          dir="rtl"
+          style={{
+            position: "fixed",
+            left: floatingPosition.left,
+            top: floatingPosition.top,
+            width: floatingPosition.width,
+            maxHeight: floatingPosition.maxHeight,
+            zIndex: 60,
+          }}
+          className="overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#080B10]/98 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.48)] backdrop-blur-xl"
+        >
+          {suggestions.map((suggestion, index) => (
+            <button
+              key={suggestion.id}
+              id={`${listboxId}-${index}`}
+              type="button"
+              role="option"
+              aria-selected={index === activeSuggestion}
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActiveSuggestion(index)}
+              onClick={() => selectSuggestion(index)}
+              className={`block w-full rounded-xl px-3 py-2.5 text-start transition ${
+                index === activeSuggestion
+                  ? "bg-[#D8B87A]/12 text-[#D8B87A]"
+                  : "text-white/78 hover:bg-white/[0.05] hover:text-white"
+              }`}
+            >
+              <span className="block text-sm leading-6">{suggestion.title}</span>
+              {suggestion.meta ? (
+                <span className="mt-0.5 block text-xs text-white/38">
+                  {suggestion.meta}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )
+    : null;
+
   return (
-    <div className="relative">
+    <div ref={anchorRef} className="relative">
       <input
         ref={inputRef}
         type="search"
@@ -232,39 +351,7 @@ export default function PublicContentSearchInput({
         </button>
       ) : null}
 
-      {showSuggestions ? (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-label="اقتراحات البحث"
-          className="absolute inset-x-0 top-[calc(100%+0.55rem)] z-40 overflow-hidden rounded-2xl border border-white/12 bg-[#080B10]/98 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.48)] backdrop-blur-xl"
-        >
-          {suggestions.map((suggestion, index) => (
-            <button
-              key={suggestion.id}
-              id={`${listboxId}-${index}`}
-              type="button"
-              role="option"
-              aria-selected={index === activeSuggestion}
-              onMouseDown={(event) => event.preventDefault()}
-              onMouseEnter={() => setActiveSuggestion(index)}
-              onClick={() => selectSuggestion(index)}
-              className={`block w-full rounded-xl px-3 py-2.5 text-start transition ${
-                index === activeSuggestion
-                  ? "bg-[#D8B87A]/12 text-[#D8B87A]"
-                  : "text-white/78 hover:bg-white/[0.05] hover:text-white"
-              }`}
-            >
-              <span className="block text-sm leading-6">{suggestion.title}</span>
-              {suggestion.meta ? (
-                <span className="mt-0.5 block text-xs text-white/38">
-                  {suggestion.meta}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {listbox}
 
       <p id={statusId} className="sr-only" role="status" aria-live="polite">
         {isPending || normalizedDraft !== committedQuery

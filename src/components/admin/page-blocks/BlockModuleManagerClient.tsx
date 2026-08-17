@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AdminEntityListFilters from "../entity-list/AdminEntityListFilters";
 import {
   AdminFeedbackRegion,
@@ -24,6 +24,7 @@ import {
   AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridRowActions,
+  AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminFormError,
   AdminFormRuntime,
@@ -38,6 +39,7 @@ import {
   type AdminRowActionsCapability,
   useAdminGridSelection,
 } from "../ui";
+import { useAdminTable } from "../table-engine";
 import type { AdminFormRuntimeHandle } from "../ui/AdminFormRuntime";
 import { PlusIcon } from "../AdminRowActions";
 import type { AdminFormAction } from "../../../lib/admin/form-runtime";
@@ -69,6 +71,8 @@ export type BlockModuleRow = {
   variant: string;
   status: string;
 };
+
+type BlockModuleSortKey = "name" | "slug" | "variant" | "status";
 
 type BlockModuleManagerClientProps = {
   moduleKey: "cta" | "cards" | "breadcrumb" | "feed";
@@ -164,6 +168,24 @@ export default function BlockModuleManagerClient({
         .join(" "),
     [visibleColumnSet],
   );
+  const sortAccessors = useMemo(
+    () => ({
+      name: (row: BlockModuleRow) => row.name,
+      slug: (row: BlockModuleRow) => row.slug,
+      variant: (row: BlockModuleRow) => variantLabelByValue.get(row.variant) ?? row.variant,
+      status: (row: BlockModuleRow) => statusMeta(row.status).label,
+    }),
+    [variantLabelByValue],
+  );
+  const table = useAdminTable<BlockModuleRow, BlockModuleSortKey>({
+    initialRows: instant.rows,
+    getRowId: (row) => row.id,
+    sortAccessors,
+  });
+  const setTableRows = table.setRows;
+  useEffect(() => {
+    setTableRows(instant.rows);
+  }, [instant.rows, setTableRows]);
   const queryContract = useMemo<AdminBoundedClientQueryContract<BlockModuleRow>>(
     () => ({
       mode: "bounded-client",
@@ -178,7 +200,7 @@ export default function BlockModuleManagerClient({
     [variantLabelByValue],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: instant.rows,
+    rows: table.rows,
     datasetKey: moduleKey,
     queryContract,
     defaultPageSize: PAGE_SIZE,
@@ -431,15 +453,60 @@ export default function BlockModuleManagerClient({
               label="تحديد الكل"
             />
           </AdminDataGridCheckboxCell>
-          <AdminDataGridPrimaryCell>الاسم</AdminDataGridPrimaryCell>
+          <AdminDataGridPrimaryCell>
+            <AdminDataGridSortLabel
+              active={table.sort.key === "name"}
+              direction={table.sort.direction}
+              onClick={() => {
+                pagination.resetPage();
+                table.toggleSort("name");
+              }}
+              className="justify-end"
+            >
+              الاسم
+            </AdminDataGridSortLabel>
+          </AdminDataGridPrimaryCell>
           {visibleColumnSet.has("slug") ? (
-            <AdminDataGridCenterCell>المعرّف</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
+              <AdminDataGridSortLabel
+                active={table.sort.key === "slug"}
+                direction={table.sort.direction}
+                onClick={() => {
+                  pagination.resetPage();
+                  table.toggleSort("slug");
+                }}
+              >
+                المعرّف
+              </AdminDataGridSortLabel>
+            </AdminDataGridCenterCell>
           ) : null}
           {visibleColumnSet.has("variant") ? (
-            <AdminDataGridCenterCell>النمط</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
+              <AdminDataGridSortLabel
+                active={table.sort.key === "variant"}
+                direction={table.sort.direction}
+                onClick={() => {
+                  pagination.resetPage();
+                  table.toggleSort("variant");
+                }}
+              >
+                النمط
+              </AdminDataGridSortLabel>
+            </AdminDataGridCenterCell>
           ) : null}
           {visibleColumnSet.has("status") ? (
-            <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
+              <AdminDataGridSortLabel
+                active={table.sort.key === "status"}
+                direction={table.sort.direction}
+                onClick={() => {
+                  pagination.resetPage();
+                  table.toggleSort("status");
+                }}
+              >
+                الحالة
+              </AdminDataGridSortLabel>
+            </AdminDataGridCenterCell>
           ) : null}
           <div className="text-center">الإجراءات</div>
         </AdminDataGridHeader>

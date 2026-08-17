@@ -6,14 +6,8 @@ import type {
 } from "./hero/hero-content-controls";
 import { resolveHeroContentControls } from "./hero/hero-content-controls";
 
-export type HeroSourceType =
-  | "manual"
-  | "latest_topics"
-  | "featured_topics"
-  | "topic_category"
-  | "latest_media"
-  | "featured_media"
-  | "media_category";
+/** Hero owns authored presentation only; public content belongs to page modules. */
+export type HeroSourceType = "manual";
 
 export type PageRecord = {
   id: number;
@@ -59,14 +53,6 @@ type HeroTemplateRecord = {
 export type HeroSectionData = PageSectionRecord & {
   page?: PageRecord | null;
   template?: Pick<HeroTemplateRecord, "id" | "name" | "slug"> | null;
-  resolvedItems?: Array<{
-    id: number;
-    title: string;
-    excerpt?: string | null;
-    image?: string | null;
-    href?: string;
-    category?: string | null;
-  }>;
 };
 
 export type HeroLayoutPreset = "compact" | "standard";

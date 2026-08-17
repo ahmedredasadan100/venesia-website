@@ -1450,6 +1450,7 @@ check(
       "feedbackOwner" in surface &&
       "confirmationOwner" in surface &&
       "reorderOwner" in surface &&
+      Array.isArray(surface.consumerAdoptionEvidence) &&
       "queryMode" in surface &&
       Array.isArray(surface.genuineExceptions) &&
       Array.isArray(surface.requiredAdoption) &&
@@ -1504,6 +1505,82 @@ const collectionSurfaceComplianceFailures = collectionSurfaces.flatMap(
 check(
   "every Collection, specialized adopter, and explicit exception proves its classification from the existing contracts",
   collectionSurfaceComplianceFailures.length === 0,
+);
+const blockTemplateLibraries = collectionSurfaces.find(
+  (surface) => surface.id === "block-template-libraries",
+);
+const blockTemplateConsumerContracts = [
+  "collection",
+  "table",
+  "toolbar",
+  "search",
+  "filters",
+  "header",
+  "columns",
+  "sort",
+  "row_actions",
+  "bulk",
+  "selection",
+  "pagination",
+  "runtime",
+  "data_registry",
+] as const;
+const blockTemplateContractTokens = {
+  collection: "AdminDataGrid",
+  table: "AdminDataGridHeader",
+  toolbar: "AdminEntityListFilters",
+  search: "search={{",
+  filters: "AdminEntityListFilters",
+  header: "AdminPageContextHeader",
+  columns: "AdminColumnVisibilityMenu",
+  sort: "AdminDataGridSortLabel",
+  row_actions: "AdminDataGridRowActions",
+  bulk: "AdminBulkActionBar",
+  selection: "useAdminGridSelection",
+  pagination: "AdminTablePagination",
+  runtime: "useAdminBoundedClientInstantMutation",
+} as const;
+const blockTemplateConsumerFailures = blockTemplateLibraries?.consumerAdoptionEvidence.flatMap(
+  (consumer) => {
+    const failures: string[] = [];
+    if (
+      !blockTemplateLibraries.routes.includes(consumer.route) ||
+      !blockTemplateLibraries.pageSourceFiles.includes(consumer.pageSourceFile) ||
+      !existsSync(join(ROOT, consumer.pageSourceFile)) ||
+      !existsSync(join(ROOT, consumer.presentationOwner))
+    ) {
+      failures.push(`${consumer.id}:source_ownership`);
+      return failures;
+    }
+    const source = `${read(consumer.pageSourceFile)}\n${read(consumer.presentationOwner)}`;
+    for (const contract of blockTemplateConsumerContracts) {
+      const state = consumer.contracts[contract];
+      if (!state) {
+        failures.push(`${consumer.id}:${contract}:missing_claim`);
+        continue;
+      }
+      if (contract === "data_registry") {
+        if (state !== "not_required") failures.push(`${consumer.id}:${contract}:false_claim`);
+        continue;
+      }
+      if (state !== "adopted" || !source.includes(blockTemplateContractTokens[contract])) {
+        failures.push(`${consumer.id}:${contract}:missing_evidence`);
+      }
+    }
+    if (consumer.requiredAdoption.length > 0) {
+      failures.push(`${consumer.id}:partial_adoption`);
+    }
+    return failures;
+  },
+) ?? ["block-template-libraries:missing_surface"];
+check(
+  "each Block Template library proves its own Collection capabilities instead of inheriting a grouped claim",
+  blockTemplateLibraries?.consumerAdoptionEvidence.length === 8 &&
+    sameValueSet(
+      blockTemplateLibraries.consumerAdoptionEvidence.map((consumer) => consumer.route),
+      blockTemplateLibraries.routes,
+    ) &&
+    blockTemplateConsumerFailures.length === 0,
 );
 check(
   "every generic list primitive, top-level card catalog, and mapped command queue is classified exactly once",

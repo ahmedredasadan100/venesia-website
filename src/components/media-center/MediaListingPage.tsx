@@ -1,7 +1,7 @@
 import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
-import { isMediaListingShellPublished } from "./media-listing-shell-model";
+import { renderMediaHubSections } from "./renderMediaHubSections";
 import {
   getMediaHref,
   getMediaListingPage,
@@ -31,12 +31,6 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     searchParams ?? Promise.resolve(undefined),
     loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
   ]);
-  if (
-    !isMediaListingShellPublished(
-      config.cmsPageSlug,
-      composition.blockStates,
-    )
-  ) return null;
   if (!composition.mediaSidebarModules) return null;
 
   const sort = params?.sort === "oldest" ? "oldest" : "newest";
@@ -47,6 +41,12 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     composition.mediaHubModules,
     config.mediaType,
   );
+  const featuredModules = composition.mediaHubModules?.modules.filter(
+    (module) =>
+      module.sectionKey === "featured" &&
+      module.config.placement === "featured",
+  ) ?? [];
+  const featuredNodes = renderMediaHubSections(featuredModules);
   const listing = await getMediaListingPage({
     type: config.mediaType,
     page: presentation.paginationEnabled ? requestedPage : 1,
@@ -73,23 +73,30 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
         searchSuggestions={searchSuggestions}
         searchResultCount={listing.totalRegular}
       >
-        <MediaListingContent
-          items={listing.items}
-          searchQuery={searchQuery}
-          currentPage={listing.currentPage}
-          totalPages={listing.totalPages}
-          totalCount={listing.totalRegular}
-          sort={sort}
-          basePath={config.basePath}
-          emptyTitle={config.emptyTitle}
-          emptyDescription={config.emptyDescription}
-          cardCtaText={presentation.cardCtaText}
-          itemsLabel={config.itemsLabel}
-          layout={presentation.layout}
-          columns={presentation.columns}
-          paginationEnabled={presentation.paginationEnabled}
-          cardVariant={presentation.cardVariant}
-        />
+        <div className="space-y-10">
+          {featuredNodes.length > 0 ? (
+            <section className="space-y-10 text-right text-white" dir="rtl">
+              {featuredNodes}
+            </section>
+          ) : null}
+          <MediaListingContent
+            items={listing.items}
+            searchQuery={searchQuery}
+            currentPage={listing.currentPage}
+            totalPages={listing.totalPages}
+            totalCount={listing.totalRegular}
+            sort={sort}
+            basePath={config.basePath}
+            emptyTitle={config.emptyTitle}
+            emptyDescription={config.emptyDescription}
+            cardCtaText={presentation.cardCtaText}
+            itemsLabel={config.itemsLabel}
+            layout={presentation.layout}
+            columns={presentation.columns}
+            paginationEnabled={presentation.paginationEnabled}
+            cardVariant={presentation.cardVariant}
+          />
+        </div>
       </MediaPageShell>
     </MediaCenterShellLayout>
   );

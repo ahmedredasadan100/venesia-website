@@ -12,9 +12,13 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   cleanText,
   getStatus,
+  PAGE_BLOCK_PUBLICATION_BULK_ACTIONS,
   parseFormBoolean,
   parseFormStatus,
   parseNumber,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
+  withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
@@ -35,11 +39,14 @@ export async function updateMediaHubModule(formData: FormData) {
 
   const sectionKey = parseMediaHubSectionKey(cleanText(formData.get("section_key")));
   const dataSource = cleanText(formData.get("data_source")) || "topics";
-  const placement = cleanText(formData.get("placement")) === "listing" ? "listing" : "hub";
+  const placementInput = cleanText(formData.get("placement"));
+  const placement = placementInput === "listing"
+    ? "listing"
+    : placementInput === "featured"
+      ? "featured"
+      : "hub";
   const config = buildMediaHubModuleConfig(sectionKey, dataSource, {
     limit: parseNumber(formData.get("limit"), 0),
-    sideLimit: parseNumber(formData.get("side_limit"), 0),
-    listLimit: parseNumber(formData.get("list_limit"), 0),
   }, {
     eyebrow: cleanText(formData.get("eyebrow")),
     title: cleanText(formData.get("title")),
@@ -93,7 +100,10 @@ export async function updateMediaHubModule(formData: FormData) {
   }, actor);
   await revalidateBlockModulePaths("media-hub");
   revalidatePath(`/admin/pages-blocks/blocks/media-hub/${id}`, "page");
-  redirect(`/admin/pages-blocks/blocks/media-hub/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
+  redirect(withModuleEditorReturnContextFromForm(
+    `/admin/pages-blocks/blocks/media-hub/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    formData,
+  ));
 }
 
 export async function toggleMediaHubModuleStatus(
@@ -121,6 +131,33 @@ export async function toggleMediaHubModuleStatus(
     entityType: "content_block_template",
     entityId: id,
     metadata: { blockType: "media-hub", status: normalizedStatus },
+  }, actor);
+  await revalidateBlockModulePaths("media-hub");
+}
+
+export async function bulkMediaHubModuleStatuses(formData: FormData) {
+  const actor = await requireAdminSession();
+  const action = parsePageBlockBulkAction(
+    formData.get("bulk_action"),
+    PAGE_BLOCK_PUBLICATION_BULK_ACTIONS,
+  );
+  const ids = parsePageBlockBulkIds(formData.getAll("ids"));
+  const status = action === "publish" ? "published" : "unpublished";
+
+  const { error } = await getSupabaseAdmin()
+    .from("media_hub_module_templates")
+    .update({ status, updated_at: new Date().toISOString() })
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      action === "publish" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityLabel: "media_hub_module_templates",
+    metadata: { blockType: "media-hub", action, ids, count: ids.length },
   }, actor);
   await revalidateBlockModulePaths("media-hub");
 }

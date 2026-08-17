@@ -23,7 +23,8 @@ export default async function MediaHubModuleEditPage({ params, searchParams }: P
     getMediaHubModuleAssignmentContext(id),
   ]);
 
-  if (error || !block) notFound();
+  if (error) throw new Error(`Media Hub template read failed: ${error.message}`);
+  if (!block) notFound();
 
   return (
     <MediaHubModuleEditClient

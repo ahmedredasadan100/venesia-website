@@ -84,7 +84,9 @@ export default function PageBlocksAssignmentRow({
     actions: {
       edit: {
         access: "allowed",
-        href: moduleEditHref(row.module_kind, row.template_id),
+        href: moduleEditHref(row.module_kind, row.template_id, {
+          returnPageId: row.page_id,
+        }),
       },
       preview: previewHref
         ? {
@@ -176,7 +178,9 @@ export default function PageBlocksAssignmentRow({
           <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأسفل" : reorderDisabledTitle} disabled={!canMoveDown} pending={pendingAction === "reorder-down"} onClick={onMoveDown}>↓</AdminDataGridActionButton>
         </span>
         <Link
-          href={moduleEditHref(row.module_kind, row.template_id)}
+          href={moduleEditHref(row.module_kind, row.template_id, {
+            returnPageId: row.page_id,
+          })}
           className="min-w-0 truncate text-sm font-semibold text-white hover:text-[#D8B87A]"
           title={row.template_slug}
         >
@@ -206,19 +210,11 @@ export default function PageBlocksAssignmentRow({
 
       {showStatus ? (
         <AdminDataGridStatusCell>
-          <div className="flex items-center justify-center gap-2">
-            <span
-              className={`text-[10px] ${isVisible ? "text-emerald-200/80" : "text-white/40"}`}
-              data-module-public-visibility={isVisible ? "visible" : "hidden"}
-            >
-              {isVisible ? "ظاهر للعامة" : "غير ظاهر للعامة"}
-            </span>
-            <AdminDataGridRowActions
-              capability={capability}
-              display="visibility"
-              size="compact"
-            />
-          </div>
+          <AdminDataGridRowActions
+            capability={capability}
+            display="visibility"
+            size="compact"
+          />
         </AdminDataGridStatusCell>
       ) : null}
 

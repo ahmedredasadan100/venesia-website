@@ -113,13 +113,14 @@ for (const type of ["article", "news", "press", "site_update", "video", "gallery
   assert.ok(publicPaths.includes(`${type}:`));
 }
 
-for (const [label, source] of [
-  ["Hero", hero],
-  ["Topics Feed", feed],
-] as const) {
-  assert.ok(source.includes("loadPublicContentCollection"), `${label} must consume the Public Collection owner`);
-  assert.ok(!source.includes('.from("topics")'), `${label} must not keep a parallel public content read`);
-}
+assert.ok(feed.includes("loadPublicContentCollection"), "Topics Feed must consume the Public Collection owner");
+assert.ok(!feed.includes('.from("topics")'), "Topics Feed must not keep a parallel public content read");
+assert.ok(
+  !hero.includes("loadPublicContentCollection") &&
+    !hero.includes('.from("topics")') &&
+    !hero.includes("resolvedItems"),
+  "Hero must remain presentation-only and outside the Public Collection consumer set",
+);
 assert.ok(sitemap.includes("loadPublicContentSitemapRows"));
 assert.ok(!sitemap.includes('.from("topics")'));
 
@@ -129,6 +130,11 @@ assert.ok(input.includes("maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}"));
 assert.ok(input.includes('role="combobox"'));
 assert.ok(input.includes('role="listbox"'));
 assert.ok(input.includes('role="option"'));
+assert.ok(input.includes("createPortal("));
+assert.ok(input.includes('position: "fixed"'));
+assert.ok(input.includes('data-public-content-search-listbox=""'));
+assert.ok(input.includes("window.addEventListener(\"scroll\", updateFloatingPosition, true)"));
+assert.ok(!input.includes("z-[9999]") && !input.includes("zIndex: 9999"));
 assert.ok(input.includes('aria-live="polite"'));
 assert.ok(input.includes("ArrowDown") && input.includes("ArrowUp") && input.includes("Escape"));
 assert.ok(input.includes('event.key === "Enter" && normalizedDraft !== committedQuery'));
@@ -140,13 +146,20 @@ for (const forbidden of ["router.refresh", "window.location.reload", "fetch("]) 
 
 assert.ok(topicsSearchPanel.includes("PublicContentSearchInput"));
 assert.ok(mediaSidebar.includes("PublicContentSearchInput"));
+assert.ok(mediaSidebar.includes("SidebarFeedPanel"));
+assert.ok(!mediaSidebar.includes("function SidebarPanel"));
 assert.ok(topicsPage.includes("listingPromise") && topicsPage.includes("Promise.all"));
 assert.ok(topicsListing.includes("topics.map"));
 assert.ok(topicsListing.includes("!isSearching ? <FeaturedTopic"));
 assert.ok(mediaPage.includes("getMediaListingPage"));
 assert.ok(!mediaPage.includes("getMediaItems("), "Media search must not fetch a second catalog");
 assert.ok(!mediaPage.includes("searchCatalog"));
-assert.ok(mediaListing.includes("!isSearching ? children : null"));
+assert.ok(mediaPage.includes("featuredNodes"));
+assert.ok(
+  mediaPage.indexOf("featuredNodes") < mediaPage.indexOf("<MediaListingContent"),
+  "Featured Content must remain an independent page module during listing search",
+);
+assert.ok(!mediaListing.includes("children?: ReactNode"));
 assert.ok(!mediaShell.includes("createContext") && !mediaShell.includes("useMediaSearch"));
 
 for (const route of ["news", "videos", "gallery", "press", "site-updates"]) {
@@ -156,5 +169,5 @@ for (const route of ["news", "videos", "gallery", "press", "site-updates"]) {
 }
 
 console.log(
-  "PASS Public Content: one Unified Content Public Collection owner and contract; Topics, Media, Hero, Feed and Sitemap adopt it; autocomplete reuses loaded results; projections remain bounded.",
+  "PASS Public Content: one Unified Content Public Collection owner and contract; Topics, Media, Feed, Featured Content, and Sitemap adopt it while Hero remains presentation-only; autocomplete reuses loaded results; projections remain bounded.",
 );

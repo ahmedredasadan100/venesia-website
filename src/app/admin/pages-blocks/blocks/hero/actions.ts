@@ -23,6 +23,7 @@ import {
   parseFormStatus,
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
+  withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import {
@@ -247,8 +248,10 @@ export async function createHeroTemplate(
       description: cleanText(formData.get("template_description")) || null,
       variant: cleanText(formData.get("variant")) || "internal-page",
       style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
-      source_type: cleanText(formData.get("source_type")) || "manual",
-      limit_count: parseNumber(formData.get("limit_count"), 1),
+      source_type: "manual",
+      source_id: null,
+      source_slug: null,
+      limit_count: 1,
       status: parseFormStatus(formData),
       config: buildHeroConfig(formData),
     };
@@ -391,10 +394,10 @@ export async function duplicateHeroTemplate(formData: FormData) {
     section_key: hero.section_key,
     variant: hero.variant,
     style_preset: hero.style_preset,
-    source_type: hero.source_type,
-    source_id: hero.source_id,
-    source_slug: hero.source_slug,
-    limit_count: hero.limit_count,
+    source_type: "manual",
+    source_id: null,
+    source_slug: null,
+    limit_count: 1,
     status: "unpublished",
     sort_order: hero.sort_order + 1,
     config: hero.config,
@@ -503,12 +506,14 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     throw new Error("Hero id, name and slug are required.");
   }
 
-  const { data: duplicate } = await getSupabaseAdmin()
+  const { data: duplicate, error: duplicateError } = await getSupabaseAdmin()
     .from("hero_templates")
     .select("id")
     .eq("slug", slug)
     .neq("id", id)
     .maybeSingle();
+
+  if (duplicateError) throw new Error(duplicateError.message);
 
   if (duplicate) {
     throw new Error("الـ slug مستخدم بالفعل في Hero آخر.");
@@ -520,9 +525,10 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     description: cleanText(formData.get("template_description")) || null,
     variant: cleanText(formData.get("variant")) || "internal-page",
     style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
-    source_type: cleanText(formData.get("source_type")) || "manual",
-    source_slug: cleanText(formData.get("source_slug")) || null,
-    limit_count: parseNumber(formData.get("limit_count"), 1),
+    source_type: "manual",
+    source_id: null,
+    source_slug: null,
+    limit_count: 1,
     status: parseFormStatus(formData),
     config: buildHeroConfig(formData),
     updated_at: new Date().toISOString(),
@@ -559,9 +565,10 @@ export async function updateHeroTemplateDetails(formData: FormData) {
   await revalidateHeroAdmin();
   revalidatePath(`/admin/pages-blocks/blocks/hero/${id}`);
   const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);
-  redirect(
+  redirect(withModuleEditorReturnContextFromForm(
     `/admin/pages-blocks/blocks/hero/${id}?saved=1${notice ? `&notice=${notice}` : ""}`,
-  );
+    formData,
+  ));
 }
 
 export async function getHeroTemplateRows(): Promise<HeroTemplateRow[]> {

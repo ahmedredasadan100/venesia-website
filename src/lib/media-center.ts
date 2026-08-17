@@ -23,6 +23,19 @@ export async function getMediaItems(type?: MediaContentType) {
   return unifiedGetMediaItems(type);
 }
 
+/** Featured Content modules read Unified Content through the existing public owner. */
+export async function getFeaturedMediaItems(
+  type: MediaContentType,
+  limit = 1,
+): Promise<MediaContentItem[]> {
+  return unifiedGetMediaItemsLimited({
+    type,
+    limit: Math.max(1, limit),
+    featuredOnly: true,
+    sort: "newest",
+  });
+}
+
 export async function getMediaItemBySlug(type: MediaContentType, slug: string) {
   return unifiedGetMediaItemBySlug(type, slug);
 }

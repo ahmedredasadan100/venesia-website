@@ -22,6 +22,7 @@ import {
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
   slugify,
+  withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
@@ -61,7 +62,8 @@ function buildBreadcrumbConfig(formData: FormData): BreadcrumbBlockConfig {
 async function ensureUniqueSlug(slug: string, id?: number) {
   let query = getSupabaseAdmin().from("breadcrumb_block_templates").select("id").eq("slug", slug).limit(1);
   if (id) query = query.neq("id", id);
-  const { data } = await query.maybeSingle();
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(`Breadcrumb slug lookup failed: ${error.message}`);
   return !data;
 }
 
@@ -232,7 +234,10 @@ export async function updateBreadcrumbBlock(formData: FormData) {
   }, actor);
   await revalidateBlockModulePaths("breadcrumb");
   revalidatePath(`/admin/pages-blocks/blocks/breadcrumb/${id}`, "page");
-  redirect(`/admin/pages-blocks/blocks/breadcrumb/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
+  redirect(withModuleEditorReturnContextFromForm(
+    `/admin/pages-blocks/blocks/breadcrumb/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    formData,
+  ));
 }
 
 export async function toggleBreadcrumbBlockStatus(formData: FormData) {

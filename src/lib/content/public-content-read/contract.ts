@@ -23,7 +23,7 @@ export const PUBLIC_CONTENT_SEARCH_FIELDS = [
 ] as const;
 
 /**
- * Canonical hero selection intent for public content consumers.
+ * Canonical featured-content selection intent for public content consumers.
  * Automatic means `is_featured = true` only; absence never falls back to latest.
  */
 export type PublicContentFeaturedSelection =

@@ -5,9 +5,7 @@ export type MediaHubSectionKey = "featured" | "site-updates" | "videos" | "galle
 
 export type MediaHubFeaturedSectionData = {
   kind: "featured";
-  featuredNews: MediaContentItem;
-  latestNews: MediaContentItem[];
-  sideLimit: number;
+  item: MediaContentItem;
 };
 
 export type MediaHubItemsSectionData = {
@@ -32,4 +30,6 @@ export type MediaHubModulesState = {
   modules: MediaHubModuleState[];
   sourceStatus: "database" | "missing" | "error";
   sourceIssues: string[];
+  hasAnyAssignmentRows: boolean;
+  hasRenderableModules: boolean;
 };

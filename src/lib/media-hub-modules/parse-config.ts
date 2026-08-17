@@ -3,7 +3,7 @@ import type { MediaHubSectionKey } from "./types";
 
 export type MediaHubMediaType = "news" | "site_update" | "video" | "gallery" | "press";
 
-export type MediaHubModulePlacement = "hub" | "listing";
+export type MediaHubModulePlacement = "hub" | "featured" | "listing";
 export type MediaListingLayout = "grid" | "vertical";
 export type MediaListingColumns = 1 | 2 | 3;
 export type MediaListingCardVariant = "default" | "compact";
@@ -30,8 +30,6 @@ export type MediaHubModuleConfig = {
   type?: MediaHubMediaType;
   featured?: boolean;
   limit?: number;
-  sideLimit?: number;
-  listLimit?: number;
   listing?: MediaListingPresentationConfig;
   presentation: MediaHubModulePresentation;
 };
@@ -73,8 +71,6 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
   {
     config: MediaHubModuleConfig;
     defaultLimit?: number;
-    defaultSideLimit?: number;
-    defaultListLimit?: number;
   }
 > = {
   featured: {
@@ -83,17 +79,15 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       source: "topics",
       type: "news",
       featured: true,
-      sideLimit: 3,
-      listLimit: 4,
+      limit: 1,
       presentation: {
-        eyebrow: "Latest News",
-        title: "آخر الأخبار",
+        eyebrow: "Featured Content",
+        title: "المحتوى المميز",
         description: "",
-        ctaText: "استكشف الأخبار",
+        ctaText: "استكشف القسم",
       },
     },
-    defaultSideLimit: 3,
-    defaultListLimit: 4,
+    defaultLimit: 1,
   },
   "site-updates": {
     config: {
@@ -236,7 +230,11 @@ export function parseMediaHubModuleConfig(
 
   const source = raw.source === "topics" ? "topics" : fallback.source;
   const presentation = readPresentation(raw.presentation, fallback.presentation);
-  const placement = raw.placement === "listing" ? "listing" : "hub";
+  const placement = raw.placement === "listing"
+    ? "listing"
+    : raw.placement === "featured" && sectionKey === "featured"
+      ? "featured"
+      : "hub";
   const configuredMediaType = isMediaHubMediaType(raw.type)
     ? raw.type
     : mediaTypeForSection(sectionKey);
@@ -255,10 +253,9 @@ export function parseMediaHubModuleConfig(
     return {
       placement,
       source,
-      type: "news",
+      type: configuredMediaType,
       featured: true,
-      sideLimit: readLimit(raw.sideLimit, fallback.sideLimit ?? 3),
-      listLimit: readLimit(raw.listLimit, fallback.listLimit ?? 4),
+      limit: readLimit(raw.limit, fallback.limit ?? 1),
       presentation,
     };
   }
@@ -275,7 +272,7 @@ export function parseMediaHubModuleConfig(
 export function buildMediaHubModuleConfig(
   sectionKey: MediaHubSectionKey,
   dataSource: string,
-  limits: { limit?: number; sideLimit?: number; listLimit?: number },
+  limits: { limit?: number },
   presentation: MediaHubModulePresentation,
   listingInput?: {
     placement: MediaHubModulePlacement;
@@ -319,13 +316,15 @@ export function buildMediaHubModuleConfig(
 
   if (sectionKey === "featured") {
     const defaults = MEDIA_HUB_SECTION_DEFAULTS.featured;
+    if (!listingInput || !isMediaHubMediaType(listingInput.mediaType)) {
+      throw new Error("نوع المحتوى المميز غير صالح.");
+    }
     return {
-      placement: "hub",
+      placement: listingInput.placement === "featured" ? "featured" : "hub",
       source: "topics",
-      type: "news",
+      type: listingInput.mediaType,
       featured: true,
-      sideLimit: Math.max(1, limits.sideLimit || defaults.defaultSideLimit || 3),
-      listLimit: Math.max(1, limits.listLimit || defaults.defaultListLimit || 4),
+      limit: Math.max(1, limits.limit || defaults.defaultLimit || 1),
       presentation,
     };
   }

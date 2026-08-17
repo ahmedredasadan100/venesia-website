@@ -755,6 +755,34 @@ export type AdminCollectionReorderOwner =
   | "not_applicable"
   | "domain_owned_atomic_reorder";
 
+export type AdminCollectionConsumerAdoptionEvidence = {
+  id: string;
+  route: string;
+  pageSourceFile: string;
+  presentationOwner: string;
+  contracts: Readonly<
+    Record<
+      | "collection"
+      | "table"
+      | "toolbar"
+      | "search"
+      | "filters"
+      | "header"
+      | "columns"
+      | "sort"
+      | "row_actions"
+      | "bulk"
+      | "selection"
+      | "pagination"
+      | "runtime"
+      | "data_registry",
+      "adopted" | "not_required"
+    >
+  >;
+  genuineExceptions: readonly string[];
+  requiredAdoption: readonly string[];
+};
+
 export type AdminCollectionSurfaceInventoryEntry = {
   id: string;
   /** Collection lifecycle only; Admin Chrome is inherited structurally. */
@@ -797,6 +825,8 @@ export type AdminCollectionSurfaceInventoryEntry = {
   feedbackOwner: "AdminFeedbackProvider" | "not_applicable";
   confirmationOwner: "AdminConfirmDialog" | "not_applicable";
   reorderOwner: AdminCollectionReorderOwner;
+  /** Per-consumer proof for grouped surfaces whose routes have distinct adapters or capabilities. */
+  consumerAdoptionEvidence: readonly AdminCollectionConsumerAdoptionEvidence[];
   genuineExceptions: readonly string[];
   requiredAdoption: readonly string[];
   exceptionRationale: string | null;
@@ -811,6 +841,7 @@ const ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS = {
   gridOwner: "AdminEntityList",
   dataRegistryEntities: [],
   reorderOwner: "not_applicable",
+  consumerAdoptionEvidence: [],
   genuineExceptions: [],
 } as const;
 
@@ -822,6 +853,7 @@ const ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS = {
   gridOwner: "not_applicable",
   dataRegistryEntities: [],
   reorderOwner: "not_applicable",
+  consumerAdoptionEvidence: [],
   genuineExceptions: [],
 } as const;
 
@@ -833,6 +865,7 @@ const ADMIN_FIXED_SURFACE_DEFAULTS = {
   gridOwner: "not_applicable",
   dataRegistryEntities: [],
   reorderOwner: "not_applicable",
+  consumerAdoptionEvidence: [],
   genuineExceptions: [
     "The surface is a bounded structural or navigation composition, not a growing record collection.",
   ],
@@ -846,9 +879,27 @@ const ADMIN_AUTH_SURFACE_DEFAULTS = {
   gridOwner: "not_applicable",
   dataRegistryEntities: [],
   reorderOwner: "not_applicable",
+  consumerAdoptionEvidence: [],
   genuineExceptions: [
     "Authentication routes intentionally render outside authenticated Admin Chrome.",
   ],
+} as const;
+
+const ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS = {
+  collection: "adopted",
+  table: "adopted",
+  toolbar: "adopted",
+  search: "adopted",
+  filters: "adopted",
+  header: "adopted",
+  columns: "adopted",
+  sort: "adopted",
+  row_actions: "adopted",
+  bulk: "adopted",
+  selection: "adopted",
+  pagination: "adopted",
+  runtime: "adopted",
+  data_registry: "not_required",
 } as const;
 
 /**
@@ -1400,10 +1451,52 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationOwner: "AdminTablePagination",
       queryMode: "bounded-client",
       layoutOwner: "AdminPageExperience + AdminDataGrid Contract",
+      consumerAdoptionEvidence: [
+        {
+          id: "content-template-library",
+          route: "/admin/pages-blocks/blocks/content",
+          pageSourceFile: "src/app/admin/pages-blocks/blocks/content/page.tsx",
+          presentationOwner: "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+          contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
+          genuineExceptions: [],
+          requiredAdoption: [],
+        },
+        {
+          id: "hero-template-library",
+          route: "/admin/pages-blocks/blocks/hero",
+          pageSourceFile: "src/app/admin/pages-blocks/blocks/hero/page.tsx",
+          presentationOwner: "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+          contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
+          genuineExceptions: [],
+          requiredAdoption: [],
+        },
+        ...(["breadcrumb", "cards", "cta", "feed"] as const).map((moduleKind) => ({
+          id: `${moduleKind}-template-library`,
+          route: `/admin/pages-blocks/blocks/${moduleKind}`,
+          pageSourceFile: `src/app/admin/pages-blocks/blocks/${moduleKind}/page.tsx`,
+          presentationOwner: "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+          contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
+          genuineExceptions: [],
+          requiredAdoption: [],
+        })),
+        ...(["media-hub", "media-sidebar"] as const).map((moduleKind) => ({
+          id: `${moduleKind}-template-library`,
+          route: `/admin/pages-blocks/blocks/${moduleKind}`,
+          pageSourceFile: `src/app/admin/pages-blocks/blocks/${moduleKind}/page.tsx`,
+          presentationOwner: "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+          contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
+          genuineExceptions: [
+            "Create, duplicate, and delete are not supported by the current Media module domain action contract.",
+          ],
+          requiredAdoption: [],
+        })),
+      ],
+      genuineExceptions: [],
       requiredAdoption: [],
-      exceptionRationale: null,
+      exceptionRationale:
+        "Each template-library consumer proves search, filtering, sorting, selection, publication bulk actions, optional columns, pagination, Row Actions, and shared Runtime adoption independently. Unsupported Media lifecycle commands remain explicit at their two consumers.",
       rationale:
-        "All eight template libraries declare one bounded-client query contract; the shared Collection owner controls query normalization, filtering, membership, pagination, and URL history while loaders and domain mutations remain owned by Page Composition.",
+        "All eight template libraries use bounded-client query contracts, while per-consumer evidence prevents one grouped surface from hiding adoption drift between their distinct presentation adapters.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -1431,6 +1524,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/pages-blocks/blocks/media-sidebar/[id]/page.tsx",
       ],
       presentationSourceFiles: [
+        "src/components/admin/page-blocks/ModuleEditorPresentation.tsx",
         "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
         "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
         "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
@@ -1456,7 +1550,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Schema editing remains specialized content inside the structurally inherited Shared Admin Page System.",
+        "Schema editing remains specialized content inside the structurally inherited Shared Admin Page System; the shared Module Editor header preserves validated Page Composition return context while direct Library entry retains Library navigation.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,

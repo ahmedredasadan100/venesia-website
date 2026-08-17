@@ -9,7 +9,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
-import { cleanText, getStatus, parseFormStatus, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
+import {
+  cleanText,
+  getStatus,
+  PAGE_BLOCK_PUBLICATION_BULK_ACTIONS,
+  parseFormStatus,
+  parseNumber,
+  parsePageBlockBulkAction,
+  parsePageBlockBulkIds,
+  withModuleEditorReturnContextFromForm,
+} from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   buildMediaSidebarModuleConfig,
@@ -69,7 +78,10 @@ export async function updateMediaSidebarModule(formData: FormData) {
   }, actor);
   await revalidateBlockModulePaths("media-sidebar");
   revalidatePath(`/admin/pages-blocks/blocks/media-sidebar/${id}`, "page");
-  redirect(`/admin/pages-blocks/blocks/media-sidebar/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
+  redirect(withModuleEditorReturnContextFromForm(
+    `/admin/pages-blocks/blocks/media-sidebar/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    formData,
+  ));
 }
 
 export async function toggleMediaSidebarModuleStatus(
@@ -97,6 +109,33 @@ export async function toggleMediaSidebarModuleStatus(
     entityType: "content_block_template",
     entityId: id,
     metadata: { blockType: "media-sidebar", status: normalizedStatus },
+  }, actor);
+  await revalidateBlockModulePaths("media-sidebar");
+}
+
+export async function bulkMediaSidebarModuleStatuses(formData: FormData) {
+  const actor = await requireAdminSession();
+  const action = parsePageBlockBulkAction(
+    formData.get("bulk_action"),
+    PAGE_BLOCK_PUBLICATION_BULK_ACTIONS,
+  );
+  const ids = parsePageBlockBulkIds(formData.getAll("ids"));
+  const status = action === "publish" ? "published" : "unpublished";
+
+  const { error } = await getSupabaseAdmin()
+    .from("media_sidebar_module_templates")
+    .update({ status, updated_at: new Date().toISOString() })
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction(
+      "content_block_template",
+      action === "publish" ? "publish" : "unpublish",
+    ),
+    entityType: "content_block_template",
+    entityLabel: "media_sidebar_module_templates",
+    metadata: { blockType: "media-sidebar", action, ids, count: ids.length },
   }, actor);
   await revalidateBlockModulePaths("media-sidebar");
 }

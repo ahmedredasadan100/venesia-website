@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { useSearchParams } from "next/navigation";
 
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import {
@@ -33,6 +34,12 @@ import {
   type ModuleEditorFieldNature,
   type ModuleEditorFieldSpan,
 } from "../../../lib/page-blocks/module-editor-presentation-contract";
+import {
+  MODULE_EDITOR_RETURN_PAGE_FORM_FIELD,
+  MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM,
+  parseModuleEditorReturnPageId,
+  resolveModuleEditorReturnNavigation,
+} from "../../../lib/page-blocks/admin-utils";
 
 type ModuleEditorMetadataScope = {
   moduleKind: string;
@@ -52,6 +59,7 @@ export function ModuleEditorHeader({
   entityName,
   ...props
 }: ModuleEditorHeaderProps) {
+  const searchParams = useSearchParams();
   const metadata = getModuleEditorHeaderMetadata(moduleKind, moduleSlug, entityName);
   if (!metadata) {
     throw new Error(`Missing Module Editor header metadata for ${moduleKind}:${moduleSlug ?? "default"}`);
@@ -62,6 +70,29 @@ export function ModuleEditorHeader({
     title: metadata.titleAr,
     description: metadata.descriptionAr,
   };
+
+  const returnNavigation = resolveModuleEditorReturnNavigation(
+    searchParams.get(MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM),
+  );
+
+  if (returnNavigation) {
+    const contextualProps = props as {
+      actions?: ReactNode;
+      meta?: ReactNode;
+      saved?: boolean;
+      status?: string;
+    };
+    return (
+      <BlockEditorContextHeader
+        {...returnNavigation}
+        {...presentation}
+        actions={contextualProps.actions}
+        meta={contextualProps.meta}
+        saved={contextualProps.saved}
+        status={contextualProps.status}
+      />
+    );
+  }
 
   return "backHref" in props ? (
     <BlockEditorContextHeader {...props} {...presentation} />
@@ -422,22 +453,35 @@ export function ModuleEditorSaveArea({
   saveLabel?: ReactNode;
 }) {
   const { pending } = useFormStatus();
+  const searchParams = useSearchParams();
+  const returnPageId = parseModuleEditorReturnPageId(
+    searchParams.get(MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM),
+  );
 
   return (
-    <AdminStickyFormBar
-      className="mt-8"
-      title={title}
-      description={description}
-    >
-      <button
-        type="submit"
-        disabled={pending}
-        className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-[#D8B87A] px-6 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d] ${
-          pending ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-        }`}
+    <>
+      {returnPageId ? (
+        <input
+          type="hidden"
+          name={MODULE_EDITOR_RETURN_PAGE_FORM_FIELD}
+          value={returnPageId}
+        />
+      ) : null}
+      <AdminStickyFormBar
+        className="mt-8"
+        title={title}
+        description={description}
       >
-        {pending ? "جارٍ الحفظ..." : saveLabel}
-      </button>
-    </AdminStickyFormBar>
+        <button
+          type="submit"
+          disabled={pending}
+          className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-[#D8B87A] px-6 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d] ${
+            pending ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+          }`}
+        >
+          {pending ? "جارٍ الحفظ..." : saveLabel}
+        </button>
+      </AdminStickyFormBar>
+    </>
   );
 }

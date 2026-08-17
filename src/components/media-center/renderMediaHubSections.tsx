@@ -16,11 +16,9 @@ function renderHubSection(module: MediaHubModuleState): ReactNode {
 
   switch (data.kind) {
     case "featured":
-      return data.featuredNews ? (
+      return data.item ? (
         <MediaCenterHubFeatured
-          featuredItem={data.featuredNews}
-          news={data.latestNews}
-          sideLimit={data.sideLimit}
+          featuredItem={data.item}
           presentation={module.config.presentation}
         />
       ) : null;

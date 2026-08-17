@@ -24,6 +24,8 @@ export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaS
       widgets: [],
       sourceStatus: pageState.sourceStatus,
       sourceIssues: pageState.sourceIssue ? [pageState.sourceIssue] : [],
+      hasAnyAssignmentRows: false,
+      hasRenderableModules: false,
     };
   }
 
@@ -34,7 +36,15 @@ export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaS
     .eq("slot", "sidebar")
     .order("sort_order", { ascending: true });
 
-  if (error) return { widgets: [], sourceStatus: "error", sourceIssues: [error.message] };
+  if (error) {
+    return {
+      widgets: [],
+      sourceStatus: "error",
+      sourceIssues: [error.message],
+      hasAnyAssignmentRows: false,
+      hasRenderableModules: false,
+    };
+  }
 
   const widgets: MediaSidebarWidgetState[] = [];
   for (const row of rows ?? []) {
@@ -54,5 +64,11 @@ export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaS
     });
   }
 
-  return enrichMediaSidebarModules({ widgets, sourceStatus: "database", sourceIssues: [] });
+  return enrichMediaSidebarModules({
+    widgets,
+    sourceStatus: "database",
+    sourceIssues: [],
+    hasAnyAssignmentRows: (rows?.length ?? 0) > 0,
+    hasRenderableModules: widgets.some((widget) => widget.isVisible),
+  });
 }

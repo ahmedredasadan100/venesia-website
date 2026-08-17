@@ -49,7 +49,8 @@ export function isMediaHubKind(kind: string): kind is "media-hub" {
 
 export async function resolvePageSlug(pageId: number): Promise<string | null> {
   const { data, error } = await getSupabaseAdmin().from("pages").select("slug").eq("id", pageId).maybeSingle();
-  if (error || !data?.slug) return null;
+  if (error) throw new Error(`Page slug read failed: ${error.message}`);
+  if (!data?.slug) return null;
   return String(data.slug);
 }
 
@@ -73,34 +74,40 @@ export function templateTable(blockType: PageBlockType) {
 
 export async function nextSortOrder(pageId: number, blockType: PageBlockType) {
   const table = assignmentTable(blockType);
-  const { data } = await getSupabaseAdmin()
+  const { data, error } = await getSupabaseAdmin()
     .from(table)
     .select("sort_order")
     .eq("page_id", pageId)
     .order("sort_order", { ascending: false })
     .limit(1);
 
+  if (error) throw new Error(`Page module sort-order read failed: ${error.message}`);
+
   return (data?.[0]?.sort_order ?? 0) + 10;
 }
 
 export async function nextMediaSidebarSortOrder(pageId: number) {
-  const { data } = await getSupabaseAdmin()
+  const { data, error } = await getSupabaseAdmin()
     .from(MEDIA_SIDEBAR_ASSIGNMENT_TABLE)
     .select("sort_order")
     .eq("page_id", pageId)
     .order("sort_order", { ascending: false })
     .limit(1);
 
+  if (error) throw new Error(`Media Sidebar sort-order read failed: ${error.message}`);
+
   return (data?.[0]?.sort_order ?? 0) + 10;
 }
 
 export async function nextMediaHubSortOrder(pageId: number) {
-  const { data } = await getSupabaseAdmin()
+  const { data, error } = await getSupabaseAdmin()
     .from(MEDIA_HUB_ASSIGNMENT_TABLE)
     .select("sort_order")
     .eq("page_id", pageId)
     .order("sort_order", { ascending: false })
     .limit(1);
+
+  if (error) throw new Error(`Media Hub sort-order read failed: ${error.message}`);
 
   return (data?.[0]?.sort_order ?? 0) + 10;
 }

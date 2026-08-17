@@ -7,7 +7,6 @@ import {
   type MediaCenterCmsPageSlug,
 } from "../../lib/media-center-page-config";
 import { MediaCenterCmsBlocksProvider } from "./MediaCenterCmsBlocksContext";
-import { resolveMediaListingMainBlocks } from "./media-listing-shell-model";
 
 type MediaCenterShellLayoutProps = {
   cmsPageSlug: MediaCenterCmsPageSlug;
@@ -16,29 +15,11 @@ type MediaCenterShellLayoutProps = {
   children: React.ReactNode;
 };
 
-function MediaListingShellPlaceholder() {
-  return (
-    <section
-      className="relative py-16 text-right md:py-20"
-      data-media-listing-shell-placeholder="true"
-    >
-      <div className="mx-auto max-w-7xl px-6">
-        <h2 className="text-2xl font-bold tracking-[-0.03em] text-white md:text-4xl">
-          Listing shell
-        </h2>
-        <p className="mt-4 max-w-3xl text-[15px] leading-8 text-white/60 md:text-base">
-          Publish or replace to show CMS content above the listing.
-        </p>
-      </div>
-    </section>
-  );
-}
-
 /**
- * CMS-aware shell for Media Center listing routes.
- * Hero from hero_assignments; optional main/bottom blocks inside the content card.
+ * CMS-aware layout for Media Center routes.
+ * Hero and optional generic main/bottom blocks keep their existing owners.
  */
-export default async function MediaCenterShellLayout({
+export default function MediaCenterShellLayout({
   cmsPageSlug,
   composition,
   breadcrumbCurrentLabel,
@@ -48,24 +29,9 @@ export default async function MediaCenterShellLayout({
   const heroEntry = findHeroInComposition(composition);
   const mainBlocks = getSlotBlocks(composition, "main");
   const bottomBlocks = getSlotBlocks(composition, "bottom");
-  const listingMainBlocks = resolveMediaListingMainBlocks(cmsPageSlug, mainBlocks);
-  const hasListingPresentationModule = Boolean(
-    composition.mediaHubModules?.modules.some(
-      (module) => module.isVisible && module.config.placement === "listing",
-    ),
-  );
-  const showListingPlaceholder =
-    cmsPageSlug !== "media-center" &&
-    mainBlocks.length === 0 &&
-    !hasListingPresentationModule &&
-    !composition.hasCompositionError;
-
-  const prefixBlocks =
-    listingMainBlocks.length > 0 ? (
-      <SlotModulesRenderer blocks={listingMainBlocks} />
-    ) : showListingPlaceholder ? (
-      <MediaListingShellPlaceholder />
-    ) : undefined;
+  const prefixBlocks = mainBlocks.length > 0
+    ? <SlotModulesRenderer blocks={mainBlocks} />
+    : undefined;
   const suffixBlocks =
     bottomBlocks.length > 0 ? <SlotModulesRenderer blocks={bottomBlocks} /> : undefined;
 

@@ -6,7 +6,7 @@ import { unstable_cache } from "next/cache";
 import type { Json } from "../database.types";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
-import { getPublishedPageBySlug } from "../pages/get-published-page-by-slug";
+import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import {
   isPageModulePubliclyVisible,
 } from "../page-blocks/admin-utils";
@@ -66,10 +66,15 @@ export const loadFeedModulesForPageSlug = cache(async function loadFeedModulesFo
 async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedModuleLoadResult> {
   const supabase = getSupabaseAdmin();
 
-  const page = await getPublishedPageBySlug(pageSlug);
-  if (!page) {
-    return { modules: [], hasAnyAssignmentRows: false, hasCompositionError: false };
+  const pageState = await getPublishedPageStateBySlug(pageSlug);
+  if (!pageState.page) {
+    return {
+      modules: [],
+      hasAnyAssignmentRows: false,
+      hasCompositionError: pageState.sourceStatus === "error",
+    };
   }
+  const page = pageState.page;
 
   const { data: assignments, error: assignmentsError } = await supabase
     .from("page_feed_module_assignments")

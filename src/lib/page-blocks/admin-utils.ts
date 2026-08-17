@@ -4,7 +4,11 @@ import { getContentStatusMetadata } from "../admin/content/content-status-metada
 export const BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"];
 
 export const PAGE_BLOCK_BULK_ACTIONS = ["publish", "hide", "delete"] as const;
+export const PAGE_BLOCK_PUBLICATION_BULK_ACTIONS = ["publish", "hide"] as const;
 export const HERO_BULK_ACTIONS = ["show", "hide", "delete"] as const;
+
+export const MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM = "returnPageId";
+export const MODULE_EDITOR_RETURN_PAGE_FORM_FIELD = "return_page_id";
 
 export function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -188,11 +192,50 @@ export function mediaSidebarModuleListHref() {
   return "/admin/pages-blocks/blocks/media-sidebar";
 }
 
-export function moduleEditHref(kind: string, templateId: number) {
-  if (kind === "hero") return heroModuleHref(templateId);
-  if (kind === "media-sidebar") return mediaSidebarModuleHref(templateId);
-  if (kind === "media-hub") return mediaHubModuleHref(templateId);
-  return blockModuleHref(kind as PageBlockType, templateId);
+export function parseModuleEditorReturnPageId(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[1-9]\d*$/u.test(normalized)) return null;
+  const pageId = Number(normalized);
+  return Number.isSafeInteger(pageId) && pageId > 0 ? pageId : null;
+}
+
+export function resolveModuleEditorReturnNavigation(value: unknown) {
+  const pageId = parseModuleEditorReturnPageId(value);
+  return pageId
+    ? {
+        backHref: `/admin/pages-blocks/pages/${pageId}?tab=modules`,
+        backLabel: "الرجوع إلى موديولات الصفحة",
+      }
+    : null;
+}
+
+export function withModuleEditorReturnPageId(href: string, value: unknown) {
+  const pageId = parseModuleEditorReturnPageId(value);
+  if (!pageId) return href;
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}${MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM}=${pageId}`;
+}
+
+export function withModuleEditorReturnContextFromForm(href: string, formData: FormData) {
+  return withModuleEditorReturnPageId(
+    href,
+    formData.get(MODULE_EDITOR_RETURN_PAGE_FORM_FIELD),
+  );
+}
+
+export function moduleEditHref(
+  kind: string,
+  templateId: number,
+  options: { returnPageId?: unknown } = {},
+) {
+  const href = kind === "hero"
+    ? heroModuleHref(templateId)
+    : kind === "media-sidebar"
+      ? mediaSidebarModuleHref(templateId)
+      : kind === "media-hub"
+        ? mediaHubModuleHref(templateId)
+        : blockModuleHref(kind as PageBlockType, templateId);
+  return withModuleEditorReturnPageId(href, options.returnPageId);
 }
 
 export function moduleListHref(kind: string) {
